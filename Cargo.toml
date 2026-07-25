@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.84"
+license = "MIT"
+
+[workspace.dependencies]
+karakuri-ir = { path = "crates/karakuri-ir" }
+karakuri-codegen = { path = "crates/karakuri-codegen" }
+karakuri-engine = { path = "crates/karakuri-engine" }
+karakuri-signal = { path = "crates/karakuri-signal" }
+karakuri-store = { path = "crates/karakuri-store" }
+
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.dev]
+# The render thread has a frame budget even in debug builds. Optimising
+# dependencies keeps wgpu and naga out of the way while leaving our own
+# crates debuggable.
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
