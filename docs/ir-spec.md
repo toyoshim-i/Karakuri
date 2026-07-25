@@ -651,7 +651,13 @@ disc_point(float, float) -> vec2
 
 `vertex` / `fragment` become a render pipeline.
 
-- L1 buffers are read as storage, indexed by `@builtin(vertex_index)`, not as vertex buffers
+- **`topology points` does not lower to `PrimitiveTopology::PointList`.** WebGPU has no
+  point size — a point primitive is always one pixel — so each element expands into a quad:
+  six vertices per instance, the corner in `@builtin(vertex_index)` and the element in
+  `@builtin(instance_index)`. `point_size` scales the quad in clip space so a sprite keeps
+  its pixel size at any depth, and `point_coord` falls out of the corner
+- L1 buffers are read as storage, indexed by `@builtin(instance_index)`, not as vertex
+  buffers
 - Per-element values used in `fragment` become `@interpolate(flat)` varyings
 - `blend additive` lowers to additive blending with no depth write, which is what avoids
   any sort requirement. It is the only mode v0.2 accepts
@@ -761,8 +767,8 @@ purely a source file that a human or an LLM can read and edit.
 {"t":"meta","hash":"sha256:a3f2c1…","name":"drift_shell","kind":"L1","v":1}
 {"t":"origin","prompt":"organic drifting shell, slow","model":"…","seed":19274}
 {"t":"parent","hash":"sha256:7e01aa…"}
-{"t":"param","key":"radius","type":"float","min":0.1,"max":8.0,"default":2.0}
-{"t":"capacity","min":65536,"max":1048576,"default":262144}
+{"t":"param_decl","key":"radius","type":"float","min":0.1,"max":8.0,"default":2.0}
+{"t":"capacity_decl","min":65536,"max":1048576,"default":262144}
 {"t":"emit","attrs":["position","velocity","age"]}
 {"t":"derived","attr":"age","from":"spawn_time"}
 {"t":"perf","kind":"L1","ns_per_element":0.9,"bytes_per_element":48}
@@ -772,6 +778,13 @@ purely a source file that a human or an LLM can read and edit.
 
 The store regenerates metadata from the `.kir` plus a compile pass, so metadata files are
 reproducible artifacts rather than hand-authored ones.
+
+**One `t` means one shape, across every file.** A metadata file describes what an artifact
+*declares*; a Set file records what a value *is*. Those are different records, so they get
+different names — `param_decl` and `capacity_decl` here, `param` and `capacity` there. The
+alternative, reusing a `t` for two different shapes in two different files, cannot be read
+by a decoder that dispatches on `t` alone, which every ndjson reader does. It is not enough
+for the two vocabularies to be disjoint in practice; they have to be disjoint by name.
 
 ### On `perf`
 
