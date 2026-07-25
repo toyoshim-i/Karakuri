@@ -231,8 +231,11 @@ later is then an engine change alone — no format change, no determinism argume
 - No implicit conversions. `1` and `1.0` are different.
 - Convert with the scalar constructors `float(x)`, `int(x)`, `uint(x)`. The loop variable
   is `int`, so `float(i)` is how it enters float arithmetic.
-- Vector constructors take either one scalar per component or a single scalar to
-  broadcast: `vec3(1.0, 0.0, 0.0)`, `vec3(0.0)`.
+- Vector constructors follow GLSL: any mix of scalars and shorter vectors whose component
+  counts sum to the target width, or a single scalar to broadcast. `vec3(1.0, 0.0, 0.0)`,
+  `vec3(0.0)`, and `vec4(position, 1.0)` are all well formed — the last one is what the L4
+  example uses to get a clip-space position, so a narrower rule would reject this
+  document's own code.
 - No structs, arrays, or pointers.
 - Swizzles allowed (`v.xy`, `v.zyx`).
 
