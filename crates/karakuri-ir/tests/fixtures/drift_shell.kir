@@ -1,0 +1,33 @@
+proc drift_shell {
+  kind     L1
+  topology points
+  capacity [65536, 1048576] = 262144
+
+  param spawn_rate : float [0.0, 40000.0] = 12000.0
+  param radius     : float [0.1, 8.0]     = 2.0
+  param turbulence : float [0.0, 3.0]     = 0.8
+  param lifetime   : float [0.5, 20.0]    = 6.0
+
+  emit position, velocity, age
+
+  spawn {
+    let u = hash1(seed);
+    let v = hash1(seed + 1000u);
+    position = sphere_point(u, v) * radius;
+    velocity = vec3(0.0, 0.0, 0.0);
+    age      = 0.0;
+  }
+
+  element {
+    let flow = curl(position * 0.3 + vec3(0.0, t * 0.1, 0.0)) * turbulence;
+    let v    = velocity * 0.96 + flow * dt;
+
+    velocity = v;
+    position = position + v * dt;
+    age      = age + dt;
+
+    if age > lifetime {
+      kill();
+    }
+  }
+}

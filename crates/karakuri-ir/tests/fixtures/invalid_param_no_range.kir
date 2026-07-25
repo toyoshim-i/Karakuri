@@ -1,0 +1,13 @@
+proc bad_param {
+  kind L1
+  topology points
+  capacity [1024, 65536] = 4096
+
+  param radius : float = 2.0
+
+  emit position
+
+  element {
+    position = position;
+  }
+}

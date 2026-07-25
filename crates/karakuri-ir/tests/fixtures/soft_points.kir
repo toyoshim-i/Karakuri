@@ -1,0 +1,23 @@
+proc soft_points {
+  kind  L4
+  blend additive
+
+  consumes position, velocity, age
+
+  param point_scale : float [0.5, 40.0] = 6.0
+  param hue         : float [0.0, 1.0]  = 0.6
+  param exposure    : float [0.0, 8.0]  = 1.4
+  param falloff     : float [0.5, 8.0]  = 2.0
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = point_scale * (0.3 + 0.7 * clamp(length(velocity) * 0.2, 0.0, 1.0));
+  }
+
+  fragment {
+    let d = length(point_coord * 2.0 - 1.0);
+    let a = pow(max(0.0, 1.0 - d), falloff);
+    let c = hsv_to_rgb(vec3(hue + hash1(seed) * 0.05, 0.7, 1.0));
+    color = vec4(c * exposure, a);
+  }
+}

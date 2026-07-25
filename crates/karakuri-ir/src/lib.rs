@@ -17,6 +17,7 @@
 
 pub mod ast;
 pub mod error;
+mod lexer;
 pub mod parse;
 pub mod span;
 
