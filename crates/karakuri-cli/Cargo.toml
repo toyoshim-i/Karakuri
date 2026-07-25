@@ -6,3 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+karakuri-engine = { version = "0.1.0", path = "../karakuri-engine" }
+pollster = "1.0.1"
+wgpu = "26.0.1"
+winit = "0.30.13"
