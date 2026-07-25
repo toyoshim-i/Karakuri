@@ -14,8 +14,10 @@
 //! declaring a `param` and having a `bind` record attach a signal to it, which
 //! is what keeps every external coupling declarative.
 
+pub mod bus;
 pub mod oscillator;
 
+pub use bus::SynthesizedBus;
 pub use oscillator::Oscillator;
 
 /// A signal value and how much it should be trusted.
