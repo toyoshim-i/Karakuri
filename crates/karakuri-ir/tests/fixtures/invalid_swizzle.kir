@@ -1,0 +1,12 @@
+proc bad_swizzle {
+  kind L1
+  topology points
+  capacity [1024, 65536] = 4096
+
+  emit position
+
+  element {
+    let x = position.;
+    position = position;
+  }
+}

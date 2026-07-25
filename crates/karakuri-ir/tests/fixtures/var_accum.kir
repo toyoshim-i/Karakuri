@@ -1,0 +1,20 @@
+proc var_accum {
+  kind     L1
+  topology points
+  capacity [1024, 65536] = 4096
+
+  emit position, velocity
+
+  element {
+    var flow = vec3(0.0);
+
+    for i in 0..4 {
+      let f = 0.3 + float(i) * 1.7;
+      flow += curl(position * f + vec3(0.0, t * 0.1, 0.0)) / f;
+    }
+
+    let v = velocity * 0.96 + flow * dt;
+    velocity = v;
+    position = position + v * dt;
+  }
+}

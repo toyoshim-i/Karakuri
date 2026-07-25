@@ -230,7 +230,7 @@ var <name> = <expr>;          // mutable local
 <name> += <expr>;             // also -= *= /=, var only
 <attr> = <expr>;              // write to an attribute
 if <cond> { ... } else { ... }
-for i in 0..<N> { ... }       // N is a compile-time constant integer
+for i in <start>..<end> { ... }   // both are integer literals
 kill();                       // L1 element block only
 ```
 
@@ -245,8 +245,14 @@ kill();                       // L1 element block only
 - Assigning to a name that was never declared is an error, not a declaration.
 - `let`, `var`, and the loop variable may not shadow a param, an attribute, or an ambient
   value.
-- Constant loop bounds are what makes cost estimation possible.
+- Loop bounds are integer literals, not expressions. Constant bounds are what makes cost
+  estimation possible, and a literal is the only form the check pass need not reason about.
 - Nested loops multiply into the cost estimate.
+- Statements are terminated by `;`. **Header declarations are not terminated at all** — one
+  ends where the next declaration or block begins. That is a real ambiguity and worth
+  knowing about: a `param` default ending in a call whose closing parenthesis is missing
+  will swallow the following line as arguments, and the diagnostic will land nowhere near
+  the mistake.
 
 `var` is what makes `for` useful. Without it a loop body has nothing to carry between
 iterations: `let` cannot be reassigned, and an attribute read always returns the previous
@@ -307,8 +313,14 @@ value of the slot's layer. `hash1(seed)` therefore changes when the Set is re-se
 `seed % 512u` does not, which keeps structure and randomness independently controllable
 and satisfies the "all randomness comes from an explicit seed stream" invariant.
 
-LLMs will write `id`. The type checker special-cases the name and suggests `seed` rather
-than reporting an undefined identifier.
+LLMs will write `id`. **`id` is therefore a reserved word, not merely an absent one** — it
+cannot be a `param`, a `let`, a `var`, or a loop variable either. Reserving it means the
+parser can reject it outright and name it, instead of a later stage reporting an undefined
+identifier or, worse, a procedure that declares `param id` and quietly works.
+
+Signal names are the opposite case and belong to name resolution, not to the parser. A
+procedure may legally declare `param energy`, so whether a bare `energy` resolves depends
+on what was declared, and only the check pass knows that.
 
 ### State semantics
 
