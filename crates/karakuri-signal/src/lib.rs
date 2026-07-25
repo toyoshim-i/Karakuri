@@ -15,9 +15,11 @@
 //! is what keeps every external coupling declarative.
 
 pub mod bus;
+pub mod noise;
 pub mod oscillator;
 
 pub use bus::SynthesizedBus;
+pub use noise::{NoiseConfig, NoiseKind};
 pub use oscillator::Oscillator;
 
 /// A signal value and how much it should be trusted.
