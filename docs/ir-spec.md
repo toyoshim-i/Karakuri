@@ -382,9 +382,11 @@ carry -= float(count)
 ```
 
 There is deliberately no Poisson option. Irregular spawning is available by binding a noise
-signal to `spawn_rate`, where its depth and period are declarative and adjustable; baking a
-distribution into the engine would turn that irregularity into a fixed property nobody can
-reach.
+signal to `spawn_rate`, where its depth, period, and character are declarative and
+adjustable; baking a distribution into the engine would turn that irregularity into a fixed
+property nobody can reach. All three have to be reachable for that argument to hold — depth
+is the binding's `range`, and period and character are the `noise` fields described under
+[Set file format](#set-file-format).
 
 Count regularity is not what shows, in any case. What shows in a particle stream is
 **spatial banding**: every element born in the same frame starts at the same phase, so
@@ -704,6 +706,13 @@ Generated IR passes through these in order. Failure at any stage means no artifa
 
 Cost estimation may be conservative. If it wrongly lets something through, stage 7 catches it.
 
+**There is one severity.** A diagnostic is an error and failure means no artifact; there
+are no warnings. The response to a rejection is to regenerate, not to proceed with a
+caveat, and a caveat nobody can act on is worse than a refusal. That puts a requirement on
+the diagnostics themselves: a rejection has to carry what a regeneration needs to aim at.
+A cost rejection states the estimate and the ceiling as numbers, not merely that one
+exceeded the other — "over budget" tells a repair prompt nothing about how much to cut.
+
 Stages 1–5 are per artifact and, because `capacity` is a uniform rather than a constant,
 capacity-independent — the generated WGSL is the same at any capacity. Stages 6–8 run per
 Set, which is where `capacity`, the real parameter values, and the frame budget all become
@@ -732,6 +741,37 @@ known. The total-cost decision lives there, not in the artifact.
 - `capacity` is optional; without it the `.kir` default applies. A value outside the range
   the `.kir` declares is rejected at Set build time.
 - Unknown `t` values are ignored, for forward compatibility.
+
+### Binding noise
+
+A `bind` whose `signal` is `noise` takes a `noise` object, because a noise generator has
+parameters no other signal has:
+
+```ndjson
+{"t":"bind","layer":"L1","key":"spawn_rate","signal":"noise",
+ "noise":{"kind":"perlin","rate":0.5,"stream":3},"curve":"lin","range":[4000,16000]}
+```
+
+- `kind` is `white`, `value`, `perlin`, or `fbm`, defaulting to `perlin`. The names are the
+  ones the IR builtins already use; there is no reason for the bus to have a second
+  vocabulary for the same thing.
+- `rate` is in **cycles per beat**, so period is tempo-relative and follows the local
+  oscillator rather than a second notion of time. `white` holds each value for `1 / rate`
+  beats, which gives even the jittery kind a period.
+- `stream` decorrelates one binding from another. Two bindings sharing a stream move
+  together, which is occasionally what you want and never what you get by accident.
+
+Depth is `range`, as for any binding. Together those are the three axes the spawn-timing
+decision depends on being reachable — see [Spawn timing](#spawn-timing).
+
+Tempo-relative rate has a consequence to settle before external sync arrives. Today `bpm`
+is fixed for a session, so cycles-per-beat is a constant rescaling of cycles-per-second and
+the choice costs nothing. Once external input corrects the oscillator, **every** noise
+binding starts tracking those corrections, including ones with no musical intent — a
+flicker on an unrelated `param` would change period whenever the tempo source twitched.
+There is currently no way to opt out, because seconds-relative is not an available mode.
+When external sync lands, either a seconds-relative rate or a rate frozen at bind time will
+be needed; the decision does not have to be made now, but it does have to be made then.
 
 A Set file is a **state projection**: what is loaded, and what every value currently is. It
 carries no time.

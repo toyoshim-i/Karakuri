@@ -18,38 +18,38 @@ pub const BEATS_PER_BAR: u32 = 4;
 
 /// Phase and tempo, advanced by simulation steps rather than by wall time.
 ///
-/// Two quantities accumulate across calls to [`advance`](Oscillator::advance),
-/// and they are deliberately kept separate rather than folded into one:
-///
-/// - `t`, the elapsed simulation time (`sum(steps * dt)`). Musical phase —
-///   [`beat_phase`](Oscillator::beat_phase) and [`bar_phase`](Oscillator::bar_phase)
-///   — is defined in terms of `t`, because tempo is a real-time-domain concept:
-///   a beat is a duration, and two histories that reach the same elapsed time
-///   are at the same point in the bar regardless of how they got there.
-/// - `step`, the elapsed step count (`sum(steps)`). This is the running total
-///   of the `steps` field taken verbatim off the `tick` records that produced
-///   it — the record stream itself, not a quantity derived from it. Anything
-///   that must stay a pure function of *which* tick history occurred, not just
-///   of how much time it summed to, is keyed off this instead of off `t`. The
-///   noise signal in [`bus`](crate::bus) is the reason this field exists: two
-///   step histories that reach the same `t` by a different route (one big
-///   step vs. several small ones) are different record streams, and are
-///   allowed — expected — to diverge downstream of that difference.
+/// The only state is `t`, the elapsed simulation time (`sum(steps * dt)`
+/// across every [`advance`](Oscillator::advance) call). Everything derived
+/// from the oscillator — musical phase here, and every synthesized signal in
+/// [`bus`](crate::bus) — is a function of `t` and `bpm` alone, deliberately:
+/// two tick histories that reach the same elapsed time by a different route
+/// (one big step vs. several small ones) are the same point in the session as
+/// far as the oscillator is concerned, which matches how the IR spec's own
+/// spawn accumulator treats `steps` — `spawn_rate * dt * float(steps)` is one
+/// product, not a per-call effect — so nothing here should disagree with it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Oscillator {
     bpm: f32,
     t: f64,
-    step: u64,
 }
 
+/// Tempo is clamped into this range. The lower bound matters: every noise
+/// signal derives its phase from beats, so a tempo of zero would freeze all of
+/// them at once while nothing reported an error — a failure that looks like a
+/// broken generator rather than a bad tempo.
+pub const BPM_RANGE: std::ops::RangeInclusive<f32> = 1.0..=1000.0;
+
 impl Oscillator {
-    /// A fresh oscillator at phase zero, ticking at `bpm`.
+    /// A fresh oscillator at phase zero, ticking at `bpm`, clamped into
+    /// [`BPM_RANGE`]. A NaN tempo becomes the low bound rather than poisoning
+    /// every phase downstream.
     pub fn new(bpm: f32) -> Oscillator {
-        Oscillator {
-            bpm,
-            t: 0.0,
-            step: 0,
-        }
+        let bpm = if bpm.is_nan() {
+            *BPM_RANGE.start()
+        } else {
+            bpm.clamp(*BPM_RANGE.start(), *BPM_RANGE.end())
+        };
+        Oscillator { bpm, t: 0.0 }
     }
 
     /// Advance by `steps` simulation steps of `dt` seconds each.
@@ -60,7 +60,6 @@ impl Oscillator {
     /// both arguments are handed in.
     pub fn advance(&mut self, steps: u8, dt: f32) {
         self.t += steps as f64 * dt as f64;
-        self.step += steps as u64;
     }
 
     /// The oscillator's tempo. The local oscillator is the single source of
@@ -73,14 +72,6 @@ impl Oscillator {
     /// to [`advance`](Oscillator::advance) so far. Never wall clock.
     pub fn t(&self) -> f64 {
         self.t
-    }
-
-    /// Elapsed step count, `sum(steps)` across every call to
-    /// [`advance`](Oscillator::advance) so far — the running total of the
-    /// `tick` records' `steps` field itself, distinct from `t`. See the struct
-    /// docs for why this is kept separate.
-    pub fn step_index(&self) -> u64 {
-        self.step
     }
 
     /// Position within the current beat, `0.0..1.0`. `0.0` is the instant of
@@ -117,7 +108,6 @@ mod tests {
         osc.advance(2, 0.5);
         osc.advance(1, 0.25);
         assert!((osc.t() - 1.25).abs() < 1e-12);
-        assert_eq!(osc.step_index(), 3);
     }
 
     #[test]
@@ -141,8 +131,12 @@ mod tests {
     }
 
     #[test]
-    fn one_step_of_double_dt_reaches_the_same_time_as_two_steps() {
-        // Same elapsed time, different tick history: `t` agrees...
+    fn one_step_of_double_dt_reaches_the_same_state_as_two_steps_of_dt() {
+        // Same total elapsed time, different tick history — and, by design,
+        // the same resulting phase: `t` (and everything derived from it) only
+        // ever sees the product `steps * dt`, never the call count. See the
+        // struct docs, and `bus::tests` for the same property carried through
+        // to the synthesized signals.
         let mut merged = Oscillator::new(90.0);
         merged.advance(1, 0.2);
 
@@ -152,11 +146,27 @@ mod tests {
 
         assert!((merged.t() - split.t()).abs() < 1e-12);
         assert_eq!(merged.beat_phase(), split.beat_phase());
+        assert_eq!(merged.bar_phase(), split.bar_phase());
+    }
+}
 
-        // ...but `step` does not: it is the tick history itself, not a
-        // function of the time it summed to.
-        assert_ne!(merged.step_index(), split.step_index());
-        assert_eq!(merged.step_index(), 1);
-        assert_eq!(split.step_index(), 2);
+#[cfg(test)]
+mod tempo_tests {
+    use super::*;
+
+    #[test]
+    fn a_zero_or_negative_tempo_cannot_freeze_every_noise_signal() {
+        // Noise phase is derived from beats, so a tempo of zero would stop all
+        // of it at once and report nothing. Clamping turns a silent freeze into
+        // a visibly wrong-but-running tempo.
+        for bad in [0.0, -120.0, f32::NAN] {
+            let osc = Oscillator::new(bad);
+            assert!(osc.bpm() >= *BPM_RANGE.start(), "{bad} survived clamping");
+        }
+    }
+
+    #[test]
+    fn an_ordinary_tempo_is_untouched() {
+        assert_eq!(Oscillator::new(128.0).bpm(), 128.0);
     }
 }
