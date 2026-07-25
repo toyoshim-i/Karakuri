@@ -11,7 +11,17 @@
 //! - Element order is preserved. Compaction is order-preserving, which is what
 //!   makes reproduction bit-exact — floating-point addition is not associative,
 //!   so even additive blending depends on a stable order.
+//! - Simulation time advances by `steps * dt` from a `tick` record. Nothing in
+//!   this crate reads a clock.
 
+pub mod camera;
+pub mod gpu;
+pub mod points;
+pub mod present;
 pub mod video_source;
 
+pub use camera::Orbit;
+pub use gpu::{Gpu, GpuError};
+pub use points::{Params, Points};
+pub use present::Present;
 pub use video_source::VideoSource;
