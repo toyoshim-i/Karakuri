@@ -1,0 +1,458 @@
+//! Stage 4: cost estimation.
+//!
+//! Produces a per-element figure, never a total. `capacity` belongs to the Set,
+//! so an artifact has no total cost to be judged on; rejection here is against
+//! a per-element ceiling only, and the frame-budget decision belongs to the
+//! probe in stage 7 where the real capacity and the real parameters are known.
+//!
+//! ## Method
+//!
+//! `ops_per_element` is a static instruction count, multiplied out through loop
+//! bounds (constant, per the grammar, so this terminates and needs no actual
+//! iteration — a loop's cost is its body's cost times its trip count, computed
+//! once and multiplied, never executed `n` times by this pass). Nested loops
+//! multiply into the running multiplier, so nesting multiplies the estimate
+//! rather than adding to it, per the spec. An `if` charges the condition, one
+//! unit for the test itself, and the *more expensive* of its two arms — not
+//! both — because both are usually executed on a GPU control-flow-divergent
+//! lane anyway, so the arm that is skipped in scalar code is not free here.
+//!
+//! Every leaf read (a literal, a local, a param, an attribute, an ambient) and
+//! every operator or statement costs one unit — a stand-in for "one scalar ALU
+//! instruction, roughly." Builtins are weighted relative to that baseline in
+//! [`builtin_weight`]; see the comment there for where the numbers come from.
+//! **All of this is ordinal, not measured.** Nothing here has been run through
+//! a profiler or a WGSL compiler; the numbers encode "this is roughly N times
+//! more expensive than a multiply," not a nanosecond figure. Replacing them
+//! with real numbers needs GPU timing of each builtin in isolation (a
+//! microbenchmark shader per function, on representative hardware) — exactly
+//! the kind of measurement stage 7's probe does for a whole procedure, just
+//! decomposed per builtin instead.
+//!
+//! `bytes_per_element` is simpler and not ordinal: it follows directly from
+//! the WGSL lowering section. Every emitted attribute gets a pair of storage
+//! buffers (prev/next), 16-byte aligned; `seed`, the alive flag, and the birth
+//! fraction are always allocated whether or not the procedure names them,
+//! because none of the three is nameable from IR.
+
+use crate::ast::{BlockKind, Lit, Ty};
+use crate::builtin::Builtin;
+use crate::error::{IrError, IrResult};
+use crate::span::Span;
+use crate::typed::{Checked, Cost, TExpr, TExprKind, TStmt};
+
+/// Per-element ceiling on [`Cost::ops_per_element`]. Anything estimated above
+/// this is rejected at stage 4.
+///
+/// The number is ordinal, chosen rather than measured, and lives here as one
+/// tunable constant precisely because it will need retuning once real probe
+/// data (stage 7) exists to compare against. It was calibrated against the two
+/// worked examples in `docs/ir-spec.md`: `drift_shell` (spawn + element,
+/// including a `curl` call) estimates at a little under 200 ops/element under
+/// this module's weights, and the `curl`-in-a-4-iteration-loop snippet under
+/// [Statements and expressions](../../../docs/ir-spec.md#statements-and-expressions)
+/// at a little under 500. `4096` leaves roughly an order of magnitude of
+/// headroom above both — enough for a procedure with a few small loops of
+/// noise calls — while still catching the pattern the spec calls out
+/// explicitly as dangerous: loops nested a few levels deep, each multiplying
+/// the estimate rather than adding to it.
+pub const MAX_OPS_PER_ELEMENT: u64 = 4096;
+
+/// Ceiling on [`Cost::ops_per_spawn`]. Looser than the per-frame figure because
+/// spawning happens once in an element's life and then never again: the work
+/// per frame is `spawn_rate * dt` elements' worth, which at any sane rate is a
+/// small fraction of what the population costs. Charging spawn against the
+/// per-frame ceiling would reject a procedure that seeds an expensive initial
+/// state and then coasts, which is a shape worth allowing.
+pub const MAX_OPS_PER_SPAWN: u64 = 16_384;
+
+/// Ceiling on [`Cost::ops_per_fragment`]. Tighter than either, because a
+/// fragment is evaluated far more often than an element: one soft sprite covers
+/// tens of pixels, and they overlap. Like the others this is ordinal and
+/// untested — stage 7's probe is what actually knows.
+pub const MAX_OPS_PER_FRAGMENT: u64 = 512;
+
+/// Every attribute buffer is 16-byte aligned per the WGSL lowering section.
+const BUFFER_ALIGN: u32 = 16;
+
+const fn align16(bytes: u32) -> u32 {
+    bytes.div_ceil(BUFFER_ALIGN) * BUFFER_ALIGN
+}
+
+/// `seed`, the alive flag, and the birth fraction are always allocated per the
+/// lowering section, regardless of whether the procedure names them — none of
+/// the three is nameable from IR. Each is 4 bytes natively (a `uint`, a flag,
+/// and a `float`), padded to the buffer alignment, and double buffered like
+/// any emitted attribute.
+const ALWAYS_ALLOCATED_BYTES: u32 = align16(4) * 2 * 3;
+
+fn native_bytes(ty: Ty) -> u32 {
+    match ty {
+        Ty::Float | Ty::Int | Ty::Uint | Ty::Bool => 4,
+        Ty::Vec2 => 8,
+        Ty::Vec3 => 12,
+        Ty::Vec4 => 16,
+        Ty::Mat3 => 36,
+        Ty::Mat4 => 64,
+    }
+}
+
+fn storage_bytes(checked: &Checked) -> u32 {
+    checked.emit.iter().fold(ALWAYS_ALLOCATED_BYTES, |total, attr| {
+        total + align16(native_bytes(attr.ty())) * 2
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Builtin weights
+// ---------------------------------------------------------------------------
+//
+// Ordinal, not measured — see the module doc. The rough tiers, from cheapest
+// to most expensive:
+//
+// - `1`: componentwise selects/compares (`abs`, `floor`, `min`, `step`, ...) —
+//   about one ALU instruction.
+// - `2`-`4`: a handful of multiply-adds (`dot`, `cross`) or a single
+//   reciprocal-square-root-shaped op (`sqrt`).
+// - `8`-`10`: transcendentals (`exp`, `log`, `pow`, trig) — GPUs implement
+//   these via range reduction plus a polynomial or rational approximation,
+//   commonly cited as several times the cost of a multiply-add.
+// - low double digits: integer hashes (a handful of bit-mixing ops each,
+//   `hash3` costing roughly three `hash1`s) and the noise functions built on
+//   them (`value_noise`, `perlin`, `simplex` — multiple lattice-corner hashes
+//   plus interpolation).
+// - `curl`: "several noise evaluations" per the task brief — a numerical curl
+//   needs the underlying field sampled at multiple offset points (or an
+//   analytic gradient with a comparable number of terms), so it is weighted
+//   as six `perlin` calls.
+// - `fbm`: exactly `octaves` `perlin`-equivalent evaluations plus a per-octave
+//   combine, since that is literally what the lowering unrolls it into.
+// - SDF primitives, rotations, and distributions: composed from the above
+//   (a couple of trig calls plus vector arithmetic for a rotation, a `dot` or
+//   `length` plus a few ALU ops for an SDF primitive), weighted accordingly.
+
+const W_CHEAP: u64 = 1; // abs/floor/ceil/round/fract/sign/min/max/step/mod
+const W_SELECT3: u64 = 2; // clamp/mix: two selects/lerps worth of blending
+const W_SMOOTHSTEP: u64 = 3; // clamp + a cubic Hermite blend
+const W_SQRT: u64 = 4;
+const W_TRANSCENDENTAL: u64 = 8; // exp/log/exp2/log2
+const W_POW: u64 = 10; // often lowered as exp(log(x) * y)
+const W_TRIG: u64 = 8; // sin/cos
+const W_TRIG_HARDER: u64 = 9; // asin/acos/atan: extra branching for domain edges
+const W_TRIG_HARDEST: u64 = 10; // tan (division on top), atan2 (quadrant select)
+const W_DOT: u64 = 2;
+const W_CROSS: u64 = 4;
+const W_LENGTH: u64 = W_DOT + W_SQRT; // 6
+const W_DISTANCE: u64 = W_LENGTH + 1; // 7: subtract, then length
+const W_NORMALIZE: u64 = W_LENGTH + 2; // 8: length, then a componentwise divide
+const W_REFLECT: u64 = W_DOT + 3; // I - 2*dot(I,N)*N
+const W_REFRACT: u64 = W_REFLECT + W_SQRT + 2; // + a discriminant and a branch
+
+const W_HASH1: u64 = 3;
+const W_HASH2: u64 = 5;
+const W_HASH3: u64 = 7;
+const W_VALUE_NOISE: u64 = 12; // 8 lattice-corner hashes + trilinear blend
+const W_PERLIN: u64 = 16; // 8 corner gradients, dot products, and a blend
+const W_SIMPLEX: u64 = 14; // fewer corners than a cubic lattice (4 in 3D)
+const W_CURL: u64 = 6 * W_PERLIN; // several field evaluations; see doc above
+
+const W_SD_SPHERE: u64 = W_LENGTH + 1;
+const W_SD_BOX: u64 = 10; // abs + max + length across components
+const W_SD_TORUS: u64 = 9;
+const W_SD_PLANE: u64 = W_DOT + 2;
+const W_OP_UNION: u64 = W_CHEAP;
+const W_OP_SUBTRACT: u64 = W_CHEAP;
+const W_OP_INTERSECT: u64 = W_CHEAP;
+const W_OP_SMOOTH_UNION: u64 = 8; // smin: a clamp plus a cubic blend
+
+const W_ROT: u64 = 2 * W_TRIG + 4; // build sin/cos, then a handful of madds
+const W_ROT_AXIS: u64 = 2 * W_TRIG + 10; // Rodrigues' formula: more vector terms
+
+const W_SPHERE_POINT: u64 = 2 * W_TRIG + W_SQRT + 4;
+const W_DISC_POINT: u64 = W_TRIG + W_SQRT + 2;
+
+const W_HSV_RGB: u64 = 10; // piecewise-branchy conversion
+const W_SRGB_LINEAR: u64 = W_TRANSCENDENTAL + 2; // a pow-shaped curve
+
+/// Weight of one call to `func`. `args` is only consulted for `fbm`, whose
+/// cost depends on its compile-time octave count.
+fn builtin_weight(func: Builtin, args: &[TExpr]) -> u64 {
+    match func {
+        Builtin::Abs
+        | Builtin::Floor
+        | Builtin::Ceil
+        | Builtin::Round
+        | Builtin::Fract
+        | Builtin::Mod
+        | Builtin::Min
+        | Builtin::Max
+        | Builtin::Step
+        | Builtin::Sign => W_CHEAP,
+        Builtin::Clamp | Builtin::Mix => W_SELECT3,
+        Builtin::Smoothstep => W_SMOOTHSTEP,
+        Builtin::Sqrt => W_SQRT,
+        Builtin::Pow => W_POW,
+        Builtin::Exp | Builtin::Log | Builtin::Exp2 | Builtin::Log2 => W_TRANSCENDENTAL,
+
+        Builtin::Sin | Builtin::Cos => W_TRIG,
+        Builtin::Asin | Builtin::Acos | Builtin::Atan => W_TRIG_HARDER,
+        Builtin::Tan | Builtin::Atan2 => W_TRIG_HARDEST,
+
+        Builtin::Length => W_LENGTH,
+        Builtin::Distance => W_DISTANCE,
+        Builtin::Normalize => W_NORMALIZE,
+        Builtin::Dot => W_DOT,
+        Builtin::Cross => W_CROSS,
+        Builtin::Reflect => W_REFLECT,
+        Builtin::Refract => W_REFRACT,
+
+        Builtin::Hash1 => W_HASH1,
+        Builtin::Hash2 => W_HASH2,
+        Builtin::Hash3 => W_HASH3,
+        Builtin::ValueNoise => W_VALUE_NOISE,
+        Builtin::Perlin => W_PERLIN,
+        Builtin::Simplex => W_SIMPLEX,
+        Builtin::Fbm => fbm_weight(args),
+        Builtin::Curl => W_CURL,
+
+        Builtin::SdSphere => W_SD_SPHERE,
+        Builtin::SdBox => W_SD_BOX,
+        Builtin::SdTorus => W_SD_TORUS,
+        Builtin::SdPlane => W_SD_PLANE,
+        Builtin::OpUnion => W_OP_UNION,
+        Builtin::OpSmoothUnion => W_OP_SMOOTH_UNION,
+        Builtin::OpSubtract => W_OP_SUBTRACT,
+        Builtin::OpIntersect => W_OP_INTERSECT,
+
+        Builtin::RotX | Builtin::RotY | Builtin::RotZ => W_ROT,
+        Builtin::RotAxis => W_ROT_AXIS,
+
+        Builtin::SpherePoint => W_SPHERE_POINT,
+        Builtin::DiscPoint => W_DISC_POINT,
+
+        Builtin::HsvToRgb | Builtin::RgbToHsv => W_HSV_RGB,
+        Builtin::SrgbToLinear | Builtin::LinearToSrgb => W_SRGB_LINEAR,
+    }
+}
+
+/// `fbm(position, octaves)` unrolls to `octaves` noise evaluations at lowering
+/// time (see WGSL lowering notes), plus a per-octave amplitude/frequency
+/// combine, so its cost is exactly that multiplication rather than a fixed
+/// weight.
+fn fbm_weight(args: &[TExpr]) -> u64 {
+    // `octaves` is `const_args[0]` on `fbm`'s signature (see builtin.rs), so
+    // the check pass guarantees this is a constant int literal by the time
+    // cost estimation runs — it has to be, since lowering unrolls it. Falling
+    // back to a single octave if that invariant is ever violated is a
+    // defensive underestimate, not an expected path.
+    let octaves = match args.get(1).map(|a| &a.kind) {
+        Some(TExprKind::Lit(Lit::Int(n))) => (*n).max(0) as u64,
+        _ => 1,
+    };
+    (W_PERLIN + 1).saturating_mul(octaves)
+}
+
+// ---------------------------------------------------------------------------
+// Static op counting
+// ---------------------------------------------------------------------------
+
+/// The most expensive single builtin call found, scaled by how many times its
+/// enclosing loops replay it. Recorded so a rejection can name what dominated
+/// the estimate instead of just reporting a number.
+struct HotSpot {
+    builtin: Builtin,
+    /// `weight * (product of enclosing loop trip counts)`.
+    contribution: u64,
+    block: BlockKind,
+    span: Span,
+}
+
+fn stmts_cost(stmts: &[TStmt], mult: u64, block: BlockKind, hot: &mut Option<HotSpot>) -> u64 {
+    stmts
+        .iter()
+        .fold(0u64, |total, s| total.saturating_add(stmt_cost(s, mult, block, hot)))
+}
+
+fn stmt_cost(stmt: &TStmt, mult: u64, block: BlockKind, hot: &mut Option<HotSpot>) -> u64 {
+    match stmt {
+        TStmt::Let { value, .. } | TStmt::Var { value, .. } | TStmt::Assign { value, .. } => {
+            1u64.saturating_add(expr_cost(value, mult, block, hot))
+        }
+        TStmt::If { cond, then, els, .. } => {
+            let cond_cost = expr_cost(cond, mult, block, hot);
+            let then_cost = stmts_cost(then, mult, block, hot);
+            let els_cost = stmts_cost(els, mult, block, hot);
+            // Both arms are charged for hot-spot tracking (both were walked
+            // above), but the total only counts the pricier one plus the
+            // test: on a GPU both are usually executed by every lane anyway,
+            // so the skipped arm in scalar code is not free here.
+            cond_cost.saturating_add(1).saturating_add(then_cost.max(els_cost))
+        }
+        TStmt::For { start, end, body, .. } => {
+            let iterations = loop_iterations(*start, *end);
+            // The multiplier that reaches any builtin *inside* this loop
+            // grows for hot-spot tracking, but the body is walked once — its
+            // cost is computed, not executed `iterations` times — which is
+            // what keeps a huge literal bound cheap to estimate.
+            let inner_mult = mult.saturating_mul(iterations);
+            let body_cost = stmts_cost(body, inner_mult, block, hot);
+            // +1 per iteration for the loop counter's increment/compare.
+            iterations.saturating_mul(body_cost.saturating_add(1))
+        }
+        TStmt::Kill { .. } => 1,
+    }
+}
+
+/// Trip count of `start..end`, per the `for i in <start>..<end>` grammar.
+/// Both bounds are integer literals, so this is exact and needs no runtime
+/// value; an empty or backwards range costs nothing.
+fn loop_iterations(start: i32, end: i32) -> u64 {
+    let n = i64::from(end) - i64::from(start);
+    if n <= 0 {
+        0
+    } else {
+        n as u64
+    }
+}
+
+fn expr_cost(expr: &TExpr, mult: u64, block: BlockKind, hot: &mut Option<HotSpot>) -> u64 {
+    match &expr.kind {
+        TExprKind::Lit(_)
+        | TExprKind::Local(_)
+        | TExprKind::Param(_)
+        | TExprKind::Attr(_)
+        | TExprKind::Ambient(_) => 1,
+        TExprKind::Unary { value, .. } => 1u64.saturating_add(expr_cost(value, mult, block, hot)),
+        TExprKind::Binary { lhs, rhs, .. } => 1u64
+            .saturating_add(expr_cost(lhs, mult, block, hot))
+            .saturating_add(expr_cost(rhs, mult, block, hot)),
+        TExprKind::Builtin { func, args } => {
+            let weight = builtin_weight(*func, args);
+            let contribution = weight.saturating_mul(mult);
+            let is_new_max = hot.as_ref().is_none_or(|h| contribution > h.contribution);
+            if is_new_max {
+                *hot = Some(HotSpot {
+                    builtin: *func,
+                    contribution,
+                    block,
+                    span: expr.span,
+                });
+            }
+            let args_cost = args
+                .iter()
+                .fold(0u64, |total, a| total.saturating_add(expr_cost(a, mult, block, hot)));
+            weight.saturating_add(args_cost)
+        }
+        TExprKind::Construct { args } => 1u64.saturating_add(
+            args.iter()
+                .fold(0u64, |total, a| total.saturating_add(expr_cost(a, mult, block, hot))),
+        ),
+        TExprKind::Swizzle { value, .. } => 1u64.saturating_add(expr_cost(value, mult, block, hot)),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------------------
+
+/// Estimate, and reject anything above the per-element ceiling.
+pub fn estimate(checked: &Checked) -> IrResult<Cost> {
+    let mut hot: Option<HotSpot> = None;
+    let mut block_totals: Vec<(BlockKind, u64)> = Vec::with_capacity(checked.blocks.len());
+    let mut ops_per_element = 0u64;
+
+    let mut ops_per_spawn = 0u64;
+    let mut ops_per_fragment = 0u64;
+
+    for block in &checked.blocks {
+        let block_cost = stmts_cost(&block.stmts, 1, block.kind, &mut hot);
+        block_totals.push((block.kind, block_cost));
+        // Each block's cost is charged to the quantity it actually scales
+        // with. These are not summed: see `Cost`.
+        match block.kind {
+            BlockKind::Element | BlockKind::Vertex => {
+                ops_per_element = ops_per_element.saturating_add(block_cost)
+            }
+            BlockKind::Spawn => ops_per_spawn = ops_per_spawn.saturating_add(block_cost),
+            BlockKind::Fragment => ops_per_fragment = ops_per_fragment.saturating_add(block_cost),
+        }
+    }
+
+    let cost = Cost {
+        ops_per_element,
+        ops_per_spawn,
+        ops_per_fragment,
+        bytes_per_element: storage_bytes(checked),
+    };
+
+    for (measured, ceiling, unit) in [
+        (ops_per_element, MAX_OPS_PER_ELEMENT, "ops/element"),
+        (ops_per_spawn, MAX_OPS_PER_SPAWN, "ops/spawn"),
+        (ops_per_fragment, MAX_OPS_PER_FRAGMENT, "ops/fragment"),
+    ] {
+        if measured > ceiling {
+            return Err(vec![reject(
+                checked,
+                measured,
+                ceiling,
+                unit,
+                &block_totals,
+                hot,
+            )]);
+        }
+    }
+
+    Ok(cost)
+}
+
+/// Build the rejection diagnostic. Per the validation pipeline section, a cost
+/// rejection has to carry the estimate and the ceiling as actual numbers, and
+/// should say what dominated so a regeneration has something to aim at —
+/// "over budget" tells a repair prompt nothing about how much to cut.
+fn reject(
+    checked: &Checked,
+    ops: u64,
+    ceiling: u64,
+    unit: &str,
+    block_totals: &[(BlockKind, u64)],
+    hot: Option<HotSpot>,
+) -> IrError {
+    if let Some(hot) = hot {
+        let percent = hot.contribution.saturating_mul(100) / ops;
+        let message = format!(
+            "{ops} {unit} exceeds the {ceiling} {unit} ceiling \
+             (dominated by `{}` in `{}`: ~{} of {ops} ops, {percent}%)",
+            hot.builtin.name(),
+            hot.block.name(),
+            hot.contribution,
+        );
+        let hint = format!(
+            "cut or cheapen the `{}` call in the `{}` block first — it alone accounts for \
+             about {percent}% of the estimate. Fewer loop iterations around it, a lower `fbm` \
+             octave count, or a cheaper builtin all reduce it directly.",
+            hot.builtin.name(),
+            hot.block.name(),
+        );
+        IrError::cost(hot.span, message).with_hint(hint)
+    } else {
+        // No single builtin call stands out — the estimate is dominated by
+        // plain statements and arithmetic, most likely under deep loop
+        // nesting. Point at the costliest block instead.
+        let (dom_block, dom_cost) = block_totals
+            .iter()
+            .copied()
+            .max_by_key(|&(_, c)| c)
+            .unwrap_or((BlockKind::Element, ops));
+        let message = format!(
+            "{ops} {unit} exceeds the {ceiling} {unit} ceiling \
+             (the `{}` block accounts for {dom_cost} of {ops} ops)",
+            dom_block.name(),
+        );
+        let hint = format!(
+            "cut statements or loop iterations in the `{}` block — the estimate is dominated \
+             by plain arithmetic under loop nesting there, not by a single builtin call.",
+            dom_block.name(),
+        );
+        IrError::cost(checked.span, message).with_hint(hint)
+    }
+}

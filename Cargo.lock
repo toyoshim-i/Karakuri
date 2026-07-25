@@ -772,6 +772,10 @@ dependencies = [
 [[package]]
 name = "karakuri-codegen"
 version = "0.1.0"
+dependencies = [
+ "karakuri-ir",
+ "naga",
+]
 
 [[package]]
 name = "karakuri-engine"
