@@ -16,10 +16,14 @@
 //! measurement, promotion) belong to `karakuri-codegen` and `karakuri-engine`.
 
 pub mod ast;
+pub mod builtin;
+pub mod check;
+pub mod cost;
 pub mod error;
 mod lexer;
 pub mod parse;
 pub mod span;
+pub mod typed;
 
 pub use ast::{
     Ambient, Attr, BinOp, Blend, Block, BlockKind, CapacityDecl, Expr, Kind, Lit, Output, Param,

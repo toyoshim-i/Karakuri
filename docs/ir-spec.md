@@ -91,9 +91,13 @@ param <name> : <type> [<min>, <max>] = <default>
 - Types: `float`, `vec2`, `vec3`
 - The range is mandatory. It doubles as the UI fader range, the agent's search range,
   and the normalization basis for signal binding.
-- Attribute names are reserved. A `param` may not be called `position`, `size`, `tint`,
-  `seed`, or any other name from the attribute table — parameters and attributes share one
-  scope inside a block, and the shadowing would be silent.
+- **Every name the language already gives meaning to is reserved.** A `param` may not be
+  called `position`, `size`, `tint` or any other attribute; nor `seed`, `t`, `dt`,
+  `capacity`, `camera` or `point_coord`; nor `clip`, `point_size` or `color`; nor `id`.
+  Params, attributes, ambients and stage outputs share one scope inside a block, and the
+  lowering packs params and ambients into one uniform struct — `param t : float` would
+  collide with the ambient `t` in the generated WGSL, silently, at a point far from the
+  declaration. The same reservation applies to `let`, `var`, and loop variables.
 - 3 to 8 parameters recommended. Zero is legal but such a procedure has no reuse value.
 - Intensity-like parameters may exceed 1.0. The pipeline is HDR; see [Color](#color).
 
@@ -109,9 +113,16 @@ emit     position, velocity, age
 consumes position, age
 ```
 
-Compatibility is a subset check. If `consumes` is not contained in `emit`, the compiler
-first attempts [attribute derivation](#attribute-derivation); if no rule applies, it is a
-compile error.
+Compatibility is a subset check **between two procedures**, not within one. `emit` is
+declared by the L1 procedure in a slot and `consumes` by the L4 procedure paired with it, so
+the check belongs to Set composition and cannot be made against a single `.kir` — the
+`soft_points` example below consumes three attributes and emits nothing, which is not an
+error but the normal shape of an L4 file. When the Set is built and `consumes` is not
+contained in the paired `emit`, the compiler first attempts
+[attribute derivation](#attribute-derivation); if no rule applies, the Set is rejected.
+
+Within one procedure the useful check is narrower: an attribute is readable or writable
+only if that procedure declares it, since only a declared attribute gets a buffer pair.
 
 Available attributes:
 
@@ -149,6 +160,12 @@ the approximation for bright distant elements. None of that reaches the IR surfa
 
 Blend mode is part of an artifact's identity: a procedure writes its `color` and alpha
 knowing how they will be combined.
+
+One gap to close before a second L4 style exists. Quad expansion is justified by
+`topology points`, but `topology` is declared on the **L1** header — an L4 procedure never
+declares one and the checked tree has no field for it. With one topology and one blend mode
+the question does not arise, and the moment there are two of either, an L4 procedure will
+need a way to say which it is written for.
 
 ---
 
@@ -410,9 +427,12 @@ and doubles the correction whenever a procedure applies it on top of the engine'
 same silent-footgun shape as [`id`](#element-identity). Nothing in the IR mentions spawn
 timing and no generation prompt has to.
 
-Cost is one value per element and one branch in `element`. The scaled step lands on the
-element's first update, which is the frame after it was spawned: `spawn` runs after the
-`element` pass, so a new element is rendered once at its spawn state before it first moves.
+Cost is one value per element and no branch at all. The fraction expires itself: `element`
+computes its step as `dt * birth_frac` and unconditionally writes `birth_frac = 1.0` for
+the next frame, so the correction applies exactly once without anything having to ask
+whether this is an element's first update. The scaled step lands on that first update,
+which is the frame after the element was spawned — `spawn` runs after the `element` pass,
+so a new element is rendered once at its spawn state before it first moves.
 
 ### Dispatch
 
@@ -657,8 +677,15 @@ disc_point(float, float) -> vec2
 - `spawn` dispatches over `[live_count, capacity)`, bounded by the spawn count the engine
   computed for this frame, and writes `seed` from the monotone counter and the birth
   fraction from its index within the frame's batch
-- `param` values pack into a single uniform buffer along with `t`, `dt`, `capacity`, and
-  the layer's seed salt. `capacity` is a uniform so that changing it needs no recompile
+- `param` values pack into a single uniform buffer along with `t`, `dt`, `capacity`, the
+  layer's seed salt, and three quantities the IR never sees but the entry points cannot
+  work without: `live_count` (where the live range ends), `spawn_count` (how many elements
+  to create this frame), and `seed_base` (the monotone counter's value for the first of
+  them). `capacity` is a uniform so that changing it needs no recompile
+- Every attribute buffer is padded to a 16-byte stride regardless of the attribute's
+  width, so `capacity * 16` sizes any of them and no buffer needs its own arithmetic. It
+  costs memory — a `float` attribute occupies four times what it needs — and that is worth
+  revisiting if VRAM becomes the binding constraint before something else does
 - Buffers swap at the end of the frame
 
 ### L4
@@ -693,9 +720,11 @@ Generated IR passes through these in order. Failure at any stage means no artifa
 
 1. **Parse**
 2. **Type check** — undefined identifiers, type mismatches, missing attribute assignments
-3. **Contract check** — `consumes` ⊆ `emit` (after derivation), no signal-bus reads, no
-   `param` or local shadowing an attribute name, no assignment to a `let` or to an
-   undeclared name, each emitted attribute and required stage output assigned on every path
+3. **Contract check** — no signal-bus reads, no shadowing, no assignment to a `let` or to
+   an undeclared name, no reference to an attribute the procedure does not declare, and
+   each emitted attribute and required stage output assigned on every path. Note that
+   `consumes` ⊆ `emit` is **not** checked here: it relates two procedures and belongs to
+   Set composition, at stage 6
 4. **Cost estimation** — static instruction count × loop bounds, yielding a **per element**
    figure. `capacity` belongs to the Set, so an artifact has no total cost to be judged on;
    rejection here is against a per-element ceiling only

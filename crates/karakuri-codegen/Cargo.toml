@@ -6,3 +6,11 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+karakuri-ir.workspace = true
+
+[dev-dependencies]
+# Generated WGSL is only as good as what compiles it. naga is already in the
+# dependency tree via wgpu (karakuri-engine); pulling it in directly here lets
+# tests feed generated text through a real WGSL front end instead of trusting
+# that it merely looks right.
+naga = { version = "26", features = ["wgsl-in"] }
