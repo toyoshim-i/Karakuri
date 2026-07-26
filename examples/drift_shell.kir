@@ -1,0 +1,32 @@
+// A shell of elements pushed around by a curl-noise field and slowly rotated.
+//
+// No `spawn` block, so every element is live from frame zero and `seed` is its
+// slot index. That is the simplest form the specification describes, and the
+// one that needs no compaction to run.
+
+proc drift_shell {
+  kind     L1
+  topology points
+  capacity [4096, 1048576] = 262144
+
+  param radius     : float [0.1, 8.0] = 2.6
+  param turbulence : float [0.0, 3.0] = 1.1
+  param swirl      : float [0.0, 2.0] = 0.35
+  param drift      : float [0.0, 2.0] = 0.6
+
+  emit position, velocity, age
+
+  element {
+    let u    = hash1(seed);
+    let v    = hash1(seed + 1000u);
+    let base = sphere_point(u, v) * radius;
+
+    let phase = t * drift + hash1(seed + 7u) * 6.2831853;
+    let flow  = curl(base * 0.4 + vec3(0.0, t * 0.15, 0.0)) * turbulence;
+    let p     = rot_y(base + flow * 0.35, t * swirl + sin(phase) * 0.2);
+
+    position = p;
+    velocity = flow;
+    age      = age + dt;
+  }
+}

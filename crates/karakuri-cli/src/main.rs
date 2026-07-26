@@ -1,4 +1,8 @@
-//! The V1 entry point: a window and a render loop.
+//! The V1 entry point.
+//!
+//! Two `.kir` files go in, through parse, type and contract checking, cost
+//! estimation, WGSL generation, and pipeline creation, and come out as either a
+//! window or a PNG. Nothing here is hand-written shader code.
 //!
 //! This is also the only place a clock is read. The engine advances by `steps`
 //! from a `tick` record and never measures anything; deriving that count from
@@ -6,10 +10,14 @@
 //! replay it is read back from the stream instead. Keeping the measurement out
 //! here is what lets the same engine code be deterministic.
 
+mod compile;
+mod render;
+
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use karakuri_engine::{Gpu, Points, Present, VideoSource};
+use karakuri_engine::{Gpu, Present, Set, VideoSource};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -22,17 +30,151 @@ const DT: f32 = 1.0 / 60.0;
 /// catch-up turns a load spike into a death spiral.
 const MAX_STEPS: u8 = 4;
 
-const CAPACITY: u32 = 262_144;
 const SEED: u32 = 19_274;
 
-fn main() {
-    let event_loop = EventLoop::new().expect("event loop");
-    event_loop.set_control_flow(ControlFlow::Poll);
-    event_loop.run_app(&mut App::default()).expect("run");
+struct Args {
+    /// `--param name=value`, applied after the Set is built. A parameter
+    /// change is a uniform write, not a structural change, which is why it
+    /// needs no fork and no recompilation.
+    overrides: Vec<(String, f32)>,
+    l1: PathBuf,
+    l4: PathBuf,
+    capacity: u32,
+    render_to: Option<PathBuf>,
+    seq_to: Option<PathBuf>,
+    frames: u32,
+    size: (u32, u32),
 }
 
-#[derive(Default)]
+fn parse_args() -> Args {
+    let mut args = Args {
+        overrides: Vec::new(),
+        l1: "examples/drift_shell.kir".into(),
+        l4: "examples/soft_points.kir".into(),
+        capacity: 262_144,
+        render_to: None,
+        seq_to: None,
+        frames: 240,
+        size: (1280, 720),
+    };
+    let mut positional = Vec::new();
+    let mut it = std::env::args().skip(1);
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "--render" => args.render_to = it.next().map(PathBuf::from),
+            "--seq" => args.seq_to = it.next().map(PathBuf::from),
+            "--param" => {
+                if let Some((k, v)) = it.next().and_then(|s| {
+                    s.split_once('=')
+                        .and_then(|(k, v)| v.parse().ok().map(|v| (k.to_string(), v)))
+                }) {
+                    args.overrides.push((k, v));
+                }
+            }
+            "--frames" => args.frames = it.next().and_then(|v| v.parse().ok()).unwrap_or(240),
+            "--capacity" => {
+                args.capacity = it.next().and_then(|v| v.parse().ok()).unwrap_or(262_144)
+            }
+            "--size" => {
+                if let Some(v) = it.next() {
+                    if let Some((w, h)) = v.split_once('x') {
+                        if let (Ok(w), Ok(h)) = (w.parse(), h.parse()) {
+                            args.size = (w, h);
+                        }
+                    }
+                }
+            }
+            _ => positional.push(PathBuf::from(arg)),
+        }
+    }
+    if positional.len() == 2 {
+        args.l1 = positional[0].clone();
+        args.l4 = positional[1].clone();
+    }
+    args
+}
+
+fn main() {
+    let args = parse_args();
+
+    eprintln!("compiling:");
+    let l1 = match compile::load(&args.l1) {
+        Ok(c) => c,
+        Err(report) => {
+            eprintln!("{report}");
+            std::process::exit(1);
+        }
+    };
+    let l4 = match compile::load(&args.l4) {
+        Ok(c) => c,
+        Err(report) => {
+            eprintln!("{report}");
+            std::process::exit(1);
+        }
+    };
+
+    match args.render_to.clone().or(args.seq_to.clone()) {
+        Some(path) => {
+            let gpu = Gpu::headless().expect("no GPU");
+            let mut set = build(&gpu, &l1, &l4, args.capacity, &args.overrides);
+            let (w, h) = args.size;
+            eprintln!(
+                "rendering {w}x{h}, {} elements, {} frames -> {}",
+                args.capacity,
+                args.frames,
+                path.display()
+            );
+            let result = if args.seq_to.is_some() {
+                render::to_sequence(&gpu, &mut set, w, h, args.frames, &path)
+            } else {
+                render::to_png(&gpu, &mut set, w, h, args.frames, &path)
+            };
+            if let Err(e) = result {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+        None => {
+            let event_loop = EventLoop::new().expect("event loop");
+            event_loop.set_control_flow(ControlFlow::Poll);
+            event_loop
+                .run_app(&mut App {
+                    args,
+                    procs: Some((l1, l4)),
+                    live: None,
+                })
+                .expect("run");
+        }
+    }
+}
+
+fn build(
+    gpu: &Gpu,
+    l1: &karakuri_ir::typed::Checked,
+    l4: &karakuri_ir::typed::Checked,
+    capacity: u32,
+    overrides: &[(String, f32)],
+) -> Set {
+    match Set::build(&gpu.device, &gpu.queue, l1, l4, capacity, SEED) {
+        Ok(mut set) => {
+            for (name, value) in overrides {
+                match set.params.get_mut(name) {
+                    Some(slot) => *slot = *value,
+                    None => eprintln!("  no parameter named `{name}`, ignoring"),
+                }
+            }
+            set
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 struct App {
+    args: Args,
+    procs: Option<(karakuri_ir::typed::Checked, karakuri_ir::typed::Checked)>,
     live: Option<Live>,
 }
 
@@ -42,7 +184,7 @@ struct Live {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     present: Present,
-    points: Points,
+    set: Set,
     /// Fractional steps carried between frames, so a frame rate that does not
     /// divide the step rate still advances at the right average rate. The same
     /// accumulator shape as spawn quantisation, for the same reason.
@@ -52,11 +194,16 @@ struct Live {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.live.is_some() {
+        let Some((l1, l4)) = self.procs.take() else {
             return;
-        }
+        };
 
-        let attrs = Window::default_attributes().with_title("Karakuri");
+        let attrs = Window::default_attributes()
+            .with_title("Karakuri")
+            .with_inner_size(winit::dpi::LogicalSize::new(
+                self.args.size.0,
+                self.args.size.1,
+            ));
         let window = Arc::new(event_loop.create_window(attrs).expect("window"));
         let size = window.inner_size();
 
@@ -86,13 +233,13 @@ impl ApplicationHandler for App {
         surface.configure(&gpu.device, &config);
 
         let present = Present::new(&gpu.device, format, config.width, config.height);
-        let mut points = Points::new(&gpu.device, CAPACITY, SEED);
-        points.resize(config.width, config.height);
+        let mut set = build(&gpu, &l1, &l4, self.args.capacity, &self.args.overrides);
+        set.resize(config.width, config.height);
 
-        println!(
-            "karakuri: {CAPACITY} elements on {}, timestamps {}",
-            gpu.adapter.get_info().name,
-            if gpu.timestamps { "yes" } else { "no" }
+        eprintln!(
+            "running: {} elements on {}",
+            set.capacity(),
+            gpu.adapter.get_info().name
         );
 
         self.live = Some(Live {
@@ -101,7 +248,7 @@ impl ApplicationHandler for App {
             surface,
             config,
             present,
-            points,
+            set,
             carry: 0.0,
             last: Instant::now(),
         });
@@ -132,7 +279,7 @@ impl Live {
         self.config.height = height;
         self.surface.configure(&self.gpu.device, &self.config);
         self.present.resize(&self.gpu.device, width, height);
-        self.points.resize(width, height);
+        self.set.resize(width, height);
     }
 
     /// The one measurement in the program: elapsed real time becomes a step
@@ -161,10 +308,11 @@ impl Live {
         };
         let view = frame.texture.create_view(&Default::default());
 
-        self.points.prepare(&self.gpu.queue, steps);
+        self.set.prepare(&self.gpu.queue, steps);
 
         let mut encoder = self.gpu.device.create_command_encoder(&Default::default());
-        self.points.render(&mut encoder, self.present.hdr_view(), steps);
+        self.set
+            .render(&mut encoder, self.present.hdr_view(), steps);
         self.present.draw(&mut encoder, &view);
         self.gpu.queue.submit([encoder.finish()]);
         frame.present();
