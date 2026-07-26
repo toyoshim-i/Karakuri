@@ -7,6 +7,8 @@ license.workspace = true
 
 [dependencies]
 bytemuck = "1.25.2"
+karakuri-codegen = { version = "0.1.0", path = "../karakuri-codegen" }
+karakuri-ir = { version = "0.1.0", path = "../karakuri-ir" }
 pollster = "1.0.1"
 thiserror.workspace = true
 wgpu = "26.0.1"

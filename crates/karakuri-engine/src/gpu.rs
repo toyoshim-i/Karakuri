@@ -47,12 +47,22 @@ impl Gpu {
             })
             .await?;
 
-        let timestamps = adapter
-            .features()
-            .contains(wgpu::Features::TIMESTAMP_QUERY);
+        // Two features, and asking for only the first is a trap. `TIMESTAMP_QUERY`
+        // alone permits timestamps at pass boundaries — the `timestamp_writes`
+        // field of a pass descriptor — and nothing else. Writing one directly
+        // into an encoder, which is how you time a span that is not exactly one
+        // pass, additionally needs `TIMESTAMP_QUERY_INSIDE_ENCODERS`. Without it
+        // `write_timestamp` does not produce ticks, and the symptom is a
+        // measurement that succeeds and reads zero rather than one that fails:
+        // a probe returning 0.0 ms looks like a very fast shader.
+        let available = adapter.features();
+        let timestamps = available.contains(wgpu::Features::TIMESTAMP_QUERY);
         let mut required_features = wgpu::Features::empty();
         if timestamps {
             required_features |= wgpu::Features::TIMESTAMP_QUERY;
+        }
+        if available.contains(wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS) {
+            required_features |= wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS;
         }
 
         let (device, queue) = adapter

@@ -15,13 +15,20 @@
 //!   this crate reads a clock.
 
 pub mod camera;
+pub mod compaction;
 pub mod gpu;
 pub mod points;
 pub mod present;
+pub mod probe;
+pub mod set;
+pub mod uniforms;
 pub mod video_source;
 
 pub use camera::Orbit;
+pub use compaction::Compaction;
 pub use gpu::{Gpu, GpuError};
 pub use points::{Params, Points};
 pub use present::Present;
+pub use probe::{Measurement, Probe};
+pub use set::{Set, SetError};
 pub use video_source::VideoSource;
