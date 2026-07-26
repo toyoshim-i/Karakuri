@@ -1,0 +1,567 @@
+# Karakuri — Vision and Roadmap
+
+Companion to `README.md` (invariants and V1 scope) and `docs/ir-spec.md` (the IR).
+
+This document exists so that decisions made during V1 do not foreclose later milestones.
+Where a later milestone imposes a constraint on earlier code, that constraint is stated
+under **Demands on earlier work**. Those are the parts worth reading during V1
+implementation even though the milestone itself is far off.
+
+---
+
+## The end state
+
+A performer opens an empty session and types a prompt. Over the course of a set, the
+system generates visual material, warms it up out of sight, and offers it at musically
+sensible moments. The performer takes control of anything they want and leaves the rest to
+the system. Everything generated is saved, searchable, and reusable in later sessions.
+Nothing stops working when the network drops or the DJ gear changes.
+
+Four properties define whether this succeeded:
+
+1. **Procedural, not generated frames.** The AI writes procedures that run on the GPU
+   every frame, not images or video. What gets saved is an instrument with parameters, not
+   a recording.
+2. **Manual and autonomous on the same mechanism.** A human and an agent affect the system
+   through the identical interface. Authority is a per-layer setting, not a global mode.
+3. **Reproducible.** The same record stream and the same seeds produce the same show.
+4. **Unbreakable on stage.** Nothing stops working when the network drops or the DJ gear
+   changes. Defended continuously rather than built once — see Continuous concerns.
+
+### What this is not
+
+- Not a general-purpose compositor. Video file playback and editing are out of scope
+  except as an external source node.
+- Not a 3D content creation tool. There is no modelling, no asset import pipeline, no
+  animation timeline.
+- Not primarily a live-coding environment for humans. The IR is written by LLMs and read
+  by humans, not the other way round.
+- Not a cloud service. The engine runs locally and keeps running when generation is
+  unavailable.
+
+### The reference point
+
+TouchDesigner is the closest existing thing, and the deliberate divergence is worth
+stating. TouchDesigner is largely one operator per GPU pass, connected by texture
+ping-pong, driven from the CPU. Karakuri compiles a subgraph into a minimal set of passes
+and fuses procedural chains into single shaders. The cost is a compilation step and less
+immediate feedback; the gain is that primitive-centric generation at high element counts
+becomes affordable.
+
+---
+
+## Architecture beyond V1
+
+V1 implements L1 and L4 inside a single Set. The full model:
+
+| Layer | Role | Milestone |
+|---|---|---|
+| L0 | Signal bus. Synthesized values exist from M1; audio, tempo and MIDI arrive in M2 | M1 / M2 |
+| L1 | Geometry generation. Vertices, particles, SDF builtins used inline. The first-class `Field` type is M3 | M1 |
+| L2 | Deformation and motion. Time-axis modulation, physics | M3 |
+| L3 | Camera and space. Viewpoint, motion grammars | M3 |
+| L4 | Render and material. Raster, raymarch, splatting | M1 |
+| L5 | Composite. Set mixing, transitions, post, output routing | M2 |
+
+Orthogonal to the layers:
+
+- **Control plane** — node agents, director, mix agent, generation worker (M6)
+- **Library** — search, genealogy, embeddings, previews (M4), on top of the content
+  addressing and separate metadata files that exist from M1
+
+### Three clocks
+
+The single most load-bearing idea in the design. These must never collapse into each other.
+
+| Clock | Period | What happens |
+|---|---|---|
+| Frame | 8–16 ms | GPU execution and parameter evaluation only. No allocation, no compilation |
+| Beat / bar | 0.5–4 s | Variant switching, parameter morphs, transitions. Selection among precompiled options only |
+| Generation | seconds to minutes | LLM writes IR, validation, shader compilation. Background worker |
+
+The consequence: **AI works ahead of time; the runtime only selects.** An agent reacting to
+music is choosing from a pool it prepared earlier and queueing generation for material it
+expects to need later. No LLM call is ever on a path that a frame waits for.
+
+### Slot interface contracts
+
+What makes procedures reusable across arbitrary combinations. Introduced properly in M3.
+
+```
+L1 : ()                  -> Geometry | Field
+L2 : Geometry            -> Geometry      // endomorphism, therefore stackable
+L3 : ()                  -> Camera
+L4 : (Geometry, Camera)  -> Texture + AOVs
+```
+
+`Geometry` is not monolithic. It declares topology, an attribute set, a count mode, and a
+spatial domain. Compatibility is a subset check on attributes, with automatic adapters
+where a derivation rule exists. This declaration-plus-adapter layer is what lets almost
+any L2 in the library sit on almost any L1.
+
+### Multiplicity within a layer
+
+Each layer composes differently, and each needs its own semantics.
+
+- **L1 multiple** — merge. Several geometry sources in one Set, which raises a question
+  with no answer yet: **how two sources avoid colliding identities.** Identity is `seed`, a
+  monotone spawn ordinal from a counter that is engine state and resets at Set start — one
+  counter, described in the singular. Two sources either share it and interleave, or hold
+  one each and collide immediately. The `{"t":"seed"}` record salts per *layer*, not per
+  source, so it does not settle this either. Decide before L1 multiplicity is built.
+- **L2 multiple** — chain. Order matters. Each modulator carries a weight and a mask, and
+  masks are attribute-based: only elements where `seed % 3 == 0`, only inside a region,
+  only where `age > 0.7`. This is the largest single source of expressive range in the
+  system, because the same modulator becomes a different thing under a different mask.
+- **L3 multiple** — weighted blend or cut. Blending interpolates trajectories, so an orbit
+  and a handheld rig can be mixed at 0.3.
+- **L4 multiple** — overdraw on shared geometry. The same point cloud drawn as points, and
+  as lines between neighbours, and as an SDF raymarch. Geometry is shared, so the marginal
+  cost is one draw pass. This is the cheapest visual variety per unit of GPU time in the
+  whole system, and it is the payoff for being primitive-centric.
+
+---
+
+## Milestones
+
+Sizes are rough and relative — a sense of which milestone is larger than which, not an
+estimate of anyone's calendar.
+
+### M1 — Closing the loop *(= V1, scoped in `README.md`)*
+
+**Proves:** an LLM can generate constrained IR, we can validate it, compile it to WGSL,
+and hot-swap it without dropping a frame.
+
+One Set, hardcoded slots, no UI, synthesized signals only, L1 and L4 only. If this loop
+does not close, the whole concept needs rethinking. Everything after this is engineering.
+
+How much of it is closed is tracked in `README.md`, not here.
+
+~2–3 weeks.
+
+---
+
+### M2 — Playable
+
+**Goal:** play a real one-hour set on this and survive.
+
+Getting on stage early is not a vanity milestone. Live use surfaces failure modes that no
+amount of desk testing finds — thermal throttling, a laptop lid closing, a set that looked
+fine alone and is unreadable next to lights.
+
+**Adds**
+
+- Multiple Sets with the full lifecycle: Cold / Warming / Priming / Live / Cooling
+- **The deck** — the one place prepared-but-not-showing material lives, at Set granularity.
+  Priming Sets, the staging lane M5 draws, the pool an agent fills in M6, and whatever M7
+  schedules ahead of a phrase are all this, seen from different angles. Naming it once here
+  stops each of those milestones inventing its own waiting area. One to four members are
+  Live and composited; the rest are resident
+- Residency has three levels and the governor moves slots between them: **Live**,
+  **Priming** (stepping hidden, at reduced rate), and **Allocated** (compiled, buffers
+  held, not stepping). Allocated keeps its state, so returning to Priming resumes where it
+  stopped rather than starting over — `t` is simulation time and does not advance while
+  parked. Going straight from Allocated to Live shows an unwarmed image, which is the
+  operator's call to make
+- Live preview of any slot's output, not just a Set's. Auditioning candidates is the basic
+  workflow and it cannot be done blind, so this is a prerequisite rather than a convenience.
+  It needs a **default renderer per topology** — a built-in L4 that draws raw geometry — so
+  that a generated L1 can be seen directly rather than through whatever L4 happens to be
+  paired with it. This is also how a broken L1 becomes diagnosable
+- Priming — rendering hidden at reduced rate and resolution so stateful simulations reach
+  their attractor before becoming visible. Without this, every fade-in shows particles
+  being born, which usually looks bad
+- Budget governor. Per-Set GPU timestamps, live Sets prioritised, priming runs in slack,
+  priming resolution and step rate reduced automatically, and an escalation path when
+  priming will not finish in time. It governs **how many** slots are resident as well as
+  how well they prime: the deck has two separate budgets, VRAM bounding how many can be
+  Allocated at all, and compute bounding how many can step. Deck size is an output of this,
+  not a layout constant
+- Closed-form procedures skip priming entirely. A procedure that never reads an attribute
+  it emits is a pure function of `seed`, `t`, and its parameters, so any `t` can be jumped
+  to directly — Cold to Live with no warm-up, and seekable. The check pass can decide this
+  statically and record it, and the governor should use it: a deck full of closed-form
+  material costs almost nothing to hold ready
+- L5 mixer. Layer stack, blend modes, opacity, masks, and a per-Set linear gain
+- Tone mapping, once, after the mix. Three different things get called exposure and only
+  one of them belongs to the artifact: the `param exposure` inside a procedure is how bright
+  that material is, the per-Set gain at L5 is how it balances against the others, and tone
+  mapping is the transfer from unbounded linear HDR to something displayable. Today the
+  first is standing in for the third, which is why an artifact authored at high element
+  counts carries an exposure far below 1.0 — and that breaks the second, because a mixer
+  fader means nothing if each Set arrives at a different nominal level. Semi-automatic gain
+  needs a measured level per Set, which is the same per-Set measurement hook the budget
+  governor needs
+- Transitions as first-class objects, not just crossfade
+- `VideoSource` interface with `color` required and AOVs optional
+- Audio input. Spectrum, energy, onset detection, tempo estimation
+- Wiring the signal bus into parameters: `bind` records become uniform writes. The bus,
+  the oscillator, and the confidence field already exist and are tested; nothing consumes
+  them yet, so binding is the work
+- PLL correction of the local oscillator against external tempo
+- Ableton Link as a passive peer that never proposes a tempo
+- MIDI control surface on a dedicated controller, not the DJ controller
+- Output routing: Syphon / Spout / NDI
+- Panic key to a known-good Set
+
+**Demands on earlier work**
+
+- Set must already be the compilation and lifecycle unit in M1, even with one Set
+- `VideoSource` must exist as a type in M1
+- Every signal consumer must branch on confidence, never on provider presence
+- The fork-and-swap invariant must hold from M1, because it is how Sets get edited live
+
+**Decide before building**
+
+- **Whether GPU timestamps work on the performing machine.** The budget governor is
+  specified on per-Set GPU timestamps, and on Apple Silicon via Metal they are advertised,
+  enabled, and unreliable — an enormous workload resolves to zero, to a negative delta, or
+  occasionally to something plausible. Flaky rather than absent is the failure mode that
+  quietly returns a usable-looking number. A governor steering on a host clock reacts to
+  submission overhead as much as to shader cost, so confirm this before automatic priming
+  demotion depends on it.
+- **Whether noise rate stays tempo-relative once tempo is corrected.** A noise `bind`
+  carries a rate in cycles per beat. Under fixed tempo that is a constant rescaling of
+  cycles per second and costs nothing; under PLL correction every noise binding tracks the
+  correction, including ones with no musical intent. There is no seconds-relative mode.
+  Choose between adding one and freezing a binding's rate at bind time, when correction
+  lands rather than after.
+
+~6–8 weeks.
+
+---
+
+### M3 — Expressive depth
+
+**Goal:** the combinatorial range that makes the library worth having.
+
+**Adds**
+
+- L2 and L3 as IR `kind`s with their own slots
+- Multiple L1 sources, and the `source` attribute that keeps their identities apart. Per
+  source `seed` counters starting at zero so structured layouts survive, and a per-source
+  hash salt so randomness differs without structure differing
+- **L2 amplification** — a second kind of L2 whose output count differs from its input.
+  Kaleidoscopes, instancing, trails and subdivision are all unwriteable today because
+  `Geometry -> Geometry` is an endomorphism. The factor is declared and constant, amplifying
+  stages multiply rather than compose, and the output is derived and rebuilt each frame so
+  it needs neither double buffering nor compaction. This is the geometry-side version of the
+  argument for drawing one point cloud several ways
+- Cross-source interpolation, restricted at first to static sources where `seed` is the slot
+  index and the paired read is a direct one
+- Slot interface contracts, attribute declarations, automatic adapters
+- L2 stacking with weights and attribute-based masks
+- Multiple L4 renderers over shared geometry
+- The `Field` type — a spatial function represented as code rather than data
+- Graph compiler. Node graph as authoring representation, render graph as execution
+  representation, with fusion of `Field` chains into single shaders
+- `blend weighted` (weighted blended OIT) alongside `blend additive`
+
+**Demands on earlier work**
+
+- The `blend` declaration must exist in the L4 header from M1, even with one legal value
+- Identity must already be per element and carried, not a slot index, or multiple sources
+  cannot be told apart at all
+- IR must be a real IR from M1, not a thin wrapper over WGSL, or fusion has nothing to work
+  with
+- `capacity` must already be a Set-level value rather than baked into the artifact
+
+**Clear before building**
+
+- **Pack attributes into one storage buffer per direction.** One buffer pair per attribute
+  puts 12 storage buffers in the L1 compute stage for three emitted attributes; the WebGPU
+  default limit is 8 and the downlevel default is 4. L2 stacking multiplies the attribute
+  count, so this is already over budget on a conservative adapter. Packing also lets
+  compaction move one struct rather than touch N buffers.
+- **Give an L4 procedure a way to say what it renders.** Quad expansion is justified by
+  `topology points`, but `topology` is declared on the L1 header and a checked L4 tree has
+  no field for it. One topology and one blend mode hide the problem; M3 adds a second of
+  each.
+
+~8–10 weeks.
+
+---
+
+### M4 — Library at scale
+
+**Goal:** finding the right thing among two thousand artifacts is faster than generating a
+new one.
+
+**Adds**
+
+- Library thumbnails. Every artifact gets a short loop and a still at promotion time, for
+  browsing. Distinct from the live slot preview built in M2 — that one renders a running
+  instance, this one is a stored asset
+- Dual embeddings. Text embedding of prompt and tags, plus a visual embedding of the
+  preview. Visual search matters more than it sounds — under stage conditions people
+  search by look, not by words
+- Genealogy. Derivation graph via `parent`, enabling "make ten variations of this"
+  evolutionary workflows
+- Variant pools. A slot holds several compiled alternatives, selectable at beat resolution.
+  Mechanically these are pre-forked Sets sharing every other slot, so they are deck members
+  rather than a separate structure — and they cost what their differing slot costs. Three
+  alternatives that differ only in L4 share one simulation; three that differ in L1 are
+  three simulations. Selection is close to free for closed-form material and expensive for
+  accumulating material, which is the same distinction priming turns on
+- Bundle and unbundle for sharing single self-contained patch files
+
+**Demands on earlier work**
+
+- Content addressing and separate metadata files from M1
+- `parent` recorded from the first generated artifact, or the genealogy has a hole at the
+  root
+
+~4–6 weeks.
+
+---
+
+### M5 — Interface
+
+**Goal:** a surface where a human can see what the system is about to do and disagree with it.
+
+This comes before agents deliberately. An autonomous system that cannot be observed and
+overridden is not usable on stage, and building the observation surface afterwards means
+retrofitting it into decisions already made.
+
+**Adds**
+
+- Node editor for the graph model introduced in M3
+- Parameter surfaces with MIDI learn and signal binding UI
+- Set browser with live previews of priming Sets
+- Staging lane — where candidates appear before they go live. Its first producer is the
+  operator's own regeneration of a slot, which needs no agents and makes the lane useful
+  and testable as soon as it exists; M6's agents write to the same place rather than
+  inventing one. Because a rejected candidate costs nothing — the previous artifact is
+  still in the library and the slot record still points at it — this is an A/B between two
+  versions, not a merge tool
+- Per-layer mode control: Manual / Suggest / Auto
+
+~8–10 weeks.
+
+---
+
+### M6 — Autonomy
+
+**Goal:** the system prepares material without being asked and is safe to let run.
+
+**Adds**
+
+- Slot agents, one per slot rather than per graph node. Each owns a prompt, watches
+  designated inputs, selects from its prepared variants, and queues generation for material
+  it expects to need. Autonomous selection means choosing among what already exists, never
+  generating on a path the frame waits for
+- Director. Cross-layer coherence — whether the camera behaviour suits the geometry,
+  whether L4 is killing the shape L1 produced
+- Mix agent. Set-level arc, energy trajectory, monitoring for staleness
+- Authority model. Budget constraints ("camera changes at most once per four bars"),
+  and manual intervention instantly demoting that layer's agent to `Suggest`
+- Generation queue with priority and cost awareness
+
+**Demands on earlier work**
+
+- The record stream must be the sole mutation path, so that an agent is structurally
+  incapable of doing anything a human could not do through the same interface
+- Parameter schemas with ranges on every procedure, from M1 — an agent with no declared
+  ranges has nothing to search over
+
+~8–10 weeks.
+
+---
+
+### M7 — Musical foresight
+
+**Goal:** transitions land on phrase boundaries because the system knew they were coming.
+
+Audio analysis is reactive; it reports what already happened. Track analysis is
+anticipatory. This is what makes generation-time latency compatible with live performance:
+knowing a chorus arrives in 32 bars is enough time to generate, compile, and prime.
+
+**Adds**
+
+- rekordbox integration. Beatgrid and transport position, current track identification,
+  and phrase structure (`PSSI`) from the local collection database
+- Lookahead timeline as a queryable structure, not a signal — "the first Chorus within 16
+  bars"
+- Backward scheduling. Transition point fixes priming start, which fixes generation start.
+  "Will not make it" becomes a decision to postpone rather than a dropped frame
+- Track metadata into visual direction: key to palette, colour tags, and a convention for
+  writing VJ hints in the rekordbox comment field
+- Optionally PRO DJ LINK via beat-link and crate-digger, if playing on club CDJs
+
+**Demands on earlier work**
+
+- The Set lifecycle must already be schedulable by absolute time, not just triggered
+- Signal confidence must already drive transition policy, since these sources are
+  unofficial reverse-engineered integrations that will break
+
+~6–8 weeks.
+
+---
+
+## Continuous concerns
+
+Not milestones. These degrade silently if not defended at every step.
+
+### Live safety
+
+- No allocation or compilation on the render thread, ever
+- Watchdog on new pipelines with automatic rollback
+- The show continues when the generation API is unavailable. This becomes meaningful once
+  there is a pool to fall back on, so it is a promise from M4 onward rather than from M1
+- Graceful degradation for every input source, with confidence driving how conservative
+  transition scheduling becomes
+
+### Determinism
+
+Reproducibility is not a nice-to-have; it is what makes the record stream meaningful.
+Undo, replay, A/B comparison, and session recording all follow from it. Anything
+introducing run-to-run variance — atomic append ordering, real frame delta, wall-clock
+seeds — breaks all four at once.
+
+### Performance discipline
+
+Per-element cost is the artifact's intrinsic property; total cost is a function of capacity.
+Metadata records the former. Any change touching the frame path comes with a GPU timestamp
+measurement.
+
+---
+
+## Deferred by decision
+
+Designed, understood, deliberately not scheduled.
+
+**External shader source compatibility.** Shadertoy-style material does not fit the
+primitive-centric model directly: it is a single fullscreen fragment shader, with no
+geometry stage and no parameters. Two import modes were designed — wholesale, as an opaque
+L4 fullscreen node, and extraction, where an LLM pulls out the SDF or noise function and
+discards the raymarch loop so it becomes a composable `Field`. The real value in both is
+parameter lifting: hardcoded constants become declared `param`s, turning a frozen image
+into an instrument.
+
+This is deferred rather than dropped because `VideoSource` makes it cheap later. A foreign
+source only needs to produce a colour texture. It slots in beside a Set without touching
+the Set model.
+
+Note that imported material is often extremely expensive. Allowing it makes the budget
+governor mandatory rather than advisory.
+
+**Also deferred:** projection mapping and multi-output warping, DMX and Art-Net lighting
+sync, collaborative multi-operator sessions, video file playback, and any browser or wasm
+target. The engine is native for Syphon, NDI, low-latency audio, MIDI, and GPU timestamp
+queries.
+
+---
+
+## Settled decisions
+
+Reference, not history. These are in force, they constrain what later milestones can
+choose, and changing one is a redesign rather than an edit. The reasoning behind each is in
+`docs/ir-spec.md`; what follows is the shape.
+
+**Identity and randomness**
+
+- Element identity is `seed`, a monotone spawn ordinal carried per element. There is no
+  `id`: a buffer slot index stops being an identity the moment compaction moves elements.
+- `seed` is an ordinal, not a random number. Randomness comes from the hash builtins, which
+  are salted per layer from the seed stream — so re-seeding a Set changes its randomness
+  without touching anything structural.
+
+**Time**
+
+- `t` is simulation time, never wall clock. It advances by `steps * dt` where `steps` comes
+  from a `tick` record: emitted from real time when live, read back verbatim on replay.
+  Nothing in the engine measures anything.
+- Two tick histories reaching the same elapsed time are the same point in the session.
+  Substepping exists so that state at a given time does not depend on frame rate, so
+  nothing downstream may distinguish them.
+- A **Set file** is a state projection with no time in it. A **session stream** is the
+  timeline. Keeping them apart is what stops saving a Set from saving a performance.
+
+**Ordering**
+
+- Compaction is order preserving. Bit-exact reproduction depends on elements being combined
+  in the same order every run — floating-point addition is not associative, so this holds
+  under additive blending as much as anything else. Atomic allocation is cheaper and
+  forfeits it.
+
+**The IR surface**
+
+- The signal bus is unreachable from IR. External values arrive as a `param` with a `bind`
+  record, which is what keeps every external coupling declarative and adjustable.
+- Every name the language gives meaning to is reserved against params and locals:
+  attributes, ambients, stage outputs, `id`. Generated WGSL additionally mangles all
+  IR-derived identifiers, so a procedure cannot capture a generated name whatever it is
+  called.
+- One `t` value means one record shape, across every file. A decoder dispatches on `t`
+  alone, and every ndjson decoder does.
+- `capacity` is a Set-level dial with a range declared by the artifact, passed as a uniform.
+  It is not part of a procedure's identity — otherwise the library multiplies by every size
+  anyone wanted.
+- Spawn timing is engine-side. No ambient exposes the birth fraction: an exposed one is
+  forgotten by half the generators that need it and applied twice by the other half.
+
+**Editing and revision**
+
+- A Set **value** is immutable and content-addressed; a **compiled instance** is not. Every
+  structural change produces a new value and a record, which is what makes replay work.
+  Whether the engine rebuilds the instance or updates it in place is an implementation
+  choice, and it may update in place whenever the change needs no reallocation and no
+  recompilation. Editing in the background is therefore fast without punching a hole in the
+  record stream. "Never mutate a live Set in place" reads as a weaker claim than the rule
+  it belongs to; the rule is about values.
+- The cheapest correct answer to a revision request is usually not regeneration. Try the
+  existing parameter range first — a uniform write, effective within the frame — then a
+  range change, which needs a fork but no compile, and only then new code. This is what
+  makes mandatory parameter ranges pay off a fourth time.
+- Regeneration is destructive at slot granularity and that is fine. The other slots are
+  untouched by construction, the previous artifact is still in the library, and a slot
+  record points back at it. What guards against a bad generation is not caution in the
+  prompt but the validation pipeline, the probe, and automatic rollback.
+- Reference material handed to a generator is part of what produced an artifact and belongs
+  in `origin` with the prompt. Two artifacts from the same words that differ because
+  different examples were supplied are otherwise unexplainable.
+
+**Craft knowledge**
+
+- What a user saves is the prompt that worked, alongside the thing it produced. That is a
+  view over the library — favourites, their `origin.prompt`, and their thumbnails — rather
+  than a subsystem. Generation assembles a fixed preamble the system owns (the language,
+  the viewing conditions, the reserved names) plus whatever the operator supplied.
+- Such a palette expresses taste and nothing else. The moment an entry is compensating for
+  a missing engine feature — an exposure value that only works at one element count, say —
+  it has become a tone mapper written in prose and shipped to every prompt forever. Fix the
+  feature instead.
+
+**Diagnostics and cost**
+
+- One severity. No warnings, because the response to a rejection is to regenerate rather
+  than proceed with a caveat. That puts the burden on the diagnostic: a cost rejection
+  states the estimate, the ceiling, and what dominated, since "over budget" gives a repair
+  prompt nothing to aim at.
+- Cost is three separate figures, each counted against a different unit — the mistake to
+  avoid is calling them all "per element". `element` scales with live population,
+  `spawn` with spawn rate, `fragment` with covered pixels. They share a unit and must never
+  be summed.
+- An artifact records cost per element; total cost is a function of capacity and therefore
+  belongs to the Set. For L4 the published figure is a measurement at stated resolution and
+  parameters, because fill-rate-bound cost has no meaningful per-element form.
+
+---
+
+## Document map
+
+| | |
+|---|---|
+| `README.md` | What exists, how to run it, and the invariants in force |
+| `docs/ir-spec.md` | The IR: grammar, semantics, lowering, record formats |
+| This file | Milestones, their demands on earlier work, and the settled decisions above |
+
+Neither of the other two should restate this one, and this one should not restate them.
+
+---
+
+## Reading order for implementation
+
+1. `README.md` — invariants, then V1 scope
+2. `docs/ir-spec.md` — the whole thing before writing any parser code
+3. This document — the **Demands on earlier work** sections only, during M1
