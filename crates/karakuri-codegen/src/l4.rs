@@ -48,7 +48,7 @@ use karakuri_ir::typed::{Checked, TBlock, TExpr, TExprKind, TStmt, Target};
 use karakuri_ir::{Ambient, Attr, BlockKind, Kind, Output};
 
 use crate::layout::{self, group, AttrSlot, UniformLayout, UniformLayoutBuilder};
-use crate::lower::{lower_expr, Resolver};
+use crate::lower::{lower_expr, mangle_local, Resolver};
 use crate::prelude::{self, Requirements};
 use crate::ty::wgsl_ty;
 
@@ -120,16 +120,16 @@ fn emit_stmts(stmts: &[TStmt], resolver: &L4Resolver, req: &mut Requirements, in
         match stmt {
             TStmt::Let { name, value, .. } => {
                 let v = lower_expr(value, resolver, req);
-                out.push_str(&format!("{pad}let {name} = {v};\n"));
+                out.push_str(&format!("{pad}let {} = {v};\n", mangle_local(name)));
             }
             TStmt::Var { name, value, .. } => {
                 let v = lower_expr(value, resolver, req);
-                out.push_str(&format!("{pad}var {name} = {v};\n"));
+                out.push_str(&format!("{pad}var {} = {v};\n", mangle_local(name)));
             }
             TStmt::Assign { target, value, .. } => {
                 let v = lower_expr(value, resolver, req);
                 match target {
-                    Target::Local(name) => out.push_str(&format!("{pad}{name} = {v};\n")),
+                    Target::Local(name) => out.push_str(&format!("{pad}{} = {v};\n", mangle_local(name))),
                     Target::Output(o) => out.push_str(&format!("{pad}{} = {v};\n", output_local(*o))),
                     Target::Attr(a) => unreachable!("L4 never assigns attribute {a:?}, only reads it"),
                 }
@@ -147,9 +147,8 @@ fn emit_stmts(stmts: &[TStmt], resolver: &L4Resolver, req: &mut Requirements, in
                 }
             }
             TStmt::For { var, start, end, body, .. } => {
-                out.push_str(&format!(
-                    "{pad}for (var {var}: i32 = {start}; {var} < {end}; {var} = {var} + 1) {{\n"
-                ));
+                let v = mangle_local(var);
+                out.push_str(&format!("{pad}for (var {v}: i32 = {start}; {v} < {end}; {v} = {v} + 1) {{\n"));
                 emit_stmts(body, resolver, req, indent + 1, out);
                 out.push_str(&format!("{pad}}}\n"));
             }
@@ -203,19 +202,6 @@ fn used_in_fragment(block: &TBlock) -> (bool, HashSet<Attr>) {
     let mut attrs = HashSet::new();
     scan_stmts(&block.stmts, &mut seed, &mut attrs);
     (seed, attrs)
-}
-
-fn write_uniform_struct(out: &mut String, layout: &UniformLayout, pad_f32: u32) {
-    out.push_str("struct Uniforms {\n");
-    for f in &layout.fields {
-        out.push_str(&format!("    {}: {},\n", f.name, f.wgsl_ty));
-    }
-    match pad_f32 {
-        0 => {}
-        1 => out.push_str("    _pad: f32,\n"),
-        n => out.push_str(&format!("    _pad: array<f32, {n}>,\n")),
-    }
-    out.push_str("};\n");
 }
 
 fn write_attr_bindings(out: &mut String, slots: &[AttrSlot]) {
@@ -332,7 +318,7 @@ pub fn generate_l4(checked: &Checked) -> L4Shader {
     b.field("viewport", "vec2<f32>");
     b.field("camera", "mat4x4<f32>");
     for p in &checked.params {
-        b.field(p.name.clone(), wgsl_ty(p.ty));
+        b.param_field(p.name.clone(), wgsl_ty(p.ty));
     }
     let (uniform_layout, uniform_pad_f32) = b.finish();
 
@@ -358,7 +344,7 @@ pub fn generate_l4(checked: &Checked) -> L4Shader {
     };
 
     let mut src = String::new();
-    write_uniform_struct(&mut src, &uniform_layout, uniform_pad_f32);
+    layout::write_uniform_struct(&mut src, &uniform_layout, uniform_pad_f32);
     src.push_str("\n@group(0) @binding(0) var<uniform> u: Uniforms;\n\n");
     write_attr_bindings(&mut src, &attr_slots);
     src.push('\n');

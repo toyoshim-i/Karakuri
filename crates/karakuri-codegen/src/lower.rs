@@ -16,8 +16,44 @@ use karakuri_ir::builtin::Builtin;
 use karakuri_ir::typed::{TExpr, TExprKind};
 use karakuri_ir::{Ambient, Attr, BinOp, Lit, Ty, UnOp};
 
+use crate::layout::mangle_param;
 use crate::prelude::{mod_helper_name, Requirements};
 use crate::ty::wgsl_ty;
+
+/// Mangles a user-chosen identifier — a `let`/`var` binding or a `for` loop
+/// variable — into the WGSL identifier this crate actually emits for it.
+///
+/// Every other identifier this crate writes (`u`, `prev_<attr>`,
+/// `next_<attr>`, `attr_<attr>`, entry-point locals like `seed`/`slot`/`i`,
+/// every helper function name) is a fixed string chosen by the generator,
+/// never by IR text. Locals are the one category that *is* IR text passed
+/// through — the language spec calls `let`/`var` lowering "a rename rather
+/// than a transformation" — and a rename that reuses the source spelling
+/// verbatim makes every fixed name above capturable: a procedure that opens
+/// its `spawn` block with `let u = hash1(seed);`, which is not a contrived
+/// example but the ir-spec's own `drift_shell`, shadows the generated
+/// `var<uniform> u` and every later `u.<param>` silently resolves to the
+/// local instead. Naga catches the resulting nonsense, but only because the
+/// mistake happens to produce a type error a few lines later — nothing
+/// stops the same shadowing from landing on a name whose reuse compiles
+/// clean and just computes the wrong thing.
+///
+/// The fix is not to rename the generator's own identifiers away from
+/// whatever a user local might plausibly be called — enumerating "plausible"
+/// is exactly the reasoning that missed `u` — it is to make the two
+/// namespaces disjoint by construction. Every local this crate ever writes
+/// carries this prefix; no fixed identifier this crate emits does or ever
+/// will start with it. That turns "no realistic procedure names a local
+/// this" into "no procedure's local can spell this," which does not depend
+/// on which names turn out to be realistic.
+///
+/// The prefix is kept short and the source name is kept intact after it
+/// specifically so a human reading generated WGSL can still tell which IR
+/// name a given local came from — `usr_radius` for `radius`, not a hash or
+/// a counter.
+pub fn mangle_local(name: &str) -> String {
+    format!("usr_{name}")
+}
 
 /// How names resolve in the block currently being lowered. Implemented once
 /// per (kind, block) combination — see `l1::Resolver` and `l4::Resolver`.
@@ -40,8 +76,8 @@ pub trait Resolver {
 pub fn lower_expr(expr: &TExpr, resolver: &dyn Resolver, req: &mut Requirements) -> String {
     match &expr.kind {
         TExprKind::Lit(lit) => lower_lit(*lit),
-        TExprKind::Local(name) => name.clone(),
-        TExprKind::Param(name) => format!("u.{name}"),
+        TExprKind::Local(name) => mangle_local(name),
+        TExprKind::Param(name) => format!("u.{}", mangle_param(name)),
         TExprKind::Attr(attr) => resolver.read_attr(*attr),
         TExprKind::Ambient(Ambient::Seed) => resolver.read_seed(),
         TExprKind::Ambient(amb) => resolver.read_ambient(*amb),

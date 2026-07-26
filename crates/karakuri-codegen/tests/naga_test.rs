@@ -85,9 +85,15 @@ fn drift_shell() -> Checked {
         kind: BlockKind::Spawn,
         span: span(),
         stmts: vec![
-            let_("uu", call(Builtin::Hash1, vec![ambient(Ambient::Seed, Ty::Uint)], Ty::Float)),
+            // Named `u` and `v`, verbatim, exactly as the ir-spec's own
+            // `drift_shell` writes them (`let u = hash1(seed); let v =
+            // hash1(seed + 1000u);`). This is the regression: `u` is also
+            // the generated uniform binding's name, and `v` is what the
+            // element block below separately calls its own `let`. Neither
+            // may capture anything this crate emits.
+            let_("u", call(Builtin::Hash1, vec![ambient(Ambient::Seed, Ty::Uint)], Ty::Float)),
             let_(
-                "vv",
+                "v",
                 call(
                     Builtin::Hash1,
                     vec![bin(BinOp::Add, ambient(Ambient::Seed, Ty::Uint), lit_u(1000), Ty::Uint)],
@@ -98,7 +104,7 @@ fn drift_shell() -> Checked {
                 Attr::Position,
                 bin(
                     BinOp::Mul,
-                    call(Builtin::SpherePoint, vec![local("uu", Ty::Float), local("vv", Ty::Float)], Ty::Vec3),
+                    call(Builtin::SpherePoint, vec![local("u", Ty::Float), local("v", Ty::Float)], Ty::Vec3),
                     param("radius", Ty::Float),
                     Ty::Vec3,
                 ),
@@ -261,6 +267,183 @@ fn soft_points() -> Checked {
     }
 }
 
+/// An L1 procedure whose `let`s are named after every bare identifier this
+/// crate's L1 lowering emits: the uniform binding (`u`), entry-point locals
+/// (`seed`, `i`, `slot`, `gid`, `birth_frac`), ambient-backed uniform fields
+/// (`t`, `dt`, `capacity`, `live_count`, `spawn_count`, `seed_base`), and
+/// helper function names (`hash1`, `sphere_point`, `curl`, `mod_f32`). None
+/// of these are contrived: `u` is the ir-spec's own `drift_shell` (see
+/// `drift_shell` above); the rest are exactly as plausible for an LLM to
+/// reach for, since none of them is a reserved word in the `.kir` grammar.
+/// The block still exercises `hash1`, `sphere_point`, `curl`, and `%` on a
+/// float for real afterwards — the point is that declaring a local of the
+/// same name earlier must not have broken any of them.
+fn shadowing_locals_l1() -> Checked {
+    let adversarial_lets = [
+        "u", "hash1", "seed", "prev_position", "next_age", "i", "slot", "gid", "sphere_point", "curl",
+        "birth_frac",
+    ];
+    let mut spawn_stmts: Vec<TStmt> = adversarial_lets.iter().enumerate().map(|(n, name)| let_(name, lit_f(n as f32))).collect();
+    spawn_stmts.push(assign_attr(
+        Attr::Position,
+        bin(
+            BinOp::Mul,
+            call(
+                Builtin::SpherePoint,
+                vec![
+                    call(Builtin::Hash1, vec![ambient(Ambient::Seed, Ty::Uint)], Ty::Float),
+                    call(Builtin::Hash1, vec![bin(BinOp::Add, ambient(Ambient::Seed, Ty::Uint), lit_u(7), Ty::Uint)], Ty::Float),
+                ],
+                Ty::Vec3,
+            ),
+            param("radius", Ty::Float),
+            Ty::Vec3,
+        ),
+    ));
+    spawn_stmts.push(assign_attr(Attr::Age, lit_f(0.0)));
+    let spawn = TBlock { kind: BlockKind::Spawn, span: span(), stmts: spawn_stmts };
+
+    let more_adversarial_lets = ["t", "dt", "capacity", "live_count", "spawn_count", "seed_base", "mod_f32"];
+    let mut element_stmts: Vec<TStmt> =
+        more_adversarial_lets.iter().enumerate().map(|(n, name)| let_(name, lit_f(n as f32))).collect();
+    element_stmts.push(assign_attr(Attr::Age, bin(BinOp::Rem, attr(Attr::Age), lit_f(1.0), Ty::Float)));
+    element_stmts.push(assign_attr(
+        Attr::Position,
+        bin(BinOp::Add, attr(Attr::Position), call(Builtin::Curl, vec![attr(Attr::Position)], Ty::Vec3), Ty::Vec3),
+    ));
+    element_stmts.push(TStmt::If {
+        cond: bin(BinOp::Gt, attr(Attr::Age), lit_f(1.0), Ty::Bool),
+        then: vec![TStmt::Kill { span: span() }],
+        els: vec![],
+        span: span(),
+    });
+    let element = TBlock { kind: BlockKind::Element, span: span(), stmts: element_stmts };
+
+    Checked {
+        name: "shadowing_locals_l1".to_string(),
+        kind: Kind::L1,
+        topology: Some(Topology::Points),
+        capacity: None,
+        blend: None,
+        params: vec![param_decl("radius", Ty::Float, 0.1, 8.0)],
+        emit: vec![Attr::Position, Attr::Age],
+        consumes: vec![],
+        derived: Vec::<Derivation>::new(),
+        blocks: vec![spawn, element],
+        cost: None,
+        span: span(),
+    }
+}
+
+/// The L4 counterpart: `let`s named after `vertex`/`fragment`'s bare
+/// identifiers — the uniform binding (`u`), the vertex/fragment builtin
+/// parameter names (`elem`, `in`, `out`, `corner`, `corner_idx`), the
+/// storage buffer name for a consumed attribute (`attr_position`), the
+/// fragment-only ambient (`point_coord`), and two helper function names
+/// (`hash1`, `hsv_to_rgb`, `corner_of`).
+fn shadowing_locals_l4() -> Checked {
+    let vertex_adversarial = ["u", "seed", "elem", "in", "out", "corner", "corner_idx", "attr_position"];
+    let mut vertex_stmts: Vec<TStmt> =
+        vertex_adversarial.iter().enumerate().map(|(n, name)| let_(name, lit_f(n as f32))).collect();
+    vertex_stmts.push(assign_output(
+        Output::Clip,
+        bin(
+            BinOp::Mul,
+            ambient(Ambient::Camera, Ty::Mat4),
+            construct(Ty::Vec4, vec![attr(Attr::Position), lit_f(1.0)]),
+            Ty::Vec4,
+        ),
+    ));
+    vertex_stmts.push(assign_output(Output::PointSize, param("point_scale", Ty::Float)));
+    let vertex = TBlock { kind: BlockKind::Vertex, span: span(), stmts: vertex_stmts };
+
+    let fragment_adversarial = ["point_coord", "hash1", "hsv_to_rgb", "corner_of"];
+    let mut fragment_stmts: Vec<TStmt> =
+        fragment_adversarial.iter().enumerate().map(|(n, name)| let_(name, lit_f(n as f32))).collect();
+    fragment_stmts.push(let_(
+        "c",
+        call(
+            Builtin::HsvToRgb,
+            vec![construct(Ty::Vec3, vec![param("hue", Ty::Float), lit_f(0.7), lit_f(1.0)])],
+            Ty::Vec3,
+        ),
+    ));
+    fragment_stmts.push(let_("a", call(Builtin::Length, vec![ambient(Ambient::PointCoord, Ty::Vec2)], Ty::Float)));
+    fragment_stmts.push(assign_output(
+        Output::Color,
+        construct(Ty::Vec4, vec![local("c", Ty::Vec3), local("a", Ty::Float)]),
+    ));
+    let fragment = TBlock { kind: BlockKind::Fragment, span: span(), stmts: fragment_stmts };
+
+    Checked {
+        name: "shadowing_locals_l4".to_string(),
+        kind: Kind::L4,
+        topology: None,
+        capacity: None,
+        blend: Some(Blend::Additive),
+        params: vec![param_decl("point_scale", Ty::Float, 0.5, 40.0), param_decl("hue", Ty::Float, 0.0, 1.0)],
+        emit: vec![],
+        consumes: vec![Attr::Position],
+        derived: Vec::<Derivation>::new(),
+        blocks: vec![vertex, fragment],
+        cost: None,
+        span: span(),
+    }
+}
+
+/// An L1 procedure whose `param`s are named after WGSL reserved words that
+/// are ordinary, unremarkable identifiers in `.kir` — `array` is the one
+/// that was actually caught reaching a real GPU (see the bug report this
+/// test locks in), the rest are here because WGSL reserves a great many
+/// more than IR does and a generator has no reason to avoid any of them.
+/// Every one of these is exactly the kind of word a procedure *about*
+/// something would reach for: a particle `array`, a `loop` count, a `switch`
+/// threshold.
+fn reserved_word_params_l1() -> Checked {
+    let names = ["array", "struct", "loop", "switch", "fn", "discard", "const", "override", "ptr", "sampler"];
+    let params = names.iter().map(|n| param_decl(n, Ty::Float, 0.0, 1.0)).collect();
+
+    let sum = names
+        .iter()
+        .map(|n| param(n, Ty::Float))
+        .reduce(|acc, p| bin(BinOp::Add, acc, p, Ty::Float))
+        .expect("at least one reserved-word param");
+    let element = TBlock { kind: BlockKind::Element, span: span(), stmts: vec![assign_attr(Attr::Age, sum)] };
+
+    Checked {
+        name: "reserved_word_params".to_string(),
+        kind: Kind::L1,
+        topology: Some(Topology::Points),
+        capacity: None,
+        blend: None,
+        params,
+        emit: vec![Attr::Age],
+        consumes: vec![],
+        derived: Vec::<Derivation>::new(),
+        blocks: vec![element],
+        cost: None,
+        span: span(),
+    }
+}
+
+/// Every field `layout` declares must appear in `source` spelled exactly
+/// `wgsl_name`, and `karakuri-engine`'s uniform packer keys its lookups on
+/// `name` — so this also pins the two names apart: `name` must survive
+/// unmangled (Set records address a param by its declared `.kir` name, and
+/// the packer's lookups have to match that), while `wgsl_name` is what
+/// actually appears in the WGSL text.
+fn assert_layout_matches_text(source: &str, layout: &karakuri_codegen::layout::UniformLayout) {
+    for f in &layout.fields {
+        let decl = format!("{}: {},", f.wgsl_name, f.wgsl_ty);
+        assert!(
+            source.contains(&decl),
+            "field {:?} (wgsl_name {:?}) is declared in the layout but not found in the emitted struct as {decl:?}:\n{source}",
+            f.name,
+            f.wgsl_name,
+        );
+    }
+}
+
 fn validate(source: &str) {
     let module = naga::front::wgsl::parse_str(source).unwrap_or_else(|e| {
         panic!("WGSL failed to parse:\n{}\n\n---- source ----\n{source}", e.emit_to_string(source))
@@ -279,6 +462,63 @@ fn drift_shell_l1_compiles_and_validates() {
 #[test]
 fn soft_points_l4_compiles_and_validates() {
     let shader = karakuri_codegen::generate_l4(&soft_points());
+    validate(&shader.source);
+}
+
+/// `param array : float ...` parses, checks, and costs — WGSL reserves
+/// `array` but `.kir` does not — and before the fix this generated a struct
+/// field literally named `array`, which naga rejects as a reserved keyword.
+/// Every param name in this fixture is a real WGSL reserved word.
+#[test]
+fn params_named_after_wgsl_reserved_words_compile_and_validate() {
+    let shader = karakuri_codegen::generate_l1(&reserved_word_params_l1());
+    validate(&shader.source);
+}
+
+/// The layout this crate publishes and the WGSL text it emits must never
+/// disagree about a field's name — `karakuri-engine`'s uniform packer
+/// writes bytes at the offset `UniformLayout` gives it, on the assumption
+/// that the struct in the WGSL text has a field at that same offset under
+/// the name it looked up. A mismatch here would not fail loudly in this
+/// crate; it would fail as a panic in `UniformPacker`, or worse, silently
+/// pack a value into the wrong param's bytes.
+#[test]
+fn uniform_layout_and_emitted_struct_text_agree() {
+    let l1 = karakuri_codegen::generate_l1(&drift_shell());
+    assert_layout_matches_text(&l1.source, &l1.uniform_layout);
+
+    let l4 = karakuri_codegen::generate_l4(&soft_points());
+    assert_layout_matches_text(&l4.source, &l4.uniform_layout);
+
+    let reserved = karakuri_codegen::generate_l1(&reserved_word_params_l1());
+    assert_layout_matches_text(&reserved.source, &reserved.uniform_layout);
+
+    // And specifically: the layout's semantic `name` must stay the
+    // undecorated param name (what a Set record and the engine's packer
+    // both address it by), even though the WGSL text spells it mangled.
+    let array_field = reserved
+        .uniform_layout
+        .fields
+        .iter()
+        .find(|f| f.name == "array")
+        .expect("the `array` param must be in the layout under its declared name");
+    assert_eq!(array_field.wgsl_name, "param_array");
+}
+
+/// The regression this whole file exists for: a local named `u` (or `seed`,
+/// or `hash1`, or any of this crate's other fixed identifiers) must not be
+/// capturable. Before the fix, this failed exactly the way the bug report
+/// describes — naga rejecting a `u.<param>` access because a same-named
+/// local shadowed the uniform binding.
+#[test]
+fn l1_locals_cannot_shadow_generated_identifiers() {
+    let shader = karakuri_codegen::generate_l1(&shadowing_locals_l1());
+    validate(&shader.source);
+}
+
+#[test]
+fn l4_locals_cannot_shadow_generated_identifiers() {
+    let shader = karakuri_codegen::generate_l4(&shadowing_locals_l4());
     validate(&shader.source);
 }
 

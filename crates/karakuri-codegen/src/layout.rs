@@ -173,11 +173,51 @@ pub fn l4_attr_slots(consumes: &[Attr]) -> Vec<AttrSlot> {
 /// the WGSL text it emits.
 #[derive(Debug, Clone, PartialEq)]
 pub struct UniformField {
+    /// The semantic name: a declared `param`'s own name verbatim, or one of
+    /// this crate's fixed engine fields (`t`, `dt`, `capacity`, …). This is
+    /// what `karakuri-engine`'s uniform packer looks a field up by — a Set
+    /// record names a param by its declared `.kir` name
+    /// (`{"t":"param","key":"radius",...}`), never by `wgsl_name`, so the
+    /// packer's lookups have to key on this field, not on the WGSL spelling.
     pub name: String,
+    /// The identifier actually written in the WGSL struct declaration and
+    /// at every `u.<field>` read site. Equal to `name` for this crate's own
+    /// fixed fields, since it always chooses those itself and they are
+    /// never a WGSL reserved word by construction. For a `param`, always
+    /// [`mangle_param`]`(name)` — see there for why every param is mangled,
+    /// not only the ones that happen to collide with a reserved word today.
+    pub wgsl_name: String,
     /// WGSL type spelling, e.g. `"f32"`, `"vec3<f32>"`, `"mat4x4<f32>"`.
     pub wgsl_ty: &'static str,
     pub offset: u32,
     pub size: u32,
+}
+
+/// Mangles a `param`'s declared name into the identifier this crate writes
+/// for its uniform struct field, at both the declaration site and every
+/// `u.<field>` read.
+///
+/// Unconditionally — for every param, not only the ones that happen to
+/// collide with a WGSL reserved word today. WGSL reserves a long list of
+/// identifiers `.kir` does not (`array`, `struct`, `loop`, `switch`,
+/// `return`, `discard`, `const`, `override`, `enable`, `bitcast`, `fn`,
+/// `atomic`, `ptr`, `sampler`, and more), and a generator that only mangled
+/// names it recognised from a blocklist would need to track the WGSL
+/// specification forever to stay correct as it grows. That is exactly the
+/// reasoning that made blanket mangling the right call for `let`/`var`
+/// locals rather than trying to enumerate which spellings a procedure might
+/// plausibly reach for — `param array : float ...` is not contrived, a
+/// generator writing a procedure about a particle array reaches for exactly
+/// that word.
+///
+/// A different prefix from [`crate::lower::mangle_local`]'s (`param_` here,
+/// `usr_` there) purely so a human reading generated WGSL can tell at a
+/// glance which kind of `.kir` declaration a name came from. It does not
+/// matter for correctness: a param is always read through `u.` field
+/// access and a local is always a bare identifier, so the two namespaces
+/// cannot collide with each other even sharing one prefix.
+pub fn mangle_param(name: &str) -> String {
+    format!("param_{name}")
 }
 
 /// The complete field order and size of a generated uniform struct. This is
@@ -227,18 +267,36 @@ impl UniformLayoutBuilder {
         UniformLayoutBuilder { fields: Vec::new(), offset: 0 }
     }
 
+    /// Adds one of this crate's own fixed fields (`t`, `dt`, `capacity`, …).
+    /// The WGSL spelling is `name` verbatim — safe because this crate always
+    /// chooses these names itself and `.kir` text never gets to pick them.
     pub fn field(&mut self, name: impl Into<String>, wgsl_ty: &'static str) -> &mut Self {
+        let name = name.into();
+        let wgsl_name = name.clone();
+        self.push(name, wgsl_name, wgsl_ty)
+    }
+
+    /// Adds a field for a declared `param`. The WGSL spelling is always
+    /// mangled — see [`mangle_param`].
+    pub fn param_field(&mut self, name: impl Into<String>, wgsl_ty: &'static str) -> &mut Self {
+        let name = name.into();
+        let wgsl_name = mangle_param(&name);
+        self.push(name, wgsl_name, wgsl_ty)
+    }
+
+    fn push(&mut self, name: String, wgsl_name: String, wgsl_ty: &'static str) -> &mut Self {
         let (align, size) = align_size(wgsl_ty);
         let offset = align_up(self.offset, align);
-        self.fields.push(UniformField { name: name.into(), wgsl_ty, offset, size });
+        self.fields.push(UniformField { name, wgsl_name, wgsl_ty, offset, size });
         self.offset = offset + size;
         self
     }
 
     /// Finishes the layout, padding to a 16-byte multiple. Returns the
-    /// layout plus the number of `f32` pad slots to declare in WGSL as a
-    /// trailing `_pad: array<f32, N>` field (omitted from `fields` — it is
-    /// wire padding, not a value the engine ever sets).
+    /// layout plus the number of trailing `f32` pad slots to declare in
+    /// WGSL — see [`write_uniform_struct`] for how those are spelled
+    /// (omitted from `fields` either way: it is wire padding, not a value
+    /// the engine ever sets).
     pub fn finish(self) -> (UniformLayout, u32) {
         let total_size = align_up(self.offset, 16);
         let pad_bytes = total_size - self.offset;
@@ -251,6 +309,35 @@ impl Default for UniformLayoutBuilder {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Writes `struct Uniforms { ... };` for `layout`, plus `pad_f32` trailing
+/// pad fields. Shared by [`crate::l1`] and [`crate::l4`] — both build a
+/// [`UniformLayout`] and need identical WGSL for it.
+///
+/// Padding is emitted as individually named scalar fields (`_pad0`,
+/// `_pad1`, …; just `_pad` when there is exactly one), never as
+/// `array<f32, N>`. WGSL requires array elements inside a uniform-address-
+/// space struct to have a stride that is itself a multiple of 16 — true of
+/// every *attribute* array this crate emits (`array<vec4<f32>>`, by
+/// design), but `array<f32, N>` has a 4-byte stride and fails validation
+/// the moment `pad_f32` is 2 or 3, which single-field padding never
+/// triggers because a lone scalar field is not an array at all.
+pub fn write_uniform_struct(out: &mut String, layout: &UniformLayout, pad_f32: u32) {
+    out.push_str("struct Uniforms {\n");
+    for f in &layout.fields {
+        out.push_str(&format!("    {}: {},\n", f.wgsl_name, f.wgsl_ty));
+    }
+    match pad_f32 {
+        0 => {}
+        1 => out.push_str("    _pad: f32,\n"),
+        n => {
+            for i in 0..n {
+                out.push_str(&format!("    _pad{i}: f32,\n"));
+            }
+        }
+    }
+    out.push_str("};\n");
 }
 
 #[cfg(test)]
@@ -299,6 +386,27 @@ mod tests {
         assert_eq!(layout.fields[0].offset, 0);
         // vec3 aligns to 16, so it cannot start at byte 4.
         assert_eq!(layout.fields[1].offset, 16);
+    }
+
+    #[test]
+    fn padding_of_two_or_three_f32_never_becomes_an_array() {
+        // WGSL requires array elements inside a uniform-address-space struct
+        // to have a stride that is itself a multiple of 16; `array<f32, N>`
+        // has a 4-byte stride and fails validation for N >= 2, so multi-slot
+        // padding must be individually named scalar fields instead. A single
+        // pad field (N == 1) was already covered before this was caught by
+        // an end-to-end naga run, which is exactly the gap this locks shut.
+        for param_count in 0..6 {
+            let mut b = UniformLayoutBuilder::new();
+            b.field("t", "f32");
+            for i in 0..param_count {
+                b.field(format!("p{i}"), "f32");
+            }
+            let (layout, pad_f32) = b.finish();
+            let mut out = String::new();
+            write_uniform_struct(&mut out, &layout, pad_f32);
+            assert!(!out.contains("array<f32"), "param_count={param_count}:\n{out}");
+        }
     }
 
     #[test]
