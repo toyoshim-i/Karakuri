@@ -516,25 +516,39 @@ impl VideoSource for Set {
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
-        _steps: u8,
+        steps: u8,
     ) {
-        let parity = usize::from(self.parity);
-
-        if self.live_count > 0 {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("element"),
-                timestamp_writes: None,
-            });
-            pass.set_pipeline(&self.element);
-            pass.set_bind_group(group::UNIFORMS, &self.l1_uniform_bg, &[]);
-            pass.set_bind_group(group::PREV, &self.prev_bg[parity], &[]);
-            pass.set_bind_group(group::NEXT, &self.next_bg[parity], &[]);
-            pass.dispatch_workgroups(Self::workgroups(self.live_count), 1, 1);
+        // One element pass per step, not one per frame. `steps` is what the
+        // tick record carries, and the whole point of substepping is that the
+        // simulation state at a given `t` does not depend on frame rate — so
+        // advancing `t` by `steps * dt` while stepping once would desynchronise
+        // the two. At `steps == 0` nothing runs and parity does not flip, so a
+        // paused frame renders exactly what the previous one did.
+        //
+        // `t` is constant across a frame's substeps, the same way parameters
+        // and signal bindings are. Substepping exists to keep integration
+        // stable under load, not to give external forcing a finer clock.
+        for _ in 0..steps {
+            if self.live_count == 0 {
+                break;
+            }
+            let parity = usize::from(self.parity);
+            {
+                let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("element"),
+                    timestamp_writes: None,
+                });
+                pass.set_pipeline(&self.element);
+                pass.set_bind_group(group::UNIFORMS, &self.l1_uniform_bg, &[]);
+                pass.set_bind_group(group::PREV, &self.prev_bg[parity], &[]);
+                pass.set_bind_group(group::NEXT, &self.next_bg[parity], &[]);
+                pass.dispatch_workgroups(Self::workgroups(self.live_count), 1, 1);
+            }
+            // What this pass wrote as "next" is the next pass's "prev", and
+            // after the last one it is what L4 reads.
+            self.parity = !self.parity;
         }
 
-        // The compute pass wrote "next"; flipping parity makes those buffers
-        // "prev", which is the set L4 reads.
-        self.parity = !self.parity;
         let render_parity = usize::from(self.parity);
 
         {
