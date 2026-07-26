@@ -240,3 +240,41 @@ fn a_capacity_outside_the_declared_range_is_refused() {
     };
     assert!(msg.contains("999999") && msg.contains("262144"), "{msg}");
 }
+
+// ---------------------------------------------------------------------------
+// Substepping: the simulation state at a given `t` must not depend on how many
+// frames it took to get there. That is the entire reason `steps` exists.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn two_frames_of_one_step_land_where_one_frame_of_two_steps_does() {
+    let gpu = Gpu::headless().expect("no GPU available");
+
+    let mut split = build(&gpu, CAPACITY, 19274);
+    frame(&gpu, &mut split, 1);
+    let split = frame(&gpu, &mut split, 1);
+
+    let mut merged = build(&gpu, CAPACITY, 19274);
+    let merged = frame(&gpu, &mut merged, 2);
+
+    assert_eq!(
+        split, merged,
+        "a frame rate drop changed the simulation rather than the frame count"
+    );
+}
+
+#[test]
+fn zero_steps_renders_the_previous_frame_unchanged() {
+    // A paused frame, or simply a display faster than the step rate: `t` does
+    // not advance, so nothing may move.
+    let gpu = Gpu::headless().expect("no GPU available");
+    let mut set = build(&gpu, CAPACITY, 19274);
+
+    frame(&gpu, &mut set, 1);
+    let before = frame(&gpu, &mut set, 1);
+    let t_before = set.time();
+
+    let paused = frame(&gpu, &mut set, 0);
+    assert_eq!(set.time(), t_before, "`t` advanced on a zero-step frame");
+    assert_eq!(before, paused, "the simulation advanced while paused");
+}
