@@ -6,11 +6,45 @@ Procedural generation centred on primitive drawing, executed on the GPU, where t
 procedures themselves are generated from prompts, saved, and recalled. The design goal is
 that manual human control and autonomous AI control coexist on the same mechanism.
 
+This file is the current state: how to run it, what the rules are, and what does and does
+not work today. Where it is going is [docs/roadmap.md](docs/roadmap.md); what the IR is is
+[docs/ir-spec.md](docs/ir-spec.md).
+
+---
+
+## Running it
+
+Rust stable and a GPU. Two `.kir` files go in — one L1, one L4 — and the CLI puts them
+through parsing, type and contract checking, cost estimation, WGSL generation, and pipeline
+creation. There is no hand-written shader anywhere in that path.
+
+```sh
+cargo run -p karakuri-cli                                    # a window
+cargo run -p karakuri-cli -- --render out.png --frames 240   # one frame
+cargo run -p karakuri-cli -- --seq frames/ --frames 420      # every frame
+cargo run -p karakuri-cli -- --param turbulence=2.6          # a uniform write
+cargo run -p karakuri-cli -- --capacity 65536                # a Set-level dial
+cargo run -p karakuri-cli -- a.kir b.kir                     # a different pair
+```
+
+Defaults are the pair in [examples/](examples/) at 262144 elements. A procedure that fails
+any stage prints every diagnostic it has, against the source, and stops — there is one
+severity, because the response to a rejection is to regenerate rather than to proceed with
+a caveat.
+
+```
+$ cargo run -p karakuri-cli -- broken.kir examples/soft_points.kir
+12:61: contract: `energy` does not resolve to a local, a param, an attribute, or an ambient value
+12 |     position = sphere_point(u, hash1(seed + 1u)) * radius * energy;
+                                                                 ^^^^^^
+hint: the signal bus is not readable from IR — declare `param energy` and attach a `bind` record to it in the Set file
+```
+
 ---
 
 ## Stack
 
-- Rust + wgpu (WGSL)
+- Rust + wgpu 26 (WGSL), winit
 - No UI for now. V1 is a CLI plus a window
 - Audio and external sync are out of V1 scope
 
@@ -47,8 +81,13 @@ during implementation, these win.
 
 ### State mutation
 
-- **Every structural change goes through forking a Set.** Never mutate a live Set in place
-- Parameter value changes may apply in place (uniform writes)
+- **Every structural change produces a new Set value.** Set values are immutable and
+  content-addressed; the compiled instance behind one is not, and may be updated in place
+  whenever the change needs no reallocation and no recompilation. Editing in the background
+  is fast for that reason, without the record stream losing track of anything
+- Parameter value changes may apply in place (uniform writes) and are not structural
+- The cheapest correct response to "make it slower" is usually a parameter move, then a
+  range change, and only then new code
 - **The record stream is the only path that mutates engine state.** CLI, GUI, and agents
   all write the same records. The engine cannot distinguish a human from an agent
 
@@ -94,54 +133,57 @@ There is exactly one assumption to prove:
 > Can an LLM generate constrained IR, can we validate it and compile it to WGSL, and can
 > we hot-swap it without dropping a frame?
 
-### In
+One Set, slots hardcoded, no UI. Local oscillator and synthesized signals only. L1 for
+geometry and L4 for rendering, nothing else. What V1 deliberately leaves out — multiple
+Sets, agents, audio, L2 and L3, the node editor — is scheduled in
+[docs/roadmap.md](docs/roadmap.md) rather than listed here.
 
-- One Set. Slots hardcoded, no UI
-- Local oscillator plus synthesized signals only (no external input)
-- IR covering L1 (point/particle generation) and L4 (point rendering)
-- Stateful elements: dynamic live count, indirect dispatch, spawn and kill,
-  double-buffered attributes, order-preserving prefix-sum compaction
-- Attribute derivation for `velocity` and `age`
-- Accumulator-quantized spawning with engine-applied birth fractions
-- Session stream with `tick` records, always `steps: 1`
-- Set-level `capacity` override within the artifact's declared range
-- IR → WGSL code generation
-- Background compilation and frame-boundary swap
-- Linear HDR pipeline with bloom
-- Prompt-driven L1 procedure generation
-- Artifact save and recall
-- The `VideoSource` interface defined (Set is the only implementation)
+### Status
 
-### Out
+**Two of the three clauses hold.** `.kir` text goes through every stage and 262144 elements
+come out on a GPU with no hand-written shader in the path.
 
-Node editor / multiple Sets / agents / audio input / Ableton Link / L2 and L3 as
-independent slots / phrase scheduling / L5 mixing / porting existing shaders /
-AOV implementation (types only)
+An LLM can write this language from the specification alone. Three models were each given
+`docs/ir-spec.md`, a one-line aesthetic prompt, and nothing else — no example files, no
+source, no tests. **Two of the three compiled on the first attempt with no diagnostics at
+all**; the third failed on one type error and passed on the second attempt after reading
+it. That is a result rather than an assumption, at n=3.
 
----
+What none of them got was the *look* they were asked for. All three rendered a saturated
+blob, and the same procedures rendered correctly once exposure and scale were turned down —
+the code was right and the viewing conditions were guesses. The specification did not say
+where the camera is, what world scale to work in, or that usable exposure falls as element
+count rises. It does now, but the underlying problem is that a generator has no way to know
+a value that depends on a Set-level dial. That is the tone mapper's job, not the prompt's.
 
-## Where V1 stands
-
-The assumption V1 exists to test has three clauses. **The middle one is proven.** `.kir`
-text goes through parse, type and contract checking, cost estimation, WGSL generation, and
-pipeline creation, and 262144 elements come out on a GPU with no hand-written shader
-anywhere in the path. `cargo run -p karakuri-cli` runs the pair in `examples/`.
-
-The other two clauses are not. Nothing generates IR from a prompt yet, so "can an LLM
-generate constrained IR" is still an assumption about a language designed for it rather
-than a result. And there is no hot swap: pipelines are built once at startup, so
-"without dropping a frame" has not been asked of anything.
-
-Also built but not yet joined to the running path:
+The third clause is untested: pipelines are built once at startup, so "without dropping a
+frame" has not been asked of anything.
 
 | | |
 |---|---|
-| Compaction | Correct and tested against a CPU reference, not wired into the L1 dispatch. Until it is, `spawn` and `kill()` cannot run: there is no contiguous free range for a new element to land in |
-| Indirect dispatch | `element` dispatches over a host-side live count. The indirect args buffer exists and is what compaction writes |
-| Attribute derivation | The check pass resolves and records it; the generator does not emit it. A `consumes` satisfied only by derivation will check clean and then be missing at runtime |
-| The store | Content-addressed put/get, ndjson, and the session-to-Set projection all work. The CLI does not use any of it — artifacts are loose files |
-| Signals | The oscillator and the synthesized bus are complete. Nothing binds them to a parameter yet, so `bind` records do nothing |
-| Tone mapping and bloom | Neither exists. The linear HDR pipeline runs end to end and clips at final output, which is why `examples/soft_points.kir` carries a low exposure — that is a workaround standing in for a tone mapper |
+| IR: parse, type and contract check, cost estimation | Works. Diagnostics carry a span, a hint, and every error at once |
+| WGSL generation | Works, validated through naga. Generated names cannot be captured by anything a `.kir` can spell |
+| Set, buffers, pipelines, compute and render | Works. Double buffering, Set-level `capacity`, parameters as uniform writes |
+| Linear HDR end to end, sRGB once at output | Works |
+| Store, oscillator, synthesized bus, noise | Work standalone |
+| **Compaction** | Correct and tested against a CPU reference, **not wired into the L1 dispatch**. Until it is, `spawn` and `kill()` cannot run: there is no contiguous free range for a new element to land in |
+| **Indirect dispatch** | `element` dispatches over a host-side live count. The indirect args buffer exists and is what compaction writes |
+| **Attribute derivation** | The check pass resolves and records it; the generator does not emit it. A `consumes` satisfied only by derivation checks clean and is then missing at runtime |
+| **The store, in use** | The CLI does not use it. Artifacts are loose files |
+| **Signal binding** | Nothing binds a signal to a parameter, so `bind` records do nothing |
+| **Tone mapping and bloom** | Neither exists. The pipeline clips at output, which is why `examples/soft_points.kir` carries a low exposure — a workaround standing in for a tone mapper |
+| **Prompt-driven generation, hot swap** | Not started |
+
+Two things known to be fragile rather than merely absent:
+
+- **Storage buffer count.** One buffer pair per attribute means the L1 compute stage binds
+  12 storage buffers for a procedure emitting three attributes. This machine allows 31, the
+  WebGPU default is 8, and the downlevel default is 4. It runs here because the engine
+  requests the adapter's limits; it would not run on a conservative one. Packing attributes
+  into one struct per direction is the fix, and it also means compaction moves one struct
+  instead of touching N buffers.
+- **GPU timestamps.** See Working style below. Every performance number in this repository
+  came from a host clock.
 
 The hand-written `Points` pipeline is still present. It was the vertical slice that had to
 keep working while everything else was built, and it can go once the generated path covers
@@ -178,14 +220,18 @@ crates/
   karakuri-store/     content-addressed artifact store, ndjson I/O
   karakuri-cli/       V1 entry point
 docs/
-  ir-spec.md          IR specification — settled; see its Resolved section
+  ir-spec.md          the IR. Settled; open questions are empty
+  roadmap.md          where this goes after V1
 examples/             a runnable .kir pair
 library/              artifact store (gitignored)
 ```
 
-```sh
-cargo run -p karakuri-cli                                  # a window
-cargo run -p karakuri-cli -- --render out.png --frames 240 # one frame
-cargo run -p karakuri-cli -- --seq frames/ --frames 420    # every frame
-cargo run -p karakuri-cli -- --param turbulence=2.6        # a uniform write
-```
+---
+
+## Documents
+
+| | |
+|---|---|
+| This file | What exists, how to run it, and the rules that hold now |
+| [docs/ir-spec.md](docs/ir-spec.md) | The IR: grammar, semantics, lowering, record formats. Its Resolved section records the decisions and why, including the ones implementation forced |
+| [docs/roadmap.md](docs/roadmap.md) | Milestones after V1, and the **Demands on earlier work** each one places on code written now. That is the part worth reading before making a decision here |

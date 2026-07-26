@@ -89,8 +89,10 @@ param <name> : <type> [<min>, <max>] = <default>
 ```
 
 - Types: `float`, `vec2`, `vec3`
-- The range is mandatory. It doubles as the UI fader range, the agent's search range,
-  and the normalization basis for signal binding.
+- The range is mandatory. It is the UI fader range, the agent's search range, the
+  normalization basis for signal binding, and the basis for incremental revision: an
+  instruction like "a little slower" can only be translated into a value by something that
+  knows what the range is. Without one, every revision falls back to regenerating code.
 - **Every name the language already gives meaning to is reserved.** A `param` may not be
   called `position`, `size`, `tint` or any other attribute; nor `seed`, `t`, `dt`,
   `capacity`, `camera` or `point_coord`; nor `clip`, `point_size` or `color`; nor `id`.
@@ -187,6 +189,36 @@ ambient value — see [Element identity](#element-identity).
 The **live** element count is deliberately not exposed. `capacity` is a compile-time
 constant; the live count is engine state, and a procedure that branched on it would
 produce different geometry at different fill levels for no expressible reason.
+
+### Viewing conditions
+
+A procedure has to choose a world scale and a brightness, and neither is guessable. Stating
+them is not a courtesy: a generated procedure that picks the wrong scale renders a flat
+sheet, and one that picks the wrong exposure renders a white blob, and **the compiler has
+nothing to say about either**. These are the only numbers in this document that exist
+solely so that something writing a procedure can aim.
+
+Until L3 exists the camera is a built-in orbit:
+
+| | |
+|---|---|
+| Radius | 8.0 world units from the origin |
+| Height | 2.0 |
+| Field of view | 60° vertical |
+| Near / far | 0.1 / 100.0 |
+| Target | the origin |
+
+So **material should occupy roughly a radius of 1 to 4 around the origin.** Much smaller
+and it is a dot; much larger and it fills the frame with no silhouette.
+
+Brightness is harder, because the pipeline is additive and has no tone mapper yet. `color`
+is linear and unbounded, values above 1.0 clip at output, and every element in a sprite's
+footprint adds. The practical consequence is that **usable exposure scales inversely with
+element count**: what reads correctly at 4096 elements is a solid white disc at 262144. A
+procedure cannot know the capacity it will run at — that is a Set-level dial — so this is
+a problem the engine has to solve rather than the author. Until it does, an artifact
+authored for a high element count carries an exposure far below 1.0, and that value is a
+workaround rather than a property of the material.
 
 **The signal bus (energy, beat, band, bpm, …) is not readable from IR.**
 
@@ -863,6 +895,14 @@ purely a source file that a human or an LLM can read and edit.
 The store regenerates metadata from the `.kir` plus a compile pass, so metadata files are
 reproducible artifacts rather than hand-authored ones.
 
+`origin` records what produced *this* revision, not the original intent. When an artifact
+came from revising another one, `parent` points at what it was revised from and `prompt`
+holds the instruction that did it — "more aggressive, red", not the paragraph that started
+the lineage. Walking `parent` recovers the whole path; storing only the final wording loses
+it. Anything else fed to the generator belongs here too, for the same reason: two artifacts
+from the same prompt that differ because different reference material was supplied are
+otherwise unexplainable.
+
 **One `t` means one shape, across every file.** A metadata file describes what an artifact
 *declares*; a Set file records what a value *is*. Those are different records, so they get
 different names — `param_decl` and `capacity_decl` here, `param` and `capacity` there. The
@@ -891,6 +931,117 @@ The L4 number is for the library to display and for humans to compare. The budge
 belongs to the probe in stage 7, which measures the real Set with its real parameters. That
 is the existing division of labour — estimate conservatively, let the probe be the
 authority — and L4 is simply a case where the estimate cannot be made sharp.
+
+---
+
+## Beyond v0.2 — specified, not implemented
+
+Everything above this line is implemented and tested. Everything below is design that has
+been settled but not built: **no parser accepts it, no checker enforces it, and no
+generator emits it.** It is written down because later milestones depend on these shapes
+and because deciding them now keeps V1 from foreclosing them. Each carries the milestone
+it belongs to; see `docs/roadmap.md`.
+
+### Multiple L1 sources, and `source` — M3
+
+Merging several geometry sources into one Set raises the question the removal of `id` left
+open: how two sources avoid colliding identities. `seed` is a monotone ordinal from a
+counter that resets at Set start, so two sources either share it — and the second one's
+`seed` no longer starts at zero, which breaks every structured layout — or hold one each
+and collide immediately.
+
+The resolution keeps `seed` zero-based per source and adds a fourth implicit attribute:
+
+| Name | Type | Notes |
+|---|---|---|
+| `source` | `uint` | which L1 source produced this element. Implicit, carried, never declared |
+
+- Each source counts its own `seed` from zero, so `seed % side` and every other structured
+  layout works identically in every source.
+- The hash builtins' salt becomes **per source** rather than per layer, so `hash1(seed)`
+  differs between sources automatically while `seed % 512u` stays the same in both. Two
+  grids of identical shape in different colours is then the default, not something to
+  arrange.
+- `source` is what downstream layers mask on. It is an ordinary attribute for that purpose.
+
+**Downstream treats sources differently by writing attributes, not by branching on
+`source` in L4.** An L2 modulator masked to `source == 0` writes `tint`, and L4 renders
+`tint` without learning that there was more than one source — so an L4 written against one
+source works unchanged against five. An L4 that branches on `source` is coupled to a
+particular Set's composition and stops being reusable.
+
+### Combining two sources — M3
+
+Three things get called "mixing two sources" and only one of them needs anything new.
+
+| | What it is | What it needs |
+|---|---|---|
+| Crossfade | draw both, blend opacity | Nothing here. Two Sets and the L5 mixer |
+| Dissolve | hide one source's elements progressively | Nothing here. An L2 mask on `source` writing `size` or `tint` |
+| Interpolation | pair elements and blend their attributes | **A cross-source read**, which the IR does not have |
+
+Interpolation is the only real addition, and it is not a count change — it is an
+element-wise operation that needs to read *another source's* element at the corresponding
+index. `seed` provides the correspondence: element 5 of source A pairs with element 5 of
+source B, which is exactly what per-source zero-based seeds buy.
+
+It fights compaction, though: two sources kill independently, so after compaction the
+paired elements sit at different slot indices and the correspondence needs a seed-to-slot
+lookup. **Restricted to sources that are static — no `spawn`, no `kill()`, therefore no
+compaction, therefore `seed` is the slot index — it is a direct indexed read and costs
+nothing.** That restriction is statically checkable and covers lattices and shells, which
+is most of what anyone wants to interpolate. Dynamic sources can wait for a correspondence
+structure.
+
+### L2 amplification — M3
+
+`L2 : Geometry -> Geometry` is an endomorphism, which is what makes L2 freely stackable and
+also what makes kaleidoscopes, instancing, trails, and subdivision inexpressible: **nothing
+in the layer model can change the element count.**
+
+The gap is filled by a second kind of L2 rather than a new layer number. Both take geometry
+and return geometry, so they occupy the same slot position; what differs is the count mode,
+which `Geometry` already declares.
+
+```
+kind    L2
+amplify 8
+```
+
+- The factor is a compile-time constant, the same rule as loop bounds and `capacity`, so
+  the output buffer can be sized and the cost multiplied out statically.
+- Amplifying stages are **not** freely stackable: counts multiply rather than compose, so
+  each one's factor enters the estimate as a product.
+- Copies need distinguishing — eight mirror images are at eight positions — so a copy index
+  is readable inside an amplifying block, and identity downstream is the pair of the parent
+  `seed` and that index.
+
+Amplification is cheaper to build than its position suggests. **Its output is derived and
+recomputed every frame**, so unlike an L1 buffer it needs neither double buffering nor
+compaction: nothing reads its previous value and its liveness is decided upstream.
+
+This is where the primitive-centric bet pays out on the geometry side, for the same reason
+the spec already gives for drawing one point cloud several ways: one simulated element
+producing eight mirrored copies costs one simulation and eight draws, not eight simulations.
+
+### Closed form versus accumulating — M2
+
+A procedure is **closed form** if it never reads an attribute it emits — position is a pure
+function of `seed`, `t`, and parameters. It is **accumulating** if it reads its own
+previous output, which is what integration looks like.
+
+The check pass already tracks every attribute read and write, so this is decidable with the
+information it has, and it belongs in the compiled metadata because the engine's lifecycle
+depends on it:
+
+- **Closed form needs no priming.** Any `t` can be jumped to directly, so a Set can go from
+  Cold to Live with no warm-up, and can be scrubbed or seeked.
+- **Accumulating must be run forward** from its start to reach its attractor, which is what
+  priming is for and what makes a deck slot expensive.
+
+The distinction is also what decides whether beat-resolution variant selection is
+affordable: switching between closed-form alternatives costs nothing, while keeping three
+accumulating alternatives selectable means three simulations resident.
 
 ---
 
