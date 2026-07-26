@@ -120,13 +120,50 @@ AOV implementation (types only)
 
 ---
 
+## Where V1 stands
+
+The assumption V1 exists to test has three clauses. **The middle one is proven.** `.kir`
+text goes through parse, type and contract checking, cost estimation, WGSL generation, and
+pipeline creation, and 262144 elements come out on a GPU with no hand-written shader
+anywhere in the path. `cargo run -p karakuri-cli` runs the pair in `examples/`.
+
+The other two clauses are not. Nothing generates IR from a prompt yet, so "can an LLM
+generate constrained IR" is still an assumption about a language designed for it rather
+than a result. And there is no hot swap: pipelines are built once at startup, so
+"without dropping a frame" has not been asked of anything.
+
+Also built but not yet joined to the running path:
+
+| | |
+|---|---|
+| Compaction | Correct and tested against a CPU reference, not wired into the L1 dispatch. Until it is, `spawn` and `kill()` cannot run: there is no contiguous free range for a new element to land in |
+| Indirect dispatch | `element` dispatches over a host-side live count. The indirect args buffer exists and is what compaction writes |
+| Attribute derivation | The check pass resolves and records it; the generator does not emit it. A `consumes` satisfied only by derivation will check clean and then be missing at runtime |
+| The store | Content-addressed put/get, ndjson, and the session-to-Set projection all work. The CLI does not use any of it — artifacts are loose files |
+| Signals | The oscillator and the synthesized bus are complete. Nothing binds them to a parameter yet, so `bind` records do nothing |
+| Tone mapping and bloom | Neither exists. The linear HDR pipeline runs end to end and clips at final output, which is why `examples/soft_points.kir` carries a low exposure — that is a workaround standing in for a tone mapper |
+
+The hand-written `Points` pipeline is still present. It was the vertical slice that had to
+keep working while everything else was built, and it can go once the generated path covers
+what it covers.
+
+---
+
 ## Working style
 
 - **Vertical slices, not layers.** Not "build the whole signal bus" but "get a triangle on
   screen, then never break it"
 - Keep it running. Do not commit a state that does not build
 - Before adding an abstraction, confirm it has at least two call sites
-- Any change touching performance comes with a GPU-timestamp measurement
+- Any change touching performance comes with a GPU-timestamp measurement — **which does not
+  currently work on the development machine.** On Apple M4 Pro via Metal, wgpu advertises
+  and enables both `TIMESTAMP_QUERY` and `TIMESTAMP_QUERY_INSIDE_ENCODERS`, and a
+  deliberately enormous workload still resolves to zero, to a negative delta, or
+  occasionally to something plausible. Flaky is worse than broken: a probe returning 0.0 ms
+  reads as a very fast shader. `Probe` therefore calibrates against a known-heavy workload
+  rather than trusting the feature flag, and falls back to a host measurement that says so
+  in the result. Treat every performance number produced here as host-side and biased high
+  until this rule can be honoured on real hardware
 
 ---
 
@@ -141,6 +178,14 @@ crates/
   karakuri-store/     content-addressed artifact store, ndjson I/O
   karakuri-cli/       V1 entry point
 docs/
-  ir-spec.md          IR specification — settle this before implementing
+  ir-spec.md          IR specification — settled; see its Resolved section
+examples/             a runnable .kir pair
 library/              artifact store (gitignored)
+```
+
+```sh
+cargo run -p karakuri-cli                                  # a window
+cargo run -p karakuri-cli -- --render out.png --frames 240 # one frame
+cargo run -p karakuri-cli -- --seq frames/ --frames 420    # every frame
+cargo run -p karakuri-cli -- --param turbulence=2.6        # a uniform write
 ```
