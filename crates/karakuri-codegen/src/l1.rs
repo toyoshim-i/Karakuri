@@ -53,7 +53,7 @@ use karakuri_ir::typed::{Checked, TStmt, Target};
 use karakuri_ir::{Ambient, Attr, BlockKind, Kind};
 
 use crate::layout::{self, group, AttrSlot, UniformLayout, UniformLayoutBuilder, WORKGROUP_SIZE};
-use crate::lower::{lower_expr, Resolver};
+use crate::lower::{lower_expr, mangle_local, Resolver};
 use crate::prelude::{self, Requirements};
 use crate::ty::{pad_to_vec4, wgsl_ty};
 
@@ -115,16 +115,16 @@ fn emit_stmts(stmts: &[TStmt], resolver: &L1Resolver, req: &mut Requirements, in
         match stmt {
             TStmt::Let { name, value, .. } => {
                 let v = lower_expr(value, resolver, req);
-                out.push_str(&format!("{pad}let {name} = {v};\n"));
+                out.push_str(&format!("{pad}let {} = {v};\n", mangle_local(name)));
             }
             TStmt::Var { name, value, .. } => {
                 let v = lower_expr(value, resolver, req);
-                out.push_str(&format!("{pad}var {name} = {v};\n"));
+                out.push_str(&format!("{pad}var {} = {v};\n", mangle_local(name)));
             }
             TStmt::Assign { target, value, .. } => {
                 let v = lower_expr(value, resolver, req);
                 match target {
-                    Target::Local(name) => out.push_str(&format!("{pad}{name} = {v};\n")),
+                    Target::Local(name) => out.push_str(&format!("{pad}{} = {v};\n", mangle_local(name))),
                     Target::Attr(attr) => {
                         let wrapped = pad_to_vec4(attr.ty(), "f32", &v);
                         out.push_str(&format!("{pad}next_{}[{}] = {wrapped};\n", attr.name(), resolver.idx));
@@ -145,9 +145,8 @@ fn emit_stmts(stmts: &[TStmt], resolver: &L1Resolver, req: &mut Requirements, in
                 }
             }
             TStmt::For { var, start, end, body, .. } => {
-                out.push_str(&format!(
-                    "{pad}for (var {var}: i32 = {start}; {var} < {end}; {var} = {var} + 1) {{\n"
-                ));
+                let v = mangle_local(var);
+                out.push_str(&format!("{pad}for (var {v}: i32 = {start}; {v} < {end}; {v} = {v} + 1) {{\n"));
                 emit_stmts(body, resolver, req, indent + 1, out);
                 out.push_str(&format!("{pad}}}\n"));
             }
@@ -156,19 +155,6 @@ fn emit_stmts(stmts: &[TStmt], resolver: &L1Resolver, req: &mut Requirements, in
             }
         }
     }
-}
-
-fn write_uniform_struct(out: &mut String, layout: &UniformLayout, pad_f32: u32) {
-    out.push_str("struct Uniforms {\n");
-    for f in &layout.fields {
-        out.push_str(&format!("    {}: {},\n", f.name, f.wgsl_ty));
-    }
-    match pad_f32 {
-        0 => {}
-        1 => out.push_str("    _pad: f32,\n"),
-        n => out.push_str(&format!("    _pad: array<f32, {n}>,\n")),
-    }
-    out.push_str("};\n");
 }
 
 fn write_attr_bindings(out: &mut String, slots: &[AttrSlot]) {
@@ -245,7 +231,7 @@ pub fn generate_l1(checked: &Checked) -> L1Shader {
     b.field("spawn_count", "u32");
     b.field("seed_base", "u32");
     for p in &checked.params {
-        b.field(p.name.clone(), wgsl_ty(p.ty));
+        b.param_field(p.name.clone(), wgsl_ty(p.ty));
     }
     let (uniform_layout, uniform_pad_f32) = b.finish();
 
@@ -269,7 +255,7 @@ pub fn generate_l1(checked: &Checked) -> L1Shader {
     let has_spawn = spawn_body.is_some();
 
     let mut src = String::new();
-    write_uniform_struct(&mut src, &uniform_layout, uniform_pad_f32);
+    layout::write_uniform_struct(&mut src, &uniform_layout, uniform_pad_f32);
     src.push_str("\n@group(0) @binding(0) var<uniform> u: Uniforms;\n\n");
     write_attr_bindings(&mut src, &attr_slots);
     src.push('\n');

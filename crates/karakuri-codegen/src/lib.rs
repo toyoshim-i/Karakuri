@@ -143,7 +143,7 @@ mod tests {
         // the write.
         assert!(shader.source.contains("next_position[i] ="), "{}", shader.source);
         assert!(
-            shader.source.contains("let again = prev_position[i].xyz;"),
+            shader.source.contains("let usr_again = prev_position[i].xyz;"),
             "expected the re-read to reference prev_position, got:\n{}",
             shader.source
         );
@@ -247,7 +247,7 @@ mod tests {
         p.emit = vec![Attr::Age];
         p.blocks.push(TBlock { kind: BlockKind::Element, stmts: vec![let_stmt, assign], span: span() });
         let shader = generate_l1(&p);
-        assert!(shader.source.contains("let bucket = (seed % 512u);"), "{}", shader.source);
+        assert!(shader.source.contains("let usr_bucket = (seed % 512u);"), "{}", shader.source);
         assert!(!shader.source.contains("mod_"), "{}", shader.source);
     }
 
