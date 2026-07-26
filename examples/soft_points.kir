@@ -1,0 +1,31 @@
+// Soft additive sprites. Faster elements are drawn larger, and each one takes a
+// slightly different hue from its own seed, so the shell reads as a volume
+// rather than as a surface.
+//
+// `color` is linear and `hsv_to_rgb` returns linear: sRGB encoding happens once,
+// at final output. Values above 1.0 are expected — they are what will feed bloom.
+
+proc soft_points {
+  kind  L4
+  blend additive
+
+  consumes position, velocity, age
+
+  param point_scale : float [0.5, 40.0] = 4.0
+  param hue         : float [0.0, 1.0]  = 0.58
+  param spread      : float [0.0, 1.0]  = 0.30
+  param exposure    : float [0.0, 8.0]  = 0.30
+  param falloff     : float [0.5, 8.0]  = 3.0
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = point_scale * (0.35 + 0.65 * clamp(length(velocity) * 0.6, 0.0, 1.0));
+  }
+
+  fragment {
+    let d = length(point_coord * 2.0 - 1.0);
+    let a = pow(max(0.0, 1.0 - d), falloff);
+    let c = hsv_to_rgb(vec3(hue + hash1(seed) * spread, 0.75, 1.0));
+    color = vec4(c * exposure, a);
+  }
+}
