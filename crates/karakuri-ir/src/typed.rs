@@ -24,9 +24,12 @@ use crate::span::Span;
 /// A procedure that has passed parsing, type checking, and contract checking.
 ///
 /// Holding one of these is the claim that the rules in `docs/ir-spec.md` hold
-/// of it: `consumes` is contained in `emit` after derivation, nothing reads the
-/// signal bus, and every emitted attribute and required stage output is
-/// assigned on every path.
+/// of it: `consumes` is contained in `emit`, nothing reads the signal bus,
+/// and every emitted attribute and required stage output is assigned on
+/// every path. There is no derivation step: an unmet `consumes` is a plain
+/// rejection, whether caught here (a single procedure declaring both `emit`
+/// and `consumes` — see `check_consumes_emitted` in `check.rs`) or, for the
+/// ordinary L1/L4 pairing, at Set-composition time outside this crate.
 #[derive(Debug, Clone)]
 pub struct Checked {
     pub name: String,
@@ -37,10 +40,6 @@ pub struct Checked {
     pub params: Vec<Param>,
     pub emit: Vec<Attr>,
     pub consumes: Vec<Attr>,
-    /// Attributes a consumer needed that the producer did not emit, and the
-    /// rule that supplies them. Recorded so the UI can show that a value was
-    /// inferred rather than authored.
-    pub derived: Vec<Derivation>,
     pub blocks: Vec<TBlock>,
     /// Filled by cost estimation. `None` until stage 4 has run.
     pub cost: Option<Cost>,
@@ -58,20 +57,6 @@ impl Checked {
     pub fn is_static(&self) -> bool {
         self.kind == Kind::L1 && self.block(BlockKind::Spawn).is_none()
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Derivation {
-    pub attr: Attr,
-    pub from: DerivedFrom,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DerivedFrom {
-    /// `(position - prev_position) / dt`
-    PrevPosition,
-    /// Accumulated `dt` since spawn.
-    SpawnTime,
 }
 
 /// What an artifact records about its own expense.

@@ -39,45 +39,35 @@
 //! # Previous live range, not whole capacity
 //!
 //! The scan restricts itself to the *previous* live range: entries at or
-//! past the previous frame's live count are ignored regardless of what bit
-//! pattern is stored there, because that memory is stale once compaction
-//! has shrunk the range — `element` only writes destinations below the live
-//! count, so anything beyond it is left over from an earlier frame and may
-//! read back as "alive" by accident. [`Compaction::indirect_buffer`] is
-//! exactly the persistent state this needs: `record` reads the live count
-//! it wrote last time (or the construction-time default, on the first
-//! call) before overwriting it with this call's result, and the read is
-//! guaranteed to see the old value because it is an earlier command in the
-//! same encoder than the write.
+//! past `counts.range` are ignored regardless of what bit pattern is stored
+//! there, because that memory is stale once compaction has shrunk the range
+//! — `element` only writes destinations below the survivor count, so
+//! anything beyond `range` is left over from an earlier step and may read
+//! back as "alive" by accident. The counts buffer is exactly the persistent
+//! state this needs, and the ordering works out because within one step the
+//! scan reads `range` before [`Compaction::record_advance`] rewrites it, and
+//! the two are separate commands in the same encoder.
+//!
+//! # Where the buffers come from
+//!
+//! Every buffer this touches belongs to the `Set`: the two ping-ponging
+//! alive buffers and the shared counts buffer are passed to
+//! [`Compaction::new`], which builds one bind group per parity so that
+//! [`Compaction::record`] can pick between them without creating anything.
+//! Only `dest` and the block-sum pyramid are this module's own. `record` and
+//! `record_advance` take no buffer arguments and allocate nothing; they
+//! encode commands and nothing else.
 //!
 //! # What this does not do
 //!
-//! This module owns its own alive-flags buffer ([`Compaction::alive_buffer`])
-//! rather than borrowing one per call. `record` takes no buffer arguments at
-//! all — every buffer it touches was created in [`Compaction::new`] and
-//! every bind group was built there too, so `record` only ever encodes
-//! commands, never allocates. Wiring a real L1 pipeline's alive attribute
-//! into this buffer (a GPU-side copy, or writing kills directly here) is up
-//! to whatever assembles the full L1 dispatch; this module does not assume
-//! which.
+//! It does not decide *whether* to run. A procedure with no `spawn` block
+//! and no `kill()` never changes its live set, so its scan would compute the
+//! identity permutation every frame at full capacity; `Set` skips
+//! constructing a `Compaction` at all for one of those. See
+//! `karakuri_codegen::l1`'s `compacted` flag.
 
-use karakuri_codegen::layout::WORKGROUP_SIZE;
+use karakuri_codegen::layout::{counts, step_args, WORKGROUP_SIZE};
 use wgpu::util::DeviceExt;
-
-/// Matches `IndirectArgs` in `shaders/scan.wgsl`. The first three fields are
-/// exactly wgpu's `dispatch_workgroups_indirect` argument layout, so
-/// `element` can point an indirect dispatch straight at
-/// [`Compaction::indirect_buffer`]; the fourth is the raw live count, for
-/// anything that wants the element count rather than the workgroup count —
-/// including this module's own next-call scan bound.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct IndirectArgs {
-    workgroups_x: u32,
-    workgroups_y: u32,
-    workgroups_z: u32,
-    live_count: u32,
-}
 
 /// Matches `LevelLen` in `shaders/scan.wgsl`: four plain `u32`s so nothing
 /// in WGSL's uniform-address-space alignment rules can make this struct's
@@ -147,7 +137,7 @@ fn make_pipeline(
 }
 
 /// Records an exclusive prefix sum over the alive flags and turns it into
-/// destination indices plus a new live count.
+/// destination indices plus a survivor count.
 pub struct Compaction {
     capacity: u32,
     /// `workgroups[p]` is both the number of workgroups pass `p` dispatches
@@ -156,9 +146,7 @@ pub struct Compaction {
     /// count *is* how many workgroups cover the level below it.
     workgroups: Vec<u32>,
 
-    alive: wgpu::Buffer,
     dest: wgpu::Buffer,
-    indirect: wgpu::Buffer,
     /// `sums[p]` is level `p + 1`: the block-sum output of pass `p`, and the
     /// (in-place scanned) input of pass `p + 1`. Never read directly after
     /// construction — every pass reaches these buffers through the bind
@@ -172,18 +160,39 @@ pub struct Compaction {
     pipeline_inplace: wgpu::ComputePipeline,
     pipeline_add_offsets: wgpu::ComputePipeline,
     pipeline_finalize: wgpu::ComputePipeline,
+    pipeline_advance: wgpu::ComputePipeline,
 
-    bg_level0: wgpu::BindGroup,
+    /// Indexed by parity, like every other ping-ponging bind group in the
+    /// engine: the alive buffer the scan reads is whichever one is "prev"
+    /// for the step being recorded.
+    bg_level0: [wgpu::BindGroup; 2],
     /// One per level `p = 1..num_levels`, i.e. `bg_levels[p - 1]`.
     bg_levels: Vec<wgpu::BindGroup>,
     /// One per level `p = 0..num_levels - 1` (the top level needs none).
     bg_add_offsets: Vec<wgpu::BindGroup>,
     bg_finalize: wgpu::BindGroup,
+    /// One per substep, each binding the spawn-args buffer at that substep's
+    /// offset — see `karakuri_codegen::layout::step_args` for why the
+    /// parameters differ between the substeps of one frame.
+    bg_advance: Vec<wgpu::BindGroup>,
 }
 
 impl Compaction {
-    pub fn new(device: &wgpu::Device, capacity: u32) -> Compaction {
+    /// `alive` is the Set's ping-ponging pair of alive buffers, indexed by
+    /// parity; `counts` and `step_args_buf` are the Set's shared engine
+    /// state. All three are borrowed only for the length of this call —
+    /// wgpu bind groups keep their own references — which is what lets the
+    /// Set own them and this own the passes over them.
+    pub fn new(
+        device: &wgpu::Device,
+        capacity: u32,
+        alive: [&wgpu::Buffer; 2],
+        counts_buf: &wgpu::Buffer,
+        step_args_buf: &wgpu::Buffer,
+        substeps: u32,
+    ) -> Compaction {
         assert!(capacity >= 1, "compaction requires a non-zero capacity");
+        assert!(substeps >= 1, "at least one substep's advance bind group is needed");
         let wg = WORKGROUP_SIZE;
 
         // The level pyramid: level_sizes[0] is `capacity`, and each further
@@ -206,7 +215,10 @@ impl Compaction {
         let workgroups: Vec<u32> = level_sizes[1..].to_vec();
         let num_levels = workgroups.len();
 
-        let shader_source = include_str!("shaders/scan.wgsl").replace("{{WG}}", &wg.to_string());
+        let shader_source = include_str!("shaders/scan.wgsl")
+            .replace("{{WG}}", &wg.to_string())
+            .replace("{{COUNTS}}", counts::WGSL)
+            .replace("{{STEP_ARGS}}", step_args::WGSL);
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("compaction scan"),
             source: wgpu::ShaderSource::Wgsl(shader_source.into()),
@@ -214,39 +226,11 @@ impl Compaction {
 
         // --- buffers, all created once here; `record` never allocates ---
 
-        let alive = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("compaction alive"),
-            size: u64::from(capacity) * 16,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
         let dest = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("compaction dest"),
             size: u64::from(capacity) * 4,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
-        });
-
-        // Doubles as this call's `dispatch_workgroups_indirect` source for
-        // `element` and the next call's "previous live range" bound. All
-        // `capacity` elements are candidates on the first call, matching a
-        // procedure with no `spawn` block (see "Element lifecycle" /
-        // "Spawn timing" in the IR spec) — a procedure that spawns instead
-        // starts at 0 live and is expected to reset this via a copy before
-        // its first `record`.
-        let indirect = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("compaction indirect"),
-            contents: bytemuck::bytes_of(&IndirectArgs {
-                workgroups_x: capacity.div_ceil(wg),
-                workgroups_y: 1,
-                workgroups_z: 1,
-                live_count: capacity,
-            }),
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::INDIRECT
-                | wgpu::BufferUsages::COPY_DST
-                | wgpu::BufferUsages::COPY_SRC,
         });
 
         let sums: Vec<wgpu::Buffer> = workgroups
@@ -302,6 +286,10 @@ impl Compaction {
             label: Some("compaction finalize"),
             entries: &[storage_entry(11, true), storage_entry(12, false)],
         });
+        let bgl_advance = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("compaction advance"),
+            entries: &[storage_entry(13, false), uniform_entry(14)],
+        });
 
         let pipeline_from_alive =
             make_pipeline(device, &shader, &bgl_from_alive, "scan_from_alive", "compaction scan_from_alive");
@@ -311,17 +299,21 @@ impl Compaction {
             make_pipeline(device, &shader, &bgl_add_offsets, "add_offsets", "compaction add_offsets");
         let pipeline_finalize =
             make_pipeline(device, &shader, &bgl_finalize, "finalize", "compaction finalize");
+        let pipeline_advance =
+            make_pipeline(device, &shader, &bgl_advance, "advance", "compaction advance");
 
-        let bg_level0 = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("compaction level0"),
-            layout: &bgl_from_alive,
-            entries: &[
-                buffer_entry(0, &alive),
-                buffer_entry(1, &dest),
-                buffer_entry(2, &sums[0]),
-                buffer_entry(3, &len_uniforms[0]),
-                buffer_entry(4, &indirect),
-            ],
+        let bg_level0 = std::array::from_fn(|parity| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("compaction level0"),
+                layout: &bgl_from_alive,
+                entries: &[
+                    buffer_entry(0, alive[parity]),
+                    buffer_entry(1, &dest),
+                    buffer_entry(2, &sums[0]),
+                    buffer_entry(3, &len_uniforms[0]),
+                    buffer_entry(4, counts_buf),
+                ],
+            })
         });
 
         let bg_levels: Vec<wgpu::BindGroup> = (1..num_levels)
@@ -360,24 +352,44 @@ impl Compaction {
         let bg_finalize = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("compaction finalize"),
             layout: &bgl_finalize,
-            entries: &[buffer_entry(11, &sums[num_levels - 1]), buffer_entry(12, &indirect)],
+            entries: &[buffer_entry(11, &sums[num_levels - 1]), buffer_entry(12, counts_buf)],
         });
+
+        let bg_advance: Vec<wgpu::BindGroup> = (0..substeps)
+            .map(|step| {
+                device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("compaction advance"),
+                    layout: &bgl_advance,
+                    entries: &[
+                        buffer_entry(13, counts_buf),
+                        wgpu::BindGroupEntry {
+                            binding: 14,
+                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                buffer: step_args_buf,
+                                offset: u64::from(step) * step_args::STRIDE,
+                                size: wgpu::BufferSize::new(step_args::SIZE),
+                            }),
+                        },
+                    ],
+                })
+            })
+            .collect();
 
         Compaction {
             capacity,
             workgroups,
-            alive,
             dest,
-            indirect,
             sums,
             pipeline_from_alive,
             pipeline_inplace,
             pipeline_add_offsets,
             pipeline_finalize,
+            pipeline_advance,
             bg_level0,
             bg_levels,
             bg_add_offsets,
             bg_finalize,
+            bg_advance,
         }
     }
 
@@ -385,35 +397,18 @@ impl Compaction {
         self.capacity
     }
 
-    /// The alive-flags input, `array<vec4<u32>>` with the flag in `.x` —
-    /// the same shape `karakuri_codegen::layout`'s synthetic `alive` slot
-    /// uses, so a real L1 pipeline's alive attribute can be copied (or
-    /// written) straight in with no adapter. Callers upload into this with
-    /// `queue.write_buffer`, which is a data upload rather than an
-    /// allocation and is not restricted to construction time.
-    pub fn alive_buffer(&self) -> &wgpu::Buffer {
-        &self.alive
-    }
-
     /// `array<u32>`, length `capacity`. `dest[i]` is element `i`'s
     /// destination index once every survivor before it (within the
     /// previous live range) has been counted — undefined for `i` at or
-    /// past the live count, since those elements did not survive.
+    /// past the range, since those entries were not scanned.
     pub fn dest_buffer(&self) -> &wgpu::Buffer {
         &self.dest
     }
 
-    /// `dispatch_workgroups_indirect` arguments (the first three `u32`s)
-    /// plus the raw live count (the fourth), rewritten by every `record`.
-    /// Also the "previous live range" this scan itself reads on its next
-    /// call — see the module doc.
-    pub fn indirect_buffer(&self) -> &wgpu::Buffer {
-        &self.indirect
-    }
-
-    /// Encodes every scan pass. Allocates nothing: every buffer and bind
-    /// group already exists from [`Compaction::new`].
-    pub fn record(&self, encoder: &mut wgpu::CommandEncoder) {
+    /// Encodes every scan pass, over the alive buffer `parity` selects as
+    /// "prev". Allocates nothing: every buffer and bind group already exists
+    /// from [`Compaction::new`].
+    pub fn record(&self, encoder: &mut wgpu::CommandEncoder, parity: bool) {
         let num_levels = self.workgroups.len();
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("compaction scan"),
@@ -424,7 +419,7 @@ impl Compaction {
         // alive-flags buffer; every level above reads the level below's
         // block sums, in place.
         pass.set_pipeline(&self.pipeline_from_alive);
-        pass.set_bind_group(0, &self.bg_level0, &[]);
+        pass.set_bind_group(0, &self.bg_level0[usize::from(parity)], &[]);
         pass.dispatch_workgroups(self.workgroups[0], 1, 1);
         for p in 1..num_levels {
             pass.set_pipeline(&self.pipeline_inplace);
@@ -440,10 +435,24 @@ impl Compaction {
             pass.dispatch_workgroups(self.workgroups[p], 1, 1);
         }
 
-        // Grand total -> dispatch_workgroups_indirect args + raw live
-        // count.
+        // Grand total -> `counts.survivors`, and nothing else: `element`
+        // still has to run against the pre-scan range. See the shader.
         pass.set_pipeline(&self.pipeline_finalize);
         pass.set_bind_group(0, &self.bg_finalize, &[]);
+        pass.dispatch_workgroups(1, 1, 1);
+    }
+
+    /// Rolls `range` forward and recomputes the dispatch and draw arguments
+    /// from it, using substep `step`'s spawn count. Runs last in a step,
+    /// after both `element` and `spawn` — until it does, `counts.range` is
+    /// still the range those two were dispatched against.
+    pub fn record_advance(&self, encoder: &mut wgpu::CommandEncoder, step: usize) {
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("compaction advance"),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(&self.pipeline_advance);
+        pass.set_bind_group(0, &self.bg_advance[step], &[]);
         pass.dispatch_workgroups(1, 1, 1);
     }
 }

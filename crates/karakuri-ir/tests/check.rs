@@ -6,7 +6,7 @@
 use karakuri_ir::ast::{Attr, BinOp, BlockKind, Kind, Output, Topology, Ty};
 use karakuri_ir::check::check;
 use karakuri_ir::parse::parse;
-use karakuri_ir::typed::{Checked, DerivedFrom, Target, TExprKind, TStmt};
+use karakuri_ir::typed::{Checked, Target, TExprKind, TStmt};
 
 /// Parse then check, panicking with rendered diagnostics if either stage
 /// unexpectedly fails. Used for fixtures this test expects to be valid.
@@ -53,7 +53,6 @@ fn drift_shell_checks_clean_with_expected_shape() {
     assert_eq!(checked.capacity.map(|c| c.default), Some(262144));
     assert_eq!(checked.emit, vec![Attr::Position, Attr::Velocity, Attr::Age]);
     assert!(checked.consumes.is_empty());
-    assert!(checked.derived.is_empty());
     assert!(checked.cost.is_none(), "cost estimation has not run yet");
 
     let spawn = checked.block(BlockKind::Spawn).expect("spawn block");
@@ -105,8 +104,7 @@ fn soft_points_checks_clean_with_expected_shape() {
     assert!(checked.emit.is_empty());
     // The L4 side of `consumes ⊆ emit` is a cross-proc (Set-composition)
     // question this pass cannot answer alone — see the module docs on
-    // `check.rs`. Nothing is derived from within `soft_points` itself.
-    assert!(checked.derived.is_empty());
+    // `check.rs`.
 
     let vertex = checked.block(BlockKind::Vertex).expect("vertex block");
     match &vertex.stmts[0] {
@@ -419,10 +417,18 @@ proc bad {
     );
 }
 
-/// `velocity` is consumed but not emitted; since `position` *is* emitted, the
-/// compiler derives it instead of rejecting the procedure.
+/// `velocity` is consumed but not emitted. `position` being emitted used to
+/// be enough for the check pass to derive `velocity` from it and let this
+/// through — but nothing downstream ever implemented that derivation: there
+/// is no WGSL emitter for it and no second frame of `position` history to
+/// compute it from. A procedure in this shape checked clean and then read
+/// zeros for `velocity` at runtime, which is exactly the failure "one
+/// severity" cannot allow — a rejection is what gives a regenerating model
+/// something to act on. Derivation is now design only, recorded below the
+/// "specified, not implemented" line in `docs/ir-spec.md`, and this must be
+/// a plain rejection.
 #[test]
-fn consumes_satisfied_only_by_derivation_checks_clean() {
+fn consumes_not_covered_by_emit_is_rejected_even_with_a_derivation_rule() {
     let src = r#"
 proc weird {
   kind     L1
@@ -443,15 +449,18 @@ proc weird {
   }
 }
 "#;
-    let checked = check_ok(src);
-    assert_eq!(checked.derived.len(), 1);
-    assert_eq!(checked.derived[0].attr, Attr::Velocity);
-    assert_eq!(checked.derived[0].from, DerivedFrom::PrevPosition);
+    let errs = check_err(src);
+    assert!(
+        errs.iter()
+            .any(|e| e.message.contains("velocity") && e.message.contains("not implemented")),
+        "expected a diagnostic naming `velocity` and saying its derivation is not implemented, \
+         got: {errs:?}"
+    );
 }
 
-/// Without `position` emitted, `velocity` has nothing to derive from, and
-/// `age`'s absence would need to fall back to spawn-time tracking that isn't
-/// itself derivable from nothing to emit either — a plain error.
+/// `normal` has no derivation rule in the spec at all, unlike `velocity` and
+/// `age`, so its rejection carries the plain "not emitted" message rather
+/// than a mention of an unimplemented rule.
 #[test]
 fn consumes_with_no_derivation_rule_is_rejected() {
     let src = r#"
@@ -470,8 +479,184 @@ proc bad {
 "#;
     let errs = check_err(src);
     assert!(
-        errs.iter()
-            .any(|e| e.message.contains("normal") && e.message.contains("cannot be derived")),
-        "expected a diagnostic about `normal` not being derivable, got: {errs:?}"
+        errs.iter().any(|e| e.message.contains("normal") && e.message.contains("not emitted")),
+        "expected a diagnostic about `normal` not being emitted, got: {errs:?}"
     );
+    assert!(
+        !errs.iter().any(|e| e.message.contains("normal") && e.message.contains("not implemented")),
+        "`normal` has no derivation rule in the spec, so it should not get the \"not \
+         implemented\" wording — got: {errs:?}"
+    );
+}
+
+/// `check_consumes_emitted` only runs `if kind != Kind::L1 { return; }` — the
+/// module docs call this out as deliberate: an L4 procedure's `consumes` is a
+/// cross-proc question left for Set-composition time, outside this crate.
+/// `soft_points_checks_clean_with_expected_shape` already exercises this for
+/// `velocity` and `age`, but those two also happen to be the only attributes
+/// `is_derivable` recognizes, so that alone would not catch a regression that
+/// swapped the `kind != Kind::L1` guard for `!attr.is_derivable()` and
+/// otherwise left L4 behaving the same for those two names. `normal` has no
+/// derivation rule at all, so an L4 procedure consuming it must still check
+/// clean purely on the strength of the kind check.
+#[test]
+fn l4_consuming_an_unemitted_non_derivable_attribute_still_checks_clean() {
+    let src = r#"
+proc bad {
+  kind  L4
+  blend additive
+
+  consumes normal
+
+  vertex {
+    clip       = vec4(normal, 1.0);
+    point_size = 1.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+    let checked = check_ok(src);
+    assert_eq!(checked.consumes, vec![Attr::Normal]);
+    assert!(checked.emit.is_empty());
+}
+
+/// A diagnostic points at the name that is wrong, and two of them come out in
+/// declaration order.
+///
+/// Both properties come from walking `consumes` as a list rather than as a
+/// set. The span matters because a caret under the whole procedure tells a
+/// reader — human or model — nothing they did not already know. The order
+/// matters because diagnostics are output, and the same source has to produce
+/// the same output: a regeneration loop reacting to a list that reshuffles
+/// between runs is reacting to noise. `HashSet` iteration order does exactly
+/// that, and it is stable often enough to look fine in a quick test.
+#[test]
+fn a_consumes_diagnostic_points_at_the_attribute_and_keeps_declaration_order() {
+    let src = r#"
+proc probe {
+  kind     L1
+  topology points
+  capacity [64, 1024] = 256
+
+  emit position
+  consumes position, velocity, normal
+
+  element {
+    position = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#;
+    let errs = check_err(src);
+    let named: Vec<&str> = errs
+        .iter()
+        .filter(|e| e.message.contains("consumed but not emitted"))
+        .map(|e| {
+            if e.message.contains("velocity") {
+                "velocity"
+            } else if e.message.contains("normal") {
+                "normal"
+            } else {
+                "?"
+            }
+        })
+        .collect();
+    assert_eq!(named, vec!["velocity", "normal"], "{errs:?}");
+
+    // The `consumes` line, not the `proc` line: column 22 is where `velocity`
+    // starts, and the span covers exactly that word.
+    let velocity = errs
+        .iter()
+        .find(|e| e.message.contains("velocity"))
+        .expect("a diagnostic about `velocity`");
+    let text = &src[velocity.span.start as usize..velocity.span.end as usize];
+    assert_eq!(text, "velocity", "span covers `{text}`");
+}
+
+/// "`spawn` requires a spawn rate. Declare it as a parameter named
+/// `spawn_rate`" — ir-spec, "Blocks". Unenforced until now, and harmless
+/// while `spawn` was wired to nothing: with the lifecycle live, a `spawn`
+/// block without a rate compiles clean, builds a Set, and then creates zero
+/// elements every step forever, which reads as a procedure that draws
+/// nothing rather than as a mistake. That is exactly the shape the README
+/// says this pass exists to refuse.
+#[test]
+fn a_spawn_block_without_a_spawn_rate_param_is_rejected() {
+    let src = r#"
+proc no_rate {
+  kind     L1
+  topology points
+  capacity [64, 4096] = 256
+
+  emit position
+
+  spawn   { position = vec3(0.0, 0.0, 0.0); }
+  element { position = position; }
+}
+"#;
+    let errs = check_err(src);
+    let e = errs
+        .iter()
+        .find(|e| e.message.contains("spawn_rate"))
+        .unwrap_or_else(|| panic!("expected a diagnostic about `spawn_rate`, got: {errs:?}"));
+    assert!(
+        e.hint.as_deref().unwrap_or("").contains("param spawn_rate"),
+        "the hint has to spell the declaration a regenerating model should write: {e:?}"
+    );
+    // The span is the `spawn` block, which is what has to change or go.
+    let text = &src[e.span.start as usize..e.span.end as usize];
+    assert!(text.starts_with("spawn"), "span covers `{text}`");
+}
+
+/// The same rule's other half: the engine reads `spawn_rate` as elements per
+/// second, so a `spawn_rate` of some other type is a rate the engine cannot
+/// read rather than a param it can. It is also the only param name whose
+/// type the engine depends on, which is why this is checked here and no
+/// other param name is.
+#[test]
+fn a_spawn_rate_that_is_not_a_float_is_rejected() {
+    let src = r#"
+proc wrong_rate {
+  kind     L1
+  topology points
+  capacity [64, 4096] = 256
+
+  param spawn_rate : vec3 [0.0, 100.0] = vec3(1.0, 1.0, 1.0)
+
+  emit position
+
+  spawn   { position = vec3(0.0, 0.0, 0.0); }
+  element { position = position; }
+}
+"#;
+    let errs = check_err(src);
+    assert!(
+        errs.iter().any(|e| e.message.contains("`spawn_rate` must be a `float`")),
+        "expected a type diagnostic for `spawn_rate`, got: {errs:?}"
+    );
+}
+
+/// The negative control for both: a `spawn` block *with* a float
+/// `spawn_rate` must still check clean. Without this, the two tests above
+/// would pass just as well against a rule that rejected every `spawn` block.
+#[test]
+fn a_spawn_block_with_a_float_spawn_rate_checks_clean() {
+    let src = r#"
+proc with_rate {
+  kind     L1
+  topology points
+  capacity [64, 4096] = 256
+
+  param spawn_rate : float [0.0, 40000.0] = 8000.0
+
+  emit position
+
+  spawn   { position = vec3(0.0, 0.0, 0.0); }
+  element { position = position; }
+}
+"#;
+    let checked = check_ok(src);
+    assert!(checked.block(BlockKind::Spawn).is_some());
 }

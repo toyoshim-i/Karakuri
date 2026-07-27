@@ -24,9 +24,13 @@ pub const BEATS_PER_BAR: u32 = 4;
 /// [`bus`](crate::bus) — is a function of `t` and `bpm` alone, deliberately:
 /// two tick histories that reach the same elapsed time by a different route
 /// (one big step vs. several small ones) are the same point in the session as
-/// far as the oscillator is concerned, which matches how the IR spec's own
-/// spawn accumulator treats `steps` — `spawn_rate * dt * float(steps)` is one
-/// product, not a per-call effect — so nothing here should disagree with it.
+/// far as the oscillator is concerned. The IR spec's spawn accumulator agrees
+/// on the quantity — `spawn_rate * dt * float(steps)` is what a frame adds,
+/// however its steps were grouped — while differing on the grain: the engine
+/// advances it once per substep, because a batch of new elements has to land
+/// between two element passes rather than all of them before the first.
+/// Nothing here depends on that distinction, but it is the one place the two
+/// could be mistaken for saying the same thing.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Oscillator {
     bpm: f32,

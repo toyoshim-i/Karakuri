@@ -120,8 +120,12 @@ declared by the L1 procedure in a slot and `consumes` by the L4 procedure paired
 the check belongs to Set composition and cannot be made against a single `.kir` — the
 `soft_points` example below consumes three attributes and emits nothing, which is not an
 error but the normal shape of an L4 file. When the Set is built and `consumes` is not
-contained in the paired `emit`, the compiler first attempts
-[attribute derivation](#attribute-derivation); if no rule applies, the Set is rejected.
+contained in the paired `emit`, the Set is rejected — **there is no derivation step in
+v0.2.** Synthesizing a missing attribute from what an L1 procedure does emit was designed —
+see "Attribute derivation" under [Beyond v0.2](#beyond-v02--specified-not-implemented) — but
+implementing it means new per-element state every procedure would carry, whether or not
+anything ever reads the derived value, so it waits for the milestone that adds general
+attribute adapters rather than being special-cased into v0.2's binary check.
 
 Within one procedure the useful check is narrower: an attribute is readable or writable
 only if that procedure declares it, since only a declared attribute gets a buffer pair.
@@ -131,11 +135,11 @@ Available attributes:
 | Name | Type | Notes |
 |---|---|---|
 | `position` | `vec3` | |
-| `velocity` | `vec3` | derivable |
+| `velocity` | `vec3` | |
 | `normal` | `vec3` | |
 | `uv` | `vec2` | |
 | `seed` | `uint` | spawn ordinal. Implicit — never declared, always readable. See [Element identity](#element-identity) |
-| `age` | `float` | seconds since spawn, derivable |
+| `age` | `float` | seconds since spawn |
 | `size` | `float` | |
 | `tint` | `vec3` | linear RGB |
 
@@ -245,14 +249,23 @@ the nondeterministic quantity has been moved onto the record stream, which is al
 only path that mutates engine state. **v0.2 always writes `steps: 1`.** Adding substepping
 later is then an engine change alone — no format change, no determinism argument to reopen.
 
-- `t` advances by `steps * dt`
+- `t` is `steps_taken * dt`, where `steps_taken` is the whole number of steps the session
+  has advanced. **Computed from the count, not accumulated into a running sum** — a float
+  sum drifts by an ULP or two depending on how the steps were grouped, and two tick
+  histories reaching the same elapsed time have to be the same point in the session
 - `steps` is capped at 4. Past that the simulation is allowed to fall behind rather than
   catch up, because unbounded catch-up turns a load spike into a death spiral
 - `t` is therefore **simulation time, never wall clock**. Once the cap is hit, `t` lags
   real time permanently and never resynchronizes. That is intended — `t` is reproducible
   and a wall clock is not
-- `param` values and signal bindings are sampled once per frame and held constant across
-  every substep of that frame
+- **`t` advances once per substep, not once per frame.** A frame of two steps runs its two
+  `element` passes at the two instants that two frames of one step would, and a procedure
+  reading `t` sees the same sequence either way. Holding `t` constant across a frame's
+  substeps would run both passes at the same instant, which any accumulating procedure can
+  see — and substepping exists precisely so the simulation does not depend on frame rate
+- `param` values and signal bindings are the other half of that split: they are **input**,
+  genuinely sampled once per frame and held constant across every substep of it. `t` is not
+  input, it is the simulation's own clock
 
 ---
 
@@ -424,14 +437,20 @@ reads zeros, not garbage — and `seed` equals the element's initial slot index.
 ### Spawn timing
 
 `spawn_rate * dt` is rarely an integer. The count is quantized with an **accumulator**: the
-fractional remainder carries into the next frame, so the long-run rate is exact and the
+fractional remainder carries into the next substep, so the long-run rate is exact and the
 sequence stays a pure function of the record stream.
 
 ```
-carry += spawn_rate * dt * float(steps)
-count  = floor(carry)
-carry -= float(count)
+per substep:
+  carry += spawn_rate * dt
+  count  = floor(carry)
+  carry -= float(count)
 ```
+
+Once per substep, not once per frame with `steps` folded in. The frame's total is the same
+either way — the carry is a running real number — but a single batch would put a frame of
+two steps' worth of elements in before the second `element` pass, where two frames of one
+step interleave them. That is the same reason `t` advances per substep.
 
 There is deliberately no Poisson option. Irregular spawning is available by binding a noise
 signal to `spawn_rate`, where its depth, period, and character are declarative and
@@ -476,14 +495,23 @@ contiguous in the buffer. That contiguity, not determinism, is the primary reaso
 compaction: a free list leaves live elements scattered, and dispatching over the live count
 then needs a separately maintained compact list of live slots — which costs a scan anyway.
 
-- `kill()` clears the element's alive flag
-- Once per frame a prefix sum over the previous frame's live range gives each survivor its
+- `kill()` clears the element's alive flag. The slot is not reclaimed in that step — the
+  element still occupies it, with the flag clear, until the *next* step's scan counts it
+  out. It is inside the draw range for exactly one frame, scattered among the survivors
+  rather than gathered at one end, which is why the vertex stage reads the flag per
+  instance and collapses a dead element's quad to nothing
+- Once per step a prefix sum over the previous step's live range gives each survivor its
   destination index. The compaction is **order preserving**: survivors keep their relative
   order, so the live set is always a stable subsequence
 - The scan result is fused into the `element` pass, which writes each survivor straight to
   its compacted index in the next buffer. Only the scan itself is an extra pass
-- The new live count goes into the indirect args buffer
-- Free slots are therefore the contiguous range `[live_count, capacity)`, and `spawn`
+- The scan writes the survivor total and **nothing else**: `element` runs after it and
+  still has to cover the pre-scan range, so rolling the range forward there would make
+  every survivor's own step dispatch over the count it is about to become. A separate
+  single-invocation pass, after both `element` and `spawn`, sets
+  `range = survivors + min(spawn_count, capacity - survivors)` and derives the dispatch and
+  draw arguments from it
+- Free slots are therefore the contiguous range `[survivors, capacity)`, and `spawn`
   dispatches over the head of that range. There is no free list
 
 Order preservation costs a scan per frame and buys a stable blend order. Floating-point
@@ -491,23 +519,10 @@ addition is not associative, so this matters under `blend additive` too and not 
 future non-commutative mode: bit-exact reproduction depends on elements being combined in
 the same order on every run. Atomic allocation would be cheaper, but its ordering is
 scheduling-dependent, which forfeits exactly that. Measure the scan at full `capacity`
-rather than assuming it is free.
-
----
-
-## Attribute derivation
-
-When a consumer requires an attribute the producer does not emit, the compiler inserts a
-derivation if a rule exists. v0.2 rules:
-
-| Attribute | Derived from | Rule |
-|---|---|---|
-| `velocity` | `position` | `(position - prev_position) / dt` |
-| `age` | spawn time | accumulated `dt` since spawn |
-
-Derivation is nearly free because the previous-frame buffers already exist for the state
-model above. Derived attributes are marked in the compiled metadata so the UI can show
-that they are inferred rather than authored.
+rather than assuming it is free — it is 0.083 ms at 262144 on the development machine, and
+that is the number a procedure with no `spawn` block and no `kill()` does not have to pay:
+its live set cannot change, so the engine skips the scan for it and `element` writes in
+place.
 
 ---
 
@@ -699,29 +714,44 @@ disc_point(float, float) -> vec2
 `spawn` and `element` become separate compute entry points.
 
 - Workgroup size 64
-- Each emitted attribute gets a pair of storage buffers (prev / next), 16-byte aligned.
-  `seed`, the alive flag, and the birth fraction are always allocated, whether or not the
-  procedure names them — none of the three is nameable from IR
-- A scan pass runs first: an exclusive prefix sum over the previous frame's alive flags,
-  producing each survivor's destination index and the new live count. Multi-pass over the
-  previous live range, not over `capacity`
-- `element` uses `dispatch_workgroups_indirect` over the previous live count and writes
-  each survivor to its scanned destination index in the next buffers. On an element's first
+- All per-element state packs into **one** `Element` struct per direction (prev / next),
+  not one buffer pair per attribute: `seed`, then the birth fraction, then `emit` in
+  declaration order, one 16-byte slot each. `seed` and the birth fraction are always
+  allocated whether or not the procedure names them — neither is nameable from IR. A
+  procedure emitting three attributes therefore binds four storage buffers in its compute
+  stage rather than twelve, which matters because the WebGPU default limit is 8 and the
+  downlevel default is 4
+- The alive flag is the one exception: it leaves the struct and becomes its own dense
+  `array<u32>`, four bytes per element, because the compaction scan reads alive flags with
+  no stride arithmetic and packing them into `Element` would make the scan depend on a
+  per-procedure struct size
+- A scan pass runs first, once per **step**: an exclusive prefix sum over the previous
+  step's alive flags, producing each survivor's destination index and the survivor total.
+  Multi-pass over the previous live range, not over `capacity`
+- `element` uses `dispatch_workgroups_indirect` over the previous live range and writes
+  each survivor to its scanned destination index in the next buffer. On an element's first
   update it substitutes `birth_frac * dt` for `dt` — the whole of [Spawn timing](#spawn-timing)
   is this one substitution
-- `spawn` dispatches over `[live_count, capacity)`, bounded by the spawn count the engine
-  computed for this frame, and writes `seed` from the monotone counter and the birth
-  fraction from its index within the frame's batch
-- `param` values pack into a single uniform buffer along with `t`, `dt`, `capacity`, the
-  layer's seed salt, and three quantities the IR never sees but the entry points cannot
-  work without: `live_count` (where the live range ends), `spawn_count` (how many elements
-  to create this frame), and `seed_base` (the monotone counter's value for the first of
-  them). `capacity` is a uniform so that changing it needs no recompile
-- Every attribute buffer is padded to a 16-byte stride regardless of the attribute's
-  width, so `capacity * 16` sizes any of them and no buffer needs its own arithmetic. It
-  costs memory — a `float` attribute occupies four times what it needs — and that is worth
-  revisiting if VRAM becomes the binding constraint before something else does
-- Buffers swap at the end of the frame
+- `spawn` dispatches over `[survivors, capacity)`, bounded by the spawn count the engine
+  computed for **this substep**, and writes `seed` from the monotone counter and the birth
+  fraction from its index within that substep's batch. It clamps against `capacity` on the
+  GPU and drops what does not fit; the range grows by what landed, not by what was asked
+  for, and the host's seed counter advances by the request so a dropped element leaves a
+  gap in the seed sequence rather than a repeat
+- `param` values pack into a single uniform buffer along with `dt`, `capacity`, and the
+  layer's seed salt. `capacity` is a uniform so that changing it needs no recompile. What
+  is *not* in it is anything that is not constant across the frame: where the live range
+  ends is GPU state once compaction owns it, and lives in the same buffer as the indirect
+  arguments derived from it; `t`, `spawn_count` and `seed_base` differ between the substeps
+  of one frame, and live in a small per-substep buffer the engine writes ahead of the frame
+  and binds one entry of at a time
+- Every slot of `Element` is a full 16-byte `vec4` regardless of the attribute's width, so
+  `(2 + emit.len()) * 16` is the stride of every element buffer and no attribute needs its
+  own arithmetic. It costs memory — a `float` attribute occupies four times what it needs —
+  and that is worth revisiting if VRAM becomes the binding constraint before something else
+  does
+- Buffers swap at the end of every **step**, not every frame: what one substep wrote as
+  "next" is the next substep's "prev", and after the last one it is what L4 reads
 
 ### L4
 
@@ -886,7 +916,6 @@ purely a source file that a human or an LLM can read and edit.
 {"t":"param_decl","key":"radius","type":"float","min":0.1,"max":8.0,"default":2.0}
 {"t":"capacity_decl","min":65536,"max":1048576,"default":262144}
 {"t":"emit","attrs":["position","velocity","age"]}
-{"t":"derived","attr":"age","from":"spawn_time"}
 {"t":"perf","kind":"L1","ns_per_element":0.9,"bytes_per_element":48}
 {"t":"tag","values":["organic","slow","volumetric"]}
 {"t":"preview","path":"previews/a3f2c1….mp4"}
@@ -941,6 +970,32 @@ been settled but not built: **no parser accepts it, no checker enforces it, and 
 generator emits it.** It is written down because later milestones depend on these shapes
 and because deciding them now keeps V1 from foreclosing them. Each carries the milestone
 it belongs to; see `docs/roadmap.md`.
+
+### Attribute derivation — M3
+
+When a consumer requires an attribute the producer does not emit, a rule could let the
+compiler synthesize it instead of rejecting the Set — see [emit / consumes](#emit--consumes).
+v0.2 does not do this; an unmet `consumes` is an unconditional error, and the check pass
+says so by name for the two attributes below rather than leaving a model to wonder whether
+the rejection contradicts something the spec promised elsewhere.
+
+| Attribute | Derived from | Rule | What it needs |
+|---|---|---|---|
+| `velocity` | `position` | `(position - prev_position) / dt` | The position from **two** frames ago. Double buffering only ever retains one previous frame, so this is a third buffer, not a reinterpretation of the two that already exist. |
+| `age` | spawn time | accumulated `dt` since spawn | A stored spawn time. Nothing records when an element was spawned today — `t` at spawn would have to become new per-element state, paid for whether or not any consumer ever asks for `age`. |
+
+Both rules cost per-element storage that every procedure emitting the source attribute would
+carry regardless of whether anything downstream ever reads the derived one — the same
+always-on-cost shape the buffer-padding rule elsewhere in this document already normalizes
+rather than special-cases. That cost is worth taking on once, when Geometry's attribute-subset
+compatibility model gains general adapters (the slot interface contracts this milestone also
+adds), not as a one-off bolted onto v0.2's binary `emit`/`consumes` check — which is why this
+waits for M3 rather than landing sooner as an isolated feature.
+
+Once implemented, a derived attribute belongs in the compiled metadata as its own record —
+`{"t":"derived","attr":"age","from":"spawn_time"}` — so the UI can show it was inferred
+rather than authored, the same distinction [Metadata file format](#metadata-file-format)
+already draws between what an artifact declares and what a Set records.
 
 ### Multiple L1 sources, and `source` — M3
 

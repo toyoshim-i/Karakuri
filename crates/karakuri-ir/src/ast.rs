@@ -135,8 +135,14 @@ impl Attr {
         }
     }
 
-    /// Whether the compiler can synthesise this attribute when a consumer needs
-    /// it and the producer does not emit it.
+    /// Whether `docs/ir-spec.md` describes a rule for synthesising this
+    /// attribute when a consumer needs it and the producer does not emit it.
+    /// No such rule is implemented — see "Beyond v0.2 — specified, not
+    /// implemented" — so this does not mean the check pass will accept a
+    /// `consumes` entry missing from `emit`; it only changes the diagnostic
+    /// `check_consumes_emitted` produces when it rejects one, so a
+    /// regenerating model is told the rule exists rather than told the spec
+    /// is wrong.
     pub fn is_derivable(self) -> bool {
         matches!(self, Attr::Velocity | Attr::Age)
     }

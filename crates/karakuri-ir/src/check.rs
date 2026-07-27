@@ -14,17 +14,26 @@
 //! case a real `.kir` file hits. Each is called out at its point of use; the
 //! summary:
 //!
-//! - **`consumes` ⊆ `emit` after derivation** is, read literally, a cross-proc
-//!   rule: `emit` is declared by the L1 procedure and `consumes` by the L4
-//!   procedure that will be paired with it in a Set, and `check` only ever
-//!   sees one procedure. Applying it within a single proc would reject the
-//!   spec's own `soft_points` example (it consumes `position`, which is not
-//!   derivable, and never declares `emit`). This pass therefore runs the
-//!   subset-and-derivation check only when a procedure declares *both* lists
-//!   itself (which only an L1 procedure can meaningfully do, since only L1
-//!   has persistent per-element state to emit); an L4 procedure's `consumes`
-//!   is recorded as-is and left for Set-composition time, outside this
-//!   crate's scope.
+//! - **`consumes` ⊆ `emit`** is, read literally, a cross-proc rule: `emit` is
+//!   declared by the L1 procedure and `consumes` by the L4 procedure that
+//!   will be paired with it in a Set, and `check` only ever sees one
+//!   procedure. Applying it within a single proc would reject the spec's own
+//!   `soft_points` example (it consumes `position`, which `soft_points`
+//!   never declares in `emit`). This pass therefore runs the subset check
+//!   only when a procedure declares *both* lists itself (which only an L1
+//!   procedure can meaningfully do, since only L1 has persistent per-element
+//!   state to emit); an L4 procedure's `consumes` is recorded as-is and left
+//!   for Set-composition time, outside this crate's scope.
+//! - **No attribute derivation.** `docs/ir-spec.md` once specified deriving
+//!   `velocity` from `position` and `age` from spawn time when `consumes`
+//!   was not covered by `emit`; that section now lives below the "specified,
+//!   not implemented" line. Neither rule has ever been backed by a WGSL
+//!   emitter or by the per-element state either would need (two frames of
+//!   `position` history for `velocity`, a spawn timestamp for `age`), so a
+//!   `consumes` entry relying on one used to check clean and then be missing
+//!   at runtime — the one failure mode "one severity" cannot tolerate,
+//!   because a regenerating model gets no diagnostic to react to. This pass
+//!   rejects every `consumes` entry not covered by `emit`, unconditionally.
 //! - **Signal-bus names are not enumerable here.** `karakuri-signal`'s bus
 //!   accepts *any* name (falling back to a zero-confidence synthesized
 //!   sample), so there is no closed vocabulary to match against. Consequently
@@ -78,7 +87,7 @@ use crate::ast::{
 use crate::builtin::{Builtin, Domain, Shape};
 use crate::error::{IrError, IrResult, Stage};
 use crate::span::Span;
-use crate::typed::{Checked, Derivation, DerivedFrom, TBlock, TExpr, TExprKind, TStmt, Target};
+use crate::typed::{Checked, TBlock, TExpr, TExprKind, TStmt, Target};
 
 /// Resolve names, type every expression, and enforce the contracts.
 pub fn check(proc: &Proc) -> IrResult<Checked> {
@@ -89,7 +98,7 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
     let params = check_params(proc, &mut errors);
     let (emit_set, emit_vec) = dedup_attrs(&proc.emit, "emit", &mut errors);
     let (consumes_set, consumes_vec) = dedup_attrs(&proc.consumes, "consumes", &mut errors);
-    let derived = check_derivation(proc.kind, &emit_set, &consumes_set, proc.span, &mut errors);
+    check_consumes_emitted(proc.kind, &emit_set, &consumes_vec, &mut errors);
 
     let mut blocks = Vec::with_capacity(proc.blocks.len());
     for block in &proc.blocks {
@@ -139,9 +148,8 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
             capacity: proc.capacity,
             blend: proc.blend,
             params: proc.params.clone(),
-            emit: emit_vec,
-            consumes: consumes_vec,
-            derived,
+            emit: emit_vec.into_iter().map(|(a, _)| a).collect(),
+            consumes: consumes_vec.into_iter().map(|(a, _)| a).collect(),
             blocks,
             cost: None,
             span: proc.span,
@@ -188,6 +196,34 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     proc.span,
                     "L1 procedures require an `element` block",
                 ));
+            }
+            // "`spawn` requires a spawn rate. Declare it as a parameter named
+            // `spawn_rate`" — ir-spec, "Blocks". The engine reads that one
+            // param specially and has nowhere else to get a count from, so a
+            // `spawn` block without it is not a procedure that spawns slowly,
+            // it is one that never spawns at all: it compiles, builds a Set,
+            // and renders an empty frame forever. That is exactly the shape
+            // this pass exists to refuse — checking clean and then coming up
+            // short at runtime.
+            if let Some(spawn) = proc.block(BlockKind::Spawn) {
+                match proc.spawn_rate() {
+                    None => errors.push(
+                        IrError::contract(spawn.span, "a `spawn` block requires a `spawn_rate` param")
+                            .with_hint(
+                                "add `param spawn_rate : float [0.0, 40000.0] = 8000.0` — elements \
+                                 per second, which the engine reads to decide how many elements \
+                                 each step creates",
+                            ),
+                    ),
+                    Some(p) if p.ty != Ty::Float => errors.push(
+                        IrError::contract(
+                            p.span,
+                            format!("`spawn_rate` must be a `float`, not a `{}`", p.ty.name()),
+                        )
+                        .with_hint("the engine reads `spawn_rate` as elements per second"),
+                    ),
+                    Some(_) => {}
+                }
             }
         }
         Kind::L4 => {
@@ -326,12 +362,20 @@ fn check_params(proc: &Proc, errors: &mut Vec<IrError>) -> HashMap<String, Ty> {
     map
 }
 
-fn dedup_attrs(list: &[(Attr, Span)], label: &str, errors: &mut Vec<IrError>) -> (HashSet<Attr>, Vec<Attr>) {
+/// The declaration-order list is kept alongside the set, spans and all. The
+/// set answers "is this attribute declared"; the list is what anything that
+/// reports or generates walks, because both need a fixed order — buffer slot
+/// order comes from it, and so does the order diagnostics come out in.
+fn dedup_attrs(
+    list: &[(Attr, Span)],
+    label: &str,
+    errors: &mut Vec<IrError>,
+) -> (HashSet<Attr>, Vec<(Attr, Span)>) {
     let mut set = HashSet::new();
     let mut vec = Vec::new();
     for (a, span) in list {
         if set.insert(*a) {
-            vec.push(*a);
+            vec.push((*a, *span));
         } else {
             errors.push(IrError::contract(
                 *span,
@@ -342,53 +386,58 @@ fn dedup_attrs(list: &[(Attr, Span)], label: &str, errors: &mut Vec<IrError>) ->
     (set, vec)
 }
 
-/// `consumes ⊆ emit` after derivation. See the module docs: this only runs
-/// within a single procedure, so it is only meaningful for L1 (the only kind
-/// with an `emit` of its own to check `consumes` against). An L4 procedure's
-/// `consumes` is left for Set-composition time.
-fn check_derivation(
+/// `consumes ⊆ emit`, checked directly with no derivation step. See the
+/// module docs: this only runs within a single procedure, so it is only
+/// meaningful for L1 (the only kind with an `emit` of its own to check
+/// `consumes` against). An L4 procedure's `consumes` is left for
+/// Set-composition time.
+///
+/// `velocity` and `age` get a different message from every other attribute:
+/// `docs/ir-spec.md` describes a derivation rule for exactly those two (see
+/// "Beyond v0.2 — specified, not implemented"), so a bare "not emitted"
+/// verdict would read as the spec being wrong. Naming the unimplemented rule
+/// keeps a regenerating model from concluding that and instead pointing it
+/// at the one fix that works today: emit the attribute.
+/// Walks `consumes` in declaration order rather than as a set, for two
+/// reasons: the diagnostic points at the offending name instead of at the
+/// whole procedure, and two missing attributes come out in the same order on
+/// every run. Set iteration order is not stable, and a diagnostic is output —
+/// the same source has to produce the same diagnostics, or a regeneration
+/// loop is reacting to something that reshuffles under it.
+fn check_consumes_emitted(
     kind: Kind,
     emit: &HashSet<Attr>,
-    consumes: &HashSet<Attr>,
-    span: Span,
+    consumes: &[(Attr, Span)],
     errors: &mut Vec<IrError>,
-) -> Vec<Derivation> {
-    let mut derived = Vec::new();
+) {
     if kind != Kind::L1 {
-        return derived;
+        return;
     }
-    for &attr in consumes {
+    for &(attr, span) in consumes {
         if emit.contains(&attr) {
             continue;
         }
-        match attr {
-            Attr::Velocity if emit.contains(&Attr::Position) => {
-                derived.push(Derivation {
-                    attr,
-                    from: DerivedFrom::PrevPosition,
-                });
-            }
-            Attr::Age => {
-                derived.push(Derivation {
-                    attr,
-                    from: DerivedFrom::SpawnTime,
-                });
-            }
-            _ => {
-                errors.push(
-                    IrError::contract(
-                        span,
-                        format!(
-                            "`{}` is consumed but not emitted, and cannot be derived",
-                            attr.name()
-                        ),
-                    )
-                    .with_hint(format!("add `{}` to `emit`", attr.name())),
-                );
-            }
-        }
+        let hint = format!("add `{}` to `emit`", attr.name());
+        // `is_derivable` names the two attributes the spec still describes a
+        // derivation rule for, purely so the message below can say so — it
+        // does not change the verdict, since the rule is unimplemented for
+        // both. See its doc comment in `ast.rs`.
+        let message = if attr.is_derivable() {
+            let source = match attr {
+                Attr::Velocity => "a derivation from `position`",
+                Attr::Age => "a derivation from spawn time",
+                _ => unreachable!("is_derivable is true for exactly Velocity and Age"),
+            };
+            format!(
+                "`{}` is consumed but not emitted; {source} is specified in `docs/ir-spec.md` \
+                 but not implemented",
+                attr.name()
+            )
+        } else {
+            format!("`{}` is consumed but not emitted", attr.name())
+        };
+        errors.push(IrError::contract(span, message).with_hint(hint));
     }
-    derived
 }
 
 // ---------------------------------------------------------------------------

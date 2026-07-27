@@ -25,9 +25,22 @@ cargo run -p karakuri-cli -- --seq frames/ --frames 420      # every frame
 cargo run -p karakuri-cli -- --param turbulence=2.6          # a uniform write
 cargo run -p karakuri-cli -- --capacity 65536                # a Set-level dial
 cargo run -p karakuri-cli -- a.kir b.kir                     # a different pair
+cargo run -p karakuri-cli -- --watch                         # edit a .kir, watch it swap
+cargo run -p karakuri-cli -- --watch --budget-ms 0           # ...and watch it roll back
 ```
 
-Defaults are the pair in [examples/](examples/) at 262144 elements. A procedure that fails
+`--watch` recompiles in the background on a save and swaps the result in at a frame
+boundary; a file that does not compile prints its diagnostics and changes nothing. See
+Status below for what the swap does and does not do.
+
+Defaults are `drift_shell` + `soft_points` at 262144 elements. [examples/](examples/) also
+holds `spark_fountain`, an L1 that spawns and kills — pair it with the same L4:
+
+```sh
+cargo run -p karakuri-cli -- examples/spark_fountain.kir examples/soft_points.kir
+```
+
+A procedure that fails
 any stage prints every diagnostic it has, against the source, and stops — there is one
 severity, because the response to a rejection is to regenerate rather than to proceed with
 a caveat.
@@ -140,8 +153,8 @@ Sets, agents, audio, L2 and L3, the node editor — is scheduled in
 
 ### Status
 
-**Two of the three clauses hold.** `.kir` text goes through every stage and 262144 elements
-come out on a GPU with no hand-written shader in the path.
+**All three clauses hold.** `.kir` text goes through every stage and 262144 elements come
+out on a GPU with no hand-written shader in the path.
 
 An LLM can write this language from the specification alone. Three models were each given
 `docs/ir-spec.md`, a one-line aesthetic prompt, and nothing else — no example files, no
@@ -156,34 +169,93 @@ where the camera is, what world scale to work in, or that usable exposure falls 
 count rises. It does now, but the underlying problem is that a generator has no way to know
 a value that depends on a Set-level dial. That is the tone mapper's job, not the prompt's.
 
-The third clause is untested: pipelines are built once at startup, so "without dropping a
-frame" has not been asked of anything.
+The third clause closed last. A `.kir` file that changes is reparsed, rechecked,
+regenerated, and rebuilt into a whole new `Set` — shader modules, pipelines, buffers, bind
+groups — on a worker thread, and the render loop collects it with a `try_recv` at the top
+of a frame. There is no `recv` and no `device.poll(Wait)` anywhere on the frame path.
+`--watch` is both the demo and the development loop. What a swap does and does not do is
+worth stating exactly:
+
+- **It lands between two frames, never inside one.** This is structural rather than a
+  matter of call ordering: the only function that replaces the live Set returns it as a
+  `&mut` borrow that the caller holds for the whole frame body, so recording a frame and
+  swapping mid-frame would need two overlapping mutable borrows of the same value. The
+  compiler is what enforces it.
+- **It transfers no state.** A new procedure means new buffers, so the incoming Set starts
+  cold: `t` at zero, nothing primed. Warming a Set out of sight before it is shown is M2's
+  Priming, and no partial version of it is done here.
+- **It is reversible for a window.** The outgoing Set is kept alive — and unstepped, so its
+  `t` stands still — through eight warmup frames and thirty measured ones. If the median
+  frame interval over those thirty exceeds the budget, the candidate is dropped and the
+  outgoing Set is live again at exactly the `t` it was parked at. Only after it passes is
+  the old one released, and it is released on the worker thread: dropping a Set frees GPU
+  resources, and a free on the render thread is the same invariant as an allocation on it.
+- **A build that fails changes nothing.** A `.kir` that will not compile prints its
+  diagnostics on the worker thread and never becomes a request at all; a pair `Set::build`
+  refuses is reported and put down. Either way the running Set keeps its `t`, its element
+  buffers, and its live count.
+
+Measured across a swap at capacity 262144, 1280×720, **on a host clock** — the same caveat
+as every other number in this file, and here it is the frame *interval*, which includes
+vsync, the compositor, and whatever else the machine was doing:
+
+| | median | worst |
+|---|---|---|
+| steady, before the request | 4.1 ms | 9.7 ms |
+| the frame the swap landed on | 4.8 ms | — |
+| steady, after the swap | 3.9 ms | 7.7 ms |
+
+Three to five frames were rendered between the request going out and the swap landing,
+which is what "does not block" means operationally — a blocking receive would make that
+number zero. The swap frame has not, across runs, cost more than the worst ordinary frame
+in the same run; but it is one sample of a noisy quantity, so the honest claim is
+"indistinguishable from jitter", not "free".
+
+The watchdog measures a median rather than a worst case, for the reason `Probe` does: on a
+host clock a single sample carries whatever the OS scheduler was doing, and one hitch is
+not a reason to throw away generated material. It also discards the first eight frames after
+a swap, because a cold Set's first frames pay for pipeline first-use and for its own
+whole-capacity buffer upload — a budget check that fired on frame one would roll back every
+candidate that ever existed.
+
+The budget defaults to 20 ms: one 60 Hz frame plus slack, 60 Hz being the rate `dt` sets.
+**That default does not generalise to a faster display, and this one is faster.** On the
+120 Hz panel it was developed on, steady state is 8.3 ms and a frame rate cut in half reads
+as 16.7 ms, which the default does not catch. `--budget-ms` is the operator's answer; a
+budget derived from the display rather than from a constant belongs with M2's budget
+governor, alongside the decision about whether GPU timestamps can be trusted at all.
 
 | | |
 |---|---|
-| IR: parse, type and contract check, cost estimation | Works. Diagnostics carry a span, a hint, and every error at once |
+| IR: parse, type and contract check, cost estimation | Works. Diagnostics carry a span, a hint, and every error at once. A `consumes` not covered by `emit` is rejected outright — there is no derivation step, so nothing can check clean and then come up short at runtime |
 | WGSL generation | Works, validated through naga. Generated names cannot be captured by anything a `.kir` can spell |
-| Set, buffers, pipelines, compute and render | Works. Double buffering, Set-level `capacity`, parameters as uniform writes |
+| Set, buffers, pipelines, compute and render | Works. Double buffering, Set-level `capacity`, parameters as uniform writes. Nothing on the frame path allocates: both per-frame uniform writes go through storage sized once at build time |
 | Linear HDR end to end, sRGB once at output | Works |
 | Store, oscillator, synthesized bus, noise | Work standalone |
-| **Compaction** | Correct and tested against a CPU reference, **not wired into the L1 dispatch**. Until it is, `spawn` and `kill()` cannot run: there is no contiguous free range for a new element to land in |
-| **Indirect dispatch** | `element` dispatches over a host-side live count. The indirect args buffer exists and is what compaction writes |
-| **Attribute derivation** | The check pass resolves and records it; the generator does not emit it. A `consumes` satisfied only by derivation checks clean and is then missing at runtime |
+| Element lifecycle | Works. `spawn` and `kill()` run, order-preserving compaction is wired into the L1 dispatch, and `element` and the draw are both indirect off one counts buffer. A procedure that can neither spawn nor kill skips the scan entirely and dispatches in place |
 | **The store, in use** | The CLI does not use it. Artifacts are loose files |
 | **Signal binding** | Nothing binds a signal to a parameter, so `bind` records do nothing |
 | **Tone mapping and bloom** | Neither exists. The pipeline clips at output, which is why `examples/soft_points.kir` carries a low exposure — a workaround standing in for a tone mapper |
-| **Prompt-driven generation, hot swap** | Not started |
+| Hot swap | Works. Built on a worker thread, installed at a frame boundary, watched for a window, rolled back automatically. `--watch` on the CLI. Starts cold — no state transfer |
+| **Prompt-driven generation** | Not started. Procedures reach the engine as files, whoever wrote them |
 
-Two things known to be fragile rather than merely absent:
+One thing known to be fragile rather than merely absent:
 
-- **Storage buffer count.** One buffer pair per attribute means the L1 compute stage binds
-  12 storage buffers for a procedure emitting three attributes. This machine allows 31, the
-  WebGPU default is 8, and the downlevel default is 4. It runs here because the engine
-  requests the adapter's limits; it would not run on a conservative one. Packing attributes
-  into one struct per direction is the fix, and it also means compaction moves one struct
-  instead of touching N buffers.
 - **GPU timestamps.** See Working style below. Every performance number in this repository
   came from a host clock.
+
+Simulation time used to be an f32 running sum (`t += dt * steps`), whose rounding depended
+on how a frame's steps were grouped — twenty steps taken one at a time and ten taken two at
+a time landed two ULP apart at `dt = 1/60`, which the built-in camera could turn into a
+different last bit of a rendered pixel. It is now `steps_taken * dt` from an integer
+counter, and `t` advances once per substep rather than once per frame: a frame of two steps
+runs its two `element` passes at the two instants two frames of one step would.
+
+The scan, measured because the spec asks for it rather than assuming it is free: **0.083 ms
+per frame at capacity 262144** on this machine — a host clock, taken as the slope between
+4 and 64 back-to-back scans in one submit so that submit overhead cancels. The same workload
+under `TIMESTAMP_QUERY` resolves to 0.000 ms, which is the flakiness the Working style
+section describes rather than a fast shader.
 
 The hand-written `Points` pipeline is still present. It was the vertical slice that had to
 keep working while everything else was built, and it can go once the generated path covers
@@ -222,7 +294,7 @@ crates/
 docs/
   ir-spec.md          the IR. Settled; open questions are empty
   roadmap.md          where this goes after V1
-examples/             a runnable .kir pair
+examples/             runnable .kir files: two L1, one L4
 library/              artifact store (gitignored)
 ```
 

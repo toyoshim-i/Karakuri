@@ -106,7 +106,6 @@ fn checked(emit: Vec<Attr>, blocks: Vec<TBlock>) -> Checked {
         params: vec![],
         emit,
         consumes: vec![],
-        derived: vec![],
         blocks,
         cost: None,
         span: Span::EMPTY,

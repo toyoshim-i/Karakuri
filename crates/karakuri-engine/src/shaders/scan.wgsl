@@ -5,7 +5,13 @@
 //
 // `{{WG}}` is substituted at shader-module build time with
 // `karakuri_codegen::layout::WORKGROUP_SIZE`, so the number 64 is spelled in
-// exactly one place (the Rust constant) and not restated here.
+// exactly one place (the Rust constant) and not restated here. The `Counts`
+// and `SpawnArgs` struct declarations below are substituted the same way,
+// from `karakuri_codegen::layout::counts::WGSL` and `step_args::WGSL` —
+// the same text the generated L1 shader declares, so this pass and that one
+// cannot disagree about where a field sits. (Their placeholders are not
+// spelled out in this comment: the substitution is textual and would land a
+// struct body in the middle of it.)
 //
 // The scan is hierarchical, the standard reduce / scan-block-sums / add-back
 // shape for a size that exceeds one workgroup, applied recursively so it
@@ -15,7 +21,7 @@
 //     64-element block of the alive-flags buffer. Computes each element's
 //     exclusive prefix *within its own block* and reduces the block to a
 //     single total, written to `block_sums_out`. Elements at or past
-//     `indirect_in.live_count` — the previous frame's live range — are
+//     `counts_in.range` — the previous step's live range — are
 //     treated as dead no matter what is stored there: that memory is stale
 //     once compaction has shrunk the live range, which is why the scan
 //     restricts itself to the previous live range and not the whole
@@ -33,9 +39,15 @@
 //     after every level has been locally scanned bottom-up. Adds each
 //     block's fully-resolved prefix (already correct, computed by the level
 //     above) into that block's locally-scanned values.
-//   - `finalize`: turns the top-level total into
-//     `dispatch_workgroups_indirect` arguments plus the raw count, so
-//     `element` can dispatch over the new live range without a readback.
+//   - `finalize`: writes the top-level total into `counts.survivors`, and
+//     **nothing else**. It must not touch `range` or the dispatch arguments:
+//     `element` runs after this scan and still needs the pre-scan range, so
+//     rolling the range forward here would make every survivor's own step
+//     dispatch over the count it is about to become.
+//   - `advance`: the one that does roll it forward, after `element` and
+//     `spawn` have both run. `range = survivors + min(spawn_count, capacity
+//     - survivors)`, plus the dispatch and draw arguments derived from it.
+//     Single-invocation: there is exactly one number to compute.
 
 const WG: u32 = {{WG}}u;
 
@@ -52,13 +64,8 @@ struct LevelLen {
     _pad2: u32,
 }
 
-struct IndirectArgs {
-    workgroups_x: u32,
-    workgroups_y: u32,
-    workgroups_z: u32,
-    live_count: u32,
-}
-
+{{COUNTS}}
+{{STEP_ARGS}}
 var<workgroup> temp: array<u32, WG>;
 
 // Exclusive scan of `v` (this invocation's value) across the workgroup,
@@ -87,11 +94,11 @@ fn block_exclusive_scan(v: u32, li: u32) -> u32 {
 
 // --- level 0: reads the alive-flags attribute buffer directly ---
 
-@group(0) @binding(0) var<storage, read> alive_in: array<vec4<u32>>;
+@group(0) @binding(0) var<storage, read> alive_in: array<u32>;
 @group(0) @binding(1) var<storage, read_write> dest_out: array<u32>;
 @group(0) @binding(2) var<storage, read_write> block_sums_l0: array<u32>;
 @group(0) @binding(3) var<uniform> level_len_l0: LevelLen;
-@group(0) @binding(4) var<storage, read> indirect_in: IndirectArgs;
+@group(0) @binding(4) var<storage, read> counts_in: Counts;
 
 @compute @workgroup_size(WG)
 fn scan_from_alive(
@@ -103,11 +110,11 @@ fn scan_from_alive(
     let li = lid.x;
     var v: u32 = 0u;
     // In range of this level, and in range of the previous live range —
-    // not the whole capacity. Anything at or past `live_count` is stale
-    // once compaction has shrunk the range, regardless of what bit pattern
+    // not the whole capacity. Anything at or past `range` is stale
+    // once compaction has shrunk it, regardless of what bit pattern
     // sits there.
-    if i < level_len_l0.len && i < indirect_in.live_count {
-        v = alive_in[i].x;
+    if i < level_len_l0.len && i < counts_in.range {
+        v = alive_in[i];
     }
     let ex = block_exclusive_scan(v, li);
     if i < level_len_l0.len {
@@ -162,18 +169,38 @@ fn add_offsets(
     }
 }
 
-// --- finalize: grand total -> indirect dispatch args + raw live count ---
+// --- finalize: grand total -> the survivor count, and nothing else ---
 
 @group(0) @binding(11) var<storage, read> total_in: array<u32>;
-@group(0) @binding(12) var<storage, read_write> indirect_out: IndirectArgs;
+@group(0) @binding(12) var<storage, read_write> counts_finalize: Counts;
 
 @compute @workgroup_size(WG)
 fn finalize(@builtin(global_invocation_id) gid: vec3<u32>) {
     if gid.x == 0u {
-        let total = total_in[0];
-        indirect_out.workgroups_x = (total + (WG - 1u)) / WG;
-        indirect_out.workgroups_y = 1u;
-        indirect_out.workgroups_z = 1u;
-        indirect_out.live_count = total;
+        counts_finalize.survivors = total_in[0];
     }
+}
+
+// --- advance: roll the range forward, once element and spawn have run ---
+
+@group(0) @binding(13) var<storage, read_write> counts_advance: Counts;
+@group(0) @binding(14) var<uniform> step_args: StepArgs;
+
+@compute @workgroup_size(1)
+fn advance() {
+    let survivors = counts_advance.survivors;
+    // The engine asked for `spawn_count` elements; `spawn` wrote as many as
+    // fit and silently dropped the rest, so the range grows by what landed,
+    // not by what was requested. The host's seed counter deliberately
+    // advances by the request instead — a gap in the seed sequence is
+    // harmless, a repeated seed is not.
+    let room = step_args.capacity - survivors;
+    let born = min(step_args.spawn_count, room);
+    let range = survivors + born;
+
+    counts_advance.range = range;
+    counts_advance.elem_x = (range + (WG - 1u)) / WG;
+    counts_advance.elem_y = 1u;
+    counts_advance.elem_z = 1u;
+    counts_advance.instance_count = range;
 }
