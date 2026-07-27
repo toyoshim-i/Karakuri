@@ -6,6 +6,8 @@
 //! - **Never allocate on the render thread. Never compile shaders on it.**
 //! - Pipelines are double-buffered; swaps happen only on frame boundaries.
 //! - If a new pipeline exceeds the frame budget, roll back automatically.
+//!   (The last two live in [`swap`], which is where all four of these are
+//!   under load at once and where the reasoning behind them is written down.)
 //! - Every structural change forks a Set. A live Set is never mutated in place;
 //!   parameter values are the one exception, and they are uniform writes.
 //! - Element order is preserved. Compaction is order-preserving, which is what
@@ -21,6 +23,7 @@ pub mod points;
 pub mod present;
 pub mod probe;
 pub mod set;
+pub mod swap;
 pub mod uniforms;
 pub mod video_source;
 
@@ -31,4 +34,5 @@ pub use points::{Params, Points};
 pub use present::Present;
 pub use probe::{Measurement, Probe};
 pub use set::{Set, SetError};
+pub use swap::{Event, HotSwap, Request, Source, DEFAULT_BUDGET_MS};
 pub use video_source::VideoSource;

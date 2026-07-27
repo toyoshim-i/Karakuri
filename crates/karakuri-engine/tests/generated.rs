@@ -163,7 +163,7 @@ fn lit(pixels: &[u16]) -> usize {
 fn kir_source_reaches_the_screen() {
     let gpu = Gpu::headless().expect("no GPU available");
     let mut set = build(&gpu, CAPACITY, 19274);
-    assert_eq!(set.live_count(), CAPACITY, "a spawn-less procedure is full");
+    assert_eq!(set.live_count(&gpu.device, &gpu.queue), CAPACITY, "a spawn-less procedure is full");
 
     let pixels = frame(&gpu, &mut set, 1);
     let n = lit(&pixels);
@@ -241,6 +241,58 @@ fn a_capacity_outside_the_declared_range_is_refused() {
     assert!(msg.contains("999999") && msg.contains("262144"), "{msg}");
 }
 
+/// An L1 emitting exactly `attrs` and writing nothing else. Narrowing `L1`'s
+/// own `emit` will not do: an attribute is writable only where it is emitted,
+/// so dropping one from the list makes the body itself illegal and the failure
+/// lands in the checker rather than at composition.
+fn narrow_l1(attrs: &str) -> String {
+    let writes: String = attrs
+        .split(", ")
+        .map(|a| match a {
+            "position" => "    position = sphere_point(hash1(seed), hash1(seed + 1u)) * 2.0;\n",
+            "age" => "    age = age + dt;\n",
+            other => panic!("narrow_l1 has no body for `{other}`"),
+        })
+        .collect();
+    format!(
+        "proc narrow {{\n  kind L1\n  topology points\n  capacity [1024, 262144] = 4096\n\
+         \n  emit {attrs}\n\n  element {{\n{writes}  }}\n}}\n"
+    )
+}
+
+/// Stage 6, the one check that needs both procedures at once. An L4 reads the
+/// element struct its paired L1 wrote, so consuming an attribute that L1 never
+/// emitted has no field to read — and without this check it surfaces as a WGSL
+/// parse failure from inside `create_shader_module`, which is an internal error
+/// where the contract calls for a diagnostic naming what to fix.
+#[test]
+fn an_l4_consuming_what_the_l1_never_emits_is_refused() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let l1 = compile(&narrow_l1("position, age"));
+    let l4 = compile(L4);
+    let result = Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, 1);
+    let msg = match result {
+        Ok(_) => panic!("`velocity` is consumed but never emitted, and was accepted"),
+        Err(e) => e.to_string(),
+    };
+    assert!(msg.contains("velocity"), "{msg}");
+    assert!(msg.contains("emit"), "no hint at what to do: {msg}");
+}
+
+/// Every missing attribute at once, not just the first — a regeneration should
+/// be able to fix all of them in one pass. Same rule the IR checker follows.
+#[test]
+fn a_composition_error_names_every_missing_attribute() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let l1 = compile(&narrow_l1("position"));
+    let l4 = compile(L4);
+    let msg = match Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, 1) {
+        Ok(_) => panic!("two attributes are missing and the pair was accepted"),
+        Err(e) => e.to_string(),
+    };
+    assert!(msg.contains("velocity") && msg.contains("age"), "{msg}");
+}
+
 // ---------------------------------------------------------------------------
 // Substepping: the simulation state at a given `t` must not depend on how many
 // frames it took to get there. That is the entire reason `steps` exists.
@@ -250,11 +302,20 @@ fn a_capacity_outside_the_declared_range_is_refused() {
 fn two_frames_of_one_step_land_where_one_frame_of_two_steps_does() {
     let gpu = Gpu::headless().expect("no GPU available");
 
+    // Twenty steps, not two: the interesting failures are the ones that need
+    // a while to show. A `t` accumulated as a running float sum agrees with a
+    // computed one for the first step or two and drifts apart after that, so a
+    // short horizon here passes while the property does not hold.
     let mut split = build(&gpu, CAPACITY, 19274);
-    frame(&gpu, &mut split, 1);
+    for _ in 0..19 {
+        frame(&gpu, &mut split, 1);
+    }
     let split = frame(&gpu, &mut split, 1);
 
     let mut merged = build(&gpu, CAPACITY, 19274);
+    for _ in 0..9 {
+        frame(&gpu, &mut merged, 2);
+    }
     let merged = frame(&gpu, &mut merged, 2);
 
     assert_eq!(
@@ -277,4 +338,69 @@ fn zero_steps_renders_the_previous_frame_unchanged() {
     let paused = frame(&gpu, &mut set, 0);
     assert_eq!(set.time(), t_before, "`t` advanced on a zero-step frame");
     assert_eq!(before, paused, "the simulation advanced while paused");
+}
+
+/// The substepping invariant, on the shape that can actually detect a
+/// violation of it.
+///
+/// `static_shell` computes `position` as a closed-form function of `t`, so
+/// only the final `t` reaches the buffer and any intermediate value is
+/// overwritten. That makes it blind to *when* the substeps happened: it passes
+/// whether `t` advances once per frame or once per step. This procedure
+/// accumulates instead, and the term it accumulates depends on `t`, so the sum
+/// records every instant it was evaluated at.
+///
+/// Two steps in one frame with `t` held constant across them gives `2·t₂·dt`;
+/// two frames of one step gives `t₁·dt + t₂·dt`. Those differ, visibly, and no
+/// amount of care elsewhere recovers it — which is why `t` is per substep.
+#[test]
+fn an_accumulating_procedure_reading_t_is_substep_invariant() {
+    const ACCUM: &str = r#"
+proc accumulate {
+  kind     L1
+  topology points
+  capacity [1024, 262144] = 4096
+
+  emit position, velocity, age
+
+  element {
+    position = position + vec3(t, 0.5, -t) * dt * 0.05;
+    velocity = vec3(0.0, 0.0, 0.0);
+    age      = age + dt;
+  }
+}
+"#;
+    let gpu = Gpu::headless().expect("no GPU available");
+    let l1 = compile(ACCUM);
+    let l4 = compile(L4);
+    let make = || {
+        let mut set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, 19274)
+            .expect("the pair is compatible");
+        set.resize(WIDTH, HEIGHT);
+        set
+    };
+
+    // 21 steps each, reached two ways: twenty-one frames of one, and seven
+    // frames of three.
+    let mut split = make();
+    for _ in 0..20 {
+        frame(&gpu, &mut split, 1);
+    }
+    let split = frame(&gpu, &mut split, 1);
+
+    let mut merged = make();
+    for _ in 0..6 {
+        frame(&gpu, &mut merged, 3);
+    }
+    let merged = frame(&gpu, &mut merged, 3);
+
+    assert_eq!(
+        split.len(),
+        merged.len(),
+        "the two runs did not even render the same size"
+    );
+    assert_eq!(
+        split, merged,
+        "an accumulating procedure saw a different clock under a different frame rate"
+    );
 }

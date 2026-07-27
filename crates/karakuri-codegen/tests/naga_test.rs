@@ -16,7 +16,7 @@
 //! one unit test isolates.
 
 use karakuri_ir::builtin::Builtin;
-use karakuri_ir::typed::{Checked, Derivation, TBlock, TExpr, TExprKind, TStmt, Target};
+use karakuri_ir::typed::{Checked, TBlock, TExpr, TExprKind, TStmt, Target};
 use karakuri_ir::{Ambient, Attr, BinOp, Blend, BlockKind, Kind, Lit, Output, Param, Span, Topology, Ty};
 
 fn span() -> Span {
@@ -177,7 +177,6 @@ fn drift_shell() -> Checked {
         ],
         emit: vec![Attr::Position, Attr::Velocity, Attr::Age],
         consumes: vec![],
-        derived: Vec::<Derivation>::new(),
         blocks: vec![spawn, element],
         cost: None,
         span: span(),
@@ -260,7 +259,6 @@ fn soft_points() -> Checked {
         ],
         emit: vec![],
         consumes: vec![Attr::Position, Attr::Velocity, Attr::Age],
-        derived: Vec::<Derivation>::new(),
         blocks: vec![vertex, fragment],
         cost: None,
         span: span(),
@@ -268,20 +266,22 @@ fn soft_points() -> Checked {
 }
 
 /// An L1 procedure whose `let`s are named after every bare identifier this
-/// crate's L1 lowering emits: the uniform binding (`u`), entry-point locals
-/// (`seed`, `i`, `slot`, `gid`, `birth_frac`), ambient-backed uniform fields
-/// (`t`, `dt`, `capacity`, `live_count`, `spawn_count`, `seed_base`), and
-/// helper function names (`hash1`, `sphere_point`, `curl`, `mod_f32`). None
-/// of these are contrived: `u` is the ir-spec's own `drift_shell` (see
-/// `drift_shell` above); the rest are exactly as plausible for an LLM to
-/// reach for, since none of them is a reserved word in the `.kir` grammar.
-/// The block still exercises `hash1`, `sphere_point`, `curl`, and `%` on a
-/// float for real afterwards — the point is that declaring a local of the
-/// same name earlier must not have broken any of them.
+/// crate's L1 lowering emits: the uniform binding (`u`), the engine-state
+/// bindings (`counts`, `dest`, `step_args`) and their fields (`range`,
+/// `survivors`, `spawn_count`, `seed_base`), entry-point locals (`seed`,
+/// `i`, `out`, `slot`, `gid`, `birth_frac`), ambient-backed uniform fields
+/// (`t`, `dt`, `capacity`), and helper function names (`hash1`,
+/// `sphere_point`, `curl`, `mod_f32`). None of these are contrived: `u` is
+/// the ir-spec's own `drift_shell` (see `drift_shell` above); the rest are
+/// exactly as plausible for an LLM to reach for, since none of them is a
+/// reserved word in the `.kir` grammar. The block still exercises `hash1`,
+/// `sphere_point`, `curl`, and `%` on a float for real afterwards — the
+/// point is that declaring a local of the same name earlier must not have
+/// broken any of them.
 fn shadowing_locals_l1() -> Checked {
     let adversarial_lets = [
-        "u", "hash1", "seed", "prev_position", "next_age", "i", "slot", "gid", "sphere_point", "curl",
-        "birth_frac",
+        "u", "hash1", "seed", "prev_position", "next_age", "i", "out", "slot", "gid", "sphere_point",
+        "curl", "birth_frac", "counts", "dest", "step_args",
     ];
     let mut spawn_stmts: Vec<TStmt> = adversarial_lets.iter().enumerate().map(|(n, name)| let_(name, lit_f(n as f32))).collect();
     spawn_stmts.push(assign_attr(
@@ -303,7 +303,9 @@ fn shadowing_locals_l1() -> Checked {
     spawn_stmts.push(assign_attr(Attr::Age, lit_f(0.0)));
     let spawn = TBlock { kind: BlockKind::Spawn, span: span(), stmts: spawn_stmts };
 
-    let more_adversarial_lets = ["t", "dt", "capacity", "live_count", "spawn_count", "seed_base", "mod_f32"];
+    let more_adversarial_lets = [
+        "t", "dt", "capacity", "range", "survivors", "spawn_count", "seed_base", "mod_f32", "alive",
+    ];
     let mut element_stmts: Vec<TStmt> =
         more_adversarial_lets.iter().enumerate().map(|(n, name)| let_(name, lit_f(n as f32))).collect();
     element_stmts.push(assign_attr(Attr::Age, bin(BinOp::Rem, attr(Attr::Age), lit_f(1.0), Ty::Float)));
@@ -328,7 +330,6 @@ fn shadowing_locals_l1() -> Checked {
         params: vec![param_decl("radius", Ty::Float, 0.1, 8.0)],
         emit: vec![Attr::Position, Attr::Age],
         consumes: vec![],
-        derived: Vec::<Derivation>::new(),
         blocks: vec![spawn, element],
         cost: None,
         span: span(),
@@ -336,13 +337,16 @@ fn shadowing_locals_l1() -> Checked {
 }
 
 /// The L4 counterpart: `let`s named after `vertex`/`fragment`'s bare
-/// identifiers — the uniform binding (`u`), the vertex/fragment builtin
-/// parameter names (`elem`, `in`, `out`, `corner`, `corner_idx`), the
-/// storage buffer name for a consumed attribute (`attr_position`), the
-/// fragment-only ambient (`point_coord`), and two helper function names
-/// (`hash1`, `hsv_to_rgb`, `corner_of`).
+/// identifiers — the uniform binding (`u`), the storage bindings
+/// (`elements`, `alive`), the vertex/fragment builtin parameter names
+/// (`elem`, `in`, `out`, `corner`, `corner_idx`), the storage buffer name
+/// for a consumed attribute (`attr_position`), the fragment-only ambient
+/// (`point_coord`), and two helper function names (`hash1`, `hsv_to_rgb`,
+/// `corner_of`).
 fn shadowing_locals_l4() -> Checked {
-    let vertex_adversarial = ["u", "seed", "elem", "in", "out", "corner", "corner_idx", "attr_position"];
+    let vertex_adversarial = [
+        "u", "seed", "elem", "in", "out", "corner", "corner_idx", "attr_position", "elements", "alive",
+    ];
     let mut vertex_stmts: Vec<TStmt> =
         vertex_adversarial.iter().enumerate().map(|(n, name)| let_(name, lit_f(n as f32))).collect();
     vertex_stmts.push(assign_output(
@@ -384,7 +388,6 @@ fn shadowing_locals_l4() -> Checked {
         params: vec![param_decl("point_scale", Ty::Float, 0.5, 40.0), param_decl("hue", Ty::Float, 0.0, 1.0)],
         emit: vec![],
         consumes: vec![Attr::Position],
-        derived: Vec::<Derivation>::new(),
         blocks: vec![vertex, fragment],
         cost: None,
         span: span(),
@@ -419,7 +422,6 @@ fn reserved_word_params_l1() -> Checked {
         params,
         emit: vec![Attr::Age],
         consumes: vec![],
-        derived: Vec::<Derivation>::new(),
         blocks: vec![element],
         cost: None,
         span: span(),
@@ -444,6 +446,14 @@ fn assert_layout_matches_text(source: &str, layout: &karakuri_codegen::layout::U
     }
 }
 
+/// `generate_l4` takes its paired L1's `ElementLayout` rather than deriving
+/// one from `consumes` (see that function's doc) — every fixture below is
+/// built so its `consumes` is a subset of some L1 fixture's `emit`, and this
+/// derives the layout that L1 side would have produced.
+fn layout_for(l1: &Checked) -> karakuri_codegen::layout::ElementLayout {
+    karakuri_codegen::layout::generate_element_layout(&l1.emit)
+}
+
 fn validate(source: &str) {
     let module = naga::front::wgsl::parse_str(source).unwrap_or_else(|e| {
         panic!("WGSL failed to parse:\n{}\n\n---- source ----\n{source}", e.emit_to_string(source))
@@ -461,7 +471,7 @@ fn drift_shell_l1_compiles_and_validates() {
 
 #[test]
 fn soft_points_l4_compiles_and_validates() {
-    let shader = karakuri_codegen::generate_l4(&soft_points());
+    let shader = karakuri_codegen::generate_l4(&soft_points(), &layout_for(&drift_shell()));
     validate(&shader.source);
 }
 
@@ -487,7 +497,7 @@ fn uniform_layout_and_emitted_struct_text_agree() {
     let l1 = karakuri_codegen::generate_l1(&drift_shell());
     assert_layout_matches_text(&l1.source, &l1.uniform_layout);
 
-    let l4 = karakuri_codegen::generate_l4(&soft_points());
+    let l4 = karakuri_codegen::generate_l4(&soft_points(), &layout_for(&drift_shell()));
     assert_layout_matches_text(&l4.source, &l4.uniform_layout);
 
     let reserved = karakuri_codegen::generate_l1(&reserved_word_params_l1());
@@ -518,8 +528,219 @@ fn l1_locals_cannot_shadow_generated_identifiers() {
 
 #[test]
 fn l4_locals_cannot_shadow_generated_identifiers() {
-    let shader = karakuri_codegen::generate_l4(&shadowing_locals_l4());
+    let shader = karakuri_codegen::generate_l4(&shadowing_locals_l4(), &layout_for(&shadowing_locals_l1()));
     validate(&shader.source);
+}
+
+/// An L4 that consumes a strict subset of `drift_shell`'s `emit` and names
+/// them in a different order than `drift_shell` declares (`emit position,
+/// velocity, age`; this consumes `age` then `position`, skipping
+/// `velocity`). Attribute reads are resolved by field name
+/// (`elements[elem].<name>`), never by struct position, so `generate_l4`
+/// must not care about `consumes`' order or completeness relative to
+/// `emit` — only about which names it happens to read.
+fn reordered_subset_l4() -> Checked {
+    let clip = bin(
+        BinOp::Mul,
+        ambient(Ambient::Camera, Ty::Mat4),
+        construct(Ty::Vec4, vec![attr(Attr::Position), lit_f(1.0)]),
+        Ty::Vec4,
+    );
+    let vertex = TBlock {
+        kind: BlockKind::Vertex,
+        span: span(),
+        stmts: vec![
+            assign_output(Output::Clip, clip),
+            assign_output(Output::PointSize, bin(BinOp::Add, attr(Attr::Age), lit_f(1.0), Ty::Float)),
+        ],
+    };
+    let fragment = TBlock {
+        kind: BlockKind::Fragment,
+        span: span(),
+        stmts: vec![assign_output(Output::Color, construct(Ty::Vec4, vec![lit_f(1.0)]))],
+    };
+
+    Checked {
+        name: "reordered_subset_l4".to_string(),
+        kind: Kind::L4,
+        topology: None,
+        capacity: None,
+        blend: Some(Blend::Additive),
+        params: vec![],
+        emit: vec![],
+        consumes: vec![Attr::Age, Attr::Position],
+        blocks: vec![vertex, fragment],
+        cost: None,
+        span: span(),
+    }
+}
+
+/// An L4 that consumes nothing at all — legal per the ir-spec ("the
+/// `soft_points` example ... consumes three attributes and emits nothing,
+/// which is not an error but the normal shape of an L4 file"; the reverse,
+/// consuming nothing, is equally legal and untested elsewhere in this
+/// file). It still declares the full `Element` struct L1 wrote and still
+/// reads `seed`, just no named attribute.
+fn consumes_nothing_l4() -> Checked {
+    let vertex = TBlock {
+        kind: BlockKind::Vertex,
+        span: span(),
+        stmts: vec![
+            assign_output(Output::Clip, construct(Ty::Vec4, vec![lit_f(0.0), lit_f(0.0), lit_f(0.0), lit_f(1.0)])),
+            assign_output(Output::PointSize, lit_f(4.0)),
+        ],
+    };
+    let fragment = TBlock {
+        kind: BlockKind::Fragment,
+        span: span(),
+        stmts: vec![assign_output(
+            Output::Color,
+            construct(Ty::Vec4, vec![call(Builtin::Hash1, vec![ambient(Ambient::Seed, Ty::Uint)], Ty::Float)]),
+        )],
+    };
+
+    Checked {
+        name: "consumes_nothing_l4".to_string(),
+        kind: Kind::L4,
+        topology: None,
+        capacity: None,
+        blend: Some(Blend::Additive),
+        params: vec![],
+        emit: vec![],
+        consumes: vec![],
+        blocks: vec![vertex, fragment],
+        cost: None,
+        span: span(),
+    }
+}
+
+/// `consumes` names a strict subset of `emit`, out of declaration order.
+/// This is the case the module doc on `generate_l4` calls out by name:
+/// byte identity must hold regardless of what a paired L4 happens to read.
+#[test]
+fn l4_consuming_a_reordered_subset_compiles_and_validates() {
+    let shader = karakuri_codegen::generate_l4(&reordered_subset_l4(), &layout_for(&drift_shell()));
+    validate(&shader.source);
+}
+
+/// `consumes` is empty. Legal per the ir-spec; the mirror image of
+/// `soft_points`, which emits nothing.
+#[test]
+fn l4_consuming_nothing_compiles_and_validates() {
+    let shader = karakuri_codegen::generate_l4(&consumes_nothing_l4(), &layout_for(&drift_shell()));
+    validate(&shader.source);
+}
+
+/// An L1 procedure that emits every declarable attribute (all seven of
+/// `Attr::ALL`), the shape this whole change exists for: before it, this
+/// would have bound 2 synthetic + 7 declared = 9 attributes, times prev and
+/// next, an 18-buffer compute stage. The `Element` struct is 9 `vec4`
+/// slots (`seed`, `birth_frac`, plus the 7 declared) regardless, and the
+/// bind group stays 2 storage buffers per direction.
+fn emits_every_attribute_l1() -> Checked {
+    let element = TBlock {
+        kind: BlockKind::Element,
+        span: span(),
+        stmts: karakuri_ir::Attr::ALL.into_iter().map(|a| assign_attr(a, zero_expr(a.ty()))).collect(),
+    };
+
+    Checked {
+        name: "emits_every_attribute".to_string(),
+        kind: Kind::L1,
+        topology: Some(Topology::Points),
+        capacity: None,
+        blend: None,
+        params: vec![],
+        emit: karakuri_ir::Attr::ALL.to_vec(),
+        consumes: vec![],
+        blocks: vec![element],
+        cost: None,
+        span: span(),
+    }
+}
+
+/// A zero value of `ty`, using the same broadcast-scalar vector constructor
+/// the ir-spec documents (`vec3(0.0)`), since `Lit` itself only carries
+/// scalars.
+fn zero_expr(ty: Ty) -> TExpr {
+    match ty {
+        Ty::Float => lit_f(0.0),
+        Ty::Vec2 | Ty::Vec3 => construct(ty, vec![lit_f(0.0)]),
+        other => panic!("zero_expr does not cover {other:?}; no attribute needs it"),
+    }
+}
+
+/// The buffer-count claim this whole change exists for: the `Element`
+/// struct's field count tracks `emit.len()` exactly (`seed`, `birth_frac`,
+/// and every declared attribute), and it still validates as real WGSL at
+/// the largest shape the language allows: all seven declarable attributes,
+/// not just the two or three every other fixture in this file emits.
+#[test]
+fn l1_emitting_every_attribute_compiles_and_validates() {
+    let checked = emits_every_attribute_l1();
+    let shader = karakuri_codegen::generate_l1(&checked);
+    assert_eq!(shader.element_layout.slots.len(), 2 + karakuri_ir::Attr::ALL.len());
+    assert_eq!(shader.element_layout.stride, (2 + karakuri_ir::Attr::ALL.len() as u32) * 16);
+    validate(&shader.source);
+}
+
+/// The L4 side of the same claim, paired against the all-attributes L1:
+/// consuming every attribute still produces a byte-identical `Element`
+/// struct and valid WGSL.
+#[test]
+fn l4_consuming_every_attribute_compiles_and_validates() {
+    let l1 = emits_every_attribute_l1();
+    let clip = construct(Ty::Vec4, vec![attr(Attr::Position), lit_f(1.0)]);
+    let vertex = TBlock {
+        kind: BlockKind::Vertex,
+        span: span(),
+        stmts: vec![assign_output(Output::Clip, clip), assign_output(Output::PointSize, lit_f(1.0))],
+    };
+    let fragment = TBlock {
+        kind: BlockKind::Fragment,
+        span: span(),
+        stmts: vec![assign_output(Output::Color, construct(Ty::Vec4, vec![lit_f(1.0)]))],
+    };
+    let l4 = Checked {
+        name: "consumes_every_attribute".to_string(),
+        kind: Kind::L4,
+        topology: None,
+        capacity: None,
+        blend: Some(Blend::Additive),
+        params: vec![],
+        emit: vec![],
+        consumes: karakuri_ir::Attr::ALL.to_vec(),
+        blocks: vec![vertex, fragment],
+        cost: None,
+        span: span(),
+    };
+    let shader = karakuri_codegen::generate_l4(&l4, &layout_for(&l1));
+    validate(&shader.source);
+}
+
+/// The core claim the L4-takes-a-layout signature exists for: L1 and its
+/// paired L4 must declare byte-identical `Element` structs, since L4 reads
+/// the same physical buffer L1 wrote. Extracts the `struct Element { ... };`
+/// block from each generated source and compares the text directly, rather
+/// than trusting that "compiles" implies "same layout" — two structs with a
+/// different field order would each compile fine on their own.
+#[test]
+fn l1_and_paired_l4_declare_byte_identical_element_structs() {
+    fn element_struct_text(source: &str) -> &str {
+        let start = source.find("struct Element {").expect("no Element struct in source");
+        let end = source[start..].find("};").expect("unterminated Element struct") + start + 2;
+        &source[start..end]
+    }
+
+    let l1 = karakuri_codegen::generate_l1(&drift_shell());
+    let l4 = karakuri_codegen::generate_l4(&soft_points(), &layout_for(&drift_shell()));
+    assert_eq!(
+        element_struct_text(&l1.source),
+        element_struct_text(&l4.source),
+        "L1:\n{}\n\nL4:\n{}",
+        l1.source,
+        l4.source
+    );
 }
 
 /// The negative half of "a generator whose output is never fed to a

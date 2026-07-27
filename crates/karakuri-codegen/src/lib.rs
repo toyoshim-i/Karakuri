@@ -37,6 +37,8 @@ pub use l4::{generate_l4, L4Shader};
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
 
+use crate::layout::ElementLayout;
+
 /// Dispatches on `checked.kind` and returns whichever of [`L1Shader`] /
 /// [`L4Shader`] applies.
 #[derive(Debug, Clone)]
@@ -48,10 +50,19 @@ pub enum Shader {
 /// Lowers a checked procedure to WGSL, picking the L1 or L4 path by
 /// `checked.kind`. Prefer [`generate_l1`] / [`generate_l4`] directly when
 /// the kind is already known statically.
-pub fn generate(checked: &Checked) -> Shader {
+///
+/// `elements` is the paired L1 procedure's [`ElementLayout`] — required on
+/// the `Kind::L4` path, since `generate_l4` compiles against it rather than
+/// deriving its own (see that function's doc). `None` there panics; the L1
+/// path ignores the argument, since `generate_l1` computes its own layout
+/// from `checked.emit`.
+pub fn generate(checked: &Checked, elements: Option<&ElementLayout>) -> Shader {
     match checked.kind {
         Kind::L1 => Shader::L1(generate_l1(checked)),
-        Kind::L4 => Shader::L4(generate_l4(checked)),
+        Kind::L4 => {
+            let elements = elements.expect("an L4 procedure needs its paired L1's ElementLayout");
+            Shader::L4(generate_l4(checked, elements))
+        }
     }
 }
 
@@ -73,7 +84,7 @@ mod tests {
     //! emitting plausible nonsense forever.
 
     use karakuri_ir::builtin::Builtin;
-    use karakuri_ir::typed::{Checked, Derivation, TBlock, TExpr, TExprKind, TStmt, Target};
+    use karakuri_ir::typed::{Checked, TBlock, TExpr, TExprKind, TStmt, Target};
     use karakuri_ir::{Ambient, Attr, BinOp, BlockKind, Kind, Lit, Output, Param, Ty};
 
     use crate::{generate_l1, generate_l4};
@@ -100,7 +111,6 @@ mod tests {
             params: Vec::new(),
             emit: Vec::new(),
             consumes: Vec::new(),
-            derived: Vec::<Derivation>::new(),
             blocks: Vec::new(),
             cost: None,
             span: span(),
@@ -138,15 +148,61 @@ mod tests {
     #[test]
     fn attribute_read_after_assignment_still_reads_prev_buffer() {
         let shader = generate_l1(&read_after_write_proc());
-        // The write goes to `next_position`; the following read must still
-        // be `prev_position`, never a reference to a local that captured
-        // the write.
-        assert!(shader.source.contains("next_position[i] ="), "{}", shader.source);
+        // The write goes to `next[out]`; the following read must still be
+        // `prev[i]`, never a reference to a local that captured the write.
+        // Read and write index are separate expressions precisely because
+        // compaction makes them different slots.
+        assert!(shader.source.contains("next[out].position ="), "{}", shader.source);
         assert!(
-            shader.source.contains("let usr_again = prev_position[i].xyz;"),
-            "expected the re-read to reference prev_position, got:\n{}",
+            shader.source.contains("let usr_again = prev[i].position.xyz;"),
+            "expected the re-read to reference prev[i].position, got:\n{}",
             shader.source
         );
+    }
+
+    /// A procedure with neither `spawn` nor `kill()` cannot change its live
+    /// set, so the engine skips the scan for it — and `element` must then
+    /// not read the `dest` buffer that scan would have filled, nor declare
+    /// a binding for it.
+    #[test]
+    fn a_static_procedure_neither_binds_nor_reads_the_destination_indices() {
+        let shader = generate_l1(&read_after_write_proc());
+        assert!(!shader.compacted, "no spawn block and no kill() is a static procedure");
+        assert!(!shader.source.contains("dest"), "static `element` must not touch dest:\n{}", shader.source);
+        assert!(
+            !shader.source.contains("prev_alive[i]"),
+            "static `element` has no dead elements to skip:\n{}",
+            shader.source
+        );
+        assert!(shader.source.contains("let out = i;"), "{}", shader.source);
+    }
+
+    /// The same procedure with one `kill()` added, nested inside an `if` so
+    /// this also covers the recursive walk: it becomes compacted, and
+    /// `element` gains both the destination read and the skip.
+    #[test]
+    fn a_kill_anywhere_in_the_element_block_makes_a_procedure_compacted() {
+        let mut p = read_after_write_proc();
+        let element = p.blocks.last_mut().expect("the fixture has an element block");
+        element.stmts.push(TStmt::If {
+            cond: TExpr::new(Ty::Bool, span(), TExprKind::Lit(Lit::Bool(true))),
+            then: vec![TStmt::For {
+                var: "n".to_string(),
+                start: 0,
+                end: 2,
+                body: vec![TStmt::Kill { span: span() }],
+                span: span(),
+            }],
+            els: vec![],
+            span: span(),
+        });
+
+        let shader = generate_l1(&p);
+        assert!(shader.compacted, "a kill() inside an if inside a for still kills");
+        assert!(!shader.has_spawn, "no spawn block was added");
+        assert!(shader.source.contains("let out = dest[i];"), "{}", shader.source);
+        assert!(shader.source.contains("if prev_alive[i] == 0u { return; }"), "{}", shader.source);
+        assert!(shader.source.contains("next[out].position ="), "{}", shader.source);
     }
 
     /// A block calling `fbm(position, 3)` — the octave count must be
@@ -181,7 +237,7 @@ mod tests {
         // `"perlin("` would also match the helper's own `fn perlin(`.
         assert_eq!(shader.source.matches("fn perlin(").count(), 1, "{}", shader.source);
         assert_eq!(
-            shader.source.matches("perlin(prev_position").count(),
+            shader.source.matches("perlin(prev[i].position").count(),
             3,
             "fbm(_, 3) should unroll to exactly three perlin() call sites:\n{}",
             shader.source
@@ -210,7 +266,7 @@ mod tests {
     fn mod_helper_appears_only_when_percent_is_used_on_a_float() {
         let with_rem = generate_l1(&float_rem_proc());
         assert!(with_rem.source.contains("fn mod_f32("), "{}", with_rem.source);
-        assert!(with_rem.source.contains("mod_f32(prev_age[i].x, 1.0)"), "{}", with_rem.source);
+        assert!(with_rem.source.contains("mod_f32(prev[i].age.x, 1.0)"), "{}", with_rem.source);
 
         // A procedure that never uses `%` on a float must not carry the
         // helper at all.
@@ -350,7 +406,8 @@ mod tests {
 
     #[test]
     fn l4_quad_expansion_and_hsv_to_rgb_wiring() {
-        let shader = generate_l4(&l4_proc());
+        let elements = crate::layout::generate_element_layout(&[Attr::Position]);
+        let shader = generate_l4(&l4_proc(), &elements);
         let src = &shader.source;
         assert!(src.contains("@builtin(vertex_index) corner_idx: u32"), "{src}");
         assert!(src.contains("@builtin(instance_index) elem: u32"), "{src}");

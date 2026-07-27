@@ -5,15 +5,105 @@
 //! check that the multi-pass WGSL actually computes the exclusive prefix
 //! sum the module doc promises.
 
-use karakuri_codegen::layout::WORKGROUP_SIZE;
+use karakuri_codegen::layout::{counts, step_args, WORKGROUP_SIZE, VERTICES_PER_ELEMENT};
 use karakuri_engine::{Compaction, Gpu};
 
-/// Uploads `alive` (one flag per element) into `compaction`'s alive buffer,
-/// matching the engine's `array<vec4<u32>>` attribute layout: one vec4 per
-/// element, flag in `.x`, the rest padding.
-fn upload_alive(gpu: &Gpu, compaction: &Compaction, alive: &[u32]) {
-    let packed: Vec<[u32; 4]> = alive.iter().map(|&a| [a, 0, 0, 0]).collect();
-    gpu.queue.write_buffer(compaction.alive_buffer(), 0, bytemuck::cast_slice(&packed));
+/// The buffers a `Compaction` borrows but does not own — in the engine they
+/// belong to the `Set`, and here to the test. The alive pair ping-pongs in a
+/// real Set; these tests only ever scan parity `false`, so `b` exists purely
+/// to satisfy the constructor.
+struct Fixture {
+    compaction: Compaction,
+    alive: wgpu::Buffer,
+    _alive_b: wgpu::Buffer,
+    counts: wgpu::Buffer,
+    _step_args: wgpu::Buffer,
+}
+
+impl Fixture {
+    /// A fresh scan over `capacity` elements, with `range` seeded to the
+    /// whole capacity so the first `record` scans everything — the state a
+    /// spawn-less procedure comes up in.
+    fn new(gpu: &Gpu, capacity: u32) -> Fixture {
+        let alive_buf = |label| {
+            gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size: u64::from(capacity) * 4,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            })
+        };
+        let alive = alive_buf("alive a");
+        let alive_b = alive_buf("alive b");
+
+        let counts_buf = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("counts"),
+            size: counts::SIZE,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::INDIRECT
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let step_args_buf = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("spawn args"),
+            size: 4 * step_args::STRIDE,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let mut initial = vec![0u8; counts::SIZE as usize];
+        let put = |bytes: &mut [u8], at: u64, v: u32| {
+            let at = at as usize;
+            bytes[at..at + 4].copy_from_slice(&v.to_le_bytes());
+        };
+        put(&mut initial, counts::ELEM_XYZ, capacity.div_ceil(WORKGROUP_SIZE));
+        put(&mut initial, counts::ELEM_XYZ + 4, 1);
+        put(&mut initial, counts::ELEM_XYZ + 8, 1);
+        put(&mut initial, counts::RANGE, capacity);
+        put(&mut initial, counts::DRAW, VERTICES_PER_ELEMENT);
+        put(&mut initial, counts::DRAW + 4, capacity);
+        put(&mut initial, counts::SURVIVORS, capacity);
+        gpu.queue.write_buffer(&counts_buf, 0, &initial);
+
+        // Substep 0 asks for no new elements and clamps against `capacity`:
+        // these tests exercise the scan, not spawning.
+        let mut args = vec![0u8; step_args::SIZE as usize];
+        args[8..12].copy_from_slice(&capacity.to_le_bytes());
+        gpu.queue.write_buffer(&step_args_buf, 0, &args);
+
+        let compaction = Compaction::new(
+            &gpu.device,
+            capacity,
+            [&alive, &alive_b],
+            &counts_buf,
+            &step_args_buf,
+            4,
+        );
+        Fixture {
+            compaction,
+            alive,
+            _alive_b: alive_b,
+            counts: counts_buf,
+            _step_args: step_args_buf,
+        }
+    }
+
+    /// Uploads `alive` (one flag per element), matching the engine's dense
+    /// `array<u32>` alive layout: no padding, one `u32` per element.
+    fn upload_alive(&self, gpu: &Gpu, alive: &[u32]) {
+        gpu.queue.write_buffer(&self.alive, 0, bytemuck::cast_slice(alive));
+    }
+
+    /// One step's worth of scan, plus the `advance` that rolls the survivor
+    /// count into `range` — the engine runs `element` and `spawn` between
+    /// them, neither of which affects what the scan computed.
+    fn scan_and_advance(&self, gpu: &Gpu) {
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        self.compaction.record(&mut encoder, false);
+        self.compaction.record_advance(&mut encoder, 0);
+        gpu.queue.submit([encoder.finish()]);
+    }
 }
 
 /// Copies `buffer[..len_bytes]` into a mappable staging buffer and reads it
@@ -44,11 +134,15 @@ fn read_dest(gpu: &Gpu, compaction: &Compaction, capacity: u32) -> Vec<u32> {
     bytemuck::cast_slice::<u8, u32>(&bytes).to_vec()
 }
 
-/// `(workgroups_x, workgroups_y, workgroups_z, live_count)`.
-fn read_indirect(gpu: &Gpu, compaction: &Compaction) -> (u32, u32, u32, u32) {
-    let bytes = read_back(gpu, compaction.indirect_buffer(), 16);
-    let words: &[u32] = bytemuck::cast_slice(&bytes);
-    (words[0], words[1], words[2], words[3])
+/// The whole counts buffer as `u32` words, indexed by
+/// `karakuri_codegen::layout::counts`' byte offsets divided by four.
+fn read_counts(gpu: &Gpu, fixture: &Fixture) -> Vec<u32> {
+    let bytes = read_back(gpu, &fixture.counts, counts::SIZE);
+    bytemuck::cast_slice::<u8, u32>(&bytes).to_vec()
+}
+
+fn count_at(words: &[u32], offset: u64) -> u32 {
+    words[offset as usize / 4]
 }
 
 /// The obvious sequential computation this whole module exists to replace on
@@ -66,20 +160,17 @@ fn cpu_exclusive_scan(alive: &[u32]) -> (Vec<u32>, u32) {
 }
 
 /// Runs a fresh `Compaction` over `alive` and returns `(dest[0..alive.len()],
-/// live_count)`. A fresh instance's first `record` scans everything, since
-/// `Compaction::new` seeds the previous-live-range bound at `capacity`.
+/// survivors)`. A fresh fixture's first `record` scans everything, since its
+/// counts buffer seeds `range` at `capacity`.
 fn run(gpu: &Gpu, alive: &[u32]) -> (Vec<u32>, u32) {
     let capacity = alive.len() as u32;
-    let compaction = Compaction::new(&gpu.device, capacity);
-    upload_alive(gpu, &compaction, alive);
+    let fixture = Fixture::new(gpu, capacity);
+    fixture.upload_alive(gpu, alive);
+    fixture.scan_and_advance(gpu);
 
-    let mut encoder = gpu.device.create_command_encoder(&Default::default());
-    compaction.record(&mut encoder);
-    gpu.queue.submit([encoder.finish()]);
-
-    let dest = read_dest(gpu, &compaction, capacity);
-    let (_, _, _, live_count) = read_indirect(gpu, &compaction);
-    (dest, live_count)
+    let dest = read_dest(gpu, &fixture.compaction, capacity);
+    let survivors = count_at(&read_counts(gpu, &fixture), counts::SURVIVORS);
+    (dest, survivors)
 }
 
 /// xorshift32, seeded, so "pseudo-random" tests are reproducible rather than
@@ -203,7 +294,7 @@ fn surviving_destinations_are_strictly_increasing() {
     assert_eq!(survivors_seen, live_count, "every survivor must get a distinct destination");
 }
 
-// --- live count into the indirect args buffer ---
+// --- the counts buffer: what each pass is and is not allowed to write ---
 
 #[test]
 fn indirect_args_workgroup_count_covers_the_live_count() {
@@ -211,18 +302,60 @@ fn indirect_args_workgroup_count_covers_the_live_count() {
     let alive = pseudo_random_pattern(10_000, 7);
     let expected_live: u32 = alive.iter().sum();
 
-    let capacity = alive.len() as u32;
-    let compaction = Compaction::new(&gpu.device, capacity);
-    upload_alive(&gpu, &compaction, &alive);
+    let fixture = Fixture::new(&gpu, alive.len() as u32);
+    fixture.upload_alive(&gpu, &alive);
+    fixture.scan_and_advance(&gpu);
+
+    let words = read_counts(&gpu, &fixture);
+    assert_eq!(
+        count_at(&words, counts::SURVIVORS),
+        expected_live,
+        "survivor count must match the number of alive flags"
+    );
+    // No spawning in this fixture, so `advance` sets `range` to the
+    // survivors and derives both argument blocks from it.
+    assert_eq!(count_at(&words, counts::RANGE), expected_live);
+    assert_eq!(count_at(&words, counts::ELEM_XYZ + 4), 1);
+    assert_eq!(count_at(&words, counts::ELEM_XYZ + 8), 1);
+    assert_eq!(
+        count_at(&words, counts::ELEM_XYZ),
+        expected_live.div_ceil(WORKGROUP_SIZE),
+        "workgroup count must cover the range exactly"
+    );
+    assert_eq!(count_at(&words, counts::DRAW), VERTICES_PER_ELEMENT, "vertex count is fixed");
+    assert_eq!(count_at(&words, counts::DRAW + 4), expected_live, "instance count follows the range");
+}
+
+/// The one ordering constraint that is easy to get wrong and silent when it
+/// is: `finalize` writes `survivors` and must leave `range` and the dispatch
+/// arguments alone, because `element` runs after the scan and still has to
+/// cover the pre-scan range. If `finalize` rolled the range forward here,
+/// every element that died this step would take a survivor's place.
+#[test]
+fn finalize_leaves_the_pre_scan_range_alone() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let capacity = 1000u32;
+    let mut alive = vec![0u32; capacity as usize];
+    for a in alive.iter_mut().take(400) {
+        *a = 1;
+    }
+
+    let fixture = Fixture::new(&gpu, capacity);
+    fixture.upload_alive(&gpu, &alive);
+
+    // The scan alone, with no `advance` behind it.
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
-    compaction.record(&mut encoder);
+    fixture.compaction.record(&mut encoder, false);
     gpu.queue.submit([encoder.finish()]);
 
-    let (wg_x, wg_y, wg_z, live_count) = read_indirect(&gpu, &compaction);
-    assert_eq!(live_count, expected_live, "live count must match the number of alive flags");
-    assert_eq!(wg_y, 1);
-    assert_eq!(wg_z, 1);
-    assert_eq!(wg_x, live_count.div_ceil(WORKGROUP_SIZE), "workgroup count must cover live_count exactly");
+    let words = read_counts(&gpu, &fixture);
+    assert_eq!(count_at(&words, counts::SURVIVORS), 400, "the scan must report the survivors");
+    assert_eq!(count_at(&words, counts::RANGE), capacity, "`range` is `advance`'s to write, not `finalize`'s");
+    assert_eq!(
+        count_at(&words, counts::ELEM_XYZ),
+        capacity.div_ceil(WORKGROUP_SIZE),
+        "the element dispatch must still cover the pre-scan range"
+    );
 }
 
 // --- cost, measured on the GPU ---
@@ -248,8 +381,8 @@ fn full_capacity_scan_gpu_timestamp() {
     // than assuming it is free" (ir-spec.md, Dispatch).
     let capacity = 262_144u32;
     let alive = pseudo_random_pattern(capacity, 42);
-    let compaction = Compaction::new(&gpu.device, capacity);
-    upload_alive(&gpu, &compaction, &alive);
+    let fixture = Fixture::new(&gpu, capacity);
+    fixture.upload_alive(&gpu, &alive);
 
     let query_set = gpu.device.create_query_set(&wgpu::QuerySetDescriptor {
         label: Some("compaction timestamps"),
@@ -284,7 +417,7 @@ fn full_capacity_scan_gpu_timestamp() {
                 end_of_pass_write_index: None,
             }),
         });
-        compaction.record(&mut encoder);
+        fixture.compaction.record(&mut encoder, false);
         encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("timestamp end"),
             timestamp_writes: Some(wgpu::ComputePassTimestampWrites {
@@ -339,13 +472,11 @@ fn a_second_scan_ignores_stale_data_past_the_previous_live_count() {
         *a = 1;
     }
 
-    let compaction = Compaction::new(&gpu.device, capacity);
-    upload_alive(&gpu, &compaction, &alive);
+    let fixture = Fixture::new(&gpu, capacity);
+    fixture.upload_alive(&gpu, &alive);
 
-    let mut encoder = gpu.device.create_command_encoder(&Default::default());
-    compaction.record(&mut encoder);
-    gpu.queue.submit([encoder.finish()]);
-    let (_, _, _, live_after_first) = read_indirect(&gpu, &compaction);
+    fixture.scan_and_advance(&gpu);
+    let live_after_first = count_at(&read_counts(&gpu, &fixture), counts::SURVIVORS);
     assert_eq!(live_after_first, 200);
 
     // Now mark elements at [500, 600) alive too — well past the live range
@@ -353,12 +484,10 @@ fn a_second_scan_ignores_stale_data_past_the_previous_live_count() {
     for a in alive.iter_mut().take(600).skip(500) {
         *a = 1;
     }
-    upload_alive(&gpu, &compaction, &alive);
+    fixture.upload_alive(&gpu, &alive);
 
-    let mut encoder = gpu.device.create_command_encoder(&Default::default());
-    compaction.record(&mut encoder);
-    gpu.queue.submit([encoder.finish()]);
-    let (_, _, _, live_after_second) = read_indirect(&gpu, &compaction);
+    fixture.scan_and_advance(&gpu);
+    let live_after_second = count_at(&read_counts(&gpu, &fixture), counts::SURVIVORS);
 
     // If the scan had (wrongly) covered the whole capacity, this would be
     // 300. Restricted to the previous live range (200), the newly-alive

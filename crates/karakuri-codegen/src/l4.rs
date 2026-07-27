@@ -33,6 +33,20 @@
 //! given L4 procedure wants — that is a gap in today's tree, not a decision
 //! this crate is positioned to paper over.
 //!
+//! # Dead elements inside the draw range
+//!
+//! The draw's instance count is `counts.range`, which is how many slots the
+//! element buffer holds — not how many of them are alive. An element killed
+//! during the step that just ran keeps its slot until the *next* step's scan
+//! reclaims it, so it is inside the draw range for exactly one frame, and
+//! drawing it would show a particle that has already died.
+//!
+//! The vertex stage therefore reads the alive flag and collapses a dead
+//! element's quad to a single point, which rasterizes to nothing. Not a
+//! `discard` in the fragment stage: that would run the whole vertex stage,
+//! rasterize six vertices' worth of fragments, and pay the fragment block's
+//! cost per covered pixel only to throw the result away.
+//!
 //! # Varyings are minimal, not exhaustive
 //!
 //! `consumes` and `seed` are readable in both blocks, but only the ones
@@ -47,7 +61,7 @@ use std::collections::HashSet;
 use karakuri_ir::typed::{Checked, TBlock, TExpr, TExprKind, TStmt, Target};
 use karakuri_ir::{Ambient, Attr, BlockKind, Kind, Output};
 
-use crate::layout::{self, group, AttrSlot, UniformLayout, UniformLayoutBuilder};
+use crate::layout::{self, group, ElementLayout, UniformLayout, UniformLayoutBuilder};
 use crate::lower::{lower_expr, mangle_local, Resolver};
 use crate::prelude::{self, Requirements};
 use crate::ty::wgsl_ty;
@@ -58,8 +72,11 @@ pub struct L4Shader {
     pub source: String,
     pub uniform_layout: UniformLayout,
     pub uniform_pad_f32: u32,
-    /// `seed` plus `consumes`, in the order `group::ATTRS` binds them.
-    pub attr_slots: Vec<AttrSlot>,
+    /// The `Element` struct this shader declares — always exactly the
+    /// `elements` argument [`generate_l4`] was called with, echoed back so
+    /// callers that only kept the `L4Shader` still know what buffer it
+    /// expects.
+    pub element_layout: ElementLayout,
 }
 
 enum L4Block {
@@ -76,7 +93,7 @@ impl Resolver for L4Resolver {
         match self.block {
             // Storage buffers are read as storage, indexed by
             // `@builtin(instance_index)`, not as vertex buffers — the local
-            // was bound from `attr_<name>[elem]` in the vertex prologue.
+            // was bound from `elements[elem].<name>` in the vertex prologue.
             L4Block::Vertex => attr.name().to_string(),
             // Already resolved to a flat varying by the time fragment runs.
             L4Block::Fragment => format!("in.{}", attr.name()),
@@ -204,16 +221,19 @@ fn used_in_fragment(block: &TBlock) -> (bool, HashSet<Attr>) {
     (seed, attrs)
 }
 
-fn write_attr_bindings(out: &mut String, slots: &[AttrSlot]) {
-    for s in slots {
-        out.push_str(&format!(
-            "@group({}) @binding({}) var<storage, read> attr_{}: array<{}>;\n",
-            group::ATTRS,
-            s.binding,
-            s.name,
-            s.elem_ty.wgsl_name(),
-        ));
-    }
+fn write_element_bindings(out: &mut String, layout: &ElementLayout) {
+    layout::write_element_struct(out, layout);
+    out.push('\n');
+    out.push_str(&format!(
+        "@group({}) @binding({}) var<storage, read> elements: array<Element>;\n",
+        group::ATTRS,
+        layout::binding::ELEMENT,
+    ));
+    out.push_str(&format!(
+        "@group({}) @binding({}) var<storage, read> alive: array<u32>;\n",
+        group::ATTRS,
+        layout::binding::ALIVE,
+    ));
 }
 
 const CORNER_OF: &str = "\
@@ -254,10 +274,10 @@ fn vertex_entry(consumes: &[Attr], seed_used: bool, attrs_used: &[Attr], body: &
     let mut out = String::new();
     out.push_str("@vertex\n");
     out.push_str("fn vs(@builtin(vertex_index) corner_idx: u32, @builtin(instance_index) elem: u32) -> VsOut {\n");
-    out.push_str("    let seed = attr_seed[elem].x;\n");
+    out.push_str("    let seed = elements[elem].seed.x;\n");
     for &a in consumes {
         out.push_str(&format!(
-            "    let {} = attr_{}[elem].{};\n",
+            "    let {} = elements[elem].{}.{};\n",
             a.name(),
             a.name(),
             crate::ty::attr_swizzle(a.ty())
@@ -277,6 +297,15 @@ fn vertex_entry(consumes: &[Attr], seed_used: bool, attrs_used: &[Attr], body: &
     for &a in attrs_used {
         out.push_str(&format!("    out.{} = {};\n", a.name(), a.name()));
     }
+    // A dead element still occupies its slot until the next step's scan
+    // reclaims it — see the module doc. Every corner collapsing to the same
+    // clip-space point makes both triangles zero-area, so the rasterizer
+    // drops it without the fragment stage running at all. Written as an
+    // override of `out.clip` rather than folded into the expression above so
+    // that the live path's arithmetic is textually unchanged.
+    out.push_str("    if alive[elem] == 0u {\n");
+    out.push_str("        out.clip = vec4<f32>(0.0, 0.0, 0.0, 1.0);\n");
+    out.push_str("    }\n");
     out.push_str("    return out;\n");
     out.push_str("}\n\n");
     out
@@ -300,13 +329,24 @@ fn fragment_entry(seed_used: bool, attrs_used: &[Attr], body: &str) -> String {
     out
 }
 
-/// Lowers a `Checked` L4 procedure to WGSL. Panics if `checked.kind` is not
-/// `Kind::L4` or either block is missing — preconditions a real check pass
-/// already guarantees.
-pub fn generate_l4(checked: &Checked) -> L4Shader {
+/// Lowers a `Checked` L4 procedure to WGSL against `elements`, the paired L1
+/// procedure's [`ElementLayout`]. Panics if `checked.kind` is not `Kind::L4`
+/// or either block is missing — preconditions a real check pass already
+/// guarantees.
+///
+/// `elements` is a parameter rather than something this function derives
+/// from `checked.consumes`, because L4 reads the *same physical buffer* L1
+/// wrote: its `Element` struct has to be byte-identical to L1's, not merely
+/// wide enough to hold what this procedure happens to consume. Deriving a
+/// separate slot list from `consumes` (the old behaviour) could silently
+/// disagree with L1's `emit` — different attribute order, or a struct sized
+/// for fewer fields — and nothing here would catch it; the mismatch would
+/// only show up as a shader reading another attribute's bytes. `Set::build`
+/// has both checked procedures, so it is what passes the L1 side's layout
+/// through. L4 still only *reads* the slots it `consumes`, plus `seed` — it
+/// just declares the full struct so its layout matches.
+pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
     assert_eq!(checked.kind, Kind::L4, "generate_l4 called on a non-L4 procedure");
-
-    let attr_slots = layout::l4_attr_slots(&checked.consumes);
 
     let mut b = UniformLayoutBuilder::new();
     b.field("t", "f32");
@@ -346,7 +386,7 @@ pub fn generate_l4(checked: &Checked) -> L4Shader {
     let mut src = String::new();
     layout::write_uniform_struct(&mut src, &uniform_layout, uniform_pad_f32);
     src.push_str("\n@group(0) @binding(0) var<uniform> u: Uniforms;\n\n");
-    write_attr_bindings(&mut src, &attr_slots);
+    write_element_bindings(&mut src, elements);
     src.push('\n');
     src.push_str(&prelude::render(&req));
     src.push('\n');
@@ -357,5 +397,5 @@ pub fn generate_l4(checked: &Checked) -> L4Shader {
     src.push_str(&vertex_entry(&checked.consumes, seed_used, &attrs_used, &vertex_body));
     src.push_str(&fragment_entry(seed_used, &attrs_used, &fragment_body));
 
-    L4Shader { source: src, uniform_layout, uniform_pad_f32, attr_slots }
+    L4Shader { source: src, uniform_layout, uniform_pad_f32, element_layout: elements.clone() }
 }

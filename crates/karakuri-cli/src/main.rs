@@ -12,12 +12,13 @@
 
 mod compile;
 mod render;
+mod watch;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use karakuri_engine::{Gpu, Present, Set, VideoSource};
+use karakuri_engine::{Gpu, HotSwap, Present, Set, VideoSource, DEFAULT_BUDGET_MS};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -44,6 +45,15 @@ struct Args {
     seq_to: Option<PathBuf>,
     frames: u32,
     size: (u32, u32),
+    /// Watch the two `.kir` files and hot-swap on a change. Off by default:
+    /// a run that is not being edited should not carry a worker thread and a
+    /// watchdog it will never use.
+    watch: bool,
+    /// The frame budget the watchdog holds a swapped-in Set to, in
+    /// milliseconds. Exposed mostly so that rollback can be provoked on
+    /// demand — `--budget-ms 0` rejects everything — rather than only by
+    /// writing a procedure slow enough to trip it.
+    budget_ms: f32,
 }
 
 fn parse_args() -> Args {
@@ -56,6 +66,8 @@ fn parse_args() -> Args {
         seq_to: None,
         frames: 240,
         size: (1280, 720),
+        watch: false,
+        budget_ms: DEFAULT_BUDGET_MS,
     };
     let mut positional = Vec::new();
     let mut it = std::env::args().skip(1);
@@ -70,6 +82,13 @@ fn parse_args() -> Args {
                 }) {
                     args.overrides.push((k, v));
                 }
+            }
+            "--watch" => args.watch = true,
+            "--budget-ms" => {
+                args.budget_ms = it
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(DEFAULT_BUDGET_MS)
             }
             "--frames" => args.frames = it.next().and_then(|v| v.parse().ok()).unwrap_or(240),
             "--capacity" => {
@@ -133,6 +152,15 @@ fn main() {
                 eprintln!("{e}");
                 std::process::exit(1);
             }
+            // The live count is GPU state now, so reading it is a stall.
+            // Here that is free: every frame has been rendered and the queue
+            // is drained. It would not be free inside the loop above, which
+            // is why it is not there.
+            eprintln!(
+                "{} live of {} slots",
+                set.live_count(&gpu.device, &gpu.queue),
+                set.capacity()
+            );
         }
         None => {
             let event_loop = EventLoop::new().expect("event loop");
@@ -184,7 +212,11 @@ struct Live {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     present: Present,
-    set: Set,
+    /// The live Set, whatever is being built to replace it, and the watchdog
+    /// over the changeover. Without `--watch` this is a `HotSwap::fixed` and
+    /// there is no worker at all, so the frame loop below is the same code
+    /// either way.
+    swap: HotSwap,
     /// Fractional steps carried between frames, so a frame rate that does not
     /// divide the step rate still advances at the right average rate. The same
     /// accumulator shape as spawn quantisation, for the same reason.
@@ -233,8 +265,7 @@ impl ApplicationHandler for App {
         surface.configure(&gpu.device, &config);
 
         let present = Present::new(&gpu.device, format, config.width, config.height);
-        let mut set = build(&gpu, &l1, &l4, self.args.capacity, &self.args.overrides);
-        set.resize(config.width, config.height);
+        let set = build(&gpu, &l1, &l4, self.args.capacity, &self.args.overrides);
 
         eprintln!(
             "running: {} elements on {}",
@@ -242,13 +273,39 @@ impl ApplicationHandler for App {
             gpu.adapter.get_info().name
         );
 
+        let mut swap = if self.args.watch {
+            eprintln!(
+                "watching {} and {} — a save recompiles in the background and swaps \
+                 when ready, budget {:.1} ms",
+                self.args.l1.display(),
+                self.args.l4.display(),
+                self.args.budget_ms
+            );
+            HotSwap::new(
+                &gpu.device,
+                &gpu.queue,
+                set,
+                self.args.budget_ms,
+                Box::new(watch::Watch::new(
+                    self.args.l1.clone(),
+                    self.args.l4.clone(),
+                    self.args.capacity,
+                    SEED,
+                    self.args.overrides.clone(),
+                )),
+            )
+        } else {
+            HotSwap::fixed(set)
+        };
+        swap.resize(config.width, config.height);
+
         self.live = Some(Live {
             window,
             gpu,
             surface,
             config,
             present,
-            set,
+            swap,
             carry: 0.0,
             last: Instant::now(),
         });
@@ -279,7 +336,7 @@ impl Live {
         self.config.height = height;
         self.surface.configure(&self.gpu.device, &self.config);
         self.present.resize(&self.gpu.device, width, height);
-        self.set.resize(width, height);
+        self.swap.resize(width, height);
     }
 
     /// The one measurement in the program: elapsed real time becomes a step
@@ -308,13 +365,23 @@ impl Live {
         };
         let view = frame.texture.create_view(&Default::default());
 
-        self.set.prepare(&self.gpu.queue, steps);
+        // Everything a swap can do to this frame has already happened by the
+        // time `begin_frame` returns, and the borrow it returns is held until
+        // the last command is recorded — so the frame below is entirely one
+        // Set's or entirely the other's, and the compiler is what says so.
+        {
+            let set = self.swap.begin_frame();
+            set.prepare(&self.gpu.queue, steps);
 
-        let mut encoder = self.gpu.device.create_command_encoder(&Default::default());
-        self.set
-            .render(&mut encoder, self.present.hdr_view(), steps);
-        self.present.draw(&mut encoder, &view);
-        self.gpu.queue.submit([encoder.finish()]);
+            let mut encoder = self.gpu.device.create_command_encoder(&Default::default());
+            set.render(&mut encoder, self.present.hdr_view(), steps);
+            self.present.draw(&mut encoder, &view);
+            self.gpu.queue.submit([encoder.finish()]);
+        }
         frame.present();
+
+        for event in self.swap.events() {
+            eprintln!("{event}");
+        }
     }
 }

@@ -1,0 +1,64 @@
+// A fountain of sparks. Elements are born in a small disc at the base, thrown
+// upward with an outward lean, bent by a slow curl field, pulled back down by
+// gravity, and killed when they fall past the floor or outlive their lifetime.
+//
+// The first example with a `spawn` block, and so the first one that compacts.
+// Its live population is not `capacity` but the steady state the rate and the
+// flight time settle at — about 74000 of the default 262144 slots, which leaves
+// room for `spawn_rate` to be pushed up live without clipping against capacity.
+//
+// The plume rises to about y = 2 and opens to about radius 2, which sits
+// inside the 1-to-4 window the built-in orbit camera wants. Pairs with
+// `soft_points.kir`; that file's default hue is blue, and `--param hue=0.06`
+// turns the same procedure into fire.
+
+proc spark_fountain {
+  kind     L1
+  topology points
+  capacity [4096, 1048576] = 262144
+
+  param spawn_rate : float [0.0, 60000.0] = 26000.0
+  param lifetime   : float [0.5, 12.0]    = 5.0
+  param nozzle     : float [0.02, 1.5]    = 0.30
+  param launch     : float [0.5, 8.0]     = 4.4
+  param gravity    : float [0.0, 12.0]    = 3.0
+  param turbulence : float [0.0, 3.0]     = 0.55
+  param drag       : float [0.9, 1.0]     = 0.998
+
+  emit position, velocity, age
+
+  spawn {
+    let u = hash1(seed);
+    let v = hash1(seed + 1u);
+    let w = hash1(seed + 2u);
+
+    let d = disc_point(u, v) * nozzle;
+
+    position = vec3(d.x, -0.9, d.y);
+    // The outward lean scales with how far off-axis an element was born, so
+    // the plume opens into a cone instead of rising as a column. Its upward
+    // speed varies per element for the same reason — a single speed gives a
+    // hard-edged dome.
+    velocity = vec3(d.x * 2.4, launch * (0.75 + 0.5 * w), d.y * 2.4);
+    age      = 0.0;
+  }
+
+  element {
+    let flow = curl(position * 0.6 + vec3(0.0, t * 0.3, 0.0)) * turbulence;
+    let v    = (velocity + (flow + vec3(0.0, 0.0 - gravity, 0.0)) * dt) * drag;
+
+    velocity = v;
+    position = position + v * dt;
+    age      = age + dt;
+
+    // Two exits, and both are wanted: the floor is what gives the fountain
+    // its shape, and the lifetime is what stops an element caught in an
+    // updraft from living forever.
+    if position.y < -1.0 {
+      kill();
+    }
+    if age > lifetime {
+      kill();
+    }
+  }
+}
