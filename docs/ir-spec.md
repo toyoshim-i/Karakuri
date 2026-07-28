@@ -836,6 +836,13 @@ known. The total-cost decision lives there, not in the artifact.
   the `.kir` declares is rejected at Set build time.
 - Unknown `t` values are ignored, for forward compatibility.
 
+**What "implemented" covers here is the format, not yet its effect.** Every record above
+decodes, re-encodes, and folds down to a projection, and unknown ones survive the round
+trip — `karakuri-store` tests all of that. Nothing outside that crate reads a `Record`
+today: the CLI takes two `.kir` paths rather than a Set file, and `bind` in particular
+decodes into nothing, because no signal is wired to a parameter yet. So a Set file is a
+format the engine agrees with and does not yet obey.
+
 ### Binding noise
 
 A `bind` whose `signal` is `noise` takes a `noise` object, because a noise generator has
@@ -902,7 +909,22 @@ not been written yet.
 
 ---
 
-## Metadata file format
+## Beyond v0.2 — specified, not implemented
+
+Everything above this line is implemented and tested. Everything below is design that has
+been settled but not built: **no parser accepts it, no checker enforces it, and no
+generator emits it.** It is written down because later milestones depend on these shapes
+and because deciding them now keeps V1 from foreclosing them. Each carries the milestone
+it belongs to; see `docs/roadmap.md`.
+
+### Metadata file format — M4
+
+Nothing writes or reads one. `karakuri-store`'s record vocabulary covers the Set file
+and the session stream — `set`, `slot`, `capacity`, `param`, `bind`, `camera`, `seed`,
+`src`, `tick` — and **none of the records below**. The store is content-addressed from
+M1, which is half of what M4 asks of it; the separate metadata file is the other half
+and does not exist yet. `parent` in particular has to start being recorded with the
+first generated artifact or the genealogy has a hole at its root.
 
 Artifact metadata lives in a separate file, not in the `.kir` header. The `.kir` stays
 purely a source file that a human or an LLM can read and edit.
@@ -939,7 +961,7 @@ alternative, reusing a `t` for two different shapes in two different files, cann
 by a decoder that dispatches on `t` alone, which every ndjson reader does. It is not enough
 for the two vocabularies to be disjoint in practice; they have to be disjoint by name.
 
-### On `perf`
+#### On `perf`
 
 The record takes a different shape per kind, because the two do not scale the same way.
 
@@ -960,16 +982,6 @@ The L4 number is for the library to display and for humans to compare. The budge
 belongs to the probe in stage 7, which measures the real Set with its real parameters. That
 is the existing division of labour — estimate conservatively, let the probe be the
 authority — and L4 is simply a case where the estimate cannot be made sharp.
-
----
-
-## Beyond v0.2 — specified, not implemented
-
-Everything above this line is implemented and tested. Everything below is design that has
-been settled but not built: **no parser accepts it, no checker enforces it, and no
-generator emits it.** It is written down because later milestones depend on these shapes
-and because deciding them now keeps V1 from foreclosing them. Each carries the milestone
-it belongs to; see `docs/roadmap.md`.
 
 ### Attribute derivation — M3
 

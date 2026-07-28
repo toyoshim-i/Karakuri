@@ -67,7 +67,8 @@ Orthogonal to the layers:
 
 - **Control plane** — node agents, director, mix agent, generation worker (M6)
 - **Library** — search, genealogy, embeddings, previews (M4), on top of the content
-  addressing and separate metadata files that exist from M1
+  addressing that exists from M1. The separate metadata file it also wants does not exist
+  yet — see M4's demands
 
 ### Three clocks
 
@@ -135,7 +136,17 @@ and hot-swap it without dropping a frame.
 One Set, hardcoded slots, no UI, synthesized signals only, L1 and L4 only. If this loop
 does not close, the whole concept needs rethinking. Everything after this is engineering.
 
-How much of it is closed is tracked in `README.md`, not here.
+**Closed.** All three clauses hold; what remains unbuilt inside V1's scope is tracked in
+`README.md`, not here.
+
+What it cost, since it is the only evidence about how the later estimates should be read:
+the loop closed, and then four separate things that had checked clean were found to come
+up short at runtime — an unimplemented derivation rule, a Set-composition check that was
+specified and written nowhere, a `spawn_rate` requirement no pass enforced, and a clock
+that stood still across a frame's substeps. None was found by a test that existed.
+Three were found by reading the code against the specification, and the fourth by
+disbelieving a comment. Budget for that in every milestone below: the implementation is
+not the expensive half.
 
 ~2–3 weeks.
 
@@ -268,11 +279,17 @@ fine alone and is unreadable next to lights.
 
 **Clear before building**
 
-- **Pack attributes into one storage buffer per direction.** One buffer pair per attribute
-  puts 12 storage buffers in the L1 compute stage for three emitted attributes; the WebGPU
-  default limit is 8 and the downlevel default is 4. L2 stacking multiplies the attribute
-  count, so this is already over budget on a conservative adapter. Packing also lets
-  compaction move one struct rather than touch N buffers.
+- ~~Pack attributes into one storage buffer per direction.~~ **Done in M1**, because
+  compaction had to be written against the packed layout or written twice. The compute
+  stage binds 4 buffers now and stops growing with the attribute count, so L2 stacking no
+  longer walks into the WebGPU default limit of 8. What was *not* done is narrowing each
+  slot to its attribute's natural width: every slot is still a padded 16 bytes, which
+  doubles VRAM per element against what it needs. That bill comes due at M2's deck, where
+  the constraint is how many Sets fit resident, and it is one function in `layout.rs`.
+- **An L4 is now compiled against a specific L1's element layout**, since both declare the
+  same struct over the same buffer. That is the slot interface contract arriving early and
+  informally. When the contract becomes a real declaration, it should subsume this rather
+  than sit beside it.
 - **Give an L4 procedure a way to say what it renders.** Quad expansion is justified by
   `topology points`, but `topology` is declared on the L1 header and a checked L4 tree has
   no field for it. One topology and one blend mode hide the problem; M3 adds a second of
@@ -307,9 +324,13 @@ new one.
 
 **Demands on earlier work**
 
-- Content addressing and separate metadata files from M1
+- Content addressing and separate metadata files from M1. **Half done.** The store is
+  content-addressed and tested; the metadata file is specified and does not exist — no
+  record type for it is in the vocabulary `karakuri-store` decodes. See "Metadata file
+  format" under Beyond v0.2 in `docs/ir-spec.md`
 - `parent` recorded from the first generated artifact, or the genealogy has a hole at the
-  root
+  root. Nothing is recorded yet, and the first generated artifact is close — this is the
+  demand most likely to be missed by simply arriving late
 
 ~4–6 weeks.
 
