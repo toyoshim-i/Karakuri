@@ -62,6 +62,14 @@ pub enum SetError {
         l4: String,
         missing: String,
     },
+    /// A build panicked rather than returning. Not reachable through any
+    /// `.kir` a checker accepts, which is exactly why it needs a variant:
+    /// wgpu's default handler for an uncaptured validation error is a panic,
+    /// so generated WGSL that naga refuses kills whatever thread built it.
+    /// On the swap worker that is silent — the render thread keeps running
+    /// and simply never receives anything again. A rejection says so.
+    #[error("building `{label}` panicked, which is a bug in this compiler rather than in the `.kir`: {detail}")]
+    Panicked { label: String, detail: String },
 }
 
 /// Bytes per element in the alive buffer: a dense `array<u32>`, one flag per

@@ -5,15 +5,25 @@
 //! validation stages, and the diagnostics it prints when one of them refuses —
 //! is already off the render thread before `Set::build` is even reached.
 //!
-//! ## Polling mtimes, not `notify`
+//! ## Polling, not `notify`
 //!
 //! The worker is a poll loop already: it has to wake regularly to free Sets
 //! the render thread retired, so there is no blocking `recv` for a filesystem
 //! event to replace. Given that, `notify` would add a dependency, a platform
 //! backend per OS, and a second event vocabulary to debounce, in exchange for
 //! shaving a tenth of a second off a loop whose other end is a human editing a
-//! file. Two `metadata()` calls every hundred milliseconds is not a cost worth
+//! file. Reading two small files every hundred milliseconds is not a cost worth
 //! avoiding here, and it is the same amount of code.
+//!
+//! ## Contents, not timestamps
+//!
+//! What is compared is a hash of each file's bytes, not its mtime. A swap is
+//! not free — the incoming Set starts cold, at `t` zero, with nothing primed —
+//! so it must not happen for a save that changed no text. `touch`, a formatter
+//! that rewrites identical bytes, and `git checkout` of the branch you are
+//! already on all move the mtime, and under an mtime comparison each of them
+//! restarts the visual for no reason. Reading the file is not extra work
+//! either: this `Source` reads it a moment later anyway to compile it.
 //!
 //! ## Debouncing
 //!
@@ -28,8 +38,9 @@
 //! Nothing is requested, so nothing is built, so nothing is swapped — the
 //! running Set keeps running with its `t` and its element buffers untouched.
 
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use karakuri_engine::{Request, Source};
 
@@ -47,10 +58,11 @@ pub struct Watch {
     capacity: u32,
     seed_salt: u32,
     overrides: Vec<(String, f32)>,
-    /// The timestamps as of the previous poll. `None` for a file that does not
-    /// exist or cannot be stat'd, which compares equal to itself and so reads
-    /// as "unchanged" rather than as a change every interval.
-    stamps: [Option<SystemTime>; 2],
+    /// A hash of each file's contents as of the previous poll. `None` for a
+    /// file that does not exist or cannot be read, which compares equal to
+    /// itself and so reads as "unchanged" rather than as a change every
+    /// interval — a deleted file is not an edit to react to.
+    stamps: [Option<u64>; 2],
     /// A change has been seen but not yet acted on — see "Debouncing" above.
     settling: bool,
 }
@@ -78,9 +90,18 @@ impl Watch {
         watch
     }
 
-    fn stamp(&self) -> [Option<SystemTime>; 2] {
-        let mtime = |path: &PathBuf| std::fs::metadata(path).and_then(|m| m.modified()).ok();
-        [mtime(&self.l1), mtime(&self.l4)]
+    fn stamp(&self) -> [Option<u64>; 2] {
+        // Not a cryptographic hash and not trying to be: this compares a file
+        // against its own previous contents seconds earlier, where the only
+        // adversary is an editor writing the same bytes back.
+        let digest = |path: &PathBuf| {
+            std::fs::read(path).ok().map(|bytes| {
+                let mut h = DefaultHasher::new();
+                bytes.hash(&mut h);
+                h.finish()
+            })
+        };
+        [digest(&self.l1), digest(&self.l4)]
     }
 }
 
@@ -127,5 +148,48 @@ impl Source for Watch {
             params: self.overrides.clone(),
             label,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn watch_on(dir: &std::path::Path) -> Watch {
+        Watch::new(dir.join("a.kir"), dir.join("b.kir"), 4096, 1, Vec::new())
+    }
+
+    /// A save that changed no bytes is not an edit. Under an mtime comparison
+    /// `touch`, a formatter, or a `git checkout` of the branch already checked
+    /// out each restarts the visual from `t` zero for nothing.
+    #[test]
+    fn rewriting_identical_bytes_is_not_a_change() {
+        let dir = std::env::temp_dir().join("karakuri-watch-identical");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        std::fs::write(dir.join("a.kir"), "proc a {}").expect("write");
+        std::fs::write(dir.join("b.kir"), "proc b {}").expect("write");
+
+        let w = watch_on(&dir);
+        let before = w.stamp();
+        std::thread::sleep(Duration::from_millis(10));
+        std::fs::write(dir.join("a.kir"), "proc a {}").expect("rewrite");
+        assert_eq!(before, w.stamp(), "identical bytes read as a change");
+
+        std::fs::write(dir.join("a.kir"), "proc a { }").expect("edit");
+        assert_ne!(before, w.stamp(), "a real edit read as unchanged");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A missing file is stable rather than a change every interval, so
+    /// deleting one does not put the watcher into a recompile loop against a
+    /// path that is not there.
+    #[test]
+    fn a_missing_file_is_stable() {
+        let dir = std::env::temp_dir().join("karakuri-watch-missing");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let w = watch_on(&dir);
+        assert_eq!(w.stamp(), [None, None]);
+        assert_eq!(w.stamp(), w.stamp());
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

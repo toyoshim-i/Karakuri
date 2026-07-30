@@ -173,11 +173,26 @@ fn kind_name(kind: Kind) -> &'static str {
 fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
     match proc.kind {
         Kind::L1 => {
-            if proc.capacity.is_none() {
-                errors.push(IrError::contract(
+            match &proc.capacity {
+                None => errors.push(IrError::contract(
                     proc.span,
                     "L1 procedures require a `capacity` declaration",
-                ));
+                )),
+                // The range is what a Set is allowed to be built at, so a
+                // minimum of zero says a Set of no elements is legal. It is
+                // not: the compaction scan has no level pyramid to build over
+                // an empty buffer, and it asserts rather than degrading. That
+                // assert is inside `Set::build`, which runs on the swap
+                // worker — an internal panic on a background thread, where the
+                // contract calls for a diagnostic against the declaration.
+                Some(cap) if cap.min == 0 => errors.push(
+                    IrError::contract(
+                        cap.span,
+                        "`capacity` minimum must be at least 1; a Set of no elements has nothing to run",
+                    )
+                    .with_hint("use `[1, …]`, or a minimum the procedure actually looks right at"),
+                ),
+                Some(_) => {}
             }
             if proc.topology.is_none() {
                 errors.push(IrError::contract(

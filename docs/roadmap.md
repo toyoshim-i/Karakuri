@@ -219,6 +219,13 @@ fine alone and is unreadable next to lights.
 
 - Set must already be the compilation and lifecycle unit in M1, even with one Set
 - `VideoSource` must exist as a type in M1
+- **One `begin_frame` per encoder has to become structural before there are several Sets.**
+  M1's hot swap replaces the live Set only at the top of `begin_frame`, which is correct but
+  is a convention rather than something the types enforce: a caller can open one encoder,
+  end the borrow, take a second Set, and record both into it. With one Set and one frame
+  loop that is a comment; with a deck compositing up to four and priming the rest it is a
+  frame built from two different simulations. The fix is a guard owning both the `&mut Set`
+  and the encoder, submitting on drop — cheap now, a change to every call site later
 - Every signal consumer must branch on confidence, never on provider presence
 - The fork-and-swap invariant must hold from M1, because it is how Sets get edited live
 

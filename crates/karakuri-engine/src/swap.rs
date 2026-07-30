@@ -24,17 +24,31 @@
 //! there is no `device.poll(PollType::Wait)` anywhere on the frame path. A
 //! frame that finds nothing waiting does nothing about it and renders.
 //!
-//! ## Why a swap cannot land mid-frame
+//! ## Where a swap lands, and what actually guarantees it
 //!
 //! [`HotSwap::begin_frame`] is the only place `live` is replaced, and it
-//! returns `&mut Set` borrowed from `&mut self`. The caller holds that borrow
-//! for as long as it is recording the frame, and while it holds it the borrow
-//! checker will not let it call `begin_frame` — or anything else on the
-//! `HotSwap` — again. So "a frame renders entirely with the old Set or
-//! entirely with the new one" is not a claim about when the code happens to
-//! call what; it is the only shape the code compiles in. A swap in the middle
-//! of an encoder would require two overlapping `&mut` borrows of the same
-//! `HotSwap`.
+//! returns `&mut Set` borrowed from `&mut self`. While a caller holds that
+//! borrow the borrow checker will not let it call `begin_frame` — or anything
+//! else on the `HotSwap` — again, so no *single* `&mut Set` can change
+//! identity underneath a frame.
+//!
+//! **That is weaker than "a swap cannot land mid-frame", and the difference
+//! matters.** The command encoder is the caller's, and it borrows nothing from
+//! the `HotSwap`. A caller is free to open one encoder, drop the borrow, call
+//! `begin_frame` again, and record a second Set's passes into the same
+//! encoder; that compiles, and if a build arrived in between the encoder ends
+//! up holding half of one Set's frame and half of another's. The property this
+//! module wants is "one `begin_frame` per encoder", and nothing in the types
+//! says so — it is a convention `karakuri-cli`'s frame loop and the harness in
+//! `tests/hot_swap.rs` both happen to keep.
+//!
+//! Making it structural means giving `begin_frame` the encoder: a guard that
+//! owns both the `&mut Set` and the `CommandEncoder`, hands them out together,
+//! and submits on drop, so there is no way to reach a second Set without first
+//! ending the frame. That is a change to how every caller records a frame, so
+//! it is written down here rather than done halfway. Until then the honest
+//! claim is: **the live Set is only ever replaced at the top of
+//! `begin_frame`**, and callers must call it exactly once per frame.
 //!
 //! ## What a swap does not do
 //!
@@ -202,7 +216,15 @@ pub enum Event {
     /// with its `t` and its live count untouched.
     Rejected { label: Arc<str>, error: SetError },
     /// The watchdog's verdict, in favour. The previous Set is released.
-    Accepted { label: Arc<str>, median_ms: f32 },
+    Accepted {
+        label: Arc<str>,
+        median_ms: f32,
+        /// Reported alongside, because "held the budget" is not a useful
+        /// thing to read without the number it held against — the default is
+        /// derived from 60 Hz and a display running faster than that can halve
+        /// its frame rate and still come in under it.
+        budget_ms: f32,
+    },
     /// The watchdog's verdict, against. The previous Set is live again, at the
     /// `t` it was parked at, and the candidate is released.
     RolledBack {
@@ -210,6 +232,10 @@ pub enum Event {
         median_ms: f32,
         budget_ms: f32,
     },
+    /// The build worker is gone — it can only leave by panicking — so nothing
+    /// will be built again for the rest of the run. Emitted once. The live Set
+    /// keeps running; what stops is the ability to replace it.
+    WorkerLost,
 }
 
 impl std::fmt::Display for Event {
@@ -221,9 +247,14 @@ impl std::fmt::Display for Event {
             Event::Rejected { label, error } => {
                 write!(f, "`{label}` was refused, nothing changed:\n{error}")
             }
-            Event::Accepted { label, median_ms } => write!(
+            Event::Accepted {
+                label,
+                median_ms,
+                budget_ms,
+            } => write!(
                 f,
-                "`{label}` held the budget ({median_ms:.2} ms median frame interval, host clock)"
+                "`{label}` held the budget: {median_ms:.2} ms median frame interval \
+                 against {budget_ms:.2} ms (host clock)"
             ),
             Event::RolledBack {
                 label,
@@ -234,6 +265,11 @@ impl std::fmt::Display for Event {
                 "rolled back `{label}`: {median_ms:.2} ms median frame interval over \
                  {JUDGE_FRAMES} frames exceeds the {budget_ms:.2} ms budget \
                  (host clock — see README's Working style)"
+            ),
+            Event::WorkerLost => write!(
+                f,
+                "the build worker is gone; nothing more will be built this run \
+                 (the live Set is unaffected)"
             ),
         }
     }
@@ -290,6 +326,11 @@ pub struct HotSwap {
     retired: Vec<Set>,
     stop: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
+    /// The worker was expected and its channel is closed, and that has been
+    /// reported once. A worker only closes it by panicking — `run_worker`
+    /// otherwise runs until [`HotSwap::drop`] — and the symptom without this
+    /// is a `--watch` session that silently stops responding to saves.
+    worker_lost: bool,
 }
 
 impl HotSwap {
@@ -337,6 +378,7 @@ impl HotSwap {
             retired: Vec::with_capacity(GRAVEYARD_CAPACITY),
             stop,
             worker: Some(worker),
+            worker_lost: false,
         }
     }
 
@@ -363,6 +405,7 @@ impl HotSwap {
             retired: Vec::new(),
             stop: Arc::new(AtomicBool::new(false)),
             worker: None,
+            worker_lost: false,
         }
     }
 
@@ -373,8 +416,12 @@ impl HotSwap {
     /// watchdog (which may roll back), and then a finished build is installed
     /// if one has arrived. The caller records its whole frame through the
     /// returned reference, and cannot touch this `HotSwap` again until it
-    /// drops it — which is why a swap cannot land mid-encoder. See "Why a swap
-    /// cannot land mid-frame" in the module doc.
+    /// drops it.
+    ///
+    /// **Call this exactly once per frame.** Calling it a second time inside
+    /// one command encoder compiles, and records two Sets' passes into that
+    /// encoder; see "Where a swap lands, and what actually guarantees it" in
+    /// the module doc for why the borrow alone does not rule that out.
     ///
     /// Allocates nothing, compiles nothing, and never blocks: the channel is
     /// polled with `try_recv` and the graveyard with `try_lock`.
@@ -473,6 +520,7 @@ impl HotSwap {
             self.events.push(Event::Accepted {
                 label: trial.label,
                 median_ms,
+                budget_ms: self.budget_ms,
             });
         }
     }
@@ -482,15 +530,46 @@ impl HotSwap {
         // Not while something is on trial: `previous` is the rollback target
         // and there is exactly one of it, so accepting a second candidate
         // would mean losing the only Set known to work. A build that finishes
-        // during a trial simply stays in the channel until the verdict is in,
-        // which is also what a file watcher wants — the build still waiting is
-        // the newer one.
+        // during a trial stays in the channel until the verdict is in.
         if self.trial.is_some() {
             return;
         }
-        // `try_recv`, never `recv`. `Empty` and `Disconnected` are the same
-        // thing from here: no Set to install, so render and move on.
-        let Ok(built) = self.built.try_recv() else {
+        // `try_recv`, never `recv`, and drained to the *newest* result rather
+        // than stopping at the first. An `mpsc` channel is FIFO and a judging
+        // window is long enough for two saves to finish behind it, so taking
+        // the front of the queue would put a superseded Set on screen for a
+        // whole window before reaching the one the operator is waiting for.
+        // A superseded error is still reported — a diagnostic is the point of
+        // an error, superseded or not — and a superseded Set is retired to the
+        // worker rather than dropped here.
+        let mut newest: Option<Built> = None;
+        loop {
+            match self.built.try_recv() {
+                Ok(next) => {
+                    if let Some(stale) = newest.replace(next) {
+                        match stale.result {
+                            Ok(set) => self.retire(set),
+                            Err(error) => self.events.push(Event::Rejected {
+                                label: stale.label,
+                                error,
+                            }),
+                        }
+                    }
+                }
+                // `Empty` and `Disconnected` are the same thing from here: no
+                // Set to install, so render and move on. A worker that is gone
+                // while one was expected is reported once, below.
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    if self.worker.is_some() && !self.worker_lost {
+                        self.worker_lost = true;
+                        self.events.push(Event::WorkerLost);
+                    }
+                    break;
+                }
+                Err(mpsc::TryRecvError::Empty) => break,
+            }
+        }
+        let Some(built) = newest else {
             return;
         };
 
@@ -589,23 +668,40 @@ fn run_worker(
         };
         let label: Arc<str> = request.label.into();
 
-        let result = Set::build(
-            &device,
-            &queue,
-            &request.l1,
-            &request.l4,
-            request.capacity,
-            request.seed_salt,
-        )
-        .map(|mut set| {
-            for (name, value) in request.params {
-                match set.params.get_mut(&name) {
-                    Some(slot) => *slot = value,
-                    None => eprintln!("  no parameter named `{name}`, ignoring"),
+        // Caught, not allowed to propagate. A panic here would take the whole
+        // worker with it, and the render thread's only symptom would be that
+        // nothing is ever built again — no error, no event, just a `--watch`
+        // that quietly stops responding to saves. That is the worst shape a
+        // failure can take on stage. `Set::build` creates shader modules, and
+        // wgpu's default handler for an uncaptured validation error is a
+        // panic, so this is reachable from any generated WGSL naga refuses:
+        // a compiler bug, but one that must not be an unexplained silence.
+        let build = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            Set::build(
+                &device,
+                &queue,
+                &request.l1,
+                &request.l4,
+                request.capacity,
+                request.seed_salt,
+            )
+            .map(|mut set| {
+                for (name, value) in request.params {
+                    match set.params.get_mut(&name) {
+                        Some(slot) => *slot = value,
+                        None => eprintln!("  no parameter named `{name}`, ignoring"),
+                    }
                 }
-            }
-            set
-        });
+                set
+            })
+        }));
+        let result = match build {
+            Ok(result) => result,
+            Err(payload) => Err(SetError::Panicked {
+                label: label.to_string(),
+                detail: panic_detail(&payload),
+            }),
+        };
 
         if result.is_ok() {
             // `Set::build` leaves the whole element and alive buffer contents
@@ -625,6 +721,18 @@ fn run_worker(
             // The render thread is gone.
             break;
         }
+    }
+}
+
+/// The message out of a caught panic, which arrives as a `Box<dyn Any>` and is
+/// a `&str` or a `String` for every panic the standard macros produce.
+fn panic_detail(payload: &Box<dyn std::any::Any + Send>) -> String {
+    if let Some(s) = payload.downcast_ref::<&str>() {
+        (*s).to_string()
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "no message".to_string()
     }
 }
 
