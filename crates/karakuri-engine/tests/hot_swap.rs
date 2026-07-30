@@ -308,10 +308,12 @@ fn steps_taken(set: &Set) -> u64 {
 /// `try_recv` on the frame path would make that count zero.
 ///
 /// "Not inside a frame" is checked by observing the live Set's identity at the
-/// top and at the bottom of every frame body. The real guarantee is stronger
-/// and is not a test: `begin_frame` returns a `&mut Set` borrowed from the
-/// `HotSwap`, and while the frame holds it the borrow checker will not permit
-/// a second call. This asserts the observable consequence of that.
+/// top and at the bottom of every frame body. Note what that does *not* check:
+/// the borrow `begin_frame` returns stops a second call while it is held, but
+/// the encoder is the caller's and borrows nothing, so a caller that calls
+/// `begin_frame` twice inside one encoder still gets two Sets in one frame.
+/// This asserts the property for a frame loop shaped like the CLI's, which is
+/// the convention both callers keep — see the module doc on `swap.rs`.
 #[test]
 fn a_build_runs_in_the_background_and_lands_between_two_frames() {
     let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
@@ -550,6 +552,86 @@ fn a_candidate_that_holds_the_budget_is_kept() {
     );
 }
 
+/// Two saves during one judging window leave two finished builds behind it, and
+/// the channel is FIFO. Installing the front of that queue would put a
+/// superseded Set on screen for a whole window — thirty-eight frames of a `.kir`
+/// the operator has already replaced — before reaching the current one. The
+/// verdict frame has to drain to the newest.
+///
+/// No frames are rendered while `b` and `c` build, so nothing can be installed
+/// and the trial over `a` cannot end: both results are guaranteed to be waiting
+/// when the window finally closes.
+#[test]
+fn the_build_installed_after_a_verdict_is_the_newest_one() {
+    const THIRD: u32 = 12_288;
+    const FOURTH: u32 = 16_384;
+
+    let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
+    for _ in 0..5 {
+        h.frame();
+    }
+    tx.send(request(L4, SECOND, "a")).expect("worker alive");
+    h.frames_until(is_swapped, "the first swap");
+    assert!(h.swap.on_trial(), "`a` is not being watched");
+
+    tx.send(request(L4, THIRD, "b")).expect("worker alive");
+    tx.send(request(L4, FOURTH, "c")).expect("worker alive");
+    let waited = Instant::now();
+    while waited.elapsed() < Duration::from_secs(5) {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    let seen = h.frames_until(is_swapped, "the swap after the verdict").1;
+    assert_eq!(
+        h.swap.set().capacity(),
+        FOURTH,
+        "a superseded build was installed after the verdict; events: {seen:?}"
+    );
+    assert!(
+        !seen.iter().any(|s| s.contains("`b`")),
+        "`b` was superseded before it was ever live and should not have been shown: {seen:?}"
+    );
+}
+
+/// The worker can only leave its loop by panicking, and when it does its end of
+/// the channel closes. `Disconnected` and `Empty` are otherwise the same thing
+/// to the render thread, so without a distinction a `--watch` session would go
+/// on rendering and silently ignore every save for the rest of the run. It is
+/// reported once and the live Set is untouched.
+#[test]
+fn a_worker_that_dies_is_reported_once_and_does_not_disturb_the_live_set() {
+    struct Exploding(u32);
+    impl Source for Exploding {
+        fn poll(&mut self) -> Option<Request> {
+            self.0 += 1;
+            if self.0 > 2 {
+                panic!("deliberate: a build worker that will not come back");
+            }
+            std::thread::sleep(karakuri_engine::swap::POLL_INTERVAL);
+            None
+        }
+    }
+
+    let mut h = Harness::new(GENEROUS_MS, FIRST, (WIDTH, HEIGHT), Box::new(Exploding(0)));
+    let started = Instant::now();
+    let mut lost = 0;
+    while started.elapsed() < Duration::from_secs(5) {
+        h.frame();
+        lost += h
+            .swap
+            .events()
+            .filter(|e| matches!(e, Event::WorkerLost))
+            .count();
+        if lost > 0 && started.elapsed() > Duration::from_secs(1) {
+            break;
+        }
+    }
+
+    assert_eq!(lost, 1, "the dead worker was reported {lost} times, not once");
+    assert_eq!(h.swap.set().capacity(), FIRST, "the live Set was disturbed");
+    assert!(!h.swap.on_trial());
+}
+
 // ---------------------------------------------------------------------------
 // Measured, reported.
 // ---------------------------------------------------------------------------
@@ -586,6 +668,12 @@ fn frame_times_across_a_swap_are_measured_and_reported() {
 
     tx.send(request(L4, capacity, "second")).expect("worker alive");
     let in_flight = h.frames_until(is_swapped, "the swap").0;
+    // One more frame before the slice indices are taken. `Harness::frame`
+    // pushes an interval at the *top* of a frame, so when the `Swapped` event
+    // is first seen the swap frame has begun but not ended and its interval is
+    // not in the vector yet — the last entry is the frame before it. Rendering
+    // one more frame is what puts the swap frame's own interval at the end.
+    h.frame();
     let at_swap = h.intervals.len();
 
     for _ in 0..120 {

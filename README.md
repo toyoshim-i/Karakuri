@@ -176,11 +176,16 @@ of a frame. There is no `recv` and no `device.poll(Wait)` anywhere on the frame 
 `--watch` is both the demo and the development loop. What a swap does and does not do is
 worth stating exactly:
 
-- **It lands between two frames, never inside one.** This is structural rather than a
-  matter of call ordering: the only function that replaces the live Set returns it as a
-  `&mut` borrow that the caller holds for the whole frame body, so recording a frame and
-  swapping mid-frame would need two overlapping mutable borrows of the same value. The
-  compiler is what enforces it.
+- **It lands between two frames, never inside one — by convention, not by construction.**
+  The live Set is only ever replaced at the top of `begin_frame`, which returns it as a
+  `&mut` borrow the caller holds for the whole frame body, so no single reference changes
+  identity underneath a frame. That is weaker than it sounds and the difference is worth
+  stating: the command encoder is the caller's and borrows nothing, so a caller that calls
+  `begin_frame` twice inside one encoder gets two Sets in one frame, and it compiles. Both
+  callers in this repository call it once per frame; nothing in the types says they have
+  to. Making it structural means handing the encoder out from `begin_frame` too, behind a
+  guard that submits on drop — a change to how every caller records a frame, so it is
+  written down in `crates/karakuri-engine/src/swap.rs` rather than done halfway.
 - **It transfers no state.** A new procedure means new buffers, so the incoming Set starts
   cold: `t` at zero, nothing primed. Warming a Set out of sight before it is shown is M2's
   Priming, and no partial version of it is done here.
@@ -190,20 +195,28 @@ worth stating exactly:
   outgoing Set is live again at exactly the `t` it was parked at. Only after it passes is
   the old one released, and it is released on the worker thread: dropping a Set frees GPU
   resources, and a free on the render thread is the same invariant as an allocation on it.
+- **Saves that land during a window are collapsed to the newest.** A judging window is
+  about forty frames, which is long enough for two more saves to compile behind it. The
+  channel is first-in-first-out, so the verdict frame drains it to the last finished build
+  rather than taking the front of the queue; a superseded Set is never shown, and a
+  superseded build that *failed* still prints its diagnostics.
 - **A build that fails changes nothing.** A `.kir` that will not compile prints its
   diagnostics on the worker thread and never becomes a request at all; a pair `Set::build`
   refuses is reported and put down. Either way the running Set keeps its `t`, its element
   buffers, and its live count.
 
 Measured across a swap at capacity 262144, 1280×720, **on a host clock** — the same caveat
-as every other number in this file, and here it is the frame *interval*, which includes
-vsync, the compositor, and whatever else the machine was doing:
+as every other number in this file. Two more that are specific to these: it is a frame
+*interval* rather than a GPU cost, and it was taken in the **headless** test harness, which
+has no surface and therefore no vsync and no compositor. Its `device.poll(Wait)` per frame
+stands in for the pacing a real window would get, so these are the cost of producing a
+frame, not the cost of showing one:
 
 | | median | worst |
 |---|---|---|
-| steady, before the request | 4.1 ms | 9.7 ms |
-| the frame the swap landed on | 4.8 ms | — |
-| steady, after the swap | 3.9 ms | 7.7 ms |
+| steady, before the request | 5.0 ms | 13.0 ms |
+| the frame the swap landed on | 4.6 ms | — |
+| steady, after the swap | 5.0 ms | 10.3 ms |
 
 Three to five frames were rendered between the request going out and the swap landing,
 which is what "does not block" means operationally — a blocking receive would make that

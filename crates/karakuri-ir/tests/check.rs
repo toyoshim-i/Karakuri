@@ -660,3 +660,59 @@ proc with_rate {
     let checked = check_ok(src);
     assert!(checked.block(BlockKind::Spawn).is_some());
 }
+
+/// A `capacity` range starting at zero is rejected at the declaration.
+///
+/// Not a nicety. `Compaction::new` asserts a non-zero capacity, and
+/// `Set::build` runs on the hot-swap worker thread — so a `.kir` declaring
+/// `[0, …]` built at 0 was an assert firing on a background thread, which the
+/// render thread sees as nothing at all. Catching it here means the diagnostic
+/// points at the declaration that is wrong, which is also the only place a
+/// regenerating model can fix it.
+#[test]
+fn a_capacity_range_starting_at_zero_is_rejected() {
+    let src = r#"
+proc empty_ok {
+  kind     L1
+  topology points
+  capacity [0, 1024] = 256
+
+  emit position
+
+  element {
+    position = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#;
+    let errs = check_err(src);
+    let hit = errs
+        .iter()
+        .find(|e| e.message.contains("capacity") && e.message.contains("at least 1"))
+        .unwrap_or_else(|| panic!("expected a capacity-minimum diagnostic, got: {errs:?}"));
+    let text = &src[hit.span.start as usize..hit.span.end as usize];
+    assert!(
+        text.contains("capacity"),
+        "the span points at `{text}` rather than the declaration"
+    );
+}
+
+/// The negative control: a minimum of exactly 1 is fine, so the check above
+/// cannot be passing by rejecting every `capacity` it sees.
+#[test]
+fn a_capacity_range_starting_at_one_is_accepted() {
+    let src = r#"
+proc smallest {
+  kind     L1
+  topology points
+  capacity [1, 1024] = 256
+
+  emit position
+
+  element {
+    position = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#;
+    let checked = check_ok(src);
+    assert_eq!(checked.capacity.expect("a capacity range").min, 1);
+}

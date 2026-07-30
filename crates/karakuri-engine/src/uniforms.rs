@@ -263,6 +263,26 @@ mod tests {
         p.f32("nonexistent", 1.0);
     }
 
+    /// A `Set` built for one layout must not be able to pack against another.
+    /// The pipelines and the uniform buffer behind a scratch were sized against
+    /// the layout it was constructed with; a second layout of a different shape
+    /// reaching it means two of them have been crossed.
+    #[test]
+    #[should_panic(expected = "sized against a different uniform layout")]
+    fn a_scratch_cannot_be_packed_against_a_layout_it_was_not_sized_for() {
+        let mine = layout();
+        let mut scratch = UniformScratch::new(&mine);
+
+        let mut b = UniformLayoutBuilder::new();
+        b.field("t", "f32");
+        b.field("capacity", "u32");
+        b.field("glow", "vec3<f32>");
+        b.field("extra", "mat4x4<f32>");
+        let theirs = b.finish().0;
+
+        let _ = scratch.pack(&theirs);
+    }
+
     #[test]
     #[should_panic(expected = "not f32")]
     fn writing_a_field_at_the_wrong_type_is_refused() {
