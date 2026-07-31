@@ -1,14 +1,24 @@
 //! Offscreen rendering to a PNG.
 //!
-//! The same path the window takes, minus the window: the Set renders into the
-//! linear HDR target and the present pass encodes to sRGB exactly once, on
-//! write, because the destination texture carries the transfer function. That
-//! makes this a preview of what is actually on screen rather than a second
-//! rendering path that might disagree with it.
+//! The same path the window takes, minus the window: the deck composites its
+//! Live slots into the linear HDR target, the present pass tone maps once and
+//! encodes to sRGB exactly once — on write, because the destination texture
+//! carries the transfer function. That makes this a preview of what is actually
+//! on screen rather than a second rendering path that might disagree with it.
+//!
+//! **With several Sets this renders the mix**, for that reason and no other: it
+//! is what the window shows. A flag that rendered each slot to its own file
+//! would be a different feature — auditioning one candidate on its own is M2's
+//! per-slot preview, it wants a default renderer per topology to be worth
+//! having, and the deck already keeps every slot's target separate so that it
+//! can be added without changing anything here. What the mix must not become is
+//! a fourth definition of "the output"; there is one, and this is it.
 
 use std::path::Path;
 
-use karakuri_engine::{Gpu, Present, Set, VideoSource};
+use karakuri_engine::{Deck, Gpu, Present};
+
+use crate::Look;
 
 /// Rows in a texture-to-buffer copy must be a multiple of this.
 const COPY_ALIGN: u32 = 256;
@@ -16,13 +26,14 @@ const COPY_ALIGN: u32 = 256;
 /// A single frame at simulation frame `frames`.
 pub fn to_png(
     gpu: &Gpu,
-    set: &mut Set,
+    deck: &mut Deck,
+    look: Look,
     width: u32,
     height: u32,
     frames: u32,
     path: &Path,
 ) -> Result<(), String> {
-    sequence(gpu, set, width, height, frames, |i| {
+    sequence(gpu, deck, look, width, height, frames, |i| {
         (i + 1 == frames).then(|| path.to_path_buf())
     })
 }
@@ -33,21 +44,23 @@ pub fn to_png(
 /// a window.
 pub fn to_sequence(
     gpu: &Gpu,
-    set: &mut Set,
+    deck: &mut Deck,
+    look: Look,
     width: u32,
     height: u32,
     frames: u32,
     dir: &Path,
 ) -> Result<(), String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    sequence(gpu, set, width, height, frames, |i| {
+    sequence(gpu, deck, look, width, height, frames, |i| {
         Some(dir.join(format!("{i:05}.png")))
     })
 }
 
 fn sequence(
     gpu: &Gpu,
-    set: &mut Set,
+    deck: &mut Deck,
+    look: Look,
     width: u32,
     height: u32,
     frames: u32,
@@ -63,7 +76,7 @@ fn sequence(
     // Rgba8UnormSrgb, so the hardware does the linear-to-sRGB encode on write.
     let format = wgpu::TextureFormat::Rgba8UnormSrgb;
     let present = Present::new(&gpu.device, format, width, height);
-    set.resize(width, height);
+    present.set_tonemap(&gpu.queue, look.op, look.exposure, look.white_point);
 
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("png target"),
@@ -92,17 +105,19 @@ fn sequence(
     // the window shows at frame N — no clock is involved anywhere, which is
     // what makes an offline preview and a live run agree.
     for i in 0..frames {
-        set.prepare(&gpu.queue, 1);
-        let mut encoder = gpu.device.create_command_encoder(&Default::default());
-        set.render(&mut encoder, present.hdr_view(), 1);
+        // One `begin_frame` per encoder, and the guard is what says so: the
+        // readback copy is recorded through `Frame::encoder` into the frame it
+        // belongs to rather than into an encoder of this function's own.
+        let mut frame = deck.begin_frame(&gpu.device, &gpu.queue);
+        frame.render(present.hdr_view(), present.size(), 1);
 
         let Some(path) = wanted(i) else {
-            gpu.queue.submit([encoder.finish()]);
+            frame.finish();
             continue;
         };
 
-        present.draw(&mut encoder, &view);
-        encoder.copy_texture_to_buffer(
+        present.draw(frame.encoder(), &view);
+        frame.encoder().copy_texture_to_buffer(
             target.as_image_copy(),
             wgpu::TexelCopyBufferInfo {
                 buffer: &readback,
@@ -118,7 +133,7 @@ fn sequence(
                 depth_or_array_layers: 1,
             },
         );
-        gpu.queue.submit([encoder.finish()]);
+        frame.finish();
 
         let slice = readback.slice(..);
         slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));

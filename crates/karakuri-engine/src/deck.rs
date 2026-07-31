@@ -111,7 +111,26 @@
 //! which slot last had a build land on it is not observable from the mix. The
 //! shader sums its four terms unrolled, in slot order, for the same reason —
 //! see `shaders/composite.wgsl`.
+//!
+//! ## Level metering
+//!
+//! A deck can measure what each Live slot's target actually puts out — mean and
+//! peak luminance, per slot, per frame — which is what a fader needs to mean
+//! anything. It is off until [`Deck::enable_meters`] is called and costs
+//! nothing at all until then, because an offscreen `--render` has no use for a
+//! meter. The measurement never waits, so it lags; what it does and does not
+//! promise is in [`crate::meter`], including what an off-air slot reads and
+//! why. Nothing here acts on the number: gain is manual.
+//!
+//! Three things retire a slot's reading, and they are one thing: the meter
+//! stops being able to vouch that what it measured is what the slot is
+//! showing. Going off air, a resize, and **a build landing on the slot** — a
+//! swap installs a cold Set and a rollback restores a parked one, and either
+//! way the next frame's image has nothing to do with the last one's. All three
+//! are handled where they happen: [`Deck::set_residency`], [`Deck::resize`],
+//! and [`Deck::begin_frame`].
 
+use crate::meter::{Level, Meters};
 use crate::present::Present;
 use crate::swap::{Event, HotSwap};
 use crate::video_source::VideoSource;
@@ -172,6 +191,10 @@ pub struct Deck {
     /// "Determinism" in the module doc.
     slots: Vec<Slot>,
     composite: Composite,
+    /// `None` until [`Deck::enable_meters`]. Metering is opt-in because a
+    /// caller that will never read a level should not pay for one — see
+    /// "Level metering" in the module doc.
+    meters: Option<Meters>,
     width: u32,
     height: u32,
 }
@@ -218,9 +241,48 @@ impl Deck {
         Deck {
             slots,
             composite,
+            meters: None,
             width,
             height,
         }
+    }
+
+    /// Start measuring what each slot puts out. Off by default.
+    ///
+    /// Allocates a pipeline, two buffers and a ring of staging buffers per
+    /// slot, so never on the render thread — same terms as [`Deck::new`] and
+    /// [`Deck::resize`]. Calling it twice replaces the meters, which discards
+    /// every reading and starts over rather than pretending the old ones
+    /// survived.
+    ///
+    /// Levels arrive a few frames later and are read with [`Deck::level`].
+    /// Nothing in the deck acts on them: gain is manual, and see
+    /// [`crate::meter`] for why that is a decision rather than an omission.
+    pub fn enable_meters(&mut self, device: &wgpu::Device) {
+        let views: Vec<&wgpu::TextureView> = self.slots.iter().map(|s| &s.view).collect();
+        self.meters = Some(Meters::new(device, &views));
+    }
+
+    /// The meters, if there are any. `None` from [`Deck::level`] means "no
+    /// reading"; this is what tells that apart from "no meter", and it is also
+    /// where [`Meters::skipped`] is reached from.
+    ///
+    /// Read-only: recording, arming and collecting are the frame's, and a
+    /// caller that could drive them out of that order would get a reading of
+    /// the wrong frame.
+    pub fn meters(&self) -> Option<&Meters> {
+        self.meters.as_ref()
+    }
+
+    /// The most recent level measured for a slot, or `None` if there is none —
+    /// no meter, no measurement yet, a slot that is not Live, or a slot whose
+    /// material was just replaced by a resize or a swap. Never waits.
+    ///
+    /// A level is a few frames old and says so: [`Level::frames_behind`]. What
+    /// it is never is a reading of an image the slot is no longer showing; see
+    /// "Level metering" in the module doc for the three things that retire one.
+    pub fn level(&self, slot: usize) -> Option<Level> {
+        self.meters.as_ref().and_then(|m| m.level(slot))
     }
 
     /// The top of a frame: installs whatever the workers finished, opens the
@@ -288,7 +350,12 @@ impl Deck {
         device: &wgpu::Device,
         queue: &'a wgpu::Queue,
     ) -> Frame<'a> {
-        for slot in &mut self.slots {
+        for (i, slot) in self.slots.iter_mut().enumerate() {
+            // Read before the boundary so that what it appends can be told
+            // apart from what the caller has not drained yet. `pending_events`
+            // takes nothing: the events are still the caller's to read through
+            // `Deck::events`.
+            let seen = slot.swap.pending_events().len();
             match slot.residency {
                 // The returned borrow is dropped immediately: what is wanted
                 // here is the frame-boundary work, and the Sets are reached
@@ -302,6 +369,30 @@ impl Deck {
                 // is not this slot's to be judged by.
                 Residency::Allocated => slot.swap.begin_frame_parked(),
             }
+            // A build landing, and a rollback putting the outgoing Set back,
+            // both replace what the slot is drawing — a swapped-in Set is
+            // cold, `t` at zero, and a restored one resumes at a different `t`
+            // than the candidate had. A measurement of the Set that was there
+            // is a measurement of a different image, on exactly the terms a
+            // pre-resize measurement is, so it is retired on those terms too.
+            // Nothing else in `Event` changes the material: `Accepted` only
+            // ends a trial, and `Rejected` and `WorkerLost` change nothing at
+            // all.
+            let replaced = slot.swap.pending_events()[seen..]
+                .iter()
+                .any(|e| matches!(e, Event::Swapped { .. } | Event::RolledBack { .. }));
+            if replaced {
+                if let Some(meters) = &mut self.meters {
+                    meters.retire(i);
+                }
+            }
+        }
+        // Take delivery of whatever the GPU has finished measuring. A
+        // non-blocking `Poll` and a `try_recv` per slot — the same shape as
+        // the installs above, and for the same reason: a frame boundary is
+        // where results are allowed to arrive, and waiting for one is not.
+        if let Some(meters) = &mut self.meters {
+            meters.collect(device);
         }
         Frame {
             deck: self,
@@ -331,6 +422,14 @@ impl Deck {
         }
         let views: Vec<&wgpu::TextureView> = self.slots.iter().map(|s| &s.view).collect();
         self.composite.rebind(device, &views);
+        // The meters point at the old textures otherwise — and would keep
+        // measuring them, since a bind group holds its views alive, so the
+        // symptom would be a level frozen at whatever was on screen before the
+        // window was dragged. `Meters::rebind` retires every reading for the
+        // same reason.
+        if let Some(meters) = &mut self.meters {
+            meters.rebind(device, &views);
+        }
         self.width = width;
         self.height = height;
     }
@@ -372,6 +471,16 @@ impl Deck {
     /// again.
     pub fn set_residency(&mut self, slot: usize, residency: Residency) {
         self.slots[slot].residency = residency;
+        // Off air is off the meter, immediately and including whatever is
+        // still in flight: an Allocated slot's target holds whatever it last
+        // drew, and reporting that as a level would be a stale number
+        // presented as a live one. `Deck::level` reads `None` until it is back
+        // on air and a fresh measurement has landed.
+        if residency != Residency::Live {
+            if let Some(meters) = &mut self.meters {
+                meters.retire(slot);
+            }
+        }
     }
 
     pub fn gain(&self, slot: usize) -> f32 {
@@ -465,7 +574,7 @@ impl Frame<'_> {
         // Index order, and only Live slots. An Allocated slot is not stepped
         // and not drawn, which is the whole of what Allocated means: `t` only
         // advances through `prepare`.
-        for slot in &mut self.deck.slots {
+        for (i, slot) in self.deck.slots.iter_mut().enumerate() {
             if slot.residency != Residency::Live {
                 continue;
             }
@@ -473,6 +582,13 @@ impl Frame<'_> {
             let set = slot.swap.live_mut();
             set.prepare(self.queue, steps);
             set.render(encoder, view, steps);
+            // After the render pass, into the same encoder, so the measurement
+            // is of this frame's image. Live slots only: an Allocated slot
+            // rendered nothing, so there is nothing of this frame's to measure
+            // — see `Deck::set_residency`.
+            if let Some(meters) = &mut self.deck.meters {
+                meters.record(i, encoder);
+            }
         }
 
         self.deck
@@ -499,6 +615,14 @@ impl Frame<'_> {
     fn submit(&mut self) {
         if let Some(encoder) = self.encoder.take() {
             self.queue.submit([encoder.finish()]);
+            // Only now: `map_async` resolves against the submissions
+            // outstanding when it is called, so arming a staging buffer before
+            // the copy that fills it has been submitted would deliver whatever
+            // that buffer held from three frames ago as if it were this
+            // frame's. `Meters::arm` says the same thing from the other side.
+            if let Some(meters) = &mut self.deck.meters {
+                meters.arm();
+            }
         }
     }
 }

@@ -532,6 +532,20 @@ impl HotSwap {
         self.events.drain(..)
     }
 
+    /// The same events, read without taking them.
+    ///
+    /// [`HotSwap::events`] is the caller's — it drains, because a caller that
+    /// reads an event twice would print a rollback twice. Something that has
+    /// to *react* to a swap rather than report it cannot use that without
+    /// stealing it, so this is the read-only view: `Deck::begin_frame` notes
+    /// the length before the frame boundary and looks at what was appended,
+    /// which is how it knows a build landed on a slot and its level meter is
+    /// now measuring different material. It changes nothing and consumes
+    /// nothing.
+    pub fn pending_events(&self) -> &[Event] {
+        &self.events
+    }
+
     /// Remembered as well as forwarded: a Set built while the window was one
     /// size must not arrive on screen still believing it, and the parked Set
     /// must not come back through a rollback with a stale aspect ratio.

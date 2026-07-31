@@ -1,9 +1,15 @@
-//! Watching the two `.kir` files and rebuilding when they change.
+//! Watching one slot's two `.kir` files and rebuilding when they change.
 //!
 //! This is the [`Source`] the engine's build worker polls. It runs on that
 //! worker thread, so everything expensive it does — a file read, four
 //! validation stages, and the diagnostics it prints when one of them refuses —
 //! is already off the render thread before `Set::build` is even reached.
+//!
+//! **One of these per deck slot, over that slot's own pair.** A slot is the
+//! unit that gets replaced — that is what it means for each slot to own its own
+//! `HotSwap` — so the way "rebuild the slot whose files changed" is enforced is
+//! that no watcher can see another slot's files at all. Two slots given the
+//! same pair both rebuild, which is right: the same edit reached both of them.
 //!
 //! ## Polling, not `notify`
 //!
@@ -53,6 +59,10 @@ use crate::compile;
 const INTERVAL: Duration = Duration::from_millis(100);
 
 pub struct Watch {
+    /// Which slot this rebuilds. Carried only so that the diagnostics this
+    /// prints — from a worker thread, interleaved with every other slot's — say
+    /// which of the four they are about.
+    slot: usize,
     l1: PathBuf,
     l4: PathBuf,
     capacity: u32,
@@ -69,6 +79,7 @@ pub struct Watch {
 
 impl Watch {
     pub fn new(
+        slot: usize,
         l1: PathBuf,
         l4: PathBuf,
         capacity: u32,
@@ -76,6 +87,7 @@ impl Watch {
         overrides: Vec<(String, f32)>,
     ) -> Watch {
         let mut watch = Watch {
+            slot,
             l1,
             l4,
             capacity,
@@ -120,21 +132,22 @@ impl Source for Watch {
         }
         self.settling = false;
 
-        eprintln!("recompiling:");
+        let slot = self.slot;
+        eprintln!("slot {slot}: recompiling:");
         // Both files, not just the changed one: the composition check needs
         // the pair, and an L4 that stopped being compatible with its L1 is a
         // diagnostic rather than a half-applied edit.
         let l1 = match compile::load(&self.l1) {
             Ok(checked) => checked,
             Err(report) => {
-                eprintln!("{report}\nnothing changed; the running Set is still running");
+                eprintln!("{report}\nslot {slot} unchanged; its Set is still running");
                 return None;
             }
         };
         let l4 = match compile::load(&self.l4) {
             Ok(checked) => checked,
             Err(report) => {
-                eprintln!("{report}\nnothing changed; the running Set is still running");
+                eprintln!("{report}\nslot {slot} unchanged; its Set is still running");
                 return None;
             }
         };
@@ -156,7 +169,7 @@ mod tests {
     use super::*;
 
     fn watch_on(dir: &std::path::Path) -> Watch {
-        Watch::new(dir.join("a.kir"), dir.join("b.kir"), 4096, 1, Vec::new())
+        Watch::new(0, dir.join("a.kir"), dir.join("b.kir"), 4096, 1, Vec::new())
     }
 
     /// A save that changed no bytes is not an edit. Under an mtime comparison
