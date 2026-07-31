@@ -184,8 +184,12 @@ worth stating exactly:
   `begin_frame` twice inside one encoder gets two Sets in one frame, and it compiles. Both
   callers in this repository call it once per frame; nothing in the types says they have
   to. Making it structural means handing the encoder out from `begin_frame` too, behind a
-  guard that submits on drop — a change to how every caller records a frame, so it is
-  written down in `crates/karakuri-engine/src/swap.rs` rather than done halfway.
+  guard that submits on drop, and `crates/karakuri-engine/src/deck.rs` now does exactly
+  that: `Deck::begin_frame` returns a guard owning both the `&mut Deck` and the encoder, so
+  a second frame while one is open does not compile and two generations of Sets cannot
+  reach one encoder. That is the shape a caller with more than one Set has to use. A
+  `HotSwap` driven on its own — which is still what the CLI does — keeps the weaker
+  property above.
 - **It transfers no state.** A new procedure means new buffers, so the incoming Set starts
   cold: `t` at zero, nothing primed. Warming a Set out of sight before it is shown is M2's
   Priming, and no partial version of it is done here.

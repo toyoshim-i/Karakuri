@@ -13,3 +13,10 @@ pollster = "1.0.1"
 thiserror.workspace = true
 wgpu = "26.0.1"
 winit = "0.30.13"
+
+[dev-dependencies]
+# For the `tonemap_compare` example only: it writes PNGs the same way
+# `karakuri-cli`'s `--render` does, so the comparison it produces is a
+# preview of the real output path rather than a second one that might
+# disagree with it.
+png = "0.18.1"
