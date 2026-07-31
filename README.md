@@ -27,7 +27,26 @@ cargo run -p karakuri-cli -- --capacity 65536                # a Set-level dial
 cargo run -p karakuri-cli -- a.kir b.kir                     # a different pair
 cargo run -p karakuri-cli -- --watch                         # edit a .kir, watch it swap
 cargo run -p karakuri-cli -- --watch --budget-ms 0           # ...and watch it roll back
+cargo run -p karakuri-cli -- --set a.kir,b.kir --set c.kir,d.kir   # two Sets, mixed
+cargo run -p karakuri-cli -- --tonemap agx --exposure 1.5    # the output transform
 ```
+
+`--set` fills a deck slot and may be given up to four times; every Live slot renders into
+its own target and one composite pass mixes them. In the window:
+
+```
+0-3  focus a slot     space  on air / off air     [ ]  gain      \  gain to 1.0
+- =  exposure         `      exposure to 1.0      t    tone map  h  the rest
+```
+
+Taking a slot off air parks it rather than stopping it: `t` only advances through a step,
+so bringing it back resumes where it left off. `t` cycles the tone map operator live, which
+is the only way to compare two of them on moving material.
+
+The status line carries each slot's residency, gain, simulation `t`, and its **level** —
+mean and peak luminance, measured on the GPU and lagging a few frames because reading it
+back synchronously would be a stall. Mean is what two Sets are matched on; peak warns which
+one will dominate the mix wherever it lands regardless of its fader.
 
 `--watch` recompiles in the background on a save and swaps the result in at a frame
 boundary; a file that does not compile prints its diagnostics and changes nothing. See
@@ -69,7 +88,9 @@ hint: the signal bus is not readable from IR — declare `param energy` and atta
 |---|---|
 | Procedure | Code that runs every frame on the GPU, written in the IR |
 | Artifact | A saved procedure. Content-addressed and immutable |
-| Slot | A layer position within a Set (L1/L2/L3/L4) |
+| Slot | Two things, and it is worth knowing which. A **layer slot** is a position within a Set (L1/L2/L3/L4). A **deck slot** is a position within the deck, holding a whole Set. `docs/roadmap.md` says *member* for the second; the code says `Deck::slot`, and that disagreement is recorded rather than resolved — renaming either is churn until something depends on telling them apart |
+| Deck | Where prepared-but-not-showing material lives, at Set granularity. Up to four slots; one to four of them Live and composited, the rest resident |
+| Residency | How ready a deck slot is: **Live** (composited) or **Allocated** (compiled, buffers held, not stepping, keeping its state). **Priming** is the third and does not exist yet |
 | Set | Filled slots forming one video source. The unit of compilation and of lifecycle |
 | VideoSource | The interface L5 consumes. Set is one implementation of it |
 | Signal bus | Input distributed to every layer. Always complete; values carry a confidence |
@@ -147,9 +168,14 @@ There is exactly one assumption to prove:
 > we hot-swap it without dropping a frame?
 
 One Set, slots hardcoded, no UI. Local oscillator and synthesized signals only. L1 for
-geometry and L4 for rendering, nothing else. What V1 deliberately leaves out — multiple
-Sets, agents, audio, L2 and L3, the node editor — is scheduled in
-[docs/roadmap.md](docs/roadmap.md) rather than listed here.
+geometry and L4 for rendering, nothing else.
+
+**That assumption is proved and V1 is closed.** Work has moved to M2, whose goal is to play
+a real set on this and survive; the first slice of it — several Sets on a deck, an L5 mix,
+a tone mapper, and a meter to set the faders by — is in the table below alongside V1's own
+parts. What is still absent, and why, stays in
+[docs/roadmap.md](docs/roadmap.md) rather than being listed here: agents, audio, L2 and L3,
+priming, the budget governor, the node editor.
 
 ### Status
 
@@ -252,7 +278,11 @@ governor, alongside the decision about whether GPU timestamps can be trusted at 
 | Element lifecycle | Works. `spawn` and `kill()` run, order-preserving compaction is wired into the L1 dispatch, and `element` and the draw are both indirect off one counts buffer. A procedure that can neither spawn nor kill skips the scan entirely and dispatches in place |
 | **The store, in use** | The CLI does not use it. Artifacts are loose files |
 | **Signal binding** | Nothing binds a signal to a parameter, so `bind` records do nothing |
-| **Tone mapping and bloom** | Neither exists. The pipeline clips at output, which is why `examples/soft_points.kir` carries a low exposure — a workaround standing in for a tone mapper |
+| Tone mapping | Works. Four operators — clamp, Reinhard, ACES, AgX — chosen by a uniform, so switching one mid-set is a buffer write. ACES by default, picked by rendering all four across five exposures and looking; `cargo run -p karakuri-engine --example tonemap_compare` regenerates that. Applied once, immediately before the single sRGB encode |
+| The deck and the mix | Works. Up to four slots, each with its own `HotSwap` and its own HDR target, composited with a per-slot gain. Residency is Live or Allocated; Allocated holds its state, so a slot brought back resumes rather than restarts. Priming — the third level — waits for the governor that would decide what may prime and how fast |
+| Per-slot metering | Works. Mean and peak linear Rec.709 luminance per Live slot, reduced on the GPU and read back without ever waiting, so it lags a few frames and says by how many. An Allocated slot reads nothing rather than reading what it last drew |
+| **Bloom** | Does not exist. Values above 1.0 are what would feed it |
+| **Automatic gain** | Deliberately not built. The meter shows the number; nothing acts on it. An exposure that moves by itself is the worst thing that can happen on stage, and the honest order is to show the measurement first |
 | Hot swap | Works. Built on a worker thread, installed at a frame boundary, watched for a window, rolled back automatically. `--watch` on the CLI. Starts cold — no state transfer |
 | **Prompt-driven generation** | Not started. Procedures reach the engine as files, whoever wrote them |
 
