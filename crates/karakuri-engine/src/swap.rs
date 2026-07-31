@@ -38,17 +38,21 @@
 //! `begin_frame` again, and record a second Set's passes into the same
 //! encoder; that compiles, and if a build arrived in between the encoder ends
 //! up holding half of one Set's frame and half of another's. The property this
-//! module wants is "one `begin_frame` per encoder", and nothing in the types
-//! says so — it is a convention `karakuri-cli`'s frame loop and the harness in
-//! `tests/hot_swap.rs` both happen to keep.
+//! module wants is "one `begin_frame` per encoder", and nothing in *these*
+//! types says so — it is a convention `karakuri-cli`'s frame loop and the
+//! harness in `tests/hot_swap.rs` both happen to keep.
 //!
-//! Making it structural means giving `begin_frame` the encoder: a guard that
-//! owns both the `&mut Set` and the `CommandEncoder`, hands them out together,
-//! and submits on drop, so there is no way to reach a second Set without first
-//! ending the frame. That is a change to how every caller records a frame, so
-//! it is written down here rather than done halfway. Until then the honest
-//! claim is: **the live Set is only ever replaced at the top of
-//! `begin_frame`**, and callers must call it exactly once per frame.
+//! Making it structural means giving `begin_frame` the encoder, and
+//! [`crate::deck`] now does exactly that: `Deck::begin_frame` returns a guard
+//! owning both the `&mut Deck` and the `CommandEncoder`, so a second frame
+//! cannot be opened while one is and there is no way to record two generations
+//! of Sets into one encoder. That is where a deck of one to four Sets is
+//! composited, and it is the shape a caller with more than one Set has to use.
+//!
+//! A `HotSwap` driven on its own — which is what `karakuri-cli` and
+//! `tests/hot_swap.rs` still do — keeps the weaker property, and the honest
+//! claim for it is unchanged: **the live Set is only ever replaced at the top
+//! of `begin_frame`**, and such a caller must call it exactly once per frame.
 //!
 //! ## What a swap does not do
 //!
@@ -422,21 +426,60 @@ impl HotSwap {
     /// one command encoder compiles, and records two Sets' passes into that
     /// encoder; see "Where a swap lands, and what actually guarantees it" in
     /// the module doc for why the borrow alone does not rule that out.
+    /// [`crate::deck::Deck::begin_frame`] is the version that does rule it
+    /// out, by owning the encoder — a `HotSwap` driven directly still relies
+    /// on the caller.
     ///
     /// Allocates nothing, compiles nothing, and never blocks: the channel is
     /// polled with `try_recv` and the graveyard with `try_lock`.
     pub fn begin_frame(&mut self) -> &mut Set {
+        self.frame_boundary(true);
+        &mut self.live
+    }
+
+    /// The same frame boundary for a slot that is **not on air**: a finished
+    /// build is still installed and retired Sets are still handed back to the
+    /// worker, but the frame interval is not fed to the watchdog.
+    ///
+    /// A candidate in an off-air slot renders nothing, so the frame interval
+    /// the caller is producing is entirely other slots' cost. Judging against
+    /// it accepts a candidate on a budget it never spent — and, with a tight
+    /// budget and busy neighbours, rolls one back for cost it never caused.
+    /// So the trial is *frozen* instead: `seen` does not advance, no sample is
+    /// taken, and the verdict waits until the slot is Live and has actually
+    /// paid for [`JUDGE_FRAMES`] frames of its own.
+    ///
+    /// That is the same reasoning that parks an outgoing Set's `t` across a
+    /// window — a Set that is not running is not measured either — and it is
+    /// as far as an interval-based watchdog can get. What it still cannot do
+    /// is separate one Live slot's cost from its neighbours': every Live slot
+    /// in a deck is judged against the whole deck's frame interval, so a
+    /// budget that fits one Set rolls back every candidate in a deck of four.
+    /// Fixing *that* needs a per-Set measurement, which is M2's budget
+    /// governor.
+    pub(crate) fn begin_frame_parked(&mut self) {
+        self.frame_boundary(false);
+    }
+
+    fn frame_boundary(&mut self, on_air: bool) {
         let now = Instant::now();
-        if let Some(last) = self.last_frame.replace(now) {
+        let last = self.last_frame.replace(now);
+        if on_air {
             // The interval that just ended is the *previous* frame's duration,
             // so the watchdog is always one frame behind. It has to be: a
             // frame's cost is not known until the next one starts.
-            self.record(now.duration_since(last).as_secs_f32() * 1_000.0);
+            if let Some(last) = last {
+                self.record(now.duration_since(last).as_secs_f32() * 1_000.0);
+            }
+        } else {
+            // Not a sample, and not the left-hand end of one either: the first
+            // frame back on air would otherwise be measured as however long
+            // the slot spent off it.
+            self.last_frame = None;
         }
         self.frames += 1;
         self.hand_over_retired();
         self.install_if_ready();
-        &mut self.live
     }
 
     /// The live Set, outside a frame. Read-only, so it cannot be rendered
@@ -444,6 +487,25 @@ impl HotSwap {
     /// that is deliberate.
     pub fn set(&self) -> &Set {
         &self.live
+    }
+
+    /// The live Set, mutably, with **none** of the frame-boundary work
+    /// [`HotSwap::begin_frame`] does: no watchdog sample, no install, no
+    /// handover.
+    ///
+    /// This exists for [`crate::deck::Frame`], which calls `begin_frame` on
+    /// every slot at the top of a frame and then has to reach those same Sets
+    /// again once its encoder is open. Splitting the two is safe there
+    /// precisely because the deck's guard holds the encoder: between the
+    /// install and this call there is no point at which a caller could have
+    /// obtained a different Set.
+    ///
+    /// `pub(crate)`, and it should stay that way. Handing this out publicly
+    /// would be a second way to render a Set, next to the one that installs
+    /// builds on a frame boundary, and "which Sets is this frame made of"
+    /// would stop having one answer.
+    pub(crate) fn live_mut(&mut self) -> &mut Set {
+        &mut self.live
     }
 
     /// Frames begun since construction. What "a build does not block the

@@ -12,12 +12,18 @@
 //!   parameter values are the one exception, and they are uniform writes.
 //! - Element order is preserved. Compaction is order-preserving, which is what
 //!   makes reproduction bit-exact — floating-point addition is not associative,
-//!   so even additive blending depends on a stable order.
+//!   so even additive blending depends on a stable order. The same reasoning
+//!   fixes the order slots are composited in; see [`deck`].
 //! - Simulation time advances by `steps * dt` from a `tick` record. Nothing in
 //!   this crate reads a clock.
+//! - A frame is recorded through a guard that owns the command encoder, so a
+//!   frame cannot be built from two generations of Sets. That is [`deck`];
+//!   a [`swap::HotSwap`] driven on its own still relies on its caller, and
+//!   says so.
 
 pub mod camera;
 pub mod compaction;
+pub mod deck;
 pub mod gpu;
 pub mod points;
 pub mod present;
@@ -29,9 +35,10 @@ pub mod video_source;
 
 pub use camera::Orbit;
 pub use compaction::Compaction;
+pub use deck::{Deck, Frame, Residency};
 pub use gpu::{Gpu, GpuError};
 pub use points::{Params, Points};
-pub use present::Present;
+pub use present::{Present, TonemapOp};
 pub use probe::{Measurement, Probe};
 pub use set::{Set, SetError};
 pub use swap::{Event, HotSwap, Request, Source, DEFAULT_BUDGET_MS};
