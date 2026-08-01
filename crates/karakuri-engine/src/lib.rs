@@ -21,6 +21,7 @@
 //!   a [`swap::HotSwap`] driven on its own still relies on its caller, and
 //!   says so.
 
+pub mod binding;
 pub mod camera;
 pub mod compaction;
 pub mod deck;
@@ -34,6 +35,7 @@ pub mod swap;
 pub mod uniforms;
 pub mod video_source;
 
+pub use binding::{Binding, Curve, Signals};
 pub use camera::Orbit;
 pub use compaction::Compaction;
 pub use deck::{Deck, Frame, Residency};

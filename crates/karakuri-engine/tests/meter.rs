@@ -600,6 +600,7 @@ fn a_build_landing_on_a_slot_retires_its_meter() {
             capacity: CAPACITY,
             seed_salt: SEED,
             params: Vec::new(),
+            bindings: Vec::new(),
             label: "black".to_string(),
         })
         .expect("the worker is alive");

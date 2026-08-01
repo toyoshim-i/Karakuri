@@ -834,14 +834,83 @@ known. The total-cost decision lives there, not in the artifact.
   `{"t":"src","hash":"…","line":0,"s":"…"}` records.
 - `capacity` is optional; without it the `.kir` default applies. A value outside the range
   the `.kir` declares is rejected at Set build time.
+- `param` and `bind` are keyed by `layer` in the record, but the engine holds one value per
+  **name** across the whole Set. Two procedures that happen to declare the same param name
+  would therefore be one value, with the second declaration's default quietly taking the
+  first's place — so a pair that collides is **rejected at Set build time**, naming every
+  colliding param at once. Keying values by layer, the way these records already do, is
+  what would let the collision through harmlessly; until then a rejection the generator can
+  act on beats a value nobody chose.
 - Unknown `t` values are ignored, for forward compatibility.
 
-**What "implemented" covers here is the format, not yet its effect.** Every record above
-decodes, re-encodes, and folds down to a projection, and unknown ones survive the round
-trip — `karakuri-store` tests all of that. Nothing outside that crate reads a `Record`
-today: the CLI takes two `.kir` paths rather than a Set file, and `bind` in particular
-decodes into nothing, because no signal is wired to a parameter yet. So a Set file is a
-format the engine agrees with and does not yet obey.
+**What "implemented" covers here is the format; its effect is implemented for `bind` and
+not yet for the rest.** Every record above decodes, re-encodes, and folds down to a
+projection, and unknown ones survive the round trip — `karakuri-store` tests all of that.
+Nothing outside that crate reads a `Record` yet: the CLI takes two `.kir` paths rather than
+a Set file, so no record reaches the engine by being read off disk. What has changed is
+that `bind` is no longer inert once it gets there — the engine implements the semantics
+below, and `karakuri-cli`'s `--bind` flag names exactly these fields as a stand-in until a
+Set file can be loaded.
+
+### What a binding does
+
+Every frame, for each binding, in this order:
+
+1. **Sample** the `signal` by name. The bus is always complete: an unknown name is not an
+   error and not an absence, it is a value with a confidence of 0.0. Nothing anywhere tests
+   whether a provider exists.
+2. **Curve** the sample's value, which is expected in `[0, 1]` and is clamped into it.
+3. **Map** onto `range`, so `range` is what the param is written with at the two ends.
+4. **Blend by confidence**: the value written is `lerp(the param's own value, the mapped
+   value, confidence)`.
+5. **Write** it as a uniform — the same path a `param` record takes. A parameter change
+   needs no fork and no recompilation.
+
+Step 4 is what "consumers branch only on confidence" means in practice, and its
+consequences are meant to be followed rather than softened:
+
+- `bpm`, `beat` and `bar` come off the local oscillator, which is the single source of
+  truth for phase and tempo, so they carry confidence 1.0 and a binding to them takes full
+  effect.
+- `energy` and `band<N>` are invented — there is no audio input — so they carry 0.1 and
+  move a param a tenth of the way. That is the system being honest about what it knows.
+  When audio arrives it is a provider with a higher confidence and the same binding starts
+  working, with nothing else changed.
+- A signal nobody provides leaves the param at its own value, exactly, because confidence
+  is 0.0. That is the same arithmetic rather than a special case.
+
+A param's own value is the **base** of the blend and is never overwritten. So a param that
+is both bound and given a `param` record has one answer, and it does not depend on which of
+the two was written last: the record moves the base, the binding blends from it every
+frame. There is at most one binding per (`layer`, `key`); a second replaces the first,
+because two would be resolved in some order and the order would decide the value.
+
+**Curves.** Four, which is the number of distinct shapes a monotone `[0,1] -> [0,1]` map
+has. A fifth would be a re-parameterisation of one of these, and a vocabulary an LLM
+generates against pays for every name twice.
+
+| `curve` | | |
+|---|---|---|
+| `lin` | `x` | The signal as it is |
+| `pow2` | `x²` | **Emphasises the peak.** The floor is flattened, so the param only moves near the top — a `beat` through `pow2` reads as a hit rather than a wobble |
+| `sqrt` | `√x` | **Emphasises the floor**, the exact complement of `pow2`: rises fast off zero and compresses the top, so a signal that lives near the bottom still produces visible movement |
+| `smooth` | `x²(3 - 2x)` | **Eases both ends.** Zero derivative at 0 and at 1, so the param neither jumps off the floor nor slams into the ceiling. For a param that is a position rather than an intensity |
+
+An unrecognised `curve` is a diagnostic, not a silent fall back to `lin`.
+
+**Unit range.** Steps 2 and 3 are what make `range` mean what it says, and they assume the
+signal is in `[0, 1]`. Two signals are not, and both are stated rather than papered over:
+
+- `bpm` is a tempo in beats per minute, so it clamps to 1.0 and a binding to it is pinned
+  at the top of its range for the whole run. Normalising it would need an invented tempo
+  range that nothing could justify, so it is **refused** instead: `karakuri-cli`'s `--bind`
+  rejects `signal=bpm` and names `beat` and `bar`, which carry the same tempo in the range
+  a binding is defined over. A decoder that loads `bind` records off disk owes the same
+  diagnostic — a pinned binding and a working one are the same number on a status line, and
+  the whole cost of getting this wrong is paid by whoever cannot tell them apart.
+- noise is signed, in `[-1, 1)`. A binding maps it to `[0, 1]` before the curve, because
+  clamping would discard the half of the signal below zero — a `spawn_rate` bound to noise
+  would then sit at the bottom of its range half the time.
 
 ### Binding noise
 
@@ -858,9 +927,42 @@ parameters no other signal has:
   vocabulary for the same thing.
 - `rate` is in **cycles per beat**, so period is tempo-relative and follows the local
   oscillator rather than a second notion of time. `white` holds each value for `1 / rate`
-  beats, which gives even the jittery kind a period.
+  beats, which gives even the jittery kind a period. Defaults to `1.0`.
 - `stream` decorrelates one binding from another. Two bindings sharing a stream move
   together, which is occasionally what you want and never what you get by accident.
+  Defaults to `0`.
+- `octaves` is `fbm`'s layer count and is ignored by the other three kinds — a decoded
+  record cannot distinguish an omitted `octaves` from one written as `4`, so ignoring is
+  the only semantics available to it. `--bind` can tell, and therefore refuses
+  `noise.octaves` alongside any `noise.kind` but `fbm` rather than silently promoting the
+  kind. Defaults to `4`. **This field was missing from v0.2**, which listed `fbm` as a
+  `kind` and gave it nowhere to say how many octaves — leaving the count baked into the
+  engine, which is
+  precisely the "fixed property nobody can reach" that [Spawn timing](#spawn-timing)
+  rejects Poisson for. The omission is the specification's, not the implementation's.
+
+Every field defaults, and the whole `noise` object does too: a `bind` naming `noise` and
+saying nothing else is one cycle per beat of perlin on stream 0. Absent means the default
+generator, not the absence of one — there is nothing else for the name to mean. This is the
+one record whose numbers a generator has to invent, and each of them has a defensible
+default.
+
+`noise` is also the one `signal` name that is **not** a lookup on the bus. The bus takes a
+name and nothing else, and there is no collision-free grammar for four fields inside one
+string — which is why this object exists at all. So a binding whose `signal` is `noise`
+reads the generator it declares here, and **the bus does not answer that name at all**: a
+parameterless stand-in on the bus would put a second, weaker meaning behind a name the
+`bind` record already owns, which is the shape the [`t` vocabulary rule](#set-file-format)
+refuses when it asks for vocabularies disjoint by name rather than in practice. The bus
+stays complete regardless — an unknown name is a value at confidence 0.0, as always.
+
+**A noise binding carries full confidence.** It is not a guess at something unobserved:
+the binding declares the generator, the generator is deterministic in the session seed,
+and its value is exactly
+what it claims to be — the same reason the local oscillator's own signals are certain. The
+alternative would make [Spawn timing](#spawn-timing) unwriteable: irregular spawning is
+available *only* by binding noise to `spawn_rate`, and a binding at a tenth effect is not
+an alternative to the Poisson option that section rejects.
 
 Depth is `range`, as for any binding. Together those are the three axes the spawn-timing
 decision depends on being reachable — see [Spawn timing](#spawn-timing).

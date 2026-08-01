@@ -20,6 +20,7 @@ use karakuri_codegen::{generate_l1, generate_l4};
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
 
+use crate::binding::{Binding, Signals};
 use crate::camera::Orbit;
 use crate::compaction::Compaction;
 use crate::uniforms::UniformScratch;
@@ -30,6 +31,13 @@ use crate::video_source::VideoSource;
 /// advisory: each substep needs its own spawn-count entry, and that array is
 /// sized once, at build time.
 pub const MAX_STEPS: u8 = 4;
+
+/// The fixed simulation step. **Not** the real frame delta — see the
+/// determinism invariant in `README.md`. Public because the session clock a
+/// binding reads has to advance by exactly this: an oscillator on a different
+/// step would drift away from the `t` the Sets are running at, and the drift
+/// would be invisible until a beat landed in the wrong place.
+pub const DT: f32 = 1.0 / 60.0;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SetError {
@@ -61,6 +69,29 @@ pub enum SetError {
         l1: String,
         l4: String,
         missing: String,
+    },
+    /// One param name declared by both procedures.
+    ///
+    /// [`Set::params`] is keyed by name alone across both layers, so two
+    /// declarations of one name are one value: the second silently takes the
+    /// first's place, a `param` record moves both at once, and a `bind` — which
+    /// *is* keyed by layer — blends from whichever declaration happened to
+    /// land last. Neither procedure can see the other's names, so this is a
+    /// coincidence rather than a mistake, and it is caught here because the
+    /// pair is the first place both are in hand. Every collision is reported at
+    /// once, for the same reason the checker reports every error at once.
+    ///
+    /// The fix on the other side is to key values by layer, the way the record
+    /// format already does; until then, refusing beats picking one.
+    #[error(
+        "`{l1}` and `{l4}` both declare a param named {keys}\n\
+         hint: parameter values are keyed by name across the whole Set, so the two \
+         declarations would be one value — rename one side"
+    )]
+    ParamCollision {
+        l1: String,
+        l4: String,
+        keys: String,
     },
     /// A build panicked rather than returning. Not reachable through any
     /// `.kir` a checker accepts, which is exactly why it needs a variant:
@@ -171,10 +202,17 @@ pub struct Set {
     next_bg: [wgpu::BindGroup; 2],
     l4_attr_bg: [wgpu::BindGroup; 2],
 
+    /// **Manual** parameter values: the `.kir` defaults, as moved by a `param`
+    /// record or a `--param` override. A binding never writes here — it blends
+    /// *from* here — so a param that is both bound and set by hand has one
+    /// answer rather than a race between two writers. See [`Set::bind`].
     pub params: HashMap<String, f32>,
     pub camera: Orbit,
     l1_param_names: Vec<String>,
     l4_param_names: Vec<String>,
+    /// At most one per (layer, param). Resolved once per frame in
+    /// [`Set::prepare`] and read back out wherever a param value is written.
+    bindings: Vec<Binding>,
 }
 
 impl Set {
@@ -231,6 +269,25 @@ impl Set {
                     .map(|a| format!("`{a}`"))
                     .collect::<Vec<_>>()
                     .join(", "),
+            });
+        }
+
+        // Also before anything is generated, and for the same reason: the two
+        // procedures were written without sight of each other, so a shared
+        // param name is a coincidence the pair is the first thing able to see.
+        // See `SetError::ParamCollision` for why it is refused rather than
+        // resolved.
+        let clashing: Vec<String> = l1
+            .params
+            .iter()
+            .filter(|p| l4.params.iter().any(|q| q.name == p.name))
+            .map(|p| format!("`{}`", p.name))
+            .collect();
+        if !clashing.is_empty() {
+            return Err(SetError::ParamCollision {
+                l1: l1.name.clone(),
+                l4: l4.name.clone(),
+                keys: clashing.join(", "),
             });
         }
 
@@ -604,7 +661,7 @@ impl Set {
             seed_base: 0,
             seed_salt,
             steps_taken: 0,
-            dt: 1.0 / 60.0,
+            dt: DT,
             spawn_carry: 0.0,
             step_spawn_counts: [0; MAX_STEPS as usize],
             viewport: [1.0, 1.0],
@@ -635,6 +692,7 @@ impl Set {
             camera: Orbit::default(),
             l1_param_names: l1.params.iter().map(|p| p.name.clone()).collect(),
             l4_param_names: l4.params.iter().map(|p| p.name.clone()).collect(),
+            bindings: Vec::new(),
         };
         set.initialize(device, queue);
         Ok(set)
@@ -706,6 +764,49 @@ impl Set {
         self.capacity
     }
 
+    /// Attach a signal to a `param`. Returns `false` if `binding.layer`
+    /// declares no scalar `param` of that name, which is the same non-fatal
+    /// shape a `--param` for an unknown name has: a Set file naming a param a
+    /// regenerated artifact no longer has should not take the show down.
+    ///
+    /// **At most one binding per (layer, param)**, so a second one replaces
+    /// the first rather than stacking behind it. Two bindings on one param
+    /// would be resolved in vector order and the winner would be whichever was
+    /// attached last — "the last writer wins", which is exactly the answer
+    /// this design refuses everywhere else.
+    ///
+    /// Allocates, so not on the render thread. A binding arrives with a Set
+    /// (from a Set file, from `--bind`, or from a rebuild's `Request`), and
+    /// all three are off the frame path.
+    pub fn bind(&mut self, binding: Binding) -> bool {
+        let declared = match binding.layer {
+            Kind::L1 => &self.l1_param_names,
+            Kind::L4 => &self.l4_param_names,
+        };
+        // Both checks: `params` holds only the scalar params — a vector one is
+        // declared but has no value here — and a binding produces one float.
+        if !declared.contains(&binding.key) || !self.params.contains_key(&binding.key) {
+            return false;
+        }
+        self.bindings
+            .retain(|b| b.layer != binding.layer || b.key != binding.key);
+        self.bindings.push(binding);
+        true
+    }
+
+    /// Every bound param and what it was last written with. For a status line:
+    /// a binding that is doing nothing and a binding that is not there look
+    /// identical from outside otherwise.
+    pub fn bound(&self) -> impl Iterator<Item = (&str, f32)> {
+        self.bindings.iter().map(|b| (b.key.as_str(), b.value()))
+    }
+
+    /// The bindings themselves, for a caller that has to carry them across a
+    /// rebuild.
+    pub fn bindings(&self) -> &[Binding] {
+        &self.bindings
+    }
+
     /// Uploads uniforms and advances simulation time. A parameter change is a
     /// uniform write, which is why it does not need a fork.
     ///
@@ -715,23 +816,35 @@ impl Set {
     /// two have to agree or `t` would advance further than the element
     /// passes did.
     ///
+    /// `signals` is the **session's** oscillator and seed, one per deck rather
+    /// than one per Set, and it has already been advanced by this frame's
+    /// `steps` when this is called — so a binding reads the phase at the
+    /// instant of the frame's last substep. Every binding is resolved once,
+    /// here, and the value is reused wherever that param is written; resolving
+    /// twice in one frame would put two different values into one frame.
+    ///
     /// **Nothing in here allocates.** Both uniform writes go through storage
     /// sized at build time (`crate::uniforms::UniformScratch`) and the step
     /// arguments through a stack array, because this is the render thread and
     /// the first invariant in `README.md` is the one about allocating on it.
-    pub fn prepare(&mut self, queue: &wgpu::Queue, steps: u8) {
+    /// Binding resolution is the same: a fixed `Vec` written in place, a
+    /// stack-sized bus over a borrowed oscillator, and a linear scan to read
+    /// values back out.
+    pub fn prepare(&mut self, queue: &wgpu::Queue, steps: u8, signals: &Signals) {
         let steps = steps.min(MAX_STEPS);
         self.steps_taken += u64::from(steps);
+        self.resolve_bindings(signals);
 
         // No `t` here: it differs between this frame's substeps and lives in
         // `StepArgs`. Everything left is input, sampled once per frame.
         {
+            let (bindings, params) = (&self.bindings, &self.params);
             let mut p = self.l1_scratch.pack(&self.l1_uniform_layout);
             p.f32("dt", self.dt)
                 .u32("capacity", self.capacity)
                 .u32("seed_salt", self.seed_salt);
             for name in &self.l1_param_names {
-                p.f32(name, self.params[name]);
+                p.f32(name, effective(bindings, params, Kind::L1, name));
             }
             queue.write_buffer(&self.l1_uniforms, 0, p.finish());
         }
@@ -744,15 +857,31 @@ impl Set {
         let aspect = self.viewport[0] / self.viewport[1];
         let camera = self.camera.view_proj(t, aspect);
         {
+            let (bindings, params) = (&self.bindings, &self.params);
             let mut p = self.l4_scratch.pack(&self.l4_uniform_layout);
             p.f32("t", t)
                 .u32("seed_salt", self.seed_salt)
                 .vec2("viewport", self.viewport)
                 .mat4("camera", camera);
             for name in &self.l4_param_names {
-                p.f32(name, self.params[name]);
+                p.f32(name, effective(bindings, params, Kind::L4, name));
             }
             queue.write_buffer(&self.l4_uniforms, 0, p.finish());
+        }
+    }
+
+    /// Every binding, once, against the session's signals.
+    ///
+    /// Allocates nothing: the `Vec` is written in place, and each binding's
+    /// manual value is read out of `params` — which is never written here, so
+    /// a `--param` on a bound param survives the frame.
+    fn resolve_bindings(&mut self, signals: &Signals) {
+        for binding in &mut self.bindings {
+            // `unwrap_or` rather than an index: `Set::bind` refuses a param
+            // that is not in the map, so this cannot miss, and a panic on the
+            // render thread is not the way to find out if it ever does.
+            let manual = self.params.get(&binding.key).copied().unwrap_or(0.0);
+            binding.resolve(signals, manual);
         }
     }
 
@@ -769,14 +898,19 @@ impl Set {
     /// of elements in before the second element pass instead.
     ///
     /// `spawn_rate` is a `param`, so it is sampled once per frame and held
-    /// constant across the substeps, like every other parameter.
+    /// constant across the substeps, like every other parameter — and it is
+    /// read through the same binding resolution the uniform is, because
+    /// binding noise to `spawn_rate` is the ir-spec's whole answer to
+    /// irregular spawning. A `spawn_rate` that took its manual value here
+    /// while its uniform took the bound one would be the same param meaning
+    /// two things in one frame.
     fn write_step_args(&mut self, queue: &wgpu::Queue, steps: u8) {
         self.step_spawn_counts = [0; MAX_STEPS as usize];
         // A procedure with no `spawn` block never creates anything, but the
         // `advance` pass still runs for it if it can `kill()` — with a zero
         // count and the capacity it needs to clamp against.
-        let rate = if self.has_spawn {
-            self.params.get("spawn_rate").copied().unwrap_or(0.0)
+        let rate = if self.has_spawn && self.params.contains_key(SPAWN_RATE) {
+            effective(&self.bindings, &self.params, Kind::L1, SPAWN_RATE)
         } else {
             0.0
         };
@@ -814,6 +948,32 @@ impl Set {
 
     fn workgroups(count: u32) -> u32 {
         count.div_ceil(WORKGROUP_SIZE)
+    }
+}
+
+/// The param the engine quantises spawning from. Named once so the uniform
+/// path and the accumulator cannot end up reading two different strings.
+const SPAWN_RATE: &str = "spawn_rate";
+
+/// What a param is actually written with: its binding's value if it has one,
+/// its manual value otherwise.
+///
+/// A linear scan, deliberately. This is the render thread: a `HashMap` keyed
+/// by `String` would hash a name per param per frame to search a list that is
+/// never longer than the params a procedure declares, and the scan touches one
+/// cache line for a Set with no bindings at all — which is every Set today.
+fn effective(
+    bindings: &[Binding],
+    params: &HashMap<String, f32>,
+    layer: Kind,
+    name: &str,
+) -> f32 {
+    match bindings
+        .iter()
+        .find(|b| b.layer == layer && b.key == name)
+    {
+        Some(binding) => binding.value(),
+        None => params[name],
     }
 }
 

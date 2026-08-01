@@ -224,9 +224,19 @@ fine alone and is unreadable next to lights.
 - Transitions as first-class objects, not just crossfade
 - `VideoSource` interface with `color` required and AOVs optional
 - Audio input. Spectrum, energy, onset detection, tempo estimation
-- Wiring the signal bus into parameters: `bind` records become uniform writes. The bus,
-  the oscillator, and the confidence field already exist and are tested; nothing consumes
-  them yet, so binding is the work
+- ~~Wiring the signal bus into parameters.~~ **Done**, except for the decoder: a binding
+  samples, curves, maps and blends by confidence into the uniform write, and the spawn
+  accumulator reads the same value. What is missing is that a `Record::Bind` never becomes
+  one, because nothing loads a Set file into the engine — bindings arrive by CLI flag,
+  shaped like the record so that replacing the flag is deleting a parser. **The two
+  diagnostics that guard the flag** — a `bpm` binding, which saturates because a tempo is
+  not a `[0, 1]` signal, and a `noise.octaves` on a kind that has none — **live only in the
+  flag today, and the decoder owes them too**
+- **Parameter values keyed by `(layer, name)`.** The record format already does it; the
+  engine holds one flat map, so an L1 and an L4 declaring the same parameter name shared a
+  value, with the L4 default silently winning. `Set::build` now refuses the collision
+  rather than resolving it, which is correct and is not the answer — a Set whose two
+  procedures both want a `hue` is not an error
 - PLL correction of the local oscillator against external tempo
 - Ableton Link as a passive peer that never proposes a tempo
 - MIDI control surface on a dedicated controller, not the DJ controller

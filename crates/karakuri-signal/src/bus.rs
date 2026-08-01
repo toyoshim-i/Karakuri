@@ -1,12 +1,19 @@
 //! The synthesized signal bus: V1's only kind of signal, since audio and
-//! external sync are out of scope. Every value comes from the local
-//! oscillator plus an explicit seed — nothing else.
+//! external sync are out of scope. Every value on it is a pure function of the
+//! local oscillator's `t` and `bpm` — nothing else.
+//!
+//! **Nothing seeded lives here.** A signal a name alone can describe belongs on
+//! the bus; a generator with kind, rate, stream and octaves to say does not,
+//! because [`SignalBus::sample`](crate::SignalBus::sample) takes a `&str` and
+//! there is no collision-free grammar for four fields inside one. Noise is
+//! therefore reached through [`NoiseConfig`](crate::NoiseConfig), and the name
+//! `"noise"` belongs to the `bind` record that declares one — see
+//! [`sample`](SynthesizedBus::sample).
 //!
 //! [`SynthesizedBus`] never fails to resolve a name and never returns an
 //! `Option`; see [`SignalBus`](crate::SignalBus) for why. Consumers branch on
 //! [`Sample::confidence`](crate::Sample::confidence) instead.
 
-use crate::noise::NoiseConfig;
 use crate::oscillator::Oscillator;
 use crate::{Sample, SignalBus};
 
@@ -15,33 +22,36 @@ use crate::{Sample, SignalBus};
 /// so they carry full confidence.
 const CONFIDENCE_OSCILLATOR: f32 = 1.0;
 
-/// `energy`, `band*`, and `noise*` have no provider behind them in V1 (audio
-/// input is out of scope); they are pure invention shaped to be useful
-/// defaults, not measurements. Low but nonzero: a consumer that blends on
-/// confidence should still be able to use them as a gentle ambient driver
-/// when nothing better is bound, without mistaking them for a real reading.
+/// `energy` and `band*` have no provider behind them in V1 (audio input is out
+/// of scope); they are pure invention shaped to be useful defaults, not
+/// measurements. Low but nonzero: a consumer that blends on confidence should
+/// still be able to use them as a gentle ambient driver when nothing better is
+/// bound, without mistaking them for a real reading.
 const CONFIDENCE_INVENTED: f32 = 0.1;
 
-/// A signal bus synthesized entirely from a local [`Oscillator`] and a seed.
+/// A signal bus synthesized entirely from a local [`Oscillator`].
 ///
 /// V1 has no external input, so this is the only kind of `SignalBus`: there
 /// is nothing to fall back to and nothing to blend against. Holding the
 /// oscillator by reference rather than copying its state keeps the bus and
 /// the oscillator from being able to disagree — there is exactly one phase in
 /// the system, and this just reads it.
+///
+/// **No seed.** Everything the bus answers is a deterministic waveform in `t`
+/// and `bpm`; the explicit seed stream the determinism invariant asks for is
+/// [`NoiseConfig::sample`](crate::NoiseConfig::sample)'s, where the randomness
+/// actually is. A seed carried here and read by nothing would look like a
+/// randomness source that had been accounted for.
 pub struct SynthesizedBus<'a> {
     oscillator: &'a Oscillator,
-    seed: u64,
 }
 
 impl<'a> SynthesizedBus<'a> {
-    /// `seed` is the explicit randomness source for every noise signal this
-    /// bus produces. Two buses built with the same seed over oscillators fed
-    /// the same step sequence agree on every sample, bit for bit — there is
-    /// no clock, no thread-derived state, and no interior mutability that a
-    /// different call order could perturb.
-    pub fn new(oscillator: &'a Oscillator, seed: u64) -> SynthesizedBus<'a> {
-        SynthesizedBus { oscillator, seed }
+    /// Two buses over oscillators fed the same step sequence agree on every
+    /// sample, bit for bit — there is no clock, no thread-derived state, and
+    /// no interior mutability that a different call order could perturb.
+    pub fn new(oscillator: &'a Oscillator) -> SynthesizedBus<'a> {
+        SynthesizedBus { oscillator }
     }
 }
 
@@ -52,7 +62,16 @@ impl SignalBus for SynthesizedBus<'_> {
             "beat" => oscillator_derived(pulse(self.oscillator.beat_phase())),
             "bar" => oscillator_derived(pulse(self.oscillator.bar_phase())),
             "energy" => low_confidence(energy(self.oscillator.t())),
-            "noise" => low_confidence(NoiseConfig::default().sample(self.seed, self.oscillator)),
+            // **No `"noise"` here, deliberately.** A noise generator has kind,
+            // rate, stream and octaves to say, and `sample` takes a name and
+            // nothing else — so noise is reached through [`NoiseConfig`], and
+            // a `bind` record whose `signal` is `"noise"` names the generator
+            // it declares. Answering the same name here too would give it two
+            // meanings, at two confidences, resolved by which consumer asked;
+            // `docs/ir-spec.md` requires two vocabularies that meet in one
+            // decoder to be "disjoint by name", not merely disjoint in
+            // practice. The bus stays complete either way: the arm below
+            // answers every name it does not know.
             _ => match band_index(name) {
                 Some(index) => low_confidence(band(self.oscillator.t(), index)),
                 None => Sample::synthesized(0.0),
@@ -127,16 +146,20 @@ mod tests {
         osc
     }
 
+    /// Every name the bus answers. One list, so a signal added without a
+    /// test here is a signal that does not appear in any of them.
+    const PROVIDED: [&str; 6] = ["bpm", "beat", "bar", "energy", "band", "band3"];
+
     #[test]
-    fn same_seed_and_steps_give_bit_identical_samples() {
+    fn the_same_steps_give_bit_identical_samples() {
         let steps = [(1u8, 1.0 / 60.0), (2, 1.0 / 60.0), (1, 1.0 / 30.0)];
         let osc_a = advance_both(&steps, 128.0);
         let osc_b = advance_both(&steps, 128.0);
 
-        let bus_a = SynthesizedBus::new(&osc_a, 42);
-        let bus_b = SynthesizedBus::new(&osc_b, 42);
+        let bus_a = SynthesizedBus::new(&osc_a);
+        let bus_b = SynthesizedBus::new(&osc_b);
 
-        for name in ["bpm", "beat", "bar", "energy", "band", "band3", "noise"] {
+        for name in PROVIDED {
             assert_eq!(
                 bus_a.sample(name),
                 bus_b.sample(name),
@@ -145,15 +168,24 @@ mod tests {
         }
     }
 
+    /// **`"noise"` is not a bus name.** A noise generator has kind, rate,
+    /// stream and octaves to say and `sample` takes only a name, so noise is
+    /// `NoiseConfig`'s and the name belongs to the `bind` record that declares
+    /// one. Answering it here as well would give one name two meanings at two
+    /// confidences — the shape `docs/ir-spec.md` refuses when it asks for
+    /// vocabularies that are "disjoint by name" rather than in practice.
     #[test]
-    fn different_seeds_diverge_on_noise() {
+    fn noise_is_not_a_name_the_bus_answers() {
         let steps = [(1u8, 1.0 / 60.0), (3, 1.0 / 60.0)];
         let osc = advance_both(&steps, 128.0);
+        let bus = SynthesizedBus::new(&osc);
 
-        let bus_a = SynthesizedBus::new(&osc, 1);
-        let bus_b = SynthesizedBus::new(&osc, 2);
-
-        assert_ne!(bus_a.sample("noise").value, bus_b.sample("noise").value);
+        let s = bus.sample("noise");
+        assert_eq!(s.value, 0.0);
+        assert_eq!(
+            s.confidence, 0.0,
+            "the bus claimed to provide `noise`, which is the binding's name"
+        );
     }
 
     #[test]
@@ -164,7 +196,7 @@ mod tests {
         // just an unrecognized name now — still complete, still low
         // confidence, not a guess at what the caller meant.
         let osc = Oscillator::new(120.0);
-        let bus = SynthesizedBus::new(&osc, 7);
+        let bus = SynthesizedBus::new(&osc);
 
         let s = bus.sample("noise:spawn_rate");
         assert_eq!(s.value, 0.0);
@@ -174,7 +206,7 @@ mod tests {
     #[test]
     fn unknown_signal_name_is_complete_not_missing() {
         let osc = Oscillator::new(120.0);
-        let bus = SynthesizedBus::new(&osc, 0);
+        let bus = SynthesizedBus::new(&osc);
 
         let s = bus.sample("some_signal_nobody_ever_defined");
         assert_eq!(s.value, 0.0);
@@ -188,7 +220,7 @@ mod tests {
     #[test]
     fn oscillator_derived_signals_are_high_confidence() {
         let osc = Oscillator::new(120.0);
-        let bus = SynthesizedBus::new(&osc, 0);
+        let bus = SynthesizedBus::new(&osc);
 
         for name in ["bpm", "beat", "bar"] {
             assert_eq!(bus.sample(name).confidence, 1.0, "{name} should be certain");
@@ -198,9 +230,9 @@ mod tests {
     #[test]
     fn invented_signals_are_low_confidence() {
         let osc = Oscillator::new(120.0);
-        let bus = SynthesizedBus::new(&osc, 0);
+        let bus = SynthesizedBus::new(&osc);
 
-        for name in ["energy", "band", "band2", "noise"] {
+        for name in ["energy", "band", "band2"] {
             assert!(
                 bus.sample(name).confidence < 0.5,
                 "{name} should read as invented, not measured"
@@ -213,16 +245,14 @@ mod tests {
         // Same total elapsed time, different tick history: one call of
         // steps=1/dt=0.2 vs. two calls of steps=1/dt=0.1. Every signal on the
         // bus is a function of `t` and `bpm` alone (see `Oscillator`'s
-        // docs), so all of them agree here — including noise, now that its
-        // period is tempo-relative (`beats * rate`) rather than tied to how
-        // many `advance` calls occurred.
+        // docs), so all of them agree here.
         let merged = advance_both(&[(1, 0.2)], 90.0);
         let split = advance_both(&[(1, 0.1), (1, 0.1)], 90.0);
 
-        let bus_merged = SynthesizedBus::new(&merged, 99);
-        let bus_split = SynthesizedBus::new(&split, 99);
+        let bus_merged = SynthesizedBus::new(&merged);
+        let bus_split = SynthesizedBus::new(&split);
 
-        for name in ["bpm", "beat", "bar", "energy", "band", "noise"] {
+        for name in PROVIDED {
             assert_eq!(
                 bus_merged.sample(name),
                 bus_split.sample(name),

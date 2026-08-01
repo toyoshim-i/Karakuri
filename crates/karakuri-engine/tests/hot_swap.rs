@@ -27,7 +27,7 @@ use std::sync::mpsc::{self, Sender};
 use std::time::{Duration, Instant};
 
 use karakuri_engine::swap::{Event, HotSwap, Request, Source};
-use karakuri_engine::{Gpu, Present, Set, VideoSource};
+use karakuri_engine::{Binding, Curve, Gpu, Present, Set, Signals, VideoSource};
 use karakuri_ir::typed::Checked;
 
 /// Deliberately small for the structural tests: what they check does not
@@ -141,6 +141,7 @@ fn request(l4_src: &str, capacity: u32, label: &str) -> Request {
         capacity,
         seed_salt: 19274,
         params: Vec::new(),
+        bindings: Vec::new(),
         label: label.to_string(),
     }
 }
@@ -237,7 +238,7 @@ impl Harness {
 
         let set = self.swap.begin_frame();
         let at_top = set.capacity();
-        set.prepare(queue, 1);
+        set.prepare(queue, 1, &Signals::default());
         let mut encoder = device.create_command_encoder(&Default::default());
         set.render(&mut encoder, hdr, 1);
         let at_bottom = set.capacity();
@@ -369,6 +370,47 @@ fn a_build_runs_in_the_background_and_lands_between_two_frames() {
         .filter(|w| w[0].0 != w[1].0)
         .count();
     assert_eq!(changes, 1, "expected exactly one swap, saw {changes}");
+}
+
+/// A swapped-in Set carries the bindings the request stated.
+///
+/// A binding is Set state and a swap builds a whole new Set, so this is the
+/// same "carried by being restated" the params already are — and losing it is
+/// silent: `--watch` would keep working, the picture would keep updating, and
+/// the only symptom would be a parameter that quietly stopped moving after the
+/// first save.
+#[test]
+fn a_swapped_in_set_carries_the_bindings_the_request_stated() {
+    let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
+
+    for _ in 0..3 {
+        h.frame();
+    }
+    assert!(h.swap.set().bindings().is_empty());
+
+    let mut req = request(L4, SECOND, "bound");
+    // The param moved by hand *and* bound, since the two travel together and
+    // the binding has to be applied after the override to blend from it.
+    req.params = vec![("radius".to_string(), 4.0)];
+    req.bindings = vec![Binding::new(
+        karakuri_ir::Kind::L1,
+        "radius",
+        "beat",
+        Curve::Pow2,
+        [1.0, 5.0],
+    )];
+    tx.send(req).expect("worker alive");
+    h.frames_until(is_swapped, "the swap");
+
+    let set = h.swap.set();
+    assert_eq!(set.capacity(), SECOND, "the swap did not land");
+    assert_eq!(set.params["radius"], 4.0, "the override did not survive");
+    assert_eq!(
+        set.bindings().len(),
+        1,
+        "the swapped-in Set lost the binding the request stated"
+    );
+    assert_eq!(set.bindings()[0].signal, "beat");
 }
 
 /// A build that fails leaves the running Set **completely** untouched: not

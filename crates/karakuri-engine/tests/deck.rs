@@ -29,7 +29,7 @@ use std::time::{Duration, Instant};
 
 use karakuri_engine::deck::{Deck, Residency};
 use karakuri_engine::swap::{Event, HotSwap, Request};
-use karakuri_engine::{Gpu, Present, Set, VideoSource};
+use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
 use karakuri_ir::typed::Checked;
 
 const WIDTH: u32 = 256;
@@ -186,7 +186,10 @@ fn frame(gpu: &Gpu, deck: &mut Deck, present: &Present, steps: u8) {
 /// [`a_deck_of_one_is_a_bare_set_bit_for_bit`] is only worth something if this
 /// is the *old* path rather than a second spelling of the new one.
 fn bare_frame(gpu: &Gpu, set: &mut Set, present: &Present, steps: u8) {
-    set.prepare(&gpu.queue, steps);
+    // No bindings on these Sets, so the session clock is inert here and
+    // nothing reads a signal; the real one belongs to the deck, and
+    // `tests/binding.rs` is where it is asserted.
+    set.prepare(&gpu.queue, steps, &Signals::default());
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
     set.render(&mut encoder, present.hdr_view(), steps);
     gpu.queue.submit([encoder.finish()]);
@@ -746,6 +749,7 @@ fn a_swap_in_one_slot_leaves_the_other_slot_alone() {
         capacity: SWAPPED,
         seed_salt: SEED_A,
         params: Vec::new(),
+        bindings: Vec::new(),
         label: "slot 0, second".to_string(),
     })
     .expect("worker alive");
@@ -851,6 +855,7 @@ fn an_off_air_slot_is_not_judged_against_its_neighbours_frames() {
         capacity: SWAPPED,
         seed_salt: SEED_B,
         params: Vec::new(),
+        bindings: Vec::new(),
         label: "off air".to_string(),
     })
     .expect("worker alive");

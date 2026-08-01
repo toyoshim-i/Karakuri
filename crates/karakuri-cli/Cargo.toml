@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 karakuri-engine = { version = "0.1.0", path = "../karakuri-engine" }
 karakuri-ir = { version = "0.1.0", path = "../karakuri-ir" }
+karakuri-signal = { version = "0.1.0", path = "../karakuri-signal" }
 png = "0.18.1"
 pollster = "1.0.1"
 wgpu = "26.0.1"

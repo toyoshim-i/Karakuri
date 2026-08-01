@@ -12,7 +12,7 @@
 //! hand-written stand-in: when the generated path can do everything the
 //! stand-in does, the stand-in can go.
 
-use karakuri_engine::{Gpu, Present, Set, VideoSource};
+use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
 use karakuri_ir::typed::Checked;
 
 const WIDTH: u32 = 256;
@@ -109,7 +109,10 @@ fn build(gpu: &Gpu, capacity: u32, seed: u32) -> Set {
 
 fn frame(gpu: &Gpu, set: &mut Set, steps: u8) -> Vec<u16> {
     let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba16Float, WIDTH, HEIGHT);
-    set.prepare(&gpu.queue, steps);
+    // No bindings on these Sets, so the session clock is inert here and
+    // nothing reads a signal; the real one belongs to the deck, and
+    // `tests/binding.rs` is where it is asserted.
+    set.prepare(&gpu.queue, steps, &Signals::default());
 
     let bytes_per_row = WIDTH * 8;
     let readback = gpu.device.create_buffer(&wgpu::BufferDescriptor {

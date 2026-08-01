@@ -799,6 +799,7 @@ version = "0.1.0"
 dependencies = [
  "karakuri-engine",
  "karakuri-ir",
+ "karakuri-signal",
  "png",
  "pollster",
  "wgpu",
@@ -820,6 +821,7 @@ dependencies = [
  "bytemuck",
  "karakuri-codegen",
  "karakuri-ir",
+ "karakuri-signal",
  "png",
  "pollster",
  "thiserror 2.0.19",
