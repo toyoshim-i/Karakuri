@@ -13,5 +13,5 @@ pub mod store;
 pub use hash::{Hash, HashParseError};
 pub use ndjson::Line;
 pub use project::project;
-pub use record::{Layer, Record, Value, MAX_STEPS};
+pub use record::{BindNoise, Layer, Record, Value, MAX_STEPS};
 pub use store::{Store, StoreError};

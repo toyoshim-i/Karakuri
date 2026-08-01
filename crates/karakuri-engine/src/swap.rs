@@ -113,6 +113,7 @@ use std::time::{Duration, Instant};
 
 use karakuri_ir::typed::Checked;
 
+use crate::binding::Binding;
 use crate::set::{Set, SetError};
 
 /// Frames discarded after a swap, before the watchdog starts measuring. See
@@ -168,6 +169,12 @@ pub struct Request {
     /// depends on what happens to be live is not reproducible from a record
     /// stream.
     pub params: Vec<(String, f32)>,
+    /// Attached to the new Set once its params are set, and **restated** here
+    /// for the same reason they are: a rebuild that read its bindings out of
+    /// whatever happened to be live would not be reproducible from a record
+    /// stream. A binding is Set state, not Set structure — the new Set is a
+    /// new value either way, and a `bind` record travels with it.
+    pub bindings: Vec<Binding>,
     /// What a swap or rollback message calls this.
     pub label: String,
 }
@@ -766,6 +773,15 @@ fn run_worker(
                     match set.params.get_mut(&name) {
                         Some(slot) => *slot = value,
                         None => eprintln!("  no parameter named `{name}`, ignoring"),
+                    }
+                }
+                // After the params, because a binding blends from a param's
+                // value: applying them the other way round would leave the
+                // first frame after a swap blending from the `.kir` default.
+                for binding in request.bindings {
+                    let (layer, key) = (binding.layer, binding.key.clone());
+                    if !set.bind(binding) {
+                        eprintln!("  no {layer:?} parameter named `{key}` to bind, ignoring");
                     }
                 }
                 set

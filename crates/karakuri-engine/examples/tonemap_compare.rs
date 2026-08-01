@@ -19,7 +19,7 @@
 use std::path::{Path, PathBuf};
 
 use karakuri_engine::set::MAX_STEPS;
-use karakuri_engine::{Gpu, Present, Set, TonemapOp, VideoSource};
+use karakuri_engine::{Gpu, Present, Set, Signals, TonemapOp, VideoSource};
 use karakuri_ir::typed::Checked;
 
 const WIDTH: u32 = 640;
@@ -58,7 +58,7 @@ fn warm_up(gpu: &Gpu, set: &mut Set, present: &Present) {
     let mut remaining = WARMUP_STEPS;
     while remaining > 0 {
         let steps = remaining.min(u32::from(MAX_STEPS)) as u8;
-        set.prepare(&gpu.queue, steps);
+        set.prepare(&gpu.queue, steps, &Signals::default());
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         set.render(&mut encoder, present.hdr_view(), steps);
         gpu.queue.submit([encoder.finish()]);

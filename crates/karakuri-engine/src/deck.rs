@@ -112,6 +112,28 @@
 //! shader sums its four terms unrolled, in slot order, for the same reason —
 //! see `shaders/composite.wgsl`.
 //!
+//! ## Signals
+//!
+//! **One local oscillator per session, and this is where it lives.** The
+//! invariants call it the single source of truth for phase and tempo, so there
+//! cannot be one per Set: four Sets would be four truths, and a beat would
+//! land at four instants. The deck is the smallest thing that is one per
+//! session and already has the frame, so [`Deck`] owns a [`Signals`] and
+//! [`Frame::render`] advances it once, by the same `steps` every Live slot is
+//! advanced by.
+//!
+//! That placement is what puts bindings inside the determinism invariant
+//! rather than beside it: the oscillator's only input is the tick sequence,
+//! the noise seed is explicit, and nothing here reads a clock — so the same
+//! record stream and the same seed produce the same bound parameter values,
+//! bit for bit, on every run.
+//!
+//! An `Allocated` slot is not prepared, so it reads no signals while it is off
+//! air and its `t` stands still — but the session clock does not stop, because
+//! it is the session's rather than the slot's. A slot brought back on air
+//! rejoins the beat the rest of the deck is on rather than resuming a phase of
+//! its own, which is the right answer for the same reason the tempo is shared.
+//!
 //! ## Level metering
 //!
 //! A deck can measure what each Live slot's target actually puts out — mean and
@@ -130,8 +152,10 @@
 //! are handled where they happen: [`Deck::set_residency`], [`Deck::resize`],
 //! and [`Deck::begin_frame`].
 
+use crate::binding::Signals;
 use crate::meter::{Level, Meters};
 use crate::present::Present;
+use crate::set::{DT, MAX_STEPS};
 use crate::swap::{Event, HotSwap};
 use crate::video_source::VideoSource;
 
@@ -195,6 +219,9 @@ pub struct Deck {
     /// caller that will never read a level should not pay for one — see
     /// "Level metering" in the module doc.
     meters: Option<Meters>,
+    /// **The session's one local oscillator**, and the seed every noise stream
+    /// comes off. See "Signals" in the module doc.
+    signals: Signals,
     width: u32,
     height: u32,
 }
@@ -242,9 +269,27 @@ impl Deck {
             slots,
             composite,
             meters: None,
+            signals: Signals::default(),
             width,
             height,
         }
+    }
+
+    /// The session's signals — the local oscillator every binding reads, and
+    /// the seed every noise stream comes off.
+    pub fn signals(&self) -> &Signals {
+        &self.signals
+    }
+
+    /// Replace the session's signals, tempo and seed together.
+    ///
+    /// **Before the first frame.** A `Signals` carries the phase as well as
+    /// the tempo, so this restarts the session clock at zero rather than
+    /// retuning one that is running; a tempo that can move mid-set is what
+    /// M2's PLL correction is for, and it belongs in the oscillator rather
+    /// than in a wholesale replacement here.
+    pub fn set_signals(&mut self, signals: Signals) {
+        self.signals = signals;
     }
 
     /// Start measuring what each slot puts out. Off by default.
@@ -551,6 +596,17 @@ impl Frame<'_> {
         );
         self.rendered = true;
 
+        // The session clock, advanced once, here, by exactly what every Live
+        // slot is about to be advanced by — clamped the same way `Set::prepare`
+        // clamps it, or a frame the simulation was allowed to fall behind on
+        // would move the oscillator further than the material it drives. The
+        // `rendered` assert above is what makes "once" structural: a second
+        // `render` in one frame cannot reach this.
+        //
+        // Before the slots, so that a binding reads the phase at the instant of
+        // this frame's last substep — the same instant `Set::time` reports.
+        self.deck.signals.advance(steps.min(MAX_STEPS), DT);
+
         // A view carries no dimensions, so the size comes alongside it and is
         // checked here. Silence is the reason: the composite reads its sources
         // with `textureLoad`, and an out-of-range `textureLoad` is *defined* to
@@ -574,13 +630,17 @@ impl Frame<'_> {
         // Index order, and only Live slots. An Allocated slot is not stepped
         // and not drawn, which is the whole of what Allocated means: `t` only
         // advances through `prepare`.
+        // Borrowed out of the deck before the slots are: every Live slot reads
+        // the same signals, from the same frame, which is the same reason they
+        // are all advanced by the same `steps`.
+        let signals = &self.deck.signals;
         for (i, slot) in self.deck.slots.iter_mut().enumerate() {
             if slot.residency != Residency::Live {
                 continue;
             }
             let view = &slot.view;
             let set = slot.swap.live_mut();
-            set.prepare(self.queue, steps);
+            set.prepare(self.queue, steps, signals);
             set.render(encoder, view, steps);
             // After the render pass, into the same encoder, so the measurement
             // is of this frame's image. Live slots only: an Allocated slot

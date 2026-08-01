@@ -12,7 +12,7 @@
 //! fine in a test and is exactly why `Set::live_count` documents itself as
 //! one; nothing in this file is a model for what the frame path does.
 
-use karakuri_engine::{Gpu, Present, Set, VideoSource};
+use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
 use karakuri_ir::typed::Checked;
 
 const WIDTH: u32 = 128;
@@ -102,7 +102,7 @@ fn build(gpu: &Gpu, l1_src: &str, capacity: u32) -> Set {
 /// measured.
 fn step(gpu: &Gpu, set: &mut Set, steps: u8) {
     let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba16Float, WIDTH, HEIGHT);
-    set.prepare(&gpu.queue, steps);
+    set.prepare(&gpu.queue, steps, &Signals::default());
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
     set.render(&mut encoder, present.hdr_view(), steps);
     gpu.queue.submit([encoder.finish()]);
@@ -112,7 +112,7 @@ fn step(gpu: &Gpu, set: &mut Set, steps: u8) {
 /// One frame, returning the rendered `Rgba16Float` texels.
 fn frame(gpu: &Gpu, set: &mut Set, steps: u8) -> Vec<u16> {
     let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba16Float, WIDTH, HEIGHT);
-    set.prepare(&gpu.queue, steps);
+    set.prepare(&gpu.queue, steps, &Signals::default());
 
     let bytes_per_row = WIDTH * 8;
     let readback = gpu.device.create_buffer(&wgpu::BufferDescriptor {

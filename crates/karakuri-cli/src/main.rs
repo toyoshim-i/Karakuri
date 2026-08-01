@@ -26,8 +26,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use karakuri_engine::binding::{Curve, CURVES, DEFAULT_BPM, NOISE_SIGNAL};
 use karakuri_engine::deck::MAX_SLOTS;
-use karakuri_engine::{Deck, Gpu, HotSwap, Present, Residency, Set, TonemapOp, DEFAULT_BUDGET_MS};
+use karakuri_engine::{
+    Binding, Deck, Gpu, HotSwap, Present, Residency, Set, Signals, TonemapOp, DEFAULT_BUDGET_MS,
+};
+use karakuri_signal::{NoiseConfig, NoiseKind};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -35,7 +39,11 @@ use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
 /// The fixed simulation step. Not the frame delta.
-const DT: f32 = 1.0 / 60.0;
+///
+/// The engine's, not a second copy of it: the session oscillator a binding
+/// reads advances by this, so a value here that drifted from the engine's would
+/// put beats in the wrong place with nothing to show for it.
+const DT: f32 = karakuri_engine::set::DT;
 
 /// Past this the simulation falls behind rather than catching up. Unbounded
 /// catch-up turns a load spike into a death spiral.
@@ -111,6 +119,19 @@ options:
   --size WxH            output size (default 1280x720)
   --capacity N          elements per Set (default 262144)
   --param name=value    a uniform write, applied to every Set
+  --bind FIELDS         attach a signal to a param, applied to every Set.
+                        Comma-separated `field=value`, one per field of the
+                        `bind` record:
+                          layer=L1 key=turbulence signal=energy
+                          curve=lin|pow2|sqrt|smooth  range=LOW..HIGH
+                          noise.kind=white|value|perlin|fbm
+                          noise.rate=N  noise.stream=N
+                          noise.octaves=N   (needs noise.kind=fbm)
+                        layer, key, signal and range are required.
+                        signal=bpm is refused: a tempo is not a [0,1] signal
+                        and the binding would never move — bind beat or bar
+  --bpm N               the session tempo the local oscillator runs at
+                        (default 120)
   --tonemap OP          clamp | reinhard | aces | agx (default aces)
   --exposure V          output exposure, before the tone map (default 1.0)
   --watch               recompile and swap the slot whose files changed
@@ -171,6 +192,23 @@ struct Args {
     /// parameter change is a uniform write, not a structural change, which is
     /// why it needs no fork and no recompilation.
     overrides: Vec<(String, f32)>,
+    /// `--bind`, applied to every Set on the same terms as `overrides`.
+    ///
+    /// **This flag is a stand-in for a Set file and is shaped so it can be
+    /// retired for one.** Bindings belong in a `.set.ndjson`, but nothing
+    /// loads one into the engine yet — `karakuri-store` decodes records and no
+    /// other crate reads a `Record` — and that is its own slice of work. So
+    /// the flag names the record's own fields, one comma-separated
+    /// `field=value` per JSON field, and the day `--set` takes a Set file the
+    /// change here is deleting this and calling `Set::bind` from the decoder
+    /// instead. Like `--param`, it applies to every Set, because the record
+    /// has no slot field: a Set file is per Set, and one per `--set` is what
+    /// replaces it.
+    bindings: Vec<Binding>,
+    /// The session tempo. There is **no tempo record** in the v0.2 vocabulary,
+    /// so unlike `--bind` this flag has nothing to map onto yet; it is here
+    /// because a binding to `beat` is meaningless at a tempo nobody can set.
+    bpm: f32,
     /// One (L1, L4) pair per deck slot, in composite order.
     sets: Vec<(PathBuf, PathBuf)>,
     capacity: u32,
@@ -263,9 +301,184 @@ fn number_for<T: std::str::FromStr>(
         .map_err(|_| format!("`{flag} {value}` — expected {what}"))
 }
 
+/// One `--bind` value, as the `bind` record's own fields.
+///
+/// The grammar is `field=value`, comma separated, and every field name is the
+/// record's. The single deviation is `range`, which the record writes as a
+/// two-element array and this writes as `LOW..HIGH` — a comma inside a value
+/// would be indistinguishable from the separator between fields, and quoting
+/// rules to fix that would be a second grammar rather than a smaller one.
+///
+/// Unknown fields are refused rather than ignored. The record format ignores
+/// an unknown `t` for forward compatibility between engine versions; a typo on
+/// a command line has no such excuse, and `curv=pow2` silently taking the
+/// default curve is the exact silence every other flag here was fixed for.
+fn parse_bind(value: &str) -> Result<Binding, String> {
+    let bad = |what: &str| format!("`--bind {value}` — {what}");
+
+    let mut layer = None;
+    let mut key = None;
+    let mut signal = None;
+    let mut curve = Curve::Lin;
+    let mut range = None;
+    // Built whether or not it is used: a `noise.*` field on a binding whose
+    // signal is not `noise` is a mistake worth reporting, and that check needs
+    // to know one was given.
+    let mut noise = NoiseConfig::default();
+    let mut noise_given = false;
+    // Kept as what was written rather than folded into `noise.kind` as it is
+    // read. `NoiseKind` carries the octave count inside the `fbm` variant, so
+    // assigning either field as it arrives lets the later one decide the
+    // other: `noise.octaves` would turn a `white` that was asked for into an
+    // `fbm` that was not. Both are resolved once, after the loop, where the
+    // pair can be checked against each other.
+    let mut noise_kind: Option<&str> = None;
+    let mut noise_octaves: Option<u32> = None;
+
+    for field in value.split(',') {
+        let (name, v) = field
+            .split_once('=')
+            .ok_or_else(|| bad(&format!("`{field}` is not `field=value`")))?;
+        let number = |what: &str| -> Result<f32, String> {
+            v.parse::<f32>()
+                .map_err(|_| bad(&format!("`{name}` expects {what}, got `{v}`")))
+        };
+        match name.trim() {
+            "layer" => {
+                layer = Some(match v {
+                    "L1" => karakuri_ir::Kind::L1,
+                    "L4" => karakuri_ir::Kind::L4,
+                    // L2 and L3 are in the record's `Layer` and are M3's; a
+                    // Set has no slot for one, so binding into it would
+                    // silently do nothing.
+                    _ => return Err(bad(&format!("`layer={v}` — expected L1 or L4"))),
+                })
+            }
+            "key" => key = Some(v.to_string()),
+            "signal" => signal = Some(v.to_string()),
+            "curve" => {
+                curve = Curve::parse(v).ok_or_else(|| {
+                    let names: Vec<&str> = CURVES.iter().map(|c| c.name()).collect();
+                    bad(&format!("`curve={v}` — expected {}", names.join(", ")))
+                })?
+            }
+            "range" => {
+                let (low, high) = v
+                    .split_once("..")
+                    .ok_or_else(|| bad(&format!("`range={v}` — expected `LOW..HIGH`")))?;
+                match (low.parse::<f32>(), high.parse::<f32>()) {
+                    (Ok(low), Ok(high)) => range = Some([low, high]),
+                    _ => return Err(bad(&format!("`range={v}` — expected `LOW..HIGH`"))),
+                }
+            }
+            "noise.kind" => {
+                noise_given = true;
+                if !NOISE_KINDS.contains(&v) {
+                    return Err(bad(&format!(
+                        "`noise.kind={v}` — expected white, value, perlin or fbm"
+                    )));
+                }
+                noise_kind = Some(v);
+            }
+            "noise.rate" => {
+                noise_given = true;
+                noise.rate = number("a number of cycles per beat")?;
+            }
+            "noise.stream" => {
+                noise_given = true;
+                noise.stream = v
+                    .parse::<u64>()
+                    .map_err(|_| bad(&format!("`noise.stream={v}` — expected a whole number")))?;
+            }
+            "noise.octaves" => {
+                noise_given = true;
+                noise_octaves = Some(
+                    v.parse::<u32>().map_err(|_| {
+                        bad(&format!("`noise.octaves={v}` — expected a whole number"))
+                    })?,
+                );
+            }
+            other => {
+                return Err(bad(&format!(
+                    "unknown field `{other}` — expected layer, key, signal, curve, range, \
+                     or noise.kind / noise.rate / noise.stream / noise.octaves"
+                )))
+            }
+        }
+    }
+
+    let layer = layer.ok_or_else(|| bad("no `layer=`"))?;
+    let key = key.ok_or_else(|| bad("no `key=`"))?;
+    let signal = signal.ok_or_else(|| bad("no `signal=`"))?;
+    // Required, unlike `curve`: there is no defensible default range. A param
+    // declares its own in the `.kir`, and silently binding across all of it
+    // would be an aesthetic decision made by the argument parser.
+    let range = range.ok_or_else(|| bad("no `range=LOW..HIGH`"))?;
+
+    // A tempo is not a `[0, 1]` signal. Steps 2 and 3 of a binding clamp the
+    // sample into the unit range before mapping it, so `bpm` — which is 120,
+    // not 0.42 — arrives as 1.0 and the param sits at the top of its range for
+    // the whole run. `docs/ir-spec.md` records that; refusing it here is what
+    // makes it visible, because from the outside a pinned binding and a
+    // working one are the same number on a status line. `beat` and `bar` carry
+    // the same tempo in the range a binding is defined over.
+    if signal == "bpm" {
+        return Err(bad(
+            "`signal=bpm` — a tempo is not a [0, 1] signal, so the curve clamps it and this \
+             binding would sit at the top of its range for the whole run; bind `beat` or \
+             `bar` instead",
+        ));
+    }
+
+    // `octaves` is `fbm`'s layer count and the other three kinds have no
+    // layers. Refused rather than ignored, on the same terms as a `noise.*`
+    // field on a binding that is not a noise binding: the alternative is an
+    // operator watching a generator behave like one they did not name.
+    if noise_octaves.is_some() && noise_kind != Some("fbm") {
+        return Err(bad(&format!(
+            "`noise.octaves` needs `noise.kind=fbm`, and this asks for `{}`",
+            noise_kind.unwrap_or("perlin")
+        )));
+    }
+    noise.kind = match noise_kind {
+        Some("white") => NoiseKind::White,
+        Some("value") => NoiseKind::Value,
+        Some("fbm") => NoiseKind::Fbm {
+            octaves: noise_octaves.unwrap_or(DEFAULT_OCTAVES),
+        },
+        // `perlin`, and the default when nothing named a kind — which are the
+        // same generator, so they are the same arm.
+        _ => NoiseKind::Perlin,
+    };
+
+    let binding = Binding::new(layer, key, signal.clone(), curve, range);
+    if signal == NOISE_SIGNAL {
+        Ok(binding.with_noise(noise))
+    } else if noise_given {
+        // Accepting this would leave the operator watching a parameter that
+        // does not move and re-reading the noise fields to find out why.
+        Err(bad(&format!(
+            "`noise.*` needs `signal={NOISE_SIGNAL}`, and this binds `{signal}`"
+        )))
+    } else {
+        Ok(binding)
+    }
+}
+
+/// The octave count an `fbm` binding gets when it does not say. Matches the
+/// default in `karakuri-store`'s `BindNoise`, which is the record this flag
+/// stands in for.
+const DEFAULT_OCTAVES: u32 = 4;
+
+/// The `noise.kind` names, in the order the spec lists them. One list, so the
+/// check and the message cannot drift apart.
+const NOISE_KINDS: [&str; 4] = ["white", "value", "perlin", "fbm"];
+
 fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, String> {
     let mut args_out = Args {
         overrides: Vec::new(),
+        bindings: Vec::new(),
+        bpm: DEFAULT_BPM,
         sets: Vec::new(),
         capacity: 262_144,
         render_to: None,
@@ -315,6 +528,22 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                 {
                     Some(kv) => args_out.overrides.push(kv),
                     None => return Err(format!("`--param {value}` — expected `name=number`")),
+                }
+            }
+            "--bind" => {
+                let value = value_for("--bind", &mut it)?;
+                args_out.bindings.push(parse_bind(&value)?);
+            }
+            "--bpm" => {
+                let value = value_for("--bpm", &mut it)?;
+                // Refused rather than clamped here, on the same terms as
+                // `--exposure`: the oscillator clamps a bad tempo so that a
+                // zero cannot freeze every noise signal at once, but a tempo
+                // typed at the command line and quietly changed is a run that
+                // did not do what it was told.
+                match value.parse::<f32>() {
+                    Ok(v) if v.is_finite() && v > 0.0 => args_out.bpm = v,
+                    _ => return Err(format!("`--bpm {value}` — expected a positive number")),
                 }
             }
             "--tonemap" => {
@@ -508,7 +737,15 @@ fn build_deck(
         .iter()
         .enumerate()
         .map(|(slot, (l1, l4))| {
-            let set = build(gpu, l1, l4, args.capacity, &args.overrides, seed_for(slot));
+            let set = build(
+                gpu,
+                l1,
+                l4,
+                args.capacity,
+                &args.overrides,
+                &args.bindings,
+                seed_for(slot),
+            );
             if watch {
                 // One worker and one watcher per slot, over that slot's own
                 // two files. That is what makes "the slot whose files changed"
@@ -525,6 +762,7 @@ fn build_deck(
                         args.capacity,
                         seed_for(slot),
                         args.overrides.clone(),
+                        args.bindings.clone(),
                     )),
                 )
             } else {
@@ -533,10 +771,48 @@ fn build_deck(
         })
         .collect();
     let mut deck = Deck::new(&gpu.device, swaps, width, height);
+    // The session's one local oscillator, before the first frame. `SEED` is
+    // the seed every noise stream comes off — the same explicit seed the Sets
+    // are salted from, so a run is reproducible from its arguments alone.
+    deck.set_signals(Signals::new(args.bpm, u64::from(SEED)));
     if meters {
         deck.enable_meters(&gpu.device);
     }
+    // Once, not per slot: what attached, and how far each will actually move.
+    // The confidence is the part worth printing — a binding to an invented
+    // signal moving a tenth of the way is the system working, and an operator
+    // who does not know that reads it as a broken binding.
+    for binding in &args.bindings {
+        eprintln!("  {}", describe(binding, deck.signals()));
+    }
     deck
+}
+
+/// One binding, in a line, ending with what it will do rather than only what
+/// it says.
+fn describe(binding: &Binding, signals: &Signals) -> String {
+    let confidence = if binding.signal == NOISE_SIGNAL {
+        signals.noise(&binding.noise.unwrap_or_default()).confidence
+    } else {
+        signals.sample(&binding.signal).confidence
+    };
+    let effect = if confidence >= 1.0 {
+        "the signal decides it outright".to_string()
+    } else {
+        format!(
+            "it moves {:.0}% of the way and the param's own value holds the rest",
+            confidence * 100.0
+        )
+    };
+    format!(
+        "bind {:?} {} <- {} through {} onto [{}, {}] — confidence {confidence:.2}, so {effect}",
+        binding.layer,
+        binding.key,
+        binding.signal,
+        binding.curve.name(),
+        binding.range[0],
+        binding.range[1],
+    )
 }
 
 fn build(
@@ -545,6 +821,7 @@ fn build(
     l4: &karakuri_ir::typed::Checked,
     capacity: u32,
     overrides: &[(String, f32)],
+    bindings: &[Binding],
     seed: u32,
 ) -> Set {
     match Set::build(&gpu.device, &gpu.queue, l1, l4, capacity, seed) {
@@ -553,6 +830,15 @@ fn build(
                 match set.params.get_mut(name) {
                     Some(slot) => *slot = *value,
                     None => eprintln!("  no parameter named `{name}`, ignoring"),
+                }
+            }
+            // After the overrides: a binding blends from the param's value, so
+            // a `--param` on a bound param is the base of the blend rather
+            // than a competitor for the write.
+            for binding in bindings {
+                let (layer, key) = (binding.layer, binding.key.clone());
+                if !set.bind(binding.clone()) {
+                    eprintln!("  no {layer:?} parameter named `{key}` to bind, ignoring");
                 }
             }
             set
@@ -649,10 +935,11 @@ impl ApplicationHandler for App {
         );
 
         eprintln!(
-            "running: {} slot{} of {} elements on {}",
+            "running: {} slot{} of {} elements at {:.1} bpm on {}",
             deck.slot_count(),
             if deck.slot_count() == 1 { "" } else { "s" },
             self.args.capacity,
+            self.args.bpm,
             gpu.adapter.get_info().name
         );
         if self.args.watch {
@@ -929,6 +1216,15 @@ impl Live {
                 }
                 None => self.status.push_str("m---- p----  "),
             }
+            // What every binding on this slot last wrote. Without it a binding
+            // that is doing nothing — an unknown signal, or an invented one at
+            // a tenth effect — is indistinguishable from a binding that never
+            // attached, which is the whole reason confidence is worth seeing
+            // rather than merely being applied. Nothing is printed for a slot
+            // with no bindings, so the default status line is unchanged.
+            for (key, value) in self.deck.slot(slot).set().bound() {
+                let _ = write!(self.status, "{key}={value:.3}  ");
+            }
         }
         eprintln!(
             "{}| {} exp {:.2} | {fps:.1} fps",
@@ -1124,6 +1420,181 @@ mod tests {
         ] {
             let args = parse(&["--tonemap", name]).unwrap_or_else(|e| panic!("{name}: {e}"));
             assert_eq!(args.look.op, op, "{name}");
+        }
+    }
+
+    // -- --bind ---------------------------------------------------------------
+
+    /// The spec's own example, field for field. This is the mapping the flag
+    /// exists to preserve: when a Set file can be loaded, each `field=value`
+    /// here becomes the JSON field of the same name and nothing else changes.
+    ///
+    /// ```ndjson
+    /// {"t":"bind","layer":"L1","key":"spawn_rate","signal":"noise",
+    ///  "noise":{"kind":"perlin","rate":0.5,"stream":3},"curve":"lin","range":[4000,16000]}
+    /// ```
+    #[test]
+    fn bind_carries_every_field_of_the_record() {
+        let args = parse(&[
+            "--bind",
+            "layer=L1,key=spawn_rate,signal=noise,curve=lin,range=4000..16000,\
+             noise.kind=perlin,noise.rate=0.5,noise.stream=3",
+        ])
+        .expect("should parse");
+        assert_eq!(args.bindings.len(), 1);
+        let b = &args.bindings[0];
+        assert_eq!(b.layer, karakuri_ir::Kind::L1);
+        assert_eq!(b.key, "spawn_rate");
+        assert_eq!(b.signal, "noise");
+        assert_eq!(b.curve, Curve::Lin);
+        assert_eq!(b.range, [4000.0, 16000.0]);
+        assert_eq!(
+            b.noise,
+            Some(NoiseConfig {
+                kind: NoiseKind::Perlin,
+                rate: 0.5,
+                stream: 3,
+            })
+        );
+    }
+
+    #[test]
+    fn bind_defaults_the_curve_and_the_noise_generator_but_nothing_else() {
+        let plain = parse(&["--bind", "layer=L4,key=hue,signal=beat,range=0..1"])
+            .expect("should parse");
+        assert_eq!(plain.bindings[0].curve, Curve::Lin);
+        assert_eq!(plain.bindings[0].noise, None, "only a noise signal gets one");
+
+        let noise = parse(&["--bind", "layer=L1,key=spawn_rate,signal=noise,range=0..1"])
+            .expect("should parse");
+        assert_eq!(
+            noise.bindings[0].noise,
+            Some(NoiseConfig::default()),
+            "a noise signal with no generator named is the default generator, not none"
+        );
+    }
+
+    #[test]
+    fn bind_octaves_reaches_fbm_in_either_order() {
+        for fields in [
+            "layer=L1,key=radius,signal=noise,range=0..1,noise.kind=fbm,noise.octaves=6",
+            "layer=L1,key=radius,signal=noise,range=0..1,noise.octaves=6,noise.kind=fbm",
+        ] {
+            let args = parse(&["--bind", fields]).expect("should parse");
+            assert_eq!(
+                args.bindings[0].noise.expect("a generator").kind,
+                NoiseKind::Fbm { octaves: 6 },
+                "{fields}"
+            );
+        }
+        // `fbm` with nothing said about octaves is the record's default rather
+        // than a rejection — the spec's own example omits it.
+        let args = parse(&[
+            "--bind",
+            "layer=L1,key=radius,signal=noise,range=0..1,noise.kind=fbm",
+        ])
+        .expect("should parse");
+        assert_eq!(
+            args.bindings[0].noise.expect("a generator").kind,
+            NoiseKind::Fbm {
+                octaves: DEFAULT_OCTAVES
+            }
+        );
+    }
+
+    /// `octaves` belongs to `fbm` and, per `docs/ir-spec.md`, is "ignored by
+    /// the other three kinds". What it must never do is decide the kind: a
+    /// `noise.kind=white` that came back as `fbm` is a different generator
+    /// from the one the operator named, chosen silently, in a flag whose whole
+    /// stated reason for refusing unknown fields is that silence.
+    #[test]
+    fn bind_octaves_never_silently_replaces_the_kind_that_was_named() {
+        for fields in [
+            "layer=L1,key=r,signal=noise,range=0..1,noise.kind=white,noise.octaves=6",
+            "layer=L1,key=r,signal=noise,range=0..1,noise.octaves=6,noise.kind=white",
+            "layer=L1,key=r,signal=noise,range=0..1,noise.kind=perlin,noise.octaves=6",
+            // No kind at all: `perlin` is the default, and an octave count is
+            // as meaningless against it as against an explicit one.
+            "layer=L1,key=r,signal=noise,range=0..1,noise.octaves=6",
+        ] {
+            let err = match parse(&["--bind", fields]) {
+                Ok(args) => panic!(
+                    "`{fields}` was accepted as {:?}",
+                    args.bindings[0].noise.expect("a generator").kind
+                ),
+                Err(e) => e,
+            };
+            assert!(err.contains("noise.octaves"), "{fields} -> {err}");
+        }
+    }
+
+    /// Every way of getting it wrong says which part was wrong. A `--bind`
+    /// that quietly took a default would be a parameter that does not move and
+    /// no way to find out why — the silence every other flag here was fixed
+    /// for.
+    #[test]
+    fn a_malformed_bind_is_refused_and_says_what_it_could_not_use() {
+        for (fields, expect) in [
+            ("key=hue,signal=beat,range=0..1", "no `layer=`"),
+            ("layer=L4,signal=beat,range=0..1", "no `key=`"),
+            ("layer=L4,key=hue,range=0..1", "no `signal=`"),
+            ("layer=L4,key=hue,signal=beat", "no `range="),
+            ("layer=L2,key=hue,signal=beat,range=0..1", "expected L1 or L4"),
+            (
+                "layer=L4,key=hue,signal=beat,curve=expo,range=0..1",
+                "expected lin, pow2, sqrt, smooth",
+            ),
+            ("layer=L4,key=hue,signal=beat,range=0-1", "LOW..HIGH"),
+            ("layer=L4,key=hue,signal=beat,range=low..high", "LOW..HIGH"),
+            ("layer=L4,key=hue,signal=beat,curv=lin,range=0..1", "unknown field `curv`"),
+            ("layer=L4,key=hue,signal=beat,range=0..1,noise.rate=2", "needs `signal=noise`"),
+            (
+                "layer=L1,key=r,signal=noise,range=0..1,noise.rate=fast",
+                "cycles per beat",
+            ),
+            ("layer=L4,key=hue,beat", "is not `field=value`"),
+        ] {
+            let err = match parse(&["--bind", fields]) {
+                Ok(_) => panic!("`{fields}` was accepted"),
+                Err(e) => e,
+            };
+            assert!(err.contains(expect), "{fields} -> {err}");
+        }
+    }
+
+    /// A binding to `bpm` is pinned at the top of its range for the whole run,
+    /// because a tempo is not a `[0, 1]` signal and the curve clamps it. That
+    /// is `--param key=HIGH` spelled at four times the length, and nothing on
+    /// the outside distinguishes it from a binding that is working — the
+    /// status line shows a number, and the number never moves. `bpm` is a
+    /// signal the spec lists, so a generator will reach for it; the refusal is
+    /// what tells it to reach for `beat` instead.
+    #[test]
+    fn binding_bpm_is_refused_and_names_the_signal_to_use_instead() {
+        let err = parse(&["--bind", "layer=L1,key=radius,signal=bpm,range=1..5"]).unwrap_err();
+        assert!(err.contains("bpm"), "{err}");
+        assert!(err.contains("beat"), "the refusal does not say what to use: {err}");
+
+        // The two that do carry the tempo in the range a binding needs are
+        // still accepted, or the refusal above would just be a ban on tempo.
+        for signal in ["beat", "bar"] {
+            parse(&[
+                "--bind",
+                &format!("layer=L1,key=radius,signal={signal},range=1..5"),
+            ])
+            .unwrap_or_else(|e| panic!("`{signal}` was refused: {e}"));
+        }
+    }
+
+    // -- --bpm ----------------------------------------------------------------
+
+    #[test]
+    fn bpm_defaults_and_refuses_a_tempo_it_cannot_use() {
+        assert_eq!(parse(&[]).expect("should parse").bpm, DEFAULT_BPM);
+        assert_eq!(parse(&["--bpm", "128"]).expect("should parse").bpm, 128.0);
+        for bad in ["0", "-4", "fast"] {
+            let err = parse(&["--bpm", bad]).unwrap_err();
+            assert!(err.contains("--bpm"), "{bad} -> {err}");
         }
     }
 

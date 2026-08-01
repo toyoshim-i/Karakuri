@@ -29,7 +29,13 @@ cargo run -p karakuri-cli -- --watch                         # edit a .kir, watc
 cargo run -p karakuri-cli -- --watch --budget-ms 0           # ...and watch it roll back
 cargo run -p karakuri-cli -- --set a.kir,b.kir --set c.kir,d.kir   # two Sets, mixed
 cargo run -p karakuri-cli -- --tonemap agx --exposure 1.5    # the output transform
+cargo run -p karakuri-cli -- --bpm 128 \
+  --bind layer=L1,key=turbulence,signal=beat,curve=pow2,range=0.1..2.4
 ```
+
+`--bind` is a stand-in for a Set file, which nothing loads yet: its fields are
+`Record::Bind`'s fields, so replacing it later is deleting a parser rather than changing a
+design.
 
 `--set` fills a deck slot and may be given up to four times; every Live slot renders into
 its own target and one composite pass mixes them. In the window:
@@ -127,13 +133,22 @@ during implementation, these win.
 
 ### Signals
 
-- **Consumers never branch on whether a provider exists.** They branch only on confidence
+- **Consumers never branch on whether a provider exists.** They branch only on confidence.
+  A parameter binding is the first consumer holding this up: what it writes is
+  `lerp(the parameter's manual value, the mapped signal, confidence)`, so an invented
+  signal moves a parameter a tenth as far as a measured one and no code tests for a
+  microphone
 - The signal bus is always complete. A signal with no provider returns a synthesized value
+- **`noise` is not a bus name.** It is the `bind` record's, because a generator has a kind,
+  a rate, a stream and an octave count, and `sample` takes a `&str`. Completeness is
+  unaffected — an unknown name is still answered
 - Rendering reads only the local oscillator, never an external clock directly
 
 ### Determinism
 
 - **All randomness comes from an explicit seed stream**
+- The session oscillator is part of what a record stream reproduces. Its whole input is the
+  tick sequence and one explicit seed
 - No implicit randomness, no time-derived seeds, no thread-ID-derived randomness
 - `dt` is a fixed simulation step, not the real frame delta
 - **Frame advance comes from a `tick` record, never from a measurement.** Live, the engine
@@ -274,10 +289,11 @@ governor, alongside the decision about whether GPU timestamps can be trusted at 
 | WGSL generation | Works, validated through naga. Generated names cannot be captured by anything a `.kir` can spell |
 | Set, buffers, pipelines, compute and render | Works. Double buffering, Set-level `capacity`, parameters as uniform writes. Nothing on the frame path allocates: both per-frame uniform writes go through storage sized once at build time |
 | Linear HDR end to end, sRGB once at output | Works |
-| Store, oscillator, synthesized bus, noise | Work standalone |
+| Store | Works standalone. Nothing outside the crate reads a `Record`, so a Set file is a format the engine agrees with and does not yet obey |
+| Signal binding | Works. A binding samples the bus, curves it, maps it onto a range, and blends into the parameter **by confidence** — so a binding to `beat` or `bar` takes full effect today, and one to `energy` moves a tenth as far, because there is no microphone. When audio lands the same binding starts working with nothing else changed |
+| Oscillator, synthesized bus, noise | On the frame path now. One oscillator per session, owned by the deck, advanced by the same `steps` the slots are |
 | Element lifecycle | Works. `spawn` and `kill()` run, order-preserving compaction is wired into the L1 dispatch, and `element` and the draw are both indirect off one counts buffer. A procedure that can neither spawn nor kill skips the scan entirely and dispatches in place |
 | **The store, in use** | The CLI does not use it. Artifacts are loose files |
-| **Signal binding** | Nothing binds a signal to a parameter, so `bind` records do nothing |
 | Tone mapping | Works. Four operators — clamp, Reinhard, ACES, AgX — chosen by a uniform, so switching one mid-set is a buffer write. ACES by default, picked by rendering all four across five exposures and looking; `cargo run -p karakuri-engine --example tonemap_compare` regenerates that. Applied once, immediately before the single sRGB encode |
 | The deck and the mix | Works. Up to four slots, each with its own `HotSwap` and its own HDR target, composited with a per-slot gain. Residency is Live or Allocated; Allocated holds its state, so a slot brought back resumes rather than restarts. Priming — the third level — waits for the governor that would decide what may prime and how fast |
 | Per-slot metering | Works. Mean and peak linear Rec.709 luminance per Live slot, reduced on the GPU and read back without ever waiting, so it lags a few frames and says by how many. An Allocated slot reads nothing rather than reading what it last drew |

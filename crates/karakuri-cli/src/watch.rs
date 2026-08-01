@@ -48,7 +48,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
 use std::time::Duration;
 
-use karakuri_engine::{Request, Source};
+use karakuri_engine::{Binding, Request, Source};
 
 use crate::compile;
 
@@ -68,6 +68,10 @@ pub struct Watch {
     capacity: u32,
     seed_salt: u32,
     overrides: Vec<(String, f32)>,
+    /// Restated on every rebuild rather than read off the outgoing Set, for
+    /// the reason `Request::bindings` gives: a request that depended on what
+    /// happened to be live would not be reproducible from a record stream.
+    bindings: Vec<Binding>,
     /// A hash of each file's contents as of the previous poll. `None` for a
     /// file that does not exist or cannot be read, which compares equal to
     /// itself and so reads as "unchanged" rather than as a change every
@@ -85,6 +89,7 @@ impl Watch {
         capacity: u32,
         seed_salt: u32,
         overrides: Vec<(String, f32)>,
+        bindings: Vec<Binding>,
     ) -> Watch {
         let mut watch = Watch {
             slot,
@@ -93,6 +98,7 @@ impl Watch {
             capacity,
             seed_salt,
             overrides,
+            bindings,
             stamps: [None, None],
             settling: false,
         };
@@ -159,6 +165,7 @@ impl Source for Watch {
             capacity: self.capacity,
             seed_salt: self.seed_salt,
             params: self.overrides.clone(),
+            bindings: self.bindings.clone(),
             label,
         })
     }
@@ -169,7 +176,15 @@ mod tests {
     use super::*;
 
     fn watch_on(dir: &std::path::Path) -> Watch {
-        Watch::new(0, dir.join("a.kir"), dir.join("b.kir"), 4096, 1, Vec::new())
+        Watch::new(
+            0,
+            dir.join("a.kir"),
+            dir.join("b.kir"),
+            4096,
+            1,
+            Vec::new(),
+            Vec::new(),
+        )
     }
 
     /// A save that changed no bytes is not an edit. Under an mtime comparison

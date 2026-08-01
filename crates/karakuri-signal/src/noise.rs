@@ -62,15 +62,15 @@ impl Default for NoiseKind {
 
 /// A noise generator's full configuration: kind, period, and decorrelation.
 ///
-/// This is what a caller who needs a *specific* noise stream — for instance,
-/// an engine resolving a `bind` record that names one — constructs and calls
-/// [`sample`](NoiseConfig::sample) on directly. [`crate::SynthesizedBus`]'s
-/// `"noise"` signal is just [`NoiseConfig::default`] wrapped for
-/// [`SignalBus`](crate::SignalBus) completeness; it does not expose kind,
-/// rate, or stream through the name string, because a `&str` is what
+/// This is what a caller who needs a noise stream — for instance, an engine
+/// resolving a `bind` record that names one — constructs and calls
+/// [`sample`](NoiseConfig::sample) on directly. It is the **only** way to
+/// reach noise: [`crate::SynthesizedBus`] deliberately does not answer a
+/// `"noise"` name, because a `&str` is what
 /// [`SignalBus::sample`](crate::SignalBus::sample) takes and encoding a
-/// three-field configuration into one has no natural, collision-free
-/// grammar. A dedicated `NoiseConfig` does not have that problem.
+/// four-field configuration into one has no natural, collision-free grammar.
+/// A parameterless stand-in on the bus would not fix that; it would only put a
+/// second, weaker meaning behind the same name.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NoiseConfig {
     pub kind: NoiseKind,
@@ -95,9 +95,8 @@ pub struct NoiseConfig {
 }
 
 impl Default for NoiseConfig {
-    /// Perlin, one cycle per beat, stream `0` — what
-    /// [`SynthesizedBus`](crate::SynthesizedBus)'s `"noise"` signal resolves
-    /// to.
+    /// Perlin, one cycle per beat, stream `0` — what a `bind` record naming
+    /// `noise` and saying nothing else asks for.
     fn default() -> NoiseConfig {
         NoiseConfig {
             kind: NoiseKind::default(),
