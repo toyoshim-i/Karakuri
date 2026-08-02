@@ -179,6 +179,9 @@ fn drift_shell() -> Checked {
         consumes: vec![],
         blocks: vec![spawn, element],
         cost: None,
+        // Hand-built fixtures: `check` is what decides this, and these never
+        // run it. `false` is the conservative side and nothing here reads it.
+        closed_form: false,
         span: span(),
     }
 }
@@ -261,6 +264,9 @@ fn soft_points() -> Checked {
         consumes: vec![Attr::Position, Attr::Velocity, Attr::Age],
         blocks: vec![vertex, fragment],
         cost: None,
+        // Hand-built fixtures: `check` is what decides this, and these never
+        // run it. `false` is the conservative side and nothing here reads it.
+        closed_form: false,
         span: span(),
     }
 }
@@ -332,6 +338,9 @@ fn shadowing_locals_l1() -> Checked {
         consumes: vec![],
         blocks: vec![spawn, element],
         cost: None,
+        // Hand-built fixtures: `check` is what decides this, and these never
+        // run it. `false` is the conservative side and nothing here reads it.
+        closed_form: false,
         span: span(),
     }
 }
@@ -390,6 +399,9 @@ fn shadowing_locals_l4() -> Checked {
         consumes: vec![Attr::Position],
         blocks: vec![vertex, fragment],
         cost: None,
+        // Hand-built fixtures: `check` is what decides this, and these never
+        // run it. `false` is the conservative side and nothing here reads it.
+        closed_form: false,
         span: span(),
     }
 }
@@ -424,6 +436,9 @@ fn reserved_word_params_l1() -> Checked {
         consumes: vec![],
         blocks: vec![element],
         cost: None,
+        // Hand-built fixtures: `check` is what decides this, and these never
+        // run it. `false` is the conservative side and nothing here reads it.
+        closed_form: false,
         span: span(),
     }
 }
@@ -571,6 +586,9 @@ fn reordered_subset_l4() -> Checked {
         consumes: vec![Attr::Age, Attr::Position],
         blocks: vec![vertex, fragment],
         cost: None,
+        // Hand-built fixtures: `check` is what decides this, and these never
+        // run it. `false` is the conservative side and nothing here reads it.
+        closed_form: false,
         span: span(),
     }
 }
@@ -610,6 +628,9 @@ fn consumes_nothing_l4() -> Checked {
         consumes: vec![],
         blocks: vec![vertex, fragment],
         cost: None,
+        // Hand-built fixtures: `check` is what decides this, and these never
+        // run it. `false` is the conservative side and nothing here reads it.
+        closed_form: false,
         span: span(),
     }
 }
@@ -655,6 +676,9 @@ fn emits_every_attribute_l1() -> Checked {
         consumes: vec![],
         blocks: vec![element],
         cost: None,
+        // Hand-built fixtures: `check` is what decides this, and these never
+        // run it. `false` is the conservative side and nothing here reads it.
+        closed_form: false,
         span: span(),
     }
 }
@@ -712,6 +736,9 @@ fn l4_consuming_every_attribute_compiles_and_validates() {
         consumes: karakuri_ir::Attr::ALL.to_vec(),
         blocks: vec![vertex, fragment],
         cost: None,
+        // Hand-built fixtures: `check` is what decides this, and these never
+        // run it. `false` is the conservative side and nothing here reads it.
+        closed_form: false,
         span: span(),
     };
     let shader = karakuri_codegen::generate_l4(&l4, &layout_for(&l1));

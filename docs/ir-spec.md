@@ -415,6 +415,80 @@ next frame's buffer is never left undefined. Both arms of an `if` must assign it
 may. Repeated assignment is legal and the last write wins; the rule is about coverage, not
 about counting. The compiler checks this.
 
+### Closed form versus accumulating
+
+A procedure is **closed form** if its state at time `t` is a pure function of `seed`, `t`,
+and its parameters. That takes three things, not one: it never reads an attribute it emits,
+it has no `spawn` block, and it never calls `kill()`. All three are spelled out below and
+all three are independent — a procedure that spawns is accumulating however pure its
+`element` block is, because *which elements exist* is history.
+
+A procedure is **accumulating** if it fails any of them. Reading its own previous output is
+the usual way, and is what integration looks like.
+
+```
+element {                                  // closed form
+  position = sphere_point(hash1(seed), hash1(seed + 1u)) * (1.0 + sin(t));
+}
+
+element {                                  // accumulating
+  velocity = velocity + gravity * dt;      // reads `velocity`, which it emits
+  position = position + velocity * dt;
+}
+```
+
+**The check pass decides this and records it on the compiled procedure.** It is not a
+diagnostic — neither answer is an error — but it is the property the engine's whole
+lifecycle turns on, and it is worth writing a procedure one way rather than the other on
+purpose.
+
+**What being closed form buys.** Both halves are worth knowing, and the second is the
+larger one:
+
+- **No priming.** A closed-form Set goes Cold to Live with no warm-up, because there is no
+  accumulated state to warm; evaluating it at `t` *is* arriving at `t`. An accumulating one
+  has to be run forward from its start, one step at a time, which is what priming is for
+  and what makes a deck slot expensive to hold ready.
+- **It can be scrubbed.** Any `t` can be evaluated directly, so the material can be run
+  forward at any rate, held still, or **run backwards** — tape-style transport, locked to
+  the beat grid. An accumulating procedure can only ever go forward one step at a time.
+  Reversing it is not slow, it is impossible: there is no un-integrating a sum.
+
+So closed form is not a compiler-internal classification, it is an authoring choice with a
+consequence a performer can feel. **Prefer closed form when the look allows it.** Writing
+`position = f(seed, t)` where an accumulator would also have worked gives up nothing and
+buys a scrubbable instrument; reaching for `position = position + …` is a decision to
+trade that away, and is worth making deliberately rather than by habit.
+
+Three things make a procedure accumulating, and the classifier is conservative about all
+of them — it under-claims rather than over-claims, because a wrongly-claimed closed form
+does not merely show an unwarmed first second, it produces garbage the moment anything
+seeks:
+
+1. **It reads an attribute it emits**, anywhere in any block — inside an `if`, inside a
+   `for`, or bound to a `let` and used later. Reaching the value through a local is still
+   reading the attribute.
+2. **It has a `spawn` block.** This is not about attributes: an element that does not exist
+   yet cannot be evaluated, and *whether it exists* is engine state accumulated from every
+   frame since the Set started. Jumping to `t = 30` on a procedure that spawns does not
+   produce thirty seconds' worth of elements. **Spawning and closed form cannot coexist.**
+3. **It can `kill()`.** A killed element stays killed, so which elements are alive at `t`
+   depends on every step taken to get there rather than on `t`.
+
+**One caveat that applies to seeking and not to priming.** Priming only ever runs a
+procedure forward from a state it already has, so the procedure is all it needs. Seeking to
+an arbitrary `t` also needs everything *else* that is a function of time at that instant to
+be evaluable there. Today nothing else is — a Set's inputs are its parameters and the
+oscillator's phase, and the oscillator is a pure function of the tick sequence. But once
+tempo correction lands (`docs/roadmap.md`, M2), the oscillator's phase at a past `t`
+depends on the correction history, which is not a function of `t`. **`closed_form` is a
+property of the procedure and is necessary for a seek, not sufficient for one.** Whatever
+builds the transport owes the other half.
+
+The same distinction decides whether beat-resolution variant selection is affordable:
+switching between closed-form alternatives costs nothing, while keeping three accumulating
+alternatives selectable means three simulations resident.
+
 ### Blocks
 
 ```
@@ -789,7 +863,9 @@ Generated IR passes through these in order. Failure at any stage means no artifa
    an undeclared name, no reference to an attribute the procedure does not declare, and
    each emitted attribute and required stage output assigned on every path. Note that
    `consumes` ⊆ `emit` is **not** checked here: it relates two procedures and belongs to
-   Set composition, at stage 6
+   Set composition, at stage 6. This stage also decides
+   [closed form versus accumulating](#closed-form-versus-accumulating) and records it —
+   the one thing it produces that is not a diagnostic, since neither answer is an error
 4. **Cost estimation** — static instruction count × loop bounds, yielding a **per element**
    figure. `capacity` belongs to the Set, so an artifact has no total cost to be judged on;
    rejection here is against a per-element ceiling only
@@ -872,10 +948,13 @@ consequences are meant to be followed rather than softened:
 - `bpm`, `beat` and `bar` come off the local oscillator, which is the single source of
   truth for phase and tempo, so they carry confidence 1.0 and a binding to them takes full
   effect.
-- `energy` and `band<N>` are invented — there is no audio input — so they carry 0.1 and
-  move a param a tenth of the way. That is the system being honest about what it knows.
-  When audio arrives it is a provider with a higher confidence and the same binding starts
-  working, with nothing else changed.
+- `energy`, `onset` and `band<N>` carry whatever the provider behind them says. **With an
+  audio input open they are measurements at confidence 1.0 and a binding to them decides
+  its param outright; with none they are invented at 0.1** — except `onset`, which nothing
+  invents — and the same binding moves the same param a tenth as far. That is the system
+  being honest about what it knows, and it is the whole of what changed when audio landed:
+  the same name, sampled by the same call, answering with a different confidence. See
+  [Measurement in the stream](#measurement-in-the-stream--audio-and-tempo).
 - A signal nobody provides leaves the param at its own value, exactly, because confidence
   is 0.0. That is the same arithmetic rather than a special case.
 
@@ -967,14 +1046,24 @@ an alternative to the Poisson option that section rejects.
 Depth is `range`, as for any binding. Together those are the three axes the spawn-timing
 decision depends on being reachable — see [Spawn timing](#spawn-timing).
 
-Tempo-relative rate has a consequence to settle before external sync arrives. Today `bpm`
-is fixed for a session, so cycles-per-beat is a constant rescaling of cycles-per-second and
-the choice costs nothing. Once external input corrects the oscillator, **every** noise
-binding starts tracking those corrections, including ones with no musical intent — a
-flicker on an unrelated `param` would change period whenever the tempo source twitched.
-There is currently no way to opt out, because seconds-relative is not an available mode.
-When external sync lands, either a seconds-relative rate or a rate frozen at bind time will
-be needed; the decision does not have to be made now, but it does have to be made then.
+Tempo-relative rate had a consequence to settle before external sync arrived, and external
+sync has now arrived: the oscillator is corrected against tracked audio, so **every** noise
+binding could start tracking those corrections, including ones with no musical intent.
+
+**The decision, made rather than deferred: a noise rate stays cycles per beat and follows a
+*tempo* correction; it does not follow a *phase* correction.** The oscillator carries two
+beat counts for this — musical position, which takes phase shifts, and elapsed beats, which
+does not — and noise reads the second. A tempo correction is a rate change and reaches
+noise continuously, with no jump at the instant it lands, which is what the accumulators
+are for. A phase correction is the beat grid being realigned with a room, and re-hashing
+every noise stream because of it would make a flicker with no musical intent jump whenever
+the tracker nudged the grid.
+
+The alternatives were a seconds-relative mode and a rate frozen at bind time. Both were
+rejected for the same reason: they make two kinds of noise, and every existing `bind`
+record becomes ambiguous about which kind it asked for. What is given up is the claim that
+a noise lattice point coincides with a beat instant after a correction — nothing depends on
+that, and nothing can observe it.
 
 A Set file is a **state projection**: what is loaded, and what every value currently is. It
 carries no time.
@@ -1008,6 +1097,66 @@ rather than approximate.
 A Set file is the session stream with the ticks dropped and the state folded down. Saving a
 Set is that projection; loading one is a session whose head is a Set file and whose tail has
 not been written yet.
+
+### Measurement in the stream — `audio` and `tempo`
+
+Live audio is not reproducible, and the same record stream is required to reproduce the
+same output bit for bit. Those can only both be true if **the measurement joins the
+stream**, which is exactly what `tick` already does with elapsed time: derived from the
+world when live, read back verbatim on replay, and the engine cannot tell which happened.
+Audio adds two records on those terms, and no third path.
+
+```ndjson
+{"t":"audio","energy":0.42,"onset":0.75,"bands":[0.9,0.4,0.2,0.11,0.05,0.02,0.01,0.0],"confidence":1.0}
+{"t":"tempo","bpm":128.03,"shift":-0.0041,"confidence":0.86}
+{"t":"tick","steps":1}
+```
+
+**`audio` is one frame's worth of measured signals**, at most one per frame, before the
+tick it belongs to. Named fields for the named signals and a positional array for the
+bands, because `band0`…`bandN` *are* positions — the array is the naming scheme rather
+than a second one, and a map of names would both repeat those names 200,000 times an hour
+and let a stream invent names the bus has rules about. The array's length is the band
+count, so a stream with more bands than a reader knows about still decodes.
+
+One `confidence` for the whole line, not one per signal: these values came out of one block
+of samples at one instant, so their staleness is one number. It is **full while a device is
+open and delivering, falling as the last block goes stale, and 0.0 when nothing has
+arrived**. A silent room is `energy` 0.0 at confidence 1.0 — a measurement, which drives a
+bound parameter to the bottom of its range — and an interface pulled out mid-set is the
+same zeroes at a confidence sliding to 0.0, which hands every bound parameter back to
+whoever set it. The two are different lines, and the difference is the whole reason
+confidence is a number rather than a flag.
+
+**A frame with no `audio` record is not a frame of silence.** It is a frame with no
+provider, and every name answers exactly what it answered before audio existed — `energy`
+and the bands invented at confidence 0.1, `onset` at 0.0 and confidence 0.0. Nothing
+branches on which of the two it is; the bus is complete either way.
+
+**`tempo` is what the local oscillator is corrected to**, and it carries the *correction*
+rather than the estimate behind it: a new `bpm`, and `shift`, a phase shift in beats,
+positive meaning the next beat arrives sooner. Recording the decision rather than the
+observation is what keeps a session replayable after the analyser has been improved — and
+it is why replay needs no audio at all. The first `tempo` in a stream is also what sets the
+session tempo, which **v0.2 had no record for**.
+
+Neither is state, so neither appears in a Set file: both are what a frame *saw* or
+*decided*, and the tempo belongs to the session rather than to any one Set.
+
+**Signal names.** `energy` and `band<N>` are the ones the synthesized bus already answers,
+deliberately: a measured `energy` and an invented one are the same signal from different
+sources, and a binding that had to be rewritten when a microphone appeared would defeat the
+arrangement. `onset` is new — a **decaying envelope in `[0, 1]`**, 1.0 at a detected
+transient and falling from there, so that a `bind` with a `curve` reads it as a hit. It is
+not an impulse: analysis blocks and rendered frames are not locked to each other, so an
+impulse one block wide would be missed by some frames and counted twice by others. The
+synthesized bus does **not** invent an `onset`, because an invented one would be `beat`'s
+pulse under a second name.
+
+Levels are `[0, 1]` because `curve` and `range` are defined over that: they are RMS in
+dBFS, mapped from −60 dBFS to −6 dBFS, and a band reads the level of the part of the signal
+inside it on the same scale. So a full-scale tone pins, a well-mastered track lives in the
+top third, and silence is exactly 0.0.
 
 ---
 
@@ -1193,29 +1342,24 @@ This is where the primitive-centric bet pays out on the geometry side, for the s
 the spec already gives for drawing one point cloud several ways: one simulated element
 producing eight mirrored copies costs one simulation and eight draws, not eight simulations.
 
-### Closed form versus accumulating — M2
-
-A procedure is **closed form** if it never reads an attribute it emits — position is a pure
-function of `seed`, `t`, and parameters. It is **accumulating** if it reads its own
-previous output, which is what integration looks like.
-
-The check pass already tracks every attribute read and write, so this is decidable with the
-information it has, and it belongs in the compiled metadata because the engine's lifecycle
-depends on it:
-
-- **Closed form needs no priming.** Any `t` can be jumped to directly, so a Set can go from
-  Cold to Live with no warm-up, and can be scrubbed or seeked.
-- **Accumulating must be run forward** from its start to reach its attractor, which is what
-  priming is for and what makes a deck slot expensive.
-
-The distinction is also what decides whether beat-resolution variant selection is
-affordable: switching between closed-form alternatives costs nothing, while keeping three
-accumulating alternatives selectable means three simulations resident.
-
 ---
 
 ## Resolved
 
+- **Measured signals in the record stream.** An `audio` record per frame and a `tempo`
+  record per correction, on `tick`'s terms: derived live, read back verbatim on replay,
+  and the analyser never runs twice on one session. Recording the *correction* rather than
+  the estimate is what lets the analyser improve without changing how an old session
+  replays. See
+  [Measurement in the stream](#measurement-in-the-stream--audio-and-tempo).
+- **A measured signal versus an invented one.** Same names, same `sample` call, different
+  confidence — nothing anywhere asks whether a device exists. A frame with no `audio`
+  record is not a frame of silence: it is a frame with no provider, and every name answers
+  what it answered before audio existed. See
+  [What a binding does](#what-a-binding-does).
+- **Noise rate under tempo correction.** Stays cycles per beat, follows a tempo
+  correction, ignores a phase one. The alternatives made two kinds of noise and left every
+  existing `bind` record ambiguous. See [Binding noise](#binding-noise).
 - **Element identity.** `id` is gone. A slot index is not an identity once compaction
   moves elements, so identity is `seed`, a monotone spawn ordinal carried per element. See
   [Element identity](#element-identity).

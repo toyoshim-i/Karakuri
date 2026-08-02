@@ -42,8 +42,13 @@ enum Key {
 }
 
 /// The fold key for a record, or `None` if the record carries no state at
-/// all and should simply be dropped — that is `Record::Tick`, which is the
-/// one thing the spec guarantees never appears in a Set file.
+/// all and should simply be dropped — `Record::Tick`, which the spec
+/// guarantees never appears in a Set file, and `Record::Audio`, which is the
+/// same kind of thing: what one frame measured, not what anything *is*.
+/// Folding a session's audio down to its last frame would put one arbitrary
+/// moment's microphone reading into a Set file and call it state, and the same
+/// goes for `Record::Tempo`: a correction is an event, and the tempo it
+/// corrects belongs to the session rather than to any one Set.
 fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
     match record {
         Record::Set { .. } => Some(Key::Set),
@@ -54,7 +59,7 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         Record::Camera { .. } => Some(Key::Camera),
         Record::Seed { stream, .. } => Some(Key::Seed(*stream)),
         Record::Src { hash, line, .. } => Some(Key::Src(*hash, *line)),
-        Record::Tick { .. } => None,
+        Record::Tick { .. } | Record::Audio { .. } | Record::Tempo { .. } => None,
         Record::Unknown => Some(Key::Passthrough(ordinal)),
     }
 }
@@ -96,6 +101,35 @@ mod tests {
             line(Record::Set { id: "s".into(), v: 1 }),
             line(Record::Tick { steps: 1 }),
             line(Record::Tick { steps: 1 }),
+        ];
+        let set = project(&session);
+        assert_eq!(set.len(), 1);
+        assert!(set.iter().all(|l| l.record().is_state()));
+    }
+
+    /// A measurement and a correction are what a *frame* saw and decided, not
+    /// what anything is, so the projection drops them the way it drops ticks —
+    /// including the last one, which is the tempting thing to fold down and
+    /// call the session's state.
+    #[test]
+    fn drops_audio_and_tempo_too() {
+        let session = vec![
+            line(Record::Set { id: "s".into(), v: 1 }),
+            line(Record::Audio {
+                energy: 0.4,
+                onset: 0.0,
+                bands: vec![0.1, 0.2],
+                confidence: 1.0,
+            }),
+            line(Record::Tempo { bpm: 128.0, shift: -0.01, confidence: 0.8 }),
+            line(Record::Tick { steps: 1 }),
+            line(Record::Audio {
+                energy: 0.9,
+                onset: 1.0,
+                bands: vec![0.9, 0.8],
+                confidence: 1.0,
+            }),
+            line(Record::Tempo { bpm: 128.1, shift: 0.0, confidence: 0.9 }),
         ];
         let set = project(&session);
         assert_eq!(set.len(), 1);

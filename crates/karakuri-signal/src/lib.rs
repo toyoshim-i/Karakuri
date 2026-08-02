@@ -5,7 +5,9 @@
 //!
 //! - **The bus is always complete.** A signal with no provider returns a
 //!   synthesised value, so consumers never branch on whether a provider exists.
-//!   They branch only on [`Sample::confidence`].
+//!   They branch only on [`Sample::confidence`]. A *measured* signal arrives as
+//!   one more layer over that same completeness — see [`measured`] — and
+//!   changes no answer to any name it does not measure.
 //! - **Rendering reads only the local oscillator**, never an external clock.
 //!   External input is correction applied to the oscillator, not a substitute
 //!   for it.
@@ -15,10 +17,12 @@
 //! is what keeps every external coupling declarative.
 
 pub mod bus;
+pub mod measured;
 pub mod noise;
 pub mod oscillator;
 
 pub use bus::SynthesizedBus;
+pub use measured::{AudioFrame, MeasuredBus, MAX_BANDS};
 pub use noise::{NoiseConfig, NoiseKind};
 pub use oscillator::Oscillator;
 

@@ -34,7 +34,13 @@ pub enum StoreError {
     #[error("no artifact for {0}")]
     NotFound(Hash),
     /// A Set file carries no time — see `docs/ir-spec.md`, Set file format.
-    #[error("set files cannot contain a tick record (offending record at index {index})")]
+    /// `tick` was the only such record when this was named; `audio` and `tempo`
+    /// are the same kind of thing, so the check is `Record::is_state` and the
+    /// message says so rather than naming one of the three.
+    #[error(
+        "set files cannot contain a tick, audio or tempo record — a Set file carries no time \
+         (offending record at index {index})"
+    )]
     TickInSet { index: usize },
 }
 

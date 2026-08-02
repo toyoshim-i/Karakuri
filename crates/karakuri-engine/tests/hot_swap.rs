@@ -468,6 +468,63 @@ fn a_build_that_fails_changes_nothing() {
     );
 }
 
+/// **A build arrives measured, and still arrives cold.**
+///
+/// The governor budgets against a per-Set measurement taken on the worker as
+/// part of building — see "The worker also measures what it built" in
+/// `swap.rs`. Two things have to hold together and each is easy to have
+/// without the other:
+///
+/// - the measurement exists and travels with the Set, so a slot the operator
+///   might want to prime is budgetable at all;
+/// - and measuring it left **no trace**. Measuring means stepping, and a
+///   swapped-in Set is documented as arriving cold with `t` at zero. A probe
+///   run that forgot to rewind would hand over a Set sixteen steps into its own
+///   simulation, which nothing downstream would ever notice — the picture would
+///   simply be slightly wrong on the first frame after every swap, forever.
+///
+/// The cold half is asserted in step counts rather than in pixels for the
+/// reason `steps_taken` gives.
+#[test]
+fn a_build_arrives_measured_and_still_arrives_cold() {
+    let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
+
+    for _ in 0..10 {
+        h.frame();
+    }
+    assert!(
+        h.swap.measured_cost().is_none(),
+        "the Set the harness was constructed with was never built by a worker, so \
+         nothing can have measured it"
+    );
+
+    tx.send(request(L4, SECOND, "measured")).expect("worker alive");
+    h.frames_until(is_swapped, "the swap");
+
+    assert_eq!(h.swap.set().capacity(), SECOND);
+    assert_eq!(
+        steps_taken(h.swap.set()),
+        1,
+        "the swapped-in Set arrived having already been stepped; the probe run \
+         that measured it was not rewound"
+    );
+
+    let cost = h
+        .swap
+        .measured_cost()
+        .expect("a build that succeeded was not measured");
+    assert!(
+        cost.ms > 0.0 && cost.ms.is_finite(),
+        "a measurement of {} ms is not a measurement",
+        cost.ms
+    );
+    assert_eq!(
+        cost.capacity, SECOND,
+        "the measurement is labelled with a capacity the Set was not built at"
+    );
+    assert_eq!(cost.resolution, karakuri_engine::swap::PROBE_RESOLUTION);
+}
+
 /// The other half of "a failed compile changes nothing", and the half that is
 /// enforced by shape rather than by handling: a `.kir` that does not compile
 /// never becomes a `Request`, so there is nothing for the render thread to
@@ -746,4 +803,165 @@ fn frame_times_across_a_swap_are_measured_and_reported() {
     summarize("the swap frame itself", &h.intervals[at_swap - 1..at_swap]);
     summarize("steady, after the swap", &h.intervals[at_swap..]);
     eprintln!();
+}
+
+// ---------------------------------------------------------------------------
+// `Set::rewind`, directly.
+// ---------------------------------------------------------------------------
+
+/// Accumulating, spawning, and killing at once, so that a rewind has every
+/// kind of state to put back: element buffers that integrate, an `alive`
+/// buffer and a counts buffer the compaction scan rewrites, the spawn
+/// accumulator, and the seed counter.
+const L1_STATEFUL: &str = r#"
+proc fountain {
+  kind     L1
+  topology points
+  capacity [1024, 262144] = 4096
+
+  param spawn_rate : float [0.0, 40000.0] = 700.0
+  param speed      : float [0.0, 16.0]    = 4.0
+
+  emit position, velocity, age
+
+  spawn {
+    position = vec3(0.0, 0.0, 0.0);
+    velocity = sphere_point(hash1(seed), hash1(seed + 7u)) * speed;
+    age      = 0.0;
+  }
+
+  element {
+    position = position + velocity * dt;
+    velocity = velocity + vec3(0.0, -2.0, 0.0) * dt;
+    age      = age + dt;
+    if age > 0.35 {
+      kill();
+    }
+  }
+}
+"#;
+
+/// Build one Set of [`L1_STATEFUL`] at the harness size.
+fn stateful(gpu: &Gpu) -> Set {
+    let mut set = Set::build(
+        &gpu.device,
+        &gpu.queue,
+        &compile(L1_STATEFUL),
+        &compile(L4),
+        FIRST,
+        19274,
+    )
+    .expect("the pair is compatible and the capacity is in range");
+    set.resize(WIDTH, HEIGHT);
+    set
+}
+
+/// One ordinary frame against a caller-owned target, exactly as the deck
+/// records one.
+fn drive(gpu: &Gpu, set: &mut Set, view: &wgpu::TextureView, steps: u8) {
+    set.prepare(&gpu.queue, steps, &Signals::default());
+    let mut encoder = gpu.device.create_command_encoder(&Default::default());
+    set.render(&mut encoder, view, steps);
+    gpu.queue.submit([encoder.finish()]);
+    gpu.device.poll(wgpu::PollType::Wait).expect("poll");
+}
+
+fn pixels(gpu: &Gpu, texture: &wgpu::Texture) -> Vec<u16> {
+    let (width, height) = (texture.width(), texture.height());
+    let bytes_per_row = width * 8;
+    assert_eq!(bytes_per_row % 256, 0, "row pitch must be 256-byte aligned");
+    let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("rewind readback"),
+        size: u64::from(bytes_per_row * height),
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder = gpu.device.create_command_encoder(&Default::default());
+    encoder.copy_texture_to_buffer(
+        texture.as_image_copy(),
+        wgpu::TexelCopyBufferInfo {
+            buffer: &buffer,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(bytes_per_row),
+                rows_per_image: Some(height),
+            },
+        },
+        wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+    );
+    gpu.queue.submit([encoder.finish()]);
+    let slice = buffer.slice(..);
+    slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
+    gpu.device.poll(wgpu::PollType::Wait).expect("poll");
+    let data = slice.get_mapped_range();
+    let out = data.chunks_exact(2).map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+    drop(data);
+    buffer.unmap();
+    out
+}
+
+/// **A rewound Set is a fresh Set**, in every way anything downstream can see.
+///
+/// This is the claim `Set::rewind` has to hold up and the one that is silent
+/// when it does not: a swapped-in Set that kept a trace of its own probe run is
+/// wrong from its first frame and nothing reports it. Asserted by *equivalence*
+/// rather than field by field — one Set is probed and rewound, another never
+/// is, and then both are driven through the same frames and compared on their
+/// element bytes, their live count, their `t` and their pixels. A field
+/// `rewind` forgot shows up in one of those or it was not state.
+#[test]
+fn a_rewound_set_is_indistinguishable_from_one_that_was_never_stepped() {
+    use karakuri_engine::probe::Probe;
+    use karakuri_engine::swap::{measure, PROBE_RESOLUTION};
+
+    let gpu = Gpu::headless().expect("no GPU available");
+    let probed_target = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+    let fresh_target = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+
+    let mut probed = stateful(&gpu);
+    let mut fresh = stateful(&gpu);
+
+    // `timestamps: false` takes the host-clock path deliberately: what is
+    // being asserted is what the probe run does to the Set, not what it
+    // measured, and calibration is half a second of GPU time for a number this
+    // test never reads.
+    let probe = Probe::new(&gpu.device, &gpu.queue, false, PROBE_RESOLUTION);
+    let measurement = measure(&probe, &gpu.device, &gpu.queue, &mut probed);
+    assert!(measurement.ms.is_finite());
+
+    assert_eq!(steps_taken(&probed), 0, "the probe run left `t` advanced");
+    assert_eq!(
+        probed.viewport(),
+        (WIDTH, HEIGHT),
+        "the probe run left the Set at its own reference resolution; the camera's \
+         aspect ratio comes off this and the next frame would be framed wrong"
+    );
+
+    for _ in 0..24 {
+        drive(&gpu, &mut probed, probed_target.hdr_view(), 1);
+        drive(&gpu, &mut fresh, fresh_target.hdr_view(), 1);
+    }
+
+    assert_eq!(steps_taken(&probed), steps_taken(&fresh));
+    assert_eq!(
+        probed.live_count(&gpu.device, &gpu.queue),
+        fresh.live_count(&gpu.device, &gpu.queue),
+        "the probed Set holds a different population; the spawn accumulator, the \
+         seed counter or the counts buffer survived the rewind"
+    );
+    assert_eq!(
+        probed.read_elements(&gpu.device, &gpu.queue),
+        fresh.read_elements(&gpu.device, &gpu.queue),
+        "the probed Set's element buffer differs from a fresh one's after the same \
+         frames; something the probe run touched was not put back"
+    );
+    let (a, b) = (
+        pixels(&gpu, probed_target.hdr_texture()),
+        pixels(&gpu, fresh_target.hdr_texture()),
+    );
+    assert!(
+        a.chunks_exact(4).any(|p| p[0] != 0),
+        "neither Set drew anything, so this comparison is two black frames"
+    );
+    assert_eq!(a, b, "a probed-and-rewound Set renders differently from a fresh one");
 }

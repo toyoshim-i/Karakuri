@@ -114,8 +114,13 @@ impl NoiseConfig {
     /// same seed over an oscillator fed the same sequence of
     /// [`Oscillator::advance`] calls reproduces the same sample, bit for bit.
     pub fn sample(&self, seed: u64, oscillator: &Oscillator) -> f32 {
-        let beats = oscillator.t() * oscillator.bpm() as f64 / 60.0;
-        let lattice = beats * self.rate as f64;
+        // `elapsed_beats`, not `beats`: a noise stream follows a tempo
+        // correction, because cycles-per-beat is a rate and the accumulator
+        // keeps it continuous, but a **phase** correction does not re-hash it.
+        // Realigning the beat grid with a room is no reason for a flicker with
+        // no musical intent to jump. See `Oscillator`'s module doc, which is
+        // also where `docs/roadmap.md`'s open question about this is answered.
+        let lattice = oscillator.elapsed_beats() * self.rate as f64;
         sample_kind(self.kind, seed, self.stream, lattice)
     }
 }
@@ -403,6 +408,50 @@ mod tests {
         .sample(seed, &osc);
 
         assert_ne!(a, b);
+    }
+
+    /// **Which clock noise runs off**, which is `docs/roadmap.md`'s open
+    /// question about a tempo-relative rate under correction, answered in a
+    /// test rather than only in prose: a *tempo* correction reaches a noise
+    /// stream, and a *phase* correction does not.
+    ///
+    /// A phase correction realigns the beat grid with a room. Re-hashing every
+    /// noise stream because of it would make a flicker with no musical intent
+    /// jump whenever the tracker nudged the grid.
+    #[test]
+    fn noise_follows_a_tempo_correction_and_not_a_phase_one() {
+        let config = NoiseConfig::default();
+        let seed = 4242;
+
+        let mut osc = Oscillator::new(120.0);
+        osc.advance(37, 1.0 / 60.0);
+        let before = config.sample(seed, &osc);
+
+        // A phase correction: the beat grid moves, the noise does not.
+        osc.correct(osc.bpm(), 0.37);
+        assert_eq!(
+            config.sample(seed, &osc),
+            before,
+            "a phase correction moved a noise stream"
+        );
+
+        // A tempo correction is continuous at the instant it lands — no jump —
+        // and from there the stream runs at the corrected rate.
+        osc.correct(180.0, 0.0);
+        assert_eq!(
+            config.sample(seed, &osc),
+            before,
+            "a tempo correction made a noise stream jump"
+        );
+        let mut slow = Oscillator::new(120.0);
+        slow.advance(37, 1.0 / 60.0);
+        osc.advance(30, 1.0 / 60.0);
+        slow.advance(30, 1.0 / 60.0);
+        assert_ne!(
+            config.sample(seed, &osc),
+            config.sample(seed, &slow),
+            "a corrected tempo did not change how fast a noise stream runs"
+        );
     }
 
     #[test]

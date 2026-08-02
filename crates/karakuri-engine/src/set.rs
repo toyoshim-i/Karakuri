@@ -163,6 +163,10 @@ pub struct Set {
     viewport: [f32; 2],
     parity: bool,
     has_spawn: bool,
+    /// Both procedures are a pure function of `seed`, `t`, and their params —
+    /// see [`Set::is_closed_form`]. Decided by the check pass and carried here
+    /// rather than re-derived; the engine never looks at IR.
+    closed_form: bool,
 
     element_layout: ElementLayout,
     element_buf: Pair,
@@ -667,6 +671,11 @@ impl Set {
             viewport: [1.0, 1.0],
             parity: false,
             has_spawn: l1_shader.has_spawn,
+            // Both, because a Set is only seekable if everything in it is. L4
+            // is stateless and its flag is vacuously true, so in practice this
+            // is the L1's — but writing the conjunction is what keeps it
+            // correct when L2 arrives with state of its own.
+            closed_form: l1.closed_form && l4.closed_form,
             element_layout,
             element_buf,
             alive_buf,
@@ -718,6 +727,14 @@ impl Set {
         self.viewport = [width.max(1) as f32, height.max(1) as f32];
     }
 
+    /// What [`Set::resize`] last set, as it was clamped. The camera's aspect
+    /// ratio comes off this, so a caller that resizes a Set temporarily — the
+    /// probe does, to a fixed reference size — has somewhere to read the old
+    /// value back from rather than having to remember it.
+    pub fn viewport(&self) -> (u32, u32) {
+        (self.viewport[0] as u32, self.viewport[1] as u32)
+    }
+
     pub fn time(&self) -> f32 {
         self.t_at(self.steps_taken)
     }
@@ -762,6 +779,46 @@ impl Set {
 
     pub fn capacity(&self) -> u32 {
         self.capacity
+    }
+
+    /// **Whether this Set's state at any `t` is reachable by evaluating it
+    /// rather than by running forward to it.**
+    ///
+    /// True when both procedures are a pure function of `seed`, `t`, and their
+    /// parameters. Two consequences: it can be taken from Cold to Live with no
+    /// warm-up, and it can be scrubbed — forwards at any rate, held, or
+    /// backwards. Decided by the check pass (see `Checked::closed_form`) and
+    /// deliberately conservative: a `true` here is a promise that skipping the
+    /// warm-up shows the same image warming would have, and a `false` may be
+    /// pessimistic.
+    ///
+    /// [`crate::governor`] is the consumer today: a closed-form Set has nothing
+    /// to prime, so it is never worth spending compute budget on. A transport
+    /// would be the other, and would need more than this — see
+    /// `Checked::closed_form` for what a seek owes that priming does not.
+    pub fn is_closed_form(&self) -> bool {
+        self.closed_form
+    }
+
+    /// Put this Set back to exactly what [`Set::build`] left: element and alive
+    /// buffers at their initial contents, `t` at zero, parity, the spawn
+    /// accumulator and the seed counter all reset.
+    ///
+    /// **Not for the frame path and not a lifecycle operation.** It exists for
+    /// one caller: `swap.rs` measures a freshly built Set with the probe before
+    /// handing it to the render thread, and measuring means stepping it. A
+    /// swapped-in Set is documented as arriving cold, so the measurement has to
+    /// leave no trace — this is what makes that true rather than nearly true.
+    ///
+    /// It re-uploads the whole element and alive buffers, so it is as expensive
+    /// as `build`'s own upload and belongs on the worker thread beside it.
+    pub fn rewind(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        self.seed_base = 0;
+        self.steps_taken = 0;
+        self.spawn_carry = 0.0;
+        self.step_spawn_counts = [0; MAX_STEPS as usize];
+        self.parity = false;
+        self.initialize(device, queue);
     }
 
     /// Attach a signal to a `param`. Returns `false` if `binding.layer`
@@ -1000,13 +1057,23 @@ fn read_buffer(device: &wgpu::Device, queue: &wgpu::Queue, buffer: &wgpu::Buffer
     out
 }
 
-impl VideoSource for Set {
-    fn render(
-        &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        target: &wgpu::TextureView,
-        steps: u8,
-    ) {
+impl Set {
+    /// Record this frame's L1 passes and **nothing else** — no render pass, no
+    /// target, no draw.
+    ///
+    /// This is the whole of what a Priming slot runs. All of a Set's
+    /// per-element state is L1's: L4 is stateless and reads whatever L1 last
+    /// wrote, so warming a Set means running this and skipping the draw. See
+    /// "Priming" in [`crate::deck`] for why that is the right shape and why
+    /// `docs/roadmap.md`'s "reduced resolution" is superseded by it.
+    ///
+    /// [`VideoSource::render`] is this followed by the draw, so the two cannot
+    /// disagree about what a step is: there is one copy of the pass sequence
+    /// and the parity flip that goes with it.
+    ///
+    /// Must be paired with a [`Set::prepare`] in the same frame, exactly as
+    /// `render` must: the uniforms and this substep's `t` come from there.
+    pub fn step(&mut self, encoder: &mut wgpu::CommandEncoder, steps: u8) {
         // One step per `steps`, not one per frame. `steps` is what the tick
         // record carries, and the whole point of substepping is that the
         // simulation state at a given `t` does not depend on frame rate — so
@@ -1082,6 +1149,23 @@ impl VideoSource for Set {
             // after the last one it is what L4 reads.
             self.parity = !self.parity;
         }
+    }
+}
+
+impl VideoSource for Set {
+    /// This frame's L1 passes, then the draw.
+    ///
+    /// The compute half is [`Set::step`] verbatim, because a Priming slot runs
+    /// exactly that and nothing else; keeping one copy of it is what stops
+    /// "primed for thirty frames then put on air" from being a different
+    /// simulation than "on air for thirty frames".
+    fn render(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        steps: u8,
+    ) {
+        self.step(encoder, steps);
 
         let render_parity = usize::from(self.parity);
 

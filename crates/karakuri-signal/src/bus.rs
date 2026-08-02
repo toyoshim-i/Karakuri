@@ -126,7 +126,11 @@ fn band(t: f64, index: u32) -> f32 {
 /// Recognizes `"band"` (index 0) and `"band<N>"` for a decimal `N`. Anything
 /// else — including near-misses like `"banding"` — is not a band signal and
 /// falls through to the bus's unknown-name case, rather than guessing.
-fn band_index(name: &str) -> Option<u32> {
+///
+/// Shared with [`measured`](crate::measured) rather than copied into it: a
+/// measured `band3` and an invented one have to be the same name, or a binding
+/// would change which signal it means when a microphone appears.
+pub(crate) fn band_index(name: &str) -> Option<u32> {
     let rest = name.strip_prefix("band")?;
     if rest.is_empty() {
         return Some(0);

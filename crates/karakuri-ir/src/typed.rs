@@ -43,6 +43,37 @@ pub struct Checked {
     pub blocks: Vec<TBlock>,
     /// Filled by cost estimation. `None` until stage 4 has run.
     pub cost: Option<Cost>,
+    /// **Whether this procedure can be evaluated at any `t` directly** —
+    /// `docs/ir-spec.md`, "Closed form versus accumulating".
+    ///
+    /// True means the procedure's state at time `t` is a pure function of
+    /// `seed`, `t`, and its parameters. It buys two things and the second is
+    /// the larger one:
+    ///
+    /// - **No priming.** Cold to Live with no warm-up, because there is no
+    ///   accumulated state to warm.
+    /// - **It can be scrubbed.** Forward at any rate, held, or *backwards* —
+    ///   tape-style transport. An accumulating procedure can only go forward
+    ///   one step at a time, and reversing it is not slow but impossible:
+    ///   there is no un-integrating a sum.
+    ///
+    /// **Necessary for a seek, not sufficient for one.** Priming only ever runs
+    /// forward from a state the engine already has, so the procedure is all it
+    /// needs. Seeking to an arbitrary `t` also needs everything *else* that is
+    /// a function of time at that instant to be evaluable there — today
+    /// nothing else is, but an oscillator under tempo correction has a phase at
+    /// a past `t` that depends on the correction history rather than on `t`.
+    /// Whatever builds the transport owes that half; this flag does not cover
+    /// it.
+    ///
+    /// Decided by [`check`](crate::check::check) and **deliberately
+    /// conservative**: see `is_closed_form` there for exactly what it refuses
+    /// to claim and why under-claiming is the safe direction.
+    ///
+    /// Vacuously true for an L4 procedure, which emits nothing and holds no
+    /// per-element state at all. A *Set* is closed form when both of its
+    /// procedures are, which in practice means when its L1 is.
+    pub closed_form: bool,
     pub span: Span,
 }
 

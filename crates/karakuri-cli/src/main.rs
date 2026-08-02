@@ -17,6 +17,7 @@
 //! replay it is read back from the stream instead. Keeping the measurement out
 //! here is what lets the same engine code be deterministic.
 
+mod audio;
 mod compile;
 mod render;
 mod watch;
@@ -130,8 +131,19 @@ options:
                         layer, key, signal and range are required.
                         signal=bpm is refused: a tempo is not a [0,1] signal
                         and the binding would never move — bind beat or bar
-  --bpm N               the session tempo the local oscillator runs at
-                        (default 120)
+  --bpm N               the tempo the local oscillator free-runs at
+                        (default 120). With --audio-in this is where the grid
+                        starts and what it falls back to; a tracked tempo
+                        corrects it rather than replacing this flag
+  --audio-in NAME       open an audio input: `default`, or any part of a
+                        device's name. `energy`, `onset` and band0..7 become
+                        measured signals at full confidence, and the beat is
+                        tracked and corrected onto the local oscillator
+  --display-latency-ms MS
+                        how long after a frame is prepared it is light, beyond
+                        the frame queue (default 20). An offset, not a
+                        measurement: it covers the display's own pipeline,
+                        which nothing here can measure. `o`/`p` nudge it live
   --tonemap OP          clamp | reinhard | aces | agx (default aces)
   --exposure V          output exposure, before the tone map (default 1.0)
   --watch               recompile and swap the slot whose files changed
@@ -154,6 +166,10 @@ keys:
   t          cycle the tone map operator: clamp, Reinhard, ACES, AgX
   - =        output exposure down / up
   `          exposure back to 1.0
+  b          tap the beat — three or more taps set the tempo as well, and a
+             tap always sets the phase. Needs --audio-in
+  o p        display latency offset down / up, 5 ms a press. Raise it if the
+             picture reads late against the room
   s          print the status line now
   h          print these bindings
   esc        quit
@@ -220,6 +236,14 @@ struct Args {
     /// default: a run that is not being edited should not carry a worker
     /// thread per slot and a watchdog it will never use.
     watch: bool,
+    /// `--audio-in`. `None` is no device at all, which is not the same as a
+    /// device that is silent: with no device the bus answers `energy` and the
+    /// bands exactly as it did before audio existed, and the oscillator
+    /// free-runs.
+    audio_in: Option<String>,
+    /// The unmeasurable half of the output lag, in milliseconds. See
+    /// `audio::DEFAULT_DISPLAY_LATENCY_MS`.
+    display_latency_ms: f32,
     /// The frame budget the watchdog holds a swapped-in Set to, in
     /// milliseconds. Exposed mostly so that rollback can be provoked on
     /// demand — `--budget-ms 0` rejects everything — rather than only by
@@ -486,6 +510,8 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         frames: 240,
         size: (1280, 720),
         watch: false,
+        audio_in: None,
+        display_latency_ms: audio::DEFAULT_DISPLAY_LATENCY_MS,
         budget_ms: DEFAULT_BUDGET_MS,
         look: Look {
             op: TonemapOp::Aces,
@@ -579,6 +605,27 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                     }
                 }
             }
+            "--audio-in" => {
+                args_out.audio_in = Some(value_for("--audio-in", &mut it)?);
+            }
+            "--display-latency-ms" => {
+                let value = value_for("--display-latency-ms", &mut it)?;
+                // Refused rather than clamped, on the same terms as
+                // `--exposure`: an offset silently changed is an offset the
+                // operator will spend the first song chasing.
+                match value.parse::<f32>() {
+                    Ok(v) if v.is_finite() && audio::DISPLAY_LATENCY_RANGE.contains(&v) => {
+                        args_out.display_latency_ms = v
+                    }
+                    _ => {
+                        return Err(format!(
+                            "`--display-latency-ms {value}` — expected {} to {} milliseconds",
+                            audio::DISPLAY_LATENCY_RANGE.start(),
+                            audio::DISPLAY_LATENCY_RANGE.end()
+                        ))
+                    }
+                }
+            }
             "--watch" => args_out.watch = true,
             "--budget-ms" => {
                 args_out.budget_ms = number_for("--budget-ms", "a number of milliseconds", &mut it)?
@@ -624,6 +671,17 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
             "examples/drift_shell.kir".into(),
             "examples/soft_points.kir".into(),
         ));
+    }
+    // An offscreen run is a function of its inputs — that is why it never
+    // watches files either. Accepting `--audio-in` here and quietly ignoring it
+    // would produce a PNG sequence whose bindings all sat at a tenth effect
+    // with nothing to say why.
+    if args_out.audio_in.is_some() && (args_out.render_to.is_some() || args_out.seq_to.is_some()) {
+        return Err(
+            "`--audio-in` with `--render` or `--seq` — an offscreen run takes no live input, \
+             because its output has to be a function of its arguments. Drop one of them"
+                .to_string(),
+        );
     }
     if args_out.sets.len() > MAX_SLOTS {
         return Err(format!(
@@ -874,6 +932,15 @@ struct Live {
     /// divide the step rate still advances at the right average rate. The same
     /// accumulator shape as spawn quantisation, for the same reason.
     carry: f32,
+    /// The audio input, the beat lock, and the operator's latency offset.
+    /// `None` without `--audio-in`, and then nothing in the frame path below
+    /// changes at all — which is the property the whole slice is about.
+    audio: Option<audio::Audio>,
+    /// The last measured frame interval, from [`Live::steps`].
+    last_interval: f32,
+    /// When the session started, so a tap has an origin to be measured from.
+    /// The clock stays out here with the other one, for the same reason.
+    started: Instant,
     last: Instant,
     status_at: Instant,
     frames_since_status: u32,
@@ -953,6 +1020,32 @@ impl ApplicationHandler for App {
                 );
             }
         }
+        // Opened before the first frame and never on it. A failure here is
+        // fatal on purpose: `--audio-in` was asked for, and a run that quietly
+        // continued without it would look exactly like a run whose bindings
+        // are all at a tenth effect for some other reason.
+        let audio = match &self.args.audio_in {
+            Some(selector) => {
+                match audio::Audio::open(selector, self.args.display_latency_ms, DT) {
+                    Ok(audio) => {
+                        eprintln!(
+                            "audio in: {} at {} Hz — energy, onset and band0..7 are measured now, \
+                             and the beat corrects the oscillator. output offset {:.0} ms (o/p)",
+                            audio.description(),
+                            audio.sample_rate(),
+                            audio.display_latency_ms()
+                        );
+                        Some(audio)
+                    }
+                    Err(e) => {
+                        eprintln!("karakuri-cli: {e}");
+                        std::process::exit(2);
+                    }
+                }
+            }
+            None => None,
+        };
+
         eprint!("\n{BINDINGS}\n");
 
         let live = Live {
@@ -965,6 +1058,9 @@ impl ApplicationHandler for App {
             look: self.args.look,
             focus: 0,
             carry: 0.0,
+            audio,
+            last_interval: DT,
+            started: Instant::now(),
             last: Instant::now(),
             status_at: Instant::now(),
             frames_since_status: 0,
@@ -1041,6 +1137,9 @@ impl Live {
                 '-' => self.set_exposure(self.look.exposure / EXPOSURE_STEP),
                 '=' => self.set_exposure(self.look.exposure * EXPOSURE_STEP),
                 '`' => self.set_exposure(1.0),
+                'b' => self.tap(),
+                'o' => self.nudge_display_latency(-audio::DISPLAY_LATENCY_STEP_MS),
+                'p' => self.nudge_display_latency(audio::DISPLAY_LATENCY_STEP_MS),
                 's' => self.print_status(),
                 'h' | '?' => eprint!("{BINDINGS}"),
                 _ => {}
@@ -1079,10 +1178,44 @@ impl Live {
                 self.deck.set_residency(slot, Residency::Allocated);
                 eprintln!("slot {slot} off air — allocated, holding t {t:.2}s");
             }
-            Residency::Allocated => {
+            // Priming is warming out of sight and is still off air, so space
+            // does the same thing to it: puts it on, at whatever `t` it has
+            // warmed to. Deciding when a slot *should* prime is the governor's
+            // and is not wired to a key yet.
+            Residency::Allocated | Residency::Priming => {
                 self.deck.set_residency(slot, Residency::Live);
                 eprintln!("slot {slot} on air — resuming at t {t:.2}s");
             }
+        }
+    }
+
+    /// A tap on the beat. Authoritative — a performer tapping is stating where
+    /// the beat is, not offering evidence — and it goes onto the oscillator
+    /// through the same `tempo` record a tracked correction does.
+    fn tap(&mut self) {
+        let started = self.started;
+        let mut signals = *self.deck.signals();
+        let Some(audio) = self.audio.as_mut() else {
+            eprintln!("tap: no audio input — run with --audio-in to tap the beat");
+            return;
+        };
+        audio.tap(&mut signals, Instant::now(), started);
+        self.deck.set_signals(signals);
+        eprintln!(
+            "tap: {:.1} bpm, phase set",
+            self.deck.signals().oscillator().bpm()
+        );
+    }
+
+    /// The offset for what cannot be measured: the display's own latency. Raise
+    /// it if the picture reads late against the room.
+    fn nudge_display_latency(&mut self, delta_ms: f32) {
+        match self.audio.as_mut() {
+            Some(audio) => {
+                let ms = audio.nudge_display_latency(delta_ms);
+                eprintln!("display latency offset {ms:.0} ms (the picture leads the music by this much)");
+            }
+            None => eprintln!("no audio input — the display offset only means something with --audio-in"),
         }
     }
 
@@ -1130,6 +1263,10 @@ impl Live {
         let now = Instant::now();
         let elapsed = now.duration_since(self.last).as_secs_f32();
         self.last = now;
+        // Kept because the output lag a beat correction leads by starts with
+        // the frame queue, which is a number of *frames* — and the frame rate
+        // is the display's, not `dt`'s. See `audio::Audio::output_lag`.
+        self.last_interval = elapsed;
 
         self.carry += elapsed / DT;
         let whole = self.carry.floor();
@@ -1139,6 +1276,7 @@ impl Live {
 
     fn frame(&mut self) {
         let steps = self.steps();
+        self.measure_audio(steps);
 
         let surface_frame = match self.surface.get_current_texture() {
             Ok(frame) => frame,
@@ -1175,6 +1313,44 @@ impl Live {
         }
     }
 
+    /// This frame's measurement, and what it does to the session.
+    ///
+    /// **Before the frame is rendered and never inside it.** The measured frame
+    /// and the tempo correction are latched here, exactly where `steps` is
+    /// measured, so that everything drawn this frame reads one set of values —
+    /// two bindings sampling `energy` in one frame have to get one answer, or
+    /// the record saying what this frame saw is a record of neither.
+    ///
+    /// The session's signals are taken by value, given this frame's
+    /// measurement, and handed back. `Signals` is `Copy` and the copy carries
+    /// the phase, so this is not the "restart the session clock" that
+    /// `Deck::set_signals` warns about — it is the same clock with one frame's
+    /// input attached.
+    fn measure_audio(&mut self, steps: u8) {
+        let Some(audio) = self.audio.as_mut() else {
+            return;
+        };
+        let mut signals = *self.deck.signals();
+        let (_audio_record, tempo) = audio.frame(
+            &mut signals,
+            self.last_interval,
+            f32::from(steps) * DT,
+        );
+        self.deck.set_signals(signals);
+
+        // A correction is worth saying out loud when it is a decision rather
+        // than a trim: acquiring, re-acquiring, and a tap all move the grid at
+        // once, and an operator who cannot see that happen cannot tell a lock
+        // from a coincidence.
+        if let (Some(karakuri_store::record::Record::Tempo { bpm, .. }), Some(reason)) =
+            (tempo, audio.reason())
+        {
+            if !matches!(reason, karakuri_audio::Reason::Trim) {
+                eprintln!("beat: {reason:?} at {bpm:.1} bpm");
+            }
+        }
+    }
+
     /// What the operator needs and nothing that costs a stall to know: which
     /// slots are on air, what they are faded to, where their simulation clocks
     /// are, the output look, and whether frames are still arriving on time.
@@ -1200,6 +1376,7 @@ impl Live {
                 if slot == self.focus { ">" } else { " " },
                 match self.deck.residency(slot) {
                     Residency::Live => "LIVE",
+                    Residency::Priming => "prim",
                     Residency::Allocated => "off ",
                 },
                 self.deck.gain(slot),
@@ -1226,6 +1403,28 @@ impl Live {
                 let _ = write!(self.status, "{key}={value:.3}  ");
             }
         }
+        // What audio is doing, when there is any. A performer cannot tune what
+        // they cannot see: the confidence says whether the input is alive, and
+        // the phase error says which way the offset wants nudging.
+        if let Some(audio) = &self.audio {
+            let a = audio.status();
+            let _ = write!(
+                self.status,
+                "| e{:.2} on{:.2} c{:.2} | {}{:.1}bpm heard{:.1} c{:.2} err{:+.3}b off{:.0}ms ",
+                a.energy,
+                a.onset,
+                a.confidence,
+                // The grid's own tempo first, because that is what the picture
+                // is actually running at; what the tracker hears second, so a
+                // disagreement between the two is visible rather than implied.
+                if a.locked { "lock " } else { "free " },
+                self.deck.signals().oscillator().bpm(),
+                a.estimated_bpm,
+                a.estimate_confidence,
+                a.error,
+                audio.display_latency_ms(),
+            );
+        }
         eprintln!(
             "{}| {} exp {:.2} | {fps:.1} fps",
             self.status,
@@ -1238,6 +1437,7 @@ impl Live {
 fn residency_name(residency: Residency) -> &'static str {
     match residency {
         Residency::Live => "live",
+        Residency::Priming => "priming (warming, off air)",
         Residency::Allocated => "allocated (off air)",
     }
 }
@@ -1260,6 +1460,60 @@ mod tests {
             Ok(ParseOutcome::Run(args)) => Ok(*args),
             Ok(ParseOutcome::Help) => panic!("expected Args, got --help"),
             Err(e) => Err(e),
+        }
+    }
+
+    // -- audio -----------------------------------------------------------
+
+    #[test]
+    fn audio_is_off_unless_asked_for_and_takes_a_device_name() {
+        assert_eq!(parse(&[]).expect("parses").audio_in, None);
+        assert_eq!(
+            parse(&["--audio-in", "default"]).expect("parses").audio_in,
+            Some("default".to_string())
+        );
+        assert_eq!(
+            parse(&["--audio-in", "Scarlett"]).expect("parses").audio_in,
+            Some("Scarlett".to_string())
+        );
+        // A flag with nothing after it takes the next flag as its value in the
+        // shape this CLI was fixed for once already.
+        assert!(parse(&["--audio-in", "--watch"]).is_err());
+        assert!(parse(&["--audio-in"]).is_err());
+    }
+
+    /// An offscreen run is a function of its arguments, so a live input is
+    /// refused rather than accepted and ignored.
+    #[test]
+    fn audio_and_an_offscreen_render_are_refused_together() {
+        let message = parse(&["--audio-in", "default", "--render", "out.png"])
+            .expect_err("should be refused");
+        assert!(message.contains("--audio-in"), "{message}");
+        assert!(parse(&["--audio-in", "default", "--seq", "frames/"]).is_err());
+        // ...and either alone is fine.
+        assert!(parse(&["--audio-in", "default"]).is_ok());
+        assert!(parse(&["--render", "out.png"]).is_ok());
+    }
+
+    #[test]
+    fn the_display_latency_offset_defaults_and_is_validated() {
+        assert_eq!(
+            parse(&[]).expect("parses").display_latency_ms,
+            audio::DEFAULT_DISPLAY_LATENCY_MS
+        );
+        assert_eq!(
+            parse(&["--display-latency-ms", "35"])
+                .expect("parses")
+                .display_latency_ms,
+            35.0
+        );
+        // Refused rather than clamped or defaulted: an offset silently changed
+        // is an offset the operator spends the first song chasing.
+        for bad in ["-5", "1000", "twenty", ""] {
+            assert!(
+                parse(&["--display-latency-ms", bad]).is_err(),
+                "`--display-latency-ms {bad}` was accepted"
+            );
         }
     }
 
