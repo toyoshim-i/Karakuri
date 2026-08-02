@@ -113,7 +113,13 @@ pub struct Reading {
 struct Published {
     frame: AudioFrame,
     estimate: Estimate,
-    /// **A**: device buffer plus half an analysis window, measured at publish.
+    /// **A**: half an analysis window, plus whatever of the device buffer
+    /// arrived after the sample this block ends on. Measured at publish.
+    ///
+    /// **Short by the delivery delay** — the gap between the last sample being
+    /// captured and the callback running — which nothing portable measures.
+    /// That residue and every other unmeasurable term end up in one place: the
+    /// operator's offset. See the crate doc's "The two lags".
     analysis_lag: f32,
     at: Instant,
 }
@@ -176,8 +182,11 @@ impl AudioInput {
         let mut filled = 0usize;
         let mut since_hop = 0usize;
 
-        let mut on_samples = move |mono: &mut dyn Iterator<Item = f32>, latency: f32| {
-            for sample in mono {
+        // `frames` is how many this callback delivered and `rate` its sample
+        // rate, so that a hop landing part-way through a buffer can say how
+        // much of that buffer came *after* it — see the lag below.
+        let mut on_samples = move |mono: &mut dyn Iterator<Item = f32>, frames: usize, rate: f32| {
+            for (index, sample) in mono.enumerate() {
                 ring[write] = sample;
                 write = (write + 1) % BLOCK;
                 filled = (filled + 1).min(BLOCK);
@@ -198,10 +207,24 @@ impl AudioInput {
                 tracker.push(analysis.novelty);
 
                 if let Ok(mut slot) = publisher.try_lock() {
+                    // **How much of this buffer arrived after the sample that
+                    // ends this block**, which is how old the analysis instant
+                    // already is when it is published. A hop can land anywhere
+                    // in a buffer, so this runs from a whole buffer down to
+                    // nothing; charging the buffer's *whole* duration every
+                    // time — which is what this did — over-stated `A` by up to
+                    // one buffer and by half of one on average, and the
+                    // correction then led by that much too much.
+                    //
+                    // What is left unaccounted is the delivery delay: the gap
+                    // between the last sample being captured and this callback
+                    // running. Nothing portable measures it, and it is one of
+                    // the terms the operator's offset exists to absorb.
+                    let after = (frames - 1 - index) as f32 / rate;
                     *slot = Some(Published {
                         frame: analysis.frame,
                         estimate: tracker.estimate(),
-                        analysis_lag: latency + window_lag,
+                        analysis_lag: after + window_lag,
                         at: Instant::now(),
                     });
                 }
@@ -223,12 +246,10 @@ impl AudioInput {
                 device.build_input_stream(
                     config.clone(),
                     move |data: &[$sample], _: &cpal::InputCallbackInfo| {
+                        // From what actually arrived rather than from the
+                        // requested buffer size, because a host is free to
+                        // ignore that.
                         let frames = data.len() / channels.max(1);
-                        // The device buffer's own duration, which is the first
-                        // half of the analysis lag. Measured from what actually
-                        // arrived rather than from the requested buffer size,
-                        // because a host is free to ignore that.
-                        let latency = frames as f32 / sample_rate as f32;
                         // Downmix: a level is a level, and a stereo input whose
                         // channels differ is not two measurements.
                         let mut mono = data.chunks(channels.max(1)).map(|frame| {
@@ -238,7 +259,7 @@ impl AudioInput {
                                 .sum::<f32>()
                                 / channels.max(1) as f32
                         });
-                        on_samples(&mut mono, latency);
+                        on_samples(&mut mono, frames, sample_rate as f32);
                     },
                     error,
                     None,

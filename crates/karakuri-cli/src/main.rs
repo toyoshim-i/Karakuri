@@ -143,11 +143,13 @@ options:
                         device's name. `energy`, `onset` and band0..7 become
                         measured signals at full confidence, and the beat is
                         tracked and corrected onto the local oscillator
-  --display-latency-ms MS
-                        how long after a frame is prepared it is light, beyond
-                        the frame queue (default 20). An offset, not a
-                        measurement: it covers the display's own pipeline,
-                        which nothing here can measure. `o`/`p` nudge it live
+  --latency-offset-ms MS
+                        how far the picture leads the sound, beyond the frame
+                        queue (default 20, signed). Everything past the two
+                        outputs — the PA, the projector, the room — which
+                        nothing here can measure. Negative when the sound is
+                        the late one. `o`/`p` nudge it live, which is how it is
+                        meant to be found: from where the audience stands
   --tonemap OP          clamp | reinhard | aces | agx (default aces)
   --exposure V          output exposure, before the tone map (default 1.0)
   --watch               recompile and swap the slot whose files changed
@@ -182,8 +184,10 @@ keys:
              so a set started an octave off stays an octave off until this key.
              `x2?` on the status line is the tracker saying it might be one.
              The phase does not move. Needs --audio-in
-  o p        display latency offset down / up, 5 ms a press. Raise it if the
-             picture reads late against the room
+  o p        latency offset down / up, 5 ms a press, and it goes negative.
+             Raise it if the picture reads late from where the audience is,
+             lower it if the sound does. This is the only instrument that can
+             read the PA and the projector, so it is the one to trust
   s          print the status line now
   h          print these bindings
   esc        quit
@@ -256,8 +260,8 @@ struct Args {
     /// free-runs.
     audio_in: Option<String>,
     /// The unmeasurable half of the output lag, in milliseconds. See
-    /// `audio::DEFAULT_DISPLAY_LATENCY_MS`.
-    display_latency_ms: f32,
+    /// `audio::DEFAULT_LATENCY_OFFSET_MS`.
+    latency_offset_ms: f32,
     /// The frame budget the watchdog holds a swapped-in Set to, in
     /// milliseconds. Exposed mostly so that rollback can be provoked on
     /// demand — `--budget-ms 0` rejects everything — rather than only by
@@ -525,7 +529,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         size: (1280, 720),
         watch: false,
         audio_in: None,
-        display_latency_ms: audio::DEFAULT_DISPLAY_LATENCY_MS,
+        latency_offset_ms: audio::DEFAULT_LATENCY_OFFSET_MS,
         budget_ms: DEFAULT_BUDGET_MS,
         look: Look {
             op: TonemapOp::Aces,
@@ -622,20 +626,20 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
             "--audio-in" => {
                 args_out.audio_in = Some(value_for("--audio-in", &mut it)?);
             }
-            "--display-latency-ms" => {
-                let value = value_for("--display-latency-ms", &mut it)?;
+            "--latency-offset-ms" => {
+                let value = value_for("--latency-offset-ms", &mut it)?;
                 // Refused rather than clamped, on the same terms as
                 // `--exposure`: an offset silently changed is an offset the
                 // operator will spend the first song chasing.
                 match value.parse::<f32>() {
-                    Ok(v) if v.is_finite() && audio::DISPLAY_LATENCY_RANGE.contains(&v) => {
-                        args_out.display_latency_ms = v
+                    Ok(v) if v.is_finite() && audio::LATENCY_OFFSET_RANGE.contains(&v) => {
+                        args_out.latency_offset_ms = v
                     }
                     _ => {
                         return Err(format!(
-                            "`--display-latency-ms {value}` — expected {} to {} milliseconds",
-                            audio::DISPLAY_LATENCY_RANGE.start(),
-                            audio::DISPLAY_LATENCY_RANGE.end()
+                            "`--latency-offset-ms {value}` — expected {} to {} milliseconds",
+                            audio::LATENCY_OFFSET_RANGE.start(),
+                            audio::LATENCY_OFFSET_RANGE.end()
                         ))
                     }
                 }
@@ -1057,7 +1061,7 @@ impl ApplicationHandler for App {
             Some(selector) => {
                 match audio::Audio::open(
                     selector,
-                    self.args.display_latency_ms,
+                    self.args.latency_offset_ms,
                     DT,
                     self.args.bpm,
                 ) {
@@ -1067,7 +1071,7 @@ impl ApplicationHandler for App {
                              and the beat corrects the oscillator. output offset {:.0} ms (o/p)",
                             audio.description(),
                             audio.sample_rate(),
-                            audio.display_latency_ms()
+                            audio.latency_offset_ms()
                         );
                         Some(audio)
                     }
@@ -1175,8 +1179,8 @@ impl Live {
                 'b' => self.tap(),
                 ',' => self.shift_octave(0.5),
                 '.' => self.shift_octave(2.0),
-                'o' => self.nudge_display_latency(-audio::DISPLAY_LATENCY_STEP_MS),
-                'p' => self.nudge_display_latency(audio::DISPLAY_LATENCY_STEP_MS),
+                'o' => self.nudge_latency_offset(-audio::LATENCY_OFFSET_STEP_MS),
+                'p' => self.nudge_latency_offset(audio::LATENCY_OFFSET_STEP_MS),
                 's' => self.print_status(),
                 'h' | '?' => eprint!("{BINDINGS}"),
                 _ => {}
@@ -1341,15 +1345,24 @@ impl Live {
         }
     }
 
-    /// The offset for what cannot be measured: the display's own latency. Raise
-    /// it if the picture reads late against the room.
-    fn nudge_display_latency(&mut self, delta_ms: f32) {
+    /// The offset for everything past the two outputs, which nothing here can
+    /// measure. Found from where the audience stands, not from this machine —
+    /// see `karakuri-audio`'s crate doc.
+    fn nudge_latency_offset(&mut self, delta_ms: f32) {
         match self.audio.as_mut() {
             Some(audio) => {
-                let ms = audio.nudge_display_latency(delta_ms);
-                eprintln!("display latency offset {ms:.0} ms (the picture leads the music by this much)");
+                let ms = audio.nudge_latency_offset(delta_ms);
+                // Which way it now points, said in words: the sign is the part
+                // an operator gets wrong at 2 a.m., and "-15 ms" alone does not
+                // say whether that is the picture waiting or the sound.
+                let sense = if ms < 0.0 {
+                    "the picture waits for the music"
+                } else {
+                    "the picture leads the music"
+                };
+                eprintln!("latency offset {ms:+.0} ms — {sense}");
             }
-            None => eprintln!("no audio input — the display offset only means something with --audio-in"),
+            None => eprintln!("no audio input — the latency offset only means something with --audio-in"),
         }
     }
 
@@ -1572,7 +1585,7 @@ impl Live {
                     ""
                 },
                 a.error,
-                audio.display_latency_ms(),
+                audio.latency_offset_ms(),
             );
         }
         eprintln!(
@@ -1670,23 +1683,33 @@ mod tests {
     }
 
     #[test]
-    fn the_display_latency_offset_defaults_and_is_validated() {
+    fn the_latency_offset_defaults_takes_a_sign_and_is_validated() {
         assert_eq!(
-            parse(&[]).expect("parses").display_latency_ms,
-            audio::DEFAULT_DISPLAY_LATENCY_MS
+            parse(&[]).expect("parses").latency_offset_ms,
+            audio::DEFAULT_LATENCY_OFFSET_MS
         );
         assert_eq!(
-            parse(&["--display-latency-ms", "35"])
+            parse(&["--latency-offset-ms", "35"])
                 .expect("parses")
-                .display_latency_ms,
+                .latency_offset_ms,
             35.0
+        );
+        // **Negative is a value, not a typo.** A room whose sound arrives after
+        // its picture is corrected for by turning this below zero, and there is
+        // no other control that can: nothing at this end sees the PA or the
+        // projector.
+        assert_eq!(
+            parse(&["--latency-offset-ms", "-45"])
+                .expect("a negative offset is a room, not a mistake")
+                .latency_offset_ms,
+            -45.0
         );
         // Refused rather than clamped or defaulted: an offset silently changed
         // is an offset the operator spends the first song chasing.
-        for bad in ["-5", "1000", "twenty", ""] {
+        for bad in ["1000", "-1000", "twenty", ""] {
             assert!(
-                parse(&["--display-latency-ms", bad]).is_err(),
-                "`--display-latency-ms {bad}` was accepted"
+                parse(&["--latency-offset-ms", bad]).is_err(),
+                "`--latency-offset-ms {bad}` was accepted"
             );
         }
     }

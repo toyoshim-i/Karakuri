@@ -37,27 +37,35 @@ use karakuri_store::record::Record;
 /// half of the output lag a beat correction leads by.
 const QUEUE_FRAMES: f32 = 2.0;
 
-/// The default for the part of the output lag that **cannot be measured** — the
-/// display's own pipeline, from the cable to the panel. 20 ms is a reasonable
-/// modern monitor and a poor television.
+/// A starting value for everything past the two outputs that **cannot be
+/// measured here**. 20 ms is a plausible display pipeline and nothing more: it
+/// is where the operator starts adjusting, not an answer.
 ///
-/// This is an offset, not a measurement, and it is on a key for that reason: a
-/// performer nudging it by ear is the only instrument that can read it.
-pub const DEFAULT_DISPLAY_LATENCY_MS: f32 = 20.0;
+/// See `karakuri-audio`'s "Why the offset is the answer and not a better
+/// measurement". A sound path and a picture path leave this machine separately
+/// and neither ends at it, so the only instrument that can read this is a
+/// person standing where the audience stands.
+pub const DEFAULT_LATENCY_OFFSET_MS: f32 = 20.0;
 
 /// One press of the offset keys.
-pub const DISPLAY_LATENCY_STEP_MS: f32 = 5.0;
+pub const LATENCY_OFFSET_STEP_MS: f32 = 5.0;
 
-/// The bounds the offset is held inside. Zero is "the panel is instant", and
-/// 200 ms is past any display and well into the region where a performer has
-/// mistaken a whole beat for an offset.
-pub const DISPLAY_LATENCY_RANGE: std::ops::RangeInclusive<f32> = 0.0..=200.0;
+/// The bounds the offset is held inside. **Signed, and that is not symmetry for
+/// its own sake**: which of the two outputs is the late one depends on the
+/// room. A PA delayed to the back of a hall, or a desk with processing on the
+/// master, puts the sound behind a projector that had looked slow; the
+/// correction then has to lead *less*, and a floor at zero would leave the
+/// operator holding a control that cannot reach the answer.
+///
+/// 200 ms either way is past any single device and well into the region where a
+/// performer has mistaken a whole beat for an offset.
+pub const LATENCY_OFFSET_RANGE: std::ops::RangeInclusive<f32> = -200.0..=200.0;
 
 /// The audio session: an open input, the beat lock, and the operator's offset.
 pub struct Audio {
     input: AudioInput,
     lock: BeatLock,
-    display_latency_ms: f32,
+    latency_offset_ms: f32,
     /// A smoothed frame interval, for the queue part of the output lag. Fed
     /// from the same elapsed-time measurement `steps` comes from — the frame
     /// rate is a property of the machine and the display, and guessing it from
@@ -109,14 +117,14 @@ impl Audio {
     /// module.
     pub fn open(
         selector: &str,
-        display_latency_ms: f32,
+        latency_offset_ms: f32,
         dt: f32,
         session_bpm: f32,
     ) -> Result<Audio, AudioError> {
         Ok(Audio {
             input: AudioInput::open(selector, session_bpm)?,
             lock: BeatLock::new(),
-            display_latency_ms: clamped_latency(display_latency_ms),
+            latency_offset_ms: clamped_latency(latency_offset_ms),
             // Starts at the simulation step and is corrected by measurement
             // within a frame or two.
             frame_interval: dt,
@@ -144,21 +152,21 @@ impl Audio {
         self.last
     }
 
-    pub fn display_latency_ms(&self) -> f32 {
-        self.display_latency_ms
+    pub fn latency_offset_ms(&self) -> f32 {
+        self.latency_offset_ms
     }
 
     /// Nudge the offset. Returns what it became, for printing: a control that
     /// changes something invisible is indistinguishable from a broken one.
-    pub fn nudge_display_latency(&mut self, delta_ms: f32) -> f32 {
-        self.display_latency_ms = clamped_latency(self.display_latency_ms + delta_ms);
-        self.display_latency_ms
+    pub fn nudge_latency_offset(&mut self, delta_ms: f32) -> f32 {
+        self.latency_offset_ms = clamped_latency(self.latency_offset_ms + delta_ms);
+        self.latency_offset_ms
     }
 
-    /// **D**: the frame queue plus the display's own pipeline. See
-    /// `karakuri-audio`'s crate doc.
+    /// **D**: the frame queue, plus the operator's offset for everything past
+    /// the two outputs. See `karakuri-audio`'s crate doc.
     pub fn output_lag(&self) -> f32 {
-        output_lag(self.frame_interval, self.display_latency_ms)
+        output_lag(self.frame_interval, self.latency_offset_ms)
     }
 
     /// One frame's worth of audio: read the device, emit the records, and apply
@@ -268,22 +276,28 @@ impl Audio {
 }
 
 /// **D**, in seconds: the frame queue, at the rate frames are actually
-/// arriving, plus the operator's offset for the display's own pipeline.
+/// arriving, plus the operator's offset for everything past the two outputs.
+///
+/// **May be negative**, when the offset is turned down past the queue — a room
+/// whose sound arrives later than its picture. Nothing downstream needs it
+/// positive: the lead it feeds is a signed quantity all the way into
+/// `Oscillator::correct`, and a negative one is a correction that trails the
+/// measurement instead of leading it, which is exactly what such a room wants.
 ///
 /// A free function because [`Audio`] cannot be constructed without opening a
 /// device, and this is the half of the lead that has nothing to do with one:
 /// two terms in two different units, which is exactly the arithmetic that is
 /// wrong by a factor of a thousand in somebody's first draft and reads as a
 /// tuning problem forever after.
-pub fn output_lag(frame_interval: f32, display_latency_ms: f32) -> f32 {
-    QUEUE_FRAMES * frame_interval + display_latency_ms / 1000.0
+pub fn output_lag(frame_interval: f32, latency_offset_ms: f32) -> f32 {
+    QUEUE_FRAMES * frame_interval + latency_offset_ms / 1000.0
 }
 
-/// Clamp the operator's offset into [`DISPLAY_LATENCY_RANGE`].
+/// Clamp the operator's offset into [`LATENCY_OFFSET_RANGE`].
 fn clamped_latency(ms: f32) -> f32 {
     ms.clamp(
-        *DISPLAY_LATENCY_RANGE.start(),
-        *DISPLAY_LATENCY_RANGE.end(),
+        *LATENCY_OFFSET_RANGE.start(),
+        *LATENCY_OFFSET_RANGE.end(),
     )
 }
 
@@ -541,16 +555,16 @@ mod tests {
     /// implementation does.
     #[test]
     fn the_offset_moves_the_output_lag_and_stops_at_its_bounds() {
-        let mut latency = clamped_latency(DEFAULT_DISPLAY_LATENCY_MS + DISPLAY_LATENCY_STEP_MS);
-        assert_eq!(latency, DEFAULT_DISPLAY_LATENCY_MS + DISPLAY_LATENCY_STEP_MS);
+        let mut latency = clamped_latency(DEFAULT_LATENCY_OFFSET_MS + LATENCY_OFFSET_STEP_MS);
+        assert_eq!(latency, DEFAULT_LATENCY_OFFSET_MS + LATENCY_OFFSET_STEP_MS);
         for _ in 0..100 {
-            latency = clamped_latency(latency - DISPLAY_LATENCY_STEP_MS);
+            latency = clamped_latency(latency - LATENCY_OFFSET_STEP_MS);
         }
-        assert_eq!(latency, *DISPLAY_LATENCY_RANGE.start());
+        assert_eq!(latency, *LATENCY_OFFSET_RANGE.start());
         for _ in 0..100 {
-            latency = clamped_latency(latency + DISPLAY_LATENCY_STEP_MS);
+            latency = clamped_latency(latency + LATENCY_OFFSET_STEP_MS);
         }
-        assert_eq!(latency, *DISPLAY_LATENCY_RANGE.end());
+        assert_eq!(latency, *LATENCY_OFFSET_RANGE.end());
     }
 
     /// **D itself**, which nothing checked: two terms in two different units,
@@ -569,10 +583,43 @@ mod tests {
         assert!(output_lag(1.0 / 120.0, 20.0) < output_lag(1.0 / 60.0, 20.0));
         // And the default lands somewhere a display plausibly is, rather than
         // a thousand times off it in either direction.
-        let default = output_lag(1.0 / 60.0, DEFAULT_DISPLAY_LATENCY_MS);
+        let default = output_lag(1.0 / 60.0, DEFAULT_LATENCY_OFFSET_MS);
         assert!(
             (0.02..0.10).contains(&default),
             "the default output lag is {default} s"
+        );
+    }
+
+    /// **The offset reaches below zero and takes the lead with it.**
+    ///
+    /// A room whose sound arrives after its picture — a delayed PA, processing
+    /// on the master — needs the correction to lead *less* than the queue
+    /// alone, and past a point to trail it. A floor at zero would hand the
+    /// operator a control that stops short of the answer, and there is no other
+    /// control: nothing at this end can see either output path.
+    #[test]
+    fn the_offset_goes_negative_so_a_late_room_can_be_corrected_for() {
+        assert!(
+            *LATENCY_OFFSET_RANGE.start() < 0.0,
+            "the offset cannot reach a room whose sound is the late one"
+        );
+        // Turned all the way down, the lead is negative at any frame rate a
+        // display runs at — so it is the *sum* that goes below zero, not just
+        // the offset term while the queue quietly holds it up.
+        let floor = *LATENCY_OFFSET_RANGE.start();
+        for hz in [30.0, 60.0, 120.0, 240.0] {
+            let lag = output_lag(1.0 / hz, floor);
+            assert!(lag < 0.0, "at {hz} Hz the floor still leads by {lag} s");
+        }
+        // And it is monotone through zero rather than clamped at it, which is
+        // the failure this replaces: the control has to keep moving the picture
+        // as it is turned down past the point the two outputs agree.
+        let steps: Vec<f32> = (-4..=4)
+            .map(|n| output_lag(1.0 / 60.0, n as f32 * 25.0))
+            .collect();
+        assert!(
+            steps.windows(2).all(|w| w[0] < w[1]),
+            "the lead stopped moving somewhere in {steps:?}"
         );
     }
 }
