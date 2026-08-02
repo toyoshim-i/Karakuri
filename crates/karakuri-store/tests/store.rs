@@ -219,7 +219,7 @@ fn save_session_as_set_projects_and_persists() {
     let set = store.read_set("drift_01").unwrap();
 
     // No ticks in the persisted Set.
-    assert!(set.iter().all(|l| l.record().is_state()));
+    assert!(set.iter().all(|l| l.record().is_set_state()));
     // Last write wins: one radius record, holding the later value.
     let radius_records: Vec<_> = set
         .iter()

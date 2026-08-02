@@ -41,14 +41,25 @@ enum Key {
     Passthrough(usize),
 }
 
-/// The fold key for a record, or `None` if the record carries no state at
-/// all and should simply be dropped — `Record::Tick`, which the spec
-/// guarantees never appears in a Set file, and `Record::Audio`, which is the
-/// same kind of thing: what one frame measured, not what anything *is*.
+/// The fold key for a record, or `None` for one that does not belong in a Set
+/// file. **Two kinds of `None`, and the second is the one that is easy to get
+/// wrong.**
+///
+/// The first is a record that carries no state at all: `Record::Tick`, which
+/// the spec guarantees never appears in a Set file, and `Record::Audio`, which
+/// is the same kind of thing — what one frame measured, not what anything *is*.
 /// Folding a session's audio down to its last frame would put one arbitrary
-/// moment's microphone reading into a Set file and call it state, and the same
-/// goes for `Record::Tempo`: a correction is an event, and the tempo it
-/// corrects belongs to the session rather than to any one Set.
+/// moment's microphone reading into a Set file and call it state. `Tempo` is a
+/// correction, so an event, and the tempo it corrects is the session's.
+///
+/// The second is a record that **is** state and is not this Set's: `Gain`,
+/// `Residency` and `Look` describe the deck the Sets are playing on. Dropping
+/// them is not "there is nothing to fold", it is "there is something to fold
+/// and this is not the projection it folds into" — a Set file that restored a
+/// gain would apply it to whatever slot it was next loaded into, and one that
+/// restored a residency would put a Set on air by being opened. The session
+/// projection they do belong to does not exist yet, because nothing writes a
+/// session stream; when it does, it folds these and drops the first three.
 fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
     match record {
         Record::Set { .. } => Some(Key::Set),
@@ -59,7 +70,12 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         Record::Camera { .. } => Some(Key::Camera),
         Record::Seed { stream, .. } => Some(Key::Seed(*stream)),
         Record::Src { hash, line, .. } => Some(Key::Src(*hash, *line)),
-        Record::Tick { .. } | Record::Audio { .. } | Record::Tempo { .. } => None,
+        Record::Tick { .. }
+        | Record::Audio { .. }
+        | Record::Tempo { .. }
+        | Record::Gain { .. }
+        | Record::Residency { .. }
+        | Record::Look { .. } => None,
         Record::Unknown => Some(Key::Passthrough(ordinal)),
     }
 }
@@ -104,7 +120,55 @@ mod tests {
         ];
         let set = project(&session);
         assert_eq!(set.len(), 1);
-        assert!(set.iter().all(|l| l.record().is_state()));
+        assert!(set.iter().all(|l| l.record().is_set_state()));
+    }
+
+    /// **The mix is state and is dropped anyway**, which is the one drop here
+    /// that is not "there was nothing to fold".
+    ///
+    /// A gain, a residency and a look describe the deck, and a Set file that
+    /// carried them would apply them to whatever slot it was next loaded into:
+    /// a Set opened into slot 0 would pull slot 2's fader down, and one whose
+    /// residency said `live` would go on air by being opened. The folding
+    /// machinery would happily key them and produce a stable projection — it is
+    /// *correct* folding into the wrong file — so nothing but this test stands
+    /// between the two scopes.
+    #[test]
+    fn drops_the_mix_because_it_is_the_sessions_state_and_not_a_sets() {
+        let session = vec![
+            line(Record::Set {
+                id: "s".into(),
+                v: 1,
+            }),
+            line(Record::Gain {
+                slot: 2,
+                value: 0.25,
+            }),
+            line(Record::Residency {
+                slot: 0,
+                level: "live".into(),
+            }),
+            line(Record::Look {
+                op: "agx".into(),
+                exposure: 2.0,
+                white_point: 4.0,
+            }),
+            line(Record::Tick { steps: 1 }),
+            // A second value for the same key, so a projection that folded
+            // these would still produce exactly one line each and look right.
+            line(Record::Gain {
+                slot: 2,
+                value: 0.9,
+            }),
+        ];
+        let set = project(&session);
+        assert_eq!(
+            set.len(),
+            1,
+            "the mix reached a Set file: {:?}",
+            set.iter().map(|l| l.record()).collect::<Vec<_>>()
+        );
+        assert!(set.iter().all(|l| l.record().is_set_state()));
     }
 
     /// A measurement and a correction are what a *frame* saw and decided, not
@@ -133,7 +197,7 @@ mod tests {
         ];
         let set = project(&session);
         assert_eq!(set.len(), 1);
-        assert!(set.iter().all(|l| l.record().is_state()));
+        assert!(set.iter().all(|l| l.record().is_set_state()));
     }
 
     #[test]
