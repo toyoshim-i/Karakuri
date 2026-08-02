@@ -133,6 +133,10 @@ impl Resolver for L1Resolver {
         match amb {
             Ambient::Capacity => "u.capacity".to_string(),
             Ambient::T => "step_args.t".to_string(),
+            // Per substep alongside `t`, and for the same reason: a frame of
+            // two steps has to land on the same two musical instants two
+            // frames of one step do, or substepping would move the beat.
+            Ambient::Beats => "step_args.beats".to_string(),
             // Element's first pass substitutes `birth_frac * dt` for `dt`;
             // see the module doc. `spawn` has no notion of "first update"
             // to correct for and reads the uniform directly.

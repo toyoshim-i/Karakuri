@@ -158,7 +158,7 @@ not the expensive half.
 
 **Landed so far**, in order: the deck with an L5 mix and a per-slot level meter; tone
 mapping once after the mix; signal binding; priming, the budget governor and `closed_form`;
-audio input with beat tracking; a record vocabulary for the mix. Each bullet below says
+audio input with beat tracking; a record vocabulary for the mix; the `beats` ambient. Each bullet below says
 what it cost against what it promised — the ones marked **Done** are worth reading for
 where the promise was wrong, not only for the fact that it is kept.
 
@@ -284,6 +284,21 @@ fine alone and is unreadable next to lights.
   1.0, and the per-slot meter is the measurement semi-automatic gain would need — which is
   deliberately not built: the meter shows the number and nothing acts on it, because an
   exposure that moves by itself is the worst thing that can happen on stage.
+- ~~**`beats`, the tempo grid readable from IR.**~~ **Done.** Before it a procedure had `t`
+  and nothing else, so the picture ran at wall time whatever the music did — a tempo change
+  moved the grid every binding is sampled on and moved nothing that was drawn. A `bind`
+  could not close it: a binding writes one `param`, and what follows a tempo is not a
+  parameter value but the passage of time. Per substep like `t`, the same instant `t` names,
+  and continuous across a correction, which matters because a trim arrives several times a
+  second and a grid that recomputed history on each one would shimmer.
+
+  **This is following, not seeking.** A procedure reading `beats` knows where the room is;
+  it still cannot be evaluated at another time, and that is the whole of what the transport
+  below adds. What `beats` did settle is the question underneath it: a procedure that reads
+  the grid is a function of the grid as well as of `t`, and the grid at a past `t` is not a
+  function of `t` — so a scrub answers against the grid **as it stands**, which is what
+  seeking to bar 32 should mean, rather than against the grid that was running then, which
+  nothing keeps
 - **Transport, per slot.** The mapping from session time to a slot's `t`, so that material
   can be run at a rate, held, or scrubbed — tape-style fast-forward and rewind, locked to
   the beat grid. Driven by a **position** rather than by a tempo and a phase, because a

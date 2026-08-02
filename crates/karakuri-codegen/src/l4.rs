@@ -110,6 +110,7 @@ impl Resolver for L4Resolver {
     fn read_ambient(&self, amb: Ambient) -> String {
         match amb {
             Ambient::T => "u.t".to_string(),
+            Ambient::Beats => "u.beats".to_string(),
             Ambient::Camera => "u.camera".to_string(),
             Ambient::PointCoord => match self.block {
                 L4Block::Fragment => "in.point_coord".to_string(),
@@ -350,6 +351,7 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
 
     let mut b = UniformLayoutBuilder::new();
     b.field("t", "f32");
+    b.field("beats", "f32");
     b.field("seed_salt", "u32");
     // Not an IR ambient: converting `point_size` (pixels) into a clip-space
     // offset needs the render target's dimensions, which is engine state,

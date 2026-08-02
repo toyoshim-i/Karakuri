@@ -144,6 +144,32 @@ impl Oscillator {
         }
     }
 
+    /// **The same grid, read at the absolute time `t`.**
+    ///
+    /// The companion to [`Oscillator::behind`], and the choice between them is
+    /// **a choice of contract rather than of numbers**. A caller that knows how
+    /// far behind it is wants `behind`, because the gap is an exact integer and
+    /// its own `t` is not. A caller that *has* a `t` and wants the grid at
+    /// exactly that instant wants this one — `Ambient::Beats` is that case: it
+    /// is defined as the grid at the instant `Ambient::T` names, so it is
+    /// derived from that `t` and from nothing else.
+    ///
+    /// **The two agree in practice and the difference was measured rather than
+    /// assumed.** A session oscillator's `t` is an f64 running sum and a Set's
+    /// is an f32 product of a step count; they diverge by around 1e-7 of their
+    /// value, which is f32 precision, so once a beat count is narrowed to f32
+    /// the two derivations produce identical bits — over 400,000 steps, nearly
+    /// two hours, they never once differ. A test written to catch the wrong
+    /// choice would therefore pass against both, and was deleted for saying it
+    /// had checked something it could not. What is left is the contract, which
+    /// is worth stating for its own sake.
+    ///
+    /// The same caveat as `behind`: this is the grid **as it stands**, not as
+    /// it was, and the two differ by every correction applied since.
+    pub fn at_time(self, t: f64) -> Oscillator {
+        Oscillator { t, ..self }
+    }
+
     /// Steps this oscillator has been advanced by, summed over every
     /// [`advance`](Oscillator::advance).
     ///

@@ -199,16 +199,32 @@ pub enum Ambient {
     Seed,
     Capacity,
     T,
+    /// Musical position, in beats, on the session's tempo grid — the same
+    /// instant [`Ambient::T`] names, counted in beats instead of seconds.
+    ///
+    /// Monotone while the tempo is positive and continuous across a tempo
+    /// correction, which is what makes it safe to drive a phase from: a tempo
+    /// change bends the rate and never moves a beat that has already happened.
+    /// Fractional, so `fract(beats)` is the position within the beat and
+    /// `beats * 0.25` counts bars in four.
+    ///
+    /// **Not a substitute for `t` and not a replacement for it.** `t` is the
+    /// simulation's own clock and is what an accumulating procedure integrates
+    /// against; `beats` is where the room is. A procedure that wants to move
+    /// with the music reads this, and one that wants to move at a rate reads
+    /// `t`.
+    Beats,
     Dt,
     Camera,
     PointCoord,
 }
 
 impl Ambient {
-    pub const ALL: [Ambient; 6] = [
+    pub const ALL: [Ambient; 7] = [
         Ambient::Seed,
         Ambient::Capacity,
         Ambient::T,
+        Ambient::Beats,
         Ambient::Dt,
         Ambient::Camera,
         Ambient::PointCoord,
@@ -219,6 +235,7 @@ impl Ambient {
             Ambient::Seed => "seed",
             Ambient::Capacity => "capacity",
             Ambient::T => "t",
+            Ambient::Beats => "beats",
             Ambient::Dt => "dt",
             Ambient::Camera => "camera",
             Ambient::PointCoord => "point_coord",
@@ -232,7 +249,7 @@ impl Ambient {
     pub fn ty(self) -> Ty {
         match self {
             Ambient::Seed | Ambient::Capacity => Ty::Uint,
-            Ambient::T | Ambient::Dt => Ty::Float,
+            Ambient::T | Ambient::Beats | Ambient::Dt => Ty::Float,
             Ambient::Camera => Ty::Mat4,
             Ambient::PointCoord => Ty::Vec2,
         }
@@ -241,7 +258,7 @@ impl Ambient {
     /// Blocks this value is readable in. `Seed` is readable everywhere.
     pub fn available_in(self, kind: Kind, block: BlockKind) -> bool {
         match self {
-            Ambient::Seed | Ambient::T => true,
+            Ambient::Seed | Ambient::T | Ambient::Beats => true,
             Ambient::Capacity | Ambient::Dt => kind == Kind::L1,
             Ambient::Camera => kind == Kind::L4,
             Ambient::PointCoord => block == BlockKind::Fragment,

@@ -1,0 +1,54 @@
+// A shell that breathes on the beat and rotates with the bar.
+//
+// The point of this file is `beats`: the session's tempo grid, readable here.
+// `drift_shell.kir` is the same idea driven by `t` alone, and the difference
+// is what a tempo change does. Run them side by side with `--audio-in` and
+// change the music's tempo — this one follows and that one does not.
+//
+// Closed form on purpose: `position` is written outright rather than
+// accumulated, so the state at any instant is a function of `seed` and the
+// clock. That is what makes it cheap to prime and, once the transport exists,
+// scrubbable — an accumulating shell can only ever be run forward.
+
+proc beat_shell {
+  kind     L1
+  topology points
+  capacity [4096, 1048576] = 262144
+
+  param radius     : float [0.1, 8.0] = 2.4
+  // How far the shell swells between one beat and the next. The pulse is
+  // `pow2`-shaped rather than linear so it reads as a hit and not a wobble —
+  // the same reason `docs/ir-spec.md` gives for binding a percussive signal
+  // through that curve.
+  param punch      : float [0.0, 2.0] = 0.55
+  // Turns per bar. One bar is four beats, so `1.0` is a full rotation every
+  // four beats however fast the room is going.
+  param spin       : float [0.0, 4.0] = 1.0
+  param turbulence : float [0.0, 3.0] = 0.8
+
+  emit position, velocity, age
+
+  element {
+    let u    = hash1(seed);
+    let v    = hash1(seed + 1000u);
+    let base = sphere_point(u, v) * radius;
+
+    // Position within the beat, 0 at the instant of it. Squared, so the swell
+    // decays away from the hit instead of ramping into the next one.
+    let into = fract(beats);
+    let hit  = (1.0 - into) * (1.0 - into);
+
+    // Bars, not seconds. `beats * 0.25` is bars in four, so the whole figure
+    // turns with the music rather than beside it.
+    let turn = beats * 0.25 * spin * 6.2831853;
+
+    // Turbulence still moves in real time, deliberately. Not everything should
+    // be on the grid: a field that snapped with the beat would make the whole
+    // frame pulse as one object, and the shell is what is meant to be pulsing.
+    let flow = curl(base * 0.4 + vec3(0.0, t * 0.15, 0.0)) * turbulence;
+
+    position = rot_y(base * (1.0 + hit * punch) + flow * 0.3, turn);
+    velocity = flow;
+    age      = age + dt;
+  }
+}

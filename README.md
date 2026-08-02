@@ -69,7 +69,9 @@ boundary; a file that does not compile prints its diagnostics and changes nothin
 Status below for what the swap does and does not do.
 
 Defaults are `drift_shell` + `soft_points` at 262144 elements. [examples/](examples/) also
-holds `spark_fountain`, an L1 that spawns and kills — pair it with the same L4:
+holds `spark_fountain`, an L1 that spawns and kills, and `beat_shell`, which reads the
+`beats` ambient so the figure turns with the bar and swells on the beat rather than at
+wall time. Pair either with the same L4:
 
 ```sh
 cargo run -p karakuri-cli -- examples/spark_fountain.kir examples/soft_points.kir
@@ -325,6 +327,7 @@ governor, alongside the decision about whether GPU timestamps can be trusted at 
 | Linear HDR end to end, sRGB once at output | Works |
 | Store | Works standalone. **Five record types have a live path and the rest do not**: `audio` and `tempo` per frame, `gain`, `residency` and `look` per key press, all built and read back before anything is applied, so what drives the engine is what a replay would decode. `tick`, `bind`, `param` and `seed` round-trip in tests and nothing writes one, so a Set file remains a format the engine agrees with and does not yet obey. Nothing writes a session stream to disk at all |
 | Set file and session stream | The two projections are kept apart by `Record::is_set_state` and `project`. A Set file drops the mix as well as the ticks, and for a different reason: a gain is state, but the *session's*, and a Set file that restored one would pull down whatever fader it was next loaded under. The session projection that folds the mix does not exist, because nothing writes a session stream to fold |
+| `beats` | Works. The session's tempo grid, readable from IR as an ambient beside `t` — per substep, continuous across a tempo correction, and the same instant `t` names. **Without it the picture ran at wall time whatever the music did**: a tempo change moved the grid every binding was sampled on and moved nothing that was drawn, and a `bind` cannot close that, because what follows a tempo is not a parameter value but the passage of time. `beat` and `bar` stay bus names and stay different — phases in `[0, 1]` for driving a parameter, where `beats` is unbounded and monotone for driving a position |
 | Signal binding | Works. A binding samples the bus, curves it, maps it onto a range, and blends into the parameter **by confidence** — so a binding to `beat` or `bar` takes full effect today, and one to `energy` moves fully when a microphone is open and a tenth as far when none is. The binding did not change when audio arrived; the same name started answering with a different confidence |
 | Oscillator, synthesized bus, noise | On the frame path now. One oscillator per session, owned by the deck, advanced by the same `steps` the slots are |
 | Element lifecycle | Works. `spawn` and `kill()` run, order-preserving compaction is wired into the L1 dispatch, and `element` and the draw are both indirect off one counts buffer. A procedure that can neither spawn nor kill skips the scan entirely and dispatches in place |
@@ -396,7 +399,7 @@ crates/
 docs/
   ir-spec.md          the IR. Settled; open questions are empty
   roadmap.md          where this goes after V1
-examples/             runnable .kir files: two L1, one L4
+examples/             runnable .kir files: three L1, one L4
 library/              artifact store (gitignored)
 ```
 
