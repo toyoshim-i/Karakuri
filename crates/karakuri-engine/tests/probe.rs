@@ -56,6 +56,24 @@ fn a_trivial_measurement_reports_its_capacity_and_resolution() {
     );
 }
 
+/// **Seen failing twice, in a full-workspace run, and not reproduced since.**
+/// Twenty runs after — six of them under a second process holding the GPU, six
+/// with a forced rebuild each time — every one measured a ratio between 23 and
+/// 51 against a threshold of 2. That margin is not marginal, so whatever
+/// happened was not noise creeping over a line, and the failure text was lost
+/// both times to a truncating `head` in the command that ran it.
+///
+/// Nothing here is changed on a theory. The threshold is not moved and the
+/// comparison is not reshaped, because a 22× safety margin says the shape is
+/// not what failed, and a test loosened to stop a failure nobody has read is a
+/// test that will not report the next one either. What is added is the margin
+/// itself, printed on every run: the harness shows a failing test's output, so
+/// the next occurrence says whether `light` ballooned, `heavy` collapsed, or
+/// the two measurements came off different methods — three different faults
+/// that the word FAILED does not distinguish.
+///
+/// Normal, on the machine this was written on: light ≈ 1.3 ms, heavy ≈ 60 ms,
+/// both by host clock.
 #[test]
 fn a_heavier_workload_measures_as_heavier() {
     // Additive point sprites: cost scales with instance count (more quads to
@@ -96,7 +114,15 @@ fn a_heavier_workload_measures_as_heavier() {
     let light_measurement = probe.run(&gpu.device, &gpu.queue, &mut light, 1, light_capacity);
     let heavy_measurement = probe.run(&gpu.device, &gpu.queue, &mut heavy, 1, heavy_capacity);
 
-    eprintln!("measured via {:?}", light_measurement.method);
+    // Every run, not only failing ones — a number nobody records is a number
+    // nobody can compare the next failure against. See this test's doc.
+    eprintln!(
+        "measured via {:?}: light {:.3} ms, heavy {:.3} ms, ratio {:.1}x",
+        light_measurement.method,
+        light_measurement.ms,
+        heavy_measurement.ms,
+        heavy_measurement.ms / light_measurement.ms,
+    );
     assert_eq!(light_measurement.method, heavy_measurement.method);
     assert!(
         heavy_measurement.ms > light_measurement.ms * 2.0,
