@@ -16,11 +16,13 @@
 //!
 //! Doing it here is bounded and cheap. **Measured, on a host clock, release
 //! build, Apple M4 Pro**: one 2048-sample analysis is 12.7 µs against a hop
-//! that carries 10.7 ms of audio, and a tempo estimate — autocorrelation over
-//! every candidate lag — costs 56 µs once per 256 ms. That is about 0.15% of
-//! the callback's time. Both numbers come from the ignored measurements in
-//! `analysis` and `tempo`, which print them on demand rather than asserting
-//! them. It allocates nothing (every buffer is planned at construction) and
+//! that carries 10.7 ms of audio, and a tempo estimate — an autocorrelation
+//! over every candidate lag, plus one pass folding the window onto the settled
+//! period — costs 30 µs once per 256 ms. That is about 0.13% of the callback's
+//! time. Both numbers come from the ignored measurements in `analysis` and
+//! `tempo`, which print them on demand rather than asserting them, and both
+//! move by a third between a cold run and a warm one: the estimator that folds
+//! and the two heuristics it replaced measure the same to within that noise. It allocates nothing (every buffer is planned at construction) and
 //! locks nothing.
 //!
 //! ## How the frame reads it without waiting
@@ -40,6 +42,12 @@
 //! word "skip" from that paragraph and add fifty lines of ordering argument to
 //! this file; the value it protects is stale within 11 ms anyway.
 //!
+//! One thing travels the other way — the tempo tracker's window centre, which
+//! is the grid's current tempo — and it is an `AtomicU32` rather than a second
+//! mutex for the reason above: the callback reads it on **every** hop, so
+//! "skip on contention" would mean the octave window occasionally not moving,
+//! and one `f32` needs no more than a relaxed load to carry.
+//!
 //! ## Confidence and staleness
 //!
 //! The analyser says what it measured, at confidence 1.0 — including a
@@ -49,6 +57,7 @@
 //! measurement happens where the clock is, and what comes out joins the record
 //! stream.
 
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -114,6 +123,9 @@ pub struct AudioInput {
     /// Held because dropping it closes the stream. Nothing calls it.
     _stream: cpal::Stream,
     shared: Arc<Mutex<Option<Published>>>,
+    /// The tracking window's centre, as `f32` bits, written by the render
+    /// thread and read in the callback. See [`AudioInput::set_centre_bpm`].
+    centre_bpm: Arc<AtomicU32>,
     /// The most recent publish this reader has managed to pick up. Kept so a
     /// contended `try_lock` costs nothing but a repeated value.
     last: Option<Published>,
@@ -125,7 +137,11 @@ pub struct AudioInput {
 impl AudioInput {
     /// Open an input. `selector` is `"default"`, or any substring of a device's
     /// description or id — case-insensitive, first match wins.
-    pub fn open(selector: &str) -> Result<AudioInput, AudioError> {
+    ///
+    /// `centre_bpm` is where the tempo tracker's window starts: the session
+    /// tempo, which is also what the oscillator free-runs at. See
+    /// [`crate::tempo`].
+    pub fn open(selector: &str, centre_bpm: f32) -> Result<AudioInput, AudioError> {
         let host = cpal::default_host();
         let device = pick(&host, selector)?;
         let description = describe(&device);
@@ -141,9 +157,16 @@ impl AudioInput {
         let mut analyzer = Analyzer::new(sample_rate);
         let bands = analyzer.band_count();
         let window_lag = analyzer.window_lag();
-        let mut tracker = Tracker::new(analyzer.hop_seconds(), window_lag);
+        let mut tracker = Tracker::new(analyzer.hop_seconds(), window_lag, centre_bpm);
         let shared: Arc<Mutex<Option<Published>>> = Arc::new(Mutex::new(None));
         let publisher = Arc::clone(&shared);
+        // One `f32` in an atomic rather than a second mutex: the callback reads
+        // it on every hop and must never wait, and a torn read is impossible
+        // for a `u32`. Relaxed is enough — it orders nothing else, and a centre
+        // that arrives one hop late costs at most one re-measurement in the
+        // octave the grid was already in.
+        let centre_bpm = Arc::new(AtomicU32::new(centre_bpm.to_bits()));
+        let follower = Arc::clone(&centre_bpm);
 
         // Every buffer the callback touches, allocated here. The callback is
         // real-time code: an allocation in it is a lock in disguise.
@@ -171,6 +194,7 @@ impl AudioInput {
                 block[head.len()..].copy_from_slice(tail);
 
                 let analysis = analyzer.analyze(&block);
+                tracker.set_centre_bpm(f32::from_bits(follower.load(Ordering::Relaxed)));
                 tracker.push(analysis.novelty);
 
                 if let Ok(mut slot) = publisher.try_lock() {
@@ -237,6 +261,7 @@ impl AudioInput {
         Ok(AudioInput {
             _stream: stream,
             shared,
+            centre_bpm,
             last: None,
             description,
             sample_rate,
@@ -250,6 +275,17 @@ impl AudioInput {
 
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate
+    }
+
+    /// Tell the tracker where the grid is, so its octave window follows.
+    ///
+    /// **The grid's tempo, every frame** — that is what makes a drifting tempo
+    /// stay in one octave, and it is how the ×2 and ÷2 controls reach the
+    /// tracker: they move the grid, and this carries the window along with it.
+    /// Never waits; see the module doc for why this side of the boundary is an
+    /// atomic and the other is a mutex.
+    pub fn set_centre_bpm(&self, bpm: f32) {
+        self.centre_bpm.store(bpm.to_bits(), Ordering::Relaxed);
     }
 
     /// This frame's reading. **Never waits**; see the module doc.
@@ -432,6 +468,7 @@ mod tests {
                 confidence: 0.9,
                 at: 4.0,
                 revision: 7,
+                half_tempo_hint: false,
             },
             analysis_lag: 0.032,
             at: Instant::now(),

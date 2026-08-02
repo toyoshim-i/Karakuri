@@ -61,12 +61,33 @@
 //! re-acquire. An interface unplugged mid-set leaves a grid running at the
 //! tempo it had, which is the only acceptable behaviour: the picture keeps its
 //! tempo rather than stopping or lurching.
+//!
+//! **Confidence says how well the grid fits the novelty and nothing else.** It
+//! used to carry octave uncertainty as well, which meant a tempo read an octave
+//! out arrived here looking like an absent one and the grid simply never
+//! locked — a bug that read as silence. [`crate::tempo`] settles the octave by
+//! folding now, so what reaches this gate is only ever "is there a beat and
+//! does this grid sit on it".
+//!
+//! ## What a person can say that a measurement cannot
+//!
+//! Two controls here are **instructions rather than evidence**, and both are
+//! applied in full and immediately: [`BeatLock::tap`], and [`BeatLock::octave`]
+//! for the one thing the estimator cannot infer — which octave the operator
+//! wants. See [`crate::tempo`] for why that decision is a person's.
 
 use karakuri_signal::Oscillator;
 
-use crate::tempo::Estimate;
+use crate::tempo::{Estimate, BPM_RANGE};
 
 /// Below this, an estimate is not evidence of anything.
+///
+/// It sits in a wide empty gap rather than on a slope, which is why it did not
+/// have to move when [`crate::tempo`]'s confidence stopped carrying the octave.
+/// Measured on synthesised material: broadband noise reads 0.01, a swell 0.01,
+/// a sustained tone 0.18 — and everything with a pulse in it, including a grid
+/// deliberately left an octave out, reads above 0.98. The gate separates "is
+/// there a beat" from "there is not", and nothing lands in between.
 pub const GATE_CONFIDENCE: f32 = 0.35;
 
 /// Consecutive agreeing revisions before a free-running grid locks. Three is
@@ -127,6 +148,8 @@ pub enum Reason {
     Trim,
     /// A performer tapped.
     Tap,
+    /// A performer moved the grid an octave.
+    Octave,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -319,6 +342,47 @@ impl BeatLock {
         }
     }
 
+    /// A performer moving the grid an octave: `2.0` for ×2, `0.5` for ÷2.
+    ///
+    /// **This is the whole escape hatch for a window centred an octave off**,
+    /// and it is deliberately a person's key rather than a measurement. The
+    /// tracker folds every candidate into a window centred on the grid, so a
+    /// grid an octave low stays an octave low however long it listens; moving
+    /// the grid moves the window with it and tracking continues in the new
+    /// octave instead of folding straight back.
+    ///
+    /// Authoritative, like a tap: the state becomes locked and the run of
+    /// evidence is discarded, so the estimator's next few opinions — which are
+    /// still being made in the old octave, for up to a quarter second — cannot
+    /// count towards pulling it back.
+    ///
+    /// The phase does not move. Doubling a tempo subdivides the beats that are
+    /// already there and halving it takes every other one, so the beat the
+    /// performer can see stays where it is either way.
+    ///
+    /// `None` when the result would leave [`crate::tempo::BPM_RANGE`]: nothing
+    /// can be tracked out there, so the grid would be dragged back by the next
+    /// estimate that disagreed with it, and a control that undoes itself two
+    /// seconds later is worse than one that says no.
+    pub fn octave(&mut self, factor: f32, oscillator: &Oscillator) -> Option<Correction> {
+        let bpm = oscillator.bpm() * factor;
+        if !BPM_RANGE.contains(&bpm) {
+            return None;
+        }
+        self.state = State::Locked;
+        self.agreement = 0;
+        self.disagreement = 0;
+        self.candidate_bpm = bpm;
+        self.error = 0.0;
+        self.reason = Some(Reason::Octave);
+        Some(Correction {
+            bpm,
+            shift: 0.0,
+            // A person meant it, exactly as with a tap.
+            confidence: 1.0,
+        })
+    }
+
     /// The tempo the taps imply, if there are enough of them and they agree.
     fn tapped_tempo(&self) -> Option<f32> {
         if self.tap_count < 3 {
@@ -440,6 +504,7 @@ mod tests {
                         confidence,
                         at: self.now - A as f64,
                         revision: self.revision,
+                        half_tempo_hint: false,
                     },
                     None => Estimate {
                         revision: self.revision,
@@ -693,6 +758,113 @@ mod tests {
             128.0,
             "taps that disagree with each other set a tempo"
         );
+    }
+
+    // -- the octave ---------------------------------------------------------
+
+    /// **The operator's last word.** ×2 doubles the grid and leaves the phase
+    /// alone, and the estimates that arrive in the next quarter second — still
+    /// made in the old octave — do not pull it back, because an instruction
+    /// discards the run of evidence that was building against it.
+    #[test]
+    fn the_octave_control_moves_the_grid_and_survives_the_old_octave_s_estimates() {
+        let bpm = 87.0;
+        let mut session = Session::new(120.0);
+        session.run(10.0, Some((bpm, 0.9)), true);
+        assert!(session.lock.locked());
+        let phase = session.oscillator.beat_phase();
+
+        let correction = session
+            .lock
+            .octave(2.0, &session.oscillator)
+            .expect("174 bpm is inside the range");
+        assert_eq!(correction.bpm, 174.0);
+        assert_eq!(correction.shift, 0.0);
+        assert_eq!(session.lock.reason(), Some(Reason::Octave));
+        session.oscillator.correct(correction.bpm, correction.shift);
+        assert_eq!(
+            session.oscillator.beat_phase(),
+            phase,
+            "an octave move shifted the phase"
+        );
+
+        // A second of the old octave's estimates still arriving — the tracker
+        // re-measures four times a second, so this is four times the exposure
+        // the real one has — and the grid holds the octave it was given.
+        session.run(1.0, Some((bpm, 0.9)), true);
+        assert!(
+            (session.oscillator.bpm() - 174.0).abs() < 1.0,
+            "the old octave pulled the grid back to {} within a second",
+            session.oscillator.bpm()
+        );
+    }
+
+    /// **An instruction discards the evidence that was building against it.**
+    /// A run of disagreement nearly long enough to re-acquire, and then the
+    /// operator moves the octave: the estimate that completes the run must not
+    /// land, because what it is evidence against is a grid that no longer
+    /// exists.
+    #[test]
+    fn an_octave_move_discards_the_run_of_disagreement_it_interrupts() {
+        let mut session = Session::new(120.0);
+        session.run(10.0, Some((87.0, 0.9)), true);
+        assert!(session.lock.locked());
+
+        // Seven consistent disagreeing revisions: one short of RELOCK_EVIDENCE.
+        session.run(0.25 * (RELOCK_EVIDENCE - 1) as f32, Some((100.0, 0.9)), true);
+        assert!(
+            (session.oscillator.bpm() - 87.0).abs() < 1.0,
+            "the run re-acquired before the key was pressed, so this proves nothing"
+        );
+
+        let correction = session
+            .lock
+            .octave(2.0, &session.oscillator)
+            .expect("174 bpm is inside the range");
+        session.oscillator.correct(correction.bpm, correction.shift);
+
+        // The estimates that would have completed the run keep arriving.
+        session.run(0.75, Some((100.0, 0.9)), true);
+        assert!(
+            (session.oscillator.bpm() - 174.0).abs() < 1.0,
+            "a run that started against the old grid re-acquired the new one at {}",
+            session.oscillator.bpm()
+        );
+    }
+
+    /// **The half-tempo hint moves nothing.** It is a note to the operator, and
+    /// the failure this whole design removed was a measurement like it moving
+    /// the grid on its own — so two estimates differing only in that flag have
+    /// to produce the same correction, byte for byte.
+    #[test]
+    fn the_half_tempo_hint_does_not_reach_the_grid() {
+        let run = |hint: bool| {
+            let mut session = Session::new(120.0);
+            for _ in 0..(12.0 / DT) as u32 {
+                session.frame(Some((128.0, 0.9)), true);
+                session.estimate.half_tempo_hint = hint;
+            }
+            (
+                session.oscillator.bpm(),
+                session.oscillator.beats(),
+                session.lock.locked(),
+            )
+        };
+        assert_eq!(run(true), run(false));
+    }
+
+    /// A move that would leave the trackable range is refused rather than
+    /// applied and then undone by the next estimate that disagrees.
+    #[test]
+    fn an_octave_move_out_of_range_is_refused() {
+        let oscillator = Oscillator::new(174.0);
+        let mut lock = BeatLock::new();
+        assert!(lock.octave(2.0, &oscillator).is_none(), "348 bpm was taken");
+        assert_eq!(lock.reason(), None);
+        assert!(lock.octave(0.5, &oscillator).is_some(), "87 bpm was refused");
+
+        let slow = Oscillator::new(90.0);
+        assert!(lock.octave(0.5, &slow).is_none(), "45 bpm was taken");
     }
 
     // -- the wrap -----------------------------------------------------------

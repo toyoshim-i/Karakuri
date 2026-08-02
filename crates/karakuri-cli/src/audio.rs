@@ -76,6 +76,10 @@ pub struct Status {
     pub confidence: f32,
     pub estimated_bpm: f32,
     pub estimate_confidence: f32,
+    /// The tracker's note that the grid may be at half the music's tempo — the
+    /// operator's cue to press ×2. Nothing acts on it; see `karakuri-audio`'s
+    /// `tempo` module for why that is the whole point.
+    pub half_tempo_hint: bool,
     /// Phase error in beats, signed. Positive means the music is ahead of the
     /// picture, so the offset wants raising.
     pub error: f32,
@@ -84,9 +88,21 @@ pub struct Status {
 
 impl Audio {
     /// Open an input. `selector` is `default` or part of a device's name.
-    pub fn open(selector: &str, display_latency_ms: f32, dt: f32) -> Result<Audio, AudioError> {
+    ///
+    /// `session_bpm` is `--bpm`, and it does **two** jobs: it is what the
+    /// oscillator free-runs at, and it is where the tempo tracker's octave
+    /// window starts. They are the same number because they are the same
+    /// statement — "this is roughly the tempo" — and after the first lock the
+    /// window centre simply follows the grid. See `karakuri-audio`'s `tempo`
+    /// module.
+    pub fn open(
+        selector: &str,
+        display_latency_ms: f32,
+        dt: f32,
+        session_bpm: f32,
+    ) -> Result<Audio, AudioError> {
         Ok(Audio {
-            input: AudioInput::open(selector)?,
+            input: AudioInput::open(selector, session_bpm)?,
             lock: BeatLock::new(),
             display_latency_ms: clamped_latency(display_latency_ms),
             // Starts at the simulation step and is corrected by measurement
@@ -148,6 +164,13 @@ impl Audio {
             self.frame_interval += (elapsed - self.frame_interval) * 0.05;
         }
 
+        // **Where the tracker looks, every frame.** The grid's tempo is the
+        // centre of the one-octave window every candidate period folds into, so
+        // a tempo that drifts is followed without anything deciding anything —
+        // and the ×2 key works by moving the grid and letting this carry the
+        // window with it.
+        self.input.set_centre_bpm(signals.oscillator().bpm());
+
         let reading = self.input.read();
         let audio = audio_record(&reading.frame);
         // Read back rather than used directly. One small allocation per frame
@@ -172,10 +195,34 @@ impl Audio {
             confidence: reading.frame.confidence,
             estimated_bpm: reading.estimate.bpm,
             estimate_confidence: reading.estimate.confidence,
+            half_tempo_hint: reading.estimate.half_tempo_hint,
             error: self.lock.error(),
             locked: self.lock.locked(),
         };
         (audio, tempo)
+    }
+
+    /// The operator moving the grid an octave: `2.0` for ×2, `0.5` for ÷2.
+    ///
+    /// **The one decision the estimator cannot make**, and the reason it is a
+    /// key rather than a measurement is in `karakuri-audio`'s `tempo` module.
+    /// It moves the grid *and* the window together — the window because the
+    /// centre is read off the oscillator on the next frame, so tracking
+    /// continues in the new octave rather than folding straight back.
+    ///
+    /// `None` when the new tempo would leave the trackable range, which is the
+    /// lock's call rather than this one's.
+    pub fn octave(&mut self, signals: &mut Signals, factor: f32) -> Option<Record> {
+        let correction = self.lock.octave(factor, signals.oscillator())?;
+        let record = tempo_record(&correction);
+        apply_tempo(signals, &record);
+        // The tracker is told at once rather than waiting for the next frame:
+        // an estimate published in between would otherwise be folded into the
+        // octave the operator has just left.
+        self.input.set_centre_bpm(signals.oscillator().bpm());
+        self.last.locked = self.lock.locked();
+        self.last.error = self.lock.error();
+        Some(record)
     }
 
     /// A performer tapping the beat. Authoritative, and it goes through the
