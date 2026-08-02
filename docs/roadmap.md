@@ -56,7 +56,7 @@ V1 implements L1 and L4 inside a single Set. The full model:
 
 | Layer | Role | Milestone |
 |---|---|---|
-| L0 | Signal bus. Synthesized values exist from M1; audio, tempo and MIDI arrive in M2 | M1 / M2 |
+| L0 | Signal bus. Synthesized values from M1; audio and tempo landed in M2, MIDI has not | M1 / M2 |
 | L1 | Geometry generation. Vertices, particles, SDF builtins used inline. The first-class `Field` type is M3 | M1 |
 | L2 | Deformation and motion. Time-axis modulation, physics | M3 |
 | L3 | Camera and space. Viewpoint, motion grammars | M3 |
@@ -156,14 +156,17 @@ not the expensive half.
 
 **Goal:** play a real one-hour set on this and survive.
 
-**First slice landed:** the deck with Live and Allocated residency, an L5 mix with per-slot
-gain, tone mapping once after the mix, and a per-slot level meter. It was chosen so that
-nothing in it needs audio, MIDI, priming, or the budget governor to be worth having, and
-because the tone mapper unblocks generation as much as mixing — an artifact's exposure was
-standing in for a stage that did not exist, which is a value no generator can guess because
-it depends on a Set-level dial.
+**Landed so far**, in order: the deck with an L5 mix and a per-slot level meter; tone
+mapping once after the mix; signal binding; priming, the budget governor and `closed_form`;
+audio input with beat tracking. Each bullet below says what it cost against what it
+promised — the ones marked **Done** are worth reading for where the promise was wrong, not
+only for the fact that it is kept.
 
-Two things that slice taught, both worth carrying:
+**Still open**, and the shape of the rest of this milestone: transport, transitions, blend
+modes and masks, MIDI, output routing, Ableton Link, a panic key, per-slot preview, and
+loading a Set file into the engine at all.
+
+Four things the milestone has taught, all worth carrying:
 
 - **A fader at zero must mean zero.** It did not: `0.0 * NaN` is NaN, and one NaN in one
   slot took the whole mix with it. A fader is the operator's last way out of broken
@@ -173,6 +176,15 @@ Two things that slice taught, both worth carrying:
   generated material in silence — and it is the shape every automatic decision in this
   milestone can take. Whatever the governor measures, it has to be measuring the thing it
   is judging.
+- **A confidently wrong automatic decision is worse than no decision.** Tempo's octave was
+  chosen by heuristics that read plausible and were wrong above 160 bpm; replacing them with
+  a fold into a window centred on the grid deleted the judgement entirely and handed the
+  residual case to the operator. Prefer arithmetic that cannot be subtly wrong, plus a key,
+  over a rule that is usually right.
+- **A test can pass against the exact defect it is named for.** Eight of those were found by
+  review across this milestone — including one asserting that a callback allocates nothing,
+  which fed the analyser a signal so flat that it returned before reaching the code under
+  test. Watch a test fail before trusting it.
 
 Getting on stage early is not a vanity milestone. Live use surfaces failure modes that no
 amount of desk testing finds — thermal throttling, a laptop lid closing, a set that looked
@@ -180,7 +192,12 @@ fine alone and is unreadable next to lights.
 
 **Adds**
 
-- Multiple Sets with the full lifecycle: Cold / Warming / Priming / Live / Cooling
+- Multiple Sets with a lifecycle. This bullet named five states — Cold / Warming / Priming /
+  Live / Cooling — and three were built: **Live**, **Priming**, **Allocated**. Warming and
+  Cooling turned out to be transitions rather than states: a Set arrives compiled from the
+  build worker with nothing to warm into, and a slot taken off air simply stops being
+  stepped. If a real Cooling appears it will be because something needs to fade rather than
+  cut, which is the Transitions bullet below and not a residency level
 - **The deck** — the one place prepared-but-not-showing material lives, at Set granularity.
   Priming Sets, the staging lane M5 draws, the pool an agent fills in M6, and whatever M7
   schedules ahead of a phrase are all this, seen from different angles. Naming it once here
@@ -192,10 +209,11 @@ fine alone and is unreadable next to lights.
   one, which it never writes. A refusal is therefore a deferral: a slot parked for lack of
   budget primes again by itself when there is room. Built, and the same shape as M5's
   greyed-out sync toggles — a surface shows what was asked for and, separately, what is
-  happening. Two instances now; do not invent a third vocabulary for it. Allocated keeps its state, so returning to Priming resumes where it
-  stopped rather than starting over — `t` is simulation time and does not advance while
-  parked. Going straight from Allocated to Live shows an unwarmed image, which is the
-  operator's call to make
+  happening. Two instances now; do not invent a third vocabulary for it.
+
+  Allocated keeps its state, so returning to Priming resumes where it stopped rather than
+  starting over — `t` is simulation time and does not advance while parked. Going straight
+  from Allocated to Live shows an unwarmed image, which is the operator's call to make.
 - Live preview of any slot's output, not just a Set's. Auditioning candidates is the basic
   workflow and it cannot be done blind, so this is a prerequisite rather than a convenience.
   It needs a **default renderer per topology** — a built-in L4 that draws raw geometry — so
@@ -215,16 +233,27 @@ fine alone and is unreadable next to lights.
   unreliable here. And not priming **resolution** — step rate only, since priming does not
   render. A Set is measured before it goes on air, because an unmeasured Live slot is
   unbudgetable rather than free, and treating unknown as headroom is the same mistake as
-  treating an unmeasured candidate as costless. It governs **how many** slots are resident as well as
-  how well they prime: the deck has two separate budgets, VRAM bounding how many can be
-  Allocated at all, and compute bounding how many can step. Deck size is an output of this,
-  not a layout constant
-- Closed-form procedures skip priming entirely. A procedure that never reads an attribute
-  it emits is a pure function of `seed`, `t`, and its parameters, so any `t` can be jumped
-  to directly — Cold to Live with no warm-up, and seekable. The check pass can decide this
-  statically and record it, and the governor should use it: a deck full of closed-form
-  material costs almost nothing to hold ready
-- L5 mixer. Layer stack, blend modes, opacity, masks, and a per-Set linear gain
+  treating an unmeasured candidate as costless.
+
+  **VRAM budgeting was not built**, and the original wording expected it: the deck was to
+  have two budgets, compute bounding how many slots can step and VRAM bounding how many can
+  be Allocated at all, with deck size an output rather than a layout constant. Only the
+  compute half exists. VRAM needs an allocator's cooperation this engine does not have, and
+  `MAX_SLOTS` is still the constant it was supposed to replace.
+- ~~Closed-form procedures skip priming entirely.~~ **Done**, and it takes three conditions
+  rather than the one this bullet named: no read of an emitted attribute, no `spawn` block,
+  and no `kill()`. Spawning disqualifies however pure the `element` block is, because *which
+  elements exist* is history — jumping to `t=30` gives one frame of newborns, not thirty
+  seconds of population. The check pass decides it and the artifact carries it; the governor
+  refuses to prime a closed-form slot because there is nothing to warm.
+
+  Its larger payoff is not priming but **scrubbing** — see Transport above. Because the
+  classification produces no diagnostic it can only ever be wrong silently, which is why it
+  is deliberately conservative: strict-wrong costs a warm-up nobody needed, permissive-wrong
+  is a scrub that renders garbage.
+- L5 mixer. Per-slot linear gain and opacity are built and the composite reads them as one
+  weight — under additive blending they are indistinguishable, and blend modes and masks are
+  what would separate them. Those, and the layer stack, are not built
 - Tone mapping, once, after the mix. Three different things get called exposure and only
   one of them belongs to the artifact: the `param exposure` inside a procedure is how bright
   that material is, the per-Set gain at L5 is how it balances against the others, and tone
@@ -233,7 +262,12 @@ fine alone and is unreadable next to lights.
   counts carries an exposure far below 1.0 — and that breaks the second, because a mixer
   fader means nothing if each Set arrives at a different nominal level. Semi-automatic gain
   needs a measured level per Set, which is the same per-Set measurement hook the budget
-  governor needs
+  governor needs.
+
+  **Done, and it read true.** The tone mapper landed, the example's exposure went back to
+  1.0, and the per-slot meter is the measurement semi-automatic gain would need — which is
+  deliberately not built: the meter shows the number and nothing acts on it, because an
+  exposure that moves by itself is the worst thing that can happen on stage.
 - **Transport, per slot.** The mapping from session time to a slot's `t`, so that material
   can be run at a rate, held, or scrubbed — tape-style fast-forward and rewind, locked to
   the beat grid. Driven by a **position** rather than by a tempo and a phase, because a
@@ -290,7 +324,10 @@ fine alone and is unreadable next to lights.
   end the borrow, take a second Set, and record both into it. With one Set and one frame
   loop that is a comment; with a deck compositing up to four and priming the rest it is a
   frame built from two different simulations. The fix is a guard owning both the `&mut Set`
-  and the encoder, submitting on drop — cheap now, a change to every call site later
+  and the encoder, submitting on drop — cheap now, a change to every call site later.
+  **Discharged**: `Deck::begin_frame` owns the encoder and a second frame while one is open
+  is `E0499`. What it does *not* stop is named in `deck.rs` rather than left implied —
+  `mem::forget` on a frame desynchronises a Set permanently, and no guard closes that
 - Every signal consumer must branch on confidence, never on provider presence
 - The fork-and-swap invariant must hold from M1, because it is how Sets get edited live
 
@@ -308,13 +345,8 @@ fine alone and is unreadable next to lights.
   oscillator carries two anchored beat counts so that a rate is a rate while a grid
   realignment does not re-hash the lattice. A seconds-relative mode and a freeze-at-bind-time
   were both rejected for making two kinds of noise and leaving every existing `bind` record
-  ambiguous. Original text:
-- **Whether noise rate stays tempo-relative once tempo is corrected.** A noise `bind`
-  carries a rate in cycles per beat. Under fixed tempo that is a constant rescaling of
-  cycles per second and costs nothing; under PLL correction every noise binding tracks the
-  correction, including ones with no musical intent. There is no seconds-relative mode.
-  Choose between adding one and freezing a binding's rate at bind time, when correction
-  lands rather than after.
+  ambiguous. The question was live rather than hypothetical the moment correction landed,
+  which is when it was answered.
 
 ~6–8 weeks.
 
