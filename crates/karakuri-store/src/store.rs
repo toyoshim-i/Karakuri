@@ -35,7 +35,7 @@ pub enum StoreError {
     NotFound(Hash),
     /// A Set file carries no time — see `docs/ir-spec.md`, Set file format.
     /// `tick` was the only such record when this was named; `audio` and `tempo`
-    /// are the same kind of thing, so the check is `Record::is_state` and the
+    /// are the same kind of thing, so the check is `Record::is_set_state` and the
     /// message says so rather than naming one of the three.
     #[error(
         "set files cannot contain a tick, audio or tempo record — a Set file carries no time \
@@ -106,7 +106,7 @@ impl Store {
     /// file is a state projection and carries no time — rather than
     /// trusting the caller to have stripped ticks already.
     pub fn write_set(&self, id: &str, lines: &[Line]) -> Result<(), StoreError> {
-        if let Some(index) = lines.iter().position(|l| !l.record().is_state()) {
+        if let Some(index) = lines.iter().position(|l| !l.record().is_set_state()) {
             return Err(StoreError::TickInSet { index });
         }
         ndjson::write(&self.set_path(id), lines)

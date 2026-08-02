@@ -158,9 +158,9 @@ not the expensive half.
 
 **Landed so far**, in order: the deck with an L5 mix and a per-slot level meter; tone
 mapping once after the mix; signal binding; priming, the budget governor and `closed_form`;
-audio input with beat tracking. Each bullet below says what it cost against what it
-promised — the ones marked **Done** are worth reading for where the promise was wrong, not
-only for the fact that it is kept.
+audio input with beat tracking; a record vocabulary for the mix. Each bullet below says
+what it cost against what it promised — the ones marked **Done** are worth reading for
+where the promise was wrong, not only for the fact that it is kept.
 
 **Still open**, and the shape of the rest of this milestone: transport, transitions, blend
 modes and masks, MIDI, output routing, Ableton Link, a panic key, per-slot preview, and
@@ -313,6 +313,16 @@ fine alone and is unreadable next to lights.
   diagnostics that guard the flag** — a `bpm` binding, which saturates because a tempo is
   not a `[0, 1]` signal, and a `noise.octaves` on a kind that has none — **live only in the
   flag today, and the decoder owes them too**
+- **A record vocabulary for the mix.** `gain`, `residency` and `look`, built on every key
+  that moves them, decoded back, and only then applied — the same arrangement `audio` and
+  `tempo` have. Without it a session would replay the material and not the *performance*:
+  the same Sets, on the same beat, all at whatever gain they happened to start at, with
+  nothing ever going on or off air. `residency` carries the **request** and never the
+  effective level, because the governor recomputes that from the budget of whatever machine
+  is running, and replaying one machine's budget onto another's is not replaying a
+  performance. `opacity` deliberately has no record: the deck has the control and nothing
+  reaches it — no key, no flag — and a record for a control the operator cannot move is one
+  more record nobody writes, which is the condition this closes rather than extends
 - **Parameter values keyed by `(layer, name)`.** The record format already does it; the
   engine holds one flat map, so an L1 and an L4 declaring the same parameter name shared a
   value, with the L4 default silently winning. `Set::build` now refuses the collision

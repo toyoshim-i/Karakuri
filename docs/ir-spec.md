@@ -926,15 +926,21 @@ known. The total-cost decision lives there, not in the artifact.
   what would let the collision through harmlessly; until then a rejection the generator can
   act on beats a value nobody chose.
 - Unknown `t` values are ignored, for forward compatibility.
+- **`gain`, `residency` and `look` are not in this list and must never be.** They are the
+  session's state rather than any Set's — see the session stream format.
 
 **What "implemented" covers here is the format; its effect is implemented for `bind` and
 not yet for the rest.** Every record above decodes, re-encodes, and folds down to a
 projection, and unknown ones survive the round trip — `karakuri-store` tests all of that.
-Nothing outside that crate reads a `Record` yet: the CLI takes two `.kir` paths rather than
-a Set file, so no record reaches the engine by being read off disk. What has changed is
-that `bind` is no longer inert once it gets there — the engine implements the semantics
-below, and `karakuri-cli`'s `--bind` flag names exactly these fields as a stand-in until a
-Set file can be loaded.
+None of the records above reaches the engine by being read off disk: the CLI takes two
+`.kir` paths rather than a Set file. What has changed is that `bind` is no longer inert
+once it gets there — the engine implements the semantics below, and `karakuri-cli`'s
+`--bind` flag names exactly these fields as a stand-in until a Set file can be loaded.
+
+The *session* records are further along: `audio` and `tempo` per frame, and `gain`,
+`residency` and `look` per key press, are each built by the CLI, decoded back, and only
+then applied. Nothing writes them to disk yet, so what exists is the live half of the
+round trip and not a file — but the path the engine is driven through is the record's.
 
 ### What a binding does
 
@@ -1150,6 +1156,46 @@ session tempo, which **v0.2 had no record for**.
 
 Neither is state, so neither appears in a Set file: both are what a frame *saw* or
 *decided*, and the tempo belongs to the session rather than to any one Set.
+
+### The mix in the stream — `gain`, `residency` and `look`
+
+A session that carried the material and not the performance would replay the same Sets, on
+the same beat, all at whatever gain they happened to start at, with nothing ever going on
+or off air. Three records carry what an operator moves:
+
+```ndjson
+{"t":"gain","slot":0,"value":0.75}
+{"t":"residency","slot":1,"level":"priming"}
+{"t":"look","op":"aces","exposure":1.2,"white_point":4.0}
+```
+
+**`gain` is a deck slot's linear gain into the mix.** The slot is a position on the deck,
+not anything about the Set in it: moving a Set to another slot moves it under another
+fader, which is what a fader is.
+
+**`residency` is what a slot is asked to do** — `live`, `priming` or `allocated` — and it
+is always the *request*, never the effective level. The governor recomputes the second
+every pass from the budget of the machine that is running, so a session recorded on a fast
+machine and replayed on a slow one must re-derive it; recording what was decided would
+replay one machine's budget onto another's. That is the opposite of the choice `tempo`
+makes, and for the opposite reason: there, what was decided is the reproducible thing.
+
+**`look` is the output look, all of it in one line.** Tone map operator, exposure and white
+point together, because it is one value written to one uniform, and a stream that could set
+the exposure without saying which operator it applies to would describe a look nobody can
+reconstruct. Session-wide rather than per slot, since tone mapping happens once, after the
+mix.
+
+`level` and `op` are strings for the same reason `curve` and `noise.kind` are: an
+unrecognised value is the engine's to diagnose against what it actually supports, not the
+decoder's to reject before anything can say what the alternatives were.
+
+**These three are state, and a Set file still must not contain them.** That is a second
+reason for a record to be absent from a Set file and it is not the `audio` one: there is
+something to fold here, and this is not the projection it folds into. A Set file that
+restored a gain would apply it to whatever slot it was next loaded into, and one whose
+`residency` said `live` would put a Set on air by being opened. The session projection they
+*do* belong to is not written yet, because nothing writes a session stream.
 
 **Signal names.** `energy` and `band<N>` are the ones the synthesized bus already answers,
 deliberately: a measured `energy` and an invented one are the same signal from different

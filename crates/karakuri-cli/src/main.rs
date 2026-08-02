@@ -19,6 +19,7 @@
 
 mod audio;
 mod compile;
+mod mix;
 mod render;
 mod watch;
 
@@ -195,7 +196,7 @@ keys:
 
 /// The output look: everything the tone mapper is told, in one value, so the
 /// window and an offscreen render can be given the same thing and agree.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 #[cfg_attr(test, derive(Debug))]
 pub struct Look {
     pub op: TonemapOp,
@@ -211,13 +212,61 @@ impl Look {
     }
 }
 
-fn op_name(op: TonemapOp) -> &'static str {
+/// Every tone map operator there is. The one list, and its length is in its
+/// type, so adding an operator to it is a deliberate act rather than an
+/// oversight in a `Vec`.
+pub const TONEMAPS: [TonemapOp; 4] = [
+    TonemapOp::Clamp,
+    TonemapOp::Reinhard,
+    TonemapOp::Aces,
+    TonemapOp::AgX,
+];
+
+/// Both of an operator's spellings: the one a stream and a flag use, and the
+/// one a human reads.
+///
+/// **An exhaustive match, and that is the point.** There were two hand-written
+/// lists — `--tonemap`'s parser and `op_name`'s display arm — and the `look`
+/// record wanted a third. A lookup over a table would have been one list but
+/// would still answer for an operator missing from it, by falling back to
+/// something plausible; a match does not compile until every operator has both
+/// names. Everything below derives from here, parsing included, so the two
+/// directions cannot disagree.
+fn spellings(op: TonemapOp) -> (&'static str, &'static str) {
     match op {
-        TonemapOp::Clamp => "clamp",
-        TonemapOp::Reinhard => "Reinhard",
-        TonemapOp::Aces => "ACES",
-        TonemapOp::AgX => "AgX",
+        TonemapOp::Clamp => ("clamp", "clamp"),
+        TonemapOp::Reinhard => ("reinhard", "Reinhard"),
+        TonemapOp::Aces => ("aces", "ACES"),
+        TonemapOp::AgX => ("agx", "AgX"),
     }
+}
+
+/// How a human reads it. Free to be capitalised the way the papers are,
+/// because nothing parses it.
+fn op_name(op: TonemapOp) -> &'static str {
+    spellings(op).1
+}
+
+/// How a stream and a flag spell it. Lower case, stable, and the only spelling
+/// anything parses.
+pub fn op_wire_name(op: TonemapOp) -> &'static str {
+    spellings(op).0
+}
+
+/// The wire spelling back to an operator, by searching the one list with the
+/// one spelling function. `None` for a name this build does not have, which is
+/// the caller's to report against [`op_wire_names`].
+pub fn parse_op(name: &str) -> Option<TonemapOp> {
+    TONEMAPS.iter().copied().find(|op| op_wire_name(*op) == name)
+}
+
+/// Every wire spelling, for an error message that says what was available.
+pub fn op_wire_names() -> String {
+    TONEMAPS
+        .iter()
+        .map(|op| op_wire_name(*op))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 #[cfg_attr(test, derive(Debug))]
@@ -592,17 +641,9 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
             }
             "--tonemap" => {
                 let value = value_for("--tonemap", &mut it)?;
-                args_out.look.op = match value.as_str() {
-                    "clamp" => TonemapOp::Clamp,
-                    "reinhard" => TonemapOp::Reinhard,
-                    "aces" => TonemapOp::Aces,
-                    "agx" => TonemapOp::AgX,
-                    _ => {
-                        return Err(format!(
-                            "`--tonemap {value}` — expected clamp, reinhard, aces or agx"
-                        ))
-                    }
-                };
+                args_out.look.op = parse_op(&value).ok_or_else(|| {
+                    format!("`--tonemap {value}` — expected {}", op_wire_names())
+                })?;
             }
             "--exposure" => {
                 let value = value_for("--exposure", &mut it)?;
@@ -1104,9 +1145,14 @@ impl ApplicationHandler for App {
             frames_since_status: 0,
             status: String::with_capacity(256),
         };
-        // The uniform the shader already reads: switching the operator is this
-        // call and nothing else, at startup and on every `t` afterwards.
-        live.apply_look();
+        // Through a record at startup too, on the same terms as every later
+        // change: `--tonemap` and `--exposure` are an operator's choices rather
+        // than the engine's defaults, so a session that did not carry them
+        // would replay under whatever look the next build happens to default
+        // to. This is also the first thing that decodes one, so a `look` this
+        // build cannot obey is reported before a frame is drawn.
+        let mut live = live;
+        live.record(mix::look_record(&self.args.look));
         self.live = Some(live);
     }
 
@@ -1216,22 +1262,17 @@ impl Live {
         let t = self.deck.slot(slot).set().time();
         match self.deck.residency(slot) {
             Residency::Live => {
-                self.deck.set_residency(slot, Residency::Allocated);
+                self.record(mix::residency_record(slot, Residency::Allocated));
                 eprintln!("slot {slot} off air — allocated, holding t {t:.2}s");
             }
             // Priming is warming out of sight and is still off air, so space
             // does the same thing to it: puts it on, at whatever `t` it has
             // warmed to.
             Residency::Allocated | Residency::Priming => {
-                self.deck.set_residency(slot, Residency::Live);
+                self.record(mix::residency_record(slot, Residency::Live));
                 eprintln!("slot {slot} on air — resuming at t {t:.2}s");
             }
         }
-        // A slot arriving or leaving changes what is committed, and the deck's
-        // headroom with it: a slot that could not be admitted a moment ago may
-        // fit now, and one that fitted may not. Requests are untouched by this
-        // pass, so a park recovers on its own the moment there is room.
-        self.govern("residency");
     }
 
     /// Ask the focused slot to warm out of sight, or withdraw the request.
@@ -1257,12 +1298,18 @@ impl Live {
         } else {
             Residency::Priming
         };
-        self.deck.set_residency(slot, want);
-        self.govern(if want == Residency::Priming {
-            "prime requested"
-        } else {
-            "prime withdrawn"
-        });
+        // Said before the record is applied, because applying it runs a
+        // governor pass that prints what it decided — and the decision reads as
+        // an answer to a question the operator has not seen asked otherwise.
+        eprintln!(
+            "slot {slot} {}",
+            if want == Residency::Priming {
+                "asked to warm off air"
+            } else {
+                "prime request withdrawn"
+            }
+        );
+        self.record(mix::residency_record(slot, want));
     }
 
     /// One governor pass and what it decided, printed.
@@ -1371,14 +1418,17 @@ impl Live {
     }
 
     fn set_gain(&mut self, gain: f32) {
-        let gain = clamp_gain(gain);
-        self.deck.set_gain(self.focus, gain);
-        eprintln!("slot {} gain {gain:.2}", self.focus);
+        let slot = self.focus;
+        self.record(mix::gain_record(slot, clamp_gain(gain)));
+        eprintln!("slot {slot} gain {:.2}", self.deck.gain(slot));
     }
 
     fn cycle_tonemap(&mut self) {
-        self.look.op = next_tonemap(self.look.op);
-        self.apply_look();
+        let look = Look {
+            op: next_tonemap(self.look.op),
+            ..self.look
+        };
+        self.record(mix::look_record(&look));
         eprintln!(
             "tonemap {} (exposure {:.2})",
             self.look.name(),
@@ -1387,9 +1437,52 @@ impl Live {
     }
 
     fn set_exposure(&mut self, exposure: f32) {
-        self.look.exposure = clamp_exposure(exposure);
-        self.apply_look();
+        let look = Look {
+            exposure: clamp_exposure(exposure),
+            ..self.look
+        };
+        self.record(mix::look_record(&look));
         eprintln!("exposure {:.3} ({})", self.look.exposure, self.look.name());
+    }
+
+    /// **Every mix change goes through here, and here goes through a record.**
+    ///
+    /// Built, decoded, and only then applied — so what drives the deck is what
+    /// a replay would decode from a session stream, rather than a second path
+    /// that happens to agree with it today. `audio.rs` does the same thing with
+    /// the two records it emits; see `mix.rs` for the whole argument.
+    ///
+    /// A record this build cannot obey is printed and nothing moves. It cannot
+    /// happen from a key press — every caller here built the record a moment
+    /// ago out of the engine's own types — and it is handled rather than
+    /// unwrapped because the replay driver will hand this same function lines
+    /// off a file, and a file is where an unobeyable record comes from.
+    fn record(&mut self, record: karakuri_store::record::Record) {
+        match mix::change(&record, self.deck.slot_count()) {
+            Ok(Some(change)) => self.apply(change),
+            Ok(None) => {}
+            Err(message) => eprintln!("mix: {message}"),
+        }
+    }
+
+    /// What one decoded record does. The only place the mix is written.
+    fn apply(&mut self, change: mix::Change) {
+        match change {
+            mix::Change::Gain { slot, value } => self.deck.set_gain(slot, value),
+            mix::Change::Residency { slot, level } => {
+                self.deck.set_residency(slot, level);
+                // A slot arriving or leaving changes what is committed, and the
+                // deck's headroom with it: a slot that could not be admitted a
+                // moment ago may fit now, and one that fitted may not. Requests
+                // are untouched by the pass, so a park recovers on its own the
+                // moment there is room.
+                self.govern("residency");
+            }
+            mix::Change::Look(look) => {
+                self.look = look;
+                self.apply_look();
+            }
+        }
     }
 
     /// One `queue.write_buffer`. Not a pipeline rebuild, not a frame-boundary
@@ -2144,12 +2237,18 @@ mod tests {
         assert_eq!(clamp_exposure(1.0), 1.0);
     }
 
+    /// The cycle visits every operator and closes — and, because `next_tonemap`
+    /// is an exhaustive match while `TONEMAPS` is a hand-written list, **this
+    /// is also what checks the list is complete**. An operator added to the
+    /// enum forces a new arm in the cycle; if `TONEMAPS` is not updated with it
+    /// the two disagree here, before it can reach a `look` record that spells a
+    /// name nothing parses.
     #[test]
     fn tonemap_cycles_through_all_four_and_back_to_the_start() {
         let start = TonemapOp::Clamp;
         let mut op = start;
         let mut seen = vec![op];
-        for _ in 0..3 {
+        for _ in 0..TONEMAPS.len() - 1 {
             op = next_tonemap(op);
             seen.push(op);
         }
@@ -2163,6 +2262,35 @@ mod tests {
             ]
         );
         assert_eq!(next_tonemap(op), start, "the cycle must close");
+        assert_eq!(
+            seen.len(),
+            TONEMAPS.len(),
+            "the cycle and `TONEMAPS` disagree about how many operators there are"
+        );
+        for op in TONEMAPS {
+            assert!(seen.contains(&op), "{} is not in the cycle", op_name(op));
+        }
+    }
+
+    /// Both spellings of every operator are distinct from every other's, so a
+    /// `look` record cannot name two operators and `--tonemap` cannot resolve
+    /// to the wrong one. Two arms of `spellings` sharing a wire name would
+    /// compile and would make `parse_op` return whichever came first.
+    #[test]
+    fn no_two_tonemap_operators_share_a_spelling() {
+        for op in TONEMAPS {
+            assert_eq!(
+                parse_op(op_wire_name(op)),
+                Some(op),
+                "`{}` does not parse back to itself",
+                op_wire_name(op)
+            );
+        }
+        let mut wire: Vec<&str> = TONEMAPS.iter().map(|op| op_wire_name(*op)).collect();
+        wire.sort_unstable();
+        let before = wire.len();
+        wire.dedup();
+        assert_eq!(before, wire.len(), "two operators share a wire spelling");
     }
 }
 

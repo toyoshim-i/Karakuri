@@ -146,6 +146,57 @@ pub enum Record {
         line: u32,
         s: String,
     },
+    // -- The mix: durable state that belongs to the *session* -------------
+    //
+    // Everything above describes one Set and goes into a Set file. These
+    // three describe the deck the Sets are playing on, and a Set file must
+    // not contain them — a Set does not know what fader it is under or
+    // whether it is on air, and one that carried its gain would restore that
+    // gain wherever it was next loaded. They are state all the same, which is
+    // what separates them from the three below: `is_set_state` says no to all
+    // six and means two different things by it.
+    /// A deck slot's linear gain into the mix.
+    ///
+    /// The slot is an index into the deck rather than anything about the Set
+    /// in it. Moving a Set to another slot moves it under another fader,
+    /// which is what a fader is.
+    Gain {
+        slot: u8,
+        value: f32,
+    },
+    /// What a deck slot is asked to do: `live`, `priming`, or `allocated`.
+    ///
+    /// **The request, never the effective level.** The governor recomputes the
+    /// second every pass from the budget of the machine that is running, so a
+    /// session recorded on a fast machine and replayed on a slow one must
+    /// re-derive it rather than replay it — recording what was decided would
+    /// replay one machine's budget onto another's. This is the same choice
+    /// [`Record::Tempo`] makes in the other direction and for the opposite
+    /// reason: there, what was decided is the reproducible thing.
+    ///
+    /// A `String` rather than an enum, on the same terms as `curve` and
+    /// `noise.kind`: an unrecognised level is the engine's to diagnose against
+    /// what it actually supports. This one has earned it — `docs/roadmap.md`
+    /// planned five residency levels and three were built.
+    Residency {
+        slot: u8,
+        level: String,
+    },
+    /// The output look: tone map operator, exposure, and the operator's white
+    /// point. One record rather than three because it is one value in the
+    /// engine, written to one uniform, and a stream that could set the
+    /// exposure without saying which operator it applies to would be
+    /// describing a look nobody can reconstruct.
+    ///
+    /// Session-wide and deliberately not per slot: tone mapping happens once,
+    /// after the mix, which is the whole argument in `karakuri-engine`'s
+    /// `present` module.
+    Look {
+        op: String,
+        exposure: f32,
+        white_point: f32,
+    },
+    // -- What a frame saw or decided --------------------------------------
     /// How far this frame advances. Emitted from real time when live, read back
     /// verbatim on replay — which is what keeps substepping deterministic.
     /// Always 1 in v0.2, capped at [`MAX_STEPS`].
@@ -234,16 +285,32 @@ pub enum Record {
 pub const MAX_STEPS: u8 = 4;
 
 impl Record {
-    /// Whether this record belongs in a Set file. Ticks, audio frames and
-    /// tempo corrections do not: a Set file carries no time, and all three are
-    /// what a *frame* saw or decided. A Set file that carried one would be
-    /// claiming that a particular moment's measurement is part of what a Set
-    /// is — and the tempo is the session's rather than any Set's, so it has
-    /// nowhere to live in a per-Set projection either.
-    pub fn is_state(&self) -> bool {
+    /// Whether this record belongs in a Set file. **Six say no, for two
+    /// different reasons, and keeping them apart is the point of the name** —
+    /// it is `is_set_state` rather than `is_set_state` because half of what it
+    /// refuses is state.
+    ///
+    /// - [`Record::Tick`], [`Record::Audio`] and [`Record::Tempo`] are not
+    ///   state at all: they are what a *frame* saw or decided. A Set file
+    ///   carries no time, and one holding an audio frame would be claiming a
+    ///   particular moment's microphone reading is part of what a Set is.
+    /// - [`Record::Gain`], [`Record::Residency`] and [`Record::Look`] are
+    ///   durable state, but the **session's** rather than any Set's. A Set does
+    ///   not know what fader it is under; one that carried its gain would
+    ///   restore that gain wherever it was next loaded, which is a Set file
+    ///   reaching outside the Set.
+    ///
+    /// A session stream carries all six. That is the difference between the two
+    /// files, stated from this side.
+    pub fn is_set_state(&self) -> bool {
         !matches!(
             self,
-            Record::Tick { .. } | Record::Audio { .. } | Record::Tempo { .. }
+            Record::Tick { .. }
+                | Record::Audio { .. }
+                | Record::Tempo { .. }
+                | Record::Gain { .. }
+                | Record::Residency { .. }
+                | Record::Look { .. }
         )
     }
 }
@@ -421,7 +488,7 @@ mod tests {
 
     #[test]
     fn ticks_are_not_state() {
-        assert!(!Record::Tick { steps: 1 }.is_state());
+        assert!(!Record::Tick { steps: 1 }.is_set_state());
         // Nor is anything else a frame measured or decided.
         assert!(!Record::Audio {
             energy: 0.5,
@@ -429,17 +496,17 @@ mod tests {
             bands: vec![0.1],
             confidence: 1.0
         }
-        .is_state());
+        .is_set_state());
         assert!(!Record::Tempo {
             bpm: 128.0,
             shift: 0.0,
             confidence: 0.9
         }
-        .is_state());
+        .is_set_state());
         assert!(Record::Set {
             id: "drift_01".into(),
             v: 1
         }
-        .is_state());
+        .is_set_state());
     }
 }
