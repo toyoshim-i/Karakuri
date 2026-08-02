@@ -7,7 +7,7 @@
 //! | | |
 //! |---|---|
 //! | [`analysis`] | samples in, one frame of measured signals out |
-//! | [`tempo`] | novelty in, a tempo and a beat phase out |
+//! | [`tempo`] | novelty in, a tempo and a beat phase out, in the octave the grid is already in |
 //! | [`lock`] | an estimate in, a correction for the local oscillator out |
 //! | [`device`] | opens a stream, runs the first two on it, hands the results across a thread |
 //!
@@ -50,4 +50,4 @@ pub mod tempo;
 pub use analysis::{Analysis, Analyzer};
 pub use device::{staleness, AudioError, AudioInput, Reading};
 pub use lock::{BeatLock, Correction, Reason};
-pub use tempo::{Estimate, Tracker};
+pub use tempo::{fold, tracking_window, Estimate, Tracker};

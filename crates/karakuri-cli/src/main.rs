@@ -134,7 +134,10 @@ options:
   --bpm N               the tempo the local oscillator free-runs at
                         (default 120). With --audio-in this is where the grid
                         starts and what it falls back to; a tracked tempo
-                        corrects it rather than replacing this flag
+                        corrects it rather than replacing this flag. It is also
+                        where the tracker's one-octave window starts, so a value
+                        within about 40% of the real tempo settles the octave —
+                        and `,`/`.` are the fix when it does not
   --audio-in NAME       open an audio input: `default`, or any part of a
                         device's name. `energy`, `onset` and band0..7 become
                         measured signals at full confidence, and the beat is
@@ -168,6 +171,11 @@ keys:
   `          exposure back to 1.0
   b          tap the beat — three or more taps set the tempo as well, and a
              tap always sets the phase. Needs --audio-in
+  , .        halve / double the grid, and the octave the tracker looks in with
+             it. Nothing finds an octave for you: the tracker follows the grid,
+             so a set started an octave off stays an octave off until this key.
+             `x2?` on the status line is the tracker saying it might be one.
+             The phase does not move. Needs --audio-in
   o p        display latency offset down / up, 5 ms a press. Raise it if the
              picture reads late against the room
   s          print the status line now
@@ -1026,7 +1034,12 @@ impl ApplicationHandler for App {
         // are all at a tenth effect for some other reason.
         let audio = match &self.args.audio_in {
             Some(selector) => {
-                match audio::Audio::open(selector, self.args.display_latency_ms, DT) {
+                match audio::Audio::open(
+                    selector,
+                    self.args.display_latency_ms,
+                    DT,
+                    self.args.bpm,
+                ) {
                     Ok(audio) => {
                         eprintln!(
                             "audio in: {} at {} Hz — energy, onset and band0..7 are measured now, \
@@ -1138,6 +1151,8 @@ impl Live {
                 '=' => self.set_exposure(self.look.exposure * EXPOSURE_STEP),
                 '`' => self.set_exposure(1.0),
                 'b' => self.tap(),
+                ',' => self.shift_octave(0.5),
+                '.' => self.shift_octave(2.0),
                 'o' => self.nudge_display_latency(-audio::DISPLAY_LATENCY_STEP_MS),
                 'p' => self.nudge_display_latency(audio::DISPLAY_LATENCY_STEP_MS),
                 's' => self.print_status(),
@@ -1205,6 +1220,38 @@ impl Live {
             "tap: {:.1} bpm, phase set",
             self.deck.signals().oscillator().bpm()
         );
+    }
+
+    /// Halve or double the grid — **the operator's last word on the octave**.
+    ///
+    /// The tracker folds every candidate tempo into a one-octave window centred
+    /// on the grid, so an octave error is stable rather than self-correcting:
+    /// a set started at 87 for a track that is 174 will track 87 all night. This
+    /// moves the grid and the window together, and the picture keeps its phase
+    /// — doubling subdivides the beats already there.
+    fn shift_octave(&mut self, factor: f32) {
+        let mut signals = *self.deck.signals();
+        let Some(audio) = self.audio.as_mut() else {
+            eprintln!("no audio input — the octave keys move the tracker's window, which only exists with --audio-in");
+            return;
+        };
+        let before = signals.oscillator().bpm();
+        match audio.octave(&mut signals, factor) {
+            Some(_) => {
+                self.deck.set_signals(signals);
+                eprintln!(
+                    "beat: grid {} to {:.1} bpm — the tracker's window moved with it",
+                    if factor > 1.0 { "doubled" } else { "halved" },
+                    self.deck.signals().oscillator().bpm()
+                );
+            }
+            // Refused rather than applied and undone two seconds later: outside
+            // the range the tracker searches there is nothing to lock to.
+            None => eprintln!(
+                "beat: {before:.1} bpm {} would leave the trackable range",
+                if factor > 1.0 { "doubled" } else { "halved" }
+            ),
+        }
     }
 
     /// The offset for what cannot be measured: the display's own latency. Raise
@@ -1410,7 +1457,7 @@ impl Live {
             let a = audio.status();
             let _ = write!(
                 self.status,
-                "| e{:.2} on{:.2} c{:.2} | {}{:.1}bpm heard{:.1} c{:.2} err{:+.3}b off{:.0}ms ",
+                "| e{:.2} on{:.2} c{:.2} | {}{:.1}bpm heard{:.1} c{:.2}{} err{:+.3}b off{:.0}ms ",
                 a.energy,
                 a.onset,
                 a.confidence,
@@ -1421,6 +1468,16 @@ impl Live {
                 self.deck.signals().oscillator().bpm(),
                 a.estimated_bpm,
                 a.estimate_confidence,
+                // The tracker's note that this grid might be at half the
+                // music's tempo, shown only when the estimate behind it is
+                // worth anything. It moves nothing by itself — `.` does, and
+                // this is what tells a performer to consider pressing it.
+                if a.half_tempo_hint && a.estimate_confidence >= karakuri_audio::lock::GATE_CONFIDENCE
+                {
+                    " x2?"
+                } else {
+                    ""
+                },
                 a.error,
                 audio.display_latency_ms(),
             );

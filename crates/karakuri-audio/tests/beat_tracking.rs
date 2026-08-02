@@ -65,7 +65,10 @@ struct Rig {
 impl Rig {
     fn new(free_running_bpm: f32) -> Rig {
         let analyzer = Analyzer::new(RATE as u32);
-        let tracker = Tracker::new(analyzer.hop_seconds(), analyzer.window_lag());
+        // The window starts centred on the session tempo, which is the same
+        // number the oscillator free-runs at — one number doing both jobs, as
+        // it does on the command line.
+        let tracker = Tracker::new(analyzer.hop_seconds(), analyzer.window_lag(), free_running_bpm);
         Rig {
             analyzer,
             tracker,
@@ -87,6 +90,9 @@ impl Rig {
             let analysis = self
                 .analyzer
                 .analyze(&samples[self.next_block..self.next_block + BLOCK]);
+            // What `device` does on every hop: the tracking window is centred
+            // on the grid, so the octave follows the tempo the grid is running.
+            self.tracker.set_centre_bpm(self.oscillator.bpm());
             self.tracker.push(analysis.novelty);
             self.estimate = self.tracker.estimate();
             self.published = self.now;
@@ -159,6 +165,56 @@ fn a_click_train_puts_the_oscillators_beat_on_the_music_s_beat() {
     );
 }
 
+/// **The octave, end to end, in both of its halves.**
+///
+/// A 174 bpm track under a session started at 87 locks at 87 — *confidently*,
+/// because the grid does fit the music, every other pulse of it. Nothing
+/// automatic will move it and nothing here pretends otherwise: the tracker
+/// centres its one-octave window on the grid, so the grid is what decides which
+/// octave gets tracked, and it never disagrees with itself.
+///
+/// Then the operator presses ×2, and the second half of the test is the part
+/// that matters: the grid moves, the window moves with it, and ten seconds
+/// later it is *still* at 174 with the beat on the beat — rather than folding
+/// straight back the moment the next estimate arrives, which is what would
+/// happen if the window had not come along.
+#[test]
+fn the_octave_key_moves_the_grid_and_the_window_and_tracking_continues_there() {
+    let bpm = 174.0;
+    let samples = clicks(bpm, 40.0);
+
+    let mut rig = Rig::new(bpm / 2.0);
+    rig.run(&samples, 16.0, true);
+    assert!(rig.lock.locked(), "the grid never locked at all");
+    assert!(
+        (rig.oscillator.bpm() - bpm / 2.0).abs() < 2.0,
+        "a window centred an octave low settled at {} bpm, not at {}",
+        rig.oscillator.bpm(),
+        bpm / 2.0
+    );
+
+    let correction = rig
+        .lock
+        .octave(2.0, &rig.oscillator)
+        .expect("174 bpm is inside the tracked range");
+    rig.oscillator.correct(correction.bpm, correction.shift);
+    assert_eq!(rig.oscillator.bpm(), correction.bpm);
+    assert!((rig.oscillator.bpm() - bpm).abs() < 2.0);
+
+    rig.run(&samples, 10.0, true);
+    assert!(
+        (rig.oscillator.bpm() - bpm).abs() < 2.0,
+        "the grid folded back to {} bpm after the octave key",
+        rig.oscillator.bpm()
+    );
+    let error = rig.visible_error(bpm);
+    assert!(
+        error.abs() < 0.02,
+        "in the new octave the visible beat is {error} beats out"
+    );
+    assert!(rig.lock.locked());
+}
+
 /// The measured signals come out of the same path, and a click train is not
 /// silence: `energy` moves, `onset` fires, and the frame is fully believed
 /// because a measurement happened.
@@ -191,7 +247,7 @@ fn the_same_path_produces_measured_signals_at_full_confidence() {
 #[test]
 #[ignore = "needs an audio input device"]
 fn the_default_input_opens_and_delivers() {
-    let mut input = match karakuri_audio::AudioInput::open("default") {
+    let mut input = match karakuri_audio::AudioInput::open("default", 120.0) {
         Ok(input) => input,
         Err(e) => panic!("could not open the default input: {e}"),
     };
@@ -215,4 +271,43 @@ fn the_default_input_opens_and_delivers() {
         best > 0.0,
         "the device opened but delivered nothing in a second"
     );
+}
+
+
+/// **An octave-low grid has to be steady as well as wrong.** Half of a click
+/// train's pulses are on that grid and half are between them, and the two sets
+/// are equally good beats — nothing in the novelty says which is the downbeat.
+/// Picking the other one on some later window would yank the picture half a
+/// beat, which is worse than the octave itself; the phase comes off the
+/// strongest hump of a folded profile, and the same hump has to keep winning.
+///
+/// Half a minute of it, measured as jumps rather than as a final position: a
+/// grid that ends where it started could still have gone round the houses.
+#[test]
+fn a_grid_left_an_octave_low_does_not_change_its_mind_about_which_pulse_is_the_beat() {
+    let bpm = 174.0;
+    let samples = clicks(bpm, 60.0);
+    let mut rig = Rig::new(bpm / 2.0);
+    rig.run(&samples, 16.0, true);
+    assert!(rig.lock.locked());
+
+    let mut jumped = Vec::new();
+    let mut last = rig.oscillator.beats();
+    for _ in 0..(30.0 / DT) as u32 {
+        rig.frame(&samples, true);
+        let moved = rig.oscillator.beats() - last;
+        // What one frame of a free-running grid at this tempo is worth. The
+        // trim is a thousandth of a beat a frame; anything near a hundredth is
+        // a re-acquire, and anything near a half is the parity flipping.
+        let expected = rig.oscillator.bpm() as f64 / 60.0 * DT as f64;
+        if (moved - expected).abs() > 0.01 {
+            jumped.push((rig.now, moved - expected));
+        }
+        last = rig.oscillator.beats();
+    }
+    assert!(
+        jumped.is_empty(),
+        "the octave-low grid jumped (at, beats): {jumped:?}"
+    );
+    assert!((rig.oscillator.bpm() - bpm / 2.0).abs() < 2.0);
 }
