@@ -59,6 +59,15 @@
 //! Two oscillators would be two truths about phase and tempo. A binding is
 //! therefore a pure function of the tick sequence and the seed, which is what
 //! puts it inside the determinism invariant rather than beside it.
+//!
+//! **One grid, read at more than one position along it.** A slot warming off
+//! air steps on some frames and not others, so its `t` is behind the session's,
+//! and it reads this same oscillator through [`Signals::at`] — same tempo, same
+//! anchor, same corrections, its own position. That is not a second truth about
+//! phase; it is the one truth asked what it says at another instant. A slot on
+//! air always reads the session's position, because a picture in the room has
+//! to be on the room's beat. `Set::prepare_warming` carries the argument and
+//! the two things it does not fix.
 
 use karakuri_ir::Kind;
 use karakuri_signal::{
@@ -216,6 +225,31 @@ impl Signals {
     /// instant of the frame's last substep.
     pub fn advance(&mut self, steps: u8, dt: f32) {
         self.oscillator.advance(steps, dt);
+    }
+
+    /// **The same signals, with the oscillator read `seconds` earlier.** For a
+    /// caller whose clock is behind the session's; `0.0` returns `self`
+    /// unchanged, bit for bit. See [`Oscillator::behind`].
+    ///
+    /// **Which signals move with it is not uniform, and the split is the
+    /// interesting part.** A *synthesized* signal is a function of the
+    /// oscillator — `energy` and the bands are, when nothing is measuring — so
+    /// it moves, and it should: it is generated on that clock and reading it on
+    /// another would be reading it out of step with itself. A *measured* one
+    /// does not move, because there is nothing to move it to. Whatever
+    /// [`Signals::set_audio`] installed is this frame's, and there is no past
+    /// `energy` to give: nothing keeps one.
+    ///
+    /// So `energy` means the room's sound on the session's clock with audio
+    /// connected, and a synthesized wobble on the caller's own clock without —
+    /// two different things behind one name, which is what a bus that invents
+    /// what it cannot measure buys and pays for. The confidence says which one
+    /// is speaking: 1.0 measured, 0.1 invented.
+    pub fn behind(self, seconds: f64) -> Signals {
+        Signals {
+            oscillator: self.oscillator.behind(seconds),
+            ..self
+        }
     }
 
     /// Correct the session's tempo and phase — a new tempo, and a phase shift

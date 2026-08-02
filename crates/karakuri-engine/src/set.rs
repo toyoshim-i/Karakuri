@@ -103,6 +103,21 @@ pub enum SetError {
     Panicked { label: String, detail: String },
 }
 
+/// Which clock a binding's oscillator signals are read on. Private: the choice
+/// belongs to [`Set::prepare`] and [`Set::prepare_warming`], which name the two
+/// situations it distinguishes, and a caller picking a clock directly would be
+/// picking one without the situation that justifies it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Clock {
+    /// The session's, as handed in. **What a slot on air reads**: it is in the
+    /// room, and the room's beat is the session's however far behind the
+    /// slot's own clock has fallen.
+    Session,
+    /// The same grid, read at this Set's own `t`. **What a slot warming off
+    /// air reads** — see [`Set::prepare_warming`] for the whole argument.
+    Local,
+}
+
 /// Bytes per element in the alive buffer: a dense `array<u32>`, one flag per
 /// element, no vec4 padding — see the layout contract for why this is the
 /// one piece of per-element state that is *not* 16-byte padded: the
@@ -880,6 +895,10 @@ impl Set {
     /// here, and the value is reused wherever that param is written; resolving
     /// twice in one frame would put two different values into one frame.
     ///
+    /// **This is the on-air form**, and it reads the session's position on the
+    /// grid. A Set warming off air is behind that position and wants
+    /// [`Set::prepare_warming`], which is this function with one difference.
+    ///
     /// **Nothing in here allocates.** Both uniform writes go through storage
     /// sized at build time (`crate::uniforms::UniformScratch`) and the step
     /// arguments through a stack array, because this is the render thread and
@@ -888,9 +907,87 @@ impl Set {
     /// stack-sized bus over a borrowed oscillator, and a linear scan to read
     /// values back out.
     pub fn prepare(&mut self, queue: &wgpu::Queue, steps: u8, signals: &Signals) {
+        self.prepare_on(queue, steps, signals, Clock::Session);
+    }
+
+    /// [`Set::prepare`] for a Set that is **warming off air**: identical in
+    /// every respect but one — oscillator signals are read on this Set's own
+    /// clock instead of the session's.
+    ///
+    /// The difference only exists because a warming slot's clock is behind the
+    /// room's. It steps on some frames and not others, so `steps_taken * dt`
+    /// falls further behind the session's `t` the slower it is warmed, and
+    /// handing it the session's phase would make a binding advance by a whole
+    /// frame's worth of beats for every step the slot actually takes. **The
+    /// governor picks that rate.** A Set warmed at one step in four would then
+    /// warm into different material than the same Set warmed at full rate — a
+    /// performance knob, invisible to the operator, silently changing the
+    /// picture. Reading the grid at the slot's own `t` removes the rate from
+    /// the arithmetic entirely.
+    ///
+    /// **The lag is a step count, so a slot that is not behind reads exactly
+    /// what it would have read on air.** A slot warming at full rate takes a
+    /// step whenever the session does, its lag is zero, and
+    /// [`Signals::behind`] hands back the session's own oscillator bit for bit
+    /// — which is what makes "primed then Live" *identical* to "always Live"
+    /// rather than close to it, for bound material as well as unbound. Deriving
+    /// a position from this Set's `t` instead would cost an f32 rounding the
+    /// session's accumulated `t` never took, and the identity would hold to
+    /// about seven digits: it diverges within a second at 120 bpm, and every
+    /// step after that reads a different value.
+    ///
+    /// Two residues, both real and neither fixable here:
+    ///
+    /// - **Tempo corrections.** Warming slower spans more wall time and
+    ///   therefore more corrections, and [`Oscillator::behind`] gives the grid
+    ///   as it stands rather than as it was. Invariance holds against a steady
+    ///   tempo, not across a change of one.
+    /// - **Measured audio.** `energy` and the bands are this frame's
+    ///   measurement at every rate, because there is no other measurement to
+    ///   give. A Set bound to audio warms into whatever the room was doing while
+    ///   it warmed. *Synthesized* `energy` — what the bus invents when nothing
+    ///   is measuring — does move with the clock, because it is a function of
+    ///   it; [`Signals::behind`] has the split.
+    ///
+    /// Going on air moves the slot back to the session's grid, and nothing sees
+    /// the discontinuity that causes: the frame before was not drawn. That is
+    /// the whole reason the split is safe — **off air is not in the room**, and
+    /// a slot on air must be on the room's beat however far behind its own
+    /// clock is.
+    pub fn prepare_warming(&mut self, queue: &wgpu::Queue, steps: u8, signals: &Signals) {
+        self.prepare_on(queue, steps, signals, Clock::Local);
+    }
+
+    /// The one body. Both entry points come through here so that "identical in
+    /// every respect but one" is structural rather than a claim two functions
+    /// have to keep making about each other.
+    fn prepare_on(&mut self, queue: &wgpu::Queue, steps: u8, signals: &Signals, clock: Clock) {
         let steps = steps.min(MAX_STEPS);
         self.steps_taken += u64::from(steps);
-        self.resolve_bindings(signals);
+        // After the bump, so `Clock::Local` measures the lag as of *this*
+        // frame's last substep — the instant `Clock::Session` reads, because
+        // the deck advances the session's oscillator before it prepares
+        // anything. Reading before it would put every warming binding a frame
+        // early.
+        match clock {
+            Clock::Session => self.resolve_bindings(signals),
+            // **Subtract step counts, not times.** Both clocks are integer
+            // counters of the same `dt`, so their difference is exact and is
+            // zero whenever they agree; two `t`s derived from them are not
+            // exact and their difference is not zero. `saturating_sub` because
+            // a Set may have taken more steps than the session's oscillator —
+            // a Set built and stepped before it was ever put on a deck — and
+            // that is a slot ahead of the room, which reads the room's phase
+            // rather than an extrapolated future one.
+            Clock::Local => {
+                let lag = signals
+                    .oscillator()
+                    .steps_taken()
+                    .saturating_sub(self.steps_taken);
+                let local = signals.behind(lag as f64 * f64::from(self.dt));
+                self.resolve_bindings(&local);
+            }
+        }
 
         // No `t` here: it differs between this frame's substeps and lives in
         // `StepArgs`. Everything left is input, sampled once per frame.
@@ -927,7 +1024,10 @@ impl Set {
         }
     }
 
-    /// Every binding, once, against the session's signals.
+    /// Every binding, once, against the signals it was handed — the session's
+    /// on air, the same ones read at this Set's `t` while warming. Which is
+    /// [`Set::prepare_on`]'s to decide and not this function's: it resolves
+    /// against what it is given.
     ///
     /// Allocates nothing: the `Vec` is written in place, and each binding's
     /// manual value is read out of `params` — which is never written here, so

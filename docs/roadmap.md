@@ -166,7 +166,7 @@ only for the fact that it is kept.
 modes and masks, MIDI, output routing, Ableton Link, a panic key, per-slot preview, and
 loading a Set file into the engine at all.
 
-Four things the milestone has taught, all worth carrying:
+Five things the milestone has taught, all worth carrying:
 
 - **A fader at zero must mean zero.** It did not: `0.0 * NaN` is NaN, and one NaN in one
   slot took the whole mix with it. A fader is the operator's last way out of broken
@@ -185,6 +185,13 @@ Four things the milestone has taught, all worth carrying:
   review across this milestone — including one asserting that a callback allocates nothing,
   which fed the analyser a signal so flat that it returned before reaching the code under
   test. Watch a test fail before trusting it.
+- **Two runs of the same path agree with each other under a wrong implementation.** The
+  test for the priming fix compared two *warming* runs, so it pinned the rate out of the
+  arithmetic and said nothing about which instant was right — a clock a whole frame early
+  passed it, and so did one at the wrong scale entirely. It took a comparison against the
+  *on-air* path to find that the fix had made full-rate warming diverge from Live within a
+  second. **An invariance test needs a reference run, not a second run of the thing under
+  test.**
 
 Getting on stage early is not a vanity milestone. Live use surfaces failure modes that no
 amount of desk testing finds — thermal throttling, a laptop lid closing, a set that looked
@@ -226,7 +233,16 @@ fine alone and is unreadable next to lights.
   L4 is stateless, so warming is the compute passes and the render is skipped outright.
   There is no resolution to reduce, and skipping the draw makes "primed then Live"
   *identical* to "always Live" rather than close to it. Reduced rate survives and means
-  stepping on one frame in *n*
+  stepping on one frame in *n*.
+
+  **That identity cost one repair to be true of bound material.** A warming slot was
+  handed the session's oscillator at the frame's phase, so a slot stepping one frame in
+  *n* had its bound params swept *n* times as fast per step as the same Set warming at
+  full rate — the governor's rate, chosen from frame budget and shown to nobody, deciding
+  what the Set warmed into. It reads the same grid held back by the steps it has not
+  taken instead. Two things that does not reach, both narrow and both recorded in the
+  code: a tempo *change* during a slow warm-up, and measured audio, which has no past
+  value to be read at
 - Budget governor. Built, with two corrections to this bullet's original wording. Not
   per-Set **GPU timestamps** — a per-Set measurement taken by the probe on the build worker,
   calibrated and labelled with its method, because timestamps are advertised, enabled and

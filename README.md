@@ -43,14 +43,21 @@ its own target and one composite pass mixes them. In the window:
 ```
 0-3  focus a slot     space  on air / off air     [ ]  gain      \  gain to 1.0
 - =  exposure         `      exposure to 1.0      t    tone map  h  the rest
-b    tap the beat     , .    halve / double it    o p  display latency offset
+w    warm off air     b      tap the beat         , .  halve / double it
+o p  display latency offset
 ```
 
-The last row is `--audio-in` only.
+The last row and `b , .` are `--audio-in` only.
 
-Taking a slot off air parks it rather than stopping it: `t` only advances through a step,
+Taking a slot off air holds it rather than stopping it: `t` only advances through a step,
 so bringing it back resumes where it left off. `t` cycles the tone map operator live, which
 is the only way to compare two of them on moving material.
+
+`w` **asks** for a slot to warm off air; the governor grants it only if the frame budget
+has room. A request it is still holding shows as `park` on the status line, apart from
+`off` — the same residency, opposite situations, and a surface that showed them alike
+would be telling an operator their request was discarded when it is reconsidered every
+pass and takes effect by itself when a slot comes off air.
 
 The status line carries each slot's residency, gain, simulation `t`, and its **level** —
 mean and peak luminance, measured on the GPU and lagging a few frames because reading it

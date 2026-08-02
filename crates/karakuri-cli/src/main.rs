@@ -29,6 +29,7 @@ use std::time::{Duration, Instant};
 
 use karakuri_engine::binding::{Curve, CURVES, DEFAULT_BPM, NOISE_SIGNAL};
 use karakuri_engine::deck::MAX_SLOTS;
+use karakuri_engine::swap::Event;
 use karakuri_engine::{
     Binding, Deck, Gpu, HotSwap, Present, Residency, Set, Signals, TonemapOp, DEFAULT_BUDGET_MS,
 };
@@ -164,6 +165,11 @@ keys:
              every swap message use, so there is no off-by-one to remember
   space      focused slot on air / off air. Off air holds its `t`, so it
              resumes where it stopped rather than restarting
+  w          ask the focused slot to warm off air, or withdraw the request.
+             A request, not a command: the governor grants it only if the
+             frame budget has room, and `park` on the status line is a request
+             it is still holding — reconsidered every pass, so it takes effect
+             by itself when a slot comes off air
   [ ]        focused slot gain down / up
   \\          focused slot gain back to 1.0
   t          cycle the tone map operator: clamp, Reinhard, ACES, AgX
@@ -999,7 +1005,7 @@ impl ApplicationHandler for App {
         surface.configure(&gpu.device, &config);
 
         let present = Present::new(&gpu.device, format, config.width, config.height);
-        let deck = build_deck(
+        let mut deck = build_deck(
             &gpu,
             &procs,
             &self.args,
@@ -1008,6 +1014,14 @@ impl ApplicationHandler for App {
             config.width,
             config.height,
         );
+        // Here and nowhere else: before the first frame, where the stall it
+        // costs is free. Nothing else measures the Sets a run starts with —
+        // only the build worker measures, and at startup it has built nothing
+        // — and **one unmeasured live slot makes the whole deck's committed
+        // cost unknown**, which parks every priming request there is with
+        // `Reason::CommittedUnknown`. Without this call the governor below is
+        // an elaborate way of saying no.
+        deck.measure_slots(&gpu.device, &gpu.queue);
 
         eprintln!(
             "running: {} slot{} of {} elements at {:.1} bpm on {}",
@@ -1017,6 +1031,13 @@ impl ApplicationHandler for App {
             self.args.bpm,
             gpu.adapter.get_info().name
         );
+        // What the deck costs and what it is allowed, printed once at startup
+        // so the numbers a park is later explained by are not the first the
+        // operator sees. Every millisecond in that line is a cold Set measured
+        // at a reference resolution — comparable between slots, not a
+        // prediction of this machine's frame time. The line says which clock
+        // it came off, which is the part that changes between machines.
+        eprintln!("  {}", deck.govern());
         if self.args.watch {
             for (slot, (l1, l4)) in self.args.sets.iter().enumerate() {
                 eprintln!(
@@ -1150,6 +1171,7 @@ impl Live {
                 '-' => self.set_exposure(self.look.exposure / EXPOSURE_STEP),
                 '=' => self.set_exposure(self.look.exposure * EXPOSURE_STEP),
                 '`' => self.set_exposure(1.0),
+                'w' => self.toggle_priming(),
                 'b' => self.tap(),
                 ',' => self.shift_octave(0.5),
                 '.' => self.shift_octave(2.0),
@@ -1175,7 +1197,7 @@ impl Live {
         self.focus = slot;
         eprintln!(
             "focus slot {slot} — {}, gain {:.2}, t {:.2}s",
-            residency_name(self.deck.residency(slot)),
+            residency_name(self.deck.residency(slot), self.deck.is_parked(slot)),
             self.deck.gain(slot),
             self.deck.slot(slot).set().time()
         );
@@ -1195,11 +1217,76 @@ impl Live {
             }
             // Priming is warming out of sight and is still off air, so space
             // does the same thing to it: puts it on, at whatever `t` it has
-            // warmed to. Deciding when a slot *should* prime is the governor's
-            // and is not wired to a key yet.
+            // warmed to.
             Residency::Allocated | Residency::Priming => {
                 self.deck.set_residency(slot, Residency::Live);
                 eprintln!("slot {slot} on air — resuming at t {t:.2}s");
+            }
+        }
+        // A slot arriving or leaving changes what is committed, and the deck's
+        // headroom with it: a slot that could not be admitted a moment ago may
+        // fit now, and one that fitted may not. Requests are untouched by this
+        // pass, so a park recovers on its own the moment there is room.
+        self.govern("residency");
+    }
+
+    /// Ask the focused slot to warm out of sight, or withdraw the request.
+    ///
+    /// **A request, not a command** — the governor decides whether it is
+    /// granted, and the report printed here says which. Whether it takes effect
+    /// is exactly the thing the operator cannot otherwise see: a refused
+    /// request leaves the slot at Allocated, which is what an untouched slot
+    /// looks like too.
+    ///
+    /// Live slots are left alone. Priming is off-air warming, so asking a slot
+    /// on air to prime could only mean taking it off air, and that is what
+    /// space is for.
+    fn toggle_priming(&mut self) {
+        let slot = self.focus;
+        if self.deck.residency(slot) == Residency::Live {
+            eprintln!("slot {slot} is on air — priming is off-air warming; take it off with space");
+            return;
+        }
+        let requested = self.deck.requested_residency(slot);
+        let want = if requested == Residency::Priming {
+            Residency::Allocated
+        } else {
+            Residency::Priming
+        };
+        self.deck.set_residency(slot, want);
+        self.govern(if want == Residency::Priming {
+            "prime requested"
+        } else {
+            "prime withdrawn"
+        });
+    }
+
+    /// One governor pass and what it decided, printed.
+    ///
+    /// Called when something the decision depends on moved — a residency
+    /// request, a build landing — and never per frame: it allocates, and the
+    /// answer cannot change between those events.
+    ///
+    /// The parked slots are named individually rather than counted, because
+    /// each one is waiting on something different and the reasons call for
+    /// different actions: `NoHeadroom` waits for a slot to come off air,
+    /// `CommittedUnknown` for a measurement, and `NoPrimingNeeded` for nothing
+    /// at all — that Set is closed form and can go straight on air.
+    fn govern(&mut self, why: &str) {
+        let report = self.deck.govern();
+        eprintln!("{why}: {report}");
+        for decision in report.parked() {
+            eprintln!(
+                "  slot {} parked, request held: {:?}",
+                decision.slot, decision.reason
+            );
+        }
+        for decision in &report.decisions {
+            if decision.effective == Residency::Priming && decision.prime_one_in > 1 {
+                eprintln!(
+                    "  slot {} priming at one step in {}",
+                    decision.slot, decision.prime_one_in
+                );
             }
         }
     }
@@ -1348,10 +1435,20 @@ impl Live {
         }
         surface_frame.present();
 
+        // A build landing replaces the Set in a slot, and with it the
+        // measurement the deck is budgeting against — a swap and a rollback
+        // both move what is committed. Collected here and governed after the
+        // drain, because `Deck::events` borrows the deck for as long as it is
+        // being read.
+        let mut set_changed = false;
         for slot in 0..self.deck.slot_count() {
             for event in self.deck.events(slot) {
+                set_changed |= matches!(event, Event::Swapped { .. } | Event::RolledBack { .. });
                 eprintln!("slot {slot}: {event}");
             }
+        }
+        if set_changed {
+            self.govern("build landed");
         }
 
         self.frames_since_status += 1;
@@ -1421,11 +1518,7 @@ impl Live {
                 self.status,
                 "{}{slot} {} g{:.2} t{:.1}s ",
                 if slot == self.focus { ">" } else { " " },
-                match self.deck.residency(slot) {
-                    Residency::Live => "LIVE",
-                    Residency::Priming => "prim",
-                    Residency::Allocated => "off ",
-                },
+                residency_tag(self.deck.residency(slot), self.deck.is_parked(slot)),
                 self.deck.gain(slot),
                 self.deck.slot(slot).set().time()
             );
@@ -1491,10 +1584,34 @@ impl Live {
     }
 }
 
-fn residency_name(residency: Residency) -> &'static str {
+/// The status line's four-column form of the same thing [`residency_name`]
+/// spells out. Fixed width, so the columns after it do not move.
+///
+/// Pulled out beside `residency_name` for the reason `slot_in_range` was: the
+/// distinction it carries is the one thing about it that can be wrong, and
+/// checking it should not need a GPU, a window, or a `Deck`.
+fn residency_tag(residency: Residency, parked: bool) -> &'static str {
+    match residency {
+        Residency::Live => "LIVE",
+        Residency::Priming => "prim",
+        Residency::Allocated if parked => "park",
+        Residency::Allocated => "off ",
+    }
+}
+
+/// `parked` is [`Deck::is_parked`] for the same slot: Allocated with a standing
+/// request to prime. It is not a residency of its own, which is exactly why it
+/// has to be passed in — the residency alone cannot tell a deferred request
+/// from no request.
+///
+/// A parked slot and one nobody asked about are the same [`Residency`] and
+/// opposite situations, and a surface that names them alike tells the operator
+/// their request was discarded when it is being reconsidered every pass.
+fn residency_name(residency: Residency, parked: bool) -> &'static str {
     match residency {
         Residency::Live => "live",
         Residency::Priming => "priming (warming, off air)",
+        Residency::Allocated if parked => "parked (asked to prime, waiting for room)",
         Residency::Allocated => "allocated (off air)",
     }
 }
@@ -1948,6 +2065,44 @@ mod tests {
         // A deck of one: only slot 0 is valid, matching the default run.
         assert!(slot_in_range(0, 1));
         assert!(!slot_in_range(1, 1));
+    }
+
+    /// A parked slot is `Residency::Allocated`, exactly like a slot nobody
+    /// asked about, and the operator's request is the only thing that tells
+    /// them apart. Showing one as the other is not a cosmetic loss: it says a
+    /// standing request was discarded, when the governor is reconsidering it
+    /// every pass and will grant it the moment a slot comes off air.
+    #[test]
+    fn a_parked_slot_does_not_read_as_one_nobody_asked_about() {
+        assert_ne!(
+            residency_tag(Residency::Allocated, true),
+            residency_tag(Residency::Allocated, false)
+        );
+        assert_ne!(
+            residency_name(Residency::Allocated, true),
+            residency_name(Residency::Allocated, false)
+        );
+        // Parked is off air, so it must not read as either of the two states
+        // that are not: a park shown as `prim` claims warming that is not
+        // happening, and shown as `LIVE` claims a slot on air.
+        for parked in [true, false] {
+            assert_ne!(
+                residency_tag(Residency::Allocated, parked),
+                residency_tag(Residency::Priming, parked)
+            );
+            assert_ne!(
+                residency_tag(Residency::Allocated, parked),
+                residency_tag(Residency::Live, parked)
+            );
+        }
+        // `parked` is only ever true of an Allocated slot — `Deck::is_parked`
+        // says so — but the tag is fixed-width regardless of what it is asked,
+        // because the columns after it are positional.
+        for residency in [Residency::Live, Residency::Priming, Residency::Allocated] {
+            for parked in [true, false] {
+                assert_eq!(residency_tag(residency, parked).len(), 4);
+            }
+        }
     }
 
     #[test]

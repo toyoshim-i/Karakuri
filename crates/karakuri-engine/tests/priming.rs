@@ -13,7 +13,16 @@
 //! - and it is visibly different from the same slot taken from Allocated
 //!   straight to Live, or none of the above would be worth anything;
 //! - determinism survives all of it, including a slot that primes for a while
-//!   and then goes Live.
+//!   and then goes Live;
+//! - and **the signal a warming slot reads is its own clock's, not the
+//!   frame's** — so the rate the governor picked does not decide what the Set
+//!   warms into, and a slot that is not behind reads exactly what it would have
+//!   read on air.
+//!
+//! The last pair needs both halves and the second is the sharper one: two
+//! warming runs agree with each other under any clock that is a function of the
+//! step index, including one a whole frame early. Only a comparison against a
+//! *Live* run says which instant is the right one.
 //!
 //! The material is deliberately an *accumulating* procedure — elements drift
 //! outward from the origin at a fixed rate — because a closed-form one would
@@ -22,10 +31,12 @@
 //! one small blob; warm, they are on a sphere. That gap is what "shows warmed
 //! state" is measured by.
 
+use karakuri_engine::binding::Curve;
 use karakuri_engine::deck::{Deck, Residency};
 use karakuri_engine::swap::HotSwap;
-use karakuri_engine::{Gpu, Present, Set};
+use karakuri_engine::{Binding, Gpu, Present, Set, Signals};
 use karakuri_ir::typed::Checked;
+use karakuri_ir::Kind;
 
 const WIDTH: u32 = 256;
 const HEIGHT: u32 = 256;
@@ -481,11 +492,17 @@ fn priming_then_going_live_reproduces_bit_identically() {
 /// clock. Bit for bit.
 ///
 /// **The material has no signal binding, and that is load-bearing rather than
-/// incidental.** A Priming slot is handed the *session's* signals, at the
-/// current frame's phase, however few steps it has taken; so a bound parameter
-/// on a slot priming at one frame in `n` is sampled at a phase its own `t`
-/// never reaches, and the equality below does not hold for it. See "Priming
-/// steps; it does not draw" in `deck.rs` for what the claim is narrowed to.
+/// incidental** — though not for the reason it once was. A warming slot now
+/// reads the grid at its own position, so the *warming* is rate-invariant for a
+/// bound Set too, which is what
+/// `the_priming_rate_does_not_change_the_signal_a_warming_set_reads` asserts.
+/// What a binding would still break is the **last frame**: the primed run's
+/// final frame is on air, reads the session's phase, and its `t` is sixty
+/// frames behind the Live run's session clock, so the two would sample
+/// different instants at the one step that decides the image. That is the two
+/// clocks meeting exactly as designed, not a defect — and it is why this test
+/// asserts the identity on unbound material and the bound claims are asserted
+/// separately.
 #[test]
 fn priming_at_a_reduced_rate_reaches_the_same_state_as_being_live() {
     let gpu = Gpu::headless().expect("no GPU available");
@@ -519,5 +536,146 @@ fn priming_at_a_reduced_rate_reaches_the_same_state_as_being_live() {
         primed, always,
         "a slot primed at one frame in {ONE_IN} and then put on air is not the slot \
          that was on air throughout, at the same `t`"
+    );
+}
+
+/// **The priming rate must not decide what a Set warms into.**
+///
+/// A binding is resolved on every step, and its value comes off the
+/// oscillator. A slot warming at one frame in four takes one step for every
+/// four the session's clock advances, so handing it the session's phase makes
+/// its bound param sweep four times as fast per step as the same slot warming
+/// at full rate — and the rate is the *governor*'s, chosen from frame budget
+/// and never shown to the operator. Two identical Sets would then warm into
+/// different material because one deck happened to be busier.
+///
+/// The two sequences are compared step for step rather than at the end,
+/// because the state a Set accumulates is a function of the whole sequence and
+/// two sequences can meet at the last value without having agreed anywhere
+/// else.
+///
+/// The distinct-value assertion is not decoration: `beat` bound onto a range
+/// this test could have written as `[x, x]`, or a run shorter than a beat,
+/// would make both sequences constant and the comparison would hold against
+/// any implementation at all.
+#[test]
+fn the_priming_rate_does_not_change_the_signal_a_warming_set_reads() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    /// Steps each run warms for. Two beats at 120 bpm, so the bound value
+    /// sweeps its whole range twice and a phase error of any size shows.
+    const STEPS: usize = 60;
+    const ONE_IN: u32 = 4;
+
+    // `speed` drives an accumulating `position`, so this is a binding whose
+    // value the warmed state actually depends on rather than one that is
+    // merely written to a uniform.
+    let warm = |one_in: u32| -> Vec<f32> {
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+        let mut set = build(&gpu, SEED_A);
+        assert!(
+            set.bind(Binding::new(
+                Kind::L1,
+                "speed",
+                "beat",
+                Curve::Lin,
+                [0.0, 8.0]
+            )),
+            "`speed` is a declared L1 param of CREEP"
+        );
+        let mut deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], WIDTH, HEIGHT);
+        deck.set_signals(Signals::new(120.0, u64::from(SEED_A)));
+        deck.set_residency(0, Residency::Priming);
+        deck.set_prime_one_in(0, one_in);
+
+        let mut seen = Vec::with_capacity(STEPS);
+        let mut taken = 0;
+        // Frames, not steps: at a reduced rate most of them do nothing, which
+        // is the situation under test. The loop runs until the slot has taken
+        // `STEPS` steps however many frames that costs.
+        while taken < STEPS as u64 {
+            frame(&gpu, &mut deck, &present, 1);
+            let set = deck.slot(0).set();
+            if steps_taken(set) != taken {
+                taken = steps_taken(set);
+                seen.push(set.bound().next().expect("one binding").1);
+            }
+        }
+        seen
+    };
+
+    let (full, slowed) = (warm(1), warm(ONE_IN));
+
+    assert_eq!(full.len(), STEPS, "the full-rate run did not take a step a frame");
+    assert!(
+        full.iter().any(|&v| v != full[0]),
+        "every value in the run is {}, so this comparison would hold against \
+         an implementation that read any phase at all",
+        full[0]
+    );
+    assert_eq!(
+        full, slowed,
+        "warming at one frame in {ONE_IN} read a different signal than warming at \
+         full rate — the governor's rate is deciding what the Set warms into"
+    );
+}
+
+/// **Warming at full rate reads exactly what being on air reads.**
+///
+/// The sharper half of the claim above, and the one that catches the error
+/// rate-invariance alone cannot see: two warming runs agree with each other
+/// under any clock that is a function of the step index, including one a frame
+/// early and one at the wrong scale entirely. Only a Live run says *which*
+/// instant is the right one.
+///
+/// A slot warming at one frame in one steps whenever the session steps, so its
+/// lag is zero and it must read the session's oscillator itself — not a
+/// position recomputed from its own `t`, which costs an f32 rounding the
+/// session's `t` never took and diverges inside a second. Bit for bit, on
+/// every step, because the identity `priming_then_going_live_reproduces_bit_
+/// identically` rests on is bit-exact and a bound Set has to keep it too.
+#[test]
+fn warming_at_full_rate_reads_the_same_signal_as_being_on_air() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    /// Three beats at 120 bpm. Long enough that an f32-derived clock has
+    /// diverged — it first does so around step 29 — several times over.
+    const STEPS: usize = 90;
+
+    let run = |residency: Residency| -> Vec<f32> {
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+        let mut set = build(&gpu, SEED_A);
+        assert!(set.bind(Binding::new(
+            Kind::L1,
+            "speed",
+            "beat",
+            Curve::Lin,
+            [0.0, 8.0]
+        )));
+        let mut deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], WIDTH, HEIGHT);
+        deck.set_signals(Signals::new(120.0, u64::from(SEED_A)));
+        deck.set_residency(0, residency);
+
+        (0..STEPS)
+            .map(|_| {
+                frame(&gpu, &mut deck, &present, 1);
+                deck.slot(0).set().bound().next().expect("one binding").1
+            })
+            .collect()
+    };
+
+    let (live, warming) = (run(Residency::Live), run(Residency::Priming));
+    assert!(
+        live.iter().any(|&v| v != live[0]),
+        "the bound value never moved, so this comparison holds against anything"
+    );
+    let differs = live
+        .iter()
+        .zip(&warming)
+        .position(|(a, b)| a != b)
+        .map(|i| format!("first at step {i}: live {} vs warming {}", live[i], warming[i]));
+    assert!(
+        differs.is_none(),
+        "a slot warming at full rate read a different signal than the same slot on \
+         air — {}",
+        differs.unwrap_or_default()
     );
 }
