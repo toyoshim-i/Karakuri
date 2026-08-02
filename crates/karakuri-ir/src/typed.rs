@@ -60,11 +60,19 @@ pub struct Checked {
     /// **Necessary for a seek, not sufficient for one.** Priming only ever runs
     /// forward from a state the engine already has, so the procedure is all it
     /// needs. Seeking to an arbitrary `t` also needs everything *else* that is
-    /// a function of time at that instant to be evaluable there — today
-    /// nothing else is, but an oscillator under tempo correction has a phase at
-    /// a past `t` that depends on the correction history rather than on `t`.
-    /// Whatever builds the transport owes that half; this flag does not cover
-    /// it.
+    /// a function of time at that instant to be evaluable there, and
+    /// [`Ambient::Beats`](crate::ast::Ambient::Beats) has made that concrete:
+    /// a procedure reading it is a function of the tempo grid as well as of
+    /// `t`, and the grid at a past `t` depends on the correction history rather
+    /// than on `t`.
+    ///
+    /// It is still not a disqualifier. The grid can be evaluated anywhere **as
+    /// it stands**, which is a pure function of `t` given the current tempo and
+    /// anchor — and for a scrub that is the wanted answer, since seeking to bar
+    /// 32 means bar 32 of the grid the room is on now. For an exact re-run of a
+    /// past moment it is not, and nothing keeps the history that would be.
+    /// Whatever builds the transport owes that half and owes this distinction
+    /// with it; this flag covers neither.
     ///
     /// Decided by [`check`](crate::check::check) and **deliberately
     /// conservative**: see `is_closed_form` there for exactly what it refuses

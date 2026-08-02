@@ -219,7 +219,7 @@ struct Counts {
 /// [`step_args::STRIDE`] apart, and binds the right one per substep.
 pub mod step_args {
     /// Byte size of one entry.
-    pub const SIZE: u64 = 16;
+    pub const SIZE: u64 = 20;
     /// Distance between consecutive substeps' entries. 256 is the WebGPU
     /// default `min_uniform_buffer_offset_alignment` and a multiple of every
     /// smaller value an adapter may report, so a binding at `k * STRIDE` is
@@ -234,6 +234,7 @@ struct StepArgs {
     seed_base: u32,
     capacity: u32,
     t: f32,
+    beats: f32,
 };
 ";
 }

@@ -183,12 +183,44 @@ The only implicit values readable inside a block:
 |---|---|---|---|
 | `capacity` | `uint` | allocated element count, set per Set | L1 |
 | `t` | `float` | simulation seconds since Set start | all |
+| `beats` | `float` | musical position on the session's tempo grid, at the instant `t` names | all |
 | `dt` | `float` | fixed simulation step. Scaled on an element's first update — see [Spawn timing](#spawn-timing) | L1 |
 | `camera` | `mat4` | view-projection matrix | L4 |
 | `point_coord` | `vec2` | 0..1 within point sprite | L4 fragment |
 
 `seed` is readable in every block as well, but it is a carried attribute rather than an
 ambient value — see [Element identity](#element-identity).
+
+### `beats`, and why it is not a signal
+
+**Without it a procedure runs at wall time whatever the music does.** `t` is the only clock
+IR could read, so a tempo change moved the grid every binding is sampled on and moved
+nothing that was drawn. A `bind` cannot close that: a binding writes one `param`, and what
+follows a tempo is not a parameter value but the passage of time itself.
+
+It is an ambient rather than a bus name for the same reason `t` is. The signal rule below
+says IR cannot read the bus — every external value arrives through a declared `param` — and
+that rule exists so a procedure's inputs are enumerable. A clock is not an input in that
+sense; it is the thing the procedure is evaluated *at*. `beat` and `bar` remain bus names,
+and they are a different thing: phases in `[0, 1]`, for driving a parameter through a
+`curve` and a `range`. `beats` is unbounded and monotone, for driving a position.
+
+Three properties, all of them load-bearing:
+
+- **The same instant as `t`.** At 60 bpm the two are numerically equal, and a procedure
+  reading both is reading one clock rather than two nearly-equal ones.
+- **Per substep**, exactly like `t`. A frame that advances three steps sees three musical
+  instants, so a frame rate drop does not move the beat.
+- **Continuous across a tempo correction.** A correction bends the rate and never moves a
+  beat that has already happened, so following the room does not mean jumping every time
+  the tracker trims — and it trims several times a second.
+
+What it is **not** is a seek. Reading `beats` says where the room is; it does not let a
+procedure be evaluated at another time. That is the transport, it needs `closed_form`, and
+it is not built. Nor does reading `beats` disqualify a procedure from being closed form: the
+grid is a pure function of `t` given its current tempo and anchor, so a procedure of
+`(seed, t, params, beats)` is still evaluable at any `t` — against the grid **as it stands**,
+which is what a scrub wants and is not what the grid historically was.
 
 The **live** element count is deliberately not exposed. `capacity` is a compile-time
 constant; the live count is engine state, and a procedure that branched on it would
@@ -486,12 +518,19 @@ seeks:
 **One caveat that applies to seeking and not to priming.** Priming only ever runs a
 procedure forward from a state it already has, so the procedure is all it needs. Seeking to
 an arbitrary `t` also needs everything *else* that is a function of time at that instant to
-be evaluable there. Today nothing else is — a Set's inputs are its parameters and the
-oscillator's phase, and the oscillator is a pure function of the tick sequence. But once
-tempo correction lands (`docs/roadmap.md`, M2), the oscillator's phase at a past `t`
-depends on the correction history, which is not a function of `t`. **`closed_form` is a
-property of the procedure and is necessary for a seek, not sufficient for one.** Whatever
-builds the transport owes the other half.
+be evaluable there. **Tempo correction has landed, and `beats` has made this concrete
+rather than hypothetical**: a procedure reading `beats` is a function of the grid as well
+as of `t`, and the grid at a past `t` depends on the correction history, which is not a
+function of `t`.
+
+That does not disqualify it. `Oscillator::at_time` answers with the grid **as it stands**,
+which is a pure function of `t` given the current tempo and anchor, so such a procedure is
+evaluable anywhere — it simply answers about today's grid rather than about the grid that
+was running then. For a scrub that is the wanted answer: seeking to bar 32 means bar 32 of
+the grid the room is on now. For an exact re-run of a past moment it is not, and nothing
+keeps the history that would be. **`closed_form` is a property of the procedure and is
+necessary for a seek, not sufficient for one.** Whatever builds the transport owes the
+other half and owes this distinction with it.
 
 The same distinction decides whether beat-resolution variant selection is affordable:
 switching between closed-form alternatives costs nothing, while keeping three accumulating

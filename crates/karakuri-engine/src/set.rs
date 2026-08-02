@@ -21,6 +21,7 @@ use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
 
 use crate::binding::{Binding, Signals};
+use karakuri_signal::Oscillator;
 use crate::camera::Orbit;
 use crate::compaction::Compaction;
 use crate::uniforms::UniformScratch;
@@ -969,8 +970,14 @@ impl Set {
         // the deck advances the session's oscillator before it prepares
         // anything. Reading before it would put every warming binding a frame
         // early.
-        match clock {
-            Clock::Session => self.resolve_bindings(signals),
+        //
+        // **One grid position for this Set, this frame**, and everything that
+        // reads the grid reads it: the bindings below and the `beats` every
+        // substep is given. Two lookups could not disagree even in principle,
+        // but computing it once is what makes that true by construction rather
+        // than by two call sites happening to pass the same argument.
+        let view = match clock {
+            Clock::Session => *signals,
             // **Subtract step counts, not times.** Both clocks are integer
             // counters of the same `dt`, so their difference is exact and is
             // zero whenever they agree; two `t`s derived from them are not
@@ -984,10 +991,10 @@ impl Set {
                     .oscillator()
                     .steps_taken()
                     .saturating_sub(self.steps_taken);
-                let local = signals.behind(lag as f64 * f64::from(self.dt));
-                self.resolve_bindings(&local);
+                signals.behind(lag as f64 * f64::from(self.dt))
             }
-        }
+        };
+        self.resolve_bindings(&view);
 
         // No `t` here: it differs between this frame's substeps and lives in
         // `StepArgs`. Everything left is input, sampled once per frame.
@@ -1003,17 +1010,21 @@ impl Set {
             queue.write_buffer(&self.l1_uniforms, 0, p.finish());
         }
 
-        self.write_step_args(queue, steps);
+        self.write_step_args(queue, steps, view.oscillator());
 
         // Read before the packer borrows the scratch: `time` and `view_proj`
         // take `&self`, and the packer holds a `&mut` to one of its fields.
         let t = self.time();
+        // The grid at exactly that `t`, on the same terms as the per-substep
+        // `beats` above: one instant, named twice, derived once.
+        let beats = view.oscillator().at_time(f64::from(t)).beats() as f32;
         let aspect = self.viewport[0] / self.viewport[1];
         let camera = self.camera.view_proj(t, aspect);
         {
             let (bindings, params) = (&self.bindings, &self.params);
             let mut p = self.l4_scratch.pack(&self.l4_uniform_layout);
             p.f32("t", t)
+                .f32("beats", beats)
                 .u32("seed_salt", self.seed_salt)
                 .vec2("viewport", self.viewport)
                 .mat4("camera", camera);
@@ -1061,7 +1072,7 @@ impl Set {
     /// irregular spawning. A `spawn_rate` that took its manual value here
     /// while its uniform took the bound one would be the same param meaning
     /// two things in one frame.
-    fn write_step_args(&mut self, queue: &wgpu::Queue, steps: u8) {
+    fn write_step_args(&mut self, queue: &wgpu::Queue, steps: u8, grid: &Oscillator) {
         self.step_spawn_counts = [0; MAX_STEPS as usize];
         // A procedure with no `spawn` block never creates anything, but the
         // `advance` pass still runs for it if it can `kill()` — with a zero
@@ -1093,6 +1104,14 @@ impl Set {
             bytes[at + 8..at + 12].copy_from_slice(&self.capacity.to_le_bytes());
             bytes[at + 12..at + 16]
                 .copy_from_slice(&self.t_at(first + step as u64).to_le_bytes());
+            // **The grid read at exactly the `t` written two lines up.**
+            // `beats` is defined as the grid at the instant `t` names, so it is
+            // derived from that `t` — not from a position counted back from the
+            // session's, which would be the same number and a different claim.
+            // See `Oscillator::at_time` for why "the same number" is a measured
+            // fact here rather than a hopeful one.
+            let beats = grid.at_time(f64::from(self.t_at(first + step as u64))).beats() as f32;
+            bytes[at + 16..at + 20].copy_from_slice(&beats.to_le_bytes());
 
             // By the request, not by what fits: the GPU clamps against
             // capacity and silently drops the overflow, and reusing those
