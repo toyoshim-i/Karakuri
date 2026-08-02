@@ -630,7 +630,11 @@ choose, and changing one is a redesign rather than an edit. The reasoning behind
 
 - `t` is simulation time, never wall clock. It advances by `steps * dt` where `steps` comes
   from a `tick` record: emitted from real time when live, read back verbatim on replay.
-  Nothing in the engine measures anything.
+  Nothing in the engine measures anything. **The emission is not built** — `steps` reaches
+  the engine as a number and no `Record::Tick` is constructed outside tests. What the
+  invariant rests on is already true: the engine advances by a step count and never by a
+  duration, so the record serialises a quantity that exists rather than one that has to be
+  invented. `README.md`'s Invariants list what else is in this position.
 - Two tick histories reaching the same elapsed time are the same point in the session.
   Substepping exists so that state at a given time does not depend on frame rate, so
   nothing downstream may distinguish them.
