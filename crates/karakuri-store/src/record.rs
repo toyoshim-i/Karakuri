@@ -152,6 +152,78 @@ pub enum Record {
     Tick {
         steps: u8,
     },
+    /// One frame's worth of **measured** signals, on the same terms as
+    /// [`Record::Tick`]: derived from a device when live, read back verbatim on
+    /// replay, and the engine cannot tell which happened.
+    ///
+    /// Live audio is not reproducible and the record stream is required to be,
+    /// so the two can only both be true if the measurement joins the stream.
+    /// This is that record, and its shape follows from what a frame is:
+    ///
+    /// - **One line per frame**, so it interleaves with `tick` and every edit
+    ///   lands at an exact frame position, the way the session stream format
+    ///   already promises.
+    /// - **Named fields for named signals** and a positional array for the
+    ///   bands, because `band0`…`bandN` *are* positions — an array is the
+    ///   naming scheme rather than a second one. A map of name to value would
+    ///   also encode which names it carries, at the cost of repeating those
+    ///   names 200,000 times an hour and of letting a stream invent a name the
+    ///   bus has rules about (`noise` is not a bus name, and a generic map is
+    ///   where that rule would be broken).
+    /// - **One confidence for the frame**, not one per signal: these values all
+    ///   came out of the same block of samples at the same instant, so their
+    ///   staleness is one number. A per-signal confidence would be four copies
+    ///   of it.
+    ///
+    /// The array's length is the band count, so a stream carrying more bands
+    /// than a reader knows about still decodes — a fixed-length array would
+    /// make a band count a breaking format change, which is the opposite of
+    /// what the unknown-`t` rule is for.
+    Audio {
+        /// Broadband level, `[0, 1]`.
+        energy: f32,
+        /// Transient envelope, `[0, 1]`: 1.0 at a detected onset, decaying from
+        /// there. Not an impulse — an impulse one analysis block wide would be
+        /// missed by some frames and seen twice by others.
+        onset: f32,
+        /// Per-band level, `[0, 1]`, low band first. Position is the name.
+        bands: Vec<f32>,
+        /// How much of this frame to believe, `[0, 1]`. Full while a device is
+        /// open and delivering — **a silent room is 0.0 energy at confidence
+        /// 1.0** — falling as the last block goes stale, and 0.0 when nothing
+        /// has arrived, which leaves every bound parameter at its own value.
+        confidence: f32,
+    },
+    /// What the local oscillator's tempo and phase are corrected to, this
+    /// frame. The same terms as [`Record::Tick`] and [`Record::Audio`]: derived
+    /// live, read back verbatim on replay.
+    ///
+    /// **v0.2 had no tempo record at all**, which `docs/roadmap.md` notes: the
+    /// session tempo arrived by CLI flag and nothing in the stream could say
+    /// what it was. This closes that, and it closes it with the *correction*
+    /// rather than with the estimate, for a reason worth stating: an analyser
+    /// is allowed to improve, and a session recorded today has to replay the
+    /// same way after it does. Recording what was decided rather than what was
+    /// heard is what makes that true. It is also why replay does not need the
+    /// audio.
+    ///
+    /// The first one in a stream is what sets the session tempo, so this record
+    /// is both "the tempo is now this" and "the tempo has moved a little"; a
+    /// correction with `shift` 0.0 and `confidence` 0.0 is a free-running
+    /// tempo being stated.
+    Tempo {
+        /// The tempo from now on. A tempo change does not move a beat that has
+        /// already happened — see `Oscillator::correct`.
+        bpm: f32,
+        /// Phase shift in beats, positive meaning the next beat arrives sooner.
+        /// Almost always tiny: the grid is predicted and trimmed, not chased.
+        shift: f32,
+        /// How much the estimate behind this correction was believed. Carried
+        /// so a replay can show an operator what the live run showed, and
+        /// because a correction that was applied at low confidence is a
+        /// different event from the same numbers applied at high confidence.
+        confidence: f32,
+    },
     /// Forward compatibility: an unrecognised `t` is ignored, not an error.
     #[serde(other)]
     Unknown,
@@ -162,10 +234,17 @@ pub enum Record {
 pub const MAX_STEPS: u8 = 4;
 
 impl Record {
-    /// Whether this record belongs in a Set file. Ticks do not: a Set file
-    /// carries no time.
+    /// Whether this record belongs in a Set file. Ticks, audio frames and
+    /// tempo corrections do not: a Set file carries no time, and all three are
+    /// what a *frame* saw or decided. A Set file that carried one would be
+    /// claiming that a particular moment's measurement is part of what a Set
+    /// is — and the tempo is the session's rather than any Set's, so it has
+    /// nowhere to live in a per-Set projection either.
     pub fn is_state(&self) -> bool {
-        !matches!(self, Record::Tick { .. })
+        !matches!(
+            self,
+            Record::Tick { .. } | Record::Audio { .. } | Record::Tempo { .. }
+        )
     }
 }
 
@@ -261,9 +340,102 @@ mod tests {
         assert_eq!(n, BindNoise::default());
     }
 
+    /// A decoded frame reproduces the values it was emitted with. That is the
+    /// whole promise of putting the measurement in the stream: replay writes
+    /// the same uniforms live did, so it has to be the same numbers.
+    #[test]
+    fn an_audio_frame_round_trips_with_every_value_it_carried() {
+        let rec = round_trip(
+            r#"{"t":"audio","energy":0.42,"onset":0.75,
+                "bands":[0.9,0.4,0.2,0.11,0.05,0.02,0.01,0.0],"confidence":1.0}"#,
+        );
+        assert_eq!(
+            rec,
+            Record::Audio {
+                energy: 0.42,
+                onset: 0.75,
+                bands: vec![0.9, 0.4, 0.2, 0.11, 0.05, 0.02, 0.01, 0.0],
+                confidence: 1.0,
+            }
+        );
+    }
+
+    /// A silent room is a measurement and reads as one: zeroes at full
+    /// confidence. A dead input is the same zeroes at no confidence. Two
+    /// different lines, and a decoder that lost the difference would make an
+    /// unplugged interface look like a quiet one.
+    #[test]
+    fn silence_and_absence_are_different_lines() {
+        let silent = round_trip(
+            r#"{"t":"audio","energy":0.0,"onset":0.0,"bands":[0.0,0.0],"confidence":1.0}"#,
+        );
+        let absent = round_trip(
+            r#"{"t":"audio","energy":0.0,"onset":0.0,"bands":[0.0,0.0],"confidence":0.0}"#,
+        );
+        assert_ne!(silent, absent);
+        let Record::Audio { confidence, .. } = silent else {
+            panic!("expected an audio record");
+        };
+        assert_eq!(confidence, 1.0);
+    }
+
+    /// The band count is the array's length, so a stream from something that
+    /// measures more bands than this reader knows about still decodes rather
+    /// than failing — the same forward compatibility the unknown-`t` rule is
+    /// for, one level down.
+    #[test]
+    fn a_band_count_this_reader_does_not_expect_still_decodes() {
+        let rec: Record = serde_json::from_str(
+            r#"{"t":"audio","energy":0.5,"onset":0.0,"bands":[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0,0.1,0.2],"confidence":1.0}"#,
+        )
+        .expect("parse");
+        let Record::Audio { bands, .. } = rec else {
+            panic!("expected an audio record");
+        };
+        assert_eq!(bands.len(), 12);
+    }
+
+    /// A correction round-trips exactly, because replay applies it verbatim: a
+    /// shift that decoded to a different number would put the beat somewhere
+    /// else than the live run did.
+    #[test]
+    fn a_tempo_correction_round_trips() {
+        assert_eq!(
+            round_trip(r#"{"t":"tempo","bpm":128.25,"shift":-0.0125,"confidence":0.82}"#),
+            Record::Tempo {
+                bpm: 128.25,
+                shift: -0.0125,
+                confidence: 0.82,
+            }
+        );
+        // A free-running tempo being stated: no shift, no claim.
+        assert_eq!(
+            round_trip(r#"{"t":"tempo","bpm":120.0,"shift":0.0,"confidence":0.0}"#),
+            Record::Tempo {
+                bpm: 120.0,
+                shift: 0.0,
+                confidence: 0.0,
+            }
+        );
+    }
+
     #[test]
     fn ticks_are_not_state() {
         assert!(!Record::Tick { steps: 1 }.is_state());
+        // Nor is anything else a frame measured or decided.
+        assert!(!Record::Audio {
+            energy: 0.5,
+            onset: 0.0,
+            bands: vec![0.1],
+            confidence: 1.0
+        }
+        .is_state());
+        assert!(!Record::Tempo {
+            bpm: 128.0,
+            shift: 0.0,
+            confidence: 0.9
+        }
+        .is_state());
         assert!(Record::Set {
             id: "drift_01".into(),
             v: 1

@@ -1,14 +1,43 @@
 //! The local oscillator: the single source of truth for phase and tempo.
 //!
-//! Rendering reads this and never an external clock. External tempo input, when
-//! it exists, is a correction applied here — so a dropped or jittering source
-//! degrades the correction rather than the clock.
+//! Rendering reads this and never an external clock. External tempo input is a
+//! correction applied here — so a dropped or jittering source degrades the
+//! correction rather than the clock.
 //!
 //! **The oscillator advances by simulation steps, never by wall clock.**
 //! [`Oscillator::advance`] takes exactly the two quantities a `tick` record
 //! carries — a step count and a fixed `dt` — and nothing else. There is no
 //! clock read anywhere in this module; see `tests/no_clock_access.rs` for a
-//! standing check of that.
+//! standing check of that. [`Oscillator::correct`] is the same shape: it takes
+//! a tempo and a phase shift that were *decided* elsewhere, and a `tempo`
+//! record carries them, so a corrected session replays from the record stream
+//! without anything estimating anything a second time.
+//!
+//! ## Two beat counts, and why
+//!
+//! Musical position is an accumulator (`beats`) rather than the product
+//! `t * bpm / 60`, because a tempo correction has to change the *rate* from now
+//! on without moving where the beat already was — a product would slide every
+//! beat that has already happened. Both are anchored: with no correction ever
+//! applied the accumulator reduces to exactly that product, bit for bit, which
+//! is what keeps an uncorrected session identical to one from before this
+//! existed.
+//!
+//! There are two of them, and the difference is the answer to a question
+//! `docs/roadmap.md` leaves open — what a noise `bind`'s cycles-per-beat rate
+//! does once tempo is corrected:
+//!
+//! - [`Oscillator::beats`] is musical position. It takes phase shifts, because
+//!   a phase shift is the beat grid being realigned with the room.
+//! - [`Oscillator::elapsed_beats`] takes tempo corrections and **not** phase
+//!   shifts. Noise reads this one. A noise binding therefore still runs in
+//!   cycles per beat and still follows a tempo change — a rate is a rate, and
+//!   it stays continuous because both are accumulators — but a beat-grid
+//!   realignment does not re-hash it. The alternative was a seconds-relative
+//!   rate, which would have made two kinds of noise and left every existing
+//!   `bind` record ambiguous; this keeps one kind and gives up only the claim
+//!   that a noise lattice point coincides with a beat instant after a
+//!   correction, which nothing depends on.
 
 /// Beats per bar. v0.2 of the IR spec has no time-signature concept anywhere
 /// (no `bind` field, no Set-file record), so this is a fixed assumption of
@@ -35,6 +64,15 @@ pub const BEATS_PER_BAR: u32 = 4;
 pub struct Oscillator {
     bpm: f32,
     t: f64,
+    /// The simulation time the current tempo took effect at. Zero until the
+    /// first correction, which is what makes an uncorrected oscillator's
+    /// arithmetic identical to the product it used to be.
+    anchor_t: f64,
+    /// Musical position at `anchor_t`, phase shifts included.
+    anchor_beats: f64,
+    /// Musical position at `anchor_t`, phase shifts **excluded** — what noise
+    /// reads. See the module doc.
+    anchor_elapsed: f64,
 }
 
 /// Tempo is clamped into this range. The lower bound matters: every noise
@@ -48,12 +86,13 @@ impl Oscillator {
     /// [`BPM_RANGE`]. A NaN tempo becomes the low bound rather than poisoning
     /// every phase downstream.
     pub fn new(bpm: f32) -> Oscillator {
-        let bpm = if bpm.is_nan() {
-            *BPM_RANGE.start()
-        } else {
-            bpm.clamp(*BPM_RANGE.start(), *BPM_RANGE.end())
-        };
-        Oscillator { bpm, t: 0.0 }
+        Oscillator {
+            bpm: clamp_bpm(bpm),
+            t: 0.0,
+            anchor_t: 0.0,
+            anchor_beats: 0.0,
+            anchor_elapsed: 0.0,
+        }
     }
 
     /// Advance by `steps` simulation steps of `dt` seconds each.
@@ -66,10 +105,58 @@ impl Oscillator {
         self.t += steps as f64 * dt as f64;
     }
 
-    /// The oscillator's tempo. The local oscillator is the single source of
-    /// truth for it, so this is not corrected against anything else in V1.
+    /// Apply a correction: a new tempo, and a phase shift in beats.
+    ///
+    /// **This is not an external clock and rendering still does not read one.**
+    /// Both arguments are decided outside — by a tracker watching audio, by a
+    /// performer tapping, or by a `tempo` record on replay — and arrive here as
+    /// numbers, the same way `steps` does. What the oscillator guarantees is
+    /// that applying them is continuous: the tempo takes effect from now on and
+    /// does not move a beat that has already happened, and the shift moves the
+    /// beat grid by exactly what it says.
+    ///
+    /// A positive `shift_beats` moves the grid **forward** — the next beat
+    /// arrives sooner. That is the direction a correction takes when the
+    /// oscillator is running late, which is the direction it is nearly always
+    /// running when a measurement is involved, since a measurement is old by
+    /// the time it exists.
+    ///
+    /// The shift does not reach [`Oscillator::elapsed_beats`]; see the module
+    /// doc for why noise is deliberately deaf to it.
+    pub fn correct(&mut self, bpm: f32, shift_beats: f32) {
+        let shift = if shift_beats.is_finite() {
+            shift_beats as f64
+        } else {
+            0.0
+        };
+        self.anchor_beats = self.beats() + shift;
+        self.anchor_elapsed = self.elapsed_beats();
+        self.anchor_t = self.t;
+        self.bpm = clamp_bpm(bpm);
+    }
+
+    /// The oscillator's tempo — free-running from `--bpm`, or whatever
+    /// [`Oscillator::correct`] last set. The local oscillator is still the
+    /// single source of truth: an estimate corrects this, nothing reads past
+    /// it.
     pub fn bpm(&self) -> f32 {
         self.bpm
+    }
+
+    /// Musical position in beats, phase shifts included. Monotone while the
+    /// tempo is positive, and continuous across a tempo correction.
+    pub fn beats(&self) -> f64 {
+        self.anchor_beats + self.since_anchor()
+    }
+
+    /// Musical position in beats with phase shifts excluded — the one noise
+    /// reads. See the module doc.
+    pub fn elapsed_beats(&self) -> f64 {
+        self.anchor_elapsed + self.since_anchor()
+    }
+
+    fn since_anchor(&self) -> f64 {
+        (self.t - self.anchor_t) * self.bpm as f64 / 60.0
     }
 
     /// Elapsed simulation time in seconds, `sum(steps * dt)` across every call
@@ -81,15 +168,23 @@ impl Oscillator {
     /// Position within the current beat, `0.0..1.0`. `0.0` is the instant of
     /// the beat; the value rises linearly and wraps at the next beat.
     pub fn beat_phase(&self) -> f32 {
-        let beats_per_second = self.bpm as f64 / 60.0;
-        (self.t * beats_per_second).rem_euclid(1.0) as f32
+        self.beats().rem_euclid(1.0) as f32
     }
 
     /// Position within the current bar, `0.0..1.0`, using [`BEATS_PER_BAR`].
     pub fn bar_phase(&self) -> f32 {
-        let beats_per_second = self.bpm as f64 / 60.0;
-        let beats = self.t * beats_per_second;
-        (beats / BEATS_PER_BAR as f64).rem_euclid(1.0) as f32
+        (self.beats() / BEATS_PER_BAR as f64).rem_euclid(1.0) as f32
+    }
+}
+
+/// A NaN tempo becomes the low bound rather than poisoning every phase
+/// downstream, and every tempo is held inside [`BPM_RANGE`] — including one
+/// arriving from a correction, where a wild estimate is a thing that happens.
+fn clamp_bpm(bpm: f32) -> f32 {
+    if bpm.is_nan() {
+        *BPM_RANGE.start()
+    } else {
+        bpm.clamp(*BPM_RANGE.start(), *BPM_RANGE.end())
     }
 }
 
@@ -151,6 +246,124 @@ mod tests {
         assert!((merged.t() - split.t()).abs() < 1e-12);
         assert_eq!(merged.beat_phase(), split.beat_phase());
         assert_eq!(merged.bar_phase(), split.bar_phase());
+    }
+}
+
+#[cfg(test)]
+mod correction_tests {
+    use super::*;
+
+    const DT: f32 = 1.0 / 60.0;
+
+    fn run(seconds: f32) -> Oscillator {
+        let mut osc = Oscillator::new(120.0);
+        for _ in 0..(seconds / DT) as u32 {
+            osc.advance(1, DT);
+        }
+        osc
+    }
+
+    /// The reason musical position is an accumulator: a tempo correction
+    /// changes the rate from now on and leaves the beat that is happening where
+    /// it is. Multiplying `t` by a new tempo would slide every beat that had
+    /// already happened, which on stage is the picture jumping when the tracker
+    /// merely sharpens its estimate.
+    #[test]
+    fn a_tempo_correction_does_not_move_the_phase_it_arrives_at() {
+        let mut osc = run(10.0);
+        let before = osc.beat_phase();
+        osc.correct(128.0, 0.0);
+        assert!(
+            (osc.beat_phase() - before).abs() < 1e-6,
+            "phase jumped from {before} to {} on a tempo change",
+            osc.beat_phase()
+        );
+        assert_eq!(osc.bpm(), 128.0);
+
+        // ...and from there it runs at the new rate.
+        osc.advance(1, 60.0 / 128.0);
+        assert!(
+            (osc.beat_phase() - before).abs() < 1e-5,
+            "one beat at the corrected tempo did not return to the same phase"
+        );
+    }
+
+    /// A phase shift moves the grid by exactly what it says, and forward means
+    /// sooner — the direction a late oscillator has to move.
+    #[test]
+    fn a_phase_shift_moves_the_grid_by_what_it_says_and_forward_means_sooner() {
+        let mut osc = run(10.0);
+        let before = osc.beats();
+        osc.correct(osc.bpm(), 0.25);
+        assert!((osc.beats() - before - 0.25).abs() < 1e-9);
+
+        // "Sooner": the next beat instant is a quarter of a beat closer.
+        // Modulo one beat, because "closer" past a beat boundary means the beat
+        // after it — a shift of a quarter beat from a phase of 0.9 lands on the
+        // next beat rather than a negative distance to this one.
+        let to_beat_before = 1.0 - before.rem_euclid(1.0);
+        let to_beat_after = 1.0 - osc.beats().rem_euclid(1.0);
+        assert!(
+            ((to_beat_before - to_beat_after).rem_euclid(1.0) - 0.25).abs() < 1e-6,
+            "a forward shift did not bring the next beat closer: {to_beat_before} -> {to_beat_after}"
+        );
+    }
+
+    /// An uncorrected oscillator is the one that existed before corrections
+    /// did, bit for bit — the accumulator is anchored at zero, so it reduces to
+    /// the product it replaced.
+    #[test]
+    fn an_uncorrected_oscillator_is_the_product_it_used_to_be_bit_for_bit() {
+        for bpm in [90.0_f32, 120.0, 128.5] {
+            let mut osc = Oscillator::new(bpm);
+            for i in 0..600 {
+                osc.advance(1 + (i % 3) as u8, DT);
+                let product = osc.t() * bpm as f64 / 60.0;
+                assert_eq!(osc.beats(), product, "beats drifted from the product");
+                assert_eq!(osc.elapsed_beats(), product);
+                assert_eq!(osc.beat_phase(), product.rem_euclid(1.0) as f32);
+            }
+        }
+    }
+
+    /// The roadmap's open question, answered in the type: noise follows a
+    /// tempo correction and ignores a phase one.
+    #[test]
+    fn noise_time_follows_a_tempo_correction_and_ignores_a_phase_one() {
+        let mut osc = run(10.0);
+        let elapsed = osc.elapsed_beats();
+
+        osc.correct(osc.bpm(), 0.4);
+        assert_eq!(
+            osc.elapsed_beats(),
+            elapsed,
+            "a phase correction reached the noise clock"
+        );
+        assert_ne!(osc.beats(), elapsed, "a phase correction did nothing");
+
+        // A tempo correction is a rate change, and noise time takes it —
+        // continuously, with no jump at the instant it lands.
+        osc.correct(240.0, 0.0);
+        assert_eq!(osc.elapsed_beats(), elapsed, "noise time jumped on a rate change");
+        osc.advance(1, 1.0);
+        assert!(
+            (osc.elapsed_beats() - elapsed - 4.0).abs() < 1e-9,
+            "noise time did not run at the corrected tempo"
+        );
+    }
+
+    /// A tracker that goes mad cannot stop or reverse the session clock.
+    #[test]
+    fn a_wild_correction_is_clamped_like_any_other_tempo() {
+        let mut osc = run(1.0);
+        for bad in [0.0, -400.0, f32::NAN, f32::INFINITY, 1e9] {
+            osc.correct(bad, 0.0);
+            assert!(BPM_RANGE.contains(&osc.bpm()), "{bad} survived clamping");
+        }
+        // And a nonsense shift is dropped rather than making every phase NaN.
+        let beats = osc.beats();
+        osc.correct(osc.bpm(), f32::NAN);
+        assert_eq!(osc.beats(), beats);
     }
 }
 

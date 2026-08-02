@@ -1,0 +1,11 @@
+[package]
+name = "karakuri-audio"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+karakuri-signal = { version = "0.1.0", path = "../karakuri-signal" }
+cpal = "0.18"
+rustfft = "6"

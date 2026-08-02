@@ -6,10 +6,17 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+karakuri-audio = { version = "0.1.0", path = "../karakuri-audio" }
 karakuri-engine = { version = "0.1.0", path = "../karakuri-engine" }
 karakuri-ir = { version = "0.1.0", path = "../karakuri-ir" }
 karakuri-signal = { version = "0.1.0", path = "../karakuri-signal" }
+karakuri-store = { version = "0.1.0", path = "../karakuri-store" }
 png = "0.18.1"
 pollster = "1.0.1"
 wgpu = "26.0.1"
 winit = "0.30.13"
+
+[dev-dependencies]
+# The record conversions are checked through the JSON a session stream would
+# actually hold, rather than only as Rust values.
+serde_json.workspace = true

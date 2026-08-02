@@ -716,3 +716,250 @@ proc smallest {
     let checked = check_ok(src);
     assert_eq!(checked.capacity.expect("a capacity range").min, 1);
 }
+
+// ---------------------------------------------------------------------------
+// Closed form versus accumulating.
+//
+// The property the engine's governor uses to decide that a Set needs no
+// priming. Nothing is rejected either way, so there is no diagnostic to assert
+// on and no way for a mistake here to be loud: these are the only thing
+// standing between a wrong answer and a slot going on air showing an unwarmed
+// image while claiming it needed no warming. Every case below is written so
+// that the *permissive* direction is what fails it.
+// ---------------------------------------------------------------------------
+
+/// A procedure whose position is a function of `seed` and `t` alone is closed
+/// form: any `t` can be evaluated directly, so it needs no priming.
+#[test]
+fn a_procedure_that_never_reads_what_it_emits_is_closed_form() {
+    let src = r#"
+proc pure_shell {
+  kind     L1
+  topology points
+  capacity [1, 1024] = 256
+
+  param radius : float [0.1, 8.0] = 2.0
+
+  emit position
+
+  element {
+    let u = hash1(seed);
+    let v = hash1(seed + 1000u);
+    position = sphere_point(u, v) * radius * (1.0 + sin(t));
+  }
+}
+"#;
+    assert!(
+        check_ok(src).closed_form,
+        "a pure function of seed, t and params was classified as accumulating"
+    );
+}
+
+/// The one the name is about: `age = age + dt` reads what it emits, so the
+/// state at `t` is the sum of every step taken to get there.
+#[test]
+fn a_procedure_that_reads_what_it_emits_is_accumulating() {
+    let src = r#"
+proc accumulator {
+  kind     L1
+  topology points
+  capacity [1, 1024] = 256
+
+  emit position, age
+
+  element {
+    position = vec3(hash1(seed), 0.0, 0.0);
+    age      = age + dt;
+  }
+}
+"#;
+    assert!(
+        !check_ok(src).closed_form,
+        "`age = age + dt` reads `age`, which is emitted — this is the definition \
+         of accumulating and it was classified closed form"
+    );
+}
+
+/// **The read is found wherever it is.** Buried in the condition of an `if`
+/// inside a `for`, bound to a local, and used two statements later — a
+/// classifier that only looked at the right-hand side of an attribute
+/// assignment, or that only walked the top level of a block, would miss every
+/// one of these and call this procedure seekable.
+#[test]
+fn a_read_inside_a_nested_if_in_a_for_still_counts() {
+    let src = r#"
+proc buried_read {
+  kind     L1
+  topology points
+  capacity [1, 1024] = 256
+
+  emit position, age
+
+  element {
+    var acc = 0.0;
+    for i in 0..4 {
+      if age > float(i) * 0.25 {
+        acc = acc + 0.1;
+      }
+    }
+    position = vec3(acc, 0.0, 0.0);
+    age      = float(1.0);
+  }
+}
+"#;
+    assert!(
+        !check_ok(src).closed_form,
+        "the only read of `age` is in an `if` condition inside a `for`, and it was \
+         not found — a classifier that misses it calls this seekable"
+    );
+}
+
+/// The same read through a local. `let prev = position;` is a read of
+/// `position`, and the fact that what is assigned back is spelled `prev` does
+/// not make it one.
+#[test]
+fn a_read_that_reaches_the_value_through_a_local_still_counts() {
+    let src = r#"
+proc laundered_read {
+  kind     L1
+  topology points
+  capacity [1, 1024] = 256
+
+  emit position
+
+  element {
+    let prev = position;
+    let drift = vec3(0.0, 0.01, 0.0);
+    position = prev + drift;
+  }
+}
+"#;
+    assert!(
+        !check_ok(src).closed_form,
+        "the read of `position` was laundered through a `let` and got past the \
+         classifier"
+    );
+}
+
+/// **Spawning and closed form cannot coexist**, and not because of attributes:
+/// this procedure's `element` block is a pure function of `seed` and `t`. What
+/// is accumulated is the *population* — the spawn accumulator and the live
+/// range are engine state built up over every frame since the Set started — and
+/// jumping to `t` does not conjure the elements that would have been born
+/// getting there.
+#[test]
+fn a_spawn_block_disqualifies_even_a_pure_element_block() {
+    let src = r#"
+proc pure_fountain {
+  kind     L1
+  topology points
+  capacity [1, 1024] = 256
+
+  param spawn_rate : float [0.0, 40000.0] = 100.0
+
+  emit position
+
+  spawn {
+    position = vec3(0.0, 0.0, 0.0);
+  }
+
+  element {
+    position = sphere_point(hash1(seed), hash1(seed + 7u)) * t;
+  }
+}
+"#;
+    let checked = check_ok(src);
+    assert!(
+        !checked.closed_form,
+        "a procedure that spawns was called seekable; the elements that would have \
+         been born on the way to `t` do not exist when `t` is jumped to"
+    );
+}
+
+/// `kill()` disqualifies for the mirror-image reason: a killed element stays
+/// killed, so which elements are alive at `t` is a function of every step taken
+/// to get there rather than of `t`.
+#[test]
+fn a_kill_disqualifies_even_a_pure_element_block() {
+    let src = r#"
+proc pure_cull {
+  kind     L1
+  topology points
+  capacity [1, 1024] = 256
+
+  emit position
+
+  element {
+    position = sphere_point(hash1(seed), hash1(seed + 7u)) * 2.0;
+    if t > 5.0 && t < 5.1 {
+      kill();
+    }
+  }
+}
+"#;
+    assert!(
+        !check_ok(src).closed_form,
+        "a procedure that can `kill()` was called seekable; arriving at t = 6 in one \
+         step removes nothing this would have removed at t = 5.05"
+    );
+}
+
+/// An L4 procedure holds no per-element state at all, so the property is
+/// vacuously true of it — and a Set is closed form when both of its procedures
+/// are, which in practice means when its L1 is.
+#[test]
+fn an_l4_procedure_is_vacuously_closed_form() {
+    let src = include_str!("fixtures/soft_points.kir");
+    assert!(
+        check_ok(src).closed_form,
+        "L4 is stateless and emits nothing, so there is nothing for it to warm"
+    );
+}
+
+/// The canonical examples, as a check that the classifier's answers are the
+/// ones the specification's own material deserves: `drift_shell` integrates a
+/// velocity and spawns, and is accumulating on both counts.
+#[test]
+fn drift_shell_is_accumulating() {
+    let checked = check_ok(include_str!("fixtures/drift_shell.kir"));
+    assert!(!checked.closed_form);
+}
+
+/// **L4 is vacuously closed form, and nothing an L4 file can say changes it.**
+///
+/// `emit` has no meaning on an L4 procedure — only L1 attributes get buffers —
+/// and nothing rejects one, so a generated file can carry a stray `emit` that
+/// duplicates its `consumes`. Classifying by "reads an attribute in `emit`"
+/// alone then calls a stateless procedure accumulating, and since a Set is
+/// closed form only when both of its procedures are, one meaningless line in an
+/// L4 file makes a whole seekable Set look like it needs priming. The property
+/// is about per-element state and L4 has none.
+#[test]
+fn an_l4_that_declares_emit_is_still_vacuously_closed_form() {
+    let src = r#"
+proc odd_l4 {
+  kind  L4
+  blend additive
+
+  emit     position
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 4.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+    let checked = check_ok(src);
+    assert_eq!(checked.kind, karakuri_ir::Kind::L4);
+    assert!(
+        checked.closed_form,
+        "an L4 holds no per-element state at all, so the flag is supposed to be \
+         vacuously true — a stray `emit` on a stateless procedure made the whole \
+         Set look like it needed priming"
+    );
+}

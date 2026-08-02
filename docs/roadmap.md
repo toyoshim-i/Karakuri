@@ -186,9 +186,13 @@ fine alone and is unreadable next to lights.
   schedules ahead of a phrase are all this, seen from different angles. Naming it once here
   stops each of those milestones inventing its own waiting area. One to four members are
   Live and composited; the rest are resident
-- Residency has three levels and the governor moves slots between them: **Live**,
-  **Priming** (stepping hidden, at reduced rate), and **Allocated** (compiled, buffers
-  held, not stepping). Allocated keeps its state, so returning to Priming resumes where it
+- Residency has three levels: **Live**, **Priming** (stepping hidden, at reduced rate), and
+  **Allocated** (compiled, buffers held, not stepping). **The governor does not move slots
+  between them** — it computes an *effective* level each pass from the operator's *requested*
+  one, which it never writes. A refusal is therefore a deferral: a slot parked for lack of
+  budget primes again by itself when there is room. Built, and the same shape as M5's
+  greyed-out sync toggles — a surface shows what was asked for and, separately, what is
+  happening. Two instances now; do not invent a third vocabulary for it. Allocated keeps its state, so returning to Priming resumes where it
   stopped rather than starting over — `t` is simulation time and does not advance while
   parked. Going straight from Allocated to Live shows an unwarmed image, which is the
   operator's call to make
@@ -197,12 +201,21 @@ fine alone and is unreadable next to lights.
   It needs a **default renderer per topology** — a built-in L4 that draws raw geometry — so
   that a generated L1 can be seen directly rather than through whatever L4 happens to be
   paired with it. This is also how a broken L1 becomes diagnosable
-- Priming — rendering hidden at reduced rate and resolution so stateful simulations reach
-  their attractor before becoming visible. Without this, every fade-in shows particles
-  being born, which usually looks bad
-- Budget governor. Per-Set GPU timestamps, live Sets prioritised, priming runs in slack,
-  priming resolution and step rate reduced automatically, and an escalation path when
-  priming will not finish in time. It governs **how many** slots are resident as well as
+- Priming — **stepping** hidden so stateful simulations reach their attractor before
+  becoming visible. Without this, every fade-in shows particles being born, which usually
+  looks bad. Built, and this bullet's original wording — "rendering hidden at reduced rate
+  and resolution" — was superseded on contact: L1 owns every piece of per-element state and
+  L4 is stateless, so warming is the compute passes and the render is skipped outright.
+  There is no resolution to reduce, and skipping the draw makes "primed then Live"
+  *identical* to "always Live" rather than close to it. Reduced rate survives and means
+  stepping on one frame in *n*
+- Budget governor. Built, with two corrections to this bullet's original wording. Not
+  per-Set **GPU timestamps** — a per-Set measurement taken by the probe on the build worker,
+  calibrated and labelled with its method, because timestamps are advertised, enabled and
+  unreliable here. And not priming **resolution** — step rate only, since priming does not
+  render. A Set is measured before it goes on air, because an unmeasured Live slot is
+  unbudgetable rather than free, and treating unknown as headroom is the same mistake as
+  treating an unmeasured candidate as costless. It governs **how many** slots are resident as well as
   how well they prime: the deck has two separate budgets, VRAM bounding how many can be
   Allocated at all, and compute bounding how many can step. Deck size is an output of this,
   not a layout constant
@@ -221,9 +234,27 @@ fine alone and is unreadable next to lights.
   fader means nothing if each Set arrives at a different nominal level. Semi-automatic gain
   needs a measured level per Set, which is the same per-Set measurement hook the budget
   governor needs
+- **Transport, per slot.** The mapping from session time to a slot's `t`, so that material
+  can be run at a rate, held, or scrubbed — tape-style fast-forward and rewind, locked to
+  the beat grid. Driven by a **position** rather than by a tempo and a phase, because a
+  position can reverse and jump and a tempo cannot: audio analysis supplies a position that
+  only ever moves forward, and a deck link (M7) supplies one that does not. Same entry
+  point, so the downstream is not rebuilt when the better source arrives
+- **What the transport can do depends on `closed_form`**, which the check pass now decides
+  and the artifact carries. A closed-form procedure evaluates at any `t`, so scrubbing it is
+  free. An accumulating one can only be run forward — but "cannot rewind" is too strong:
+  because the engine is bit-exactly reproducible, restarting it and running to the target is
+  *the same state*, not an approximation. So a rewind is priced rather than impossible, and
+  the governor's per-Set measurement is what prices it. That is a second payoff of the
+  determinism invariant, alongside undo, replay, A/B and session recording
 - Transitions as first-class objects, not just crossfade
 - `VideoSource` interface with `color` required and AOVs optional
-- Audio input. Spectrum, energy, onset detection, tempo estimation
+- ~~Audio input. Spectrum, energy, onset detection, tempo estimation~~ **Done**, plus beat
+  tracking with latency compensation. Analysis runs in the driver's callback rather than on
+  the frame path. Two records carry it — `audio` per frame and `tempo` for corrections — on
+  `tick`'s terms, so replay reads them back and opens no device. `tempo` carries the
+  **correction, not the estimate**, so a session recorded today replays the same after the
+  analyser improves
 - ~~Wiring the signal bus into parameters.~~ **Done**, except for the decoder: a binding
   samples, curves, maps and blends by confidence into the uniform write, and the spawn
   accumulator reads the same value. What is missing is that a `Record::Bind` never becomes
@@ -237,7 +268,13 @@ fine alone and is unreadable next to lights.
   value, with the L4 default silently winning. `Set::build` now refuses the collision
   rather than resolving it, which is correct and is not the answer — a Set whose two
   procedures both want a `hue` is not an error
-- PLL correction of the local oscillator against external tempo
+- ~~PLL correction of the local oscillator against external tempo~~ **Done**, and shaped by
+  what it is for: tempo is stable except at a track change, so the grid is **predicted, not
+  chased**. A locked grid free-runs and takes a slow trim; a single disagreeing estimate
+  moves it not at all; re-acquisition needs eight consecutive consistent revisions. The
+  correction **leads** by the analysis lag plus the output lag, because a loop that merely
+  tracks shows its beat late by both, consistently — which reads as wrong rather than as
+  noise
 - Ableton Link as a passive peer that never proposes a tempo
 - MIDI control surface on a dedicated controller, not the DJ controller
 - Output routing: Syphon / Spout / NDI
@@ -259,13 +296,19 @@ fine alone and is unreadable next to lights.
 
 **Decide before building**
 
-- **Whether GPU timestamps work on the performing machine.** The budget governor is
-  specified on per-Set GPU timestamps, and on Apple Silicon via Metal they are advertised,
-  enabled, and unreliable — an enormous workload resolves to zero, to a negative delta, or
-  occasionally to something plausible. Flaky rather than absent is the failure mode that
-  quietly returns a usable-looking number. A governor steering on a host clock reacts to
-  submission overhead as much as to shader cost, so confirm this before automatic priming
-  demotion depends on it.
+- ~~Whether GPU timestamps work on the performing machine.~~ **Decided: do not steer on
+  them.** They are advertised, enabled and unreliable here, and flaky is worse than absent
+  because it quietly returns a usable-looking number. The governor budgets against a
+  calibrated, method-labelled probe measurement taken on the build worker instead — off the
+  frame path, comparable between slots, and honest about being a reference figure rather
+  than a prediction of frame time. What it cannot see is written down where a reader of the
+  report will look: one frame of a cold Set at a fixed resolution, never re-measured.
+- ~~Whether noise rate stays tempo-relative once tempo is corrected.~~ **Decided: it
+  stays.** A noise binding follows a *tempo* correction and ignores a *phase* one — the
+  oscillator carries two anchored beat counts so that a rate is a rate while a grid
+  realignment does not re-hash the lattice. A seconds-relative mode and a freeze-at-bind-time
+  were both rejected for making two kinds of noise and leaving every existing `bind` record
+  ambiguous. Original text:
 - **Whether noise rate stays tempo-relative once tempo is corrected.** A noise `bind`
   carries a rate in cycles per beat. Under fixed tempo that is a constant rescaling of
   cycles per second and costs nothing; under PLL correction every noise binding tracks the
@@ -391,6 +434,19 @@ retrofitting it into decisions already made.
   still in the library and the slot record still points at it — this is an A/B between two
   versions, not a merge tool
 - Per-layer mode control: Manual / Suggest / Auto
+- **Per-slot tempo-sync and beat-sync toggles, with beat-sync greyed out for accumulating
+  material.** The two are different requests and only one of them is always available:
+  tempo-sync changes the *rate*, which any procedure can follow because it only ever means
+  stepping more or fewer times; beat-sync locks the *position*, which needs the ability to
+  jump and reverse. Continuous beat-sync is therefore closed-form only — an accumulating
+  slot re-running its whole history on every correction is not a feature. A *one-off* scrub
+  is available to anything that fits the budget, so what the surface shows there is a price
+  ("8 bars back — 340 ms") rather than a disabled control.
+
+  Worth noting what makes the greying-out possible: `closed_form` is decided statically in
+  the check pass, travels with the artifact, and arrives at the interface as a fact. Had it
+  been left for the engine to infer at runtime, the surface could not have said anything
+  until the Set was built and run.
 
 ~8–10 weeks.
 

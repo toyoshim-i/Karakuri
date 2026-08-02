@@ -16,12 +16,18 @@
 //! following rather than softening. `beat`, `bar` and `bpm` come off the local
 //! oscillator, which the project invariants call the single source of truth,
 //! so they carry confidence 1.0 and a binding to them takes full effect today.
-//! `energy` and the bands are invented — there is no microphone — so they
-//! carry 0.1 and move a parameter by a tenth of what the same number from a
-//! real provider would. That is the system being honest about what it knows.
-//! When audio lands it becomes a provider with a higher confidence and the
-//! identical binding starts working, with nothing else changed. A demo made
-//! livelier by ignoring confidence would be a lie that has to be unwritten.
+//! `energy` and the bands are invented when nothing is measuring, so they carry
+//! 0.1 and move a parameter by a tenth of what the same number from a real
+//! provider would. That is the system being honest about what it knows. A demo
+//! made livelier by ignoring confidence would be a lie that has to be
+//! unwritten.
+//!
+//! Audio has landed, and this is what "with nothing else changed" turned out to
+//! mean: [`Signals::set_audio`] puts one frame's measurements on the session
+//! once per frame, `sample` layers them over the synthesized bus, and every
+//! step below — curve, range, blend, write — is untouched. The same `energy`
+//! binding that moved a tenth of the way now moves all of it, because the same
+//! name came back with confidence 1.0 instead of 0.1.
 //!
 //! Nothing here asks whether a provider exists. [`SignalBus::sample`] cannot
 //! fail and does not return an `Option`; a name nobody has ever heard of comes
@@ -55,7 +61,9 @@
 //! puts it inside the determinism invariant rather than beside it.
 
 use karakuri_ir::Kind;
-use karakuri_signal::{NoiseConfig, Oscillator, Sample, SignalBus, SynthesizedBus};
+use karakuri_signal::{
+    AudioFrame, MeasuredBus, NoiseConfig, Oscillator, Sample, SignalBus, SynthesizedBus,
+};
 
 /// The tempo a session runs at until something corrects it. There is no tempo
 /// record in the v0.2 vocabulary and no external sync yet, so this is a
@@ -137,18 +145,33 @@ impl Curve {
     }
 }
 
-/// The session's signal source: one local oscillator and one seed.
+/// The session's signal source: one local oscillator, one seed, and whatever
+/// the record stream last said was measured.
 ///
 /// **One per session.** `Deck` owns it and advances it once per frame; see the
 /// module doc. Everything a binding can read comes from here, so a binding's
-/// whole input is `(bpm, elapsed steps, seed)` and nothing else — no clock, no
-/// interior mutability, nothing thread-derived.
+/// whole input is `(bpm, elapsed steps, seed, this frame's measurements)` and
+/// nothing else — no clock, no interior mutability, nothing thread-derived. The
+/// last of those is plain data that is *handed in* once per frame, exactly as
+/// `steps` is: see [`Signals::set_audio`].
+///
+/// `Copy`, so that a caller can take the session's signals, put this frame's
+/// measurement on them, and hand them back without the phase moving.
+#[derive(Clone, Copy)]
 pub struct Signals {
     oscillator: Oscillator,
     /// The explicit seed every noise stream is derived from. The determinism
     /// invariant is "all randomness comes from an explicit seed stream", and
     /// this is that seed for the signal side.
     seed: u64,
+    /// This frame's measured signals, or `None` when nothing is measuring.
+    ///
+    /// `None` is not a case any consumer sees: it decides which bus is built
+    /// below, and a `None` builds one that answers every name exactly as it did
+    /// before audio existed. Someone has to know whether a provider exists —
+    /// the invariant is that it is not the consumer, and it is not the bus's
+    /// callers.
+    audio: Option<AudioFrame>,
 }
 
 impl Default for Signals {
@@ -165,7 +188,26 @@ impl Signals {
         Signals {
             oscillator: Oscillator::new(bpm),
             seed,
+            audio: None,
         }
+    }
+
+    /// Install this frame's measured signals, or `None` for "nothing is
+    /// measuring".
+    ///
+    /// **Once per frame, before the frame is rendered**, from the same place
+    /// `steps` comes from — a measurement live, a record on replay. A frame's
+    /// worth of measurement is latched here and does not change while the frame
+    /// is drawn, for the same reason `steps` does not: two bindings sampling
+    /// `energy` in one frame have to get one answer, or the record that says
+    /// what this frame saw is a record of neither.
+    pub fn set_audio(&mut self, audio: Option<AudioFrame>) {
+        self.audio = audio;
+    }
+
+    /// What [`Signals::set_audio`] last installed.
+    pub fn audio(&self) -> Option<&AudioFrame> {
+        self.audio.as_ref()
     }
 
     /// Advance the session clock. `steps` comes from a `tick` record and `dt`
@@ -174,6 +216,19 @@ impl Signals {
     /// instant of the frame's last substep.
     pub fn advance(&mut self, steps: u8, dt: f32) {
         self.oscillator.advance(steps, dt);
+    }
+
+    /// Correct the session's tempo and phase — a new tempo, and a phase shift
+    /// in beats.
+    ///
+    /// **Once per frame at most, before the frame is rendered**, from the same
+    /// place `steps` and the measured frame come from: a tracker live, a
+    /// `tempo` record on replay. Nothing is measured here and no clock is read;
+    /// two numbers arrive and the oscillator applies them, which is what keeps
+    /// "rendering reads only the local oscillator" true while an external tempo
+    /// source exists at all.
+    pub fn correct(&mut self, bpm: f32, shift_beats: f32) {
+        self.oscillator.correct(bpm, shift_beats);
     }
 
     pub fn oscillator(&self) -> &Oscillator {
@@ -186,12 +241,19 @@ impl Signals {
 
     /// Sample a signal by name. Never fails, never returns an `Option`.
     ///
-    /// The bus is constructed per call and holds the oscillator by reference,
-    /// so there is nothing to keep in sync and nothing to allocate — this is
-    /// two words on the stack, which matters because it is called per binding
-    /// per frame on the render thread.
+    /// The bus is constructed per call and holds the oscillator and the frame
+    /// by reference, so there is nothing to keep in sync and nothing to
+    /// allocate — this is a few words on the stack, which matters because it is
+    /// called per binding per frame on the render thread.
+    ///
+    /// Two layers: whatever was measured this frame, over the synthesized bus.
+    /// A measured name answers with its own confidence; every other name — and
+    /// every name at all, when nothing is measuring — falls through unchanged.
+    /// This is the whole of "a binding starts working when audio lands":
+    /// `energy` is the same name, sampled by the same call, and only the
+    /// confidence that comes back is different.
     pub fn sample(&self, name: &str) -> Sample {
-        SynthesizedBus::new(&self.oscillator).sample(name)
+        MeasuredBus::new(self.audio.as_ref(), SynthesizedBus::new(&self.oscillator)).sample(name)
     }
 
     /// Sample a generator the caller declares, mapped from the generator's

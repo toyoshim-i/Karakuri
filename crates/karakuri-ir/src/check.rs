@@ -78,6 +78,19 @@
 //!   which drops params from the protected set; the spec text and the seam
 //!   type's own doc comment agree with each other and this pass follows
 //!   them, not the paraphrase.
+//!
+//! ## One thing this pass decides that is not a diagnostic
+//!
+//! **Closed form versus accumulating.** A procedure that is a pure function of
+//! `seed`, `t`, and its params can be evaluated at any `t` directly, so the
+//! engine may take it Cold to Live with no priming and — the larger half — may
+//! scrub it forwards, hold it, or run it backwards. That is a property of the
+//! procedure, so it is decided here — where `emit`, `consumes` and cost
+//! already live — and recorded on
+//! [`Checked::closed_form`](crate::typed::Checked::closed_form) rather than
+//! rediscovered by the engine. Nothing is rejected either way, which is exactly
+//! why it has to be conservative: see [`is_closed_form`] for what it refuses to
+//! claim and why under-claiming is the safe direction.
 
 use std::collections::{HashMap, HashSet};
 
@@ -141,6 +154,9 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
     }
 
     if errors.is_empty() {
+        // Before the move: the classifier reads the checked blocks, and
+        // `blocks` is about to become the struct's.
+        let closed_form = is_closed_form(proc.kind, &emit_set, &blocks);
         Ok(Checked {
             name: proc.name.clone(),
             kind: proc.kind,
@@ -152,6 +168,7 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
             consumes: consumes_vec.into_iter().map(|(a, _)| a).collect(),
             blocks,
             cost: None,
+            closed_form,
             span: proc.span,
         })
     } else {
@@ -452,6 +469,117 @@ fn check_consumes_emitted(
             format!("`{}` is consumed but not emitted", attr.name())
         };
         errors.push(IrError::contract(span, message).with_hint(hint));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Closed form versus accumulating.
+// ---------------------------------------------------------------------------
+
+/// Whether this procedure is a pure function of `seed`, `t`, and its params —
+/// so any `t` can be evaluated directly. See
+/// [`Checked::closed_form`](crate::typed::Checked::closed_form) for what that
+/// buys (no priming, and — the larger half — the material can be scrubbed
+/// forwards, held, or run backwards) and `docs/ir-spec.md`, "Closed form
+/// versus accumulating", for the whole of it.
+///
+/// Three things make a procedure accumulating, and only the first is the one
+/// the name suggests:
+///
+/// 1. **It reads an attribute it emits.** `age = age + dt` reads one;
+///    `position = f(seed, t)` does not. Every read counts, wherever it is —
+///    inside an `if`, inside a `for`, or bound to a `let` and used later — so
+///    this walks every expression in every block rather than trying to decide
+///    which reads "reach" a write. A read that reaches an emitted attribute's
+///    value through a local is still a read of that attribute, and it is the
+///    read this looks at, not the local.
+///
+///    Within an L1 procedure `consumes ⊆ emit` holds
+///    (`check_consumes_emitted`), so in practice *any* attribute read in an L1
+///    block is a read of an emitted one. The membership test is still written
+///    out, because it is the rule the property actually names and it stays
+///    correct if the two lists are ever allowed to come apart.
+///
+/// 2. **It has a `spawn` block.** Spawning and closed form cannot coexist, and
+///    the reason is not about attributes at all: an element that does not
+///    exist yet cannot be stepped, and *whether it exists* is engine state —
+///    the spawn accumulator, the seed counter, the live range — accumulated
+///    from every frame since the Set started. Jumping to `t = 30` on a Set that
+///    spawns 8000 elements a second does not produce 240,000 elements; it
+///    produces the handful of them one frame's accumulator emits, at their
+///    spawn state. The population is the state that had to be warmed, and it is
+///    not reachable from `seed` and `t`. So a `spawn` block disqualifies,
+///    however pure the `element` block is.
+///
+/// 3. **It can `kill()`.** A killed element stays killed, so the live set at
+///    `t` is a function of every step taken to get there and not of `t`. Even a
+///    kill condition written purely in `seed` and `t` is history-dependent in
+///    the direction that matters: `if t > 5.0 && t < 5.1 { kill() }` removes
+///    nothing at all if `t = 6.0` is arrived at in one step.
+///
+/// **The conservative direction is the safe one, and this errs into it
+/// deliberately.** There is no diagnostic attached to this decision — nothing
+/// is rejected either way — so the only way it can be wrong is silently. Wrong
+/// in the strict direction costs a warm-up that was not needed: a slot primes
+/// for a few seconds it could have skipped, and cannot be scrubbed when it
+/// could have been. Wrong in the permissive direction is far worse, and gets
+/// worse the more the property is used for. It puts a slot on air showing an
+/// unwarmed image — particles being born, an integrator at its initial
+/// condition — while telling the governor it needed no warming, so nothing
+/// anywhere is looking for the problem. And once transport is built on this,
+/// a wrongly-claimed closed form is a scrub that produces garbage rather than
+/// merely a bad first second: seeking an accumulating procedure to an
+/// arbitrary `t` evaluates it once from wherever it happened to be. That is
+/// the failure this whole pass exists to refuse — checking clean and then
+/// coming up short at runtime. Under-claim.
+fn is_closed_form(kind: Kind, emit: &HashSet<Attr>, blocks: &[TBlock]) -> bool {
+    // Vacuously true for L4, and said here rather than left to fall out of an
+    // empty `emit`. An L4 procedure holds no per-element state: it reads what
+    // L1 wrote and throws the result at a target, so there is nothing about it
+    // to warm at any `t`. Nothing rejects a stray `emit` on an L4 — it has no
+    // meaning there and no buffer behind it — and without this line such a
+    // procedure reads its own `emit` list in `vertex`, is called accumulating,
+    // and drags a Set that needs no priming into needing it.
+    if kind == Kind::L4 {
+        return true;
+    }
+    if blocks.iter().any(|b| b.kind == BlockKind::Spawn) {
+        return false;
+    }
+    blocks
+        .iter()
+        .all(|b| !accumulates(&b.stmts, emit))
+}
+
+/// `kill()`, or a read of an emitted attribute, anywhere under `stmts`.
+fn accumulates(stmts: &[TStmt], emit: &HashSet<Attr>) -> bool {
+    stmts.iter().any(|s| match s {
+        TStmt::Kill { .. } => true,
+        TStmt::Let { value, .. } | TStmt::Var { value, .. } => reads_emitted(value, emit),
+        TStmt::Assign { value, .. } => reads_emitted(value, emit),
+        TStmt::If { cond, then, els, .. } => {
+            reads_emitted(cond, emit) || accumulates(then, emit) || accumulates(els, emit)
+        }
+        TStmt::For { body, .. } => accumulates(body, emit),
+    })
+}
+
+/// A read of an emitted attribute anywhere in one expression.
+fn reads_emitted(e: &TExpr, emit: &HashSet<Attr>) -> bool {
+    match &e.kind {
+        TExprKind::Attr(a) => emit.contains(a),
+        TExprKind::Lit(_)
+        | TExprKind::Local(_)
+        | TExprKind::Param(_)
+        | TExprKind::Ambient(_) => false,
+        TExprKind::Unary { value, .. } => reads_emitted(value, emit),
+        TExprKind::Binary { lhs, rhs, .. } => {
+            reads_emitted(lhs, emit) || reads_emitted(rhs, emit)
+        }
+        TExprKind::Builtin { args, .. } | TExprKind::Construct { args } => {
+            args.iter().any(|a| reads_emitted(a, emit))
+        }
+        TExprKind::Swizzle { value, .. } => reads_emitted(value, emit),
     }
 }
 

@@ -113,6 +113,9 @@ mod tests {
             consumes: Vec::new(),
             blocks: Vec::new(),
             cost: None,
+            // Hand-built fixtures: `check` is what decides this, and these never
+            // run it. `false` is the conservative side and nothing here reads it.
+            closed_form: false,
             span: span(),
         }
     }

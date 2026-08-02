@@ -84,7 +84,8 @@ hint: the signal bus is not readable from IR — declare `param energy` and atta
 
 - Rust + wgpu 26 (WGSL), winit
 - No UI for now. V1 is a CLI plus a window
-- Audio and external sync are out of V1 scope
+- Audio input exists — spectrum, energy, onset, and a beat grid that corrects the local
+  oscillator. External sync (Ableton Link, deck protocols) does not
 
 ---
 
@@ -96,7 +97,8 @@ hint: the signal bus is not readable from IR — declare `param energy` and atta
 | Artifact | A saved procedure. Content-addressed and immutable |
 | Slot | Two things, and it is worth knowing which. A **layer slot** is a position within a Set (L1/L2/L3/L4). A **deck slot** is a position within the deck, holding a whole Set. `docs/roadmap.md` says *member* for the second; the code says `Deck::slot`, and that disagreement is recorded rather than resolved — renaming either is churn until something depends on telling them apart |
 | Deck | Where prepared-but-not-showing material lives, at Set granularity. Up to four slots; one to four of them Live and composited, the rest resident |
-| Residency | How ready a deck slot is: **Live** (composited) or **Allocated** (compiled, buffers held, not stepping, keeping its state). **Priming** is the third and does not exist yet |
+| Residency | How ready a deck slot is, over three levels: **Live** (composited), **Priming** (stepped, not drawn), **Allocated** (compiled, buffers held, not stepping, keeping its state). It is **two facts, not one** — what the operator *requested*, which only they change, and what the engine is *effectively* doing, which the governor recomputes each pass |
+| Parked | Requested Priming, effective Allocated: waiting for budget, **not cancelled**. It resumes by itself when there is room, because the request is never overwritten — every pass recomputes the effective level from it |
 | Set | Filled slots forming one video source. The unit of compilation and of lifecycle |
 | VideoSource | The interface L5 consumes. Set is one implementation of it |
 | Signal bus | Input distributed to every layer. Always complete; values carry a confidence |
@@ -130,6 +132,8 @@ during implementation, these win.
   range change, and only then new code
 - **The record stream is the only path that mutates engine state.** CLI, GUI, and agents
   all write the same records. The engine cannot distinguish a human from an agent
+- **The governor may lower a slot's effective residency and may never write its requested
+  one.** A refusal is a deferral: the operator's request is what the next pass reads
 
 ### Signals
 
@@ -290,12 +294,15 @@ governor, alongside the decision about whether GPU timestamps can be trusted at 
 | Set, buffers, pipelines, compute and render | Works. Double buffering, Set-level `capacity`, parameters as uniform writes. Nothing on the frame path allocates: both per-frame uniform writes go through storage sized once at build time |
 | Linear HDR end to end, sRGB once at output | Works |
 | Store | Works standalone. Nothing outside the crate reads a `Record`, so a Set file is a format the engine agrees with and does not yet obey |
-| Signal binding | Works. A binding samples the bus, curves it, maps it onto a range, and blends into the parameter **by confidence** — so a binding to `beat` or `bar` takes full effect today, and one to `energy` moves a tenth as far, because there is no microphone. When audio lands the same binding starts working with nothing else changed |
+| Signal binding | Works. A binding samples the bus, curves it, maps it onto a range, and blends into the parameter **by confidence** — so a binding to `beat` or `bar` takes full effect today, and one to `energy` moves fully when a microphone is open and a tenth as far when none is. The binding did not change when audio arrived; the same name started answering with a different confidence |
 | Oscillator, synthesized bus, noise | On the frame path now. One oscillator per session, owned by the deck, advanced by the same `steps` the slots are |
 | Element lifecycle | Works. `spawn` and `kill()` run, order-preserving compaction is wired into the L1 dispatch, and `element` and the draw are both indirect off one counts buffer. A procedure that can neither spawn nor kill skips the scan entirely and dispatches in place |
 | **The store, in use** | The CLI does not use it. Artifacts are loose files |
 | Tone mapping | Works. Four operators — clamp, Reinhard, ACES, AgX — chosen by a uniform, so switching one mid-set is a buffer write. ACES by default, picked by rendering all four across five exposures and looking; `cargo run -p karakuri-engine --example tonemap_compare` regenerates that. Applied once, immediately before the single sRGB encode |
-| The deck and the mix | Works. Up to four slots, each with its own `HotSwap` and its own HDR target, composited with a per-slot gain. Residency is Live or Allocated; Allocated holds its state, so a slot brought back resumes rather than restarts. Priming — the third level — waits for the governor that would decide what may prime and how fast |
+| The deck and the mix | Works. Up to four slots, each with its own `HotSwap` and its own HDR target, composited with a per-slot gain. Allocated holds its state, so a slot brought back resumes rather than restarts |
+| Priming and the governor | Works. Priming steps a slot and does not draw it — L1 owns every piece of per-element state and L4 is stateless, so warming is the compute passes and nothing else. The governor computes each slot's effective residency from the operator's request and a budget of per-Set costs measured by the probe at build time. It **never demotes a Live slot**: an over-budget deck reports and suspends priming. An unmeasured Live slot means the committed cost is unknown, and unknown is not headroom, so priming is suspended until every slot has been measured |
+| Audio | Works. Analysis runs in the driver's callback, not on the frame path, and the frame reads one small value through a `try_lock` on both sides so neither can block. Level is RMS mapped −60 to −6 dBFS: a mastered track's loud windows sit near the top of that, where a top at 0 dBFS would leave real music between 0.80 and 0.90 and a bound parameter barely moving |
+| Beat tracking | Works. The grid is **predicted, not chased**: once locked it free-runs, takes a slow trim, and moves not at all for a single disagreeing estimate — re-acquiring takes eight consecutive consistent revisions. Half- and double-tempo are decided explicitly rather than by luck. The correction leads by the analysis lag plus the output lag, so what is shown lands on the beat rather than behind it |
 | Per-slot metering | Works. Mean and peak linear Rec.709 luminance per Live slot, reduced on the GPU and read back without ever waiting, so it lags a few frames and says by how many. An Allocated slot reads nothing rather than reading what it last drew |
 | **Bloom** | Does not exist. Values above 1.0 are what would feed it |
 | **Automatic gain** | Deliberately not built. The meter shows the number; nothing acts on it. An exposure that moves by itself is the worst thing that can happen on stage, and the honest order is to show the measurement first |

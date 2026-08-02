@@ -104,6 +104,59 @@
 //! The worker also flushes and waits for that upload on its own thread before
 //! handing the Set over, which removes most of the cost from the window rather
 //! than merely hiding it inside the warmup.
+//!
+//! ## The worker also measures what it built
+//!
+//! The watchdog above is a *frame interval*, and a frame interval cannot be
+//! divided among the slots that produced it — every Live slot in a deck is
+//! judged against the whole deck's, so a budget that fits one Set rolls back
+//! every candidate in a deck of four. That defect is fatal for a governor,
+//! which has to add up what several Sets cost and decide, so the governor does
+//! not use it. It uses a **per-Set measurement taken here**, on the worker
+//! thread, as part of building the Set.
+//!
+//! This is the right place for three reasons and they are all already written
+//! down in this repository:
+//!
+//! - The worker already does a submit-and-wait before handing a Set over (see
+//!   "The window" above), so there is somewhere to measure that is not the
+//!   render thread. [`crate::probe`]'s whole method is submit, wait, repeat.
+//! - `crate::probe` already knows that GPU timestamps are advertised, enabled
+//!   and unreliable on this machine, calibrates against a known-heavy workload
+//!   rather than trusting the feature flag, and labels every number with how it
+//!   was obtained. A governor steering on an unlabelled number is the failure
+//!   mode `docs/roadmap.md` asks to decide about before building this.
+//! - A Set is the unit the governor budgets in, and it is the unit that gets
+//!   built. Measuring it where it is built means the measurement travels with
+//!   it and cannot get attached to the wrong one.
+//!
+//! **What the measurement is of**, exactly: one frame of this Set at
+//! [`PROBE_STEPS`] simulation steps, at its real capacity and with its real
+//! parameters and bindings already applied, rendered into an offscreen target
+//! of [`PROBE_RESOLUTION`] — its L1 compute passes and its L4 draw, the
+//! commands `VideoSource::render` records and nothing else.
+//!
+//! **What it cannot see**, and every one of these matters to whatever reads it:
+//!
+//! - **Resolution.** It is taken at a fixed reference size, not at the deck's.
+//!   L4 cost is fill-rate bound, so a slot on a 4K output costs several times
+//!   this. The number is comparable *between slots* — which is what a budget
+//!   needs — and is not a prediction of this machine's frame time.
+//! - **The composite, the meters, the present pass, and `prepare`.** None of
+//!   them is inside `render`. The deck's own per-frame cost is not in here.
+//! - **The future.** It is one measurement of a cold Set at one instant. A
+//!   procedure whose population grows, whose points get bigger, or whose
+//!   overdraw rises as it spreads costs more later, and nothing re-measures.
+//! - **Anything host-side**, on the GPU path; and on the fallback path it
+//!   includes submission and synchronization overhead and reads biased high.
+//!   [`Measurement::method`] is which, and it is not decoration.
+//!
+//! Measuring means *stepping* the Set, which a Set about to be swapped in must
+//! not arrive having done — it is documented as arriving cold. So the probe run
+//! is followed by [`Set::rewind`], which puts the buffers, `t`, parity and the
+//! spawn accumulator back to what `Set::build` left. That is another
+//! whole-capacity upload on the worker thread, next to the one that was already
+//! there.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -113,7 +166,8 @@ use std::time::{Duration, Instant};
 
 use karakuri_ir::typed::Checked;
 
-use crate::binding::Binding;
+use crate::binding::{Binding, Signals};
+use crate::probe::{Measurement, Probe};
 use crate::set::{Set, SetError};
 
 /// Frames discarded after a swap, before the watchdog starts measuring. See
@@ -148,6 +202,23 @@ const JUDGE_FRAMES: usize = 30;
 /// live, and picking a second, worse answer here would be something M2 has to
 /// remove.
 pub const DEFAULT_BUDGET_MS: f32 = 20.0;
+
+/// The offscreen size every per-Set measurement is taken at.
+///
+/// Fixed rather than the deck's, and that is a trade rather than an oversight.
+/// The deck's size is render-thread state; the worker would have to be told it,
+/// and a measurement taken at whatever the window happened to be would not be
+/// comparable with one taken a drag-resize earlier. A governor adds
+/// measurements together and compares them, so **comparable matters more than
+/// absolute** — and an absolute number would be a lie the moment the window
+/// moved anyway. 1280x720 because it is the size every other figure in
+/// `README.md` was taken at.
+pub const PROBE_RESOLUTION: (u32, u32) = (1280, 720);
+
+/// Simulation steps per measured frame. One, because that is what a `tick`
+/// carries in normal play; a Set that falls behind and substeps costs a
+/// multiple of this, which is the caller's arithmetic rather than the probe's.
+pub const PROBE_STEPS: u8 = 1;
 
 /// How long a [`Source`] with nothing to report should block before returning.
 /// The worker does nothing else between polls, so a source that returns
@@ -290,6 +361,10 @@ impl std::fmt::Display for Event {
 struct Built {
     label: Arc<str>,
     result: Result<Set, SetError>,
+    /// What the worker measured this Set at, if it got that far. Travels with
+    /// the Set rather than being looked up later, so it cannot be attached to
+    /// the wrong one — see "The worker also measures what it built".
+    cost: Option<Measurement>,
 }
 
 /// The candidate currently being watched.
@@ -306,10 +381,17 @@ struct Trial {
 /// way, which is the point of routing both through here.
 pub struct HotSwap {
     live: Set,
+    /// What the worker measured [`HotSwap::live`] at, if anything did. `None`
+    /// for a Set no worker built — [`HotSwap::fixed`]'s, and the one `new` was
+    /// constructed with — until [`HotSwap::set_measured_cost`] supplies one.
+    cost: Option<Measurement>,
     /// The Set that was live before the current one, held so that a rollback
     /// is a move rather than a rebuild. Not stepped while parked; see "What a
     /// swap does not do" in the module doc.
     previous: Option<Set>,
+    /// Its measurement, parked with it. A rollback restores both, or the
+    /// governor would go on budgeting for a Set that is no longer there.
+    previous_cost: Option<Measurement>,
     trial: Option<Trial>,
     /// Frame intervals in the current judging window. Capacity is fixed at
     /// [`JUDGE_FRAMES`] here so that `push` on the render thread never grows
@@ -376,7 +458,9 @@ impl HotSwap {
 
         HotSwap {
             live,
+            cost: None,
             previous: None,
+            previous_cost: None,
             trial: None,
             samples: Vec::with_capacity(JUDGE_FRAMES),
             budget_ms,
@@ -403,7 +487,9 @@ impl HotSwap {
         let (_, built_rx) = mpsc::channel();
         HotSwap {
             live,
+            cost: None,
             previous: None,
+            previous_cost: None,
             trial: None,
             samples: Vec::new(),
             budget_ms: f32::INFINITY,
@@ -528,6 +614,78 @@ impl HotSwap {
         self.budget_ms
     }
 
+    /// **What one frame of the live Set costs**, as measured when it was built
+    /// — not a frame interval, and not this frame.
+    ///
+    /// `None` means nothing has measured this Set, which is not the same as
+    /// "it is free": [`HotSwap::fixed`] and the Set [`HotSwap::new`] is
+    /// constructed with arrive unmeasured, and stay that way until
+    /// [`HotSwap::measure_live`] is called. [`crate::governor`] treats an
+    /// unmeasured Set as unbudgetable rather than as zero, which is the only
+    /// safe reading — **including when the slot is Live**, where it makes the
+    /// deck's committed cost unknown and suspends priming. Measuring the Sets
+    /// a caller built itself is therefore a startup step rather than an
+    /// optional refinement; see
+    /// [`Deck::measure_slots`](crate::deck::Deck::measure_slots).
+    ///
+    /// Read [`Measurement::method`] before trusting the number; read
+    /// "The worker also measures what it built" in the module doc for what it
+    /// is a measurement of and what it cannot see.
+    pub fn measured_cost(&self) -> Option<Measurement> {
+        self.cost
+    }
+
+    /// **Measure the Set that is live now**, and keep the result.
+    ///
+    /// For a Set no worker built — [`HotSwap::fixed`]'s, or the one handed to
+    /// [`HotSwap::new`] — which is otherwise invisible to the governor, and
+    /// which makes the whole deck unbudgetable for as long as it is on air and
+    /// unmeasured. This is the reachable form of [`measure`]: the live `Set` is
+    /// not handed out mutably (that is `live_mut`, and it is `pub(crate)` for
+    /// good reasons), so without this a caller cannot measure a Set it has
+    /// already put into a `HotSwap`.
+    ///
+    /// **Never on the render thread and never inside a frame.** It submits and
+    /// waits, once per sample, and it steps the Set and rewinds it — which is
+    /// another whole-capacity upload. Startup is where it belongs.
+    ///
+    /// **On a Set that has already stepped, this is destructive.** [`measure`]
+    /// ends in [`Set::rewind`], which restores what `Set::build` left rather
+    /// than what this call found: `t` back to zero, element buffers cold. That
+    /// is exactly right for the cold Set it is meant for and is a reset for any
+    /// other, so measure before the first frame.
+    /// [`Deck::measure_slots`](crate::deck::Deck::measure_slots) skips a slot
+    /// that has stepped for this reason; a caller reaching this directly is
+    /// holding the check itself.
+    ///
+    /// `probe` is taken rather than constructed for the reason [`measure`]
+    /// gives: calibration is expensive and two probes can disagree about this
+    /// adapter, producing numbers a governor would then be summing.
+    /// [`Deck::measure_slots`](crate::deck::Deck::measure_slots) is the
+    /// deck-wide version and constructs one probe for all of them.
+    pub fn measure_live(
+        &mut self,
+        probe: &Probe,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Measurement {
+        let cost = measure(probe, device, queue, &mut self.live);
+        self.cost = Some(cost);
+        cost
+    }
+
+    /// Attach a measurement to the Set that is live now.
+    ///
+    /// [`HotSwap::measure_live`] is the one that takes it; this is for a caller
+    /// that has a number from somewhere else — a test pinning exact
+    /// arithmetic, or a measurement carried across a rebuild of the same Set.
+    ///
+    /// Replaced wholesale by the next build that lands, since that
+    /// measurement is of a different Set.
+    pub fn set_measured_cost(&mut self, cost: Measurement) {
+        self.cost = Some(cost);
+    }
+
     /// Whether a candidate is currently on trial. While one is, incoming
     /// builds are left in the channel — see [`HotSwap::install_if_ready`].
     pub fn on_trial(&self) -> bool {
@@ -590,8 +748,11 @@ impl HotSwap {
 
         if median_ms > self.budget_ms {
             // The candidate goes, the parked Set comes back. It resumes at the
-            // `t` it stopped at, because nothing stepped it while it waited.
+            // `t` it stopped at, because nothing stepped it while it waited —
+            // and its measurement comes back with it, or the governor would go
+            // on budgeting for the candidate that is no longer there.
             let candidate = std::mem::replace(&mut self.live, previous);
+            self.cost = self.previous_cost.take();
             self.retire(candidate);
             self.events.push(Event::RolledBack {
                 label: trial.label,
@@ -599,6 +760,7 @@ impl HotSwap {
                 budget_ms: self.budget_ms,
             });
         } else {
+            self.previous_cost = None;
             self.retire(previous);
             self.events.push(Event::Accepted {
                 label: trial.label,
@@ -665,6 +827,7 @@ impl HotSwap {
                 candidate.resize(self.viewport.0, self.viewport.1);
                 let outgoing = std::mem::replace(&mut self.live, candidate);
                 self.previous = Some(outgoing);
+                self.previous_cost = std::mem::replace(&mut self.cost, built.cost);
                 self.samples.clear();
                 self.trial = Some(Trial {
                     label: Arc::clone(&built.label),
@@ -716,6 +879,58 @@ const GRAVEYARD_CAPACITY: usize = 4;
 /// frame, and they are mutually exclusive.
 const EVENT_CAPACITY: usize = 4;
 
+/// Measure one frame of `set` and leave it exactly as it was found.
+///
+/// **Never on the render thread.** It submits and waits, once per sample, which
+/// is what makes the number mean anything and is the pattern the frame loop must
+/// never use; and it steps the Set, so it has to rewind it afterwards, which is
+/// another whole-capacity upload. The worker calls this as part of building; a
+/// caller with a [`HotSwap::fixed`] Set reaches it through
+/// [`HotSwap::measure_live`], or through
+/// [`Deck::measure_slots`](crate::deck::Deck::measure_slots) for a whole deck
+/// at once, before the first frame.
+///
+/// `probe` is taken rather than constructed because constructing one runs a
+/// calibration workload ten times over (see [`Probe::new`]), and because two
+/// independently constructed probes can land on different
+/// [`MeasurementMethod`](crate::probe::MeasurementMethod)s and produce numbers
+/// that are not comparable — which is precisely what a governor summing them
+/// would then be doing.
+///
+/// The Set is resized to [`PROBE_RESOLUTION`] for the run and **resized back**
+/// before this returns. That is not decoration: the viewport is what the
+/// camera's aspect ratio is derived from in [`Set::prepare`], it is the one
+/// piece of a Set's state a probe run touches that [`Set::rewind`] has no
+/// business resetting — `build` leaves it at 1×1 and a caller's size is not a
+/// thing to rewind to — and a Set left at 720p renders a different picture on
+/// its first frame in a deck of any other shape. `HotSwap::install_if_ready`
+/// happens to resize an arriving candidate anyway, which is what kept this
+/// invisible; a caller measuring its own [`HotSwap::fixed`] Set has no such
+/// second chance.
+pub fn measure(
+    probe: &Probe,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    set: &mut Set,
+) -> Measurement {
+    let capacity = set.capacity();
+    let viewport = set.viewport();
+    set.resize(PROBE_RESOLUTION.0, PROBE_RESOLUTION.1);
+    // The uniforms have never been written otherwise — `build` allocates them
+    // and leaves them at whatever the driver's fresh buffer holds — so the
+    // measured frame has to be preceded by a real `prepare`, exactly as an
+    // on-air frame is. The session's signals are `default` here: a probe run is
+    // not part of a session and has no tick sequence of its own, and a binding
+    // resolved against a phase of zero is the same shape of work as one
+    // resolved against any other phase.
+    set.prepare(queue, PROBE_STEPS, &Signals::default());
+    let measurement = probe.run(device, queue, set, PROBE_STEPS, capacity);
+    // Back to cold. `Set::rewind` is documented for this one caller.
+    set.rewind(device, queue);
+    set.resize(viewport.0, viewport.1);
+    measurement
+}
+
 /// The build worker.
 ///
 /// A poll loop rather than a blocking one, because it has two jobs: asking the
@@ -730,6 +945,14 @@ fn run_worker(
     graveyard: Arc<Mutex<Vec<Set>>>,
     stop: Arc<AtomicBool>,
 ) {
+    // Constructed once, on first use, and reused for every build this worker
+    // ever does. Once because calibration is expensive (ten heavy runs) and
+    // once because two probes can disagree with each other about whether this
+    // adapter's timestamps work — see `Probe::new`. Lazily because a worker
+    // that is never given anything to build should not allocate a 720p target
+    // and half a second of calibration for nothing.
+    let mut probe: Option<Probe> = None;
+
     while !stop.load(Ordering::Relaxed) {
         // Take the retired Sets out from under the lock before dropping them:
         // releasing a Set's GPU resources is not instant, and the render
@@ -795,7 +1018,9 @@ fn run_worker(
             }),
         };
 
-        if result.is_ok() {
+        let mut result = result;
+        let mut cost = None;
+        if let Ok(set) = &mut result {
             // `Set::build` leaves the whole element and alive buffer contents
             // staged on the queue — megabytes at a real capacity. Left there,
             // they would be flushed by whatever the *render thread* submits
@@ -807,9 +1032,44 @@ fn run_worker(
             // belongs.
             queue.submit([]);
             let _ = device.poll(wgpu::PollType::Wait);
+
+            // And then measure it, on the same thread and for the same reason.
+            // Caught for the same reason the build is: this reaches driver code
+            // through a freshly generated pipeline, and a panic here would take
+            // the worker with it and leave a `--watch` session silently
+            // unable to build anything again. A build that could not be
+            // measured is still a build — it travels without a measurement and
+            // the governor declines to budget for it, which is the conservative
+            // reading rather than a failure.
+            let probe = probe.get_or_insert_with(|| {
+                Probe::new(
+                    &device,
+                    &queue,
+                    device.features().contains(wgpu::Features::TIMESTAMP_QUERY),
+                    PROBE_RESOLUTION,
+                )
+            });
+            cost = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                measure(probe, &device, &queue, set)
+            }))
+            .ok();
+            if cost.is_none() {
+                eprintln!("  `{label}` could not be measured; it will not be budgeted for");
+            }
+
+            // And flush again, for the reason the first flush exists. `measure`
+            // ends in `Set::rewind`, which re-stages the *whole* element and
+            // alive buffers — the same megabytes `build` staged, put back a
+            // second time — and nothing in `measure` submits after it. Left
+            // here they would ride out on the render thread's next submission,
+            // which is precisely the cost the flush above was added to keep out
+            // of the swap frame. The flush before the measurement does not
+            // cover an upload the measurement itself creates.
+            queue.submit([]);
+            let _ = device.poll(wgpu::PollType::Wait);
         }
 
-        if out.send(Built { label, result }).is_err() {
+        if out.send(Built { label, result, cost }).is_err() {
             // The render thread is gone.
             break;
         }

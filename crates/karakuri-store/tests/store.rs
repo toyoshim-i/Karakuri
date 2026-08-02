@@ -242,3 +242,50 @@ fn projection_folds_repeated_edits_last_write_wins() {
     assert_eq!(set.len(), 1);
     assert_eq!(set[0].record(), &param(Layer::L1, "radius", 3.0));
 }
+
+/// The same rule for the two records audio added. A Set file carries no time,
+/// and both of these are what one frame measured or decided — so the writer
+/// refuses them for the same reason it refuses a tick, rather than for the
+/// narrower reason its error variant is named after.
+#[test]
+fn write_set_rejects_an_audio_frame_and_a_tempo_correction() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    for (name, record) in [
+        (
+            "audio",
+            Record::Audio {
+                energy: 0.4,
+                onset: 0.0,
+                bands: vec![0.1, 0.2],
+                confidence: 1.0,
+            },
+        ),
+        (
+            "tempo",
+            Record::Tempo {
+                bpm: 128.0,
+                shift: 0.0,
+                confidence: 0.9,
+            },
+        ),
+    ] {
+        let lines = vec![
+            Line::new(Record::Set {
+                id: "drift_01".into(),
+                v: 1,
+            }),
+            Line::new(record),
+        ];
+        match store.write_set(name, &lines) {
+            Err(StoreError::TickInSet { index }) => assert_eq!(index, 1),
+            other => panic!("a `{name}` record in a Set file was accepted: {other:?}"),
+        }
+        assert!(!dir
+            .path()
+            .join("sets")
+            .join(format!("{name}.set.ndjson"))
+            .exists());
+    }
+}
