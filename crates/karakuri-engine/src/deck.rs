@@ -166,21 +166,29 @@
 //! fast, because `t` is `steps_taken * dt` and both arrive at a given `t`
 //! having taken the same steps.
 //!
-//! **One exception, and it is a real one: a Set with a signal binding.** A
-//! Priming slot is handed the *session's* [`Signals`] — the deck's one
-//! oscillator, at this frame's phase — because that is what every slot in the
-//! frame is handed. A slot stepping one frame in `n` has taken a fraction of
-//! the session's steps, so its `t` and the phase it is being driven by come
-//! apart, and a bound param is sampled at instants the slot's own clock never
-//! reaches. The identity above then holds only up to the rate: "primed at
-//! one-in-two then Live" is *not* bit-identical to "always Live" for a Set with
-//! a binding, and `spawn_rate` is a bound param in the ir-spec's own answer to
-//! irregular spawning, so this reaches the population and not only the look.
-//! At `prime_one_in == 1` there is no gap and the identity is exact, which is
-//! what `tests/priming.rs` covers at both rates. Closing it properly means a
-//! Priming slot being driven by the session's tempo advanced to *its own* step
-//! count rather than to the frame's — a slot-local view of the one oscillator,
-//! not a second oscillator — and that is a design change rather than a repair.
+//! **That took one repair, and a Set with a signal binding is where it showed.**
+//! A Priming slot used to be handed the *session's* [`Signals`] at this frame's
+//! phase, because that is what every slot in the frame was handed. A slot
+//! stepping one frame in `n` has taken a fraction of the session's steps, so
+//! its `t` and the phase driving it came apart, and a bound param was sampled
+//! at instants the slot's own clock never reached — "primed at one-in-two then
+//! Live" was *not* bit-identical to "always Live" for a Set with a binding, and
+//! `spawn_rate` is a bound param in the ir-spec's own answer to irregular
+//! spawning, so it reached the population and not only the look.
+//!
+//! What closes it is a slot-local view of the one oscillator — the session's
+//! grid read at the slot's own position along it, not a second oscillator.
+//! [`Set::prepare_warming`](crate::set::Set::prepare_warming) is that view and
+//! carries the argument; the position is expressed as a **lag in steps** rather
+//! than as a time, so a slot that is not behind reads the session's oscillator
+//! bit for bit and the identity is exact rather than nearly exact.
+//!
+//! Two things that repair does not reach, both named where the code is: a
+//! tempo *correction* during a slow warm-up, since the grid is read as it
+//! stands rather than as it was, and measured audio, which has no past value to
+//! be read at. `tests/priming.rs` covers rate-invariance against a bound Set
+//! and the full-rate identity against a Live one — the second is the test that
+//! says which instant is the right one, and the first cannot see it.
 //!
 //! What Priming is *not* is a preview. Seeing a slot before it goes on air is
 //! M2's "live preview of any slot's output" and wants a target and a draw; this
@@ -233,6 +241,17 @@
 //! it is the session's rather than the slot's. A slot brought back on air
 //! rejoins the beat the rest of the deck is on rather than resuming a phase of
 //! its own, which is the right answer for the same reason the tempo is shared.
+//!
+//! A `Priming` slot is the one case that reads the grid somewhere other than
+//! the session's position on it. It steps on some frames and not others, so its
+//! `t` falls behind at a rate the *governor* chose, and giving it the session's
+//! phase would make that rate decide what it warms into. It reads the same
+//! oscillator, held back by the steps it has not taken —
+//! [`Set::prepare_warming`](crate::set::Set::prepare_warming) — and rejoins the
+//! session's position the moment it goes on air, where nothing sees the jump
+//! because the frame before was not drawn. A slot that is not behind is held
+//! back by nothing and reads the session's oscillator itself, which is what
+//! keeps the identity above bit-exact for bound material.
 //!
 //! ## Level metering
 //!
@@ -1038,7 +1057,12 @@ impl Frame<'_> {
                     slot.prime_phase = slot.prime_phase.wrapping_add(1);
                     if step_now {
                         let set = slot.swap.live_mut();
-                        set.prepare(self.queue, steps, signals);
+                        // `prepare_warming`, not `prepare`: this slot's clock
+                        // is behind the session's by however much the governor
+                        // has slowed it, and handing it the session's phase
+                        // would let the priming *rate* decide what it warms
+                        // into. See `Set::prepare_warming`.
+                        set.prepare_warming(self.queue, steps, signals);
                         set.step(encoder, steps);
                     }
                 }

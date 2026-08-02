@@ -73,6 +73,10 @@ pub struct Oscillator {
     /// Musical position at `anchor_t`, phase shifts **excluded** — what noise
     /// reads. See the module doc.
     anchor_elapsed: f64,
+    /// Steps advanced so far. `t` is the f64 sum those steps produced and this
+    /// is the count they came in as; the two are not interchangeable, which is
+    /// exactly why both are kept — see [`Oscillator::steps_taken`].
+    steps_taken: u64,
 }
 
 /// Tempo is clamped into this range. The lower bound matters: every noise
@@ -92,6 +96,7 @@ impl Oscillator {
             anchor_t: 0.0,
             anchor_beats: 0.0,
             anchor_elapsed: 0.0,
+            steps_taken: 0,
         }
     }
 
@@ -103,6 +108,52 @@ impl Oscillator {
     /// both arguments are handed in.
     pub fn advance(&mut self, steps: u8, dt: f32) {
         self.t += steps as f64 * dt as f64;
+        self.steps_taken += u64::from(steps);
+    }
+
+    /// **The same grid, read `seconds` earlier.** A copy with `t` moved back,
+    /// leaving the tempo and both anchors alone.
+    ///
+    /// **A lag rather than a position, and that is the whole of the design.**
+    /// A caller reading a clock that is behind the session's knows how far
+    /// behind it is — an integer step count, exactly — and does not know its own
+    /// `t` to the last bit, because deriving one costs a rounding the session's
+    /// accumulated `t` never took. Handing that derived position in would make
+    /// `behind(0)` *nearly* the caller's own oscillator, and "nearly" is not a
+    /// property anything can rest on. `seconds == 0.0` returns `self` bit for
+    /// bit, so a caller that is not behind reads exactly what it would have
+    /// read without asking.
+    ///
+    /// This is the grid **as it stands now**, extrapolated backwards — not the
+    /// grid as it was then. The two differ by every correction applied since: a
+    /// correction moves the anchor and nothing remembers where it was, so
+    /// reaching back past one gives the current tempo run backwards from the
+    /// current anchor rather than the tempo that was actually running. That is
+    /// the property `Checked::closed_form`'s documentation says the oscillator
+    /// does not have, stated from this side.
+    ///
+    /// It is the right answer for a caller reading a *different clock now*, and
+    /// the wrong one for a caller reading *the past*. The first is what a slot
+    /// warming behind the session wants: one grid, one tempo, every slot on it,
+    /// each at its own position along it. The second would need a correction
+    /// history, and nothing keeps one.
+    pub fn behind(self, seconds: f64) -> Oscillator {
+        Oscillator {
+            t: self.t - seconds,
+            ..self
+        }
+    }
+
+    /// Steps this oscillator has been advanced by, summed over every
+    /// [`advance`](Oscillator::advance).
+    ///
+    /// The **integer** the f64 `t` was accumulated from, kept so that a caller
+    /// whose own clock is also a step count can express the gap between them
+    /// exactly. Two derived `t`s subtracted would not be exact and the answer
+    /// would not be zero when the clocks agree, which is the one case that has
+    /// to be exact — see [`Oscillator::behind`].
+    pub fn steps_taken(&self) -> u64 {
+        self.steps_taken
     }
 
     /// Apply a correction: a new tempo, and a phase shift in beats.
