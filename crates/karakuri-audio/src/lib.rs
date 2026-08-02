@@ -31,16 +31,43 @@
 //! A correction has to lead, or the beat lands late and looks wrong rather than
 //! random. The two durations it leads by are:
 //!
-//! - **A** = input buffer + half an analysis window. Both are known and both
-//!   are measured here: [`device::Reading::age`] carries their sum, plus
-//!   however long ago the last publish was.
-//! - **D** = the frame queue, the present, and the display's own pipeline. The
-//!   first is knowable and the last is not, so it is an **operator-adjustable
-//!   offset with a default**, not a measurement — see `karakuri-cli`'s
-//!   `--display-latency-ms`. A performer will nudge it by ear, and that dial is
-//!   the honest place for what cannot be measured.
+//! - **A** = half an analysis window, plus whatever of the device buffer
+//!   arrived after the sample the block ends on. Both are known and both are
+//!   measured here: [`device::Reading::age`] carries their sum, plus however
+//!   long ago the last publish was.
+//! - **D** = the frame queue, the present, and everything past the two outputs.
+//!   The first is knowable and the rest is not.
 //!
 //! [`lock`] explains what is done with them.
+//!
+//! ## Why the offset is the answer and not a better measurement
+//!
+//! It is tempting to read the unknown part of **D** as the display's own
+//! pipeline and go looking for a number for it. That is the wrong shape of the
+//! problem. **Sound and picture leave by different paths and neither ends at
+//! the machine**: the audio goes to a desk, through processing, to a PA that
+//! may be metres or tens of metres from the audience and may be delayed
+//! deliberately; the picture goes to a projector, a scaler, an LED processor,
+//! a stream. Either can be later. Nothing at this end can see any of it, and
+//! the sum is regularly larger than everything measured here put together.
+//!
+//! It also cannot be measured *at* the machine even in principle, because what
+//! has to line up is what a person in the room sees and hears — a position, not
+//! a signal. So the honest instrument is the one an operator uses: play sound
+//! and picture, stand where the audience stands, and move an offset until they
+//! land together.
+//!
+//! Everything here therefore aims at one thing — that the estimate be
+//! **stable**, so the offset stays put once it is found. An estimate that is
+//! wrong by a fixed amount costs one adjustment; an estimate that drifts costs
+//! the operator the whole night. That is why `A` is computed rather than
+//! rounded to the buffer it arrived in, and why the residue it cannot see is
+//! named rather than guessed at: a constant unknown is absorbed by the offset,
+//! and a varying one is not.
+//!
+//! The offset is `karakuri-cli`'s `--latency-offset-ms`, on the `o` and `p`
+//! keys, and it is **signed** — the picture is as often the early one as the
+//! late one.
 
 pub mod analysis;
 pub mod device;

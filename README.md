@@ -44,7 +44,7 @@ its own target and one composite pass mixes them. In the window:
 0-3  focus a slot     space  on air / off air     [ ]  gain      \  gain to 1.0
 - =  exposure         `      exposure to 1.0      t    tone map  h  the rest
 w    warm off air     b      tap the beat         , .  halve / double it
-o p  display latency offset
+o p  latency offset down / up
 ```
 
 The last row and `b , .` are `--audio-in` only.
@@ -313,6 +313,7 @@ governor, alongside the decision about whether GPU timestamps can be trusted at 
 | Priming and the governor | Works. Priming steps a slot and does not draw it — L1 owns every piece of per-element state and L4 is stateless, so warming is the compute passes and nothing else. The governor computes each slot's effective residency from the operator's request and a budget of per-Set costs measured by the probe at build time. It **never demotes a Live slot**: an over-budget deck reports and suspends priming. An unmeasured Live slot means the committed cost is unknown, and unknown is not headroom, so priming is suspended until every slot has been measured |
 | Audio | Works. Analysis runs in the driver's callback, not on the frame path, and the frame reads one small value through a `try_lock` on both sides so neither can block. Level is RMS mapped −60 to −6 dBFS: a mastered track's loud windows sit near the top of that, where a top at 0 dBFS would leave real music between 0.80 and 0.90 and a bound parameter barely moving |
 | Beat tracking | Works. The grid is **predicted, not chased**: once locked it free-runs, takes a slow trim, and moves not at all for a single disagreeing estimate — re-acquiring takes eight consecutive consistent revisions. **The octave is folded, not judged**: every candidate period is halved or doubled into a one-octave window centred on the grid, which starts at `--bpm`. So a window centred an octave off tracks an octave off, `,` and `.` are the fix, and there is deliberately no automatic one — the alternative is a heuristic that can be confidently wrong, which is the failure that shows on stage. A 3:2 error is a different problem and is not touched. The correction leads by the analysis lag plus the output lag, so what is shown lands on the beat rather than behind it |
+| Where the lead comes from | The measurable part is computed and the rest is a **signed operator offset**, on `o`/`p`. That is not a gap waiting for a better sensor: sound and picture leave by different paths, neither ends at this machine, and what has to line up is what a person in the room sees and hears. So the measured half aims at being *stable* rather than complete — a constant unknown costs one adjustment, a drifting one costs the whole night — and the offset goes negative, because a delayed PA makes the sound the late one |
 | Per-slot metering | Works. Mean and peak linear Rec.709 luminance per Live slot, reduced on the GPU and read back without ever waiting, so it lags a few frames and says by how many. An Allocated slot reads nothing rather than reading what it last drew |
 | **Bloom** | Does not exist. Values above 1.0 are what would feed it |
 | **Automatic gain** | Deliberately not built. The meter shows the number; nothing acts on it. An exposure that moves by itself is the worst thing that can happen on stage, and the honest order is to show the measurement first |
