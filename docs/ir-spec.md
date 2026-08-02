@@ -245,9 +245,17 @@ How far a frame advances comes from a `tick` record, never from a measurement:
 
 Live, the engine derives `steps` from elapsed real time and emits the record. On replay it
 reads the record and measures nothing. Substepping therefore cannot threaten determinism:
-the nondeterministic quantity has been moved onto the record stream, which is already the
-only path that mutates engine state. **v0.2 always writes `steps: 1`.** Adding substepping
-later is then an engine change alone — no format change, no determinism argument to reopen.
+the nondeterministic quantity has been moved onto the record stream, which is the path
+engine state is meant to be mutated through. Adding substepping later is then an engine
+change alone — no format change, no determinism argument to reopen.
+
+**Substepping landed and the record did not.** `steps` is no longer always 1: it is derived
+per frame and capped at 4, and the engine advances by that count. What has not been built
+is the emission — nothing constructs a `Record::Tick`, so the value goes to the engine as a
+number. The determinism argument above survives that intact, because what it rests on is
+the engine advancing by a **step count** rather than by a duration, and that is what it
+does. The record is a serialisation of a quantity that already exists in the right shape;
+`README.md`'s Invariants list what else is in the same position.
 
 - `t` is `steps_taken * dt`, where `steps_taken` is the whole number of steps the session
   has advanced. **Computed from the count, not accumulated into a running sum** — a float

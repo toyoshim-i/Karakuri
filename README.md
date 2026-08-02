@@ -113,7 +113,7 @@ hint: the signal bus is not readable from IR — declare `param energy` and atta
 | VideoSource | The interface L5 consumes. Set is one implementation of it |
 | Signal bus | Input distributed to every layer. Always complete; values carry a confidence |
 | Local oscillator | The single source of truth for phase and tempo. External input is only correction |
-| Record stream | The only path that mutates engine state. ndjson |
+| Record stream | The path engine state is meant to be mutated through, so that a session replays. ndjson. **Audio and tempo go through it today and the rest does not** — see Invariants |
 | Set file | A Set's state projection. No time in it |
 | Session stream | The timeline. A Set file followed by `tick` records and the edits between them |
 
@@ -141,7 +141,19 @@ during implementation, these win.
 - The cheapest correct response to "make it slower" is usually a parameter move, then a
   range change, and only then new code
 - **The record stream is the only path that mutates engine state.** CLI, GUI, and agents
-  all write the same records. The engine cannot distinguish a human from an agent
+  all write the same records. The engine cannot distinguish a human from an agent.
+
+  **This one is a target, not a description, and the gap is worth stating exactly** —
+  an invariant that reads like a report of the code is worse than one that admits it is
+  not there yet. What goes through a record today is `audio` and `tempo`: the CLI builds
+  them, reads them back, and hands the engine what they say, so that path is the record's
+  and not one that happens to agree with it. What does not: `tick` — the step count is
+  derived from real time and passed as a number, and `Record::Tick` is never constructed
+  outside tests; `bind`, `param` and `seed` — the record types exist and round-trip, but
+  the CLI applies its `--bind`, `--param`, `--bpm` and seeds to the engine directly; and
+  gain, opacity, residency, tone map and exposure, which have no record vocabulary at all
+  and are keys straight onto method calls. Closing it is a session writer, a replay
+  driver, and a vocabulary for the mix — `docs/roadmap.md` carries all three
 - **The governor may lower a slot's effective residency and may never write its requested
   one.** A refusal is a deferral: the operator's request is what the next pass reads
 
@@ -166,7 +178,11 @@ during implementation, these win.
 - No implicit randomness, no time-derived seeds, no thread-ID-derived randomness
 - `dt` is a fixed simulation step, not the real frame delta
 - **Frame advance comes from a `tick` record, never from a measurement.** Live, the engine
-  derives it from real time and emits it; on replay it reads it back and measures nothing
+  derives it from real time; on replay it reads it back and measures nothing. Today the
+  derived value is passed as a number and no `tick` record is built — what already holds
+  is the half that matters for determinism, that the engine advances by a **step count**
+  and never by a duration, so the record is a serialisation of something that exists
+  rather than a channel that has to be invented
 - **Element order is preserved.** Compaction is order-preserving, so the live set stays a
   stable subsequence and the additive blend order never drifts
 - The same record stream plus the same seeds reproduces the same output, bit for bit
@@ -303,7 +319,7 @@ governor, alongside the decision about whether GPU timestamps can be trusted at 
 | WGSL generation | Works, validated through naga. Generated names cannot be captured by anything a `.kir` can spell |
 | Set, buffers, pipelines, compute and render | Works. Double buffering, Set-level `capacity`, parameters as uniform writes. Nothing on the frame path allocates: both per-frame uniform writes go through storage sized once at build time |
 | Linear HDR end to end, sRGB once at output | Works |
-| Store | Works standalone. Nothing outside the crate reads a `Record`, so a Set file is a format the engine agrees with and does not yet obey |
+| Store | Works standalone. **Two record types have a live path and the rest do not**: `audio` and `tempo` are built by the CLI every frame and read back before anything is applied, so what drives the engine is what a replay would decode. `tick`, `bind`, `param` and `seed` round-trip in tests and nothing writes one, so a Set file remains a format the engine agrees with and does not yet obey. Nothing writes a session stream to disk at all |
 | Signal binding | Works. A binding samples the bus, curves it, maps it onto a range, and blends into the parameter **by confidence** — so a binding to `beat` or `bar` takes full effect today, and one to `energy` moves fully when a microphone is open and a tenth as far when none is. The binding did not change when audio arrived; the same name started answering with a different confidence |
 | Oscillator, synthesized bus, noise | On the frame path now. One oscillator per session, owned by the deck, advanced by the same `steps` the slots are |
 | Element lifecycle | Works. `spawn` and `kill()` run, order-preserving compaction is wired into the L1 dispatch, and `element` and the draw are both indirect off one counts buffer. A procedure that can neither spawn nor kill skips the scan entirely and dispatches in place |
