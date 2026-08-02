@@ -65,6 +65,18 @@ pub struct Audio {
     frame_interval: f32,
     /// What was last read, for the status line.
     last: Status,
+    /// **This frame's `Record::Audio`, reused.** Rewritten in place every frame
+    /// and handed out by reference.
+    ///
+    /// The record carries its bands as a `Vec` on purpose — the length is the
+    /// band count, so a stream with more bands than a reader knows about still
+    /// decodes, and `record.rs` argues that at length. Building a fresh one per
+    /// frame would put a heap allocation on the render thread, which
+    /// `README.md` forbids without a size qualifier and deliberately: "one
+    /// small allocation" is the argument that ends with a hitch nobody can
+    /// account for. `Vec::clear` keeps the buffer, so the only allocation is
+    /// the one here, before the first frame.
+    audio: Record,
 }
 
 /// What a performer needs to see. A tempo they cannot read is a tempo they
@@ -109,6 +121,14 @@ impl Audio {
             // within a frame or two.
             frame_interval: dt,
             last: Status::default(),
+            // At full capacity from the start, so the first `frame` does not
+            // grow it and the render thread never sees a `realloc` either.
+            audio: Record::Audio {
+                energy: 0.0,
+                onset: 0.0,
+                bands: Vec::with_capacity(MAX_BANDS),
+                confidence: 0.0,
+            },
         })
     }
 
@@ -149,14 +169,19 @@ impl Audio {
     /// back here*, so the path the engine is driven through is the record's
     /// rather than one that happens to agree with it.
     ///
+    /// The audio record is handed out **by reference and is overwritten next
+    /// frame**: it is one buffer, reused, because building a fresh one would
+    /// allocate on the render thread. A writer serialises it before returning;
+    /// a caller that wants to keep it past the frame owes itself a clone.
+    ///
     /// Never blocks: the device read is a `try_lock` that keeps the previous
-    /// value on contention.
+    /// value on contention, and nothing on this path allocates.
     pub fn frame(
         &mut self,
         signals: &mut Signals,
         elapsed: f32,
         step: f32,
-    ) -> (Record, Option<Record>) {
+    ) -> (&Record, Option<Record>) {
         // A frame interval measured on the host clock, smoothed hard: this is
         // an input to a latency, and a single hitched frame is not a change in
         // how deep the queue is.
@@ -172,12 +197,11 @@ impl Audio {
         self.input.set_centre_bpm(signals.oscillator().bpm());
 
         let reading = self.input.read();
-        let audio = audio_record(&reading.frame);
-        // Read back rather than used directly. One small allocation per frame
-        // in the CLI's own loop — not the engine's, and not a GPU resource —
-        // and what it buys is that the live path and a replay reach
-        // `set_audio` through the same decode.
-        signals.set_audio(audio_frame(&audio));
+        write_audio_record(&mut self.audio, &reading.frame);
+        // Read back rather than used directly, which is the whole point: the
+        // live path and a replay reach `set_audio` through the same decode, so
+        // the conversion is exercised every frame instead of only by a test.
+        signals.set_audio(audio_frame(&self.audio));
 
         let ahead = reading.age + self.output_lag();
         let correction = self
@@ -199,7 +223,7 @@ impl Audio {
             error: self.lock.error(),
             locked: self.lock.locked(),
         };
-        (audio, tempo)
+        (&self.audio, tempo)
     }
 
     /// The operator moving the grid an octave: `2.0` for ×2, `0.5` for ÷2.
@@ -263,14 +287,30 @@ fn clamped_latency(ms: f32) -> f32 {
     )
 }
 
-/// A measured frame as the record that carries it.
-pub fn audio_record(frame: &AudioFrame) -> Record {
-    Record::Audio {
-        energy: frame.energy,
-        onset: frame.onset,
-        bands: frame.bands[..usize::from(frame.band_count).min(MAX_BANDS)].to_vec(),
-        confidence: frame.confidence,
-    }
+/// A measured frame into an existing [`Record::Audio`], **reusing its band
+/// buffer**. `clear` keeps the allocation, so this allocates nothing once the
+/// buffer has been sized once — which is what lets the frame path emit a record
+/// at all.
+///
+/// Panics on anything but a `Record::Audio`, deliberately: the caller owns the
+/// buffer it is passing and cannot be handed the wrong variant by accident.
+/// Silently doing nothing would leave the previous frame's measurement in
+/// place and present it as this one's.
+fn write_audio_record(record: &mut Record, frame: &AudioFrame) {
+    let Record::Audio {
+        energy,
+        onset,
+        bands,
+        confidence,
+    } = record
+    else {
+        panic!("the reused audio record is not a `Record::Audio`");
+    };
+    *energy = frame.energy;
+    *onset = frame.onset;
+    *confidence = frame.confidence;
+    bands.clear();
+    bands.extend_from_slice(&frame.bands[..usize::from(frame.band_count).min(MAX_BANDS)]);
 }
 
 /// The record as the frame the bus reads, or `None` for a record that is not a
@@ -329,6 +369,21 @@ pub fn apply_tempo(signals: &mut Signals, record: &Record) {
 mod tests {
     use super::*;
 
+    /// A record built from scratch. **Tests only, and the allocation is why**:
+    /// the frame path rewrites one record in place, so a function that returns
+    /// a fresh one has no caller there and would be a standing invitation to
+    /// become one.
+    fn audio_record(frame: &AudioFrame) -> Record {
+        let mut record = Record::Audio {
+            energy: 0.0,
+            onset: 0.0,
+            bands: Vec::new(),
+            confidence: 0.0,
+        };
+        write_audio_record(&mut record, frame);
+        record
+    }
+
     fn frame() -> AudioFrame {
         AudioFrame {
             energy: 0.42,
@@ -336,6 +391,53 @@ mod tests {
             bands: [0.9, 0.4, 0.2, 0.11, 0.05, 0.02, 0.01, 0.0],
             band_count: 8,
             confidence: 1.0,
+        }
+    }
+
+    /// **Rewriting the record does not touch the heap.** `Audio::frame` emits
+    /// one of these per frame on the render thread, where `README.md` allows no
+    /// allocation at all, so the band buffer has to be the one from before.
+    ///
+    /// A counting allocator would be the direct assertion, but a
+    /// `#[global_allocator]` is per binary and this is one — it would count
+    /// every other test in the crate. The buffer's **pointer and capacity**
+    /// are the observable consequence instead, and they are not a proxy: a
+    /// `to_vec`, a fresh `Vec`, or any growth past the reserved length moves
+    /// one or both. Band counts are varied across the calls, including up to
+    /// the maximum and back down, because a buffer that is only ever written at
+    /// one length would hold under an implementation that reallocates on any
+    /// change of length.
+    #[test]
+    fn rewriting_the_audio_record_reuses_its_band_buffer() {
+        let mut record = Record::Audio {
+            energy: 0.0,
+            onset: 0.0,
+            bands: Vec::with_capacity(MAX_BANDS),
+            confidence: 0.0,
+        };
+        let Record::Audio { bands, .. } = &record else {
+            unreachable!()
+        };
+        let (pointer, capacity) = (bands.as_ptr(), bands.capacity());
+
+        for count in [3u8, 8, 1, 8, 0, 5] {
+            let mut measured = frame();
+            measured.band_count = count;
+            write_audio_record(&mut record, &measured);
+            let Record::Audio { bands, .. } = &record else {
+                unreachable!()
+            };
+            assert_eq!(
+                bands.len(),
+                usize::from(count),
+                "the record does not carry the bands it was given"
+            );
+            assert_eq!(
+                bands.as_ptr(),
+                pointer,
+                "the band buffer moved at {count} bands, so the frame path allocated"
+            );
+            assert_eq!(bands.capacity(), capacity, "the band buffer was regrown");
         }
     }
 
