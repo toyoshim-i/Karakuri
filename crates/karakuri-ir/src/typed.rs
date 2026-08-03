@@ -82,6 +82,23 @@ pub struct Checked {
     /// per-element state at all. A *Set* is closed form when both of its
     /// procedures are, which in practice means when its L1 is.
     pub closed_form: bool,
+    /// **Whether the procedure reads [`Ambient::Beats`](crate::ast::Ambient::Beats).**
+    ///
+    /// Material written against the grid already follows the room's tempo. A
+    /// transport that also scales the slot's clock by the tempo would make it
+    /// follow twice — the clock scaled, and the grid read on the scaled clock —
+    /// so the two compound into roughly the square of the tempo ratio. This is
+    /// what lets a surface refuse that combination instead of offering it.
+    ///
+    /// A fact rather than a judgement: nothing is rejected for it, and unlike
+    /// [`Checked::closed_form`] there is no safe direction to err in. Claiming
+    /// it wrongly greys out a control that would have worked; missing it offers
+    /// one that compounds.
+    ///
+    /// Says nothing about *beat* sync, which is a position lock and is decided
+    /// by `closed_form` instead. The two controls are independent and this
+    /// bears on only one of them.
+    pub reads_beats: bool,
     pub span: Span,
 }
 

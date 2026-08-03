@@ -158,11 +158,11 @@ not the expensive half.
 
 **Landed so far**, in order: the deck with an L5 mix and a per-slot level meter; tone
 mapping once after the mix; signal binding; priming, the budget governor and `closed_form`;
-audio input with beat tracking; a record vocabulary for the mix; the `beats` ambient. Each bullet below says
+audio input with beat tracking; a record vocabulary for the mix; the `beats` ambient; per-slot transport. Each bullet below says
 what it cost against what it promised — the ones marked **Done** are worth reading for
 where the promise was wrong, not only for the fact that it is kept.
 
-**Still open**, and the shape of the rest of this milestone: transport, transitions, blend
+**Still open**, and the shape of the rest of this milestone: transitions, blend
 modes and masks, MIDI, output routing, Ableton Link, a panic key, per-slot preview, and
 loading a Set file into the engine at all.
 
@@ -299,12 +299,28 @@ fine alone and is unreadable next to lights.
   function of `t` — so a scrub answers against the grid **as it stands**, which is what
   seeking to bar 32 should mean, rather than against the grid that was running then, which
   nothing keeps
-- **Transport, per slot.** The mapping from session time to a slot's `t`, so that material
-  can be run at a rate, held, or scrubbed — tape-style fast-forward and rewind, locked to
-  the beat grid. Driven by a **position** rather than by a tempo and a phase, because a
-  position can reverse and jump and a tempo cannot: audio analysis supplies a position that
-  only ever moves forward, and a deck link (M7) supplies one that does not. Same entry
-  point, so the downstream is not rebuilt when the better source arrives
+- ~~**Transport, per slot.**~~ **Done**, and driven by a position exactly as this bullet
+  asked. Three modes: `free` is wall time, `tempo` scales the rate, `beat` locks the slot's
+  clock to the room's musical position and therefore jumps and reverses. The scrub is on a
+  key so that the reversing path runs today rather than waiting for a source that can
+  reverse — audio only ever moves forward, and a deck link (M7) arrives at the same entry
+  point.
+
+  **It turned out to be two mechanisms rather than one**, and `closed_form` is the seam:
+  a seek can place a closed-form clock in one element pass, and an accumulating one can
+  only be given a rate. So `beat` is refused on accumulating material — where the operator
+  asks, not where it would misbehave, because seeking an accumulating Set evaluates it once
+  from wherever it happened to be and that is garbage rather than an error.
+
+  **A second refusal was not foreseen and is the more interesting one.** Material that reads
+  `beats` already follows the room; scaling its clock by the tempo as well makes it follow
+  twice, at roughly the square of the tempo ratio. The check pass records whether a
+  procedure reads the ambient, and `tempo` is refused on material that does. Two controls
+  that each look right and compound into nonsense is a shape worth watching for elsewhere.
+
+  The anchor — what tempo this material calls 1× — is a per-slot dial because **material has
+  no intrinsic tempo**: a `.kir` declares parameters and a capacity, not a bar length. It
+  defaults to the tempo at the moment sync is engaged, so engaging it moves nothing
 - **What the transport can do depends on `closed_form`**, which the check pass now decides
   and the artifact carries. A closed-form procedure evaluates at any `t`, so scrubbing it is
   free. An accumulating one can only be run forward — but "cannot rewind" is too strong:

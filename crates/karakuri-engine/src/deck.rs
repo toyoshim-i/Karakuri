@@ -253,6 +253,21 @@
 //! back by nothing and reads the session's oscillator itself, which is what
 //! keeps the identity above bit-exact for bound material.
 //!
+//! ## Transport
+//!
+//! A Live slot's clock need not be the session's. [`crate::transport`] holds
+//! the mapping and the argument for it; what the deck owes is that the mapping
+//! is consulted in exactly one place — the Live branch of [`Frame::render`] —
+//! and that a slot nobody has arranged reads [`Sync::Free`], which is the
+//! session's own step count and is what every slot did before the module
+//! existed.
+//!
+//! **Priming deliberately has no transport.** A warming slot is catching up on
+//! a rate the *governor* chose, which is a different mechanism answering a
+//! different question, and two things in charge of one clock is how a slot ends
+//! up somewhere neither of them meant. The transport applies when a slot is on
+//! air and at no other time.
+//!
 //! ## Level metering
 //!
 //! A deck can measure what each Live slot's target actually puts out — mean and
@@ -278,6 +293,7 @@ use crate::present::Present;
 use crate::probe::Probe;
 use crate::set::{DT, MAX_STEPS};
 use crate::swap::{Event, HotSwap, PROBE_RESOLUTION};
+use crate::transport::{Advance, Sync, Transport};
 use crate::video_source::VideoSource;
 
 /// How many slots a deck can hold. The roadmap's number: "one to four members
@@ -354,6 +370,12 @@ struct Slot {
     /// takes effect from a defined frame rather than from wherever a running
     /// counter happened to be.
     prime_phase: u32,
+    /// **What this slot's clock does with the session's** — free, tempo-synced
+    /// or beat-locked. Read only while [`Residency::Live`]: a Priming slot is
+    /// catching up on the governor's rate, which is a different mechanism for a
+    /// different reason, and giving it a transport as well would put two things
+    /// in charge of one clock.
+    transport: Transport,
     target: wgpu::Texture,
     view: wgpu::TextureView,
 }
@@ -416,6 +438,7 @@ impl Deck {
                     opacity: 1.0,
                     prime_one_in: 1,
                     prime_phase: 0,
+                    transport: Transport::default(),
                     target,
                     view,
                 }
@@ -756,6 +779,53 @@ impl Deck {
         }
     }
 
+    /// What this slot's clock is doing with the session's.
+    pub fn transport(&self, slot: usize) -> &Transport {
+        &self.slots[slot].transport
+    }
+
+    /// **Put a slot's clock under a sync mode**, or say why it cannot go there.
+    ///
+    /// The refusal is here, at the moment the operator asks, and not at the
+    /// frame where it would misbehave. Both refusals are silent failures
+    /// otherwise: beat sync on accumulating material evaluates the procedure
+    /// once from wherever it happened to be, and tempo sync on material that
+    /// reads `beats` runs it at the square of the tempo ratio. Neither raises
+    /// anything on its own; both look like a broken artifact.
+    ///
+    /// All three values are applied verbatim, because this is the apply half of
+    /// a record and a replay that recomputed one of them from the machine it is
+    /// running on would not be a replay. [`Transport::engaged`] is what decides
+    /// them when an operator engages a mode by hand.
+    pub fn set_transport(
+        &mut self,
+        slot: usize,
+        sync: Sync,
+        anchor_bpm: f32,
+        offset_beats: f64,
+    ) -> Result<(), crate::transport::Refusal> {
+        self.sync_allowed(slot, sync)?;
+        self.slots[slot].transport.set(sync, anchor_bpm, offset_beats);
+        Ok(())
+    }
+
+    /// Whether a mode is available for the Set currently in this slot, and why
+    /// not when it is not. **What a surface greys a control out on**, and it
+    /// answers before anything is pressed.
+    ///
+    /// A property of the Set, so it changes when a build lands in the slot. A
+    /// swap that replaces closed-form material with accumulating material can
+    /// therefore make the mode a slot is *already in* unavailable; nothing here
+    /// resolves that, and whatever wires swapping to this owes it.
+    pub fn sync_allowed(
+        &self,
+        slot: usize,
+        sync: Sync,
+    ) -> Result<(), crate::transport::Refusal> {
+        let set = self.slots[slot].swap.set();
+        Transport::allows(sync, set.is_closed_form(), set.reads_beats())
+    }
+
     /// How many slots are warming out of sight right now. Effective, so a
     /// parked slot is not one of them however much it was asked for.
     pub fn priming_slots(&self) -> usize {
@@ -1032,6 +1102,26 @@ impl Frame<'_> {
                 Residency::Live => {
                     let view = &slot.view;
                     let set = slot.swap.live_mut();
+                    // **What this slot's clock does with the session's.** Free
+                    // is the session's own `steps` and is what every slot did
+                    // before the transport existed, so a deck nothing has
+                    // arranged records exactly the frame it used to.
+                    let steps = match slot.transport.advance(steps, signals.oscillator(), DT) {
+                        Advance::Steps(n) => n,
+                        // A seek: put the clock on the target and evaluate
+                        // there with a single pass. One is enough because the
+                        // transport only offers this mode on closed-form
+                        // material, whose state at `t` does not depend on how
+                        // it got there — `Set::seek` carries that argument and
+                        // the refusal that enforces it.
+                        //
+                        // One short of the target, because `prepare` bumps the
+                        // counter by the steps it is given.
+                        Advance::SeekTo(target) => {
+                            set.seek(target.saturating_sub(1));
+                            1
+                        }
+                    };
                     set.prepare(self.queue, steps, signals);
                     set.render(encoder, view, steps);
                     // After the render pass, into the same encoder, so the

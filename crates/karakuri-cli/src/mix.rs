@@ -34,6 +34,7 @@
 //! when it gets a control.
 
 use karakuri_engine::deck::Residency;
+use karakuri_engine::transport::{Sync, Transport};
 use karakuri_store::record::Record;
 
 use crate::{op_wire_name, op_wire_names, Look};
@@ -49,6 +50,15 @@ pub enum Change {
     Gain { slot: usize, value: f32 },
     Residency { slot: usize, level: Residency },
     Look(Look),
+    /// What a slot's clock does with the session's. Carried as a value rather
+    /// than applied as a mode change, because the record says all three and a
+    /// replay must not recompute one of them from the machine it is on.
+    Transport {
+        slot: usize,
+        sync: Sync,
+        anchor_bpm: f32,
+        offset_beats: f64,
+    },
 }
 
 /// A slot's gain, as the record that carries it.
@@ -74,6 +84,16 @@ pub fn look_record(look: &Look) -> Record {
         op: op_wire_name(look.op).to_string(),
         exposure: look.exposure,
         white_point: look.white_point,
+    }
+}
+
+/// A slot's transport, as the record that carries it.
+pub fn transport_record(slot: usize, transport: &Transport) -> Record {
+    Record::Transport {
+        slot: slot as u8,
+        sync: transport.sync().name().to_string(),
+        anchor_bpm: transport.anchor_bpm(),
+        offset_beats: transport.offset_beats(),
     }
 }
 
@@ -161,6 +181,30 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
             })?;
             Ok(Some(Change::Residency { slot, level }))
         }
+        Record::Transport {
+            slot,
+            sync,
+            anchor_bpm,
+            offset_beats,
+        } => {
+            let slot = in_range(*slot)?;
+            let sync = Sync::from_name(sync).ok_or_else(|| {
+                format!(
+                    "sync `{sync}` — expected {}",
+                    Sync::ALL
+                        .iter()
+                        .map(|s| s.name())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })?;
+            Ok(Some(Change::Transport {
+                slot,
+                sync,
+                anchor_bpm: *anchor_bpm,
+                offset_beats: *offset_beats,
+            }))
+        }
         Record::Look {
             op,
             exposure,
@@ -198,6 +242,15 @@ mod tests {
                 },
             ),
             (
+                transport_record(3, &Transport::engaged(Sync::Beat, 126.0)),
+                Change::Transport {
+                    slot: 3,
+                    sync: Sync::Beat,
+                    anchor_bpm: 126.0,
+                    offset_beats: 0.0,
+                },
+            ),
+            (
                 look_record(&Look {
                     op: TonemapOp::AgX,
                     exposure: 1.5,
@@ -232,6 +285,32 @@ mod tests {
                 change(&record, 1).expect("built here"),
                 Some(Change::Residency { slot: 0, level }),
                 "{level:?} did not survive its own wire name"
+            );
+        }
+    }
+
+    /// **Every sync mode round-trips**, so a mode added to the engine and not
+    /// to the wire vocabulary is a slot silently left free rather than put
+    /// where the record said.
+    #[test]
+    fn every_sync_mode_has_a_wire_name_that_decodes_back() {
+        for sync in Sync::ALL {
+            let mut transport = Transport::engaged(sync, 100.0);
+            transport.scrub(-0.75);
+            let record = transport_record(1, &transport);
+            assert_eq!(
+                change(&record, 4).expect("built here"),
+                Some(Change::Transport {
+                    slot: 1,
+                    sync,
+                    anchor_bpm: 100.0,
+                    // Carried under every mode, including the two that do
+                    // nothing with it — a slot moved back onto the grid returns
+                    // to where the operator left it.
+                    offset_beats: -0.75,
+                }),
+                "{} did not survive its own wire name",
+                sync.name()
             );
         }
     }

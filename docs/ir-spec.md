@@ -965,8 +965,8 @@ known. The total-cost decision lives there, not in the artifact.
   what would let the collision through harmlessly; until then a rejection the generator can
   act on beats a value nobody chose.
 - Unknown `t` values are ignored, for forward compatibility.
-- **`gain`, `residency` and `look` are not in this list and must never be.** They are the
-  session's state rather than any Set's — see the session stream format.
+- **`gain`, `residency`, `look` and `transport` are not in this list and must never be.**
+  They are the session's state rather than any Set's — see the session stream format.
 
 **What "implemented" covers here is the format; its effect is implemented for `bind` and
 not yet for the rest.** Every record above decodes, re-encodes, and folds down to a
@@ -977,8 +977,8 @@ once it gets there — the engine implements the semantics below, and `karakuri-
 `--bind` flag names exactly these fields as a stand-in until a Set file can be loaded.
 
 The *session* records are further along: `audio` and `tempo` per frame, and `gain`,
-`residency` and `look` per key press, are each built by the CLI, decoded back, and only
-then applied. Nothing writes them to disk yet, so what exists is the live half of the
+`residency`, `look` and `transport` per key press, are each built by the CLI, decoded back,
+and only then applied. Nothing writes them to disk yet, so what exists is the live half of the
 round trip and not a file — but the path the engine is driven through is the record's.
 
 ### What a binding does
@@ -1196,7 +1196,7 @@ session tempo, which **v0.2 had no record for**.
 Neither is state, so neither appears in a Set file: both are what a frame *saw* or
 *decided*, and the tempo belongs to the session rather than to any one Set.
 
-### The mix in the stream — `gain`, `residency` and `look`
+### The mix in the stream — `gain`, `residency`, `look` and `transport`
 
 A session that carried the material and not the performance would replay the same Sets, on
 the same beat, all at whatever gain they happened to start at, with nothing ever going on
@@ -1229,7 +1229,22 @@ mix.
 unrecognised value is the engine's to diagnose against what it actually supports, not the
 decoder's to reject before anything can say what the alternatives were.
 
-**These three are state, and a Set file still must not contain them.** That is a second
+**`transport` is what a slot's clock does with the session's**, and it carries two numbers
+because the mode alone does not mean anything without them:
+
+```ndjson
+{"t":"transport","slot":0,"sync":"beat","anchor_bpm":126.0,"offset_beats":-0.25}
+```
+
+`anchor_bpm` is the tempo at which this material runs at 1×, and it has to be recorded
+because **material has no intrinsic tempo**: a `.kir` declares parameters and a capacity,
+not a bar length, so "one beat of music is how many seconds of material" is an operator's
+answer rather than the artifact's. `offset_beats` is the scrub — signed, unbounded, and the
+one value in this format that is meant to go backwards. Both are carried under every mode,
+including `free` where neither does anything, so that a slot moved back onto the grid
+returns to where the operator left it rather than to a default.
+
+**These four are state, and a Set file still must not contain them.** That is a second
 reason for a record to be absent from a Set file and it is not the `audio` one: there is
 something to fold here, and this is not the projection it folds into. A Set file that
 restored a gain would apply it to whatever slot it was next loaded into, and one whose

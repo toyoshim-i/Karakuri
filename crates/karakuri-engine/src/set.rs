@@ -183,6 +183,9 @@ pub struct Set {
     /// see [`Set::is_closed_form`]. Decided by the check pass and carried here
     /// rather than re-derived; the engine never looks at IR.
     closed_form: bool,
+    /// Whether either procedure reads the `beats` ambient — see
+    /// [`Set::reads_beats`].
+    reads_beats: bool,
 
     element_layout: ElementLayout,
     element_buf: Pair,
@@ -692,6 +695,7 @@ impl Set {
             // is the L1's — but writing the conjunction is what keeps it
             // correct when L2 arrives with state of its own.
             closed_form: l1.closed_form && l4.closed_form,
+            reads_beats: l1.reads_beats || l4.reads_beats,
             element_layout,
             element_buf,
             alive_buf,
@@ -808,12 +812,48 @@ impl Set {
     /// warm-up shows the same image warming would have, and a `false` may be
     /// pessimistic.
     ///
-    /// [`crate::governor`] is the consumer today: a closed-form Set has nothing
-    /// to prime, so it is never worth spending compute budget on. A transport
-    /// would be the other, and would need more than this — see
-    /// `Checked::closed_form` for what a seek owes that priming does not.
+    /// Two consumers: [`crate::governor`], where a closed-form Set has nothing
+    /// to prime and is never worth compute budget; and [`crate::transport`],
+    /// where it is what makes beat sync possible at all — a position lock has
+    /// to be able to land on a position.
     pub fn is_closed_form(&self) -> bool {
         self.closed_form
+    }
+
+    /// **Whether this Set's material is written against the tempo grid** —
+    /// either procedure reads the `beats` ambient.
+    ///
+    /// Such material already follows the room, so a transport that also scaled
+    /// its clock by the tempo would make it follow twice and run at roughly the
+    /// square of the tempo ratio. [`crate::transport`] refuses that combination
+    /// rather than offering it; see `Checked::reads_beats`.
+    pub fn reads_beats(&self) -> bool {
+        self.reads_beats
+    }
+
+    /// **Put the simulation clock at `steps_taken` without running anything.**
+    ///
+    /// The seek half of a transport. What follows must be exactly one
+    /// [`Set::prepare`] of one step and one [`Set::render`] of one step: this
+    /// leaves the counter one short of the target, `prepare` bumps it onto the
+    /// target and writes the uniforms for that instant, and the single element
+    /// pass evaluates the procedure there. One pass is enough because the
+    /// caller has promised the procedure is closed form, which is exactly the
+    /// promise that its state at `t` does not depend on how it got there.
+    ///
+    /// **Only for a closed-form Set**, and this does not check, because it
+    /// cannot usefully: the Set knows ([`Set::is_closed_form`]) but the
+    /// alternative to a caller that checks is a caller that gets a silent
+    /// wrong answer either way — an accumulating Set seeked to `t` evaluates
+    /// once from wherever it happened to be, which is garbage rather than an
+    /// error. [`crate::transport`] is the one caller and refuses beat sync on
+    /// accumulating material at the point the operator asks for it, where there
+    /// is something to say.
+    ///
+    /// The element buffers are left alone. They hold the previous instant's
+    /// values, which a closed-form `element` block does not read.
+    pub fn seek(&mut self, steps_taken: u64) {
+        self.steps_taken = steps_taken;
     }
 
     /// Put this Set back to exactly what [`Set::build`] left: element and alive

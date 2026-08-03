@@ -43,11 +43,11 @@ its own target and one composite pass mixes them. In the window:
 ```
 0-3  focus a slot     space  on air / off air     [ ]  gain      \  gain to 1.0
 - =  exposure         `      exposure to 1.0      t    tone map  h  the rest
-w    warm off air     b      tap the beat         , .  halve / double it
-o p  latency offset down / up
+w    warm off air     y      slot sync mode       u i  scrub the slot
+b    tap the beat     , .    halve / double it    o p  latency offset
 ```
 
-The last row and `b , .` are `--audio-in` only.
+The last row is `--audio-in` only.
 
 Taking a slot off air holds it rather than stopping it: `t` only advances through a step,
 so bringing it back resumes where it left off. `t` cycles the tone map operator live, which
@@ -58,6 +58,15 @@ has room. A request it is still holding shows as `park` on the status line, apar
 `off` — the same residency, opposite situations, and a surface that showed them alike
 would be telling an operator their request was discarded when it is reconsidered every
 pass and takes effect by itself when a slot comes off air.
+
+`y` cycles a slot's **transport**: `free` runs at wall time, `tempo` scales the rate by the
+room's tempo, and `beat` locks the slot's clock to the room's musical position — tape-style,
+so `u`/`i` scrub it back and forward a quarter beat a press. Modes the material cannot take
+are skipped with the reason: **beat sync needs closed-form material**, because a position
+lock has to be able to place the clock and an accumulating procedure can only be run
+forward; and **tempo sync is refused on material that reads `beats`**, which already follows
+the room and would otherwise follow it twice. Engaging a mode anchors the material at the
+current tempo, so nothing jumps at the moment it is switched on.
 
 The status line carries each slot's residency, gain, simulation `t`, and its **level** —
 mean and peak luminance, measured on the GPU and lagging a few frames because reading it
@@ -115,7 +124,7 @@ hint: the signal bus is not readable from IR — declare `param energy` and atta
 | VideoSource | The interface L5 consumes. Set is one implementation of it |
 | Signal bus | Input distributed to every layer. Always complete; values carry a confidence |
 | Local oscillator | The single source of truth for phase and tempo. External input is only correction |
-| Record stream | The path engine state is meant to be mutated through, so that a session replays. ndjson. **Audio, tempo and the mix go through it today; the material does not** — see Invariants |
+| Record stream | The path engine state is meant to be mutated through, so that a session replays. ndjson. **Audio, tempo, the mix and the transport go through it today; the material does not** — see Invariants |
 | Set file | A Set's state projection. No time in it |
 | Session stream | The timeline. A Set file followed by `tick` records and the edits between them |
 
@@ -149,8 +158,8 @@ during implementation, these win.
   an invariant that reads like a report of the code is worse than one that admits it is
   not there yet.
 
-  What goes through a record: `audio` and `tempo` every frame, and `gain`, `residency`
-  and `look` on every key that moves them. All five are built, read back, and only then
+  What goes through a record: `audio` and `tempo` every frame, and `gain`, `residency`,
+  `look` and `transport` on every key that moves them. All five are built, read back, and only then
   applied, so what drives the engine is what a replay would decode rather than a second
   path that happens to agree with it.
 
@@ -325,8 +334,9 @@ governor, alongside the decision about whether GPU timestamps can be trusted at 
 | WGSL generation | Works, validated through naga. Generated names cannot be captured by anything a `.kir` can spell |
 | Set, buffers, pipelines, compute and render | Works. Double buffering, Set-level `capacity`, parameters as uniform writes. Nothing on the frame path allocates: both per-frame uniform writes go through storage sized once at build time |
 | Linear HDR end to end, sRGB once at output | Works |
-| Store | Works standalone. **Five record types have a live path and the rest do not**: `audio` and `tempo` per frame, `gain`, `residency` and `look` per key press, all built and read back before anything is applied, so what drives the engine is what a replay would decode. `tick`, `bind`, `param` and `seed` round-trip in tests and nothing writes one, so a Set file remains a format the engine agrees with and does not yet obey. Nothing writes a session stream to disk at all |
+| Store | Works standalone. **Six record types have a live path and the rest do not**: `audio` and `tempo` per frame, `gain`, `residency`, `look` and `transport` per key press, all built and read back before anything is applied, so what drives the engine is what a replay would decode. `tick`, `bind`, `param` and `seed` round-trip in tests and nothing writes one, so a Set file remains a format the engine agrees with and does not yet obey. Nothing writes a session stream to disk at all |
 | Set file and session stream | The two projections are kept apart by `Record::is_set_state` and `project`. A Set file drops the mix as well as the ticks, and for a different reason: a gain is state, but the *session's*, and a Set file that restored one would pull down whatever fader it was next loaded under. The session projection that folds the mix does not exist, because nothing writes a session stream to fold |
+| Transport | Works, per slot. `free`, `tempo` (rate, scaled by the room's tempo against a per-slot anchor) and `beat` (position lock, jumps and reverses). **Two mechanisms, because there are two kinds of material**: closed-form state at `t` is a pure function of `t`, so a seek costs one element pass; accumulating material integrates, and reversing a sum is impossible rather than slow, so all it can be given is a rate. The anchor is a per-slot dial because **material has no intrinsic tempo** — a `.kir` declares parameters and a capacity, not a bar length — and it defaults to the tempo at the moment sync is engaged so that engaging it moves nothing. What is not built: a position source that can itself reverse. Audio only ever moves forward; a deck link (M7) does not, and arrives at the same entry point |
 | `beats` | Works. The session's tempo grid, readable from IR as an ambient beside `t` — per substep, continuous across a tempo correction, and the same instant `t` names. **Without it the picture ran at wall time whatever the music did**: a tempo change moved the grid every binding was sampled on and moved nothing that was drawn, and a `bind` cannot close that, because what follows a tempo is not a parameter value but the passage of time. `beat` and `bar` stay bus names and stay different — phases in `[0, 1]` for driving a parameter, where `beats` is unbounded and monotone for driving a position |
 | Signal binding | Works. A binding samples the bus, curves it, maps it onto a range, and blends into the parameter **by confidence** — so a binding to `beat` or `bar` takes full effect today, and one to `energy` moves fully when a microphone is open and a tenth as far when none is. The binding did not change when audio arrived; the same name started answering with a different confidence |
 | Oscillator, synthesized bus, noise | On the frame path now. One oscillator per session, owned by the deck, advanced by the same `steps` the slots are |

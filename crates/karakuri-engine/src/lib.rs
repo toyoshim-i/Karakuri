@@ -33,6 +33,7 @@ pub mod present;
 pub mod probe;
 pub mod set;
 pub mod swap;
+pub mod transport;
 pub mod uniforms;
 pub mod video_source;
 
