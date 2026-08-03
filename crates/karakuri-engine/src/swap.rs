@@ -665,7 +665,7 @@ impl HotSwap {
     /// deck-wide version and constructs one probe for all of them.
     pub fn measure_live(
         &mut self,
-        probe: &Probe,
+        probe: &mut Probe,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Measurement {
@@ -908,7 +908,7 @@ const EVENT_CAPACITY: usize = 4;
 /// invisible; a caller measuring its own [`HotSwap::fixed`] Set has no such
 /// second chance.
 pub fn measure(
-    probe: &Probe,
+    probe: &mut Probe,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     set: &mut Set,

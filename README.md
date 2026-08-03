@@ -338,7 +338,7 @@ The budget defaults to 20 ms: one 60 Hz frame plus slack, 60 Hz being the rate `
 120 Hz panel it was developed on, steady state is 8.3 ms and a frame rate cut in half reads
 as 16.7 ms, which the default does not catch. `--budget-ms` is the operator's answer; a
 budget derived from the display rather than from a constant belongs with M2's budget
-governor, alongside the decision about whether GPU timestamps can be trusted at all.
+governor, alongside the decision about whether GPU timestamps can be trusted at all. That decision is a **ratio against a second measurement of the same submission**, not a constant: a fixed floor was what let an adapter's meaningless 0.095 ms reading through, and it is checked on every measurement rather than once, because the adapter that produced it passed calibration and lied afterwards.
 
 | | |
 |---|---|

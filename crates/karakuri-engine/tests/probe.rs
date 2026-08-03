@@ -37,7 +37,7 @@ fn gpu() -> Option<Gpu> {
 fn a_trivial_measurement_reports_its_capacity_and_resolution() {
     let Some(gpu) = gpu() else { return };
 
-    let probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, RESOLUTION);
+    let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, RESOLUTION);
 
     let capacity = 1024;
     let mut points = Points::new(&gpu.device, capacity, 19274);
@@ -56,33 +56,35 @@ fn a_trivial_measurement_reports_its_capacity_and_resolution() {
     );
 }
 
-/// **This test caught a real defect, and it is not in this test.**
+/// **This test caught a real defect, and it was not in this test.**
 ///
-/// It failed intermittently and was not reproducible for a long time; the
-/// margin printed below was added so the next occurrence would be readable
-/// instead of a mystery. When it fired, it said this:
+/// It failed intermittently and resisted reproduction; the margin printed below
+/// was added so the next occurrence would be readable instead of a mystery.
+/// When it fired, it said this:
 ///
 /// ```text
 /// measured via GpuTimestamp: light 0.103 ms, heavy 0.095 ms, ratio 0.9x
 /// ```
 ///
 /// Two million points at point size 40, measured at a tenth of a millisecond,
-/// and **lighter than sixty-four points**. Every earlier guess had been about
-/// the host clock and contention; the numbers say the host clock was not
-/// involved at all. On the runs that fail, the adapter advertises
-/// `TIMESTAMP_QUERY`, the probe's calibration passes, and the timestamps are
-/// then meaningless.
+/// and **lighter than sixty-four points**. Every guess until then had been
+/// about the host clock and contention; the numbers said the host clock was
+/// not involved. On the runs that failed, the adapter advertised
+/// `TIMESTAMP_QUERY`, calibration passed, and the timestamps were meaningless
+/// — the abstract warning `README.md` carries, arriving.
 ///
-/// **That is a defect in the probe and not in this test**, and it is the one
-/// `README.md` already warns about in the abstract — "timestamps are
-/// advertised, enabled and unreliable here". The governor budgets against
-/// these numbers, so a Set measured at 0.095 ms instead of sixty is a Set
-/// admitted as very nearly free. The threshold below is not moved and the
-/// comparison is not reshaped: a test loosened to stop reporting this would
-/// have hidden it.
+/// **The defect was the calibration's guard.** It was a constant floor of
+/// 0.1 ms against a workload costing tens of milliseconds, so a reading of
+/// 0.095 ms cleared it by five microseconds while measuring nothing. See
+/// `Probe::plausible`: the guard is now a ratio against what the host clock
+/// saw of the same submission, checked on every measurement rather than once
+/// at construction, and a probe that catches its adapter lying stops trusting
+/// it for good rather than for that reading.
 ///
-/// Normal, when the timestamps are honest or the host clock is used: light
-/// ≈ 1.3 ms, heavy ≈ 60 ms.
+/// The threshold below was never moved and the comparison never reshaped. A
+/// test loosened to stop reporting this would have hidden it.
+///
+/// Normal: light ≈ 1.3 ms, heavy ≈ 60 ms.
 #[test]
 fn a_heavier_workload_measures_as_heavier() {
     // Additive point sprites: cost scales with instance count (more quads to
@@ -101,7 +103,7 @@ fn a_heavier_workload_measures_as_heavier() {
     // different measurement methods, which would make comparing their
     // numbers meaningless.
     let Some(gpu) = gpu() else { return };
-    let probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, RESOLUTION);
+    let mut probe = Probe::new(&gpu.device, &gpu.queue, gpu.timestamps, RESOLUTION);
 
     let light_capacity = 64;
     let heavy_capacity = 2_000_000;
@@ -153,7 +155,7 @@ fn unavailable_timestamps_fall_back_to_a_labelled_host_measurement() {
     // for a GPU one.
     let Some(gpu) = gpu() else { return };
 
-    let probe = Probe::new(&gpu.device, &gpu.queue, false, RESOLUTION);
+    let mut probe = Probe::new(&gpu.device, &gpu.queue, false, RESOLUTION);
     let capacity = 1024;
     let mut points = Points::new(&gpu.device, capacity, 19274);
     points.resize(RESOLUTION.0, RESOLUTION.1);

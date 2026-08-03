@@ -927,7 +927,7 @@ impl Deck {
             // measure should pay neither.
             return 0;
         }
-        let probe = Probe::new(
+        let mut probe = Probe::new(
             device,
             queue,
             device.features().contains(wgpu::Features::TIMESTAMP_QUERY),
@@ -936,7 +936,7 @@ impl Deck {
         let mut measured = 0;
         for slot in &mut self.slots {
             if measurable(slot) {
-                slot.swap.measure_live(&probe, device, queue);
+                slot.swap.measure_live(&mut probe, device, queue);
                 measured += 1;
             }
         }
