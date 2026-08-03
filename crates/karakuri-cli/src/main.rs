@@ -85,6 +85,73 @@ fn clamp_exposure(exposure: f32) -> f32 {
     exposure.clamp(EXPOSURE_MIN, EXPOSURE_MAX)
 }
 
+/// **A demonstration that drives itself**, as a list of `(seconds, key)`.
+///
+/// Every entry goes through [`Live::key`], the same function a keyboard reaches,
+/// so what a watcher sees is what pressing those keys does and not a second
+/// path that resembles it. Nothing here can do anything a person could not.
+///
+/// It exists because a window is the only honest demonstration of a transport —
+/// the scrub is a motion, and a still frame of it is a still frame — and
+/// whoever is *describing* the feature is often not the one at the keyboard.
+///
+/// The order is the argument: engage first and let it sit, so it is clear that
+/// engaging changes nothing; then scrub back a long way, hold, and let it run
+/// back onto the grid.
+const DEMO_SCRIPT: &[(f32, char)] = &[
+    // Four seconds of the material as it is, for a before.
+    (4.0, 'y'), // beat sync — the picture does not move, deliberately
+    // Two bars back, a quarter beat at a time, over about a second and a half.
+    (6.0, 'u'),
+    (6.1, 'u'),
+    (6.2, 'u'),
+    (6.3, 'u'),
+    (6.4, 'u'),
+    (6.5, 'u'),
+    (6.6, 'u'),
+    (6.7, 'u'),
+    (6.8, 'u'),
+    (6.9, 'u'),
+    (7.0, 'u'),
+    (7.1, 'u'),
+    (7.2, 'u'),
+    (7.3, 'u'),
+    (7.4, 'u'),
+    (7.5, 'u'),
+    // Held there for three seconds: the slot is two bars behind the room and
+    // still locked to it, so it moves at the room's rate from where it is.
+    // Then forward again, past where it was.
+    (10.5, 'i'),
+    (10.6, 'i'),
+    (10.7, 'i'),
+    (10.8, 'i'),
+    (10.9, 'i'),
+    (11.0, 'i'),
+    (11.1, 'i'),
+    (11.2, 'i'),
+    (11.3, 'i'),
+    (11.4, 'i'),
+    (11.5, 'i'),
+    (11.6, 'i'),
+    (11.7, 'i'),
+    (11.8, 'i'),
+    (11.9, 'i'),
+    (12.0, 'i'),
+    (12.1, 'i'),
+    (12.2, 'i'),
+    (12.3, 'i'),
+    (12.4, 'i'),
+    // Back to free running, which prints the refusal `tempo` earns on material
+    // that reads `beats` on its way past.
+    (16.0, 'y'),
+];
+
+/// How long one pass through [`DEMO_SCRIPT`] lasts before it starts over. Past
+/// the last entry, so the run ends free-running for a few seconds — the state
+/// it began in, which is what makes the next pass legible as a repeat rather
+/// than as something new.
+const DEMO_LOOP_SECONDS: f32 = 20.0;
+
 /// One press of the scrub keys, in beats. A quarter beat — a sixteenth of a bar
 /// in four — which is small enough to place a hit by ear and large enough to
 /// hear one press.
@@ -159,6 +226,10 @@ options:
                         meant to be found: from where the audience stands
   --tonemap OP          clamp | reinhard | aces | agx (default aces)
   --exposure V          output exposure, before the tone map (default 1.0)
+  --demo                drive the transport from a script instead of the
+                        keyboard, so a window shows it without anyone at one.
+                        A demonstration harness: it presses `y`, `u` and `i`
+                        and can do nothing a person could not
   --watch               recompile and swap the slot whose files changed
   --budget-ms MS        frame budget a swapped-in Set is held to
   -h, --help            this
@@ -325,6 +396,9 @@ struct Args {
     /// The unmeasurable half of the output lag, in milliseconds. See
     /// `audio::DEFAULT_LATENCY_OFFSET_MS`.
     latency_offset_ms: f32,
+    /// Drive the transport from [`DEMO_SCRIPT`] instead of waiting for a
+    /// keyboard. A demonstration harness, not a feature: it presses keys.
+    demo: bool,
     /// The frame budget the watchdog holds a swapped-in Set to, in
     /// milliseconds. Exposed mostly so that rollback can be provoked on
     /// demand — `--budget-ms 0` rejects everything — rather than only by
@@ -594,6 +668,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         audio_in: None,
         latency_offset_ms: audio::DEFAULT_LATENCY_OFFSET_MS,
         budget_ms: DEFAULT_BUDGET_MS,
+        demo: false,
         look: Look {
             op: TonemapOp::Aces,
             exposure: 1.0,
@@ -700,6 +775,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                 }
             }
             "--watch" => args_out.watch = true,
+            "--demo" => args_out.demo = true,
             "--budget-ms" => {
                 args_out.budget_ms = number_for("--budget-ms", "a number of milliseconds", &mut it)?
             }
@@ -1017,6 +1093,13 @@ struct Live {
     last: Instant,
     status_at: Instant,
     frames_since_status: u32,
+    /// How far into [`DEMO_SCRIPT`] the run is, or `None` when `--demo` was not
+    /// given and nothing drives itself.
+    demo: Option<usize>,
+    /// When the current pass through [`DEMO_SCRIPT`] started. The script loops,
+    /// so this is not [`Live::started`]: that one is the session's origin and a
+    /// tap is measured from it.
+    demo_started: Instant,
     /// Reused by the status line. Printing at all on this thread means locking
     /// stderr, but there is no reason for it to mean a fresh allocation twice a
     /// second as well.
@@ -1158,6 +1241,8 @@ impl ApplicationHandler for App {
             status_at: Instant::now(),
             frames_since_status: 0,
             status: String::with_capacity(256),
+            demo: self.args.demo.then_some(0),
+            demo_started: Instant::now(),
         };
         // Through a record at startup too, on the same terms as every later
         // change: `--tonemap` and `--exposure` are an operator's choices rather
@@ -1214,6 +1299,39 @@ impl Live {
         // the pair for the same reason.
         self.present.resize(&self.gpu.device, width, height);
         self.deck.resize(&self.gpu.device, width, height);
+    }
+
+    /// Press whatever [`DEMO_SCRIPT`] is due, if this run is driving itself.
+    ///
+    /// Wall clock rather than frame count, because what is being demonstrated
+    /// is a performance and a performance happens in seconds. That makes the
+    /// demo *not* reproducible frame for frame, which is fine and is worth
+    /// saying: it is a thing to look at, not a thing to diff. Everything it
+    /// presses goes through [`Live::key`], so it can do nothing a person at the
+    /// keyboard could not.
+    fn run_demo(&mut self) {
+        let Some(next) = self.demo else {
+            return;
+        };
+        let elapsed = self.demo_started.elapsed().as_secs_f32();
+        let mut at = next;
+        while let Some((due, key)) = DEMO_SCRIPT.get(at) {
+            if elapsed < *due {
+                break;
+            }
+            let key = Key::Character(key.to_string().into());
+            self.key(&key);
+            at += 1;
+        }
+        // **It loops**, because a demonstration nobody happened to be looking
+        // at is a demonstration that did not happen. The whole script is under
+        // twenty seconds and it starts over, so glancing at the window at any
+        // moment eventually shows the thing.
+        if at >= DEMO_SCRIPT.len() && elapsed >= DEMO_LOOP_SECONDS {
+            self.demo_started = Instant::now();
+            at = 0;
+        }
+        self.demo = Some(at);
     }
 
     /// A key press. Returns true if it was a request to quit.
@@ -1626,6 +1744,7 @@ impl Live {
     }
 
     fn frame(&mut self) {
+        self.run_demo();
         let steps = self.steps();
         self.measure_audio(steps);
 
