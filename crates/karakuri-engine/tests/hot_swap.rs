@@ -925,8 +925,8 @@ fn a_rewound_set_is_indistinguishable_from_one_that_was_never_stepped() {
     // being asserted is what the probe run does to the Set, not what it
     // measured, and calibration is half a second of GPU time for a number this
     // test never reads.
-    let probe = Probe::new(&gpu.device, &gpu.queue, false, PROBE_RESOLUTION);
-    let measurement = measure(&probe, &gpu.device, &gpu.queue, &mut probed);
+    let mut probe = Probe::new(&gpu.device, &gpu.queue, false, PROBE_RESOLUTION);
+    let measurement = measure(&mut probe, &gpu.device, &gpu.queue, &mut probed);
     assert!(measurement.ms.is_finite());
 
     assert_eq!(steps_taken(&probed), 0, "the probe run left `t` advanced");

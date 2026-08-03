@@ -284,6 +284,18 @@ impl Probe {
     /// the false positive that made an earlier, laxer version of this check
     /// unreliable.
     const CALIBRATION_ATTEMPTS: u32 = 10;
+    /// How far below the host clock a GPU timestamp may be before it is not
+    /// believed: the host number divided by this. Four is loose on purpose —
+    /// the host figure carries submission, two marker passes, a buffer mapping
+    /// and a poll, and on a fast GPU those can genuinely be most of it. What it
+    /// has to catch is not a factor of two, it is the factor of six hundred
+    /// that a lying adapter produced.
+    const PLAUSIBILITY_RATIO: f64 = 4.0;
+    /// Below this the host figure is mostly its own overhead and the ratio says
+    /// nothing, so the check does not apply. Five milliseconds: submission and
+    /// synchronisation are well under a millisecond, so a figure this size is
+    /// dominated by real work.
+    const PLAUSIBILITY_FLOOR_NS: f64 = 5_000_000.0;
 
     /// Allocate a probe at a given offscreen `resolution`.
     ///
@@ -420,7 +432,7 @@ impl Probe {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         middle: impl FnOnce(&mut wgpu::CommandEncoder),
-    ) -> (u64, u64) {
+    ) -> (u64, u64, f64) {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("probe sample"),
         });
@@ -457,6 +469,13 @@ impl Probe {
             0,
             gpu.resolve_buffer.size(),
         );
+        // **The same submission, timed twice.** The host clock around
+        // submit-and-wait is coarse and biased *high* — it includes
+        // submission, the two marker passes, the mapping and the poll — which
+        // is exactly what makes it useful here: it is an upper bound on the
+        // GPU time, and a timestamp delta far below it is a timestamp that is
+        // not measuring this work. Free, because the wait happens anyway.
+        let started = Instant::now();
         queue.submit([encoder.finish()]);
 
         // Wait for this sample to fully complete on the GPU before the next
@@ -465,13 +484,40 @@ impl Probe {
         let slice = gpu.readback_buffer.slice(..);
         slice.map_async(wgpu::MapMode::Read, |r| r.expect("map probe readback"));
         device.poll(wgpu::PollType::Wait).expect("poll");
+        let host_ns = started.elapsed().as_secs_f64() * 1_000_000_000.0;
         let data = slice.get_mapped_range();
         let begin = u64::from_le_bytes(data[0..8].try_into().expect("8-byte chunk"));
         let end = u64::from_le_bytes(data[8..16].try_into().expect("8-byte chunk"));
         drop(data);
         gpu.readback_buffer.unmap();
 
-        (begin, end)
+        (begin, end, host_ns)
+    }
+
+    /// **Whether a GPU timestamp delta is plausible against what the host saw
+    /// of the same submission.**
+    ///
+    /// The check that a fixed floor could not be. `CALIBRATION_MIN_NS` was
+    /// 0.1 ms against a workload costing tens of milliseconds — a thousand
+    /// times too low — and an adapter returning readings of about a tenth of a
+    /// millisecond cleared it while measuring nothing. A constant cannot be set
+    /// safely here: too low and it passes garbage, too high and it fails a
+    /// genuinely fast GPU. A second measurement of the *same work* has no such
+    /// problem, and its bias is in the direction that makes it usable — the
+    /// host clock includes submission and synchronisation, so it can only
+    /// over-state, and a GPU delta far *below* it is the only shape this can
+    /// flag.
+    ///
+    /// **Only when the host number is large enough for its overhead to be a
+    /// minor part of it**, which is why [`Probe::PLAUSIBILITY_FLOOR_NS`]
+    /// exists. On a cheap candidate the host figure is mostly submit-and-wait,
+    /// so the ratio means nothing — and nothing is at stake either: cheap
+    /// material measured as cheap is the right answer whichever clock said so.
+    /// The check bites exactly where a wrong answer is dangerous, which is
+    /// expensive material measured as nearly free.
+    fn plausible(gpu_ns: f64, host_ns: f64) -> bool {
+        host_ns < Self::PLAUSIBILITY_FLOOR_NS
+            || gpu_ns * Self::PLAUSIBILITY_RATIO >= host_ns
     }
 
     /// Bracket a deliberately heavy `render` pass through [`Probe::bracket`]
@@ -574,7 +620,7 @@ fn fs() -> @location(0) vec4<f32> {{
         let target_view = target.create_view(&Default::default());
 
         for _ in 0..Self::CALIBRATION_ATTEMPTS {
-            let (begin, end) = Self::bracket(gpu, device, queue, |encoder| {
+            let (begin, end, host_ns) = Self::bracket(gpu, device, queue, |encoder| {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("probe calibration work"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -594,30 +640,43 @@ fn fs() -> @location(0) vec4<f32> {{
                 pass.draw(0..3, 0..1);
             });
 
-            let plausible = end
+            // **Against what the host saw of the same submission, not against
+            // a constant.** The constant was the defect: `CALIBRATION_MIN_NS`
+            // is a thousandth of what this workload costs, so an adapter
+            // returning about a tenth of a millisecond cleared it while
+            // measuring nothing at all. The floor is kept as a second, weaker
+            // guard — a delta below it is not believable on any hardware — but
+            // the ratio is what decides.
+            let believable = end
                 .checked_sub(begin)
                 .map(|delta| delta as f64 * f64::from(gpu.period_ns))
-                .is_some_and(|delta_ns| delta_ns >= Self::CALIBRATION_MIN_NS);
-            if !plausible {
+                .is_some_and(|delta_ns| {
+                    delta_ns >= Self::CALIBRATION_MIN_NS
+                        && Self::plausible(delta_ns, host_ns)
+                });
+            if !believable {
                 return false;
             }
         }
         true
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn run_gpu(
-        &self,
         gpu: &GpuQuery,
+        target_view: &wgpu::TextureView,
+        resolution: (u32, u32),
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         source: &mut dyn VideoSource,
         steps: u8,
         capacity: u32,
-    ) -> Measurement {
+    ) -> Result<Measurement, f64> {
         let mut deltas_ns: Vec<f64> = Vec::with_capacity(Self::SAMPLES as usize - 1);
+        let mut host_ns: Vec<f64> = Vec::with_capacity(Self::SAMPLES as usize - 1);
         for i in 0..Self::SAMPLES {
-            let (begin, end) = Self::bracket(gpu, device, queue, |encoder| {
-                source.render(encoder, &self.target_view, steps);
+            let (begin, end, host) = Self::bracket(gpu, device, queue, |encoder| {
+                source.render(encoder, target_view, steps);
             });
             if i == 0 {
                 // Cold: pays for pipeline and cache state settling every
@@ -630,6 +689,7 @@ fn fs() -> @location(0) vec4<f32> {{
             // to zero would enter a spuriously "instant" measurement into
             // the pool; dropping it keeps the representative value built
             // only from pairs the hardware actually reported as ordered.
+            host_ns.push(host);
             if let Some(delta) = end.checked_sub(begin) {
                 deltas_ns.push(delta as f64 * f64::from(gpu.period_ns));
             }
@@ -641,13 +701,25 @@ fn fs() -> @location(0) vec4<f32> {{
         );
         deltas_ns.sort_by(|a, b| a.partial_cmp(b).expect("timestamp deltas are finite"));
         let median_ns = deltas_ns[deltas_ns.len() / 2];
+        host_ns.sort_by(|a, b| a.partial_cmp(b).expect("elapsed times are finite"));
+        let host_median_ns = host_ns[host_ns.len() / 2];
 
-        Measurement {
+        // **Checked again here, and not only at calibration.** The adapter that
+        // produced this check passed calibration and then measured two million
+        // point sprites at less than a tenth of a millisecond — the flakiness
+        // this module already documents is attempt to attempt within one
+        // process, so a verdict taken once at construction does not hold for
+        // the life of a probe.
+        if !Self::plausible(median_ns, host_median_ns) {
+            return Err(host_median_ns);
+        }
+
+        Ok(Measurement {
             ms: (median_ns / 1_000_000.0) as f32,
             method: MeasurementMethod::GpuTimestamp,
             capacity,
-            resolution: self.resolution,
-        }
+            resolution,
+        })
     }
 
     /// Time one host-clock sample: wrap `source.render`'s submission and the
@@ -722,7 +794,7 @@ fn fs() -> @location(0) vec4<f32> {{
     /// been constructed at that capacity; see [`Probe::new`] for why it is
     /// this method's parameter rather than the constructor's.
     pub fn run(
-        &self,
+        &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         source: &mut dyn VideoSource,
@@ -731,9 +803,86 @@ fn fs() -> @location(0) vec4<f32> {{
     ) -> Measurement {
         match (&self.gpu, self.method) {
             (Some(gpu), MeasurementMethod::GpuTimestamp) => {
-                self.run_gpu(gpu, device, queue, source, steps, capacity)
+                match Self::run_gpu(
+                    gpu,
+                    &self.target_view,
+                    self.resolution,
+                    device,
+                    queue,
+                    source,
+                    steps,
+                    capacity,
+                ) {
+                    Ok(measurement) => measurement,
+                    // **Distrusted for the rest of this probe's life, not just
+                    // for this measurement.** The two methods are not
+                    // comparable — the module doc says so and the governor sums
+                    // them — so a probe that answered with a GPU number and
+                    // then a host number would hand the budget two figures on
+                    // different scales and no way to tell. Falling back for
+                    // good keeps every number a probe produces comparable with
+                    // every other, which is the property an admission decision
+                    // actually rests on.
+                    Err(_) => {
+                        self.method = MeasurementMethod::HostWallClock;
+                        self.run_host(device, queue, source, steps, capacity)
+                    }
+                }
             }
             _ => self.run_host(device, queue, source, steps, capacity),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **The reading that got through, against the check written for it.**
+    ///
+    /// `tests/probe.rs` recorded what the adapter actually produced when it
+    /// lied: two million point sprites at 0.095 ms while the same submission
+    /// took tens of milliseconds on the host clock. The old guard was a
+    /// constant floor of 0.1 ms, so 0.095 ms sat *just under* the only bar
+    /// there was — and a floor set high enough to catch it would fail a
+    /// genuinely fast GPU.
+    #[test]
+    fn the_reading_that_got_through_a_constant_floor_does_not_get_through_this() {
+        let lying_ns = 95_000.0;
+        let host_ns = 60_000_000.0;
+        assert!(
+            !Probe::plausible(lying_ns, host_ns),
+            "the reading this check exists for was believed"
+        );
+        // And the shape of the old bar, for the record: it cleared the floor
+        // by all of five microseconds.
+        assert!(lying_ns < Probe::CALIBRATION_MIN_NS);
+    }
+
+    /// An honest measurement is believed even when the host clock is much
+    /// larger, because it always is: the host figure carries submission, two
+    /// marker passes, a mapping and a poll. The ratio is loose for that reason
+    /// and only has to catch a factor of hundreds.
+    #[test]
+    fn an_honest_measurement_survives_the_hosts_overhead() {
+        // A GPU that did the work in a quarter of what the host observed.
+        assert!(Probe::plausible(15_000_000.0, 60_000_000.0));
+        // And one that did it in most of it.
+        assert!(Probe::plausible(55_000_000.0, 60_000_000.0));
+    }
+
+    /// **Below the floor the check does not apply**, and that is deliberate:
+    /// on a cheap candidate the host figure is mostly its own overhead, so the
+    /// ratio would fail an honest measurement. Nothing is at stake there —
+    /// cheap material measured as cheap is right whichever clock said it — and
+    /// the check is aimed at the case that is dangerous, expensive material
+    /// measured as nearly free.
+    #[test]
+    fn a_cheap_candidate_is_not_judged_against_its_own_overhead() {
+        // 0.05 ms of GPU work inside a 1 ms submit-and-wait: a ratio of twenty,
+        // and entirely normal.
+        assert!(Probe::plausible(50_000.0, 1_000_000.0));
+        // The floor is where that stops being excused.
+        assert!(!Probe::plausible(50_000.0, Probe::PLAUSIBILITY_FLOOR_NS * 2.0));
     }
 }
