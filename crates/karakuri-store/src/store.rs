@@ -123,6 +123,21 @@ impl Store {
         ndjson::write(&self.session_path(stamp), lines)
     }
 
+    /// **Open a session stream for appending**, for a writer that produces the
+    /// timeline as it happens rather than holding a whole set in memory.
+    ///
+    /// Not atomic, and deliberately not: [`Store::write_session`] renames a
+    /// complete file into place, which is right for something written once and
+    /// wrong for something written for an hour. A session appended to is
+    /// readable up to its last complete line at every moment, and a run that
+    /// dies mid-set leaves the set up to that point rather than nothing.
+    pub fn append_session(&self, stamp: &str) -> Result<fs::File, StoreError> {
+        Ok(fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.session_path(stamp))?)
+    }
+
     /// Save a live session as a Set: the session stream with ticks dropped
     /// and the state folded down, last write wins per layer and key. See
     /// [`project::project`] and `docs/ir-spec.md`, Session stream format.
