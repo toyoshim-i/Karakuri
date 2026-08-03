@@ -158,13 +158,18 @@ not the expensive half.
 
 **Landed so far**, in order: the deck with an L5 mix and a per-slot level meter; tone
 mapping once after the mix; signal binding; priming, the budget governor and `closed_form`;
-audio input with beat tracking; a record vocabulary for the mix; the `beats` ambient; per-slot transport; Set files, saved and loaded. Each bullet below says
+audio input with beat tracking; a record vocabulary for the mix; the `beats` ambient; per-slot transport; Set files, saved and loaded; a session writer and a replay driver. Each bullet below says
 what it cost against what it promised — the ones marked **Done** are worth reading for
 where the promise was wrong, not only for the fact that it is kept.
 
-**Still open**, and the shape of the rest of this milestone: transitions, blend
-modes and masks, MIDI, output routing, Ableton Link, a panic key, per-slot preview, and a
-session writer with the replay driver that makes it worth writing.
+**Still open**, and the shape of the rest of this milestone: transitions, blend modes and
+masks, MIDI, output routing, Ableton Link, a panic key, and per-slot preview.
+
+Two debts from what has landed, both named where the code is rather than only here:
+**`audio` is not written to a session stream** — its record carries a `Vec` and cloning one
+per frame is the allocation the writer exists to avoid, so it needs the same buffer swap
+the recorder uses internally — and **`Deck::set_opacity` is unreachable**, with no key and
+no flag, which is why the mix vocabulary has no `opacity` record.
 
 Five things the milestone has taught, all worth carrying:
 
