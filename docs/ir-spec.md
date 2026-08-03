@@ -968,13 +968,22 @@ known. The total-cost decision lives there, not in the artifact.
 - **`gain`, `residency`, `look` and `transport` are not in this list and must never be.**
   They are the session's state rather than any Set's — see the session stream format.
 
-**What "implemented" covers here is the format; its effect is implemented for `bind` and
-not yet for the rest.** Every record above decodes, re-encodes, and folds down to a
-projection, and unknown ones survive the round trip — `karakuri-store` tests all of that.
-None of the records above reaches the engine by being read off disk: the CLI takes two
-`.kir` paths rather than a Set file. What has changed is that `bind` is no longer inert
-once it gets there — the engine implements the semantics below, and `karakuri-cli`'s
-`--bind` flag names exactly these fields as a stand-in until a Set file can be loaded.
+**Implemented, and the engine obeys it.** `karakuri-cli`'s `--save-set` writes one of
+these and puts both `.kir` sources in the store as content-addressed artifacts;
+`--load-set` reads it back and builds from it, resolving each `slot` by hash or from
+inlined `src` records when the file is bundled. A run driven by a Set file renders the
+same frame as the run whose flags wrote it.
+
+`--bind` survives as a way of *writing* a `bind` record rather than as a path beside one:
+the flag parses its fields into a `Record::Bind` and hands it to the same decoder a Set
+file uses, so a command line and a file cannot mean different things by the same fields.
+
+**Three places this format is finer than the engine**, all of them reported on load rather
+than dropped: `seed`, `capacity` and `param` are keyed by layer while the engine holds one
+seed, one capacity and one flat parameter map per Set; a `param` may be a vector while the
+engine's map holds `f32`; and `camera` carries two of the six fields the engine's orbit
+has. Each is a disagreement between the format and the engine rather than a gap in the
+loader, and settling them is the format's business and the engine's, not the reader's.
 
 The *session* records are further along: `audio` and `tempo` per frame, and `gain`,
 `residency`, `look` and `transport` per key press, are each built by the CLI, decoded back,

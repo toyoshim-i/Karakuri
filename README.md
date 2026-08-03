@@ -33,9 +33,18 @@ cargo run -p karakuri-cli -- --bpm 128 \
   --bind layer=L1,key=turbulence,signal=beat,curve=pow2,range=0.1..2.4
 ```
 
-`--bind` is a stand-in for a Set file, which nothing loads yet: its fields are
-`Record::Bind`'s fields, so replacing it later is deleting a parser rather than changing a
-design.
+A Set file can be saved and loaded, which is what `--bind` was a stand-in for:
+
+```sh
+cargo run -p karakuri-cli -- a.kir b.kir --save-set night01 --param turbulence=2.6
+cargo run -p karakuri-cli -- --load-set night01
+```
+
+`--save-set` puts both `.kir` files in the store as content-addressed artifacts and writes
+a Set file referencing them by hash, with the capacity, parameters, bindings, camera and
+seed the run was given. `--load-set` reads it back, and a run driven by the file renders
+**the same frame** as the run whose flags wrote it. Anything the file could not be carried
+across in full is printed rather than dropped — see the Status table.
 
 `--set` fills a deck slot and may be given up to four times; every Live slot renders into
 its own target and one composite pass mixes them. In the window:
@@ -163,12 +172,15 @@ during implementation, these win.
   applied, so what drives the engine is what a replay would decode rather than a second
   path that happens to agree with it.
 
-  What does not: `tick` — the step count is derived from real time and passed as a
-  number, and `Record::Tick` is never constructed outside tests; and `bind`, `param`
-  and `seed` — the record types exist and round-trip, but the CLI applies its `--bind`,
-  `--param`, `--bpm` and seeds to the engine directly, because nothing loads a Set file
-  into the engine yet. So the *performance* is on the record path and the *material* is
-  not. Closing it is a session writer, a replay driver, and a Set-file loader
+  The **material** joined them: `--load-set` builds a Set from `set`, `slot`, `capacity`,
+  `param`, `bind`, `camera` and `seed` records, and `--bind` is now a way of *writing* a
+  `bind` record rather than a second path beside it — one decoder, so a command line and a
+  Set file cannot mean different things by the same fields.
+
+  What does not go through a record: `tick`. The step count is derived from real time and
+  passed as a number, and `Record::Tick` is never constructed outside tests. Closing that
+  is a session writer and a replay driver, which is also what would let a whole
+  performance be replayed rather than only rebuilt
 - **The governor may lower a slot's effective residency and may never write its requested
   one.** A refusal is a deferral: the operator's request is what the next pass reads
 
@@ -334,7 +346,8 @@ governor, alongside the decision about whether GPU timestamps can be trusted at 
 | WGSL generation | Works, validated through naga. Generated names cannot be captured by anything a `.kir` can spell |
 | Set, buffers, pipelines, compute and render | Works. Double buffering, Set-level `capacity`, parameters as uniform writes. Nothing on the frame path allocates: both per-frame uniform writes go through storage sized once at build time |
 | Linear HDR end to end, sRGB once at output | Works |
-| Store | Works standalone. **Six record types have a live path and the rest do not**: `audio` and `tempo` per frame, `gain`, `residency`, `look` and `transport` per key press, all built and read back before anything is applied, so what drives the engine is what a replay would decode. `tick`, `bind`, `param` and `seed` round-trip in tests and nothing writes one, so a Set file remains a format the engine agrees with and does not yet obey. Nothing writes a session stream to disk at all |
+| Store | Works, and the engine obeys it. `--save-set` writes a Set file and puts both `.kir` sources in the store as content-addressed artifacts; `--load-set` reads it back and builds from it, resolving each procedure by hash or from inlined `src` when the file is bundled. **Only `tick` still has no writer.** `audio` and `tempo` go through a record every frame, `gain`, `residency`, `look` and `transport` on every key that moves them, and `set`/`slot`/`capacity`/`param`/`bind`/`camera`/`seed` on every save and load. Nothing writes a *session* stream to disk yet, so a performance can be rebuilt and not replayed |
+| What a Set file cannot carry | Named rather than dropped, and printed on load. The format keys `seed`, `capacity` and `param` by **layer** and the engine holds one seed, one capacity and one flat parameter map per Set; a `param` may be a vector and the engine's map holds `f32`; and a `camera` record carries two of `Orbit`'s six fields, so the other four come back as defaults. Every one of those is a real disagreement between the format and the engine rather than an omission in the loader, and a Set file that half-applied in silence is the failure this repository keeps refusing |
 | Set file and session stream | The two projections are kept apart by `Record::is_set_state` and `project`. A Set file drops the mix as well as the ticks, and for a different reason: a gain is state, but the *session's*, and a Set file that restored one would pull down whatever fader it was next loaded under. The session projection that folds the mix does not exist, because nothing writes a session stream to fold |
 | Transport | Works, per slot. `free`, `tempo` (rate, scaled by the room's tempo against a per-slot anchor) and `beat` (position lock, jumps and reverses). **Two mechanisms, because there are two kinds of material**: closed-form state at `t` is a pure function of `t`, so a seek costs one element pass; accumulating material integrates, and reversing a sum is impossible rather than slow, so all it can be given is a rate. The anchor is a per-slot dial because **material has no intrinsic tempo** — a `.kir` declares parameters and a capacity, not a bar length — and it defaults to the tempo at the moment sync is engaged so that engaging it moves nothing. What is not built: a position source that can itself reverse. Audio only ever moves forward; a deck link (M7) does not, and arrives at the same entry point |
 | `beats` | Works. The session's tempo grid, readable from IR as an ambient beside `t` — per substep, continuous across a tempo correction, and the same instant `t` names. **Without it the picture ran at wall time whatever the music did**: a tempo change moved the grid every binding was sampled on and moved nothing that was drawn, and a `bind` cannot close that, because what follows a tempo is not a parameter value but the passage of time. `beat` and `bar` stay bus names and stay different — phases in `[0, 1]` for driving a parameter, where `beats` is unbounded and monotone for driving a position |

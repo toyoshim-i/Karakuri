@@ -158,13 +158,13 @@ not the expensive half.
 
 **Landed so far**, in order: the deck with an L5 mix and a per-slot level meter; tone
 mapping once after the mix; signal binding; priming, the budget governor and `closed_form`;
-audio input with beat tracking; a record vocabulary for the mix; the `beats` ambient; per-slot transport. Each bullet below says
+audio input with beat tracking; a record vocabulary for the mix; the `beats` ambient; per-slot transport; Set files, saved and loaded. Each bullet below says
 what it cost against what it promised — the ones marked **Done** are worth reading for
 where the promise was wrong, not only for the fact that it is kept.
 
 **Still open**, and the shape of the rest of this milestone: transitions, blend
-modes and masks, MIDI, output routing, Ableton Link, a panic key, per-slot preview, and
-loading a Set file into the engine at all.
+modes and masks, MIDI, output routing, Ableton Link, a panic key, per-slot preview, and a
+session writer with the replay driver that makes it worth writing.
 
 Five things the milestone has taught, all worth carrying:
 
@@ -340,10 +340,14 @@ fine alone and is unreadable next to lights.
   samples, curves, maps and blends by confidence into the uniform write, and the spawn
   accumulator reads the same value. What is missing is that a `Record::Bind` never becomes
   one, because nothing loads a Set file into the engine — bindings arrive by CLI flag,
-  shaped like the record so that replacing the flag is deleting a parser. **The two
-  diagnostics that guard the flag** — a `bpm` binding, which saturates because a tempo is
-  not a `[0, 1]` signal, and a `noise.octaves` on a kind that has none — **live only in the
-  flag today, and the decoder owes them too**
+  shaped like the record so that replacing the flag is deleting a parser. **The decoder
+  has landed and the debt is paid** — the two diagnostics that guarded the flag, a `bpm`
+  binding and a `noise.octaves` on a kind that has none, live in the decoder now and the
+  flag reaches them by *building the record and decoding it*. One rule rather than two
+  copies of it, so a command line and a Set file cannot mean different things by the same
+  fields. The one check that stayed with the flag is the one a record cannot express:
+  `BindNoise::octaves` has a serde default, deliberately, so a record cannot say whether
+  `octaves` was named and only the flag knows
 - **A record vocabulary for the mix.** `gain`, `residency` and `look`, built on every key
   that moves them, decoded back, and only then applied — the same arrangement `audio` and
   `tempo` have. Without it a session would replay the material and not the *performance*:
