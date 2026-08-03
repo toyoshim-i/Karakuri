@@ -116,6 +116,7 @@ mod tests {
             // Hand-built fixtures: `check` is what decides this, and these never
             // run it. `false` is the conservative side and nothing here reads it.
             closed_form: false,
+            reads_beats: false,
             span: span(),
         }
     }

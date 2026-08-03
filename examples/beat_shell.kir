@@ -49,6 +49,10 @@ proc beat_shell {
 
     position = rot_y(base * (1.0 + hit * punch) + flow * 0.3, turn);
     velocity = flow;
-    age      = age + dt;
+    // `t`, not `age + dt`, and the difference is the whole of the claim above:
+    // reading an attribute this procedure emits is one of the three things
+    // that make a procedure accumulating. With no `spawn` block every element
+    // is alive from frame zero, so its age is the clock.
+    age      = t;
   }
 }

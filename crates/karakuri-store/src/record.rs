@@ -196,6 +196,25 @@ pub enum Record {
         exposure: f32,
         white_point: f32,
     },
+    /// **What a deck slot's clock does with the session's** — `free`, `tempo`
+    /// or `beat`, with the two numbers that make the mode mean something.
+    ///
+    /// `anchor_bpm` is the tempo at which this material runs at 1x, and it has
+    /// to be recorded because **material has no intrinsic tempo**: a `.kir`
+    /// declares parameters and a capacity, not a bar length, so "one beat of
+    /// music is how many seconds of material" is an operator's answer rather
+    /// than the artifact's. `offset_beats` is the scrub — signed, unbounded,
+    /// and the one value in this format that is meant to go backwards.
+    ///
+    /// Both are carried even under `free`, where neither does anything, so that
+    /// a slot moved back onto the grid returns to where the operator left it
+    /// rather than to a default.
+    Transport {
+        slot: u8,
+        sync: String,
+        anchor_bpm: f32,
+        offset_beats: f64,
+    },
     // -- What a frame saw or decided --------------------------------------
     /// How far this frame advances. Emitted from real time when live, read back
     /// verbatim on replay — which is what keeps substepping deterministic.
@@ -285,7 +304,7 @@ pub enum Record {
 pub const MAX_STEPS: u8 = 4;
 
 impl Record {
-    /// Whether this record belongs in a Set file. **Six say no, for two
+    /// Whether this record belongs in a Set file. **Seven say no, for two
     /// different reasons, and keeping them apart is the point of the name** —
     /// it is `is_set_state` rather than `is_set_state` because half of what it
     /// refuses is state.
@@ -294,13 +313,14 @@ impl Record {
     ///   state at all: they are what a *frame* saw or decided. A Set file
     ///   carries no time, and one holding an audio frame would be claiming a
     ///   particular moment's microphone reading is part of what a Set is.
-    /// - [`Record::Gain`], [`Record::Residency`] and [`Record::Look`] are
-    ///   durable state, but the **session's** rather than any Set's. A Set does
+    /// - [`Record::Gain`], [`Record::Residency`], [`Record::Look`] and
+    ///   [`Record::Transport`] are durable state, but the **session's** rather
+    ///   than any Set's. A Set does
     ///   not know what fader it is under; one that carried its gain would
     ///   restore that gain wherever it was next loaded, which is a Set file
     ///   reaching outside the Set.
     ///
-    /// A session stream carries all six. That is the difference between the two
+    /// A session stream carries all seven. That is the difference between the two
     /// files, stated from this side.
     pub fn is_set_state(&self) -> bool {
         !matches!(
@@ -311,6 +331,7 @@ impl Record {
                 | Record::Gain { .. }
                 | Record::Residency { .. }
                 | Record::Look { .. }
+                | Record::Transport { .. }
         )
     }
 }

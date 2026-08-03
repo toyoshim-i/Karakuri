@@ -75,7 +75,8 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         | Record::Tempo { .. }
         | Record::Gain { .. }
         | Record::Residency { .. }
-        | Record::Look { .. } => None,
+        | Record::Look { .. }
+        | Record::Transport { .. } => None,
         Record::Unknown => Some(Key::Passthrough(ordinal)),
     }
 }

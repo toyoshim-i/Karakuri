@@ -31,6 +31,7 @@ use std::time::{Duration, Instant};
 use karakuri_engine::binding::{Curve, CURVES, DEFAULT_BPM, NOISE_SIGNAL};
 use karakuri_engine::deck::MAX_SLOTS;
 use karakuri_engine::swap::Event;
+use karakuri_engine::transport::{Sync, Transport};
 use karakuri_engine::{
     Binding, Deck, Gpu, HotSwap, Present, Residency, Set, Signals, TonemapOp, DEFAULT_BUDGET_MS,
 };
@@ -83,6 +84,11 @@ const EXPOSURE_MAX: f32 = 64.0;
 fn clamp_exposure(exposure: f32) -> f32 {
     exposure.clamp(EXPOSURE_MIN, EXPOSURE_MAX)
 }
+
+/// One press of the scrub keys, in beats. A quarter beat — a sixteenth of a bar
+/// in four — which is small enough to place a hit by ear and large enough to
+/// hear one press.
+const SCRUB_BEATS: f64 = 0.25;
 
 /// A fader floor: a negative gain would subtract one slot's light from
 /// another's, which is a blend mode rather than a fader. Not ceilinged — the
@@ -178,6 +184,14 @@ keys:
   t          cycle the tone map operator: clamp, Reinhard, ACES, AgX
   - =        output exposure down / up
   `          exposure back to 1.0
+  y          cycle the focused slot's sync: free, tempo, beat. Modes the
+             material cannot take are skipped with the reason — beat sync
+             needs closed-form material, and tempo sync is refused on material
+             that reads `beats`, which already follows the room. Engaging
+             anchors the material at the current tempo, so nothing jumps
+  u i        scrub the focused slot back / forward, a quarter beat a press.
+             Beat sync only: scrubbing moves a position and the other modes
+             are rates
   b          tap the beat — three or more taps set the tempo as well, and a
              tap always sets the phase. Needs --audio-in
   , .        halve / double the grid, and the octave the tracker looks in with
@@ -1222,6 +1236,9 @@ impl Live {
                 '=' => self.set_exposure(self.look.exposure * EXPOSURE_STEP),
                 '`' => self.set_exposure(1.0),
                 'w' => self.toggle_priming(),
+                'y' => self.cycle_sync(),
+                'u' => self.scrub(-SCRUB_BEATS),
+                'i' => self.scrub(SCRUB_BEATS),
                 'b' => self.tap(),
                 ',' => self.shift_octave(0.5),
                 '.' => self.shift_octave(2.0),
@@ -1340,6 +1357,82 @@ impl Live {
                 );
             }
         }
+    }
+
+    /// **Cycle the focused slot's sync mode**, skipping the modes its material
+    /// cannot take and saying why.
+    ///
+    /// This is the CLI's form of a control greyed out: there is no widget to
+    /// dim, so the unavailable modes are stepped over and the reason is printed
+    /// with the result. Silently skipping would leave an operator pressing a
+    /// key and watching two of three modes never arrive; printing on every
+    /// press without skipping would make the key refuse to do anything at all
+    /// on material that only allows one mode.
+    fn cycle_sync(&mut self) {
+        let slot = self.focus;
+        let current = self.deck.transport(slot).sync();
+        let at = Sync::ALL.iter().position(|s| *s == current).unwrap_or(0);
+
+        let mut refused: Vec<String> = Vec::new();
+        let mut next = None;
+        // Every other mode, in cycle order, starting after the current one.
+        for step in 1..=Sync::ALL.len() {
+            let candidate = Sync::ALL[(at + step) % Sync::ALL.len()];
+            match self.deck.sync_allowed(slot, candidate) {
+                Ok(()) => {
+                    next = Some(candidate);
+                    break;
+                }
+                Err(refusal) => refused.push(format!("{} — {refusal}", candidate.name())),
+            }
+        }
+
+        let Some(next) = next else {
+            // Unreachable while `Sync::Free` is never refused, and handled
+            // rather than unwrapped because that is a property of `allows` and
+            // not of this loop.
+            eprintln!("slot {slot}: no sync mode is available for this material");
+            return;
+        };
+        if next == current {
+            eprintln!("slot {slot}: {} is the only mode this material takes", next.name());
+        }
+        for reason in &refused {
+            eprintln!("  skipped {reason}");
+        }
+
+        let bpm = self.deck.signals().oscillator().bpm();
+        let engaged = Transport::engaged(next, bpm);
+        self.record(mix::transport_record(slot, &engaged));
+        eprintln!(
+            "slot {slot} sync {} at {bpm:.1} bpm{}",
+            next.name(),
+            match next {
+                Sync::Free => " — wall time, the room does nothing to it",
+                Sync::Tempo => " — 1x here, faster if the room is",
+                Sync::Beat => " — locked to the room's position; u/i scrub",
+            }
+        );
+    }
+
+    /// Scrub the focused slot, in beats. The one control that goes backwards.
+    fn scrub(&mut self, beats: f64) {
+        let slot = self.focus;
+        let transport = self.deck.transport(slot);
+        if transport.sync() != Sync::Beat {
+            eprintln!(
+                "slot {slot} is {} — scrubbing moves a position, and only beat sync has one (y)",
+                transport.sync().name()
+            );
+            return;
+        }
+        let mut moved = *transport;
+        moved.scrub(beats);
+        self.record(mix::transport_record(slot, &moved));
+        eprintln!(
+            "slot {slot} scrub {:+.2} beats",
+            self.deck.transport(slot).offset_beats()
+        );
     }
 
     /// A tap on the beat. Authoritative — a performer tapping is stating where
@@ -1481,6 +1574,24 @@ impl Live {
             mix::Change::Look(look) => {
                 self.look = look;
                 self.apply_look();
+            }
+            mix::Change::Transport {
+                slot,
+                sync,
+                anchor_bpm,
+                offset_beats,
+            } => {
+                // The refusal is reported and nothing moves. It cannot happen
+                // from a key press — `cycle_sync` only offers modes the Set
+                // allows — but a session recorded against one Set and replayed
+                // against another is exactly where it can, and a slot silently
+                // left free would be a performance replayed wrong.
+                if let Err(refusal) =
+                    self.deck
+                        .set_transport(slot, sync, anchor_bpm, offset_beats)
+                {
+                    eprintln!("slot {slot}: {} sync refused — {refusal}", sync.name());
+                }
             }
         }
     }
@@ -1628,6 +1739,30 @@ impl Live {
                 self.deck.gain(slot),
                 self.deck.slot(slot).set().time()
             );
+            // The transport, and **only when it is doing something**: a deck
+            // nobody has synced prints the line it always printed. `free` is
+            // the absence of a transport rather than a setting, and a column
+            // reading `free` on every slot would be four characters of nothing
+            // on a line that has to be read at a glance in the dark.
+            let transport = self.deck.transport(slot);
+            match transport.sync() {
+                Sync::Free => {}
+                Sync::Tempo => {
+                    let _ = write!(self.status, "T{:.0} ", transport.anchor_bpm());
+                }
+                Sync::Beat => {
+                    let _ = write!(
+                        self.status,
+                        "B{:.0}{} ",
+                        transport.anchor_bpm(),
+                        if transport.offset_beats() == 0.0 {
+                            String::new()
+                        } else {
+                            format!("{:+.2}", transport.offset_beats())
+                        }
+                    );
+                }
+            }
             // The level, which is why the meter exists: two Sets are matched
             // on `m` and `p` warns which one will dominate the mix wherever it
             // lands regardless of its fader. `None` for an off-air slot is the

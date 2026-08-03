@@ -157,6 +157,7 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
         // Before the move: the classifier reads the checked blocks, and
         // `blocks` is about to become the struct's.
         let closed_form = is_closed_form(proc.kind, &emit_set, &blocks);
+        let reads_beats = reads_beats(&blocks);
         Ok(Checked {
             name: proc.name.clone(),
             kind: proc.kind,
@@ -169,6 +170,7 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
             blocks,
             cost: None,
             closed_form,
+            reads_beats,
             span: proc.span,
         })
     } else {
@@ -581,6 +583,52 @@ fn reads_emitted(e: &TExpr, emit: &HashSet<Attr>) -> bool {
         }
         TExprKind::Swizzle { value, .. } => reads_emitted(value, emit),
     }
+}
+
+/// **Whether the procedure reads [`Ambient::Beats`] anywhere.**
+///
+/// Recorded because it decides what a *transport* may do to the slot, and it is
+/// the one property there that the engine cannot work out for itself: a
+/// procedure written against the grid already follows the room's tempo, and
+/// putting it in a tempo-synced slot would make it follow twice — the slot's
+/// clock scaled by the tempo, and the grid read on that scaled clock. The
+/// result runs at roughly the square of the tempo ratio, which reads as a
+/// broken artifact rather than as two controls doing the same job.
+///
+/// So this is a **fact, not a judgement**, and nothing is rejected for it.
+/// Unlike [`is_closed_form`] there is no conservative direction to err into:
+/// over-claiming greys out a control that would have worked, under-claiming
+/// offers one that compounds. Both are wrong, and neither is safe, which is
+/// why this walks the tree rather than approximating.
+fn reads_beats(blocks: &[TBlock]) -> bool {
+    fn in_stmts(stmts: &[TStmt]) -> bool {
+        stmts.iter().any(|s| match s {
+            TStmt::Kill { .. } => false,
+            TStmt::Let { value, .. } | TStmt::Var { value, .. } => in_expr(value),
+            TStmt::Assign { value, .. } => in_expr(value),
+            TStmt::If { cond, then, els, .. } => {
+                in_expr(cond) || in_stmts(then) || in_stmts(els)
+            }
+            TStmt::For { body, .. } => in_stmts(body),
+        })
+    }
+    fn in_expr(e: &TExpr) -> bool {
+        match &e.kind {
+            TExprKind::Ambient(Ambient::Beats) => true,
+            TExprKind::Lit(_)
+            | TExprKind::Local(_)
+            | TExprKind::Param(_)
+            | TExprKind::Attr(_)
+            | TExprKind::Ambient(_) => false,
+            TExprKind::Unary { value, .. } => in_expr(value),
+            TExprKind::Binary { lhs, rhs, .. } => in_expr(lhs) || in_expr(rhs),
+            TExprKind::Builtin { args, .. } | TExprKind::Construct { args } => {
+                args.iter().any(in_expr)
+            }
+            TExprKind::Swizzle { value, .. } => in_expr(value),
+        }
+    }
+    blocks.iter().any(|b| in_stmts(&b.stmts))
 }
 
 // ---------------------------------------------------------------------------

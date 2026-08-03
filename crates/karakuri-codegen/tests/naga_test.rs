@@ -182,6 +182,7 @@ fn drift_shell() -> Checked {
         // Hand-built fixtures: `check` is what decides this, and these never
         // run it. `false` is the conservative side and nothing here reads it.
         closed_form: false,
+        reads_beats: false,
         span: span(),
     }
 }
@@ -267,6 +268,7 @@ fn soft_points() -> Checked {
         // Hand-built fixtures: `check` is what decides this, and these never
         // run it. `false` is the conservative side and nothing here reads it.
         closed_form: false,
+        reads_beats: false,
         span: span(),
     }
 }
@@ -341,6 +343,7 @@ fn shadowing_locals_l1() -> Checked {
         // Hand-built fixtures: `check` is what decides this, and these never
         // run it. `false` is the conservative side and nothing here reads it.
         closed_form: false,
+        reads_beats: false,
         span: span(),
     }
 }
@@ -402,6 +405,7 @@ fn shadowing_locals_l4() -> Checked {
         // Hand-built fixtures: `check` is what decides this, and these never
         // run it. `false` is the conservative side and nothing here reads it.
         closed_form: false,
+        reads_beats: false,
         span: span(),
     }
 }
@@ -439,6 +443,7 @@ fn reserved_word_params_l1() -> Checked {
         // Hand-built fixtures: `check` is what decides this, and these never
         // run it. `false` is the conservative side and nothing here reads it.
         closed_form: false,
+        reads_beats: false,
         span: span(),
     }
 }
@@ -589,6 +594,7 @@ fn reordered_subset_l4() -> Checked {
         // Hand-built fixtures: `check` is what decides this, and these never
         // run it. `false` is the conservative side and nothing here reads it.
         closed_form: false,
+        reads_beats: false,
         span: span(),
     }
 }
@@ -631,6 +637,7 @@ fn consumes_nothing_l4() -> Checked {
         // Hand-built fixtures: `check` is what decides this, and these never
         // run it. `false` is the conservative side and nothing here reads it.
         closed_form: false,
+        reads_beats: false,
         span: span(),
     }
 }
@@ -679,6 +686,7 @@ fn emits_every_attribute_l1() -> Checked {
         // Hand-built fixtures: `check` is what decides this, and these never
         // run it. `false` is the conservative side and nothing here reads it.
         closed_form: false,
+        reads_beats: false,
         span: span(),
     }
 }
@@ -739,6 +747,7 @@ fn l4_consuming_every_attribute_compiles_and_validates() {
         // Hand-built fixtures: `check` is what decides this, and these never
         // run it. `false` is the conservative side and nothing here reads it.
         closed_form: false,
+        reads_beats: false,
         span: span(),
     };
     let shader = karakuri_codegen::generate_l4(&l4, &layout_for(&l1));
