@@ -177,10 +177,15 @@ during implementation, these win.
   `bind` record rather than a second path beside it — one decoder, so a command line and a
   Set file cannot mean different things by the same fields.
 
-  What does not go through a record: `tick`. The step count is derived from real time and
-  passed as a number, and `Record::Tick` is never constructed outside tests. Closing that
-  is a session writer and a replay driver, which is also what would let a whole
-  performance be replayed rather than only rebuilt
+  **Every record type now has a writer.** `--record-session` writes the timeline as it
+  happens — the Set's records, a `tick` a frame, and every edit between them — and
+  `--replay` renders it back, reading `tick` where a live run reads a clock and `audio`
+  where it reads a microphone. So a performance is replayed rather than only rebuilt, and
+  the invariant above is a description at last.
+
+  The frame path still writes nothing itself: serialising allocates, so a frame moves a
+  record into a buffer that already has room and a writer thread does the rest. An `audio`
+  record carries a `Vec`, so it is swapped for an empty shell rather than copied
 - **The governor may lower a slot's effective residency and may never write its requested
   one.** A refusal is a deferral: the operator's request is what the next pass reads
 

@@ -52,6 +52,16 @@ impl Line {
         &self.record
     }
 
+    /// The record, taken back out.
+    ///
+    /// For a writer that has serialised a line and wants the record's own
+    /// buffers back rather than freeing them — `karakuri-cli`'s session
+    /// recorder returns an audio record's band `Vec` to the frame path this
+    /// way, so nothing allocates one per frame.
+    pub fn into_record(self) -> Record {
+        self.record
+    }
+
     /// The exact text this line will write back as.
     pub fn as_str(&self) -> &str {
         &self.raw

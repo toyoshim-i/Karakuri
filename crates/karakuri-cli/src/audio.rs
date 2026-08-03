@@ -234,6 +234,18 @@ impl Audio {
         (&self.audio, tempo)
     }
 
+    /// **This frame's audio record, to be taken.**
+    ///
+    /// Handed out mutably so a session recorder can *swap* it for an empty
+    /// shell rather than clone it: the record carries a `Vec` of bands and this
+    /// is the frame path. See `session::Recorder::push_audio`.
+    ///
+    /// Whatever is left here is overwritten by the next [`Audio::frame`], so a
+    /// caller that swaps in a shell loses nothing.
+    pub fn record_mut(&mut self) -> &mut Record {
+        &mut self.audio
+    }
+
     /// The operator moving the grid an octave: `2.0` for ×2, `0.5` for ÷2.
     ///
     /// **The one decision the estimator cannot make**, and the reason it is a
