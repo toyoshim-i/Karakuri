@@ -56,24 +56,33 @@ fn a_trivial_measurement_reports_its_capacity_and_resolution() {
     );
 }
 
-/// **Seen failing twice, in a full-workspace run, and not reproduced since.**
-/// Twenty runs after — six of them under a second process holding the GPU, six
-/// with a forced rebuild each time — every one measured a ratio between 23 and
-/// 51 against a threshold of 2. That margin is not marginal, so whatever
-/// happened was not noise creeping over a line, and the failure text was lost
-/// both times to a truncating `head` in the command that ran it.
+/// **This test caught a real defect, and it is not in this test.**
 ///
-/// Nothing here is changed on a theory. The threshold is not moved and the
-/// comparison is not reshaped, because a 22× safety margin says the shape is
-/// not what failed, and a test loosened to stop a failure nobody has read is a
-/// test that will not report the next one either. What is added is the margin
-/// itself, printed on every run: the harness shows a failing test's output, so
-/// the next occurrence says whether `light` ballooned, `heavy` collapsed, or
-/// the two measurements came off different methods — three different faults
-/// that the word FAILED does not distinguish.
+/// It failed intermittently and was not reproducible for a long time; the
+/// margin printed below was added so the next occurrence would be readable
+/// instead of a mystery. When it fired, it said this:
 ///
-/// Normal, on the machine this was written on: light ≈ 1.3 ms, heavy ≈ 60 ms,
-/// both by host clock.
+/// ```text
+/// measured via GpuTimestamp: light 0.103 ms, heavy 0.095 ms, ratio 0.9x
+/// ```
+///
+/// Two million points at point size 40, measured at a tenth of a millisecond,
+/// and **lighter than sixty-four points**. Every earlier guess had been about
+/// the host clock and contention; the numbers say the host clock was not
+/// involved at all. On the runs that fail, the adapter advertises
+/// `TIMESTAMP_QUERY`, the probe's calibration passes, and the timestamps are
+/// then meaningless.
+///
+/// **That is a defect in the probe and not in this test**, and it is the one
+/// `README.md` already warns about in the abstract — "timestamps are
+/// advertised, enabled and unreliable here". The governor budgets against
+/// these numbers, so a Set measured at 0.095 ms instead of sixty is a Set
+/// admitted as very nearly free. The threshold below is not moved and the
+/// comparison is not reshaped: a test loosened to stop reporting this would
+/// have hidden it.
+///
+/// Normal, when the timestamps are honest or the host clock is used: light
+/// ≈ 1.3 ms, heavy ≈ 60 ms.
 #[test]
 fn a_heavier_workload_measures_as_heavier() {
     // Additive point sprites: cost scales with instance count (more quads to

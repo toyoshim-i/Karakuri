@@ -57,6 +57,24 @@ pub fn to_sequence(
     })
 }
 
+/// Render a session's frames, driven by the stream rather than by a clock.
+///
+/// `drive` is called once before each frame with its index and the deck, and
+/// returns the step count that frame's `tick` recorded.
+#[allow(clippy::too_many_arguments)]
+pub fn replay(
+    gpu: &Gpu,
+    deck: &mut Deck,
+    look: Look,
+    width: u32,
+    height: u32,
+    frames: u32,
+    wanted: impl Fn(u32) -> Option<std::path::PathBuf>,
+    drive: impl FnMut(u32, &mut Deck) -> u8,
+) -> Result<(), String> {
+    sequence_driven(gpu, deck, look, width, height, frames, wanted, drive)
+}
+
 fn sequence(
     gpu: &Gpu,
     deck: &mut Deck,
@@ -65,6 +83,28 @@ fn sequence(
     height: u32,
     frames: u32,
     wanted: impl Fn(u32) -> Option<std::path::PathBuf>,
+) -> Result<(), String> {
+    sequence_driven(gpu, deck, look, width, height, frames, wanted, |_, _| 1)
+}
+
+/// [`sequence`] with the frame's step count, and whatever else has to happen,
+/// decided per frame by the caller.
+///
+/// The seam a replay needs and the only thing it needs: a live run measures
+/// `steps` from a clock and a replay reads it from a `tick`, and everything
+/// else about rendering a frame is the same. `drive` is handed the frame index
+/// and the deck, applies whatever the stream says belongs before that frame,
+/// and returns what to advance by.
+#[allow(clippy::too_many_arguments)]
+fn sequence_driven(
+    gpu: &Gpu,
+    deck: &mut Deck,
+    look: Look,
+    width: u32,
+    height: u32,
+    frames: u32,
+    wanted: impl Fn(u32) -> Option<std::path::PathBuf>,
+    mut drive: impl FnMut(u32, &mut Deck) -> u8,
 ) -> Result<(), String> {
     assert_eq!(
         (width * 4) % COPY_ALIGN,
@@ -108,8 +148,11 @@ fn sequence(
         // One `begin_frame` per encoder, and the guard is what says so: the
         // readback copy is recorded through `Frame::encoder` into the frame it
         // belongs to rather than into an encoder of this function's own.
+        // Before the frame opens: `drive` may move a fader or a residency, and
+        // a `Frame` holds the only `&mut Deck` there is while it is alive.
+        let steps = drive(i, deck);
         let mut frame = deck.begin_frame(&gpu.device, &gpu.queue);
-        frame.render(present.hdr_view(), present.size(), 1);
+        frame.render(present.hdr_view(), present.size(), steps);
 
         let Some(path) = wanted(i) else {
             frame.finish();

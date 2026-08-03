@@ -21,6 +21,7 @@ mod audio;
 mod compile;
 mod mix;
 mod render;
+mod session;
 mod setfile;
 mod watch;
 
@@ -241,6 +242,14 @@ options:
   --load-set ID         take the material from a Set file rather than from two
                         paths and the flags. Anything the file could not carry
                         is printed rather than dropped in silence
+  --record-session ID   write the timeline to sessions/ID.ndjson as it
+                        happens: the Set's records, then a `tick` a frame and
+                        every edit between them. Needs --load-set, so the
+                        stream begins with the material it is a timeline of
+  --replay ID           render sessions/ID.ndjson instead of running: the
+                        material comes from the stream's head and every frame
+                        advances by the `tick` that was recorded, so nothing
+                        reads a clock. Needs --render or --seq
   --demo                drive the transport from a script instead of the
                         keyboard, so a window shows it without anyone at one.
                         A demonstration harness: it presses `y`, `u` and `i`
@@ -418,6 +427,10 @@ struct Args {
     /// `--load-set ID`: take the material from a Set file instead of from two
     /// `.kir` paths and the flags.
     load_set: Option<String>,
+    /// `--record-session ID`: write the timeline as it happens.
+    record_session: Option<String>,
+    /// `--replay ID`: render a recorded session instead of running one.
+    replay: Option<String>,
     /// What a Set file said about the seed and the camera, when one was loaded.
     /// Not flags: there is no `--seed` and no `--camera`, and inventing two so
     /// that a file could be read would be adding surface to carry a value
@@ -686,6 +699,8 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         store: PathBuf::from(DEFAULT_STORE),
         save_set: None,
         load_set: None,
+        record_session: None,
+        replay: None,
         from_set: None,
         look: Look {
             op: TonemapOp::Aces,
@@ -797,6 +812,10 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
             "--store" => args_out.store = PathBuf::from(value_for("--store", &mut it)?),
             "--save-set" => args_out.save_set = Some(value_for("--save-set", &mut it)?),
             "--load-set" => args_out.load_set = Some(value_for("--load-set", &mut it)?),
+            "--record-session" => {
+                args_out.record_session = Some(value_for("--record-session", &mut it)?)
+            }
+            "--replay" => args_out.replay = Some(value_for("--replay", &mut it)?),
             "--budget-ms" => {
                 args_out.budget_ms = number_for("--budget-ms", "a number of milliseconds", &mut it)?
             }
@@ -889,6 +908,144 @@ fn seed_for(slot: usize) -> u32 {
 }
 
 type Pair = (karakuri_ir::typed::Checked, karakuri_ir::typed::Checked);
+
+/// **Render a recorded session.** The material comes from the stream's head and
+/// every frame advances by the `tick` that was recorded, so nothing here reads
+/// a clock — which is the whole claim: a replay and the run it came from are
+/// the same sequence of frames.
+///
+/// Offscreen only. A window would add a clock back at the one place a replay
+/// must not have one: `RedrawRequested` arrives when the display says so, and a
+/// replay's frames belong to the stream.
+fn replay_session(args: &Args, id: &str) {
+    let store = open_store(args);
+    let lines = match store.read_session(id) {
+        Ok(lines) => lines,
+        Err(e) => {
+            eprintln!("karakuri-cli: session `{id}`: {e}");
+            std::process::exit(1);
+        }
+    };
+    let stream = session::split(lines);
+    let loaded = match setfile::from_lines(&store, id, &stream.head) {
+        Ok(loaded) => loaded,
+        Err(e) => {
+            eprintln!("karakuri-cli: session `{id}`: {e}");
+            std::process::exit(1);
+        }
+    };
+    for note in &loaded.notes {
+        eprintln!("  {note}");
+    }
+    // Said rather than dropped, on the same terms as everything else here: a
+    // session that ended between frames recorded what the operator last did,
+    // and nothing renders it because there is no frame it belongs to.
+    if !stream.trailing.is_empty() {
+        eprintln!(
+            "  {} record{} after the last tick belong to no frame and are not replayed",
+            stream.trailing.len(),
+            if stream.trailing.len() == 1 { "" } else { "s" }
+        );
+    }
+
+    let Some(out) = args.render_to.clone().or(args.seq_to.clone()) else {
+        eprintln!("karakuri-cli: --replay renders offscreen; give --render FILE or --seq DIR");
+        std::process::exit(1);
+    };
+    let sequence = args.seq_to.is_some();
+    let gpu = Gpu::headless().expect("no GPU");
+    let (w, h) = args.size;
+
+    let mut set = build(
+        &gpu,
+        &loaded.l1,
+        &loaded.l4,
+        loaded.capacity.unwrap_or(args.capacity),
+        &loaded.params,
+        &loaded.bindings,
+        loaded.seed.unwrap_or_else(|| seed_for(0)),
+        loaded.camera,
+    );
+    set.resize(w, h);
+    let mut deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], w, h);
+    deck.set_signals(Signals::new(args.bpm, u64::from(SEED)));
+
+    let frames = u32::try_from(stream.frames.len()).unwrap_or(u32::MAX);
+    eprintln!(
+        "replaying session `{id}`: {frames} frames, {w}x{h}, {} at exposure {:.2} -> {}",
+        args.look.name(),
+        args.look.exposure,
+        out.display()
+    );
+
+    // A `Look` record in the stream moves this, so it is read per frame rather
+    // than fixed before the run — the same reason the deck is.
+    let mut look = args.look;
+    let result = render::replay(
+        &gpu,
+        &mut deck,
+        look,
+        w,
+        h,
+        frames,
+        |i| {
+            if sequence {
+                Some(out.join(format!("{i:05}.png")))
+            } else if i + 1 == frames {
+                Some(out.clone())
+            } else {
+                None
+            }
+        },
+        |i, deck| {
+            let frame = &stream.frames[i as usize];
+            for record in &frame.before {
+                apply_replayed(deck, &mut look, record);
+            }
+            frame.steps
+        },
+    );
+    if let Err(e) = result {
+        eprintln!("karakuri-cli: {e}");
+        std::process::exit(1);
+    }
+}
+
+/// One record from a session, applied to a replaying deck.
+///
+/// Deliberately the same decoders the live path uses — `mix::change` and
+/// `audio::apply_tempo` — because that is the whole point of the arrangement:
+/// what drove the engine live and what drives it on replay are the same
+/// function, so they cannot come apart.
+fn apply_replayed(
+    deck: &mut Deck,
+    look: &mut Look,
+    record: &karakuri_store::record::Record,
+) {
+    if let karakuri_store::record::Record::Tempo { .. } = record {
+        let mut signals = *deck.signals();
+        audio::apply_tempo(&mut signals, record);
+        deck.set_signals(signals);
+        return;
+    }
+    match mix::change(record, deck.slot_count()) {
+        Ok(Some(mix::Change::Gain { slot, value })) => deck.set_gain(slot, value),
+        Ok(Some(mix::Change::Residency { slot, level })) => deck.set_residency(slot, level),
+        Ok(Some(mix::Change::Look(l))) => *look = l,
+        Ok(Some(mix::Change::Transport {
+            slot,
+            sync,
+            anchor_bpm,
+            offset_beats,
+        })) => {
+            if let Err(refusal) = deck.set_transport(slot, sync, anchor_bpm, offset_beats) {
+                eprintln!("  slot {slot}: {} sync refused — {refusal}", sync.name());
+            }
+        }
+        Ok(None) => {}
+        Err(message) => eprintln!("  {message} — skipped"),
+    }
+}
 
 /// Open the store, or stop with the reason. Both directions need one and
 /// neither can do anything useful without it.
@@ -1011,6 +1168,11 @@ fn main() {
     // whether what they are watching is what was written.
     if let Some(id) = &args.save_set {
         save_set(&args, id);
+        return;
+    }
+
+    if let Some(id) = args.replay.clone() {
+        replay_session(&args, &id);
         return;
     }
 
@@ -1255,6 +1417,10 @@ struct Live {
     last: Instant,
     status_at: Instant,
     frames_since_status: u32,
+    /// Writes the timeline, when `--record-session` asked for one. The frame
+    /// path pushes into it and never blocks or allocates — see
+    /// [`crate::session`].
+    recorder: Option<session::Recorder>,
     /// How far into [`DEMO_SCRIPT`] the run is, or `None` when `--demo` was not
     /// given and nothing drives itself.
     demo: Option<usize>,
@@ -1386,6 +1552,35 @@ impl ApplicationHandler for App {
 
         eprint!("\n{BINDINGS}\n");
 
+        // Opened before the first frame and never on one: it creates a file
+        // and spawns a thread. A failure is fatal because `--record-session`
+        // was asked for, and a run that quietly continued without it would be
+        // a performance nobody can replay and nothing saying so.
+        let recorder = match &self.args.record_session {
+            Some(id) => {
+                let store = open_store(&self.args);
+                let head = match &self.args.load_set {
+                    Some(set) => store.read_set(set).unwrap_or_default(),
+                    None => Vec::new(),
+                };
+                match session::Recorder::open(&store, id, &head) {
+                    Ok(recorder) => {
+                        eprintln!(
+                            "recording session `{id}` — {} record{} of material at its head",
+                            head.len(),
+                            if head.len() == 1 { "" } else { "s" }
+                        );
+                        Some(recorder)
+                    }
+                    Err(e) => {
+                        eprintln!("karakuri-cli: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            }
+            None => None,
+        };
+
         let live = Live {
             window,
             gpu,
@@ -1404,6 +1599,7 @@ impl ApplicationHandler for App {
             frames_since_status: 0,
             status: String::with_capacity(256),
             demo: self.args.demo.then_some(0),
+            recorder,
             demo_started: Instant::now(),
         };
         // Through a record at startup too, on the same terms as every later
@@ -1441,7 +1637,23 @@ impl ApplicationHandler for App {
     /// run is over, which is exactly the case `Set::live_count` is documented
     /// to be for.
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
-        if let Some(live) = &self.live {
+        if let Some(live) = &mut self.live {
+            // Before the counts, because it ends a thread and flushes a file
+            // and those are the things worth knowing failed.
+            if let Some(recorder) = live.recorder.take() {
+                match recorder.finish() {
+                    Ok((written, 0)) => eprintln!("session: {written} records written"),
+                    // **Named rather than counted quietly.** A session with a
+                    // hole in it is not a session, and an operator who is told
+                    // how much is missing can decide what to do about it.
+                    Ok((written, dropped)) => eprintln!(
+                        "session: {written} records written, and {dropped} batch{} lost \
+                         because the disk could not keep up — the stream has gaps",
+                        if dropped == 1 { "" } else { "es" }
+                    ),
+                    Err(e) => eprintln!("session: {e}"),
+                }
+            }
             report_live_counts(&live.gpu, &live.deck);
         }
     }
@@ -1831,6 +2043,12 @@ impl Live {
     /// unwrapped because the replay driver will hand this same function lines
     /// off a file, and a file is where an unobeyable record comes from.
     fn record(&mut self, record: karakuri_store::record::Record) {
+        if let Some(recorder) = &mut self.recorder {
+            // Cloned, which allocates — and this is a key press rather than a
+            // frame, so it is the one place in the record path where that is
+            // allowed. `README.md`'s invariant is about what a frame does.
+            recorder.push(record.clone());
+        }
         match mix::change(&record, self.deck.slot_count()) {
             Ok(Some(change)) => self.apply(change),
             Ok(None) => {}
@@ -1908,6 +2126,12 @@ impl Live {
     fn frame(&mut self) {
         self.run_demo();
         let steps = self.steps();
+        // **The one measurement in the program, as the record that carries
+        // it.** `tick` had no writer until this line; everything else the
+        // engine is driven by already went through a record.
+        if let Some(recorder) = &mut self.recorder {
+            recorder.push(karakuri_store::record::Record::Tick { steps });
+        }
         self.measure_audio(steps);
 
         let surface_frame = match self.surface.get_current_texture() {
@@ -1984,6 +2208,12 @@ impl Live {
         // than a trim: acquiring, re-acquiring, and a tap all move the grid at
         // once, and an operator who cannot see that happen cannot tell a lock
         // from a coincidence.
+        // Scalars only, so pushing it allocates nothing — which is why the
+        // tempo half of the audio path can be recorded on a frame and the
+        // measurement half cannot yet. See the note in `session.rs`.
+        if let (Some(record), Some(recorder)) = (tempo.clone(), self.recorder.as_mut()) {
+            recorder.push(record);
+        }
         if let (Some(karakuri_store::record::Record::Tempo { bpm, .. }), Some(reason)) =
             (tempo, audio.reason())
         {
