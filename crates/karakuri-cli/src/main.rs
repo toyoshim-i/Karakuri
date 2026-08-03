@@ -21,6 +21,7 @@ mod audio;
 mod compile;
 mod mix;
 mod render;
+mod setfile;
 mod watch;
 
 use std::fmt::Write as _;
@@ -35,7 +36,8 @@ use karakuri_engine::transport::{Sync, Transport};
 use karakuri_engine::{
     Binding, Deck, Gpu, HotSwap, Present, Residency, Set, Signals, TonemapOp, DEFAULT_BUDGET_MS,
 };
-use karakuri_signal::{NoiseConfig, NoiseKind};
+use karakuri_signal::NoiseConfig;
+use karakuri_store::record::{BindNoise, Layer, Record};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -152,6 +154,12 @@ const DEMO_SCRIPT: &[(f32, char)] = &[
 /// than as something new.
 const DEMO_LOOP_SECONDS: f32 = 20.0;
 
+/// Where the store lives when nothing says otherwise. A directory in the
+/// working tree rather than under `$HOME`: a session's material belongs beside
+/// the session, and a global store shared by every run is a decision an
+/// operator should make rather than inherit.
+const DEFAULT_STORE: &str = ".karakuri";
+
 /// One press of the scrub keys, in beats. A quarter beat — a sixteenth of a bar
 /// in four — which is small enough to place a hit by ear and large enough to
 /// hear one press.
@@ -226,6 +234,13 @@ options:
                         meant to be found: from where the audience stands
   --tonemap OP          clamp | reinhard | aces | agx (default aces)
   --exposure V          output exposure, before the tone map (default 1.0)
+  --store DIR           where artifacts and Set files live (default .karakuri)
+  --save-set ID         put both `.kir` files in the store, write the material
+                        as a Set file, and stop. The flags that were given —
+                        capacity, params, binds, bpm — are what it records
+  --load-set ID         take the material from a Set file rather than from two
+                        paths and the flags. Anything the file could not carry
+                        is printed rather than dropped in silence
   --demo                drive the transport from a script instead of the
                         keyboard, so a window shows it without anyone at one.
                         A demonstration harness: it presses `y`, `u` and `i`
@@ -396,6 +411,18 @@ struct Args {
     /// The unmeasurable half of the output lag, in milliseconds. See
     /// `audio::DEFAULT_LATENCY_OFFSET_MS`.
     latency_offset_ms: f32,
+    /// `--store DIR`: where content-addressed artifacts and Set files live.
+    store: PathBuf,
+    /// `--save-set ID`: write the material as a Set file and stop.
+    save_set: Option<String>,
+    /// `--load-set ID`: take the material from a Set file instead of from two
+    /// `.kir` paths and the flags.
+    load_set: Option<String>,
+    /// What a Set file said about the seed and the camera, when one was loaded.
+    /// Not flags: there is no `--seed` and no `--camera`, and inventing two so
+    /// that a file could be read would be adding surface to carry a value
+    /// rather than to be used.
+    from_set: Option<(Option<u32>, Option<karakuri_engine::camera::Orbit>)>,
     /// Drive the transport from [`DEMO_SCRIPT`] instead of waiting for a
     /// keyboard. A demonstration harness, not a feature: it presses keys.
     demo: bool,
@@ -594,60 +621,47 @@ fn parse_bind(value: &str) -> Result<Binding, String> {
     // would be an aesthetic decision made by the argument parser.
     let range = range.ok_or_else(|| bad("no `range=LOW..HIGH`"))?;
 
-    // A tempo is not a `[0, 1]` signal. Steps 2 and 3 of a binding clamp the
-    // sample into the unit range before mapping it, so `bpm` — which is 120,
-    // not 0.42 — arrives as 1.0 and the param sits at the top of its range for
-    // the whole run. `docs/ir-spec.md` records that; refusing it here is what
-    // makes it visible, because from the outside a pinned binding and a
-    // working one are the same number on a status line. `beat` and `bar` carry
-    // the same tempo in the range a binding is defined over.
-    if signal == "bpm" {
-        return Err(bad(
-            "`signal=bpm` — a tempo is not a [0, 1] signal, so the curve clamps it and this \
-             binding would sit at the top of its range for the whole run; bind `beat` or \
-             `bar` instead",
-        ));
-    }
-
-    // `octaves` is `fbm`'s layer count and the other three kinds have no
-    // layers. Refused rather than ignored, on the same terms as a `noise.*`
-    // field on a binding that is not a noise binding: the alternative is an
-    // operator watching a generator behave like one they did not name.
+    // **Built as the record and decoded back**, so the flag is what its
+    // documentation always claimed: a way to write a `bind` record. Every
+    // semantic rule — the `bpm` refusal, `octaves` needing `fbm`, a generator
+    // needing `signal=noise` — lives in `setfile::binding_from_record` and
+    // cannot differ between a command line and a Set file. `docs/roadmap.md`
+    // recorded that debt against the decoder; this is it paid by having one
+    // rule rather than two copies of it.
+    //
+    // The one check that stays here is the one the record cannot express.
+    // `BindNoise::octaves` has a serde default, deliberately — "a generator
+    // omitted field by field is under-specified, not refused" — so a record
+    // cannot say whether `octaves` was *named*. The flag knows, and an
+    // `octaves` named beside a kind that has no octaves is an operator
+    // expecting a generator they did not ask for.
     if noise_octaves.is_some() && noise_kind != Some("fbm") {
         return Err(bad(&format!(
             "`noise.octaves` needs `noise.kind=fbm`, and this asks for `{}`",
             noise_kind.unwrap_or("perlin")
         )));
     }
-    noise.kind = match noise_kind {
-        Some("white") => NoiseKind::White,
-        Some("value") => NoiseKind::Value,
-        Some("fbm") => NoiseKind::Fbm {
-            octaves: noise_octaves.unwrap_or(DEFAULT_OCTAVES),
-        },
-        // `perlin`, and the default when nothing named a kind — which are the
-        // same generator, so they are the same arm.
-        _ => NoiseKind::Perlin,
-    };
 
-    let binding = Binding::new(layer, key, signal.clone(), curve, range);
-    if signal == NOISE_SIGNAL {
-        Ok(binding.with_noise(noise))
-    } else if noise_given {
-        // Accepting this would leave the operator watching a parameter that
-        // does not move and re-reading the noise fields to find out why.
-        Err(bad(&format!(
-            "`noise.*` needs `signal={NOISE_SIGNAL}`, and this binds `{signal}`"
-        )))
-    } else {
-        Ok(binding)
-    }
+    let record = Record::Bind {
+        layer: match layer {
+            karakuri_ir::Kind::L1 => Layer::L1,
+            karakuri_ir::Kind::L4 => Layer::L4,
+        },
+        key,
+        signal,
+        curve: curve.name().to_string(),
+        range,
+        noise: noise_given.then(|| BindNoise {
+            kind: noise_kind.unwrap_or("perlin").to_string(),
+            rate: noise.rate,
+            stream: noise.stream,
+            octaves: noise_octaves.unwrap_or(setfile::DEFAULT_OCTAVES),
+        }),
+    };
+    setfile::binding_from_record(&record).map_err(|e| bad(&e))
 }
 
-/// The octave count an `fbm` binding gets when it does not say. Matches the
-/// default in `karakuri-store`'s `BindNoise`, which is the record this flag
-/// stands in for.
-const DEFAULT_OCTAVES: u32 = 4;
+
 
 /// The `noise.kind` names, in the order the spec lists them. One list, so the
 /// check and the message cannot drift apart.
@@ -669,6 +683,10 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         latency_offset_ms: audio::DEFAULT_LATENCY_OFFSET_MS,
         budget_ms: DEFAULT_BUDGET_MS,
         demo: false,
+        store: PathBuf::from(DEFAULT_STORE),
+        save_set: None,
+        load_set: None,
+        from_set: None,
         look: Look {
             op: TonemapOp::Aces,
             exposure: 1.0,
@@ -776,6 +794,9 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
             }
             "--watch" => args_out.watch = true,
             "--demo" => args_out.demo = true,
+            "--store" => args_out.store = PathBuf::from(value_for("--store", &mut it)?),
+            "--save-set" => args_out.save_set = Some(value_for("--save-set", &mut it)?),
+            "--load-set" => args_out.load_set = Some(value_for("--load-set", &mut it)?),
             "--budget-ms" => {
                 args_out.budget_ms = number_for("--budget-ms", "a number of milliseconds", &mut it)?
             }
@@ -815,11 +836,29 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
             ))
         }
     }
-    if args_out.sets.is_empty() {
+    // The default pair, for a run that named no material at all. **Not when a
+    // Set file is loaded**: that file *is* the material, and adding the default
+    // beside it would put a second Set on the deck nobody asked for — which is
+    // not merely extra, it is a `--bind` from the file landing on material that
+    // has no such parameter and saying so.
+    if args_out.sets.is_empty() && args_out.load_set.is_none() {
         args_out.sets.push((
             "examples/drift_shell.kir".into(),
             "examples/soft_points.kir".into(),
         ));
+    }
+    // Refused rather than resolved: a Set file describes the material, and two
+    // `.kir` paths describe the material, and a run given both has been told
+    // two different things about what to play.
+    if args_out.load_set.is_some() && !args_out.sets.is_empty() {
+        return Err(
+            "--load-set names the material and so do the `.kir` paths beside it; give one              or the other"
+                .to_string(),
+        );
+    }
+    if args_out.load_set.is_some() && args_out.save_set.is_some() {
+        return Err("--load-set and --save-set in one run: it would rewrite what it just read"
+            .to_string());
     }
     // An offscreen run is a function of its inputs — that is why it never
     // watches files either. Accepting `--audio-in` here and quietly ignoring it
@@ -851,11 +890,110 @@ fn seed_for(slot: usize) -> u32 {
 
 type Pair = (karakuri_ir::typed::Checked, karakuri_ir::typed::Checked);
 
+/// Open the store, or stop with the reason. Both directions need one and
+/// neither can do anything useful without it.
+fn open_store(args: &Args) -> karakuri_store::store::Store {
+    match karakuri_store::store::Store::open(&args.store) {
+        Ok(store) => store,
+        Err(e) => {
+            eprintln!("karakuri-cli: store `{}`: {e}", args.store.display());
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Write the material as a Set file, and say where it went.
+///
+/// The first `--set` pair only. A Set file describes **one Set**, and a deck of
+/// four is a session's arrangement rather than a Set's — that is the same line
+/// `Record::is_set_state` draws, seen from the writing side.
+fn save_set(args: &Args, id: &str) {
+    let store = open_store(args);
+    let Some((l1, l4)) = args.sets.first() else {
+        eprintln!("karakuri-cli: --save-set needs a `.kir` pair to save");
+        std::process::exit(1);
+    };
+    if args.sets.len() > 1 {
+        eprintln!(
+            "  only slot 0 is saved: a Set file describes one Set, and which Sets a deck              is holding belongs to a session"
+        );
+    }
+    let camera = karakuri_engine::camera::Orbit::default();
+    match setfile::save(
+        &store,
+        id,
+        setfile::Saving {
+            l1_path: l1,
+            l4_path: l4,
+            capacity: args.capacity,
+            params: &args.overrides,
+            bindings: &args.bindings,
+            camera: &camera,
+            seed: seed_for(0),
+        },
+    ) {
+        Ok(()) => eprintln!(
+            "wrote set `{id}` to {} — load it with `--load-set {id}`",
+            args.store.display()
+        ),
+        Err(e) => {
+            eprintln!("karakuri-cli: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Read a Set file and fold what it says back into the arguments, so everything
+/// downstream is driven the way the flags drive it.
+///
+/// **Every note is printed.** A Set file this build cannot honour in full still
+/// loads, and the alternative — succeeding quietly — is the material being
+/// subtly not what was saved with nothing anywhere saying so.
+fn load_set(args: &mut Args, id: &str) -> setfile::Loaded {
+    let store = open_store(args);
+    let loaded = match setfile::load(&store, id) {
+        Ok(loaded) => loaded,
+        Err(e) => {
+            eprintln!("karakuri-cli: {e}");
+            std::process::exit(1);
+        }
+    };
+    for note in &loaded.notes {
+        eprintln!("  {note}");
+    }
+    if let Some(capacity) = loaded.capacity {
+        args.capacity = capacity;
+    }
+    // Appended rather than replacing: a `--param` or `--bind` given alongside
+    // `--load-set` is the operator overriding the file, and the later value is
+    // what `build` applies.
+    let mut overrides = loaded.params.clone();
+    overrides.append(&mut args.overrides);
+    args.overrides = overrides;
+    let mut bindings = loaded.bindings.clone();
+    bindings.append(&mut args.bindings);
+    args.bindings = bindings;
+    args.from_set = Some((loaded.seed, loaded.camera));
+    loaded
+}
+
 fn main() {
     let args = parse_args();
 
+    // **A Set file replaces the paths and the flags together**, because it
+    // carries both: the material and everything the flags were standing in for
+    // until it existed. Handled before anything is compiled, so a run either
+    // takes its material from a file or from the command line and never from
+    // half of each.
+    let mut args = args;
+    let loaded = args.load_set.clone().map(|id| load_set(&mut args, &id));
+
     eprintln!("compiling:");
     let mut procs: Vec<Pair> = Vec::new();
+    if let Some(loaded) = loaded {
+        eprintln!("  slot 0: set `{}`", loaded.id);
+        procs.push((loaded.l1, loaded.l4));
+    }
     for (slot, (l1, l4)) in args.sets.iter().enumerate() {
         eprintln!("  slot {slot}: {} + {}", l1.display(), l4.display());
         let load = |path: &PathBuf| match compile::load(path) {
@@ -866,6 +1004,14 @@ fn main() {
             }
         };
         procs.push((load(l1), load(l4)));
+    }
+
+    // Saving is a one-shot: it writes what the flags say and stops, on the same
+    // terms as `--render`. Running afterwards would leave an operator unsure
+    // whether what they are watching is what was written.
+    if let Some(id) = &args.save_set {
+        save_set(&args, id);
+        return;
     }
 
     match args.render_to.clone().or(args.seq_to.clone()) {
@@ -951,7 +1097,18 @@ fn build_deck(
                 args.capacity,
                 &args.overrides,
                 &args.bindings,
-                seed_for(slot),
+                // A Set file's own seed when it named one, so a saved Set
+                // reproduces rather than being re-salted by the slot it lands
+                // in. It only ever applies to slot 0: `--load-set` fills that
+                // slot and the rest come from `--set`.
+                match (slot, args.from_set.as_ref()) {
+                    (0, Some((Some(seed), _))) => *seed,
+                    _ => seed_for(slot),
+                },
+                match (slot, args.from_set.as_ref()) {
+                    (0, Some((_, camera))) => *camera,
+                    _ => None,
+                },
             );
             if watch {
                 // One worker and one watcher per slot, over that slot's own
@@ -1022,6 +1179,7 @@ fn describe(binding: &Binding, signals: &Signals) -> String {
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build(
     gpu: &Gpu,
     l1: &karakuri_ir::typed::Checked,
@@ -1030,9 +1188,13 @@ fn build(
     overrides: &[(String, f32)],
     bindings: &[Binding],
     seed: u32,
+    camera: Option<karakuri_engine::camera::Orbit>,
 ) -> Set {
     match Set::build(&gpu.device, &gpu.queue, l1, l4, capacity, seed) {
         Ok(mut set) => {
+            if let Some(camera) = camera {
+                set.camera = camera;
+            }
             for (name, value) in overrides {
                 match set.params.get_mut(name) {
                     Some(slot) => *slot = *value,
@@ -1988,6 +2150,7 @@ fn slot_in_range(slot: usize, slot_count: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use karakuri_signal::NoiseKind;
 
     fn parse(args: &[&str]) -> Result<Args, String> {
         match parse_args_from(args.iter().map(|s| s.to_string())) {
@@ -2295,7 +2458,7 @@ mod tests {
         assert_eq!(
             args.bindings[0].noise.expect("a generator").kind,
             NoiseKind::Fbm {
-                octaves: DEFAULT_OCTAVES
+                octaves: setfile::DEFAULT_OCTAVES
             }
         );
     }

@@ -14,6 +14,15 @@ pub fn load(path: &Path) -> Result<Checked, String> {
     compile(&src).map_err(|report| format!("{}:\n{report}", path.display()))
 }
 
+/// The same five stages, over source already in hand rather than a path.
+///
+/// A Set file's procedures arrive as bytes out of the store, so they have no
+/// path to name in a diagnostic; everything else about validating them is
+/// identical, and it is the same function.
+pub fn check(src: &str) -> Result<Checked, String> {
+    compile(src)
+}
+
 fn compile(src: &str) -> Result<Checked, String> {
     let proc = karakuri_ir::parse(src).map_err(|e| render(&e, src))?;
     let checked = karakuri_ir::check::check(&proc).map_err(|e| render(&e, src))?;

@@ -20,3 +20,6 @@ winit = "0.30.13"
 # The record conversions are checked through the JSON a session stream would
 # actually hold, rather than only as Rust values.
 serde_json.workspace = true
+# A Set file is a directory of artifacts and a file; the round trip is only
+# worth checking against a real one.
+tempfile = "3"
