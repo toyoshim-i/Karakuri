@@ -19,7 +19,10 @@
 //! for a record it built per frame.
 //!
 //! So the frame path only ever **moves a `Record` into a `Vec` that already has
-//! room**, and a writer thread does the serialising and the I/O. The batch is
+//! room**, and a writer thread does the serialising and the I/O. An `audio`
+//! record carries a `Vec` of its own, so it is *swapped* for an empty shell
+//! rather than copied — see [`Recorder::push_audio`] — and the writer returns
+//! each band buffer after serialising it so the shells circulate too. The batch is
 //! handed over whole and an empty one comes back on a return channel, so there
 //! is one allocation per batch buffer for the life of the run and none after
 //! the buffers exist.
@@ -35,14 +38,16 @@
 //!
 //! Nothing about the engine changes. A replay reads `tick` for the step count
 //! that a live run measures from the clock, reads `audio` and `tempo` instead
-//! of opening a device, and applies the mix and transport records where they
-//! sit. That is the whole of it — the arrangement `audio.rs` and `mix.rs` were
+//! of opening a device — so a binding to `energy` replays at what a microphone
+//! heard rather than at what the bus invents — and applies the mix and
+//! transport records where they sit. That is the whole of it — the arrangement `audio.rs` and `mix.rs` were
 //! built for, with a file on the other end instead of a device and a keyboard.
 
 use std::io::Write;
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError};
 
 use karakuri_store::ndjson::Line;
+use karakuri_signal::measured::MAX_BANDS;
 use karakuri_store::record::Record;
 use karakuri_store::store::Store;
 
@@ -56,6 +61,16 @@ const BATCH: usize = 256;
 /// seconds rather than after the buffer has eaten the session.
 const QUEUE: usize = 2;
 
+/// What a finished recording amounts to. Three numbers because the two ways a
+/// stream can be short of what happened are different holes: a lost batch is a
+/// second of everything, a lost audio frame is one frame's measurement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Written {
+    pub records: u64,
+    pub dropped_batches: u64,
+    pub dropped_audio: u64,
+}
+
 /// The frame path's half of the writer.
 pub struct Recorder {
     /// This batch, with [`BATCH`] of capacity reserved. A push never grows it,
@@ -68,6 +83,16 @@ pub struct Recorder {
     /// Emptied batches coming back. A run steady-state cycles the same
     /// [`QUEUE`] + 1 buffers forever.
     spares: Receiver<Vec<Record>>,
+    /// Emptied `Record::Audio` shells coming back from the writer, with their
+    /// band buffers intact. **The whole reason audio can be recorded at all**:
+    /// its record carries a `Vec`, so cloning one per frame is exactly the
+    /// allocation this module exists to avoid, and swapping needs something to
+    /// swap with.
+    audio_shells: Receiver<Record>,
+    /// Frames whose audio was not recorded because no shell was free. Counted
+    /// apart from `dropped_batches`: a stream missing a measurement is a
+    /// different hole from a stream missing a second of everything.
+    dropped_audio: u64,
     /// Batches the writer could not take. **Frames, not bytes**: the number
     /// that matters is how much of the performance is missing.
     dropped_batches: u64,
@@ -87,6 +112,24 @@ impl Recorder {
         }
 
         let (to_writer, from_frames) = std::sync::mpsc::sync_channel::<Vec<Record>>(QUEUE);
+        // Shells go round the same way batches do, and there have to be enough
+        // to cover **everything in flight**, not everything in a frame. A shell
+        // does not come back until the batch holding it has been written, and a
+        // batch is not handed over until it is full — so in the worst case,
+        // every record being a measurement, the pool has to carry the batch
+        // being filled plus the ones queued behind it. Three was not enough by
+        // two orders of magnitude and the frame path spent the run without one:
+        // the batch never filled, because almost nothing was going into it.
+        const SHELLS: usize = BATCH * (QUEUE + 1);
+        let (return_shells, audio_shells) = std::sync::mpsc::sync_channel::<Record>(SHELLS);
+        for _ in 0..SHELLS {
+            let _ = return_shells.send(Record::Audio {
+                energy: 0.0,
+                onset: 0.0,
+                bands: Vec::with_capacity(MAX_BANDS),
+                confidence: 0.0,
+            });
+        }
         let (return_spares, spares) = std::sync::mpsc::sync_channel::<Vec<Record>>(QUEUE + 1);
         // The buffers, all of them, allocated here. Nothing after this point
         // allocates one.
@@ -100,11 +143,31 @@ impl Recorder {
             while let Ok(mut batch) = from_frames.recv() {
                 text.clear();
                 for record in batch.drain(..) {
+                    // An audio record's band buffer goes back to the frame
+                    // path rather than being freed with the record, so the
+                    // shells circulate the way the batches do and nothing
+                    // allocates one after start-up.
+                    let shell = match &record {
+                        Record::Audio { .. } => Some(()),
+                        _ => None,
+                    };
                     // Serialised here, on this thread, which is the whole
                     // reason this thread exists.
-                    text.push_str(Line::new(record).as_str());
+                    let line = Line::new(record);
+                    text.push_str(line.as_str());
                     text.push('\n');
                     written += 1;
+                    if shell.is_some() {
+                        if let Record::Audio { mut bands, .. } = line.into_record() {
+                            bands.clear();
+                            let _ = return_shells.try_send(Record::Audio {
+                                energy: 0.0,
+                                onset: 0.0,
+                                bands,
+                                confidence: 0.0,
+                            });
+                        }
+                    }
                 }
                 file.write_all(text.as_bytes())
                     .map_err(|e| format!("writing session: {e}"))?;
@@ -122,6 +185,8 @@ impl Recorder {
             batch: Vec::with_capacity(BATCH),
             to_writer: Some(to_writer),
             spares,
+            audio_shells,
+            dropped_audio: 0,
             dropped_batches: 0,
             writer: Some(writer),
         })
@@ -138,6 +203,27 @@ impl Recorder {
         // Only ever after a hand-off has made room, so this cannot grow the
         // buffer — unless the hand-off failed, and then the batch was cleared.
         self.batch.push(record);
+    }
+
+    /// **Put an audio record in the stream by swapping, never by cloning.**
+    ///
+    /// The caller keeps a record it reuses every frame; this takes that one and
+    /// leaves an empty shell in its place, so the band buffer moves rather than
+    /// being copied. Allocates nothing, and is the only way `Record::Audio` can
+    /// reach a session stream from a frame at all.
+    ///
+    /// With no shell free the frame's audio is not recorded and is counted. A
+    /// stream missing a measurement replays with that frame's bindings at the
+    /// confidence the bus invents, which is wrong quietly — so the count is
+    /// reported at the end rather than left to be inferred.
+    pub fn push_audio(&mut self, record: &mut Record) {
+        match self.audio_shells.try_recv() {
+            Ok(shell) => {
+                let filled = std::mem::replace(record, shell);
+                self.push(filled);
+            }
+            Err(_) => self.dropped_audio += 1,
+        }
     }
 
     /// Hand this batch to the writer and take an empty one back.
@@ -176,7 +262,7 @@ impl Recorder {
     /// Flush what is left and stop the writer. Blocks, and is for the end of a
     /// run — a stall is free there and losing the last second of a session to
     /// tidiness would not be.
-    pub fn finish(mut self) -> Result<(u64, u64), String> {
+    pub fn finish(mut self) -> Result<Written, String> {
         if !self.batch.is_empty() {
             let batch = std::mem::take(&mut self.batch);
             // Blocking, unlike every send above: this one is not on a frame.
@@ -192,7 +278,11 @@ impl Recorder {
                 .map_err(|_| "the session writer panicked".to_string())??,
             None => 0,
         };
-        Ok((written, self.dropped_batches))
+        Ok(Written {
+            records: written,
+            dropped_batches: self.dropped_batches,
+            dropped_audio: self.dropped_audio,
+        })
     }
 }
 
@@ -357,10 +447,10 @@ mod tests {
         // must hold is that the frame path did not grow, did not block, and
         // *counted* what was lost. A recorder that silently skipped would pass
         // the capacity assertion above and hand back a file that looked whole.
-        let (written, dropped) = recorder.finish().expect("finish");
-        assert!(written > 0, "nothing reached the file");
+        let w = recorder.finish().expect("finish");
+        assert!(w.records > 0, "nothing reached the file");
         assert_eq!(
-            written + dropped * BATCH as u64,
+            w.records + w.dropped_batches * BATCH as u64,
             (BATCH * 8) as u64,
             "records went missing without being counted as dropped"
         );
@@ -382,9 +472,94 @@ mod tests {
                 std::thread::yield_now();
             }
         }
-        let (written, dropped) = recorder.finish().expect("finish");
-        assert_eq!(dropped, 0, "a paced session lost {dropped} batches");
-        assert_eq!(written, (BATCH * 3) as u64);
+        let w = recorder.finish().expect("finish");
+        assert_eq!(w.dropped_batches, 0, "a paced session lost batches");
+        assert_eq!(w.records, (BATCH * 3) as u64);
+    }
+
+    /// **The audio record is swapped, not copied**, which is the whole reason
+    /// it can be recorded from a frame at all.
+    ///
+    /// The caller's record comes back with a *different* band buffer — the
+    /// shell's — and the one it had went into the stream. Pointer identity is
+    /// the observable form of that: a clone would leave the caller's own
+    /// buffer where it was.
+    #[test]
+    fn pushing_audio_takes_the_buffer_rather_than_copying_it() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = Store::open(dir.path()).expect("store");
+        let mut recorder = Recorder::open(&store, "s", &[]).expect("open");
+
+        let mut mine = Record::Audio {
+            energy: 0.5,
+            onset: 0.0,
+            bands: Vec::with_capacity(MAX_BANDS),
+            confidence: 1.0,
+        };
+        let Record::Audio { bands, .. } = &mut mine else {
+            unreachable!()
+        };
+        bands.extend_from_slice(&[0.1, 0.2, 0.3]);
+        let was = bands.as_ptr();
+
+        recorder.push_audio(&mut mine);
+
+        let Record::Audio { bands, energy, .. } = &mine else {
+            unreachable!()
+        };
+        assert_ne!(
+            bands.as_ptr(),
+            was,
+            "the caller kept its buffer, so the record was copied rather than taken"
+        );
+        assert!(bands.is_empty(), "the shell left behind is not empty");
+        assert_eq!(*energy, 0.0, "the shell left behind carries a measurement");
+
+        let w = recorder.finish().expect("finish");
+        assert_eq!((w.records, w.dropped_audio), (1, 0));
+        // And what reached the file is what was measured, not the shell.
+        let session = split(store.read_session("s").expect("read"));
+        assert_eq!(session.trailing.len(), 1);
+        let Record::Audio { energy, bands, .. } = &session.trailing[0] else {
+            panic!("not an audio record")
+        };
+        assert_eq!(*energy, 0.5);
+        assert_eq!(bands, &[0.1, 0.2, 0.3]);
+    }
+
+    /// **Shells circulate.** A frame path that ran out would allocate one per
+    /// frame, which is the thing this whole arrangement exists to prevent — so
+    /// the writer returns each band buffer after serialising it, and a long run
+    /// never asks for a new one.
+    #[test]
+    fn audio_shells_come_back_from_the_writer_and_are_reused() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = Store::open(dir.path()).expect("store");
+        let mut recorder = Recorder::open(&store, "s", &[]).expect("open");
+
+        let mut mine = Record::Audio {
+            energy: 0.25,
+            onset: 0.0,
+            bands: Vec::with_capacity(MAX_BANDS),
+            confidence: 1.0,
+        };
+        // Far more frames than there are shells, paced so the writer keeps up.
+        for i in 0..BATCH * 2 {
+            if let Record::Audio { bands, .. } = &mut mine {
+                bands.clear();
+                bands.extend_from_slice(&[0.1, 0.2]);
+            }
+            recorder.push_audio(&mut mine);
+            if i % 32 == 0 {
+                std::thread::yield_now();
+            }
+        }
+        let w = recorder.finish().expect("finish");
+        assert_eq!(
+            w.dropped_audio, 0,
+            "the frame path ran out of shells, so it would have had to allocate"
+        );
+        assert_eq!(w.records, (BATCH * 2) as u64);
     }
 
     /// What was pushed is what the file holds, in order.
@@ -396,8 +571,8 @@ mod tests {
         for steps in [1u8, 2, 1, 4] {
             recorder.push(Record::Tick { steps });
         }
-        let (written, dropped) = recorder.finish().expect("finish");
-        assert_eq!((written, dropped), (4, 0));
+        let w = recorder.finish().expect("finish");
+        assert_eq!((w.records, w.dropped_batches), (4, 0));
 
         let session = split(store.read_session("s").expect("read"));
         assert_eq!(session.head.len(), 1);

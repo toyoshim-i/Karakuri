@@ -1022,11 +1022,24 @@ fn apply_replayed(
     look: &mut Look,
     record: &karakuri_store::record::Record,
 ) {
-    if let karakuri_store::record::Record::Tempo { .. } = record {
-        let mut signals = *deck.signals();
-        audio::apply_tempo(&mut signals, record);
-        deck.set_signals(signals);
-        return;
+    // The two the signal bus takes, through the same decoders the live path
+    // uses. `audio` is what makes a replay reproduce what the room sounded
+    // like: without it a binding to `energy` would replay at the confidence
+    // the bus invents rather than at what a microphone heard.
+    match record {
+        karakuri_store::record::Record::Tempo { .. } => {
+            let mut signals = *deck.signals();
+            audio::apply_tempo(&mut signals, record);
+            deck.set_signals(signals);
+            return;
+        }
+        karakuri_store::record::Record::Audio { .. } => {
+            let mut signals = *deck.signals();
+            signals.set_audio(audio::audio_frame(record));
+            deck.set_signals(signals);
+            return;
+        }
+        _ => {}
     }
     match mix::change(record, deck.slot_count()) {
         Ok(Some(mix::Change::Gain { slot, value })) => deck.set_gain(slot, value),
@@ -1642,15 +1655,30 @@ impl ApplicationHandler for App {
             // and those are the things worth knowing failed.
             if let Some(recorder) = live.recorder.take() {
                 match recorder.finish() {
-                    Ok((written, 0)) => eprintln!("session: {written} records written"),
-                    // **Named rather than counted quietly.** A session with a
-                    // hole in it is not a session, and an operator who is told
-                    // how much is missing can decide what to do about it.
-                    Ok((written, dropped)) => eprintln!(
-                        "session: {written} records written, and {dropped} batch{} lost \
-                         because the disk could not keep up — the stream has gaps",
-                        if dropped == 1 { "" } else { "es" }
-                    ),
+                    Ok(w) => {
+                        eprintln!("session: {} records written", w.records);
+                        // **Named rather than counted quietly**, and named
+                        // apart: a lost batch is a second of everything and a
+                        // lost audio frame is one frame's measurement, and an
+                        // operator deciding what to do about a stream needs to
+                        // know which it has.
+                        if w.dropped_batches > 0 {
+                            eprintln!(
+                                "  {} batch{} lost because the disk could not keep up — \
+                                 the stream has gaps",
+                                w.dropped_batches,
+                                if w.dropped_batches == 1 { "" } else { "es" }
+                            );
+                        }
+                        if w.dropped_audio > 0 {
+                            eprintln!(
+                                "  {} frame{} of audio not recorded — those frames replay \
+                                 with the bus's invented values rather than what was heard",
+                                w.dropped_audio,
+                                if w.dropped_audio == 1 { "" } else { "s" }
+                            );
+                        }
+                    }
                     Err(e) => eprintln!("session: {e}"),
                 }
             }
@@ -2203,6 +2231,14 @@ impl Live {
             f32::from(steps) * DT,
         );
         self.deck.set_signals(signals);
+
+        // **Swapped, not cloned.** The record carries a `Vec` of bands and this
+        // is the frame path; `push_audio` takes this one and leaves an empty
+        // shell behind, so the buffer moves and nothing allocates. This is the
+        // last record that had no writer in a session stream.
+        if let Some(recorder) = &mut self.recorder {
+            recorder.push_audio(audio.record_mut());
+        }
 
         // A correction is worth saying out loud when it is a decision rather
         // than a trim: acquiring, re-acquiring, and a tap all move the grid at
