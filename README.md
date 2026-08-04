@@ -38,6 +38,8 @@ A Set file can be saved and loaded, which is what `--bind` was a stand-in for:
 ```sh
 cargo run -p karakuri-cli -- a.kir b.kir --save-set night01 --param turbulence=2.6
 cargo run -p karakuri-cli -- --load-set night01
+cargo run -p karakuri-cli -- --load-set night01 --record-session take1
+cargo run -p karakuri-cli -- --replay take1 --seq frames/
 ```
 
 `--save-set` puts both `.kir` files in the store as content-addressed artifacts and writes
@@ -45,6 +47,13 @@ a Set file referencing them by hash, with the capacity, parameters, bindings, ca
 seed the run was given. `--load-set` reads it back, and a run driven by the file renders
 **the same frame** as the run whose flags wrote it. Anything the file could not be carried
 across in full is printed rather than dropped — see the Status table.
+
+`--record-session` writes the **timeline**: that Set file's records, then a `tick` a frame
+and every edit between them, so each one lands at an exact frame position. `--replay`
+renders it back, reading `tick` where a live run reads a clock and `audio` where it reads a
+microphone — so what is replayed is the performance, not only the material. It renders
+offscreen, deliberately: a window would put a clock back at the one place a replay must not
+have one.
 
 `--set` fills a deck slot and may be given up to four times; every Live slot renders into
 its own target and one composite pass mixes them. In the window:
@@ -351,9 +360,9 @@ governor, alongside the decision about whether GPU timestamps can be trusted at 
 | WGSL generation | Works, validated through naga. Generated names cannot be captured by anything a `.kir` can spell |
 | Set, buffers, pipelines, compute and render | Works. Double buffering, Set-level `capacity`, parameters as uniform writes. Nothing on the frame path allocates: both per-frame uniform writes go through storage sized once at build time |
 | Linear HDR end to end, sRGB once at output | Works |
-| Store | Works, and the engine obeys it. `--save-set` writes a Set file and puts both `.kir` sources in the store as content-addressed artifacts; `--load-set` reads it back and builds from it, resolving each procedure by hash or from inlined `src` when the file is bundled. **Only `tick` still has no writer.** `audio` and `tempo` go through a record every frame, `gain`, `residency`, `look` and `transport` on every key that moves them, and `set`/`slot`/`capacity`/`param`/`bind`/`camera`/`seed` on every save and load. Nothing writes a *session* stream to disk yet, so a performance can be rebuilt and not replayed |
+| Store | Works, and the engine obeys it. `--save-set` writes a Set file and puts both `.kir` sources in the store as content-addressed artifacts; `--load-set` reads it back and builds from it, resolving each procedure by hash or from inlined `src` when the file is bundled. **Every record type has a writer.** `audio` and `tempo` go through a record every frame, `gain`, `residency`, `look` and `transport` on every key that moves them, `set`/`slot`/`capacity`/`param`/`bind`/`camera`/`seed` on every save and load, and `tick` once a frame into a session stream. `--record-session` writes the timeline as it happens and `--replay` renders it back, so a performance is replayed rather than only rebuilt |
 | What a Set file cannot carry | Named rather than dropped, and printed on load. The format keys `seed`, `capacity` and `param` by **layer** and the engine holds one seed, one capacity and one flat parameter map per Set; a `param` may be a vector and the engine's map holds `f32`; and a `camera` record carries two of `Orbit`'s six fields, so the other four come back as defaults. Every one of those is a real disagreement between the format and the engine rather than an omission in the loader, and a Set file that half-applied in silence is the failure this repository keeps refusing |
-| Set file and session stream | The two projections are kept apart by `Record::is_set_state` and `project`. A Set file drops the mix as well as the ticks, and for a different reason: a gain is state, but the *session's*, and a Set file that restored one would pull down whatever fader it was next loaded under. The session projection that folds the mix does not exist, because nothing writes a session stream to fold |
+| Set file and session stream | The two projections are kept apart by `Record::is_set_state` and `project`. A Set file drops the mix as well as the ticks, and for a different reason: a gain is state, but the *session's*, and a Set file that restored one would pull down whatever fader it was next loaded under. A session folds *down* to a Set file — `Store::save_session_as_set`, ticks dropped and state folded — which is the projection the format specifies. What does not exist is the other one: folding a session to the deck state it ends at, so a run could resume where the last one stopped. Nothing needs it yet |
 | Transport | Works, per slot. `free`, `tempo` (rate, scaled by the room's tempo against a per-slot anchor) and `beat` (position lock, jumps and reverses). **Two mechanisms, because there are two kinds of material**: closed-form state at `t` is a pure function of `t`, so a seek costs one element pass; accumulating material integrates, and reversing a sum is impossible rather than slow, so all it can be given is a rate. The anchor is a per-slot dial because **material has no intrinsic tempo** — a `.kir` declares parameters and a capacity, not a bar length — and it defaults to the tempo at the moment sync is engaged so that engaging it moves nothing. What is not built: a position source that can itself reverse. Audio only ever moves forward; a deck link (M7) does not, and arrives at the same entry point |
 | `beats` | Works. The session's tempo grid, readable from IR as an ambient beside `t` — per substep, continuous across a tempo correction, and the same instant `t` names. **Without it the picture ran at wall time whatever the music did**: a tempo change moved the grid every binding was sampled on and moved nothing that was drawn, and a `bind` cannot close that, because what follows a tempo is not a parameter value but the passage of time. `beat` and `bar` stay bus names and stay different — phases in `[0, 1]` for driving a parameter, where `beats` is unbounded and monotone for driving a position |
 | Signal binding | Works. A binding samples the bus, curves it, maps it onto a range, and blends into the parameter **by confidence** — so a binding to `beat` or `bar` takes full effect today, and one to `energy` moves fully when a microphone is open and a tenth as far when none is. The binding did not change when audio arrived; the same name started answering with a different confidence |
