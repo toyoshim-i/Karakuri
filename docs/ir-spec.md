@@ -987,8 +987,9 @@ loader, and settling them is the format's business and the engine's, not the rea
 
 The *session* records are further along: `audio` and `tempo` per frame, and `gain`,
 `residency`, `look` and `transport` per key press, are each built by the CLI, decoded back,
-and only then applied. Nothing writes them to disk yet, so what exists is the live half of the
-round trip and not a file — but the path the engine is driven through is the record's.
+and only then applied — and `karakuri-cli`'s `--record-session` writes them to a session
+stream as they happen, `--replay` reading it back. The path the engine is driven through is
+the record's, in both directions.
 
 ### What a binding does
 
@@ -1257,8 +1258,11 @@ returns to where the operator left it rather than to a default.
 reason for a record to be absent from a Set file and it is not the `audio` one: there is
 something to fold here, and this is not the projection it folds into. A Set file that
 restored a gain would apply it to whatever slot it was next loaded into, and one whose
-`residency` said `live` would put a Set on air by being opened. The session projection they
-*do* belong to is not written yet, because nothing writes a session stream.
+`residency` said `live` would put a Set on air by being opened. They belong to a session stream, which
+`--record-session` writes and `--replay` reads. What does not exist is a *session*
+projection — folding one down to the deck state it ends at — because nothing needs to
+resume a deck yet; folding a session down to a **Set file** does exist and is specified
+above.
 
 **Signal names.** `energy` and `band<N>` are the ones the synthesized bus already answers,
 deliberately: a measured `energy` and an invented one are the same signal from different
