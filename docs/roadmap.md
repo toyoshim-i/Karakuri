@@ -165,7 +165,8 @@ what it cost against what it promised — the ones marked **Done** are worth rea
 where the promise was wrong, not only for the fact that it is kept.
 
 **Still open**, and the shape of the rest of this milestone: transitions, masks, MIDI,
-output routing, Ableton Link, a panic key, and per-slot preview.
+output routing, Ableton Link, and per-slot preview. The panic key is **decided against**
+rather than pending — see its bullet.
 
 The one debt this milestone was carrying — **`Deck::set_opacity` unreachable**, no key and
 no flag, and therefore no `opacity` record — **is paid**, and it was paid by building the
@@ -416,7 +417,39 @@ fine alone and is unreadable next to lights.
 - Ableton Link as a passive peer that never proposes a tempo
 - MIDI control surface on a dedicated controller, not the DJ controller
 - Output routing: Syphon / Spout / NDI
-- Panic key to a known-good Set
+- ~~Panic key to a known-good Set.~~ **Decided against, and the reasoning is worth more
+  than the key would have been.**
+
+  Everything a panic key would undo is already manually recoverable: `space` takes a slot
+  off air, `\` returns the gain, `'` walks the fader back to 1.0 in ten presses, `` ` ``
+  returns the exposure, and the status line says what each of them currently is. So the key
+  would not add a *capability* — it would add doing all of it at once, without choosing.
+
+  What killed it is what "without choosing" costs. **An anomaly is usually one frame and
+  usually harmless**: a shader dividing by a value that reaches zero is one of the most
+  ordinary things a shader does, and what it produces is a blown-out pixel nobody notices.
+  A control that resets a performance in response to that does far more damage than the
+  thing it is responding to — and an operator who has learned that the panic key is
+  sometimes the wrong answer has a control they hesitate over, which is the one property a
+  panic key must not have.
+
+  It also could not have done the job it was named for. "A known-good Set" implies rolling
+  a slot back to what it was showing, and there is nothing to roll back to:
+  `HotSwap::previous` exists only inside a judging window and is retired the moment a build
+  is accepted. A standing rollback target would mean holding a whole Set resident per slot,
+  which is the VRAM budget this milestone did not build.
+
+  **What was missing was not a recovery action but a way to see.** The meter now reports
+  the texels it left out of a reading — the bullet directly below — and decides nothing.
+  That is the third time this milestone has landed on the same answer, after the tempo
+  octave and semi-automatic gain: *show the number, act on nothing.*
+- **The meter no longer loses a slot's reading to one bad texel.** Luminance that is not a
+  finite number is counted and excluded rather than summed, because one NaN admitted to a
+  sum makes the mean NaN — so a routine shader artifact used to take away the number an
+  operator sets faders by. The count is reported beside the mean and the peak and is
+  deliberately **not** a fault indicator: being ordinary and mostly harmless is exactly what
+  makes it a bad proxy for "this material is wrong", and a warning that fires on normal
+  material teaches an operator to ignore warnings
 
 **Demands on earlier work**
 

@@ -51,6 +51,18 @@ fn f16(x: f32) -> u16 {
     if x == 0.0 {
         return 0;
     }
+    // The two that are exactly representable and are not numbers. They are
+    // here because a shader reaches them by dividing by a value that got to
+    // zero, which is what
+    // `a_texel_that_is_not_a_number_is_counted_and_left_out_rather_than_spreading`
+    // is about; the exactness check below is written for finite values and
+    // would refuse both.
+    if x.is_nan() {
+        return 0x7e00;
+    }
+    if x.is_infinite() {
+        return if x > 0.0 { 0x7c00 } else { 0xfc00 };
+    }
     let bits = x.to_bits();
     let sign = ((bits >> 16) & 0x8000) as u16;
     let exponent = ((bits >> 23) & 0xff) as i32 - 127;
@@ -172,6 +184,117 @@ fn a_black_frame_measures_zero_and_a_brighter_frame_measures_higher() {
     // Above 1.0, which is the half of the range the pipeline is HDR for.
     assert!(bright.peak > 1.0, "the bright frame did not exceed 1.0");
     assert!(bright.mean > dim.mean && dim.mean > black.mean);
+}
+
+/// **One texel that is not a number does not cost a slot its reading.**
+///
+/// A shader dividing by a value that reaches zero is one of the most ordinary
+/// things a shader does, and what it usually produces is a blown-out pixel
+/// nobody notices. What it used to also produce was `mean = NaN` for the whole
+/// slot, because one NaN admitted to a sum makes the sum a NaN — so a routine
+/// artifact took away the number an operator sets faders by.
+///
+/// The frame here is a known wash with a few texels replaced, so the expected
+/// mean is in closed form: the bad texels contribute nothing and divide in as
+/// zero, exactly as black does. Every spelling of "not a finite number" is
+/// tried, because they arrive by different routes and `NaN` is the only one a
+/// comparison-based test would catch by accident.
+#[test]
+fn a_texel_that_is_not_a_number_is_counted_and_left_out_rather_than_spreading() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    const W: u32 = 64;
+    const H: u32 = 64;
+    const WASH: f32 = 0.5;
+    // Three texels, one per spelling, all in the first row so the arithmetic
+    // below does not depend on which workgroup they land in.
+    const BAD: [f32; 3] = [f32::NAN, f32::INFINITY, f32::NEG_INFINITY];
+
+    let (_tex, view) = image(&gpu, W, H, |x, y| {
+        if y == 0 && (x as usize) < BAD.len() {
+            let v = BAD[x as usize];
+            [v, v, v]
+        } else {
+            [WASH, WASH, WASH]
+        }
+    });
+    let level = measure(&gpu, &view);
+
+    assert_eq!(
+        level.bad_texels,
+        BAD.len() as u32,
+        "the meter counted {} texels that were not light, not {}",
+        level.bad_texels,
+        BAD.len()
+    );
+    // A grey of `v` has luminance `v` exactly: the weights sum to 1.0. The bad
+    // texels are out of the sum and still in the denominator.
+    let expected = WASH * (W * H - BAD.len() as u32) as f32 / (W * H) as f32;
+    let close = |x: f32, y: f32| (x - y).abs() <= 1e-4 * (1.0 + y.abs());
+    assert!(
+        close(level.mean, expected),
+        "the mean is {} rather than {expected} — either a texel that is not light \
+         reached the sum, or the ones that did not were taken out of the denominator \
+         as well",
+        level.mean
+    );
+    assert!(
+        close(level.peak, WASH),
+        "the peak is {} rather than {WASH}",
+        level.peak
+    );
+
+    // And a frame with none of them reports none, so the count is measuring
+    // the texels rather than being a constant.
+    let (_clean, clean_view) = image(&gpu, W, H, |_, _| [WASH, WASH, WASH]);
+    let clean = measure(&gpu, &clean_view);
+    assert_eq!(
+        clean.bad_texels, 0,
+        "an ordinary frame was reported as having texels that were not light"
+    );
+    assert!(
+        close(clean.mean, WASH),
+        "the clean frame measured {}",
+        clean.mean
+    );
+}
+
+/// **A frame with no light in it at all reports no peak, not the sentinel.**
+///
+/// `peak` starts below anything a target can hold, and now that only finite
+/// texels are `max`ed into it, a frame where none of them was finite leaves
+/// that starting value untouched. Reporting it hands a caller `-3.4e38`, which
+/// the CLI status line formats as **41 characters** and which pushes every
+/// column after it off a line whose whole design is fixed-width and read at a
+/// glance in the dark. That is the failure this change exists to prevent,
+/// arriving through the other number.
+///
+/// What it reports instead is 0.0 — the same thing the mean says about the same
+/// frame — and `bad_texels` is what distinguishes it from black, in the only
+/// terms available that are not a judgement: every texel of it. A frame that is
+/// genuinely dark *below* zero still reports its negative peak, since the
+/// fallback is keyed on nothing having been seen rather than on the value being
+/// low; `a_negative_frame_reports_a_negative_peak` is that case.
+#[test]
+fn a_frame_with_no_finite_texel_reports_no_peak_rather_than_the_sentinel() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    const W: u32 = 64;
+    const H: u32 = 64;
+
+    let (_tex, view) = image(&gpu, W, H, |_, _| [f32::NAN, f32::NAN, f32::NAN]);
+    let level = measure(&gpu, &view);
+
+    assert_eq!(
+        level.bad_texels,
+        W * H,
+        "the frame was supposed to be entirely unlit, so this asserts nothing"
+    );
+    assert_eq!(level.mean, 0.0, "a frame with no light measured light");
+    assert_eq!(
+        level.peak, 0.0,
+        "the peak came back as {} — the sentinel it starts at, which formats as \
+         41 characters in a status line",
+        level.peak
+    );
 }
 
 /// **Peak and mean move independently.**
@@ -332,7 +455,11 @@ fn a_negative_frame_reports_a_negative_peak() {
     let measured = measure(&gpu, &view);
 
     let close = |x: f32, y: f32| (x - y).abs() <= 1e-4 * (1.0 + y.abs());
-    assert!(close(measured.mean, -0.5), "a -0.5 frame measured {}", measured.mean);
+    assert!(
+        close(measured.mean, -0.5),
+        "a -0.5 frame measured {}",
+        measured.mean
+    );
     assert!(
         close(measured.peak, -0.5),
         "a frame that is -0.5 everywhere reported a peak of {}, so the peak is \
@@ -388,6 +515,34 @@ proc soft_points {
 }
 "#;
 
+/// The same shape, rendering a NaN — a `sqrt` of a negative, which parses,
+/// type-checks, costs, compiles and runs. A generated L4 reaches this by
+/// dividing by a parameter that got to zero as easily as by writing it, and
+/// that is the point: this is what an ordinary shader accident looks like
+/// arriving through a real fragment block and a real additive blend, rather
+/// than a NaN a test wrote into a texture by hand.
+const L4_NAN: &str = r#"
+proc nan_points {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  param exposure : float [0.0, 8.0] = 1.0
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 4.0;
+  }
+
+  fragment {
+    let d   = length(point_coord * 2.0 - 1.0);
+    let bad = sqrt(0.0 - exposure);
+    color = vec4(vec3(bad, bad, bad), max(0.0, 1.0 - d));
+  }
+}
+"#;
+
 fn compile(src: &str) -> Checked {
     let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     let checked =
@@ -404,12 +559,15 @@ fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
 }
 
 fn build(gpu: &Gpu, exposure: f32) -> Set {
-    let l4 = L4.replace("{{EXPOSURE}}", &format!("{exposure:.3}"));
+    build_l4(gpu, &L4.replace("{{EXPOSURE}}", &format!("{exposure:.3}")))
+}
+
+fn build_l4(gpu: &Gpu, l4: &str) -> Set {
     let mut set = Set::build(
         &gpu.device,
         &gpu.queue,
         &compile(L1),
-        &compile(&l4),
+        &compile(l4),
         CAPACITY,
         SEED,
     )
@@ -482,8 +640,12 @@ fn a_brighter_set_measures_higher_than_a_dimmer_one() {
     let mut deck = metered_deck(&gpu, &[1.0, 0.25, 0.0]);
 
     let (bright, _) = wait_for_level(&gpu, &mut deck, &present, 0);
-    let dim = deck.level(1).expect("every slot is metered from the same frame");
-    let dark = deck.level(2).expect("every slot is metered from the same frame");
+    let dim = deck
+        .level(1)
+        .expect("every slot is metered from the same frame");
+    let dark = deck
+        .level(2)
+        .expect("every slot is metered from the same frame");
 
     assert!(
         bright.mean > 0.0,
@@ -505,6 +667,64 @@ fn a_brighter_set_measures_higher_than_a_dimmer_one() {
     );
     assert_eq!(dark.mean, 0.0, "a Set drawing black measured light");
     assert_eq!(dark.peak, 0.0, "a Set drawing black has a peak");
+}
+
+/// **A NaN out of a real fragment block does not cost the slot its reading.**
+///
+/// The host-written-texture half of this file pins what the reduction computes;
+/// this pins that the thing it is protecting against actually arrives that way.
+/// [`L4_NAN`] is a `sqrt` of a negative — the shape a generated procedure
+/// reaches by dividing by a parameter that got to zero — so the NaN travels a
+/// real fragment block, a real additive blend and a real `Rgba16Float` target
+/// before the meter sees it.
+///
+/// Slot 1 is ordinary material, and it is here to say the two slots are metered
+/// independently: a NaN is contained by *which target was measured*, which is
+/// the property the module doc claims and which no single-slot test can see.
+#[test]
+fn a_nan_from_a_real_l4_is_counted_and_leaves_the_mean_a_number() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+    let mut deck = Deck::new(
+        &gpu.device,
+        vec![
+            HotSwap::fixed(build_l4(&gpu, L4_NAN)),
+            HotSwap::fixed(build(&gpu, 1.0)),
+        ],
+        WIDTH,
+        HEIGHT,
+    );
+    deck.enable_meters(&gpu.device);
+
+    let (bad, _) = wait_for_level(&gpu, &mut deck, &present, 0);
+    let good = deck
+        .level(1)
+        .expect("every slot is metered from the same frame");
+
+    assert!(
+        bad.bad_texels > 100,
+        "the NaN Set produced only {} texels that were not light, so this test is \
+         asserting nothing",
+        bad.bad_texels
+    );
+    assert!(
+        bad.mean.is_finite() && bad.peak.is_finite(),
+        "the NaN Set measured mean {} peak {}, so one texel of it still takes the \
+         whole reading",
+        bad.mean,
+        bad.peak
+    );
+    assert_eq!(
+        good.bad_texels, 0,
+        "the ordinary Set was reported as having {} texels that were not light, so a \
+         NaN crossed between slots",
+        good.bad_texels
+    );
+    assert!(
+        good.mean > 0.0,
+        "the ordinary Set measured {}, so it drew nothing and says nothing",
+        good.mean
+    );
 }
 
 /// **An Allocated slot reads nothing — `None`, not its last frame.**
@@ -586,12 +806,21 @@ fn a_build_landing_on_a_slot_retires_its_meter() {
     let (requests, source) = mpsc::channel::<Request>();
     // A budget no frame in this harness will come near: what is under test is
     // the swap landing, not the watchdog's opinion of it.
-    let swap = HotSwap::new(&gpu.device, &gpu.queue, build(&gpu, 1.0), 10_000.0, Box::new(source));
+    let swap = HotSwap::new(
+        &gpu.device,
+        &gpu.queue,
+        build(&gpu, 1.0),
+        10_000.0,
+        Box::new(source),
+    );
     let mut deck = Deck::new(&gpu.device, vec![swap], WIDTH, HEIGHT);
     deck.enable_meters(&gpu.device);
 
     let (bright, _) = wait_for_level(&gpu, &mut deck, &present, 0);
-    assert!(bright.mean > 0.0, "the Set measured nothing before the swap");
+    assert!(
+        bright.mean > 0.0,
+        "the Set measured nothing before the swap"
+    );
 
     requests
         .send(Request {

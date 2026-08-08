@@ -2394,7 +2394,19 @@ impl Live {
             // thing the slot drew — see `Deck::level`.
             match self.deck.level(slot) {
                 Some(level) => {
-                    let _ = write!(self.status, "m{:.3} p{:.1}  ", level.mean, level.peak);
+                    let _ = write!(self.status, "m{:.3} p{:.1}", level.mean, level.peak);
+                    // Texels the meter left out because they were not a finite
+                    // number, and **only when there are any**. Not a warning:
+                    // dividing by a value that reaches zero is an ordinary
+                    // thing for a shader to do and what it produces is a
+                    // blown-out pixel. It is here because it explains the two
+                    // numbers beside it — they are a mean and a peak over the
+                    // texels this did not count — and because 3 and 300000 are
+                    // a stray sprite and a frame that is gone.
+                    if level.bad_texels > 0 {
+                        let _ = write!(self.status, " x{}", level.bad_texels);
+                    }
+                    self.status.push_str("  ");
                 }
                 None => self.status.push_str("m---- p----  "),
             }
