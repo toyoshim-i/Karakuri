@@ -37,6 +37,33 @@
 //! that is the primaries the rest of the pipeline is in, not because it is a
 //! convenient average. See `shaders/meter.wgsl`.
 //!
+//! ## What is left out of both, and why that is not a fault indicator
+//!
+//! A texel whose luminance is not a finite number is counted and then excluded
+//! from the sum and from the peak. [`Level::bad_texels`] is that count.
+//!
+//! **The exclusion is the point; the count is a footnote to it.** Admitting one
+//! NaN to the sum makes the mean NaN, and the mean is the number an operator
+//! sets faders by — so a single stray texel used to cost a slot its entire
+//! reading. That matters because non-finite texels are *ordinary*: dividing by
+//! a value that reaches zero is one of the most common things a shader does,
+//! and what it usually produces is a blown-out white pixel nobody notices. A
+//! measurement that a routine artifact destroys is a measurement that will be
+//! missing at exactly the wrong moment.
+//!
+//! **So there is no health flag, no fault threshold, and nothing here says a
+//! slot is broken**, deliberately. Being ordinary and mostly harmless is
+//! precisely what makes a NaN count a bad proxy for "this material is wrong" —
+//! a warning that fires on normal material teaches an operator to ignore
+//! warnings, which is worse than not having one. That is the same argument the
+//! rest of this module makes about gain, and the same one `docs/roadmap.md`
+//! records against a tempo octave chosen by heuristic. The count is shown; what
+//! to make of it is the operator's.
+//!
+//! Excluded texels divide into the mean as zero rather than being taken out of
+//! the denominator, which is what black does and is the only reading that keeps
+//! two slots comparable when one of them has a bad texel.
+//!
 //! What is measured is the slot's **own** target, before gain and before
 //! opacity. That is deliberate and it is the only ordering that makes the
 //! number useful: it is the level the material arrives at, which is the input
@@ -138,20 +165,27 @@
 //! [`Deck::enable_meters`](crate::deck::Deck::enable_meters) is called, and an
 //! offscreen `--render` that never calls it pays nothing at all — no
 //! pipelines, no buffers, no pass. When it is on, each Live slot costs one
-//! compute pass of two dispatches over its own target per frame, plus an 8-byte
+//! compute pass of two dispatches over its own target per frame, plus a 16-byte
 //! copy. Everything allocates in [`Meters::new`]; [`Meters::record`] encodes
 //! commands and nothing else, in the shape `compaction.rs` and `deck.rs`
 //! established.
 //!
-//! ## NaN and infinity are reported, not sanitized
+//! ## A NaN stays inside the slot that produced it
 //!
 //! A generated L4 that divides by zero or takes a root of a negative is a
 //! procedure that compiles and runs, and `deck.rs` goes to some length to keep
-//! the NaN it produces out of the *mix*. The meter does the opposite: it
-//! measures each slot's own target, so a NaN or an infinity there lands in that
-//! slot's own reading and in no other slot's. That is the point. A Set
-//! producing NaN is exactly what an operator needs to see, and a meter that
-//! quietly replaced it with a plausible number would be hiding it.
+//! the NaN it produces out of the *mix*. The meter measures each slot's own
+//! target, so what one slot's material does is visible in that slot's reading
+//! and in no other slot's. That containment is the property worth having and it
+//! is unchanged.
+//!
+//! **What the reading does with it has changed**, and this section used to say
+//! the opposite: a NaN once landed in `mean` and made it NaN, described here as
+//! reporting rather than sanitizing. It is separated out instead — counted in
+//! [`Level::bad_texels`], kept out of both figures — because "reported" turned
+//! out to mean "the mean is gone", and the mean is the number the fader is set
+//! by. See "What is left out of both" above for why that is a footnote rather
+//! than a warning.
 
 use std::sync::mpsc::{self, Receiver, Sender};
 
@@ -160,10 +194,10 @@ use std::sync::mpsc::{self, Receiver, Sender};
 /// Templated into the shader so the two cannot drift apart.
 const WORKGROUP: u32 = 64;
 
-/// Bytes in the `Level` a reduction writes: two `f32`s. Also the size of every
-/// staging buffer, which is why `wgpu`'s 8-byte map alignment is satisfied
-/// without padding.
-const LEVEL_SIZE: u64 = 8;
+/// Bytes in the `Level` a reduction writes: three `f32`s and one of padding.
+/// Also the size of every staging buffer, and the padding is what keeps
+/// `wgpu`'s 8-byte map alignment satisfied — see the struct in the shader.
+const LEVEL_SIZE: u64 = 16;
 
 /// Staging buffers per slot. **Four**: the frame being recorded, two more that
 /// may be queued ahead of the GPU, and one spare. See "The ring" in the module
@@ -198,6 +232,22 @@ pub struct Level {
     /// to measure a fixed image, a zero is exactly what waiting for the GPU
     /// gets you.
     pub frames_behind: u32,
+    /// **Texels this reading left out**, because their luminance was not a
+    /// finite number.
+    ///
+    /// A NaN or an infinity, from a shader that divided by a variable that
+    /// reached zero, took a root of a negative, or normalised a zero vector.
+    /// Nothing in the pipeline rejects any of those and **most of them are
+    /// harmless to look at**: a non-finite texel tone maps to a blown-out white
+    /// pixel and the frame is otherwise what it was. This is not a fault
+    /// indicator and there is deliberately no such thing here — see "What is left
+    /// out of both" in the module doc.
+    ///
+    /// What it is for is the number beside it: `mean` and `peak` are computed
+    /// over the texels this did *not* count, so one stray sprite no longer
+    /// takes the whole slot's reading with it. Reported so that a mean over
+    /// most of a frame is legible as one.
+    pub bad_texels: u32,
 }
 
 /// What a completed measurement carried, kept until a newer one arrives.
@@ -205,6 +255,7 @@ pub struct Level {
 struct Reading {
     mean: f32,
     peak: f32,
+    bad: u32,
     /// The slot's frame ordinal at the time it was recorded.
     frame: u64,
 }
@@ -273,7 +324,10 @@ impl Meters {
     /// Allocates and compiles, so never on the render thread — same terms as
     /// `Deck::new`.
     pub fn new(device: &wgpu::Device, views: &[&wgpu::TextureView]) -> Meters {
-        assert!(!views.is_empty(), "a meter over no targets measures nothing");
+        assert!(
+            !views.is_empty(),
+            "a meter over no targets measures nothing"
+        );
 
         let source = include_str!("shaders/meter.wgsl").replace("{{WG}}", &WORKGROUP.to_string());
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -377,13 +431,7 @@ impl Meters {
             pass.set_pipeline(total);
             pass.dispatch_workgroups(1, 1, 1);
         }
-        encoder.copy_buffer_to_buffer(
-            &meter.result,
-            0,
-            &meter.ring[index].buffer,
-            0,
-            LEVEL_SIZE,
-        );
+        encoder.copy_buffer_to_buffer(&meter.result, 0, &meter.ring[index].buffer, 0, LEVEL_SIZE);
         meter.ring[index].claim = Some(Claim {
             generation: meter.generation,
             frame,
@@ -416,9 +464,12 @@ impl Meters {
                     if !claim.armed {
                         claim.armed = true;
                         let tx = tx.clone();
-                        staging.buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| {
-                            let _ = tx.send((index, r.is_ok()));
-                        });
+                        staging
+                            .buffer
+                            .slice(..)
+                            .map_async(wgpu::MapMode::Read, move |r| {
+                                let _ = tx.send((index, r.is_ok()));
+                            });
                     }
                 }
             }
@@ -460,8 +511,16 @@ impl Meters {
                 let data = staging.slice(..).get_mapped_range();
                 let mean = f32::from_le_bytes(data[0..4].try_into().expect("4-byte chunk"));
                 let peak = f32::from_le_bytes(data[4..8].try_into().expect("4-byte chunk"));
+                let bad = f32::from_le_bytes(data[8..12].try_into().expect("4-byte chunk"));
                 drop(data);
                 staging.unmap();
+                // The shader counts in `f32` because the whole reduction is
+                // one. Integral and exact to 2^24 — 16.7 million texels, which
+                // is every frame this renders short of a 6K display, where the
+                // count starts rounding to even. That is a count nothing acts
+                // on, so rounding it is a cost worth the reduction staying one
+                // type.
+                let bad = bad as u32;
 
                 let current = claim.generation == meter.generation;
                 let newer = meter.last.is_none_or(|last| claim.frame >= last.frame);
@@ -469,6 +528,7 @@ impl Meters {
                     meter.last = Some(Reading {
                         mean,
                         peak,
+                        bad,
                         frame: claim.frame,
                     });
                 }
@@ -488,6 +548,7 @@ impl Meters {
         meter.last.map(|reading| Level {
             mean: reading.mean,
             peak: reading.peak,
+            bad_texels: reading.bad,
             // `frame` is the next ordinal, so the last one recorded is
             // `frame - 1`; a reading is at least one frame behind that by
             // construction, since the frame it was recorded in had not been
@@ -551,7 +612,10 @@ impl SlotMeter {
     ) -> SlotMeter {
         let partials = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("meter {slot} partials")),
-            size: u64::from(WORKGROUP) * 8,
+            // `vec3<f32>` per workgroup, which WGSL lays out at a stride of
+            // 16 rather than 12: an array element is aligned to the type's
+            // alignment and `vec3` is aligned as a `vec4`.
+            size: u64::from(WORKGROUP) * 16,
             usage: wgpu::BufferUsages::STORAGE,
             mapped_at_creation: false,
         });
