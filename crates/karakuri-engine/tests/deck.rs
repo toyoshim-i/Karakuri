@@ -8,6 +8,10 @@
 //!   expectation elsewhere in this repository still means something;
 //! - gain is linear, per slot, and applied to that slot's own target before
 //!   the sum rather than to the sum;
+//! - `over` hides what is under it and `add` does not, which is the whole of
+//!   what a blend mode buys, and `max` stacks without summing;
+//! - the fader silences a slot under every mode and the level does not, which
+//!   is the asymmetry `Blend::silent_at` records;
 //! - `Allocated` keeps its state — a slot taken off air does not advance and
 //!   resumes where it stopped;
 //! - the same ticks and the same seeds composite to the same pixels;
@@ -20,14 +24,14 @@
 //!
 //! Everything is a pixel comparison against a readback of the mix, and most of
 //! them are exact. That is deliberate: `Rgba16Float` in and `Rgba16Float` out
-//! with a weight of 1.0 has no rounding in it anywhere, so "close enough"
+//! at unity gain and full opacity has no rounding in it anywhere, so "close enough"
 //! would be hiding a real defect rather than tolerating a real error. The one
 //! test that cannot be exact says why.
 
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use karakuri_engine::deck::{Deck, Residency};
+use karakuri_engine::deck::{Blend, Deck, Residency};
 use karakuri_engine::swap::{Event, HotSwap, Request};
 use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
 use karakuri_ir::typed::Checked;
@@ -118,6 +122,101 @@ proc nan_points {
   }
 }
 "#;
+
+/// **A layer that covers**: big black sprites at full coverage.
+///
+/// Black *and* opaque is the pair that separates the modes with nothing else
+/// moving. Its colour contribution is zero under every mode — `blend additive`
+/// multiplies colour by the sprite's own alpha on the way into the slot target,
+/// and zero times anything is zero — so whatever the mix does with this layer
+/// is entirely what it did with the coverage. Under `add` it is invisible;
+/// under `over` it is a hole.
+const L4_CARD: &str = r#"
+proc opaque_card {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  param exposure : float [0.0, 8.0] = 1.0
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 48.0;
+  }
+
+  fragment {
+    color = vec4(vec3(0.0, 0.0, 0.0) * exposure, 1.0);
+  }
+}
+"#;
+
+/// The ordinary material, drawn wide enough to be under the card everywhere it
+/// covers. Used where a test needs the two layers to actually overlap rather
+/// than to overlap wherever the seeds happened to put them.
+const L4_WIDE: &str = r#"
+proc wide_points {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  param exposure : float [0.0, 8.0] = 1.0
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 48.0;
+  }
+
+  fragment {
+    let d = length(point_coord * 2.0 - 1.0);
+    color = vec4(vec3(1.0, 1.0, 1.0) * exposure, max(0.0, 1.0 - d));
+  }
+}
+"#;
+
+/// The same card, writing a coverage that is **not a coverage** — one per
+/// spelling of "outside `[0, 1]`", named by what the alpha expression is.
+///
+/// Nothing in this pipeline stops any of them: the IR calls `color` linear RGB
+/// with straight alpha, says values above 1.0 are expected, and no pass clamps
+/// what a `fragment` block assigns. Each parses, type-checks, costs, compiles
+/// and runs, and a generated L4 reaches all four by dividing by a parameter as
+/// easily as by writing the constant. Black, so that whatever the mix does with
+/// one of them is what it did with the coverage and not with the colour.
+///
+/// `exposure` defaults to 1.0 and every expression is written against it, so
+/// none of them folds to a constant the compiler could reject before it runs.
+const OVERDRAWN_ALPHA: [(&str, &str); 4] = [
+    ("above one", "1.5 * exposure"),
+    ("negative", "0.0 - exposure"),
+    ("infinite", "exposure / 0.0"),
+    ("NaN", "sqrt(0.0 - exposure)"),
+];
+
+fn overdrawn_card(alpha: &str) -> String {
+    format!(
+        r#"
+proc overdrawn_card {{
+  kind  L4
+  blend additive
+
+  consumes position
+
+  param exposure : float [0.0, 8.0] = 1.0
+
+  vertex {{
+    clip       = camera * vec4(position, 1.0);
+    point_size = 48.0;
+  }}
+
+  fragment {{
+    color = vec4(vec3(0.0, 0.0, 0.0) * exposure, {alpha});
+  }}
+}}
+"#
+    )
+}
 
 fn compile(src: &str) -> Checked {
     let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
@@ -295,8 +394,16 @@ fn steps_taken(set: &Set) -> u64 {
 /// `tests/generated.rs`, `tests/lifecycle.rs` and `tests/hot_swap.rs` is about
 /// the path a bare Set takes, and they only keep meaning anything about the
 /// deck if the deck reproduces that path exactly. It can be exact — the mix
-/// reads the texel under the fragment with `textureLoad`, multiplies by a
-/// weight of exactly 1.0, and writes an `f16` that came from an `f16`.
+/// reads the texel under the fragment with `textureLoad`, adds it to a zeroed
+/// accumulator at a gain and an opacity of exactly 1.0, and writes an `f16`
+/// that came from an `f16`.
+///
+/// **The material here writes a coverage in `[0, 1]`, which is the one thing
+/// this comparison assumes.** The mix saturates what it reads into that range
+/// and a bare Set's target holds whatever L4 accumulated, so an L4 writing an
+/// alpha of 1.5 makes the two disagree in alpha and nowhere else — see
+/// `Blend::Add`. Every expectation this test exists to protect is about
+/// colour.
 ///
 /// A failure here is not a tolerance to widen. It means the mix is filtering,
 /// or resampling, or applying something it should not.
@@ -341,23 +448,34 @@ fn a_deck_of_one_is_a_bare_set_bit_for_bit() {
     assert_eq!(steps_taken(deck.slot(0).set()), 12);
 }
 
-/// **A slot faded to silence cannot take the mix with it.**
+/// **A slot faded to silence cannot take the mix with it, under any blend
+/// mode.**
 ///
-/// Zero gain has to be a *skip*, not a multiply by zero, for the same reason
-/// `Allocated` is: `0.0 * x` is zero only for finite `x`. A slot's own target
-/// is allowed to hold a NaN — `sqrt` of a negative is a procedure that passes
-/// every stage of this pipeline — and one multiplied by a zero fader would
+/// A fader at silence has to be a *skip*, not a blend at zero, for the same
+/// reason `Allocated` is: `0.0 * x` is zero only for finite `x`. A slot's own
+/// target is allowed to hold a NaN — `sqrt` of a negative is a procedure that
+/// passes every stage of this pipeline — and one blended at a zero fader would
 /// otherwise put a NaN in every channel of the composite, wiping out every
-/// other slot.
+/// other slot. This is the property `docs/roadmap.md` records as the first
+/// thing M2 taught, and it is **the** reason the operator has a fader at all.
 ///
-/// The comparison is against the same deck with that slot `Allocated`, which
-/// is the path that was already exact, so this asserts the two ways of
-/// silencing a slot agree.
+/// The comparison is against the same deck with that slot `Allocated`, which is
+/// the path that was already exact, so this asserts the two ways of silencing a
+/// slot agree.
+///
+/// Opacity is the fader here, and every mode is tried, because
+/// [`Blend::silent_at`] is the only thing standing between a NaN and the mix
+/// and a mode it forgot would be a slot that cannot be turned off. Gain gets
+/// the same treatment under the two modes where it silences at all —
+/// `zero_gain_silences_add_and_max_and_still_covers_under_over` is where that
+/// list comes from. **Under `over`, gain does not silence and a NaN gets
+/// through**; that is what the fader is for and it is deliberately not asserted
+/// here, because pinning it would read as a promise that NaN reaches the mix.
 #[test]
 fn a_slot_faded_to_silence_cannot_take_the_mix_with_it() {
     let gpu = Gpu::headless().expect("no GPU available");
 
-    let run = |silence: Residency, gain: f32| -> Vec<u16> {
+    let run = |silence: Residency, blend: Blend, gain: f32, opacity: f32| -> Vec<u16> {
         let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
         let mut deck = Deck::new(
             &gpu.device,
@@ -369,14 +487,17 @@ fn a_slot_faded_to_silence_cannot_take_the_mix_with_it() {
             HEIGHT,
         );
         deck.set_residency(1, silence);
+        deck.set_blend(1, blend);
         deck.set_gain(1, gain);
+        deck.set_opacity(1, opacity);
         for _ in 0..12 {
             frame(&gpu, &mut deck, &present, 1);
         }
         if silence == Residency::Live {
             // The faded slot is only interesting if its target really does
             // hold a NaN. (Parked, it renders nothing at all, so its target is
-            // the black it was cleared to and there is nothing to check.)
+            // the transparent black it was cleared to and there is nothing to
+            // check.)
             let own = readback(&gpu, deck.slot_target(1));
             assert!(
                 decode(&own).iter().any(|v| v.is_nan()),
@@ -387,16 +508,588 @@ fn a_slot_faded_to_silence_cannot_take_the_mix_with_it() {
     };
 
     // Off air: skipped by residency, and exact.
-    let parked = run(Residency::Allocated, 1.0);
-    // On air at a zero fader: must be the same picture.
-    let faded = run(Residency::Live, 0.0);
-
+    let parked = run(Residency::Allocated, Blend::Add, 1.0, 1.0);
     assert!(lit(&parked) > 100, "the surviving slot drew nothing");
-    let nans = decode(&faded).iter().filter(|v| v.is_nan()).count();
+
+    let nans = |mix: &[u16]| decode(mix).iter().filter(|v| v.is_nan()).count();
+
+    for blend in Blend::ALL {
+        let faded = run(Residency::Live, blend, 1.0, 0.0);
+        assert_eq!(
+            faded,
+            parked,
+            "a slot at opacity 0.0 under `{}` reached the mix ({} NaN channels), while \
+             the same slot taken off air did not",
+            blend.name(),
+            nans(&faded)
+        );
+    }
+    for blend in [Blend::Add, Blend::Max] {
+        let faded = run(Residency::Live, blend, 0.0, 1.0);
+        assert_eq!(
+            faded,
+            parked,
+            "a slot at gain 0.0 under `{}` reached the mix ({} NaN channels)",
+            blend.name(),
+            nans(&faded)
+        );
+    }
+}
+
+/// **`over` hides what is under it and `add` does not**, which is the whole of
+/// what the blend vocabulary buys.
+///
+/// Slot 1 is [`L4_CARD`] — black, opaque, and contributing no colour at all —
+/// so the two modes differ by exactly one thing: whether the coverage it drew
+/// is allowed to take the layer under it away. The expectation is not a
+/// direction but a number, read from the card's own target:
+///
+/// ```text
+///   add:   A + 0        = A
+///   over:  0 + A*(1 - c)         c = the card's coverage at that texel
+/// ```
+///
+/// Inexact for the same single reason as `gain_is_linear_...`: the GPU works in
+/// `f32` and rounds once to `f16` on write, while the expectation is computed
+/// in `f32` from values already rounded to `f16`.
+#[test]
+fn over_hides_what_is_under_it_and_add_does_not() {
+    let gpu = Gpu::headless().expect("no GPU available");
+
+    let run = |blend: Blend| -> (Vec<f32>, Vec<f32>) {
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![
+                HotSwap::fixed(build(&gpu, SEED_A, CAPACITY)),
+                HotSwap::fixed(build_with(&gpu, L4_CARD, SEED_B, CAPACITY)),
+            ],
+            WIDTH,
+            HEIGHT,
+        );
+        deck.set_blend(1, blend);
+        for _ in 0..12 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        (
+            decode(&readback(&gpu, present.hdr_texture())),
+            decode(&readback(&gpu, deck.slot_target(1))),
+        )
+    };
+
+    let (added, card) = run(Blend::Add);
+    let (overed, _) = run(Blend::Over);
+
+    // The card has to actually cover something, or every assertion below is
+    // `A == A` and this test says nothing. Alpha is the fourth channel.
+    let covered = card.iter().skip(3).step_by(4).filter(|c| **c > 0.5).count();
+    assert!(
+        covered > 100,
+        "the card covered only {covered} texels, so there is nothing for `over` to hide"
+    );
+
+    const TOLERANCE: f32 = 1.0 / 1024.0;
+    let close = |x: f32, y: f32| (x - y).abs() <= TOLERANCE * (1.0 + x.abs().max(y.abs()));
+
+    let mut misses = 0;
+    let mut worst = 0.0f32;
+    let mut hidden = 0;
+    // Colour only: the fourth channel is coverage, and what the mix does with
+    // coverage is the same under every mode by construction.
+    for i in (0..added.len()).filter(|i| i % 4 != 3) {
+        let coverage = card[(i / 4) * 4 + 3];
+        let expected = added[i] * (1.0 - coverage);
+        if !close(overed[i], expected) {
+            misses += 1;
+            worst = worst.max((overed[i] - expected).abs());
+        }
+        if !close(overed[i], added[i]) {
+            hidden += 1;
+        }
+    }
+
     assert_eq!(
-        faded, parked,
-        "a slot at gain 0.0 reached the mix ({nans} NaN channels), while the same \
-         slot taken off air did not"
+        misses, 0,
+        "`over` is not `A*(1 - coverage)`: {misses} of {} colour channels disagree, \
+         worst by {worst}",
+        added.len()
+    );
+    // The other half, and the half that fails if `over` silently stayed `add`:
+    // the two modes have to differ somewhere, or the first assertion passed
+    // only because the coverage was zero everywhere it looked.
+    assert!(
+        hidden > 100,
+        "only {hidden} channels distinguish `over` from `add`, so this run cannot tell \
+         the two modes apart"
+    );
+}
+
+/// **`max` stacks without summing.**
+///
+/// Two lit slots. Under `add` the mix is `A + B`; under `max` it is the larger
+/// of the two per channel, which is what makes four layers of the same bright
+/// material stay that bright instead of reaching four times it. `A` and `B` are
+/// measured on their own — same deck, same seeds, same ticks, one slot off air
+/// each time — so both are sampled at the same `t` as the mix.
+#[test]
+fn max_takes_the_larger_of_two_layers_rather_than_their_sum() {
+    let gpu = Gpu::headless().expect("no GPU available");
+
+    let run = |blend: Blend, off_air: Option<usize>| -> Vec<f32> {
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+        let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
+        deck.set_blend(1, blend);
+        if let Some(slot) = off_air {
+            deck.set_residency(slot, Residency::Allocated);
+        }
+        for _ in 0..12 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        decode(&readback(&gpu, present.hdr_texture()))
+    };
+
+    let a = run(Blend::Add, Some(1));
+    let b = run(Blend::Add, Some(0));
+    let summed = run(Blend::Add, None);
+    let maxed = run(Blend::Max, None);
+
+    const TOLERANCE: f32 = 1.0 / 1024.0;
+    let close = |x: f32, y: f32| (x - y).abs() <= TOLERANCE * (1.0 + x.abs().max(y.abs()));
+
+    let mut misses = 0;
+    let mut worst = 0.0f32;
+    let mut distinct = 0;
+    for i in (0..maxed.len()).filter(|i| i % 4 != 3) {
+        let expected = a[i].max(b[i]);
+        if !close(maxed[i], expected) {
+            misses += 1;
+            worst = worst.max((maxed[i] - expected).abs());
+        }
+        // Where both layers are lit, `max` is strictly less than `add`. If
+        // nowhere is, the two slots never overlap and the comparison above is
+        // `A + 0` against `max(A, 0)`, which agree.
+        if !close(maxed[i], summed[i]) {
+            distinct += 1;
+        }
+    }
+
+    assert_eq!(
+        misses, 0,
+        "`max` is not the per-channel maximum: {misses} of {} colour channels disagree, \
+         worst by {worst}",
+        maxed.len()
+    );
+    assert!(
+        distinct > 100,
+        "only {distinct} channels distinguish `max` from `add`, so the two slots barely \
+         overlap and this run cannot tell them apart"
+    );
+}
+
+/// **An opacity outside `[0, 1]` is clamped where the engine takes it**, not
+/// where a key press produces it.
+///
+/// `karakuri-cli` clamps at the key so that the `opacity` record carries the
+/// value that took effect, but a record is also how a *replay* drives the deck,
+/// and a stream is allowed to say anything. Past 1.0 an `over` layer subtracts
+/// more than it covers; below 0.0 it adds what it should have hidden. Unlike
+/// gain — a level into an HDR mix, deliberately open above 1.0 — every value
+/// outside this range has exactly one sensible reading, so it is clamped rather
+/// than refused.
+///
+/// NaN silences, which is the third value a fader can carry and the one with no
+/// obvious reading: the two available are "this slot goes dark" and "the whole
+/// mix goes dark".
+#[test]
+fn an_opacity_a_record_could_carry_is_clamped_to_a_fader() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let mut deck = deck_of(&gpu, &[SEED_A]);
+
+    for (asked, expected) in [
+        (3.0, 1.0),
+        (1.0, 1.0),
+        (0.5, 0.5),
+        (0.0, 0.0),
+        (-2.0, 0.0),
+        (f32::INFINITY, 1.0),
+        (f32::NEG_INFINITY, 0.0),
+        (f32::NAN, 0.0),
+    ] {
+        deck.set_opacity(0, asked);
+        assert_eq!(
+            deck.opacity(0),
+            expected,
+            "an opacity of {asked} reached the mix as {}",
+            deck.opacity(0)
+        );
+    }
+}
+
+/// **A gain a record could carry is floored at zero, and a NaN reads as zero.**
+///
+/// The same hole as the one above and it needed the same answer: `karakuri-cli`
+/// floors at the key press, which says plainly that a negative gain is wrong,
+/// but a replayed `{"t":"gain","slot":1,"value":-2.0}` does not go through a
+/// key press. Unbounded *above*, unlike opacity, because gain is a level into
+/// an HDR mix and 4.0 is an ordinary thing to want.
+///
+/// The NaN case is the one that cannot be recovered from. A NaN gain puts a NaN
+/// in every channel of the mix from one slot, and unlike the material's own
+/// NaN — which the fader skips past — no fader undoes a gain that has already
+/// multiplied by one.
+#[test]
+fn a_gain_a_record_could_carry_is_floored_but_not_ceilinged() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let mut deck = deck_of(&gpu, &[SEED_A]);
+
+    for (asked, expected) in [
+        (4.0, 4.0),
+        (1.0, 1.0),
+        (0.0, 0.0),
+        (-2.0, 0.0),
+        (f32::INFINITY, f32::INFINITY),
+        (f32::NEG_INFINITY, 0.0),
+        (f32::NAN, 0.0),
+    ] {
+        deck.set_gain(0, asked);
+        assert_eq!(
+            deck.gain(0),
+            expected,
+            "a gain of {asked} reached the mix as {}",
+            deck.gain(0)
+        );
+    }
+}
+
+/// **An alpha that is not a coverage cannot invert the mix or NaN it.**
+///
+/// `over` is `A*(1 - covered)`, so a coverage of 1.5 turns hiding into
+/// *subtracting*, a coverage of 2 or more turns it into amplifying with the
+/// sign flipped, and a NaN takes every channel of the frame. Nothing in the
+/// pipeline bounds what an L4 writes to alpha — see [`OVERDRAWN_ALPHA`] — and
+/// before blend modes existed that did not matter, because the channel was
+/// written by nothing and read by nothing. It is load-bearing now, which is why
+/// the mix saturates on the way in rather than trusting the material.
+///
+/// **All four spellings of "not a coverage", not only the one that motivated
+/// the fix.** Above one is the case that reads as a hiding layer subtracting;
+/// negative and infinite are the same arithmetic further along; and NaN is the
+/// one the saturation catches only because it is written as a comparison rather
+/// than as `clamp`, whose behaviour on a NaN operand WGSL leaves to the
+/// backend. A test that ran only the finite case would pass on a backend where
+/// the NaN case renders a blank frame.
+///
+/// Three claims per spelling. No colour channel of the mix is a NaN, none is
+/// negative, and the mix's own coverage stays in range — the last one being
+/// what says the saturation is where it belongs, since that value is what the
+/// slot above this one is composited against.
+#[test]
+fn an_alpha_that_is_not_a_coverage_cannot_invert_the_mix_or_nan_it() {
+    let gpu = Gpu::headless().expect("no GPU available");
+
+    for (name, alpha) in OVERDRAWN_ALPHA {
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![
+                HotSwap::fixed(build_with(&gpu, L4_WIDE, SEED_A, CAPACITY)),
+                HotSwap::fixed(build_with(&gpu, &overdrawn_card(alpha), SEED_B, CAPACITY)),
+            ],
+            WIDTH,
+            HEIGHT,
+        );
+        deck.set_blend(1, Blend::Over);
+        for _ in 0..12 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+
+        // The material has to actually be out of range, or this is a test of
+        // ordinary coverage under a frightening name.
+        let own = decode(&readback(&gpu, deck.slot_target(1)));
+        let bad = own
+            .iter()
+            .skip(3)
+            .step_by(4)
+            .filter(|a| !(0.0..=1.0).contains(*a))
+            .count();
+        assert!(
+            bad > 100,
+            "the {name} card left only {bad} texels outside a coverage of [0, 1], so \
+             nothing here is being saturated"
+        );
+
+        let mixed = decode(&readback(&gpu, present.hdr_texture()));
+        let nan = (0..mixed.len())
+            .filter(|i| i % 4 != 3)
+            .filter(|&i| mixed[i].is_nan())
+            .count();
+        assert_eq!(
+            nan, 0,
+            "{nan} colour channels of the mix are NaN under the {name} card, so an alpha \
+             nothing draws with reached every channel of the frame"
+        );
+        let negative = (0..mixed.len())
+            .filter(|i| i % 4 != 3)
+            .filter(|&i| mixed[i] < 0.0)
+            .count();
+        assert_eq!(
+            negative, 0,
+            "{negative} colour channels of the mix are negative under the {name} card, so \
+             the coverage turned `over` from hiding into subtracting"
+        );
+        let unbounded = mixed
+            .iter()
+            .skip(3)
+            .step_by(4)
+            .filter(|a| !(0.0..=1.0).contains(*a))
+            .count();
+        assert_eq!(
+            unbounded, 0,
+            "{unbounded} texels of the mix carry a coverage outside [0, 1] under the \
+             {name} card, which is what the next slot in the stack would be composited \
+             against"
+        );
+    }
+}
+
+/// **Opacity moves the mix at settings between silence and full, under every
+/// mode.**
+///
+/// Every other test here pins the fader at 0.0 or 1.0, where a composite that
+/// ignored `opacity` outright is indistinguishable from one that honours it —
+/// 0.0 is the skip, which [`Blend::silent_at`] decides on the host, and 1.0 is
+/// the identity. So without this test the one control this whole slice exists
+/// to make real has nothing saying it does anything.
+///
+/// Each mode gets its own reference, and none of them is a second run of the
+/// composite at a different fader:
+///
+/// ```text
+///   add:   a half fader at gain g is bit-identical to a full fader at g/2
+///   over:  A*(1 - o*c)              c = the card's coverage
+///   max:   mix(A, max(A, B), o)     A and B measured on their own
+/// ```
+#[test]
+fn opacity_moves_the_mix_at_settings_between_zero_and_one() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    const HALF: f32 = 0.5;
+    const GAIN: f32 = 1.4;
+
+    // --- `add`: **in colour**, opacity is the same multiply gain is, so it can
+    // be checked against gain exactly. This is the collapse the deck's two
+    // numbers used to be justified by, asserted rather than asserted about.
+    //
+    // Colour and not the whole texel, because the collapse stops at the alpha
+    // channel: opacity scales coverage and gain does not, so the same picture
+    // under the two settings carries a different coverage. That is the
+    // difference between a fader and a level, showing up in the one channel
+    // where `add` cannot hide it.
+    let add_run = |gain: f32, opacity: f32| -> Vec<f32> {
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+        let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
+        deck.set_gain(1, gain);
+        deck.set_opacity(1, opacity);
+        for _ in 0..12 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        decode(&readback(&gpu, present.hdr_texture()))
+    };
+    let colour = |mix: &[f32]| -> Vec<f32> {
+        (0..mix.len())
+            .filter(|i| i % 4 != 3)
+            .map(|i| mix[i])
+            .collect()
+    };
+
+    let half_fader = colour(&add_run(GAIN, HALF));
+    let half_gain = colour(&add_run(GAIN * HALF, 1.0));
+    let full = colour(&add_run(GAIN, 1.0));
+    assert_ne!(
+        full, half_gain,
+        "gain {GAIN} and gain {} render the same colours, so the comparison below is \
+         vacuous",
+        GAIN * HALF
+    );
+    assert_eq!(
+        half_fader, half_gain,
+        "under `add`, a fader at {HALF} is not the multiply a gain at the same factor is"
+    );
+
+    // --- `over` and `max` share the numeric comparison, and it is inexact for
+    // the single reason the other numeric tests here are: `f32` on the GPU,
+    // rounded once to `f16` on write, against an expectation computed in `f32`
+    // from values already rounded.
+    const TOLERANCE: f32 = 1.0 / 1024.0;
+    let close = |x: f32, y: f32| (x - y).abs() <= TOLERANCE * (1.0 + x.abs().max(y.abs()));
+
+    // --- `over`: the card contributes no colour, so a half fader has to leave
+    // exactly half the hole a full one does.
+    let over_run = |blend: Blend, opacity: f32| -> (Vec<f32>, Vec<f32>) {
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![
+                HotSwap::fixed(build(&gpu, SEED_A, CAPACITY)),
+                HotSwap::fixed(build_with(&gpu, L4_CARD, SEED_B, CAPACITY)),
+            ],
+            WIDTH,
+            HEIGHT,
+        );
+        deck.set_blend(1, blend);
+        deck.set_opacity(1, opacity);
+        for _ in 0..12 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        (
+            decode(&readback(&gpu, present.hdr_texture())),
+            decode(&readback(&gpu, deck.slot_target(1))),
+        )
+    };
+    // `add` at full opacity is `A + 0`, which is `A`.
+    let (bare, card) = over_run(Blend::Add, 1.0);
+    let (half_hole, _) = over_run(Blend::Over, HALF);
+
+    let mut misses = 0;
+    let mut worst = 0.0f32;
+    let mut moved = 0;
+    for i in (0..bare.len()).filter(|i| i % 4 != 3) {
+        let coverage = card[(i / 4) * 4 + 3];
+        let expected = bare[i] * (1.0 - HALF * coverage);
+        if !close(half_hole[i], expected) {
+            misses += 1;
+            worst = worst.max((half_hole[i] - expected).abs());
+        }
+        if !close(half_hole[i], bare[i]) {
+            moved += 1;
+        }
+    }
+    assert_eq!(
+        misses, 0,
+        "under `over`, a fader at {HALF} is not `A*(1 - {HALF}*coverage)`: {misses} of {} \
+         colour channels disagree, worst by {worst}",
+        bare.len()
+    );
+    assert!(
+        moved > 100,
+        "a fader at {HALF} under `over` moved only {moved} colour channels, so this run \
+         cannot see the fader at all"
+    );
+
+    // --- `max`: a crossfade *into* the maximum rather than a switch to it, so
+    // a half fader is halfway between the layer under it and the maximum.
+    let max_run = |blend: Blend, opacity: f32, off_air: Option<usize>| -> Vec<f32> {
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+        let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
+        deck.set_blend(1, blend);
+        deck.set_opacity(1, opacity);
+        if let Some(slot) = off_air {
+            deck.set_residency(slot, Residency::Allocated);
+        }
+        for _ in 0..12 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        decode(&readback(&gpu, present.hdr_texture()))
+    };
+    let a = max_run(Blend::Add, 1.0, Some(1));
+    let b = max_run(Blend::Add, 1.0, Some(0));
+    let halfway = max_run(Blend::Max, HALF, None);
+
+    let mut misses = 0;
+    let mut worst = 0.0f32;
+    let mut moved = 0;
+    for i in (0..halfway.len()).filter(|i| i % 4 != 3) {
+        let expected = a[i] + HALF * (a[i].max(b[i]) - a[i]);
+        if !close(halfway[i], expected) {
+            misses += 1;
+            worst = worst.max((halfway[i] - expected).abs());
+        }
+        if !close(halfway[i], a[i]) {
+            moved += 1;
+        }
+    }
+    assert_eq!(
+        misses, 0,
+        "under `max`, a fader at {HALF} is not halfway to the maximum: {misses} of {} \
+         colour channels disagree, worst by {worst}",
+        halfway.len()
+    );
+    assert!(
+        moved > 100,
+        "a fader at {HALF} under `max` moved only {moved} colour channels away from the \
+         layer under it, so this run cannot see the fader"
+    );
+}
+
+/// **Zero gain silences `add` and `max`, and still covers under `over`.**
+///
+/// The other half of [`Blend::silent_at`] — the fader's half is asserted
+/// against material that has gone NaN, in
+/// `a_slot_faded_to_silence_cannot_take_the_mix_with_it`, because that is where
+/// a skip and a multiply by zero stop agreeing.
+///
+/// Here the material is clean and the asymmetry is what is being pinned: a
+/// layer at zero level contributes no colour, so under `add` and `max` it is
+/// not there at all — and under `over` it is a black card, which covers. Slot 1
+/// is [`L4_CARD`], so that difference is most of the frame rather than a few
+/// bits.
+#[test]
+fn zero_gain_silences_add_and_max_and_still_covers_under_over() {
+    let gpu = Gpu::headless().expect("no GPU available");
+
+    let run = |residency: Residency, blend: Blend, gain: f32, opacity: f32| -> Vec<u16> {
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![
+                HotSwap::fixed(build(&gpu, SEED_A, CAPACITY)),
+                HotSwap::fixed(build_with(&gpu, L4_CARD, SEED_B, CAPACITY)),
+            ],
+            WIDTH,
+            HEIGHT,
+        );
+        deck.set_residency(1, residency);
+        deck.set_blend(1, blend);
+        deck.set_gain(1, gain);
+        deck.set_opacity(1, opacity);
+        for _ in 0..12 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        readback(&gpu, present.hdr_texture())
+    };
+
+    let parked = run(Residency::Allocated, Blend::Add, 1.0, 1.0);
+    assert!(lit(&parked) > 100, "the surviving slot drew nothing");
+
+    // The level silences where a layer contributing no colour contributes
+    // nothing at all...
+    for blend in [Blend::Add, Blend::Max] {
+        assert_eq!(
+            run(Residency::Live, blend, 0.0, 1.0),
+            parked,
+            "a slot at gain 0.0 under `{}` reached the mix",
+            blend.name()
+        );
+    }
+    // ...and does not under `over`, where zero gain is a black card and a black
+    // card covers. Asserted rather than left as a comment, because it is the
+    // one place the two faders stop being interchangeable and an operator
+    // reaching for the wrong one gets a frame that goes dark instead of a
+    // layer that goes away.
+    //
+    // **Colour channels only.** A whole-buffer `assert_ne!` would pass on the
+    // alpha channel alone — coverage composes whatever the colour mode does, so
+    // a slot that reached the mix and changed nothing visible still moves it —
+    // and this claim is about what the picture does.
+    let dark = decode(&run(Residency::Live, Blend::Over, 0.0, 1.0));
+    let bright = decode(&parked);
+    let darkened = (0..dark.len())
+        .filter(|i| i % 4 != 3)
+        .filter(|&i| dark[i] < bright[i])
+        .count();
+    assert!(
+        darkened > 100,
+        "a zero-gain `over` layer darkened only {darkened} colour channels, so it has \
+         stopped covering — which would make gain and opacity the same control again"
     );
 }
 
@@ -573,7 +1266,13 @@ fn gain_is_linear_and_applied_before_the_composite() {
     let mut before_misses = 0;
     let mut after_misses = 0;
     let mut worst = 0.0f32;
-    for i in 0..mixed.len() {
+    // **Colour only.** The fourth channel is coverage rather than a colour —
+    // `1 - prod(1 - a_i)`, composed as `over` under every blend mode — and gain
+    // deliberately does not reach it: turning a layer's level down dims what it
+    // draws and does not change what it covers. So alpha is neither `2*A + B`
+    // nor `2*(A + B)`, and including it here would be asserting linearity of a
+    // channel this deck promises is not linear.
+    for i in (0..mixed.len()).filter(|i| i % 4 != 3) {
         let before = 2.0 * a[i] + b[i];
         let after = 2.0 * (a[i] + b[i]);
         if !close(mixed[i], before) {

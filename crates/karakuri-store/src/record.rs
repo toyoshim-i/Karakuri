@@ -148,13 +148,13 @@ pub enum Record {
     },
     // -- The mix: durable state that belongs to the *session* -------------
     //
-    // Everything above describes one Set and goes into a Set file. These
-    // three describe the deck the Sets are playing on, and a Set file must
-    // not contain them — a Set does not know what fader it is under or
-    // whether it is on air, and one that carried its gain would restore that
-    // gain wherever it was next loaded. They are state all the same, which is
-    // what separates them from the three below: `is_set_state` says no to all
-    // six and means two different things by it.
+    // Everything above describes one Set and goes into a Set file. These six
+    // describe the deck the Sets are playing on, and a Set file must not
+    // contain them — a Set does not know what fader it is under or whether it
+    // is on air, and one that carried its gain would restore that gain
+    // wherever it was next loaded. They are state all the same, which is what
+    // separates them from the three below: `is_set_state` says no to all nine
+    // and means two different things by it.
     /// A deck slot's linear gain into the mix.
     ///
     /// The slot is an index into the deck rather than anything about the Set
@@ -163,6 +163,33 @@ pub enum Record {
     Gain {
         slot: u8,
         value: f32,
+    },
+    /// A deck slot's fader: how much of its blend lands in the mix, `[0, 1]`.
+    ///
+    /// **Separate from [`Record::Gain`] because they are separate controls**,
+    /// which only became visible once there was a blend mode that was not
+    /// `add`. Gain is the level the material arrives at; opacity is how much of
+    /// the blend takes effect, including how much the layer covers. Under `add`
+    /// the two multiply together and a stream could have carried either — under
+    /// `over` a session that replayed one as the other would replay a layer
+    /// that hides as a layer that dims.
+    Opacity {
+        slot: u8,
+        value: f32,
+    },
+    /// How a deck slot's layer meets the ones under it: `add`, `over` or `max`.
+    ///
+    /// Slot order is stacking order, so this is the one mix control whose
+    /// meaning depends on where the slot sits — which is why it is recorded per
+    /// slot rather than as a property of the Set in it. Moving a Set to another
+    /// slot moves it to another place in the stack.
+    ///
+    /// A `String` on the same terms as `residency` and `sync`: what a mode is
+    /// allowed to be is the engine's to say, and a stream from a newer build
+    /// reaches the engine's diagnostic rather than the parser.
+    Blend {
+        slot: u8,
+        mode: String,
     },
     /// What a deck slot is asked to do: `live`, `priming`, or `allocated`.
     ///
@@ -304,24 +331,24 @@ pub enum Record {
 pub const MAX_STEPS: u8 = 4;
 
 impl Record {
-    /// Whether this record belongs in a Set file. **Seven say no, for two
+    /// Whether this record belongs in a Set file. **Nine say no, for two
     /// different reasons, and keeping them apart is the point of the name** —
-    /// it is `is_set_state` rather than `is_set_state` because half of what it
-    /// refuses is state.
+    /// it is `is_set_state` rather than `is_state` because two thirds of what
+    /// it refuses is state.
     ///
     /// - [`Record::Tick`], [`Record::Audio`] and [`Record::Tempo`] are not
     ///   state at all: they are what a *frame* saw or decided. A Set file
     ///   carries no time, and one holding an audio frame would be claiming a
     ///   particular moment's microphone reading is part of what a Set is.
-    /// - [`Record::Gain`], [`Record::Residency`], [`Record::Look`] and
-    ///   [`Record::Transport`] are durable state, but the **session's** rather
-    ///   than any Set's. A Set does
+    /// - [`Record::Gain`], [`Record::Opacity`], [`Record::Blend`],
+    ///   [`Record::Residency`], [`Record::Look`] and [`Record::Transport`] are
+    ///   durable state, but the **session's** rather than any Set's. A Set does
     ///   not know what fader it is under; one that carried its gain would
     ///   restore that gain wherever it was next loaded, which is a Set file
     ///   reaching outside the Set.
     ///
-    /// A session stream carries all seven. That is the difference between the two
-    /// files, stated from this side.
+    /// A session stream carries all nine. That is the difference between the
+    /// two files, stated from this side.
     pub fn is_set_state(&self) -> bool {
         !matches!(
             self,
@@ -329,6 +356,8 @@ impl Record {
                 | Record::Audio { .. }
                 | Record::Tempo { .. }
                 | Record::Gain { .. }
+                | Record::Opacity { .. }
+                | Record::Blend { .. }
                 | Record::Residency { .. }
                 | Record::Look { .. }
                 | Record::Transport { .. }

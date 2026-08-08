@@ -127,6 +127,9 @@ impl Points {
                     format: wgpu::TextureFormat::Rgba16Float,
                     // `blend additive`, no depth write: this is what avoids any
                     // sort requirement, and it is the only mode v0.2 accepts.
+                    // Alpha accumulates coverage for the L5 mix rather than
+                    // being discarded — the argument is in `set.rs`, on the
+                    // generated L4 pipeline this one shadows.
                     blend: Some(wgpu::BlendState {
                         color: wgpu::BlendComponent {
                             src_factor: wgpu::BlendFactor::SrcAlpha,
@@ -134,8 +137,8 @@ impl Points {
                             operation: wgpu::BlendOperation::Add,
                         },
                         alpha: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::Zero,
-                            dst_factor: wgpu::BlendFactor::One,
+                            src_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
                             operation: wgpu::BlendOperation::Add,
                         },
                     }),
@@ -211,7 +214,9 @@ impl VideoSource for Points {
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    // `TRANSPARENT`: alpha is coverage and starts at nothing.
+                    // See `set.rs`'s L4 pass.
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                     store: wgpu::StoreOp::Store,
                 },
             })],

@@ -749,7 +749,12 @@ The pipeline is linear and HDR end to end.
 - All internal render targets are `Rgba16Float`
 - `color` written from a fragment block is **linear** RGB, straight alpha
 - sRGB encoding happens once, at final output
-- Values above 1.0 are expected and are what feeds bloom
+- Values above 1.0 are expected in **RGB** and are what feeds bloom
+- **Alpha is coverage, and belongs in `[0, 1]`.** It is what the sprite covers of the texel,
+  and L5's `over` blend mode composites against it — see the session stream's `blend`
+  record. Nothing rejects an alpha outside that range and the L5 mix saturates what it
+  reads, so writing `1.5` costs a layer some of the hiding it asked for rather than a
+  diagnostic. It is not a second brightness: RGB is where a value above 1.0 means something
 
 `hsv_to_rgb` returns **linear** RGB. It performs the sRGB→linear conversion internally so
 that authors get the hue they expect without thinking about color space. Explicit
@@ -887,7 +892,11 @@ disc_point(float, float) -> vec2
   buffers
 - Per-element values used in `fragment` become `@interpolate(flat)` varyings
 - `blend additive` lowers to additive blending with no depth write, which is what avoids
-  any sort requirement. It is the only mode v0.2 accepts
+  any sort requirement. It is the only mode v0.2 accepts. **Colour is what it applies to.**
+  The alpha channel of the target composes as `over` instead, accumulating
+  `1 - prod(1 - a_i)` — the coverage L5's `over` blend mode needs, which nothing else
+  writes. So the colour that leaves L4 is premultiplied by coverage, and a fragment block
+  that assigns an alpha above 1.0 is writing a coverage the mix will saturate
 - Target format `Rgba16Float`
 
 ### Lowering notes
@@ -965,8 +974,9 @@ known. The total-cost decision lives there, not in the artifact.
   what would let the collision through harmlessly; until then a rejection the generator can
   act on beats a value nobody chose.
 - Unknown `t` values are ignored, for forward compatibility.
-- **`gain`, `residency`, `look` and `transport` are not in this list and must never be.**
-  They are the session's state rather than any Set's — see the session stream format.
+- **`gain`, `opacity`, `blend`, `residency`, `look` and `transport` are not in this list
+  and must never be.** They are the session's state rather than any Set's — see the session
+  stream format.
 
 **Implemented, and the engine obeys it.** `karakuri-cli`'s `--save-set` writes one of
 these and puts both `.kir` sources in the store as content-addressed artifacts;
@@ -986,7 +996,8 @@ has. Each is a disagreement between the format and the engine rather than a gap 
 loader, and settling them is the format's business and the engine's, not the reader's.
 
 The *session* records are further along: `audio` and `tempo` per frame, and `gain`,
-`residency`, `look` and `transport` per key press, are each built by the CLI, decoded back,
+`opacity`, `blend`, `residency`, `look` and `transport` per key press, are each built by the
+CLI, decoded back,
 and only then applied — and `karakuri-cli`'s `--record-session` writes them to a session
 stream as they happen, `--replay` reading it back. The path the engine is driven through is
 the record's, in both directions.
@@ -1206,21 +1217,52 @@ session tempo, which **v0.2 had no record for**.
 Neither is state, so neither appears in a Set file: both are what a frame *saw* or
 *decided*, and the tempo belongs to the session rather than to any one Set.
 
-### The mix in the stream — `gain`, `residency`, `look` and `transport`
+### The mix in the stream — `gain`, `opacity`, `blend`, `residency`, `look` and `transport`
 
 A session that carried the material and not the performance would replay the same Sets, on
 the same beat, all at whatever gain they happened to start at, with nothing ever going on
-or off air. Three records carry what an operator moves:
+or off air. Six records carry what an operator moves:
 
 ```ndjson
 {"t":"gain","slot":0,"value":0.75}
+{"t":"opacity","slot":0,"value":0.5}
+{"t":"blend","slot":1,"mode":"over"}
 {"t":"residency","slot":1,"level":"priming"}
 {"t":"look","op":"aces","exposure":1.2,"white_point":4.0}
 ```
 
-**`gain` is a deck slot's linear gain into the mix.** The slot is a position on the deck,
-not anything about the Set in it: moving a Set to another slot moves it under another
-fader, which is what a fader is.
+**`gain` is a deck slot's level into the mix**, and **`opacity` is its fader.** The slot is
+a position on the deck, not anything about the Set in it: moving a Set to another slot moves
+it under another fader, which is what a fader is.
+
+The two are separate records because they are separate controls, and what makes them
+separate is `blend`. Every mode composites its **colour** as
+`acc <- mix(acc, f(acc, gain * src), opacity)`: gain is the level the material arrives at
+and touches colour alone, opacity is how much of the blend lands and is the only one of the
+two that scales what a layer *covers*. Under `add` they collapse into one multiply and a
+stream carrying either would replay the same; under `over` one dims a layer and the other
+stops it hiding what is beneath.
+
+Coverage is the exception to that formula and composes as `over` under every mode, because
+"there is material at this texel" is an `over` question even when the colour is being added.
+`opacity` is a proportion of a blend and is clamped to `[0, 1]`; `gain` is a level into an
+HDR mix and deliberately is not clamped above 1.0.
+
+**`blend` is how a slot's layer meets the ones under it** — `add`, `over` or `max`. Slot
+order is stacking order, so this is the one mix control whose meaning depends on where the
+slot sits.
+
+The set of modes is chosen by what survives an **unbounded linear HDR** mix rather than by
+what a VJ mixer usually lists. `screen` is `d + s - d*s` and `multiply` is `d * s`; both
+assume display-referred inputs in `[0, 1]`, and nothing has tone mapped this far up the
+pipeline — `screen` of two 2.0s is 0.0. They belong after the transfer curve or not at all.
+
+`over` needs to know what a layer covers, which is why **alpha in a slot target is
+coverage**: the L4 pass accumulates `1 - prod(1 - a_i)` there while colour adds, so the
+colour that reaches L5 is premultiplied and emissive material still sums past what its
+coverage would allow. Sparse material barely covers, so `over` on a thin point cloud reads
+close to `add` — which is correct rather than a defect, since a handful of sprites does not
+occlude anything.
 
 **`residency` is what a slot is asked to do** — `live`, `priming` or `allocated` — and it
 is always the *request*, never the effective level. The governor recomputes the second
@@ -1235,7 +1277,7 @@ the exposure without saying which operator it applies to would describe a look n
 reconstruct. Session-wide rather than per slot, since tone mapping happens once, after the
 mix.
 
-`level` and `op` are strings for the same reason `curve` and `noise.kind` are: an
+`level`, `mode` and `op` are strings for the same reason `curve` and `noise.kind` are: an
 unrecognised value is the engine's to diagnose against what it actually supports, not the
 decoder's to reject before anything can say what the alternatives were.
 
@@ -1254,7 +1296,7 @@ one value in this format that is meant to go backwards. Both are carried under e
 including `free` where neither does anything, so that a slot moved back onto the grid
 returns to where the operator left it rather than to a default.
 
-**These four are state, and a Set file still must not contain them.** That is a second
+**These six are state, and a Set file still must not contain them.** That is a second
 reason for a record to be absent from a Set file and it is not the `audio` one: there is
 something to fold here, and this is not the projection it folds into. A Set file that
 restored a gain would apply it to whatever slot it was next loaded into, and one whose
