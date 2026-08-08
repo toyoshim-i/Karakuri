@@ -646,6 +646,32 @@ impl Set {
                     // pipeline is linear and HDR end to end".
                     format: crate::present::Present::HDR_FORMAT,
                     // `blend additive`, no depth write.
+                    //
+                    // **Colour adds; alpha accumulates coverage.** The two
+                    // components answer different questions and this is the
+                    // only pairing that answers both: colour is emissive and
+                    // sums past what any coverage would allow, which is what
+                    // `blend additive` is for, while alpha comes out as
+                    // `1 - prod(1 - a_i)` — the probability that *something*
+                    // drew at this texel, and order-independent because
+                    // `a_s + a_d(1 - a_s)` is symmetric in the two.
+                    //
+                    // **Not bounded at 1, and the mix does not assume it is.**
+                    // Nothing clamps what a fragment block assigns to alpha —
+                    // the IR calls it straight alpha and says values above 1.0
+                    // are expected — so this accumulates whatever the material
+                    // wrote. `composite.wgsl` saturates on the way in rather
+                    // than L4 clamping on the way out, because clamping here
+                    // would change the colour too: additive blending
+                    // multiplies colour by this same alpha.
+                    //
+                    // Nothing in this pass reads it back. It exists for L5:
+                    // `Blend::Over` needs to know what a layer covers, and
+                    // before this the channel was written by nothing and held
+                    // the clear value forever. Colour is premultiplied by
+                    // coverage on the way out, which is what makes the mix's
+                    // `over` a multiply-add rather than a divide by an alpha
+                    // that is allowed to be zero.
                     blend: Some(wgpu::BlendState {
                         color: wgpu::BlendComponent {
                             src_factor: wgpu::BlendFactor::SrcAlpha,
@@ -653,8 +679,8 @@ impl Set {
                             operation: wgpu::BlendOperation::Add,
                         },
                         alpha: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::Zero,
-                            dst_factor: wgpu::BlendFactor::One,
+                            src_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
                             operation: wgpu::BlendOperation::Add,
                         },
                     }),
@@ -1336,7 +1362,12 @@ impl VideoSource for Set {
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        // `TRANSPARENT`, not `BLACK`: alpha in this target is
+                        // coverage, accumulated by the blend state below, and
+                        // it has to start at "nothing drew here". `BLACK` is
+                        // opaque black and would hand the L5 mix a slot that
+                        // covers the frame before a single sprite has run.
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                         store: wgpu::StoreOp::Store,
                     },
                 })],

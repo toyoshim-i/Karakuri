@@ -40,7 +40,7 @@ pub mod video_source;
 pub use binding::{Binding, Curve, Signals};
 pub use camera::Orbit;
 pub use compaction::Compaction;
-pub use deck::{Deck, Frame, Residency};
+pub use deck::{Blend, Deck, Frame, Residency};
 pub use governor::{Decision, Governor, Reason, Report, SlotState};
 pub use gpu::{Gpu, GpuError};
 pub use meter::{Level, Meters};

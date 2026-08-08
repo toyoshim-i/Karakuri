@@ -86,10 +86,19 @@ forward; and **tempo sync is refused on material that reads `beats`**, which alr
 the room and would otherwise follow it twice. Engaging a mode anchors the material at the
 current tempo, so nothing jumps at the moment it is switched on.
 
+`[`/`]` move a slot's **gain** — the level the material arrives at — and `;`/`'` move its
+**opacity**, the fader across the blend. `m` cycles the blend mode: `add`, `over`, `max`.
+Under `add` the two faders are the same dial twice; under `over` one dims a layer and the
+other stops it hiding what is beneath, and an `over` layer at zero *gain* is a black card
+that still covers. Opacity is the one that silences under every mode, so it is the one to
+pull when material has gone bad.
+
 The status line carries each slot's residency, gain, simulation `t`, and its **level** —
 mean and peak luminance, measured on the GPU and lagging a few frames because reading it
 back synchronously would be a stall. Mean is what two Sets are matched on; peak warns which
-one will dominate the mix wherever it lands regardless of its fader.
+one will dominate the mix wherever it lands regardless of its fader. Opacity, blend mode and
+transport appear only when they are away from their defaults: the line is read in the dark,
+and a column saying the same thing on every slot is four columns of nothing.
 
 `--watch` recompiles in the background on a save and swaps the result in at a frame
 boundary; a file that does not compile prints its diagnostics and changes nothing. See
@@ -370,7 +379,8 @@ governor, alongside the decision about whether GPU timestamps can be trusted at 
 | Element lifecycle | Works. `spawn` and `kill()` run, order-preserving compaction is wired into the L1 dispatch, and `element` and the draw are both indirect off one counts buffer. A procedure that can neither spawn nor kill skips the scan entirely and dispatches in place |
 | **The store, in use** | The CLI does not use it. Artifacts are loose files |
 | Tone mapping | Works. Four operators — clamp, Reinhard, ACES, AgX — chosen by a uniform, so switching one mid-set is a buffer write. ACES by default, picked by rendering all four across five exposures and looking; `cargo run -p karakuri-engine --example tonemap_compare` regenerates that. Applied once, immediately before the single sRGB encode |
-| The deck and the mix | Works. Up to four slots, each with its own `HotSwap` and its own HDR target, composited with a per-slot gain. Allocated holds its state, so a slot brought back resumes rather than restarts |
+| The deck and the mix | Works. Up to four slots, each with its own `HotSwap` and its own HDR target, folded together in slot order with a per-slot **gain, opacity and blend mode**. Allocated holds its state, so a slot brought back resumes rather than restarts |
+| Blend modes | Works: `add`, `over`, `max`. The set is what survives an **unbounded linear HDR** mix rather than what a VJ mixer usually lists — `screen` and `multiply` assume `[0, 1]` and nothing has tone mapped this far up the pipeline, so `screen` of two 2.0s is 0.0. `over` is the only mode in which one layer hides another, and what it hides with is coverage the L4 pass accumulates into alpha; thin material barely covers, which is correct rather than a defect. This is also what finally separates **gain from opacity** — gain is the level the material arrives at, opacity is the fader across the blend and the only control that silences a slot under every mode. What is not built: masks, and a layer stack that is anything other than slot order |
 | Priming and the governor | Works. Priming steps a slot and does not draw it — L1 owns every piece of per-element state and L4 is stateless, so warming is the compute passes and nothing else. The governor computes each slot's effective residency from the operator's request and a budget of per-Set costs measured by the probe at build time. It **never demotes a Live slot**: an over-budget deck reports and suspends priming. An unmeasured Live slot means the committed cost is unknown, and unknown is not headroom, so priming is suspended until every slot has been measured |
 | Audio | Works. Analysis runs in the driver's callback, not on the frame path, and the frame reads one small value through a `try_lock` on both sides so neither can block. Level is RMS mapped −60 to −6 dBFS: a mastered track's loud windows sit near the top of that, where a top at 0 dBFS would leave real music between 0.80 and 0.90 and a bound parameter barely moving |
 | Beat tracking | Works. The grid is **predicted, not chased**: once locked it free-runs, takes a slow trim, and moves not at all for a single disagreeing estimate — re-acquiring takes eight consecutive consistent revisions. **The octave is folded, not judged**: every candidate period is halved or doubled into a one-octave window centred on the grid, which starts at `--bpm`. So a window centred an octave off tracks an octave off, `,` and `.` are the fix, and there is deliberately no automatic one — the alternative is a heuristic that can be confidently wrong, which is the failure that shows on stage. A 3:2 error is a different problem and is not touched. The correction leads by the analysis lag plus the output lag, so what is shown lands on the beat rather than behind it |

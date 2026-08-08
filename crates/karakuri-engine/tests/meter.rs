@@ -95,9 +95,9 @@ fn image(
                 data.extend_from_slice(&f16(c).to_le_bytes());
             }
             // Alpha, which the meter does not read: luminance is a property of
-            // the colour, and the mix multiplies alpha through like any other
-            // channel. Set to something other than the colour so that a meter
-            // that accidentally included it would show up.
+            // the colour, and alpha in a slot target is coverage rather than a
+            // fourth colour channel. Set to something other than the colour so
+            // that a meter that accidentally included it would show up.
             data.extend_from_slice(&f16(1.0).to_le_bytes());
         }
     }

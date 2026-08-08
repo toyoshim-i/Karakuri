@@ -158,16 +158,19 @@ not the expensive half.
 
 **Landed so far**, in order: the deck with an L5 mix and a per-slot level meter; tone
 mapping once after the mix; signal binding; priming, the budget governor and `closed_form`;
-audio input with beat tracking; a record vocabulary for the mix; the `beats` ambient; per-slot transport; Set files, saved and loaded; a session writer and a replay driver. Each bullet below says
+audio input with beat tracking; a record vocabulary for the mix; the `beats` ambient;
+per-slot transport; Set files, saved and loaded; a session writer and a replay driver; the
+L5 blend modes. Each bullet below says
 what it cost against what it promised — the ones marked **Done** are worth reading for
 where the promise was wrong, not only for the fact that it is kept.
 
-**Still open**, and the shape of the rest of this milestone: transitions, blend modes and
-masks, MIDI, output routing, Ableton Link, a panic key, and per-slot preview.
+**Still open**, and the shape of the rest of this milestone: transitions, masks, MIDI,
+output routing, Ableton Link, a panic key, and per-slot preview.
 
-One debt from what has landed, named where the code is rather than only here:
-**`Deck::set_opacity` is unreachable**, with no key and no flag, which is why the mix
-vocabulary has no `opacity` record.
+The one debt this milestone was carrying — **`Deck::set_opacity` unreachable**, no key and
+no flag, and therefore no `opacity` record — **is paid**, and it was paid by building the
+thing that made a second fader mean something rather than by wiring a key to it. See the
+L5 mixer bullet.
 
 Five things the milestone has taught, all worth carrying:
 
@@ -270,9 +273,44 @@ fine alone and is unreadable next to lights.
   classification produces no diagnostic it can only ever be wrong silently, which is why it
   is deliberately conservative: strict-wrong costs a warm-up nobody needed, permissive-wrong
   is a scrub that renders garbage.
-- L5 mixer. Per-slot linear gain and opacity are built and the composite reads them as one
-  weight — under additive blending they are indistinguishable, and blend modes and masks are
-  what would separate them. Those, and the layer stack, are not built
+- ~~L5 mixer.~~ **Done for gain, opacity and blend; masks are not built.** This bullet said
+  gain and opacity were "indistinguishable under additive blending, and blend modes and
+  masks are what would separate them", and blend modes duly separated them: every mode
+  composites as `acc <- mix(acc, f(acc, gain * src), opacity)`, so gain is the level the
+  material arrives at and opacity is the fader across the blend. It also **discharged the
+  debt this milestone was carrying** — `Deck::set_opacity` had no key, no flag and no record
+  precisely because there was nothing for a second number to mean.
+
+  **The modes are `add`, `over` and `max`, and the set was chosen by the pipeline rather
+  than by the vocabulary.** A VJ mixer lists `screen` and `multiply`; both are
+  display-referred, defined on `[0, 1]`, and this mix is unbounded linear HDR with no tone
+  map upstream of it — `screen` of two 2.0s is 0.0, which is not a blend mode but a bug with
+  a familiar name. They belong after the transfer curve or not at all. That is worth
+  carrying past M2: **an operator's vocabulary is not automatically well defined in the
+  space the engine works in**, and importing it unexamined is how a control comes to mean
+  something the operator did not ask for.
+
+  `over` cost one change outside L5, and it is the interesting one: it needs to know what a
+  layer *covers*, and the alpha channel of a slot target was written by nothing. The L4 pass
+  now accumulates coverage there — colour adds, alpha composes as `over` — so the mix reads
+  premultiplied colour. Sparse material barely covers, which makes `over` on a thin point
+  cloud read close to `add`: correct rather than a defect, and worth saying because it looks
+  like one.
+
+  **What that channel is not is bounded**, and finding out cost a review pass. Nothing in
+  the pipeline clamps what a `fragment` block assigns to alpha — the IR says values above
+  1.0 are expected and means it — so an L4 writing `1.5` gives `over` a coverage of 1.5,
+  and `A*(1 - 1.5)` is a hiding layer that *subtracts*. At 2.0 and beyond it amplifies with
+  the sign flipped. The mix saturates on the way in rather than L4 clamping on the way out,
+  because clamping the fragment would change the colour too: additive blending multiplies
+  colour by that same alpha.
+
+  The general shape is worth more than the fix: **a channel nothing wrote and nothing read
+  was a free variable, and giving it a reader made every value the material could put there
+  into an input.** It had been out of range all along and there was nothing to notice
+
+  The layer stack is still slot order, which is what determinism wanted anyway, and there is
+  no reordering control. Masks are the remaining half of this bullet
 - Tone mapping, once, after the mix. Three different things get called exposure and only
   one of them belongs to the artifact: the `param exposure` inside a procedure is how bright
   that material is, the per-Set gain at L5 is how it balances against the others, and tone
@@ -351,16 +389,18 @@ fine alone and is unreadable next to lights.
   fields. The one check that stayed with the flag is the one a record cannot express:
   `BindNoise::octaves` has a serde default, deliberately, so a record cannot say whether
   `octaves` was named and only the flag knows
-- **A record vocabulary for the mix.** `gain`, `residency` and `look`, built on every key
+- **A record vocabulary for the mix.** `gain`, `opacity`, `blend`, `residency` and `look`,
+  built on every key
   that moves them, decoded back, and only then applied — the same arrangement `audio` and
   `tempo` have. Without it a session would replay the material and not the *performance*:
   the same Sets, on the same beat, all at whatever gain they happened to start at, with
   nothing ever going on or off air. `residency` carries the **request** and never the
   effective level, because the governor recomputes that from the budget of whatever machine
   is running, and replaying one machine's budget onto another's is not replaying a
-  performance. `opacity` deliberately has no record: the deck has the control and nothing
-  reaches it — no key, no flag — and a record for a control the operator cannot move is one
-  more record nobody writes, which is the condition this closes rather than extends
+  performance. `opacity` deliberately had no record here — the deck had the control and
+  nothing reached it, and a record for a control the operator cannot move is one more record
+  nobody writes, which is the condition this closes rather than extends. **It got a record
+  when it got a control**, which is the rule working rather than an exception to it
 - **Parameter values keyed by `(layer, name)`.** The record format already does it; the
   engine holds one flat map, so an L1 and an L4 declaring the same parameter name shared a
   value, with the L4 default silently winning. `Set::build` now refuses the collision

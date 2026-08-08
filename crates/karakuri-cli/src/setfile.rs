@@ -422,6 +422,8 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             | Record::Audio { .. }
             | Record::Tempo { .. }
             | Record::Gain { .. }
+            | Record::Opacity { .. }
+            | Record::Blend { .. }
             | Record::Residency { .. }
             | Record::Look { .. }
             | Record::Transport { .. } => notes.push(

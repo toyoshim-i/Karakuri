@@ -1,15 +1,17 @@
 //! The mix, through the record stream on the way.
 //!
-//! Gain, residency and the output look are the state an operator moves during a
-//! performance and the only state the engine had no record vocabulary for at
-//! all — `README.md`'s Invariants named the gap. A session that replayed
-//! everything else would replay the material and not the *performance*: the
-//! same Sets, on the same beat, all at whatever gain they happened to start at,
-//! with nothing ever going on or off air.
+//! The faders, the blend modes, residency and the output look are the state an
+//! operator moves during a performance and the only state the engine had no
+//! record vocabulary for at all — `README.md`'s Invariants named the gap. A
+//! session that replayed everything else would replay the material and not the
+//! *performance*: the same Sets, on the same beat, all at whatever gain they
+//! happened to start at, with nothing ever going on or off air.
 //!
 //! ```text
 //!   a key press ─→ Record::Gain      ─┐
-//!                  Record::Residency ─┼→ Change ─→ Deck / Present
+//!                  Record::Opacity    │
+//!                  Record::Blend      ┼→ Change ─→ Deck / Present
+//!                  Record::Residency  │
 //!                  Record::Look      ─┘
 //! ```
 //!
@@ -25,15 +27,19 @@
 //! *is* on the frame path; this one does not need to be, and pretending it did
 //! would be complexity bought with nothing.
 //!
-//! ## What is deliberately not here
+//! ## Opacity, which used to be deliberately not here
 //!
-//! **Opacity.** `Deck` has `opacity` and `set_opacity` and nothing reaches
-//! them: no key, no flag, no default but 1.0. A record type for a control the
-//! operator cannot move would be one more record nobody writes, which is the
-//! condition this module exists to end rather than to extend. It gets a record
-//! when it gets a control.
+//! `Deck::set_opacity` existed with no key, no flag and no record, and this
+//! module said so: a record type for a control the operator cannot move is one
+//! more record nobody writes, which is the condition it exists to end rather
+//! than extend. **It got a record when it got a control**, and it got a control
+//! when [`karakuri_engine::deck::Blend`] made it mean something a gain does not
+//! — the fader across the blend rather than the level the material arrives at.
+//! Under `add` the two multiply together and a stream carrying either would
+//! replay the same; under `over` one dims a layer and the other stops it
+//! hiding what is beneath.
 
-use karakuri_engine::deck::Residency;
+use karakuri_engine::deck::{Blend, Residency};
 use karakuri_engine::transport::{Sync, Transport};
 use karakuri_store::record::Record;
 
@@ -48,6 +54,10 @@ use crate::{op_wire_name, op_wire_names, Look};
 #[cfg_attr(test, derive(Debug))]
 pub enum Change {
     Gain { slot: usize, value: f32 },
+    /// The fader. Separate from `Gain` because the blend mode makes them
+    /// separate — see [`Blend`].
+    Opacity { slot: usize, value: f32 },
+    Blend { slot: usize, mode: Blend },
     Residency { slot: usize, level: Residency },
     Look(Look),
     /// What a slot's clock does with the session's. Carried as a value rather
@@ -66,6 +76,22 @@ pub fn gain_record(slot: usize, value: f32) -> Record {
     Record::Gain {
         slot: slot as u8,
         value,
+    }
+}
+
+/// A slot's opacity — the fader — as the record that carries it.
+pub fn opacity_record(slot: usize, value: f32) -> Record {
+    Record::Opacity {
+        slot: slot as u8,
+        value,
+    }
+}
+
+/// A slot's blend mode, as the record that carries it.
+pub fn blend_record(slot: usize, mode: Blend) -> Record {
+    Record::Blend {
+        slot: slot as u8,
+        mode: mode.name().to_string(),
     }
 }
 
@@ -174,6 +200,24 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
             slot: in_range(*slot)?,
             value: *value,
         })),
+        Record::Opacity { slot, value } => Ok(Some(Change::Opacity {
+            slot: in_range(*slot)?,
+            value: *value,
+        })),
+        Record::Blend { slot, mode } => {
+            let slot = in_range(*slot)?;
+            let mode = Blend::from_name(mode).ok_or_else(|| {
+                format!(
+                    "blend `{mode}` — expected {}",
+                    Blend::ALL
+                        .iter()
+                        .map(|b| b.name())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })?;
+            Ok(Some(Change::Blend { slot, mode }))
+        }
         Record::Residency { slot, level } => {
             let slot = in_range(*slot)?;
             let level = parse_residency(level).ok_or_else(|| {
@@ -235,6 +279,20 @@ mod tests {
         let cases = [
             (gain_record(2, 0.75), Change::Gain { slot: 2, value: 0.75 }),
             (
+                opacity_record(0, 0.25),
+                Change::Opacity {
+                    slot: 0,
+                    value: 0.25,
+                },
+            ),
+            (
+                blend_record(3, Blend::Over),
+                Change::Blend {
+                    slot: 3,
+                    mode: Blend::Over,
+                },
+            ),
+            (
                 residency_record(1, Residency::Priming),
                 Change::Residency {
                     slot: 1,
@@ -285,6 +343,22 @@ mod tests {
                 change(&record, 1).expect("built here"),
                 Some(Change::Residency { slot: 0, level }),
                 "{level:?} did not survive its own wire name"
+            );
+        }
+    }
+
+    /// **Every blend mode round-trips**, so a mode added to the engine and not
+    /// to the wire vocabulary is a layer silently composited the wrong way —
+    /// which under `over` is a layer that was supposed to hide and does not.
+    #[test]
+    fn every_blend_mode_has_a_wire_name_that_decodes_back() {
+        for mode in Blend::ALL {
+            let record = blend_record(2, mode);
+            assert_eq!(
+                change(&record, 4).expect("built here"),
+                Some(Change::Blend { slot: 2, mode }),
+                "{} did not survive its own wire name",
+                mode.name()
             );
         }
     }
@@ -356,6 +430,14 @@ mod tests {
         let message = change(&unknown_op, 4).expect_err("`filmic` is not an operator here");
         assert!(message.contains("filmic"), "{message}");
         assert!(message.contains("aces"), "{message}");
+
+        let unknown_mode = Record::Blend {
+            slot: 0,
+            mode: "screen".to_string(),
+        };
+        let message = change(&unknown_mode, 4).expect_err("`screen` is not a mode here");
+        assert!(message.contains("screen"), "{message}");
+        assert!(message.contains("over"), "{message}");
     }
 
     /// **A slot the deck does not have is caught in the decode**, where there

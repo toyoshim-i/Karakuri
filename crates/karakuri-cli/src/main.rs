@@ -35,7 +35,8 @@ use karakuri_engine::deck::MAX_SLOTS;
 use karakuri_engine::swap::Event;
 use karakuri_engine::transport::{Sync, Transport};
 use karakuri_engine::{
-    Binding, Deck, Gpu, HotSwap, Present, Residency, Set, Signals, TonemapOp, DEFAULT_BUDGET_MS,
+    Binding, Blend, Deck, Gpu, HotSwap, Present, Residency, Set, Signals, TonemapOp,
+    DEFAULT_BUDGET_MS,
 };
 use karakuri_signal::NoiseConfig;
 use karakuri_store::record::{BindNoise, Layer, Record};
@@ -67,6 +68,12 @@ const STATUS_INTERVAL: Duration = Duration::from_millis(500);
 /// operator wants the same physical move to mean the same amount everywhere,
 /// not a proportion of wherever the slot happens to be.
 const GAIN_STEP: f32 = 0.1;
+
+/// One press of an opacity key. Additive for the same reason as [`GAIN_STEP`],
+/// and clamped to `[0, 1]` where gain is not: opacity is a proportion of a
+/// blend and there is no such thing as 1.4 of one, while gain is a level into
+/// an HDR mix and values above 1.0 are ordinary.
+const OPACITY_STEP: f32 = 0.1;
 
 /// One press of an exposure key, as a factor. Multiplicative, because exposure
 /// is: a stop is a ratio, and an additive step would be enormous at 0.1 and
@@ -166,10 +173,16 @@ const DEFAULT_STORE: &str = ".karakuri";
 /// hear one press.
 const SCRUB_BEATS: f64 = 0.25;
 
-/// A fader floor: a negative gain would subtract one slot's light from
-/// another's, which is a blend mode rather than a fader. Not ceilinged — the
+/// A level floor: a negative gain would subtract one slot's light from
+/// another's, which is a blend mode rather than a level. Not ceilinged — the
 /// pipeline is HDR and values above 1.0 are expected. Pure for the same
 /// reason as [`clamp_exposure`].
+///
+/// `Deck::set_gain` floors too, and the two are not a duplicate. This one
+/// decides **what the record says**, so a session replays the value that took
+/// effect rather than one the engine quietly corrected; that one guards the
+/// engine against every record it did not write, which is the whole of a
+/// replay. Deleting either leaves a real hole.
 fn clamp_gain(gain: f32) -> f32 {
     gain.max(0.0)
 }
@@ -274,8 +287,19 @@ keys:
              frame budget has room, and `park` on the status line is a request
              it is still holding — reconsidered every pass, so it takes effect
              by itself when a slot comes off air
-  [ ]        focused slot gain down / up
+  [ ]        focused slot gain down / up — the level the material arrives at,
+             colour only, and not clamped at 1.0 because the mix is HDR
   \\          focused slot gain back to 1.0
+  ; '        focused slot opacity down / up — the fader across the blend, and
+             the only control that silences a slot under every mode. Pull this
+             one, not the gain, to get out of material that has gone bad: an
+             `over` layer at zero gain is a black card and still covers
+  m          cycle the focused slot's blend mode: add, over, max. `over` is
+             the only one in which a layer hides the ones under it, and what
+             it hides with is the coverage its own sprites drew — thin
+             material barely covers, which is not a bug. `screen` and
+             `multiply` are absent on purpose: they are defined on [0, 1] and
+             nothing has tone mapped this far up the pipeline
   t          cycle the tone map operator: clamp, Reinhard, ACES, AgX
   - =        output exposure down / up
   `          exposure back to 1.0
@@ -1043,6 +1067,8 @@ fn apply_replayed(
     }
     match mix::change(record, deck.slot_count()) {
         Ok(Some(mix::Change::Gain { slot, value })) => deck.set_gain(slot, value),
+        Ok(Some(mix::Change::Opacity { slot, value })) => deck.set_opacity(slot, value),
+        Ok(Some(mix::Change::Blend { slot, mode })) => deck.set_blend(slot, mode),
         Ok(Some(mix::Change::Residency { slot, level })) => deck.set_residency(slot, level),
         Ok(Some(mix::Change::Look(l))) => *look = l,
         Ok(Some(mix::Change::Transport {
@@ -1751,6 +1777,9 @@ impl Live {
                 '[' => self.nudge_gain(-GAIN_STEP),
                 ']' => self.nudge_gain(GAIN_STEP),
                 '\\' => self.set_gain(1.0),
+                ';' => self.nudge_opacity(-OPACITY_STEP),
+                '\'' => self.nudge_opacity(OPACITY_STEP),
+                'm' => self.cycle_blend(),
                 't' => self.cycle_tonemap(),
                 '-' => self.set_exposure(self.look.exposure / EXPOSURE_STEP),
                 '=' => self.set_exposure(self.look.exposure * EXPOSURE_STEP),
@@ -2036,6 +2065,41 @@ impl Live {
         eprintln!("slot {slot} gain {:.2}", self.deck.gain(slot));
     }
 
+    /// **The fader**, and the one control that silences a slot under every
+    /// blend mode — which makes it the way out of material that has gone NaN.
+    /// `[` and `]` move the *level*, and under `over` a level of zero is a
+    /// black card that still covers what is beneath it.
+    ///
+    /// The mode is printed with the number because what the number does
+    /// depends on it: under `add` opacity and gain are the same dial twice.
+    fn nudge_opacity(&mut self, delta: f32) {
+        let slot = self.focus;
+        let opacity = (self.deck.opacity(slot) + delta).clamp(0.0, 1.0);
+        self.record(mix::opacity_record(slot, opacity));
+        eprintln!(
+            "slot {slot} opacity {:.2} ({})",
+            self.deck.opacity(slot),
+            self.deck.blend(slot).name()
+        );
+    }
+
+    /// Cycle the focused slot's blend mode. No refusals here — unlike sync,
+    /// every mode is available to every slot, because a blend mode is a
+    /// question about pixels and not about what the material can do.
+    fn cycle_blend(&mut self) {
+        let slot = self.focus;
+        let current = self.deck.blend(slot);
+        let at = Blend::ALL.iter().position(|b| *b == current).unwrap_or(0);
+        let next = Blend::ALL[(at + 1) % Blend::ALL.len()];
+        self.record(mix::blend_record(slot, next));
+        eprintln!(
+            "slot {slot} blend {} — gain {:.2}, opacity {:.2}",
+            self.deck.blend(slot).name(),
+            self.deck.gain(slot),
+            self.deck.opacity(slot)
+        );
+    }
+
     fn cycle_tonemap(&mut self) {
         let look = Look {
             op: next_tonemap(self.look.op),
@@ -2088,6 +2152,8 @@ impl Live {
     fn apply(&mut self, change: mix::Change) {
         match change {
             mix::Change::Gain { slot, value } => self.deck.set_gain(slot, value),
+            mix::Change::Opacity { slot, value } => self.deck.set_opacity(slot, value),
+            mix::Change::Blend { slot, mode } => self.deck.set_blend(slot, mode),
             mix::Change::Residency { slot, level } => {
                 self.deck.set_residency(slot, level);
                 // A slot arriving or leaving changes what is committed, and the
@@ -2286,6 +2352,17 @@ impl Live {
                 self.deck.gain(slot),
                 self.deck.slot(slot).set().time()
             );
+            // The fader and the mode, **only when they are doing something**,
+            // on the same terms as the transport below: a deck nobody has
+            // touched prints the line it always printed. Full opacity under
+            // `add` is what every slot comes up as, and a column repeating it
+            // four times is four columns of nothing to read in the dark.
+            if self.deck.opacity(slot) != 1.0 {
+                let _ = write!(self.status, "o{:.2} ", self.deck.opacity(slot));
+            }
+            if self.deck.blend(slot) != Blend::Add {
+                let _ = write!(self.status, "{} ", self.deck.blend(slot).name());
+            }
             // The transport, and **only when it is doing something**: a deck
             // nobody has synced prints the line it always printed. `free` is
             // the absence of a transport rather than a setting, and a column
