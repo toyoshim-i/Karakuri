@@ -19,6 +19,7 @@
 
 mod audio;
 mod compile;
+mod midi;
 mod mix;
 mod render;
 mod session;
@@ -38,6 +39,7 @@ use karakuri_engine::{
     Binding, Blend, Deck, Gpu, HotSwap, Present, Residency, Set, Signals, TonemapOp,
     DEFAULT_BUDGET_MS,
 };
+use karakuri_midi::Action;
 use karakuri_signal::NoiseConfig;
 use karakuri_store::record::{BindNoise, Layer, Record};
 use winit::application::ApplicationHandler;
@@ -246,6 +248,26 @@ options:
                         nothing here can measure. Negative when the sound is
                         the late one. `o`/`p` nudge it live, which is how it is
                         meant to be found: from where the audience stands
+  --midi-in NAME        open a MIDI input: any part of a port's name, or an
+                        empty string for the first one there is. Every knob
+                        goes through the same records a key press writes, so a
+                        surface can do nothing a key cannot and a session
+                        recorded from one replays with neither attached
+  --midi-map FILE       what each knob and pad does, one per line:
+                          cc 1 ch 1 -> gain 0        cc 20 -> exposure
+                          cc 5      -> opacity 0     note 32 -> on-air 0
+                          note 36 -> prime 0         note 40 -> blend 0
+                          note 44 -> preview 0       note 48 -> preview mix
+                          note 49 -> tap
+                        `examples/surface.map` is this filled out for four
+                        slots, with the reasoning; copy it and edit.
+                        `ch` is the number printed on the device, 1-16, and is
+                        optional — without it a mapping answers on every
+                        channel. A continuous control takes an optional range,
+                        `-> gain 0 [0, 2]`, defaulting to [0, 1] for the faders
+                        and [0.25, 4] for exposure. Optional even with a port:
+                        without a map, every message prints the line that would
+                        map it, which is how a surface is discovered
   --tonemap OP          clamp | reinhard | aces | agx (default aces)
   --exposure V          output exposure, before the tone map (default 1.0)
   --store DIR           where artifacts and Set files live (default .karakuri)
@@ -449,6 +471,13 @@ struct Args {
     /// bands exactly as it did before audio existed, and the oscillator
     /// free-runs.
     audio_in: Option<String>,
+    /// `--midi-in`: a substring of the input port's name, or empty for the
+    /// first one there is.
+    midi_in: Option<String>,
+    /// `--midi-map`: the operator's table. Optional even with a port, because
+    /// a surface with no map still prints what it sends, which is the state an
+    /// operator is in before they have written one.
+    midi_map: Option<PathBuf>,
     /// The unmeasurable half of the output lag, in milliseconds. See
     /// `audio::DEFAULT_LATENCY_OFFSET_MS`.
     latency_offset_ms: f32,
@@ -725,6 +754,8 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         size: (1280, 720),
         watch: false,
         audio_in: None,
+        midi_in: None,
+        midi_map: None,
         latency_offset_ms: audio::DEFAULT_LATENCY_OFFSET_MS,
         budget_ms: DEFAULT_BUDGET_MS,
         demo: false,
@@ -820,6 +851,12 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
             }
             "--audio-in" => {
                 args_out.audio_in = Some(value_for("--audio-in", &mut it)?);
+            }
+            "--midi-in" => {
+                args_out.midi_in = Some(value_for("--midi-in", &mut it)?);
+            }
+            "--midi-map" => {
+                args_out.midi_map = Some(PathBuf::from(value_for("--midi-map", &mut it)?));
             }
             "--latency-offset-ms" => {
                 let value = value_for("--latency-offset-ms", &mut it)?;
@@ -919,6 +956,23 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         return Err(
             "`--audio-in` with `--render` or `--seq` — an offscreen run takes no live input, \
              because its output has to be a function of its arguments. Drop one of them"
+                .to_string(),
+        );
+    }
+    // The same, and it is the same argument: a surface is a pair of hands, and
+    // an offscreen render has nobody at it.
+    if args_out.midi_in.is_some() && (args_out.render_to.is_some() || args_out.seq_to.is_some()) {
+        return Err(
+            "`--midi-in` with `--render` or `--seq` — an offscreen run takes no live input, \
+             because its output has to be a function of its arguments. Drop one of them"
+                .to_string(),
+        );
+    }
+    // A map with no port is a file nothing reads, and the likely cause is a
+    // forgotten `--midi-in` rather than a deliberate one.
+    if args_out.midi_map.is_some() && args_out.midi_in.is_none() {
+        return Err(
+            "`--midi-map` with no `--midi-in` — there is no surface for the map to be of"
                 .to_string(),
         );
     }
@@ -1466,6 +1520,14 @@ struct Live {
     /// `None` without `--audio-in`, and then nothing in the frame path below
     /// changes at all — which is the property the whole slice is about.
     audio: Option<audio::Audio>,
+    /// The control surface, when `--midi-in` asked for one. Every action it
+    /// produces ends in the same method a key press ends in — see
+    /// [`crate::midi`] — so nothing in the frame path below changes at all when
+    /// this is `None`.
+    midi: Option<midi::Surface>,
+    /// Scratch for [`midi::Surface::take`], owned so the frame path allocates
+    /// nothing. Empty on every frame nothing was touched.
+    actions: Vec<karakuri_midi::Action>,
     /// The last measured frame interval, from [`Live::steps`].
     last_interval: f32,
     /// When the session started, so a tap has an origin to be measured from.
@@ -1607,6 +1669,23 @@ impl ApplicationHandler for App {
             None => None,
         };
 
+        // Opened on the same terms as the audio device and for the same
+        // reason: `--midi-in` was asked for, and a run that quietly continued
+        // without it would look exactly like a run whose surface is plugged in
+        // and doing nothing.
+        let midi = match &self.args.midi_in {
+            Some(selector) => {
+                match midi::Surface::open(selector, self.args.midi_map.as_deref()) {
+                    Ok(surface) => Some(surface),
+                    Err(e) => {
+                        eprintln!("karakuri-cli: {e}");
+                        std::process::exit(2);
+                    }
+                }
+            }
+            None => None,
+        };
+
         eprint!("\n{BINDINGS}\n");
 
         // Opened before the first frame and never on one: it creates a file
@@ -1649,6 +1728,8 @@ impl ApplicationHandler for App {
             focus: 0,
             carry: 0.0,
             audio,
+            midi,
+            actions: Vec::new(),
             last_interval: DT,
             started: Instant::now(),
             last: Instant::now(),
@@ -1780,6 +1861,45 @@ impl Live {
         self.demo = Some(at);
     }
 
+    /// **Whatever the control surface did since the last frame**, as the same
+    /// calls a key press makes.
+    ///
+    /// The whole of the MIDI connection, and it is one match on purpose: every
+    /// arm below ends in a method the keyboard already reaches, so a surface
+    /// can do nothing a key cannot and a session recorded from one replays with
+    /// neither attached. A control added to one and not the other does not
+    /// compile.
+    ///
+    /// Before the tick, so a fader move lands on the frame it arrived for
+    /// rather than the one after — the same placement `run_demo` has, and for
+    /// the same reason.
+    fn run_surface(&mut self) {
+        let Some(surface) = &mut self.midi else {
+            return;
+        };
+        // Into the owned scratch, then out of `self`'s borrow, so the arms
+        // below can call `&mut self` methods. Nothing allocates: both vectors
+        // are reused and `take` clears rather than replaces.
+        let mut actions = std::mem::take(&mut self.actions);
+        // The slot check is the router's — it is where the "say it once"
+        // machinery already is, and once per *message* would be a blocking
+        // write per message on this thread. See `crate::midi`.
+        surface.take(self.deck.slot_count(), &mut actions);
+        for action in &actions {
+            match *action {
+                Action::Gain { slot, value } => self.set_gain(usize::from(slot), value),
+                Action::Opacity { slot, value } => self.set_opacity(usize::from(slot), value),
+                Action::Exposure { value } => self.set_exposure(value),
+                Action::ToggleOnAir { slot } => self.toggle_on_air(usize::from(slot)),
+                Action::TogglePriming { slot } => self.toggle_priming(usize::from(slot)),
+                Action::CycleBlend { slot } => self.cycle_blend(usize::from(slot)),
+                Action::Preview { slot } => self.show(slot.map(usize::from)),
+                Action::Tap => self.tap(),
+            }
+        }
+        self.actions = actions;
+    }
+
     /// A key press. Returns true if it was a request to quit.
     ///
     /// Every branch prints what it did. There is no on-screen UI, and a control
@@ -1794,16 +1914,16 @@ impl Live {
                 c @ '0'..='3' => self.focus_slot(c as usize - '0' as usize),
                 '[' => self.nudge_gain(-GAIN_STEP),
                 ']' => self.nudge_gain(GAIN_STEP),
-                '\\' => self.set_gain(1.0),
+                '\\' => self.set_gain(self.focus, 1.0),
                 ';' => self.nudge_opacity(-OPACITY_STEP),
                 '\'' => self.nudge_opacity(OPACITY_STEP),
-                'm' => self.cycle_blend(),
+                'm' => self.cycle_blend(self.focus),
                 'v' => self.cycle_preview(),
                 't' => self.cycle_tonemap(),
                 '-' => self.set_exposure(self.look.exposure / EXPOSURE_STEP),
                 '=' => self.set_exposure(self.look.exposure * EXPOSURE_STEP),
                 '`' => self.set_exposure(1.0),
-                'w' => self.toggle_priming(),
+                'w' => self.toggle_priming(self.focus),
                 'y' => self.cycle_sync(),
                 'u' => self.scrub(-SCRUB_BEATS),
                 'i' => self.scrub(SCRUB_BEATS),
@@ -1843,7 +1963,13 @@ impl Live {
     /// which is the whole property, and printing both ends is the only way to
     /// see it without a debugger.
     fn toggle_focused(&mut self) {
-        let slot = self.focus;
+        self.toggle_on_air(self.focus);
+    }
+
+    /// On air and off again, for a named slot. Split from the key so a control
+    /// surface can reach a slot its hands are not focused on — a fader bank
+    /// has one strip per slot and no notion of focus at all.
+    fn toggle_on_air(&mut self, slot: usize) {
         let t = self.deck.slot(slot).set().time();
         match self.deck.residency(slot) {
             Residency::Live => {
@@ -1871,8 +1997,7 @@ impl Live {
     /// Live slots are left alone. Priming is off-air warming, so asking a slot
     /// on air to prime could only mean taking it off air, and that is what
     /// space is for.
-    fn toggle_priming(&mut self) {
-        let slot = self.focus;
+    fn toggle_priming(&mut self, slot: usize) {
         if self.deck.residency(slot) == Residency::Live {
             eprintln!("slot {slot} is on air — priming is off-air warming; take it off with space");
             return;
@@ -2013,8 +2138,15 @@ impl Live {
             eprintln!("tap: no audio input — run with --audio-in to tap the beat");
             return;
         };
-        audio.tap(&mut signals, Instant::now(), started);
+        let record = audio.tap(&mut signals, Instant::now(), started);
         self.deck.set_signals(signals);
+        // **The record, or the tap did not happen as far as the stream is
+        // concerned.** `Audio::tap` builds one and applies it; dropping it here
+        // left a session whose grid had been moved by a hand with nothing in
+        // the timeline to say so, and a replay then ran every `beats`-bound
+        // parameter on a different phase. Found the day a control surface made
+        // "every control writes a record" a claim rather than a habit.
+        self.push_tempo(record);
         eprintln!(
             "tap: {:.1} bpm, phase set",
             self.deck.signals().oscillator().bpm()
@@ -2036,8 +2168,9 @@ impl Live {
         };
         let before = signals.oscillator().bpm();
         match audio.octave(&mut signals, factor) {
-            Some(_) => {
+            Some(record) => {
                 self.deck.set_signals(signals);
+                self.push_tempo(record);
                 eprintln!(
                     "beat: grid {} to {:.1} bpm — the tracker's window moved with it",
                     if factor > 1.0 { "doubled" } else { "halved" },
@@ -2075,11 +2208,10 @@ impl Live {
     }
 
     fn nudge_gain(&mut self, delta: f32) {
-        self.set_gain(self.deck.gain(self.focus) + delta);
+        self.set_gain(self.focus, self.deck.gain(self.focus) + delta);
     }
 
-    fn set_gain(&mut self, gain: f32) {
-        let slot = self.focus;
+    fn set_gain(&mut self, slot: usize, gain: f32) {
         self.record(mix::gain_record(slot, clamp_gain(gain)));
         eprintln!("slot {slot} gain {:.2}", self.deck.gain(slot));
     }
@@ -2093,7 +2225,11 @@ impl Live {
     /// depends on it: under `add` opacity and gain are the same dial twice.
     fn nudge_opacity(&mut self, delta: f32) {
         let slot = self.focus;
-        let opacity = (self.deck.opacity(slot) + delta).clamp(0.0, 1.0);
+        self.set_opacity(slot, self.deck.opacity(slot) + delta);
+    }
+
+    fn set_opacity(&mut self, slot: usize, value: f32) {
+        let opacity = value.clamp(0.0, 1.0);
         self.record(mix::opacity_record(slot, opacity));
         eprintln!(
             "slot {slot} opacity {:.2} ({})",
@@ -2122,7 +2258,15 @@ impl Live {
             Some(slot) if slot + 1 < count => Some(slot + 1),
             Some(_) => None,
         };
-        self.record(mix::preview_record(next));
+        self.show(next);
+    }
+
+    /// Show one slot, or the mix. Split from the cycle so a control surface can
+    /// select one directly: a surface has a pad per slot, and reaching slot 3
+    /// through three presses is a keyboard's compromise rather than a
+    /// surface's.
+    fn show(&mut self, slot: Option<usize>) {
+        self.record(mix::preview_record(slot));
         match self.deck.preview() {
             Some(slot) => eprintln!(
                 "preview slot {slot} — {}, gain {:.2}, t {:.2}s (the mix is not being shown)",
@@ -2137,8 +2281,7 @@ impl Live {
     /// Cycle the focused slot's blend mode. No refusals here — unlike sync,
     /// every mode is available to every slot, because a blend mode is a
     /// question about pixels and not about what the material can do.
-    fn cycle_blend(&mut self) {
-        let slot = self.focus;
+    fn cycle_blend(&mut self, slot: usize) {
         let current = self.deck.blend(slot);
         let at = Blend::ALL.iter().position(|b| *b == current).unwrap_or(0);
         let next = Blend::ALL[(at + 1) % Blend::ALL.len()];
@@ -2185,6 +2328,22 @@ impl Live {
     /// ago out of the engine's own types — and it is handled rather than
     /// unwrapped because the replay driver will hand this same function lines
     /// off a file, and a file is where an unobeyable record comes from.
+    /// A tempo correction into the stream.
+    ///
+    /// Separate from [`Live::record`] because a `tempo` is applied where it is
+    /// decided rather than read back — the oscillator is moved by the code that
+    /// worked out how far, and `apply_replayed` is what re-applies it on the
+    /// way back. What this owes is the *writing*, and it is one function so
+    /// that a third thing moving the grid cannot forget it: two already had.
+    ///
+    /// Scalars only, so pushing it allocates nothing, which is what lets the
+    /// frame path call it as well as the two keys.
+    fn push_tempo(&mut self, record: karakuri_store::record::Record) {
+        if let Some(recorder) = &mut self.recorder {
+            recorder.push(record);
+        }
+    }
+
     fn record(&mut self, record: karakuri_store::record::Record) {
         if let Some(recorder) = &mut self.recorder {
             // Cloned, which allocates — and this is a key press rather than a
@@ -2271,6 +2430,7 @@ impl Live {
 
     fn frame(&mut self) {
         self.run_demo();
+        self.run_surface();
         let steps = self.steps();
         // **The one measurement in the program, as the record that carries
         // it.** `tick` had no writer until this line; everything else the
@@ -2365,15 +2525,16 @@ impl Live {
         // Scalars only, so pushing it allocates nothing — which is why the
         // tempo half of the audio path can be recorded on a frame and the
         // measurement half cannot yet. See the note in `session.rs`.
-        if let (Some(record), Some(recorder)) = (tempo.clone(), self.recorder.as_mut()) {
-            recorder.push(record);
-        }
-        if let (Some(karakuri_store::record::Record::Tempo { bpm, .. }), Some(reason)) =
-            (tempo, audio.reason())
-        {
-            if !matches!(reason, karakuri_audio::Reason::Trim) {
-                eprintln!("beat: {reason:?} at {bpm:.1} bpm");
+        let reason = audio.reason();
+        if let Some(record) = tempo {
+            if let (karakuri_store::record::Record::Tempo { bpm, .. }, Some(reason)) =
+                (&record, reason)
+            {
+                if !matches!(reason, karakuri_audio::Reason::Trim) {
+                    eprintln!("beat: {reason:?} at {bpm:.1} bpm");
+                }
             }
+            self.push_tempo(record);
         }
     }
 
@@ -2591,6 +2752,55 @@ mod tests {
         // shape this CLI was fixed for once already.
         assert!(parse(&["--audio-in", "--watch"]).is_err());
         assert!(parse(&["--audio-in"]).is_err());
+    }
+
+    // -- midi ------------------------------------------------------------
+
+    #[test]
+    fn midi_is_off_unless_asked_for_and_takes_a_port_name() {
+        assert_eq!(parse(&[]).expect("parses").midi_in, None);
+        assert_eq!(parse(&[]).expect("parses").midi_map, None);
+        assert_eq!(
+            parse(&["--midi-in", "nanoKONTROL"]).expect("parses").midi_in,
+            Some("nanoKONTROL".to_string())
+        );
+        // An empty selector is "the first port there is", which is a real
+        // answer rather than a missing value — the one plugged-in surface is
+        // the common case and should need no name.
+        assert_eq!(
+            parse(&["--midi-in", ""]).expect("parses").midi_in,
+            Some(String::new())
+        );
+        assert!(parse(&["--midi-in", "--watch"]).is_err());
+        assert!(parse(&["--midi-in"]).is_err());
+        // With a port, so what refuses this is `--midi-map` swallowing the next
+        // flag rather than the map-with-no-port rule getting there first. That
+        // is the difference between this line and an assertion that cannot
+        // fail.
+        assert!(parse(&["--midi-in", "", "--midi-map", "--watch"]).is_err());
+        assert!(parse(&["--midi-in", "", "--midi-map"]).is_err());
+    }
+
+    /// **A map with no port is a file nothing reads**, and the likely cause is
+    /// a forgotten `--midi-in`. Refused where it can be said rather than
+    /// loaded, checked and silently unused.
+    #[test]
+    fn a_midi_map_with_no_port_is_refused() {
+        let message =
+            parse(&["--midi-map", "surface.map"]).expect_err("a map with nothing to map");
+        assert!(message.contains("--midi-in"), "{message}");
+        assert!(parse(&["--midi-map", "surface.map", "--midi-in", ""]).is_ok());
+    }
+
+    /// An offscreen run has nobody at the surface, on exactly the terms it has
+    /// no microphone.
+    #[test]
+    fn midi_and_an_offscreen_render_are_refused_together() {
+        let message =
+            parse(&["--midi-in", "", "--render", "out.png"]).expect_err("should be refused");
+        assert!(message.contains("--midi-in"), "{message}");
+        assert!(parse(&["--midi-in", "", "--seq", "frames/"]).is_err());
+        assert!(parse(&["--midi-in", ""]).is_ok());
     }
 
     /// An offscreen run is a function of its arguments, so a live input is
