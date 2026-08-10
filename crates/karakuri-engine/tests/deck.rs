@@ -536,6 +536,301 @@ fn a_slot_faded_to_silence_cannot_take_the_mix_with_it() {
     }
 }
 
+/// **An audition shows the slot's own target, bit for bit, at unity.**
+///
+/// Preview is not a second pass and not a copy — it is the mix with one term in
+/// it — so the claim available is close to the strongest one: what reaches the
+/// target is the previewed slot's texels and nothing else. `0.0 + 1.0 * src` is
+/// `src`, in colour unconditionally and in alpha for material whose coverage is
+/// in range, which the material here is. `Blend::Add` carries the caveat.
+///
+/// Two things it must ignore, and both are the point of auditioning. The
+/// **faders**, because what is being judged is the level the material arrives
+/// at rather than the setting somebody already gave it; and the **other
+/// slots**, because a preview that summed anything would be a mix.
+#[test]
+fn an_audition_shows_that_slots_own_target_and_ignores_the_faders() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+    let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
+    // Settings that would all be visible if any of them reached the preview:
+    // slot 1 pulled down and put under a mode that hides, slot 0 turned up.
+    deck.set_gain(0, 3.0);
+    deck.set_gain(1, 0.3);
+    deck.set_opacity(1, 0.4);
+    deck.set_blend(1, Blend::Over);
+
+    deck.set_preview(Some(1));
+    for _ in 0..12 {
+        frame(&gpu, &mut deck, &present, 1);
+    }
+
+    let shown = readback(&gpu, present.hdr_texture());
+    let own = readback(&gpu, deck.slot_target(1));
+    assert_eq!(
+        shown, own,
+        "the audition is not slot 1's own target — a fader, another slot, or a \
+         resample reached it"
+    );
+    assert!(lit(&own) > 100, "slot 1 drew nothing, so this test compares two black frames");
+
+    // And the mix is still there to go back to: turning the preview off shows
+    // something the audition did not.
+    deck.set_preview(None);
+    for _ in 0..12 {
+        frame(&gpu, &mut deck, &present, 1);
+    }
+    let mixed = readback(&gpu, present.hdr_texture());
+    assert_ne!(
+        mixed,
+        readback(&gpu, deck.slot_target(1)),
+        "the mix and slot 1 alone are the same picture, so the comparison above \
+         could not have failed"
+    );
+}
+
+/// **Looking at a slot does not run it.**
+///
+/// The property every residency level rests on is that `t` advances through
+/// `Set::prepare` and nowhere else, which is what lets a slot be taken off air
+/// and put back where it stopped. An audition that stepped what it was looking
+/// at would break that in the least visible way possible: the operator sees a
+/// running image, puts it on air, and it is somewhere other than where they
+/// left it.
+///
+/// Asserted against `Allocated`, where the claim is absolute — no step at all,
+/// however many frames it is watched for — and the still it holds is what an
+/// audition of a stopped slot is *supposed* to show.
+///
+/// **The slot is warmed by priming rather than by being on air**, and that is
+/// what makes the draw half of this testable at all: priming steps and does not
+/// draw, so the target has never been written and is still the transparent
+/// black it was cleared to. Run it Live first and the target holds a picture
+/// from when it was, so an audition that drew nothing would show that picture
+/// and pass — which is what this test did until the defect was injected. It is
+/// also the composition `Deck::set_preview` describes: park it, prime it, look
+/// at it.
+#[test]
+fn an_audition_draws_an_allocated_slot_without_stepping_it() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+    let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
+
+    // Warm it out of sight, so it has element state and its target has never
+    // been drawn into.
+    deck.set_residency(1, Residency::Priming);
+    for _ in 0..12 {
+        frame(&gpu, &mut deck, &present, 1);
+    }
+    assert_eq!(
+        lit(&readback(&gpu, deck.slot_target(1))),
+        0,
+        "priming drew into the slot's target, so this test cannot tell a draw from \
+         a leftover"
+    );
+
+    deck.set_residency(1, Residency::Allocated);
+    let parked_steps = steps_taken(deck.slot(1).set());
+    let parked_t = deck.slot(1).set().time();
+    assert!(parked_steps > 0, "the slot never warmed, so it has nothing to draw");
+
+    deck.set_preview(Some(1));
+    for _ in 0..30 {
+        frame(&gpu, &mut deck, &present, 1);
+    }
+
+    assert_eq!(
+        steps_taken(deck.slot(1).set()),
+        parked_steps,
+        "an audition stepped an Allocated slot, so looking at material moves it"
+    );
+    assert_eq!(deck.slot(1).set().time(), parked_t);
+    // Drawn all the same, or an audition of a parked slot would be a black
+    // frame and there would be nothing to audition.
+    let shown = readback(&gpu, present.hdr_texture());
+    assert!(
+        lit(&shown) > 100,
+        "an audition of an Allocated slot showed nothing, so the draw did not happen"
+    );
+    assert_eq!(
+        shown,
+        readback(&gpu, deck.slot_target(1)),
+        "the audition is not the parked slot's target"
+    );
+}
+
+/// **Auditioning a Priming slot shows what it is warming into, on every frame.**
+///
+/// This is the workflow the whole feature is for: a candidate warms out of
+/// sight, the operator looks at it before deciding, and the deciding does not
+/// disturb the warming. Priming draws nothing on its own — that is the point of
+/// it — so the target starts as the transparent black it was cleared to and
+/// anything on screen came from the audition's draw.
+///
+/// **The second half is why it draws on every frame and not only on the frames
+/// the slot steps**, and it took an injected defect to find a version of this
+/// that could tell the two apart. A slot target persists, so between steps the
+/// two behave identically and no readback can separate them. Where they
+/// separate is a resize, which reallocates the target: draw only on step frames
+/// and a slot priming one frame in eight shows black until its next step. The
+/// resize below is timed to land on a frame that does not step.
+#[test]
+fn auditioning_a_priming_slot_survives_the_frame_its_target_is_reallocated() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let mut present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+    let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
+    deck.set_residency(1, Residency::Priming);
+    deck.set_prime_one_in(1, 8);
+    deck.set_preview(Some(1));
+
+    // Nine frames: indices 0 and 8 stepped, and the phase now stands at 9.
+    for _ in 0..9 {
+        frame(&gpu, &mut deck, &present, 1);
+    }
+    let warmed = steps_taken(deck.slot(1).set());
+    assert_eq!(
+        warmed, 2,
+        "the slot stepped {warmed} times in nine frames rather than 2, so the phase is \
+         not where the rest of this test assumes"
+    );
+    assert!(
+        lit(&readback(&gpu, present.hdr_texture())) > 100,
+        "the audition showed nothing before the resize, so what follows proves nothing"
+    );
+
+    // The one moment a persisted target stops being an answer.
+    present.resize(&gpu.device, WIDTH / 2, HEIGHT / 2);
+    deck.resize(&gpu.device, WIDTH / 2, HEIGHT / 2);
+    // Phase 9, so this frame does not step.
+    frame(&gpu, &mut deck, &present, 1);
+    assert_eq!(
+        steps_taken(deck.slot(1).set()),
+        warmed,
+        "the frame after the resize stepped, so it cannot show whether the draw is \
+         tied to stepping"
+    );
+
+    let shown = readback(&gpu, present.hdr_texture());
+    assert!(
+        lit(&shown) > 100,
+        "the audition went black on the frame after its target was reallocated, so a \
+         warming slot at a slow rate disappears when the window is resized"
+    );
+    // And it is still warming: looking at it did not take over its clock.
+    for _ in 0..16 {
+        frame(&gpu, &mut deck, &present, 1);
+    }
+    assert!(
+        steps_taken(deck.slot(1).set()) > warmed,
+        "the slot stopped warming while it was being looked at"
+    );
+}
+
+/// **An audition survives a resize that changes the aspect ratio.**
+///
+/// The viewport and the camera's aspect ratio live in the L4 uniform block, and
+/// that block is written by `Set::prepare` and by nothing else — while
+/// `Set::resize` moves only the host-side value. A parked slot never prepares,
+/// so an audition of one drew at the aspect it had before the resize, and went
+/// on doing so for as long as it stayed off air. Which is permanently: going
+/// off air is what stops it being prepared.
+///
+/// **A square resize cannot see this**, which is why the sibling test above
+/// could not: halving both dimensions leaves the aspect ratio alone and the
+/// stale matrix is the right matrix. The comparison here is against the same
+/// Set prepared at the same size through the ordinary path, which is the only
+/// reference that is not a second run of the thing under test.
+#[test]
+fn an_audition_redraws_at_the_aspect_ratio_it_was_resized_to() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    const WIDE: u32 = 256;
+    const SHORT: u32 = 64;
+
+    // The reference: a deck that was this shape all along, so its Set was
+    // prepared at this aspect on every frame it ran.
+    let reference = {
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDE, SHORT);
+        let mut deck = deck_of_at(&gpu, &[SEED_A], WIDE, SHORT);
+        for _ in 0..12 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        deck.set_residency(0, Residency::Allocated);
+        deck.set_preview(Some(0));
+        frame(&gpu, &mut deck, &present, 1);
+        readback(&gpu, present.hdr_texture())
+    };
+    assert!(lit(&reference) > 100, "the reference drew nothing");
+
+    // The same Set, run square, parked, and then resized to that shape while
+    // it was parked — so nothing has prepared it at the new aspect.
+    let mut present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+    let mut deck = deck_of(&gpu, &[SEED_A]);
+    for _ in 0..12 {
+        frame(&gpu, &mut deck, &present, 1);
+    }
+    deck.set_residency(0, Residency::Allocated);
+    present.resize(&gpu.device, WIDE, SHORT);
+    deck.resize(&gpu.device, WIDE, SHORT);
+    deck.set_preview(Some(0));
+    frame(&gpu, &mut deck, &present, 1);
+    let shown = readback(&gpu, present.hdr_texture());
+
+    assert_eq!(
+        shown, reference,
+        "the audition drew at the aspect ratio the slot had before the resize, so a \
+         parked slot is auditioned at the wrong shape until it goes back on air"
+    );
+}
+
+/// **The audition is metered; a slot nobody is looking at is not.**
+///
+/// This is what separates an audition from a look. The number an operator wants
+/// before putting a slot on air is what level it will arrive at, and `deck.rs`
+/// retires the meter for a slot that is off air precisely because its target is
+/// stale — which stops being true the moment something is drawing it.
+#[test]
+fn an_auditioned_slot_is_metered_and_an_unwatched_one_is_not() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+    let mut deck = deck_of(&gpu, &[SEED_A, SEED_B, SEED_A]);
+    deck.enable_meters(&gpu.device);
+    // **Warmed by priming, never by being on air**, for the same reason as
+    // `an_audition_draws_an_allocated_slot_without_stepping_it`: a slot that
+    // has run Live leaves a picture in its target, and a meter reading that
+    // picture is exactly the stale number `Meters::retire` exists to prevent —
+    // so the test would pass with no audition draw at all. A Set that has never
+    // been stepped has nothing to draw either, so priming is the only way to
+    // get element state into a slot whose target is still the black it was
+    // cleared to.
+    deck.set_residency(1, Residency::Priming);
+    deck.set_residency(2, Residency::Priming);
+    for _ in 0..12 {
+        frame(&gpu, &mut deck, &present, 1);
+    }
+    deck.set_residency(1, Residency::Allocated);
+    deck.set_residency(2, Residency::Allocated);
+    deck.set_preview(Some(1));
+
+    // Long enough for a reading to make the round trip. The meter never waits,
+    // so this is the harness standing in for the frames a real run would have.
+    for _ in 0..60 {
+        frame(&gpu, &mut deck, &present, 1);
+    }
+
+    let watched = deck.level(1);
+    assert!(
+        watched.is_some_and(|l| l.mean > 0.0),
+        "the auditioned slot reported {watched:?}, so its level cannot be read before \
+         it goes on air"
+    );
+    assert_eq!(
+        deck.level(2),
+        None,
+        "an Allocated slot nobody is looking at reported a level, which would be a \
+         reading of whatever its target last held"
+    );
+}
+
 /// **`over` hides what is under it and `add` does not**, which is the whole of
 /// what the blend vocabulary buys.
 ///

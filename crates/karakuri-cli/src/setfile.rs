@@ -426,7 +426,8 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             | Record::Blend { .. }
             | Record::Residency { .. }
             | Record::Look { .. }
-            | Record::Transport { .. } => notes.push(
+            | Record::Transport { .. }
+            | Record::Preview { .. } => notes.push(
                 "a record that belongs to a session rather than to a Set was skipped".to_string(),
             ),
             Record::Unknown => notes.push(

@@ -294,6 +294,14 @@ keys:
              the only control that silences a slot under every mode. Pull this
              one, not the gain, to get out of material that has gone bad: an
              `over` layer at zero gain is a black card and still covers
+  v          cycle what the output shows: the mix, then each slot, then the
+             mix again. Auditioning — an off-air slot is drawn while it is
+             being looked at, so an allocated one shows the still it stopped
+             at and a priming one shows what it is warming into. It is never
+             stepped by being looked at, so nothing moves that would not have
+             moved anyway, and the previewed slot is metered so its level can
+             be read before it goes on air. Shown at unity, ignoring its
+             faders: what is being judged is the material, not the setting
   m          cycle the focused slot's blend mode: add, over, max. `over` is
              the only one in which a layer hides the ones under it, and what
              it hides with is the coverage its own sprites drew — thin
@@ -991,6 +999,15 @@ fn replay_session(args: &Args, id: &str) {
         loaded.camera,
     );
     set.resize(w, h);
+    // **A deck of one, from one Set file**, which is what a replay can build
+    // today: a session stream names the slots its records act on but carries no
+    // way to say what was in them, since a Set file describes one Set and there
+    // is no record for "this deck held these four". So a record naming slot 1
+    // or beyond is reported and skipped — see `apply_replayed` — and a session
+    // recorded on a full deck replays the first slot's performance rather than
+    // the deck's. That is a hole in the *stream's* vocabulary rather than in
+    // this function, and it is the same hole `gain`, `blend`, `residency` and
+    // `preview` all fall into.
     let mut deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], w, h);
     deck.set_signals(Signals::new(args.bpm, u64::from(SEED)));
 
@@ -1069,6 +1086,7 @@ fn apply_replayed(
         Ok(Some(mix::Change::Gain { slot, value })) => deck.set_gain(slot, value),
         Ok(Some(mix::Change::Opacity { slot, value })) => deck.set_opacity(slot, value),
         Ok(Some(mix::Change::Blend { slot, mode })) => deck.set_blend(slot, mode),
+        Ok(Some(mix::Change::Preview { slot })) => deck.set_preview(slot),
         Ok(Some(mix::Change::Residency { slot, level })) => deck.set_residency(slot, level),
         Ok(Some(mix::Change::Look(l))) => *look = l,
         Ok(Some(mix::Change::Transport {
@@ -1780,6 +1798,7 @@ impl Live {
                 ';' => self.nudge_opacity(-OPACITY_STEP),
                 '\'' => self.nudge_opacity(OPACITY_STEP),
                 'm' => self.cycle_blend(),
+                'v' => self.cycle_preview(),
                 't' => self.cycle_tonemap(),
                 '-' => self.set_exposure(self.look.exposure / EXPOSURE_STEP),
                 '=' => self.set_exposure(self.look.exposure * EXPOSURE_STEP),
@@ -2083,6 +2102,38 @@ impl Live {
         );
     }
 
+    /// **Cycle what the output is showing**: the mix, then each slot in turn,
+    /// then the mix again.
+    ///
+    /// Auditioning, which `docs/roadmap.md` calls a prerequisite rather than a
+    /// convenience — choosing between candidates cannot be done blind. Every
+    /// slot is offered whatever its residency, because an off-air slot is
+    /// exactly the one worth looking at: an Allocated one shows the still it
+    /// stopped at and a Priming one shows what it is warming into.
+    ///
+    /// The printed line says what is being shown *and* what the mix is doing
+    /// without it, because the one thing an operator can lose track of here is
+    /// which of the two they are looking at — a previewed slot that happens to
+    /// be Live and alone in the mix is the same picture either way.
+    fn cycle_preview(&mut self) {
+        let count = self.deck.slot_count();
+        let next = match self.deck.preview() {
+            None => Some(0),
+            Some(slot) if slot + 1 < count => Some(slot + 1),
+            Some(_) => None,
+        };
+        self.record(mix::preview_record(next));
+        match self.deck.preview() {
+            Some(slot) => eprintln!(
+                "preview slot {slot} — {}, gain {:.2}, t {:.2}s (the mix is not being shown)",
+                residency_name(self.deck.residency(slot), self.deck.is_parked(slot)),
+                self.deck.gain(slot),
+                self.deck.slot(slot).set().time()
+            ),
+            None => eprintln!("preview off — showing the mix of {} live", self.deck.live_slots()),
+        }
+    }
+
     /// Cycle the focused slot's blend mode. No refusals here — unlike sync,
     /// every mode is available to every slot, because a blend mode is a
     /// question about pixels and not about what the material can do.
@@ -2154,6 +2205,7 @@ impl Live {
             mix::Change::Gain { slot, value } => self.deck.set_gain(slot, value),
             mix::Change::Opacity { slot, value } => self.deck.set_opacity(slot, value),
             mix::Change::Blend { slot, mode } => self.deck.set_blend(slot, mode),
+            mix::Change::Preview { slot } => self.deck.set_preview(slot),
             mix::Change::Residency { slot, level } => {
                 self.deck.set_residency(slot, level);
                 // A slot arriving or leaving changes what is committed, and the
@@ -2343,6 +2395,13 @@ impl Live {
         self.frames_since_status = 0;
 
         self.status.clear();
+        // **What the output is showing, when it is not the mix.** First on the
+        // line and not tucked in a column, because it is the one piece of state
+        // that changes what every other number on the line is *about*: the
+        // levels below are still per slot, but the picture is one of them.
+        if let Some(slot) = self.deck.preview() {
+            let _ = write!(self.status, "PVW{slot} ");
+        }
         for slot in 0..self.deck.slot_count() {
             let _ = write!(
                 self.status,

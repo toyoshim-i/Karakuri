@@ -148,12 +148,12 @@ pub enum Record {
     },
     // -- The mix: durable state that belongs to the *session* -------------
     //
-    // Everything above describes one Set and goes into a Set file. These six
+    // Everything above describes one Set and goes into a Set file. These seven
     // describe the deck the Sets are playing on, and a Set file must not
     // contain them — a Set does not know what fader it is under or whether it
     // is on air, and one that carried its gain would restore that gain
     // wherever it was next loaded. They are state all the same, which is what
-    // separates them from the three below: `is_set_state` says no to all nine
+    // separates them from the three below: `is_set_state` says no to all ten
     // and means two different things by it.
     /// A deck slot's linear gain into the mix.
     ///
@@ -222,6 +222,26 @@ pub enum Record {
         op: String,
         exposure: f32,
         white_point: f32,
+    },
+    /// **Which slot is being auditioned**, or none of them for the mix.
+    ///
+    /// Not a mix control — it changes nothing about how the Sets are combined,
+    /// only which of them the output is showing — but it is session state and it
+    /// is in the stream for one reason: **today the preview is the output**.
+    /// A replay that ignored it would show the mix where the operator was
+    /// looking at one slot, which is replaying a different picture than the one
+    /// that happened.
+    ///
+    /// That reason has an expiry date. When output routing gives the deck a
+    /// second output, this becomes the monitor's choice and stops being the
+    /// programme's, and the record stops belonging in a session stream — where
+    /// `gain` and `blend` will still belong. Recorded here as a fact about what
+    /// was shown, not as a claim that auditioning is part of a performance.
+    ///
+    /// `slot` is `None` for the mix rather than a sentinel index, so a deck of
+    /// a different size cannot read one as the other.
+    Preview {
+        slot: Option<u8>,
     },
     /// **What a deck slot's clock does with the session's** — `free`, `tempo`
     /// or `beat`, with the two numbers that make the mode mean something.
@@ -331,7 +351,7 @@ pub enum Record {
 pub const MAX_STEPS: u8 = 4;
 
 impl Record {
-    /// Whether this record belongs in a Set file. **Nine say no, for two
+    /// Whether this record belongs in a Set file. **Ten say no, for two
     /// different reasons, and keeping them apart is the point of the name** —
     /// it is `is_set_state` rather than `is_state` because two thirds of what
     /// it refuses is state.
@@ -341,13 +361,14 @@ impl Record {
     ///   carries no time, and one holding an audio frame would be claiming a
     ///   particular moment's microphone reading is part of what a Set is.
     /// - [`Record::Gain`], [`Record::Opacity`], [`Record::Blend`],
-    ///   [`Record::Residency`], [`Record::Look`] and [`Record::Transport`] are
-    ///   durable state, but the **session's** rather than any Set's. A Set does
+    ///   [`Record::Residency`], [`Record::Look`], [`Record::Transport`] and
+    ///   [`Record::Preview`] are durable state, but the **session's** rather
+    ///   than any Set's. A Set does
     ///   not know what fader it is under; one that carried its gain would
     ///   restore that gain wherever it was next loaded, which is a Set file
     ///   reaching outside the Set.
     ///
-    /// A session stream carries all nine. That is the difference between the
+    /// A session stream carries all ten. That is the difference between the
     /// two files, stated from this side.
     pub fn is_set_state(&self) -> bool {
         !matches!(
@@ -361,6 +382,7 @@ impl Record {
                 | Record::Residency { .. }
                 | Record::Look { .. }
                 | Record::Transport { .. }
+                | Record::Preview { .. }
         )
     }
 }
