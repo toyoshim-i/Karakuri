@@ -974,9 +974,9 @@ known. The total-cost decision lives there, not in the artifact.
   what would let the collision through harmlessly; until then a rejection the generator can
   act on beats a value nobody chose.
 - Unknown `t` values are ignored, for forward compatibility.
-- **`gain`, `opacity`, `blend`, `residency`, `look` and `transport` are not in this list
-  and must never be.** They are the session's state rather than any Set's — see the session
-  stream format.
+- **`gain`, `opacity`, `blend`, `preview`, `residency`, `look` and `transport` are not in
+  this list and must never be.** They are the session's state rather than any Set's — see
+  the session stream format.
 
 **Implemented, and the engine obeys it.** `karakuri-cli`'s `--save-set` writes one of
 these and puts both `.kir` sources in the store as content-addressed artifacts;
@@ -996,8 +996,8 @@ has. Each is a disagreement between the format and the engine rather than a gap 
 loader, and settling them is the format's business and the engine's, not the reader's.
 
 The *session* records are further along: `audio` and `tempo` per frame, and `gain`,
-`opacity`, `blend`, `residency`, `look` and `transport` per key press, are each built by the
-CLI, decoded back,
+`opacity`, `blend`, `preview`, `residency`, `look` and `transport` per key press, are each
+built by the CLI, decoded back,
 and only then applied — and `karakuri-cli`'s `--record-session` writes them to a session
 stream as they happen, `--replay` reading it back. The path the engine is driven through is
 the record's, in both directions.
@@ -1217,16 +1217,17 @@ session tempo, which **v0.2 had no record for**.
 Neither is state, so neither appears in a Set file: both are what a frame *saw* or
 *decided*, and the tempo belongs to the session rather than to any one Set.
 
-### The mix in the stream — `gain`, `opacity`, `blend`, `residency`, `look` and `transport`
+### The mix in the stream — `gain`, `opacity`, `blend`, `preview`, `residency`, `look` and `transport`
 
 A session that carried the material and not the performance would replay the same Sets, on
 the same beat, all at whatever gain they happened to start at, with nothing ever going on
-or off air. Six records carry what an operator moves:
+or off air. Seven records carry what an operator moves:
 
 ```ndjson
 {"t":"gain","slot":0,"value":0.75}
 {"t":"opacity","slot":0,"value":0.5}
 {"t":"blend","slot":1,"mode":"over"}
+{"t":"preview","slot":2}
 {"t":"residency","slot":1,"level":"priming"}
 {"t":"look","op":"aces","exposure":1.2,"white_point":4.0}
 ```
@@ -1264,6 +1265,21 @@ coverage would allow. Sparse material barely covers, so `over` on a thin point c
 close to `add` — which is correct rather than a defect, since a handful of sprites does not
 occlude anything.
 
+**`preview` is which slot the output is showing**, or `null` for the mix. It is not a mix
+control — it changes nothing about how the Sets are combined — and it is in the stream for
+one reason: today the preview *is* the output, so a replay that ignored it would show the
+mix where the operator was looking at one slot. That reason expires. When output routing
+gives the deck a second output this becomes the monitor's choice and stops being the
+programme's, and the record stops belonging in a session stream where `gain` and `blend`
+still will. `null` rather than a sentinel index, so a deck of a different size cannot read
+one as the other.
+
+**What no record says is what the deck held.** Every record above names a slot, and the
+format has no way to say that a session ran on four slots or what was in them — a Set file
+describes one Set. So `--replay` builds a deck of one and reports every record naming
+another slot rather than obeying it. That is a gap in this format, not in the replay driver,
+and it is the same gap for `gain`, `blend`, `residency` and `preview` alike.
+
 **`residency` is what a slot is asked to do** — `live`, `priming` or `allocated` — and it
 is always the *request*, never the effective level. The governor recomputes the second
 every pass from the budget of the machine that is running, so a session recorded on a fast
@@ -1296,7 +1312,7 @@ one value in this format that is meant to go backwards. Both are carried under e
 including `free` where neither does anything, so that a slot moved back onto the grid
 returns to where the operator left it rather than to a default.
 
-**These six are state, and a Set file still must not contain them.** That is a second
+**These seven are state, and a Set file still must not contain them.** That is a second
 reason for a record to be absent from a Set file and it is not the `audio` one: there is
 something to fold here, and this is not the projection it folds into. A Set file that
 restored a gain would apply it to whatever slot it was next loaded into, and one whose

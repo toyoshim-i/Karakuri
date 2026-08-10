@@ -168,6 +168,13 @@ pub struct Set {
     /// the same point in the session, and a float sum is not that function.
     steps_taken: u64,
     dt: f32,
+    /// The `beats` the last [`Set::prepare`] wrote into the L4 uniform block.
+    ///
+    /// Kept so that [`Set::refresh_view`] can rewrite that block for a slot
+    /// nothing is preparing without moving the grid position it was drawn at.
+    /// Derived, never authoritative: the oscillator is the grid, and this is
+    /// the answer it gave at this Set's `t`.
+    last_beats: f32,
     /// The spawn accumulator, in whole elements. `spawn_rate * dt` is rarely
     /// an integer, so the fractional remainder carries into the next substep
     /// and the long-run rate comes out exact — ir-spec, "Spawn timing".
@@ -711,6 +718,7 @@ impl Set {
             seed_salt,
             steps_taken: 0,
             dt: DT,
+            last_beats: 0.0,
             spawn_carry: 0.0,
             step_spawn_counts: [0; MAX_STEPS as usize],
             viewport: [1.0, 1.0],
@@ -1016,11 +1024,20 @@ impl Set {
     ///   is measuring — does move with the clock, because it is a function of
     ///   it; [`Signals::behind`] has the split.
     ///
-    /// Going on air moves the slot back to the session's grid, and nothing sees
-    /// the discontinuity that causes: the frame before was not drawn. That is
-    /// the whole reason the split is safe — **off air is not in the room**, and
-    /// a slot on air must be on the room's beat however far behind its own
-    /// clock is.
+    /// Going on air moves the slot back to the session's grid, and normally
+    /// nothing sees the discontinuity that causes: the frame before was not
+    /// drawn. That is the whole reason the split is safe — **off air is not in
+    /// the room**, and a slot on air must be on the room's beat however far
+    /// behind its own clock is.
+    ///
+    /// **An audition is the case where the frame before *is* drawn**, and it is
+    /// the one place that discontinuity is visible: a warming slot is shown at
+    /// its own grid position, so material that reads `beats` or carries a
+    /// binding moves the moment it goes on air, by however far behind the
+    /// governor's rate had it. Named rather than closed, because the close is
+    /// to read the session's grid instead — which is the defect this split cost
+    /// a repair to fix. See
+    /// [`Deck::set_preview`](crate::deck::Deck::set_preview).
     pub fn prepare_warming(&mut self, queue: &wgpu::Queue, steps: u8, signals: &Signals) {
         self.prepare_on(queue, steps, signals, Clock::Local);
     }
@@ -1078,27 +1095,57 @@ impl Set {
 
         self.write_step_args(queue, steps, view.oscillator());
 
+        // The grid at exactly this frame's `t`, on the same terms as the
+        // per-substep `beats` above: one instant, named twice, derived once.
+        // Kept, because [`Set::refresh_view`] has to be able to rewrite this
+        // block without moving it.
+        self.last_beats = view.oscillator().at_time(f64::from(self.time())).beats() as f32;
+        self.write_l4_uniforms(queue);
+    }
+
+    /// The L4 uniform block, from state this does not change.
+    ///
+    /// Split out of [`Set::prepare_on`] because a preview needs it without the
+    /// rest: an audition draws a slot nothing prepared, and every field here
+    /// but the viewport is already what it should be.
+    fn write_l4_uniforms(&mut self, queue: &wgpu::Queue) {
         // Read before the packer borrows the scratch: `time` and `view_proj`
         // take `&self`, and the packer holds a `&mut` to one of its fields.
         let t = self.time();
-        // The grid at exactly that `t`, on the same terms as the per-substep
-        // `beats` above: one instant, named twice, derived once.
-        let beats = view.oscillator().at_time(f64::from(t)).beats() as f32;
+        let beats = self.last_beats;
         let aspect = self.viewport[0] / self.viewport[1];
         let camera = self.camera.view_proj(t, aspect);
-        {
-            let (bindings, params) = (&self.bindings, &self.params);
-            let mut p = self.l4_scratch.pack(&self.l4_uniform_layout);
-            p.f32("t", t)
-                .f32("beats", beats)
-                .u32("seed_salt", self.seed_salt)
-                .vec2("viewport", self.viewport)
-                .mat4("camera", camera);
-            for name in &self.l4_param_names {
-                p.f32(name, effective(bindings, params, Kind::L4, name));
-            }
-            queue.write_buffer(&self.l4_uniforms, 0, p.finish());
+        let (bindings, params) = (&self.bindings, &self.params);
+        let mut p = self.l4_scratch.pack(&self.l4_uniform_layout);
+        p.f32("t", t)
+            .f32("beats", beats)
+            .u32("seed_salt", self.seed_salt)
+            .vec2("viewport", self.viewport)
+            .mat4("camera", camera);
+        for name in &self.l4_param_names {
+            p.f32(name, effective(bindings, params, Kind::L4, name));
         }
+        queue.write_buffer(&self.l4_uniforms, 0, p.finish());
+    }
+
+    /// **Rewrite the L4 uniforms against the current viewport**, without
+    /// advancing anything.
+    ///
+    /// For a slot being auditioned that nothing is preparing. `viewport` and
+    /// the camera's aspect ratio are written by [`Set::prepare`] and by nothing
+    /// else, while [`Set::resize`] moves only the host-side value — so an
+    /// `Allocated` slot drawn after a resize would draw at the aspect ratio it
+    /// had before it, for as long as it stayed off air. Which is to say
+    /// permanently, since going off air is what stops it being prepared.
+    ///
+    /// **Every other field comes out unchanged**, and that is the whole
+    /// contract: `t` is `steps_taken * dt` and nothing here steps, `beats` is
+    /// the value the last `prepare` derived, and a bound parameter is whatever
+    /// it last resolved to — bindings are not re-resolved, because resolving
+    /// them against a moving grid would make a parked slot's parameters drift
+    /// while its geometry stood still.
+    pub fn refresh_view(&mut self, queue: &wgpu::Queue) {
+        self.write_l4_uniforms(queue);
     }
 
     /// Every binding, once, against the signals it was handed — the session's
@@ -1337,23 +1384,21 @@ impl Set {
     }
 }
 
-impl VideoSource for Set {
-    /// This frame's L1 passes, then the draw.
+impl Set {
+    /// **The draw, without advancing anything.**
     ///
-    /// The compute half is [`Set::step`] verbatim, because a Priming slot runs
-    /// exactly that and nothing else; keeping one copy of it is what stops
-    /// "primed for thirty frames then put on air" from being a different
-    /// simulation than "on air for thirty frames".
-    fn render(
-        &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        target: &wgpu::TextureView,
-        steps: u8,
-    ) {
-        self.step(encoder, steps);
-
+    /// The L4 pass over whatever L1 last wrote, which for a Set nothing has
+    /// stepped this frame is the state it stopped at. Split out of
+    /// [`VideoSource::render`] for the same reason [`Set::step`] was split out
+    /// of it: a preview draws without stepping and a Priming slot steps without
+    /// drawing, and two copies of a render pass is how the two come to disagree
+    /// about which parity L4 reads.
+    ///
+    /// Nothing here touches `t`, `steps_taken` or `parity`. That is what lets
+    /// an operator look at an `Allocated` slot without the act of looking
+    /// moving it — see [`Deck::set_preview`](crate::deck::Deck::set_preview).
+    pub fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
         let render_parity = usize::from(self.parity);
-
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("L4"),
@@ -1384,6 +1429,26 @@ impl VideoSource for Set {
             // the command processor was going to do anyway.
             pass.draw_indirect(&self.counts, counts::DRAW);
         }
+    }
+}
+
+impl VideoSource for Set {
+    /// This frame's L1 passes, then the draw.
+    ///
+    /// The compute half is [`Set::step`] verbatim and the raster half is
+    /// [`Set::draw`] verbatim, because a Priming slot runs the first and a
+    /// preview runs the second; keeping one copy of each is what stops "primed
+    /// for thirty frames then put on air" from being a different simulation
+    /// than "on air for thirty frames", and an auditioned slot from being a
+    /// different picture than the same slot on air.
+    fn render(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        steps: u8,
+    ) {
+        self.step(encoder, steps);
+        self.draw(encoder, target);
     }
 }
 

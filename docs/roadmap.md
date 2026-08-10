@@ -165,8 +165,8 @@ what it cost against what it promised — the ones marked **Done** are worth rea
 where the promise was wrong, not only for the fact that it is kept.
 
 **Still open**, and the shape of the rest of this milestone: transitions, masks, MIDI,
-output routing, Ableton Link, and per-slot preview. The panic key is **decided against**
-rather than pending — see its bullet.
+output routing, and Ableton Link. The panic key is **decided against** rather than pending —
+see its bullet.
 
 The one debt this milestone was carrying — **`Deck::set_opacity` unreachable**, no key and
 no flag, and therefore no `opacity` record — **is paid**, and it was paid by building the
@@ -228,11 +228,46 @@ fine alone and is unreadable next to lights.
   Allocated keeps its state, so returning to Priming resumes where it stopped rather than
   starting over — `t` is simulation time and does not advance while parked. Going straight
   from Allocated to Live shows an unwarmed image, which is the operator's call to make.
-- Live preview of any slot's output, not just a Set's. Auditioning candidates is the basic
-  workflow and it cannot be done blind, so this is a prerequisite rather than a convenience.
-  It needs a **default renderer per topology** — a built-in L4 that draws raw geometry — so
-  that a generated L1 can be seen directly rather than through whatever L4 happens to be
-  paired with it. This is also how a broken L1 becomes diagnosable
+- ~~Live preview of any slot's output, not just a Set's.~~ **Done for what a slot can hold
+  today**, and the rule it turned out to need is one line: **an audition adds a draw and
+  never a step.** Stepping a slot because somebody looked at it would break the property
+  every residency level rests on — `t` advances through `Set::prepare` and nowhere else, so
+  a slot taken off air and put back resumes where it stopped — in the least visible way
+  available: the operator watches a running image, puts it on air, and it is somewhere other
+  than where they left it.
+
+  It is **not a second pass**. The mix runs as it always does with the previewed slot's
+  terms forced to unity and every other slot skipped, so `0.0 + 1.0 * src` puts that slot's
+  own texels in the target and the tone mapper, the present pass and a readback are all
+  unchanged. An operator judges the material through the transfer curve it will be shown
+  through. The faders are deliberately ignored: what is being judged is the level the
+  material arrives at, which is the input to setting a fader rather than the output of
+  having set one — the same ordering the meter measures in. The previewed slot is metered
+  for that reason, which is what makes an audition an audition rather than a look.
+
+  **Priming and preview compose, and neither had to learn about the other.** A Set that has
+  never been stepped has no element state to draw, so auditioning a candidate that arrived
+  into an off-air slot shows black — and the level that exists for exactly this steps it out
+  of sight. Park it, prime it, look at it.
+
+  Three things it costs, all named where the code is rather than only here. **The extra
+  pass is unbudgeted** — the governor charges an Allocated slot nothing and a Priming one a
+  fraction, and an audition makes both pay a full L4 pass; it also lands inside the frame
+  interval the hot-swap watchdog judges candidates on, so auditioning something heavy can
+  roll back an unrelated slot's build. **An audition is unfiltered**, so it bypasses the
+  fader's skip and material that has gone NaN reaches the output — right for what an
+  audition is *for*, and the one place "a fader at zero means zero" does not hold. And
+  **auditioning a warming slot shows it at its own grid position**, which is behind the
+  room's, so material that reads `beats` moves when it goes on air. That last one was
+  invisible while priming did not draw, and `Set::prepare_warming` argued the split was safe
+  precisely because "the frame before was not drawn" — an audition is the case where it is.
+
+  What is **not** built is the other half this bullet named: a **default renderer per
+  topology**, a built-in L4 that draws raw geometry so a generated L1 can be seen without
+  whatever L4 it happens to be paired with. It is not built because it cannot yet be needed:
+  `Set::build` takes an L1 and an L4, so there is no such thing as a slot holding geometry
+  with nothing to draw it. That arrives with M5's staging lane and M6's generation, and it
+  should be built then rather than guessed at now
 - Priming — **stepping** hidden so stateful simulations reach their attractor before
   becoming visible. Without this, every fade-in shows particles being born, which usually
   looks bad. Built, and this bullet's original wording — "rendering hidden at reduced rate

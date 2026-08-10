@@ -10,7 +10,8 @@
 //! ```text
 //!   a key press ─→ Record::Gain      ─┐
 //!                  Record::Opacity    │
-//!                  Record::Blend      ┼→ Change ─→ Deck / Present
+//!                  Record::Blend      │
+//!                  Record::Preview    ┼→ Change ─→ Deck / Present
 //!                  Record::Residency  │
 //!                  Record::Look      ─┘
 //! ```
@@ -58,6 +59,10 @@ pub enum Change {
     /// separate — see [`Blend`].
     Opacity { slot: usize, value: f32 },
     Blend { slot: usize, mode: Blend },
+    /// Which slot the output is showing, or `None` for the mix. Not a mix
+    /// control; see [`Record::Preview`] for why it is in the stream anyway and
+    /// for when it will stop being.
+    Preview { slot: Option<usize> },
     Residency { slot: usize, level: Residency },
     Look(Look),
     /// What a slot's clock does with the session's. Carried as a value rather
@@ -92,6 +97,13 @@ pub fn blend_record(slot: usize, mode: Blend) -> Record {
     Record::Blend {
         slot: slot as u8,
         mode: mode.name().to_string(),
+    }
+}
+
+/// Which slot is being auditioned, as the record that carries it.
+pub fn preview_record(slot: Option<usize>) -> Record {
+    Record::Preview {
+        slot: slot.map(|s| s as u8),
     }
 }
 
@@ -218,6 +230,9 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
             })?;
             Ok(Some(Change::Blend { slot, mode }))
         }
+        Record::Preview { slot } => Ok(Some(Change::Preview {
+            slot: slot.map(in_range).transpose()?,
+        })),
         Record::Residency { slot, level } => {
             let slot = in_range(*slot)?;
             let level = parse_residency(level).ok_or_else(|| {
@@ -285,6 +300,11 @@ mod tests {
                     value: 0.25,
                 },
             ),
+            (
+                preview_record(Some(2)),
+                Change::Preview { slot: Some(2) },
+            ),
+            (preview_record(None), Change::Preview { slot: None }),
             (
                 blend_record(3, Blend::Over),
                 Change::Blend {
@@ -438,6 +458,21 @@ mod tests {
         let message = change(&unknown_mode, 4).expect_err("`screen` is not a mode here");
         assert!(message.contains("screen"), "{message}");
         assert!(message.contains("over"), "{message}");
+    }
+
+    /// **`None` is the mix and is not a slot**, so it survives the range check
+    /// that every other slot-bearing record goes through rather than being
+    /// caught by it. A sentinel index would have made "the mix" and "slot 255"
+    /// the same line on the wire.
+    #[test]
+    fn a_preview_of_the_mix_is_not_a_slot_out_of_range() {
+        assert_eq!(
+            change(&preview_record(None), 1).expect("the mix is always available"),
+            Some(Change::Preview { slot: None })
+        );
+        // And a real slot past the deck still is.
+        let message = change(&preview_record(Some(4)), 4).expect_err("slot 4 of a deck of 4");
+        assert!(message.contains("slots 0-3"), "{message}");
     }
 
     /// **A slot the deck does not have is caught in the decode**, where there
