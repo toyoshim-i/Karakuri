@@ -1278,7 +1278,10 @@ one as the other.
 format has no way to say that a session ran on four slots or what was in them — a Set file
 describes one Set. So `--replay` builds a deck of one and reports every record naming
 another slot rather than obeying it. That is a gap in this format, not in the replay driver,
-and it is the same gap for `gain`, `blend`, `residency` and `preview` alike.
+and it is the same gap for `gain`, `blend`, `residency` and `preview` alike. It is also the
+one place "a session replays what happened" is currently short of true, and the cost grew
+the moment a control surface arrived: a map is written per slot, so a four-slot surface
+produces a session three quarters of whose moves are skipped on the way back.
 
 **`residency` is what a slot is asked to do** — `live`, `priming` or `allocated` — and it
 is always the *request*, never the effective level. The governor recomputes the second

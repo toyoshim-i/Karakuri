@@ -397,6 +397,7 @@ governor, alongside the decision about whether GPU timestamps can be trusted at 
 | Where the lead comes from | The measurable part is computed and the rest is a **signed operator offset**, on `o`/`p`. That is not a gap waiting for a better sensor: sound and picture leave by different paths, neither ends at this machine, and what has to line up is what a person in the room sees and hears. So the measured half aims at being *stable* rather than complete — a constant unknown costs one adjustment, a drifting one costs the whole night — and the offset goes negative, because a delayed PA makes the sound the late one |
 | Per-slot metering | Works. Mean and peak linear Rec.709 luminance per drawn slot — Live, or being auditioned — reduced on the GPU and read back without ever waiting, so it lags a few frames and says by how many. A slot nobody is drawing reads nothing rather than reading what it last drew. Texels whose luminance is not a finite number are counted and left out of both figures: one NaN admitted to a sum makes the mean NaN, and dividing by a value that reaches zero is ordinary enough in a shader that a routine artifact would otherwise cost a slot the number its fader is set by |
 | Slot preview | Works. `v` cycles what the output shows: the mix, then each slot. An audition **adds a draw and never a step**, so an off-air slot is drawn while it is being looked at and nothing moves that would not have moved anyway — an allocated slot shows the still it stopped at, a priming one shows what it is warming into. Not a second pass: the mix runs as always with that slot's terms at unity and the others skipped, so what lands is its own texels through the same tone mapper. Shown ignoring its faders, and metered, because the number wanted before putting it on air is the level the material arrives at. What is not built is a default renderer per topology — there is no slot holding geometry with no L4 to draw it, so there is nothing yet for one to do |
+| MIDI in | Works. `--midi-in` opens a port, `--midi-map` says what each knob and pad does, and every action ends in **the same record a key press writes** — so a surface can do nothing a key cannot, and a session recorded from one replays with neither attached. The map is a file and is deliberately **not** in the stream: which knob is which belongs to the hardware in the room. With no map, every message prints the line that would map it, which is how a surface is discovered until M5 has a UI to assign one in. 7-bit; the 14-bit MSB/LSB convention is not implemented, which is about 0.8% of a fader's range per step. Out: not built |
 | **A panic key** | Deliberately not built, and the reasoning is in `docs/roadmap.md`. Everything it would undo is already manually recoverable, and an anomaly is usually one frame and usually harmless — so a control that resets a performance in response to one does more damage than the thing it responds to. What was missing was a way to *see*, not a way to recover, which is the third time this milestone has landed on **show the number, act on nothing** |
 | **Bloom** | Does not exist. Values above 1.0 are what would feed it |
 | **Automatic gain** | Deliberately not built. The meter shows the number; nothing acts on it. An exposure that moves by itself is the worst thing that can happen on stage, and the honest order is to show the measurement first |
@@ -453,12 +454,15 @@ crates/
   karakuri-codegen/   IR → WGSL
   karakuri-engine/    render graph, Set lifecycle, pipeline management
   karakuri-signal/    local oscillator, synthesized signals, signal bus
+  karakuri-audio/     input device, analysis, tempo tracking, the beat lock
+  karakuri-midi/      wire messages, and the operator's map of them
   karakuri-store/     content-addressed artifact store, ndjson I/O
   karakuri-cli/       V1 entry point
 docs/
   ir-spec.md          the IR. Settled; open questions are empty
   roadmap.md          where this goes after V1
-examples/             runnable .kir files: three L1, one L4
+examples/             runnable .kir files: three L1, one L4, and one
+                      control-surface map to copy
 library/              artifact store (gitignored)
 ```
 

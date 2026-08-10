@@ -1,0 +1,70 @@
+# A control surface, mapped. `karakuri-cli --midi-in <port> --midi-map this`
+#
+# **This is an example, not a device.** No controller sends these numbers by
+# coincidence; the way to find yours is to run with `--midi-in` and no map, turn
+# every knob once, and paste the lines it prints. Each one arrives already in
+# the shape below with `-> ...` where the control goes.
+#
+# The layout here is the one a four-fader surface falls into: a channel strip
+# per deck slot, a row of pads under it, and the output controls off to one
+# side. Four slots because that is what the deck holds.
+
+# -- the mix ----------------------------------------------------------------
+#
+# `gain` is the level the material arrives at; `opacity` is the fader across
+# the blend. Under `add` they are the same dial twice, and under `over` one
+# dims a layer while the other stops it hiding what is beneath. Both default to
+# [0, 1], so the top of a fader is unity — push past it with `]` or say so:
+# `-> gain 0 [0, 2]`.
+
+cc 1 -> gain 0
+cc 2 -> gain 1
+cc 3 -> gain 2
+cc 4 -> gain 3
+
+cc 5 -> opacity 0
+cc 6 -> opacity 1
+cc 7 -> opacity 2
+cc 8 -> opacity 3
+
+# -- the pads ---------------------------------------------------------------
+#
+# `on-air` is the space bar: on, and off holding its `t`. `prime` asks a slot
+# to warm out of sight, which is what gives a parked candidate something to
+# show when you audition it. `blend` cycles add / over / max.
+
+note 32 -> on-air 0
+note 33 -> on-air 1
+note 34 -> on-air 2
+note 35 -> on-air 3
+
+note 36 -> prime 0
+note 37 -> prime 1
+note 38 -> prime 2
+note 39 -> prime 3
+
+note 40 -> blend 0
+note 41 -> blend 1
+note 42 -> blend 2
+note 43 -> blend 3
+
+# -- auditioning ------------------------------------------------------------
+#
+# One pad per slot rather than a cycle: a surface has the buttons, and reaching
+# slot 3 through three presses is a keyboard's compromise. `preview mix` is the
+# way back.
+
+note 44 -> preview 0
+note 45 -> preview 1
+note 46 -> preview 2
+note 47 -> preview 3
+note 48 -> preview mix
+
+# -- the room ---------------------------------------------------------------
+#
+# Exposure is a ratio control, so the middle of the fader is exactly 1.0 and
+# each step is a fraction of a stop rather than a fixed amount. `tap` needs
+# --audio-in: three or more taps set the tempo, and every tap sets the phase.
+
+cc 20 -> exposure
+note 49 -> tap

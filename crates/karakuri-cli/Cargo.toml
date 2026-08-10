@@ -9,6 +9,7 @@ license.workspace = true
 karakuri-audio = { version = "0.1.0", path = "../karakuri-audio" }
 karakuri-engine = { version = "0.1.0", path = "../karakuri-engine" }
 karakuri-ir = { version = "0.1.0", path = "../karakuri-ir" }
+karakuri-midi = { version = "0.1.0", path = "../karakuri-midi" }
 karakuri-signal = { version = "0.1.0", path = "../karakuri-signal" }
 karakuri-store = { version = "0.1.0", path = "../karakuri-store" }
 png = "0.18.1"

@@ -164,8 +164,8 @@ L5 blend modes. Each bullet below says
 what it cost against what it promised — the ones marked **Done** are worth reading for
 where the promise was wrong, not only for the fact that it is kept.
 
-**Still open**, and the shape of the rest of this milestone: transitions, masks, MIDI,
-output routing, and Ableton Link. The panic key is **decided against** rather than pending —
+**Still open**, and the shape of the rest of this milestone: transitions, masks, output
+routing, and Ableton Link. The panic key is **decided against** rather than pending —
 see its bullet.
 
 The one debt this milestone was carrying — **`Deck::set_opacity` unreachable**, no key and
@@ -450,7 +450,34 @@ fine alone and is unreadable next to lights.
   tracks shows its beat late by both, consistently — which reads as wrong rather than as
   noise
 - Ableton Link as a passive peer that never proposes a tempo
-- MIDI control surface on a dedicated controller, not the DJ controller
+- ~~MIDI control surface on a dedicated controller, not the DJ controller.~~ **Done for
+  input**, and it turned out to be the first real test of an invariant rather than a feature
+  of its own. `README.md` says the record stream is the sole mutation path, and the reason
+  M6's agents will be safe to run is that they can do nothing a human could not do through
+  the same interface — a surface is the first thing to put that claim under load, because it
+  is the first thing that is not the keyboard. Every arm of the connection ends in the
+  method a key press ends in, so it holds by construction: **a session recorded from a
+  controller replays with neither controller nor map attached.**
+
+  Building it is what found the one arm where it was already false: the beat tap moved the
+  grid and dropped the `tempo` record it had just built, so a session replayed on a
+  different phase from the one it was played on. Two keys had been doing that; the claim is
+  what made it visible. Where it is still short is the replay driver rather than the
+  surface: a session stream has no way to say what a deck *held*, so `--replay` builds a
+  deck of one and reports every record naming another slot — and `examples/surface.map` is
+  four slots wide, so most of a surface's moves are skipped on the way back. That gap is
+  the format's and it is named in `docs/ir-spec.md` where the records are.
+
+  The map is a **file and is not in the stream**, which is the same argument `residency`
+  makes from the other end: which knob is which belongs to the hardware in the room, and
+  replaying one room's wiring in another is replaying the furniture. With no map, every
+  message prints the line that would map it — a learn mode with no UI to learn into, which
+  is what M5 arrives to replace.
+
+  Two things not built and named rather than implied: **MIDI out**, so a surface's LEDs and
+  motorised faders do not follow the deck, which matters the moment two things can move a
+  fader; and **14-bit control changes**, so a fader is 128 positions, about 0.8% of its
+  range per step
 - Output routing: Syphon / Spout / NDI
 - ~~Panic key to a known-good Set.~~ **Decided against, and the reasoning is worth more
   than the key would have been.**
