@@ -53,12 +53,14 @@ enum Key {
 /// correction, so an event, and the tempo it corrects is the session's.
 ///
 /// The second is a record that **is** state and is not this Set's: `Gain`,
-/// `Opacity`, `Blend`, `Residency`, `Look`, `Transport`, `Preview`, `Mask` and
+/// `Opacity`, `Blend`, `Residency`, `Look`, `Canvas`, `Transport`, `Preview`,
+/// `Mask` and
 /// `Transition` describe the deck the Sets are playing on. Dropping them is not "there is nothing to fold", it
 /// is "there is something to fold and this is not the projection it folds into"
 /// — a Set file that restored a gain would apply it to whatever slot it was
-/// next loaded into, and one that restored a residency would put a Set on air
-/// by being opened. **The projection that would fold them — a session down to
+/// next loaded into, one that restored a residency would put a Set on air
+/// by being opened, and one that restored a canvas would resize every *other*
+/// Set in the deck. **The projection that would fold them — a session down to
 /// the deck state it ends at — does not exist**, and nothing needs it: a
 /// session is replayed from the top rather than resumed from its end.
 fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
@@ -79,6 +81,7 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         | Record::Blend { .. }
         | Record::Residency { .. }
         | Record::Look { .. }
+        | Record::Canvas { .. }
         | Record::Transport { .. }
         | Record::Preview { .. }
         | Record::Transition { .. }

@@ -160,13 +160,16 @@ not the expensive half.
 mapping once after the mix; signal binding; priming, the budget governor and `closed_form`;
 audio input with beat tracking; a record vocabulary for the mix; the `beats` ambient;
 per-slot transport; Set files, saved and loaded; a session writer and a replay driver; L5
-blend modes; slot preview; MIDI in; transitions; masks. Each bullet below says what it cost
+blend modes; slot preview; MIDI in; transitions; masks; window output as a preview. Each bullet below says what it cost
 against what it promised — the ones marked **Done** are worth reading for where the promise
 was wrong, not only for the fact that it is kept.
 
-**Still open**, and the shape of the rest of this milestone: output routing and Ableton
-Link. The panic key is **decided against** rather than pending —
-see its bullet.
+**Still open**, and it is one thing rather than two: **the plugin seam**, with output
+routing and Ableton Link hanging off it. Both bring a non-Rust toolchain into a workspace
+that is otherwise cleanly closed — Syphon wants Objective-C, Link wants cmake and a C++
+compiler — and both are outside the deterministic path, which is what makes them safe to
+put behind an interface rather than into the build. See `docs/plugins.md`. The panic key is
+**decided against** rather than pending — see its bullet.
 
 The one debt this milestone was carrying — **`Deck::set_opacity` unreachable**, no key and
 no flag, and therefore no `opacity` record — **is paid**, and it was paid by building the
@@ -528,7 +531,27 @@ fine alone and is unreadable next to lights.
   motorised faders do not follow the deck, which matters the moment two things can move a
   fader; and **14-bit control changes**, so a fader is 128 positions, about 0.8% of its
   range per step
-- Output routing: Syphon / Spout / NDI
+- ~~Output routing: Syphon / Spout / NDI.~~ **Moved outside the repository, and the line
+  is drawn in `docs/plugins.md`.**
+
+  The window is the default output and it landed as a **preview**: `--canvas` is what a run
+  renders at and `--size` is only how big the window is, with the canvas fitted into it and
+  the leftover black. Splitting them paid three times. The canvas became a **record**, so a
+  replay renders at the size the performance ran at — before, a session played in a small
+  window and replayed with a large `--size` produced different pixels and nothing in the
+  stream said which was the performance. A window resize stopped reallocating every slot's
+  target, which was the **last GPU allocation on the frame path** and it fired once per
+  frame of a drag. And `present_mode` became a choice rather than `caps.present_modes[0]`,
+  which had made frame pacing a property of whatever order the driver listed.
+
+  A fourth thing came out of looking at that path at all, and it belongs with the beat-tap
+  hole rather than here: the frame loop recorded a `tick` **before** discovering the
+  swapchain had no texture, so an abandoned frame told the stream it had simulated steps the
+  deck never took. `Outdated` arrives on every resize.
+
+  What is *not* built is fullscreen and display selection, and that is deliberate rather
+  than deferred: the window is a preview, an OBS capture of it covers the ordinary case, and
+  anything past that is the plugin seam's job rather than a bigger window's
 - ~~Panic key to a known-good Set.~~ **Decided against, and the reasoning is worth more
   than the key would have been.**
 

@@ -974,9 +974,11 @@ known. The total-cost decision lives there, not in the artifact.
   what would let the collision through harmlessly; until then a rejection the generator can
   act on beats a value nobody chose.
 - Unknown `t` values are ignored, for forward compatibility.
-- **`gain`, `opacity`, `blend`, `mask`, `transition`, `preview`, `residency`, `look` and
-  `transport` are not in this list and must never be.** They are the session's rather than
-  any Set's — see the session stream format.
+- **`gain`, `opacity`, `blend`, `mask`, `transition`, `preview`, `residency`, `look`,
+  `canvas` and `transport` are not in this list and must never be.** They are the session's
+  rather than any Set's — see the session stream format. `canvas` is the sharpest case: a
+  Set renders at whatever size it is handed, so a Set file that carried one would resize
+  every *other* Set in the deck by being loaded.
 
 **Implemented, and the engine obeys it.** `karakuri-cli`'s `--save-set` writes one of
 these and puts both `.kir` sources in the store as content-addressed artifacts;
@@ -1217,11 +1219,11 @@ session tempo, which **v0.2 had no record for**.
 Neither is state, so neither appears in a Set file: both are what a frame *saw* or
 *decided*, and the tempo belongs to the session rather than to any one Set.
 
-### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `preview`, `residency`, `look` and `transport`
+### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `preview`, `residency`, `look`, `canvas` and `transport`
 
 A session that carried the material and not the performance would replay the same Sets, on
 the same beat, all at whatever gain they happened to start at, with nothing ever going on
-or off air. Nine records carry what an operator moves — eight states and one event:
+or off air. Ten records carry what an operator moves — nine states and one event:
 
 ```ndjson
 {"t":"gain","slot":0,"value":0.75}
@@ -1232,6 +1234,7 @@ or off air. Nine records carry what an operator moves — eight states and one e
 {"t":"transition","slot":1,"control":"mask","to":1.0,"start":64.0,"beats":8.0,"curve":"smooth"}
 {"t":"residency","slot":1,"level":"priming"}
 {"t":"look","op":"aces","exposure":1.2,"white_point":4.0}
+{"t":"canvas","width":1920,"height":1080}
 ```
 
 **`gain` is a deck slot's level into the mix**, and **`opacity` is its fader.** The slot is
@@ -1357,7 +1360,22 @@ one value in this format that is meant to go backwards. Both are carried under e
 including `free` where neither does anything, so that a slot moved back onto the grid
 returns to where the operator left it rather than to a default.
 
-**These nine stay out of a Set file**, eight because they are state that is the
+**`canvas` is what the session renders at**, in texels — the surface every layer draws
+into, what every deck slot is sized to match, and what an offscreen render writes.
+
+It is **not the size of any window.** A window is a preview of what leaves by some other
+route, so it is fitted to the canvas rather than the other way round: dragging one changes
+what an operator can see and nothing about what is drawn. Until this record existed the two
+were the same number, and a session played in a small window and replayed at a large one
+rendered different pixels with nothing in the stream saying which was the performance.
+
+**Written once, at the head, and a stream carries no second one** — which makes it the only
+record here that is session state without being something a hand can reach mid-set. Changing
+a canvas reallocates every slot's target and the frame path allocates nothing, so the canvas
+is a property of a *run*. A reader that meets a later one should report it rather than obey
+it: a replay sizes everything it allocates from the first, before any frame exists.
+
+**These ten stay out of a Set file**, nine because they are state that is the
 session's rather than any Set's and `transition` because it is not state at all. That is a second
 reason for a record to be absent from a Set file and it is not the `audio` one: there is
 something to fold here, and this is not the projection it folds into. A Set file that

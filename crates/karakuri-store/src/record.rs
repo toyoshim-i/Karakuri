@@ -223,6 +223,26 @@ pub enum Record {
         exposure: f32,
         white_point: f32,
     },
+    /// **What size the session renders at**, in texels — the canvas every
+    /// `VideoSource` draws into and every deck slot is sized to match.
+    ///
+    /// Not the size of any window. A window is a preview and is fitted to this
+    /// rather than the other way round, so dragging one changes what an
+    /// operator can see and nothing about what is drawn. Without this record
+    /// the two were the same number: a session played in a small window and
+    /// replayed with a large `--size` rendered different pixels, and nothing in
+    /// the stream said which of them was the performance.
+    ///
+    /// **Written once, at the head, and a stream carries no second one.**
+    /// Changing it reallocates every slot's target and the HDR target, which is
+    /// an allocation on the render thread — the one thing this engine's frame
+    /// path forbids. So the canvas is a property of a run rather than a control
+    /// an operator moves during one, and this is the only record here that is
+    /// session state without being something a hand can reach mid-set.
+    Canvas {
+        width: u32,
+        height: u32,
+    },
     /// **What shape of the frame a deck slot's layer reaches.**
     ///
     /// A mask multiplies the layer's opacity per texel, which is what makes it
@@ -411,17 +431,18 @@ pub enum Record {
 pub const MAX_STEPS: u8 = 4;
 
 impl Record {
-    /// Whether this record belongs in a Set file. **Twelve say no, for two
+    /// Whether this record belongs in a Set file. **Thirteen say no, for two
     /// different reasons, and keeping them apart is the point of the name** —
-    /// it is `is_set_state` rather than `is_state` because two thirds of what
-    /// it refuses is state.
+    /// it is `is_set_state` rather than `is_state` because most of what it
+    /// refuses is state.
     ///
     /// - [`Record::Tick`], [`Record::Audio`] and [`Record::Tempo`] are not
     ///   state at all: they are what a *frame* saw or decided. A Set file
     ///   carries no time, and one holding an audio frame would be claiming a
     ///   particular moment's microphone reading is part of what a Set is.
     /// - [`Record::Gain`], [`Record::Opacity`], [`Record::Blend`],
-    ///   [`Record::Residency`], [`Record::Look`], [`Record::Transport`],
+    ///   [`Record::Residency`], [`Record::Look`], [`Record::Canvas`],
+    ///   [`Record::Transport`],
     ///   [`Record::Preview`], [`Record::Mask`] and [`Record::Transition`] are
     ///   the **session's**
     ///   rather than any Set's. The last is the one that is not durable state
@@ -433,8 +454,12 @@ impl Record {
     ///   restore that gain wherever it was next loaded, which is a Set file
     ///   reaching outside the Set.
     ///
-    /// A session stream carries all twelve. That is the difference between the
-    /// two files, stated from this side.
+    ///   [`Record::Canvas`] is in this group for a reason worth stating apart:
+    ///   a Set renders at whatever size it is given, and one that carried a
+    ///   canvas would make loading it resize every *other* Set in the deck.
+    ///
+    /// A session stream carries all thirteen. That is the difference between
+    /// the two files, stated from this side.
     pub fn is_set_state(&self) -> bool {
         !matches!(
             self,
@@ -446,6 +471,7 @@ impl Record {
                 | Record::Blend { .. }
                 | Record::Residency { .. }
                 | Record::Look { .. }
+                | Record::Canvas { .. }
                 | Record::Transport { .. }
                 | Record::Preview { .. }
                 | Record::Transition { .. }
@@ -496,6 +522,25 @@ mod tests {
                 softness: 0.1,
             }
         );
+        assert!(!rec.is_set_state());
+    }
+
+    /// The wire line the spec prints, parsed and written back.
+    #[test]
+    fn a_canvas_round_trips_through_the_line_the_spec_prints() {
+        let line = r#"{"t":"canvas","width":1920,"height":1080}"#;
+        let rec = round_trip(line);
+        assert_eq!(
+            rec,
+            Record::Canvas {
+                width: 1920,
+                height: 1080,
+            }
+        );
+        // **The one that would be most tempting to put in a Set file**, and the
+        // one it would do the most damage in: a Set renders at whatever size it
+        // is handed, so a Set file carrying a canvas would resize every *other*
+        // Set in the deck by being loaded.
         assert!(!rec.is_set_state());
     }
 

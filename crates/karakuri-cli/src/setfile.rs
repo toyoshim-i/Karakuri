@@ -426,6 +426,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             | Record::Blend { .. }
             | Record::Residency { .. }
             | Record::Look { .. }
+            | Record::Canvas { .. }
             | Record::Transport { .. }
             | Record::Preview { .. }
             | Record::Transition { .. }

@@ -18,11 +18,10 @@
 //! path builds them and reads them back, so the conversion is exercised every
 //! frame rather than only by a test.
 //!
-//! **What is not built here is a session writer.** Nothing in this repository
-//! writes a session stream to disk yet, so these records are produced and
-//! consumed within a frame. Writing them out, and a replay driver that reads
-//! them back instead of opening a device, are the remaining halves — and they
-//! are a decoder and a file, not a design.
+//! **Both halves this module was waiting on are built.** `--record-session`
+//! writes these records to disk and `--replay` reads them back instead of
+//! opening a device, so a binding to `energy` replays against what the room
+//! actually sounded like rather than against the bus's invented values.
 
 use std::time::Instant;
 

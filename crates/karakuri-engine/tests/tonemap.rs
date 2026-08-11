@@ -43,7 +43,7 @@ fn capture(gpu: &Gpu, present: &Present, points: &mut Points) -> Vec<u8> {
 
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
     points.render(&mut encoder, present.hdr_view(), 1);
-    present.draw(&mut encoder, &view);
+    present.draw(&mut encoder, &view, (WIDTH, HEIGHT));
     encoder.copy_texture_to_buffer(
         target.as_image_copy(),
         wgpu::TexelCopyBufferInfo {
