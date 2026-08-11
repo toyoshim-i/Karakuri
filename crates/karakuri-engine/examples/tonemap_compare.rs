@@ -98,7 +98,7 @@ fn capture(gpu: &Gpu, present: &Present, op: TonemapOp, exposure: f32, white_poi
     });
 
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
-    present.draw(&mut encoder, &view);
+    present.draw(&mut encoder, &view, (WIDTH, HEIGHT));
     encoder.copy_texture_to_buffer(
         target.as_image_copy(),
         wgpu::TexelCopyBufferInfo {

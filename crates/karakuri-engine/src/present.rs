@@ -292,11 +292,33 @@ impl Present {
         &self.hdr
     }
 
+    /// The canvas: what every `VideoSource` renders at, and what a deck must
+    /// be resized to match. **Not the size of whatever this is drawn into** —
+    /// see [`Present::draw`].
     pub fn size(&self) -> (u32, u32) {
         (self.width, self.height)
     }
 
-    pub fn draw(&self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
+    /// Draws the canvas into `target`, which may be a different size and a
+    /// different shape.
+    ///
+    /// `target_size` is the attachment's, in texels. When it matches the canvas
+    /// — every offscreen render — the viewport is the whole attachment and this
+    /// is what it always was. When it does not, the canvas is centred and
+    /// scaled to fit, and the bars are the clear.
+    ///
+    /// **Fitted rather than stretched, and that is a decision about honesty.**
+    /// A window is a preview of what leaves by some other route, so the one
+    /// thing it must not do is disagree with that route about framing: a
+    /// stretched preview puts the material somewhere it will not be. Bars are
+    /// visible and mean something; a wrong aspect ratio is invisible and means
+    /// the operator composes for the wrong frame.
+    pub fn draw(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        target_size: (u32, u32),
+    ) {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("present"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -312,8 +334,45 @@ impl Present {
             timestamp_writes: None,
             occlusion_query_set: None,
         });
+        let (x, y, w, h) = letterbox((self.width, self.height), target_size);
+        pass.set_viewport(x, y, w, h, 0.0, 1.0);
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.bind_group, &[]);
         pass.draw(0..3, 0..1);
     }
+}
+
+/// The largest centred rectangle inside `target` with `canvas`'s aspect ratio,
+/// as `(x, y, width, height)` in texels.
+///
+/// Free rather than a method, and public, because it is the whole of the
+/// fitting decision and the only part of it that can be checked without a GPU.
+///
+/// The clamps are not defensive tidiness, and they are **not** there to keep a
+/// render pass legal. wgpu validates a viewport against the device's texture
+/// limits and not against the attachment, so a rectangle that hangs outside is
+/// accepted and simply draws wrong — checked on this machine by submitting a
+/// 256x256 viewport into a 64x64 attachment, which passed. Silence is the
+/// reason to be exact here rather than a reason to relax.
+///
+/// What they fix is the arithmetic. The exact-fit axis computes as
+/// `c * (t / c)`, which floating point does not promise is `t`: over
+/// `c, t` in `1..=4096` that product exceeds `t` for 936k of the 16.7M pairs,
+/// the tightest being `c = 21, t = 3` giving `3.0000002`. Clamping the extent
+/// first and deriving the offset from the clamped extent keeps `x + w <= t`
+/// true by construction.
+///
+/// The lower clamp is the same argument at the other end: a canvas fitted into
+/// a window shaped nothing like it — 4096x1 into 1x4096 — scales to less than
+/// one texel tall, and a sub-texel viewport draws *nothing*. One row of the
+/// picture beats an empty preview and a puzzled operator.
+pub fn letterbox(canvas: (u32, u32), target: (u32, u32)) -> (f32, f32, f32, f32) {
+    let (cw, ch) = (canvas.0.max(1) as f32, canvas.1.max(1) as f32);
+    let (tw, th) = (target.0.max(1) as f32, target.1.max(1) as f32);
+    let scale = (tw / cw).min(th / ch);
+    // `min` before `max`: the target is at least 1 in each axis, so the result
+    // lands in `[1, t]` and `x + w = (t + w) / 2 <= t` still holds.
+    let w = (cw * scale).min(tw).max(1.0);
+    let h = (ch * scale).min(th).max(1.0);
+    (((tw - w) * 0.5).max(0.0), ((th - h) * 0.5).max(0.0), w, h)
 }

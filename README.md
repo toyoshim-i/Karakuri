@@ -195,11 +195,11 @@ during implementation, these win.
   an invariant that reads like a report of the code is worse than one that admits it is
   not there yet.
 
-  What goes through a record: `audio` and `tempo` every frame, and `gain`, `opacity`,
-  `blend`, `mask`, `transition`, `preview`, `residency`, `look` and `transport` on every key
-  that moves them. Each is built, read back, and only then applied, so what drives the
-  engine is what a replay would decode rather than a second path that happens to agree with
-  it.
+  What goes through a record: `audio` and `tempo` every frame, `canvas` once at the head,
+  and `gain`, `opacity`, `blend`, `mask`, `transition`, `preview`, `residency`, `look` and
+  `transport` on every key that moves them. Each is built, read back, and only then applied,
+  so what drives the engine is what a replay would decode rather than a second path that
+  happens to agree with it.
 
   **A control surface is what put that under load**, because it is the first thing that is
   not the keyboard: every MIDI action ends in the method a key press ends in, so a session
@@ -208,6 +208,17 @@ during implementation, these win.
   dropped the `tempo` record it had just built, so a session replayed on a different phase
   from the one it was played on. Two keys were doing it. That is the value of stating an
   invariant as a claim rather than keeping it as a habit.
+
+  **The second hole was in the other direction: a record written for a frame that never
+  happened.** `tick` is a promise that the deck advanced by that many steps, and the frame
+  loop used to read the clock, write the `tick`, measure the audio, and only then find out
+  the swapchain had no texture to draw into. An abandoned frame therefore told the stream it
+  had simulated steps the deck never took, and a replay obeyed the record — so resizing a
+  window during a recorded session was enough to make the replay diverge from the
+  performance. The fix is an ordering: acquire first, and nothing below it runs unless the
+  frame is going ahead. Not reading the clock is also what makes the skipped interval
+  *survive*, since it is then carried into the next frame and simulated there; before, it
+  was recorded, never simulated, and lost.
 
   The **material** joined them: `--load-set` builds a Set from `set`, `slot`, `capacity`,
   `param`, `bind`, `camera` and `seed` records, and `--bind` is now a way of *writing* a
@@ -415,6 +426,7 @@ governor, alongside the decision about whether GPU timestamps can be trusted at 
 | Transitions | Works. One scheduled move — a control, a destination, a musical duration, a curve — and a crossfade is two of them sharing a start and a length. `f`/`g` fade the focused slot out and in, `x` crossfades to the next slot, `n` and `j` choose where a fade starts and how long it lasts. **The first thing in the engine that schedules on the beat clock** — the transport already *follows* it — and a fade is a function of the session's beat count and of nothing else, so the same records reproduce it on a machine at a different frame rate and a tempo change mid-fade moves the fade with it. One record schedules the whole move and the values it produces are not recorded, which is `tick`'s shape from the other end. A hand on a control cancels whatever was moving it. A wipe is one of these carrying a mask's front, which is why there is no `wipe` record and no `crossfade` record — the first-class things are the shape and the move |
 | Slot preview | Works. `v` cycles what the output shows: the mix, then each slot. An audition **adds a draw and never a step**, so an off-air slot is drawn while it is being looked at and nothing moves that would not have moved anyway — an allocated slot shows the still it stopped at, a priming one shows what it is warming into. Not a second pass: the mix runs as always with that slot's terms at unity and the others skipped, so what lands is its own texels through the same tone mapper. Shown ignoring its faders, and metered, because the number wanted before putting it on air is the level the material arrives at. What is not built is a default renderer per topology — there is no slot holding geometry with no L4 to draw it, so there is nothing yet for one to do |
 | MIDI in | Works. `--midi-in` opens a port, `--midi-map` says what each knob and pad does, and every action ends in **the same record a key press writes** — so a surface can do nothing a key cannot, and a session recorded from one replays with neither attached. The map is a file and is deliberately **not** in the stream: which knob is which belongs to the hardware in the room. With no map, every message prints the line that would map it, which is how a surface is discovered until M5 has a UI to assign one in. 7-bit; the 14-bit MSB/LSB convention is not implemented, which is about 0.8% of a fader's range per step. **MIDI out is not built**, so a surface's LEDs and motorised faders do not follow the deck — which starts to matter the moment two things can move one fader, and a transition is now one of them |
+| Window output | Works, and it is a **preview**. `--canvas` is what a run renders at (1920x1080 by default) and `--size` is only how big the window is; the canvas is fitted into the window and the leftover is black, so dragging one changes what an operator can see and nothing about what is drawn. `a` sizes the window to the canvas one texel to one texel, which is what a downstream window capture wants. Three things came out of splitting them: the canvas now goes through a **record**, so a replay is at the size the performance ran at rather than at whatever `--size` says; a window resize no longer reallocates every slot's target on the render thread, which was the last GPU allocation on the frame path; and `present_mode` is now chosen (`Fifo`) rather than taken from whatever order the driver listed, which had made frame pacing a property of the machine with nothing saying so. Not built: fullscreen and display selection, because anything past a preview is the output-routing seam's job |
 | **A panic key** | Deliberately not built, and the reasoning is in `docs/roadmap.md`. Everything it would undo is already manually recoverable, and an anomaly is usually one frame and usually harmless — so a control that resets a performance in response to one does more damage than the thing it responds to. What was missing was a way to *see*, not a way to recover, which is the third time this milestone has landed on **show the number, act on nothing** |
 | **Bloom** | Does not exist. Values above 1.0 are what would feed it |
 | **Automatic gain** | Deliberately not built. The meter shows the number; nothing acts on it. An exposure that moves by itself is the worst thing that can happen on stage, and the honest order is to show the measurement first |

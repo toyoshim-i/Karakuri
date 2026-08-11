@@ -313,6 +313,46 @@ pub struct Session {
     pub trailing: Vec<Record>,
 }
 
+impl Session {
+    /// What the performance rendered at, and how many *later* `canvas` records
+    /// the stream also holds.
+    ///
+    /// Read before the deck is built rather than applied as the replay reaches
+    /// it, because it decides the size of everything a replay allocates: the
+    /// deck's slot targets, the HDR target, the PNG target and the readback
+    /// buffer are all made once, and honouring this after they exist would mean
+    /// remaking all four mid-run — the allocation the frame path forbids, and
+    /// the reason [`Record::Canvas`] is fixed for a run in the first place.
+    ///
+    /// **The count is returned rather than swallowed.** A stream with a second
+    /// one was not written by this program, and a replay that quietly obeyed
+    /// the first would look exactly like one that had obeyed all of them.
+    pub fn canvas(&self) -> (Option<(u32, u32)>, usize) {
+        let mut found = None;
+        let mut extra = 0;
+        // **`trailing` as well**, because a session that never drew a frame
+        // puts everything there: no tick means no `Frame` to hold it, and a
+        // run closed before the first frame — or one whose every frame was
+        // abandoned — still recorded the canvas it was going to use. Scanning
+        // the frames alone reported "no `canvas` record" about a stream that
+        // plainly has one.
+        for record in self
+            .frames
+            .iter()
+            .flat_map(|f| f.before.iter())
+            .chain(self.trailing.iter())
+        {
+            if let Record::Canvas { width, height } = record {
+                match found {
+                    None => found = Some((*width, *height)),
+                    Some(_) => extra += 1,
+                }
+            }
+        }
+        (found, extra)
+    }
+}
+
 /// One frame of a replay.
 pub struct Frame {
     /// The edits that sit between the previous tick and this one. **Applied
@@ -398,6 +438,96 @@ mod tests {
             "the second param is an edit on the second frame"
         );
         assert_eq!(session.frames[1].steps, 2);
+    }
+
+    /// The canvas is read out of the stream, not out of the head.
+    ///
+    /// It is session state, so `split` puts it in the *first frame's* edits
+    /// rather than in the head — and a replay needs it strictly earlier than
+    /// that, before it allocates anything. The two facts together are why
+    /// [`Session::canvas`] exists instead of a field on the head.
+    #[test]
+    fn the_canvas_is_found_before_the_first_frame_renders() {
+        let session = split(vec![
+            set_line(),
+            Line::new(Record::Canvas {
+                width: 1920,
+                height: 1080,
+            }),
+            Line::new(Record::Tick { steps: 1 }),
+        ]);
+
+        assert_eq!(
+            session.head.len(),
+            1,
+            "the canvas is the session's, so the head is the set alone"
+        );
+        assert_eq!(session.canvas(), (Some((1920, 1080)), 0));
+    }
+
+    /// A session that never drew a frame still carries its canvas.
+    ///
+    /// The record is written before the first tick, so with no tick at all
+    /// there is no `Frame` to hold it and it lands in `trailing` — the one
+    /// place a scan over frames alone cannot see. A run closed during startup
+    /// produces exactly this stream.
+    #[test]
+    fn a_session_with_no_tick_still_carries_its_canvas() {
+        let session = split(vec![
+            set_line(),
+            Line::new(Record::Canvas {
+                width: 1920,
+                height: 1080,
+            }),
+        ]);
+        assert!(session.frames.is_empty());
+        assert_eq!(session.canvas(), (Some((1920, 1080)), 0));
+    }
+
+    /// A stream with no canvas says so rather than answering with a size.
+    ///
+    /// `None` and "the default" have to stay distinguishable here: the caller
+    /// prints a line saying the size is a guess, and a `Session::canvas` that
+    /// helpfully returned 1920x1080 would make that line unwritable.
+    #[test]
+    fn a_stream_without_a_canvas_has_no_opinion_about_its_size() {
+        let session = split(vec![set_line(), Line::new(Record::Tick { steps: 1 })]);
+        assert_eq!(session.canvas(), (None, 0));
+    }
+
+    /// Later ones are counted, not obeyed and not swallowed.
+    ///
+    /// This program writes exactly one, at the head — a canvas change would be
+    /// a GPU reallocation mid-run. So a second one means a stream something
+    /// else wrote, and the count is what lets a replay say it did not honour
+    /// it. Silently taking the first would be indistinguishable from a replay
+    /// that had followed every one.
+    #[test]
+    fn later_canvases_are_counted_rather_than_obeyed() {
+        let session = split(vec![
+            set_line(),
+            Line::new(Record::Canvas {
+                width: 1920,
+                height: 1080,
+            }),
+            Line::new(Record::Tick { steps: 1 }),
+            Line::new(Record::Canvas {
+                width: 640,
+                height: 480,
+            }),
+            Line::new(Record::Tick { steps: 1 }),
+            Line::new(Record::Canvas {
+                width: 800,
+                height: 600,
+            }),
+            Line::new(Record::Tick { steps: 1 }),
+        ]);
+
+        assert_eq!(
+            session.canvas(),
+            (Some((1920, 1080)), 2),
+            "the first is the performance's, and the other two are reported"
+        );
     }
 
     /// Records after the last tick are kept. A session that ended between

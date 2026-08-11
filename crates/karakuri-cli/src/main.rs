@@ -268,7 +268,12 @@ options:
   --render FILE         render one frame offscreen and stop
   --seq DIR             render every frame to DIR/%05d.png and stop
   --frames N            how many simulation frames (default 240)
-  --size WxH            output size (default 1280x720)
+  --canvas WxH          what is rendered (default 1920x1080). Fixed for the
+                        run, and recorded, so a replay is at the size it was
+                        performed at
+  --size WxH            the preview window only (default 1280x720). The window
+                        fits the canvas into itself and has no say in it.
+                        Refused with --render, --seq or --replay
   --capacity N          elements per Set (default 262144)
   --param name=value    a uniform write, applied to every Set
   --bind FIELDS         attach a signal to a param, applied to every Set.
@@ -422,6 +427,13 @@ keys:
              Raise it if the picture reads late from where the audience is,
              lower it if the sound does. This is the only instrument that can
              read the PA and the projector, so it is the one to trust
+  a          size the window so the canvas lands in it one texel to one texel.
+             The window is a preview and fits the canvas into itself, so it
+             normally shows bars; press this when something downstream is
+             capturing the window, because a capture that is neither the
+             canvas nor a clean crop of it is worse than useless. The canvas
+             itself is --canvas and does not move — resizing the window
+             changes what you can see and nothing about what is drawn
   s          print the status line now
   h          print these bindings
   esc        quit
@@ -531,7 +543,21 @@ struct Args {
     render_to: Option<PathBuf>,
     seq_to: Option<PathBuf>,
     frames: u32,
+    /// **The preview window's size, and nothing else.** A window is a preview
+    /// of what leaves by some other route, so it has no say in what is drawn —
+    /// see `canvas`. Meaningless without a window, and refused rather than
+    /// ignored when there is none.
     size: (u32, u32),
+    /// **What the run renders at.** The canvas every `VideoSource` draws into,
+    /// what every deck slot is sized to match, and what an offscreen render
+    /// writes. Fixed for the run: changing it reallocates every slot's target,
+    /// and the frame path allocates nothing.
+    canvas: (u32, u32),
+    /// Whether `--canvas` was *typed*. Carried rather than resolved at parse
+    /// time because what it is refused against — whether the session being
+    /// replayed carries a canvas of its own — is not known until the stream is
+    /// read. See `replay_session`.
+    canvas_given: bool,
     /// Watch every pair and hot-swap the slot whose files changed. Off by
     /// default: a run that is not being edited should not carry a worker
     /// thread per slot and a watchdog it will never use.
@@ -649,6 +675,22 @@ fn number_for<T: std::str::FromStr>(
     value
         .parse()
         .map_err(|_| format!("`{flag} {value}` — expected {what}"))
+}
+
+/// A `WIDTHxHEIGHT` pair for `flag`.
+///
+/// **Zero is refused rather than clamped**, which is the difference between a
+/// typo and a picture: everything downstream takes `max(1)` to keep a texture
+/// descriptor legal, so `--canvas 1920x0` would have rendered a one-texel-tall
+/// frame and reported the size it was asked for.
+fn extent(flag: &str, value: String) -> Result<(u32, u32), String> {
+    let bad = || format!("`{flag} {value}` — expected `WIDTHxHEIGHT`");
+    let (w, h) = value.split_once('x').ok_or_else(bad)?;
+    match (w.parse::<u32>(), h.parse::<u32>()) {
+        (Ok(w), Ok(h)) if w > 0 && h > 0 => Ok((w, h)),
+        (Ok(_), Ok(_)) => Err(format!("`{flag} {value}` — neither side may be zero")),
+        _ => Err(bad()),
+    }
 }
 
 /// One `--bind` value, as the `bind` record's own fields.
@@ -822,6 +864,8 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         seq_to: None,
         frames: 240,
         size: (1280, 720),
+        canvas: (1920, 1080),
+        canvas_given: false,
         watch: false,
         audio_in: None,
         midi_in: None,
@@ -841,6 +885,11 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
             white_point: 1.0,
         },
     };
+    // Whether this was *typed*, not what it holds: it has a default, so "is it
+    // still 1280x720" cannot tell a flag that was given from one that was not,
+    // and the refusal below is about the giving. `--canvas` needs the same fact
+    // for longer and carries it on `Args` instead.
+    let mut size_given = false;
     let mut positional = Vec::new();
     let mut it = args;
     while let Some(arg) = it.next() {
@@ -963,14 +1012,12 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                 args_out.capacity = number_for("--capacity", "an element count", &mut it)?
             }
             "--size" => {
-                let value = value_for("--size", &mut it)?;
-                match value.split_once('x') {
-                    Some((w, h)) => match (w.parse(), h.parse()) {
-                        (Ok(w), Ok(h)) => args_out.size = (w, h),
-                        _ => return Err(format!("`--size {value}` — expected `WIDTHxHEIGHT`")),
-                    },
-                    None => return Err(format!("`--size {value}` — expected `WIDTHxHEIGHT`")),
-                }
+                args_out.size = extent("--size", value_for("--size", &mut it)?)?;
+                size_given = true;
+            }
+            "--canvas" => {
+                args_out.canvas = extent("--canvas", value_for("--canvas", &mut it)?)?;
+                args_out.canvas_given = true;
             }
             // An unknown option used to become a path, so `--wtach` looked
             // like a `.kir` that did not exist and the error blamed the file.
@@ -1046,6 +1093,19 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                 .to_string(),
         );
     }
+    // `--size` is the preview window's and an offscreen run has no window. It
+    // used to be the render size too, and that is exactly the confusion being
+    // removed: a reader who types `--render out.png --size 1920x1080` today
+    // means `--canvas`, and quietly rendering at 1280x720 because `--size` no
+    // longer reaches the canvas would be the worst of the three outcomes.
+    let offscreen = args_out.render_to.is_some() || args_out.seq_to.is_some();
+    if size_given && (offscreen || args_out.replay.is_some()) {
+        return Err(
+            "`--size` sets the preview window, and this run has no window. \
+             Use `--canvas` for what is rendered"
+                .to_string(),
+        );
+    }
     if args_out.sets.len() > MAX_SLOTS {
         return Err(format!(
             "{} Sets, and the deck holds {MAX_SLOTS}",
@@ -1053,6 +1113,73 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         ));
     }
     Ok(ParseOutcome::Run(Box::new(args_out)))
+}
+
+/// What a replay renders at: the stream's, or the flag's, or a refusal — plus
+/// a line to print when the answer is not simply what was performed.
+///
+/// **A function rather than four arms inside `replay_session`** for the reason
+/// every decoder in this program is one: the decision needs a stream, a store
+/// and a GPU to reach otherwise, and a decision nothing can test is a decision
+/// that drifts. It is also the shape the refusal has to have — it cannot live
+/// in `parse_args_from`, because at parse time nothing has read the stream.
+fn replay_canvas(
+    recorded: Option<(u32, u32)>,
+    flag: (u32, u32),
+    flag_given: bool,
+) -> Result<((u32, u32), Option<String>), String> {
+    match (recorded, flag_given) {
+        // The stream knows, so the flag is refused rather than obeyed:
+        // honouring it would render a session at a size it never ran at while
+        // reporting a faithful replay.
+        (Some(_), true) => Err(
+            "`--canvas` with `--replay` — this session records what it rendered at, \
+             and a replay is at that size or it is not a replay"
+                .to_string(),
+        ),
+        (Some(size), false) => Ok((size, None)),
+        // **The flag is the only way out for a stream that predates the record
+        // or was written by hand.** Refusing it unconditionally forced every
+        // such session to the default while saying "the session records what it
+        // rendered at" about one that does not.
+        (None, true) => Ok((
+            flag,
+            Some(format!(
+                "no `canvas` record: replaying at the {}x{} `--canvas` asked for",
+                flag.0, flag.1
+            )),
+        )),
+        (None, false) => Ok((
+            flag,
+            Some(format!(
+                "no `canvas` record and no `--canvas`: replaying at {}x{}, which is a \
+                 guess rather than what was performed",
+                flag.0, flag.1
+            )),
+        )),
+    }
+}
+
+/// Refuse a canvas the GPU cannot make a texture of, by name.
+///
+/// **Not in `extent`**, because the number it is checked against is the
+/// adapter's rather than the format's: `max_texture_dimension_2d` is 8192 on
+/// some machines and 16384 on others, so a canvas is legal or not depending on
+/// what is running the run. That makes it the earliest point *after* a device
+/// exists rather than the latest point before one does.
+///
+/// The alternative is what happened before: a panic out of `create_texture`
+/// naming a wgpu limit, from inside a call stack that says nothing about
+/// `--canvas`. Every other refusal in this program names the flag.
+fn check_canvas(device: &wgpu::Device, width: u32, height: u32) {
+    let limit = device.limits().max_texture_dimension_2d;
+    if width > limit || height > limit {
+        eprintln!(
+            "karakuri-cli: `--canvas {width}x{height}` — this GPU renders at most \
+             {limit}x{limit}"
+        );
+        std::process::exit(1);
+    }
 }
 
 /// Each slot's seed, derived from its index alone so that two slots given the
@@ -1110,7 +1237,35 @@ fn replay_session(args: &Args, id: &str) {
     };
     let sequence = args.seq_to.is_some();
     let gpu = Gpu::headless().expect("no GPU");
-    let (w, h) = args.size;
+    // **The stream's, not the flag's** — `--canvas` with `--replay` is refused
+    // for this reason. A session written by this program always carries one;
+    // the fallback is for a stream that predates the record or was written by
+    // hand, and it is named rather than assumed because a replay at the wrong
+    // size is a replay of different pixels.
+    let (recorded_canvas, later_canvases) = stream.canvas();
+    let (w, h) = match replay_canvas(recorded_canvas, args.canvas, args.canvas_given) {
+        Ok((size, note)) => {
+            if let Some(note) = note {
+                eprintln!("  {note}");
+            }
+            size
+        }
+        Err(refusal) => {
+            eprintln!("karakuri-cli: session `{id}`: {refusal}");
+            std::process::exit(1);
+        }
+    };
+    if later_canvases > 0 {
+        eprintln!(
+            "  {later_canvases} later `canvas` record{} ignored — the canvas is fixed for a run",
+            if later_canvases == 1 { "" } else { "s" }
+        );
+    }
+
+    // The size came out of the stream rather than off the command line, so this
+    // can refuse a session recorded on a machine with a larger limit than the
+    // one replaying it — which is the case a flag check could never have caught.
+    check_canvas(&gpu.device, w, h);
 
     let mut set = build(
         &gpu,
@@ -1474,7 +1629,8 @@ fn main() {
     match args.render_to.clone().or(args.seq_to.clone()) {
         Some(path) => {
             let gpu = Gpu::headless().expect("no GPU");
-            let (w, h) = args.size;
+            let (w, h) = args.canvas;
+            check_canvas(&gpu.device, w, h);
             // Fixed, never watching: an offscreen run is a function of its
             // inputs, and a save landing halfway through a sequence would make
             // it a function of the operator's editor as well.
@@ -1726,6 +1882,11 @@ struct Live {
     mask_angle: f32,
     /// The last measured frame interval, from [`Live::steps`].
     last_interval: f32,
+    /// Whether a surface error that is not recoverable by reconfiguring has
+    /// already been named. Once, not once a frame: the condition persists, so
+    /// reporting it every frame would bury the line that says what happened
+    /// under sixty copies a second of itself.
+    surface_fault: bool,
     /// When the session started, so a tap has an origin to be measured from.
     /// The clock stays out here with the other one, for the same reason.
     started: Instant,
@@ -1782,22 +1943,38 @@ impl ApplicationHandler for App {
             format,
             width: size.width.max(1),
             height: size.height.max(1),
-            present_mode: caps.present_modes[0],
+            // **Chosen, not taken.** This was `caps.present_modes[0]`, which is
+            // whatever order the backend happened to list — so the pacing of a
+            // run was a property of the driver, invisible and unsettable, and
+            // the same session ran differently on two machines with nothing
+            // saying so. `Fifo` is supported on every platform and is
+            // `PresentMode`'s own default, so naming it costs nothing and makes
+            // the answer the same everywhere. It is also the right answer for
+            // this output: tearing across a projected image is worse than a
+            // frame of latency.
+            present_mode: wgpu::PresentMode::Fifo,
             alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
         surface.configure(&gpu.device, &config);
 
-        let present = Present::new(&gpu.device, format, config.width, config.height);
+        // **The canvas, not the window.** These two were the same number until
+        // the window was named a preview: what is drawn is the session's and
+        // what it is looked at through is not, so a window that opened at an
+        // odd size no longer decides what a run renders — and dragging one no
+        // longer reallocates every slot's target on the render thread.
+        let (canvas_w, canvas_h) = self.args.canvas;
+        check_canvas(&gpu.device, canvas_w, canvas_h);
+        let present = Present::new(&gpu.device, format, canvas_w, canvas_h);
         let mut deck = build_deck(
             &gpu,
             &procs,
             &self.args,
             self.args.watch,
             true,
-            config.width,
-            config.height,
+            canvas_w,
+            canvas_h,
         );
         // Here and nowhere else: before the first frame, where the stall it
         // costs is free. Nothing else measures the Sets a run starts with —
@@ -1929,6 +2106,7 @@ impl ApplicationHandler for App {
             mask_kind: MASK_SHAPES[0].0,
             mask_angle: MASK_SHAPES[0].1,
             last_interval: DT,
+            surface_fault: false,
             started: Instant::now(),
             last: Instant::now(),
             status_at: Instant::now(),
@@ -1945,6 +2123,11 @@ impl ApplicationHandler for App {
         // to. This is also the first thing that decodes one, so a `look` this
         // build cannot obey is reported before a frame is drawn.
         let mut live = live;
+        // **Before the look, and once.** A replay reads this out of the stream
+        // to size everything it allocates, so it has to be there before any
+        // record that describes a frame — and there is deliberately no second
+        // writer anywhere, which is what "fixed for the run" means in practice.
+        live.record(mix::canvas_record(canvas_w, canvas_h));
         live.record(mix::look_record(&self.args.look));
         self.live = Some(live);
     }
@@ -2011,6 +2194,17 @@ impl ApplicationHandler for App {
 }
 
 impl Live {
+    /// The **window** changed size. Nothing that is rendered changes.
+    ///
+    /// This used to resize the HDR target and every deck slot as well, because
+    /// the window's size *was* the canvas. Two things came of that, and both
+    /// are gone with it: dragging a window reallocated every slot's target once
+    /// per frame of the drag — a GPU allocation on the render thread, which is
+    /// the one thing this engine's frame path forbids — and what a run rendered
+    /// depended on how big its window happened to be, so the same session
+    /// replayed at a different size with nothing saying which was the
+    /// performance. All that is left here is the swapchain, which has to follow
+    /// the window because it *is* the window.
     fn resize(&mut self, width: u32, height: u32) {
         if width == 0 || height == 0 {
             return;
@@ -2018,12 +2212,49 @@ impl Live {
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&self.gpu.device, &self.config);
-        // Both, always: the composite reads its sources with `textureLoad` and
-        // an out-of-range load is defined to return zero, so a deck left at the
-        // old size mixes black instead of failing. `Frame::render` asserts on
-        // the pair for the same reason.
-        self.present.resize(&self.gpu.device, width, height);
-        self.deck.resize(&self.gpu.device, width, height);
+    }
+
+    /// Resize the window so the canvas lands in it one texel to one texel.
+    ///
+    /// The preview is fitted, so an OBS window capture of it would otherwise
+    /// pick up the bars and a scale — and a capture that is neither the canvas
+    /// nor a clean crop of it is worse than useless downstream. After this the
+    /// window contains the canvas exactly, and `letterbox` becomes the identity.
+    ///
+    /// **A request, not a guarantee, and the difference is printed.** A 1080-tall
+    /// canvas cannot get a 1080-tall content window on a 1080-tall display —
+    /// there is a menu bar or a taskbar in the way — so the manager clamps it,
+    /// and an operator setting up a capture has to be told that rather than
+    /// told "1:1".
+    ///
+    /// `request_inner_size` returns the granted size **immediately** on the
+    /// platforms where the manager decides and `None` where a `Resized` event
+    /// will follow. Taking the returned value matters on the first kind: no
+    /// event arrives, so nothing else would ever reconfigure the swapchain, and
+    /// a swapchain that disagrees with its window does not fail — `set_viewport`
+    /// is not validated against the attachment — it just draws the wrong
+    /// picture, silently.
+    fn snap_to_canvas(&mut self) {
+        let (w, h) = self.present.size();
+        match self
+            .window
+            .request_inner_size(winit::dpi::PhysicalSize::new(w, h))
+        {
+            Some(granted) => {
+                self.resize(granted.width, granted.height);
+                if (granted.width, granted.height) == (w, h) {
+                    eprintln!("window: {w}x{h}, 1:1 with the canvas");
+                } else {
+                    eprintln!(
+                        "window: asked for {w}x{h} and got {}x{} — a capture of this is \
+                         not the canvas",
+                        granted.width, granted.height
+                    );
+                }
+            }
+            // A `Resized` is coming, and it reports what was actually granted.
+            None => eprintln!("window: asked for {w}x{h}, 1:1 with the canvas"),
+        }
     }
 
     /// Press whatever [`DEMO_SCRIPT`] is due, if this run is driving itself.
@@ -2137,6 +2368,7 @@ impl Live {
                 '.' => self.shift_octave(2.0),
                 'o' => self.nudge_latency_offset(-audio::LATENCY_OFFSET_STEP_MS),
                 'p' => self.nudge_latency_offset(audio::LATENCY_OFFSET_STEP_MS),
+                'a' => self.snap_to_canvas(),
                 's' => self.print_status(),
                 'h' | '?' => eprint!("{BINDINGS}"),
                 _ => {}
@@ -2828,6 +3060,51 @@ impl Live {
     fn frame(&mut self) {
         self.run_demo();
         self.run_surface();
+
+        // **Acquired before the clock is read, and the order is the whole
+        // point.** A `tick` is a promise that the deck advanced by that many
+        // steps, and everything below this point is what keeps it: if the
+        // frame is abandoned, nothing was recorded to be kept to.
+        //
+        // It used to read the clock, write the `tick`, measure the audio, and
+        // *then* find out there was no texture to draw into — so an abandoned
+        // frame told the stream it had simulated steps the deck never took, and
+        // a replay obeyed the record. `Outdated` arrives on every resize and on
+        // a display change, so resizing a window during a recorded session was
+        // enough to make the replay diverge from the performance.
+        //
+        // Not calling `steps` is also what makes the skipped time *survive*:
+        // `Live::last` is only moved by a frame that draws, so the interval
+        // this frame did not use is carried into the next one and simulated
+        // there. Before, it was recorded, never simulated, and lost. Only up to
+        // `MAX_STEPS`, which is the anti-spiral clamp and applies to any long
+        // gap however it arose — a run of abandoned frames past four steps'
+        // worth still falls behind rather than catching up, on purpose.
+        let surface_frame = match self.surface.get_current_texture() {
+            Ok(frame) => frame,
+            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                self.surface.configure(&self.gpu.device, &self.config);
+                return;
+            }
+            // Genuinely transient and self-describing — the next frame asks
+            // again. Naming it would be naming ordinary jitter.
+            Err(wgpu::SurfaceError::Timeout) => return,
+            // These two are not self-correcting the way `Timeout` is — one is
+            // fatal and the other is a generic failure the caller cannot act
+            // on — and returning silently left a frozen window with no reason
+            // for it anywhere. Retried regardless, since a wedged window that
+            // recovers is better than one that gave up; said once, since a
+            // reason repeated sixty times a second is a reason nobody reads.
+            Err(e) => {
+                if !self.surface_fault {
+                    self.surface_fault = true;
+                    eprintln!("surface: {e} — the window has stopped drawing");
+                }
+                return;
+            }
+        };
+        let view = surface_frame.texture.create_view(&Default::default());
+
         let steps = self.steps();
         // **The one measurement in the program, as the record that carries
         // it.** `tick` had no writer until this line; everything else the
@@ -2837,16 +3114,6 @@ impl Live {
         }
         self.measure_audio(steps);
 
-        let surface_frame = match self.surface.get_current_texture() {
-            Ok(frame) => frame,
-            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                self.surface.configure(&self.gpu.device, &self.config);
-                return;
-            }
-            Err(_) => return,
-        };
-        let view = surface_frame.texture.create_view(&Default::default());
-
         // The guard owns the encoder, so everything recorded here is one
         // generation of Sets: builds are installed inside `begin_frame`, before
         // the encoder exists, and there is no way to reach a second generation
@@ -2855,7 +3122,8 @@ impl Live {
         {
             let mut frame = self.deck.begin_frame(&self.gpu.device, &self.gpu.queue);
             frame.render(self.present.hdr_view(), self.present.size(), steps);
-            self.present.draw(frame.encoder(), &view);
+            self.present
+                .draw(frame.encoder(), &view, (self.config.width, self.config.height));
             frame.finish();
         }
         surface_frame.present();
@@ -3805,11 +4073,93 @@ mod value_tests {
             (vec!["--budget-ms", "soon"], "--budget-ms"),
             (vec!["--size", "1280"], "--size"),
             (vec!["--size", "1280x"], "--size"),
+            (vec!["--canvas", "1920"], "--canvas"),
+            (vec!["--canvas", "x1080"], "--canvas"),
             (vec!["--param", "turbulence"], "--param"),
         ] {
             let err = parse(&args).unwrap_or_else(|| panic!("{args:?} was accepted"));
             assert!(err.contains(expect), "{args:?} -> {err}");
         }
+    }
+
+    /// **Zero is a typo, not a size.** Every texture descriptor downstream
+    /// takes `max(1)` to stay legal, so `--canvas 1920x0` would have rendered a
+    /// frame one texel tall and reported the size it was asked for — the same
+    /// silence as a `--frames 24O` that renders 240.
+    #[test]
+    fn an_extent_with_a_zero_side_is_refused_rather_than_clamped() {
+        for args in [
+            vec!["--canvas", "1920x0"],
+            vec!["--canvas", "0x1080"],
+            vec!["--canvas", "0x0"],
+            vec!["--size", "0x720"],
+        ] {
+            let err = parse(&args).unwrap_or_else(|| panic!("{args:?} was accepted"));
+            assert!(err.contains("zero"), "{args:?} -> {err}");
+        }
+    }
+
+    /// `--size` is the preview window's, and these three runs have no window.
+    ///
+    /// Refused rather than ignored **because of what it used to mean**: it was
+    /// the render size, so a reader typing `--render out.png --size 1920x1080`
+    /// means `--canvas`. Quietly rendering at the default instead would be the
+    /// worst of the three outcomes — a PNG at a size nobody asked for, with
+    /// nothing on stderr.
+    #[test]
+    fn the_preview_windows_size_is_refused_where_there_is_no_window() {
+        for args in [
+            vec!["--render", "out.png", "--size", "1920x1080"],
+            vec!["--seq", "frames", "--size", "1920x1080"],
+            vec!["--replay", "s", "--render", "out.png", "--size", "1920x1080"],
+        ] {
+            let err = parse(&args).unwrap_or_else(|| panic!("{args:?} was accepted"));
+            assert!(err.contains("no window"), "{args:?} -> {err}");
+        }
+        // And it is accepted wherever a window exists, including beside
+        // `--canvas`: the two describe different things and were split so they
+        // could be given together.
+        assert!(parse(&["--size", "800x600"]).is_none());
+        assert!(parse(&["--size", "800x600", "--canvas", "1920x1080"]).is_none());
+        assert!(parse(&["--render", "out.png", "--canvas", "1920x1080"]).is_none());
+    }
+
+    /// A replay renders at the size the session recorded, and `--canvas` is
+    /// refused **only when there is something to refuse it against**.
+    ///
+    /// The refusal was unconditional and at parse time, which was wrong for
+    /// exactly the streams that need the flag: a session written before this
+    /// record existed carries no size, so the flag was rejected with the words
+    /// "the session records what it rendered at" and the replay then ran at the
+    /// untouched default. That is a regression against the old `--size`, which
+    /// could set it.
+    #[test]
+    fn a_replay_refuses_the_canvas_flag_only_when_the_stream_has_one() {
+        let performed = Some((1280, 720));
+        let flag = (640, 480);
+
+        assert_eq!(
+            replay_canvas(performed, flag, false),
+            Ok(((1280, 720), None)),
+            "the stream's size, and nothing to say about it"
+        );
+
+        let refusal = replay_canvas(performed, flag, true).expect_err("was accepted");
+        assert!(refusal.contains("--canvas"), "{refusal}");
+
+        // No record: the flag is the way out, and either way it is named,
+        // because a replay at a size nobody can vouch for must not look like a
+        // faithful one.
+        let (size, note) = replay_canvas(None, flag, true).expect("the flag is allowed");
+        assert_eq!(size, flag);
+        assert!(note.expect("says so").contains("640x480"));
+
+        let (size, note) = replay_canvas(None, flag, false).expect("falls back");
+        assert_eq!(size, flag);
+        assert!(note.expect("says so").contains("guess"));
+
+        // And the flag reaches parsing at all, which the old refusal blocked.
+        assert!(parse(&["--replay", "s", "--render", "out.png", "--canvas", "640x480"]).is_none());
     }
 
     /// A flag at the end of the line has no value, and the message says which

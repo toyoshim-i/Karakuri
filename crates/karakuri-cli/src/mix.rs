@@ -169,6 +169,16 @@ pub fn look_record(look: &Look) -> Record {
     }
 }
 
+/// What the run renders at, as the record that carries it.
+///
+/// There is no decoder beside this writer, and that asymmetry is the design
+/// rather than a gap: everything else here round-trips through [`change`]
+/// because it can be applied to a running deck, and a canvas cannot. A replay
+/// reads this before it builds anything — see `session::Session::canvas`.
+pub fn canvas_record(width: u32, height: u32) -> Record {
+    Record::Canvas { width, height }
+}
+
 /// A slot's transport, as the record that carries it.
 pub fn transport_record(slot: usize, transport: &Transport) -> Record {
     Record::Transport {

@@ -46,7 +46,7 @@ pub use governor::{Decision, Governor, Reason, Report, SlotState};
 pub use gpu::{Gpu, GpuError};
 pub use meter::{Level, Meters};
 pub use points::{Params, Points};
-pub use present::{Present, TonemapOp};
+pub use present::{letterbox, Present, TonemapOp};
 pub use probe::{Measurement, Probe};
 pub use set::{Set, SetError};
 pub use swap::{measure, Event, HotSwap, Request, Source, DEFAULT_BUDGET_MS};

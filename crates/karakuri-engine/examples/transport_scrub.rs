@@ -66,7 +66,7 @@ fn frame(gpu: &Gpu, deck: &mut Deck, present: &Present, view: &wgpu::TextureView
 
     let mut f = deck.begin_frame(&gpu.device, &gpu.queue);
     f.render(present.hdr_view(), present.size(), 1);
-    present.draw(f.encoder(), view);
+    present.draw(f.encoder(), view, (WIDTH, HEIGHT));
     f.encoder().copy_texture_to_buffer(
         target.as_image_copy(),
         wgpu::TexelCopyBufferInfo {
