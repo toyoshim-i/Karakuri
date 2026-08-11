@@ -3567,6 +3567,20 @@ impl Live {
                     (false, Some(true)) => "",
                 }
             );
+            // **The tempo, when nothing else is going to print it.** The
+            // grid's bpm has always lived in the audio group, which is fine
+            // while a microphone is the only thing that moves it — and wrong
+            // the moment something else does: a run with `--tempo-source` and
+            // no `--audio-in` followed a tempo that appeared nowhere on
+            // screen. Printed here only when the audio group is absent, so it
+            // appears exactly once either way.
+            if self.audio.is_none() {
+                let _ = write!(
+                    self.status,
+                    "{:.1}bpm ",
+                    self.deck.signals().oscillator().bpm()
+                );
+            }
         }
         if let Some(audio) = &self.audio {
             let a = audio.status();
