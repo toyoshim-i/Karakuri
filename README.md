@@ -147,6 +147,12 @@ hint: the signal bus is not readable from IR — declare `param energy` and atta
 
 ---
 
+**To play it rather than to judge it, read [`docs/manual.md`](docs/manual.md)** — a
+walkthrough, every flag and key, what the status line means, and a list of the things it
+deliberately will not do. That last section exists because this document is not where an
+operator would find them: "the downbeat is arbitrary until Link" is a fact about playing,
+not about design, and it had no home until the manual had one.
+
 ## Vocabulary
 
 | Term | Meaning |

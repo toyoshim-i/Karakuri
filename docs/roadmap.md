@@ -164,11 +164,29 @@ blend modes; slot preview; MIDI in; transitions; masks; window output as a previ
 against what it promised — the ones marked **Done** are worth reading for where the promise
 was wrong, not only for the fact that it is kept.
 
-**Still open**, and it is one thing rather than two: **the plugin seam**, with output
-routing and Ableton Link hanging off it. Its in-repo half — one frame loop, and a `Sink`
-trait with the window and the PNG writer behind it — is built; what is not is the interface
-a plugin crosses, deliberately, because an interface designed before its first
-implementation is a guess. Both bring a non-Rust toolchain into a workspace
+**Still open**, and it is two: **Ableton Link**, as an out-of-process plugin, and the
+**operator's manual** that `docs/manual.md` now is. Output routing is **out of this
+milestone** — the window is a preview and an OBS capture of it covers the ordinary case, so
+Syphon changes where the pixels go and not what the system does.
+
+Link is the opposite, and the reason is sharper than "a better tempo source", which is how
+it was described here for a long time. Link carries a shared beat **number**. The beat
+tracker can find how fast beats go and where they are; it cannot find *which one is beat
+one*, because downbeat detection is a separate and harder problem that this project does not
+attempt. So `bar` in a binding, "the next bar" on `n`, and an 8-beat fade are today on the
+right grid at an offset decided by whenever the session happened to start — musical in
+length, arbitrary in alignment by up to three beats. That is not a precision improvement
+waiting to happen; it is information the system does not have and cannot get from audio.
+
+There is also a licensing fact that decides the shape: Ableton Link is **GPL-2.0-or-later**
+and this workspace is MIT. That does not forbid the combination, but it does mean a binary
+linking it is distributed under the GPL. A separate process is the clean boundary, and it is
+the same boundary `docs/plugins.md` already requires for stability reasons — the constraint
+that the interface may pass only what survives a process boundary turns out to have two
+independent justifications.
+
+The seam's in-repo half — one frame loop, and a `Sink` trait with the window and the PNG
+writer behind it — is built. What is not built is the interface a plugin crosses, deliberately, because an interface designed before its first implementation is a guess. Both bring a non-Rust toolchain into a workspace
 that is otherwise cleanly closed — Syphon wants Objective-C, Link wants cmake and a C++
 compiler — and both are outside the deterministic path, which is what makes them safe to
 put behind an interface rather than into the build. See `docs/plugins.md`. The panic key is
