@@ -264,7 +264,7 @@ is up and an absent blend means `add`.
 | `heard` `err` | what the tracker last estimated, and how far the grid is from it |
 | `x2?` | the tracker thinks the grid may be an octave off. It will not fix it; `,` and `.` will |
 | `off` | the latency offset |
-| `ableton-link 2p` | the tempo source and its peer count, with ` ?` not yet heard from, ` stop` stopped, ` GONE` died, `xN` anchors rejected |
+| `ableton-link 2p` | the tempo source and its peer count, with ` ?` not yet heard from, ` stop` stopped, ` GONE` died, `xN` anchors rejected. The grid's tempo follows it here when there is no `--audio-in` to print it |
 
 The audio group is absent entirely without `--audio-in`.
 
@@ -310,6 +310,20 @@ source is another program from another repository, and a wrong reading should be
 rather than a jump. While a source is attached the beat tracker keeps measuring `energy`,
 `onset` and the bands, and stops moving the grid; otherwise the two would fight over the
 phase sixty times a second.
+
+**With rekordbox this is much less useful than it sounds, and the reason is rekordbox's.**
+Three steps are needed and the third is the problem: turn `[LINK]` on (that only joins the
+session), press **SYNC** on the deck you are playing (that puts the deck on the Link
+timeline), and then set the tempo from the **Link subscreen** — right-click `[LINK]` to show
+it. The deck's own tempo fader does **not** drive Link, by design on Pioneer's side: there
+is no master in Link for a fader to be the master of, so rekordbox never publishes the
+deck's BPM. A knob can be MIDI-mapped to the subscreen's BPM, but nothing makes it follow
+the track.
+
+So with rekordbox, a shared grid is a number a human enters — which is a tap performed in
+another application, and `b` already does that here. It is genuinely useful with a peer that
+*drives* Link, such as Ableton Live. It is not useful with rekordbox, and that is worth
+knowing before you build a set around it.
 
 The status line grows a group: `ableton-link 2p` is the source's name and how many other
 peers it can see. `0p` means it is running and alone — check the network before you check

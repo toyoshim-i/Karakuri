@@ -164,11 +164,32 @@ blend modes; slot preview; MIDI in; transitions; masks; window output as a previ
 against what it promised — the ones marked **Done** are worth reading for where the promise
 was wrong, not only for the fact that it is kept.
 
-**Still open**: verifying **Ableton Link** against a second peer. The manual
-(`docs/manual.md`) is written, and the Link seam is built — `--tempo-source` runs a helper
-and follows the beat it reports, checked end to end against a real Link peer on this
-machine. What that does *not* check is Link itself finding another application, which needs
-a second peer in the room. Output routing is **out of this
+**Ableton Link is built and verified**, and the verification produced a negative result
+worth more than the feature: **it does not solve the problem it was chosen for, with
+rekordbox.**
+
+`--tempo-source` works — a helper joins a Link session and Karakuri follows the shared beat,
+checked end to end through a real peer, a proposed tempo change, and into a recorded
+session. What does not work is the pairing. rekordbox joins the session and its decks can be
+made to *follow* Link, but it never publishes the deck's BPM: Pioneer's own answer is that
+Link has no master mechanism, so a tempo fader cannot be the thing that drives a session
+tempo. The Link tempo is entered by hand in a subscreen, or from a MIDI-mapped knob, and
+nothing connects it to the track that is playing.
+
+So with rekordbox a shared grid is a number a human types, which is a tap done in another
+application — and `b` is a tap done here. The downbeat that Link was chosen to provide is
+only as aligned as whoever typed it. **Link earns its place with a peer that drives it**
+(Ableton Live), and not with the deck software this project was aimed at.
+
+What that does *not* invalidate is the seam. `--tempo-source` is an interface for tempo
+sources in general and was deliberately not Link's, so the next candidate — a MIDI clock
+from the controller, which does follow the deck — arrives as another implementation rather
+than another design. Whether a MIDI clock can carry a *downbeat* is the open question there,
+and the honest answer today is probably not: it carries tempo and beat phase, which fixes
+the octave problem and leaves the bar where it was.
+
+**Still open**: nothing in this milestone, pending the decision above about what to try
+next for the downbeat. Output routing is **out of this
 milestone** — the window is a preview and an OBS capture of it covers the ordinary case, so
 Syphon changes where the pixels go and not what the system does.
 
