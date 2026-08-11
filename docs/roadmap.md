@@ -65,7 +65,11 @@ V1 implements L1 and L4 inside a single Set. The full model:
 
 Orthogonal to the layers:
 
-- **Control plane** — node agents, director, mix agent, generation worker (M6)
+- **Control plane** — node agents, director, mix agent, generation worker (M6). **MCP
+  arrived early and took a bite out of this**: an external model driving the system through
+  the same records a key press writes is M6's stated demand, arriving from outside the
+  process. What it does not cover is the autonomous half — an agent that prepares material
+  unasked has no chat window to be asked in
 - **Library** — search, genealogy, embeddings, previews (M4), on top of the content
   addressing that exists from M1. The separate metadata file it also wants does not exist
   yet — see M4's demands
@@ -200,8 +204,43 @@ than another design. Whether a MIDI clock can carry a *downbeat* is the open que
 and the honest answer today is probably not: it carries tempo and beat phase, which fixes
 the octave problem and leaves the bar where it was.
 
-**Still open**: nothing in this milestone, pending the decision above about what to try
-next for the downbeat. Output routing is **out of this
+**MCP landed inside this milestone rather than M5 or M6**, and it is worth saying why it
+was cheap. `--mcp` serves three tools — read a procedure, write one, ask what the swap
+machinery did — and every hard part was already built for something else. The hot-swap
+watchdog was written so a *human* editing a file could not wreck a set; it now catches a
+model doing the same, unchanged. The record invariant was written so a session would replay;
+it now means an AI-driven set replays with no AI attached. The IR was designed so a model
+could write it from the specification alone, which was tested in M1 with three models and is
+the reason "rewrite this procedure" is a plausible instruction at all.
+
+What it needed of its own was the loop: `write_procedure` hands back the checker's
+diagnostics rather than a bare failure, and `swap_outcome` says whether the result reached
+the screen. A model that cannot see the compiler's answer is guessing; one that can is
+iterating.
+
+There is deliberately **no undo tool**, and the argument for that needed correcting once it
+was reviewed. When a client reads before it writes, the previous version is in the
+conversation and undo is context rather than API — a property a prompt box could not have
+had. But nothing *makes* a client read first, and a write replaces the operator's file with
+no backup, so the claim describes a well-behaved client rather than the interface.
+
+**The one that mattered most was the replay claim, and it was simply false.** A procedure
+rewrite is a file and not a record: `session_head` writes the material once before the first
+frame, and nothing pushes a record when a `.kir` changes mid-run. An AI-driven set replays
+with the procedures it started with. The hole predates MCP — a human editor and `--watch`
+have always had it — but until this feature nothing had claimed otherwise, and the claim was
+the whole reason the feature looked safe. Closing it means a record carrying a procedure
+change, which is a format decision and is now the first item this project owes itself.
+
+The review also found the surface was a network service written like a local one: an
+attacker-supplied `Content-Length` was allocated before it was believed, and a fifty-six byte
+request aborted the render process. Loopback was treated as a boundary and is not one — a
+page on any site can POST to `127.0.0.1`, and a write needs no readable reply to have
+happened. Both are fixed, and the second is a reminder that **"it is only on loopback" is a
+sentence to distrust**.
+
+**Still open**: nothing in this milestone, pending the decision about what to try next for
+the downbeat. Output routing is **out of this
 milestone** — the window is a preview and an OBS capture of it covers the ordinary case, so
 Syphon changes where the pixels go and not what the system does.
 
