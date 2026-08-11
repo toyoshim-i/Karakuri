@@ -60,19 +60,20 @@ pub fn to_sequence(
 /// Render a session's frames, driven by the stream rather than by a clock.
 ///
 /// `drive` is called once before each frame with its index and the deck, and
-/// returns the step count that frame's `tick` recorded.
+/// returns the step count that frame's `tick` recorded **and the look that
+/// frame is under**. There is no `look` parameter beside it on purpose: see
+/// [`sequence_driven`].
 #[allow(clippy::too_many_arguments)]
 pub fn replay(
     gpu: &Gpu,
     deck: &mut Deck,
-    look: Look,
     width: u32,
     height: u32,
     frames: u32,
     wanted: impl Fn(u32) -> Option<std::path::PathBuf>,
-    drive: impl FnMut(u32, &mut Deck) -> u8,
+    drive: impl FnMut(u32, &mut Deck) -> (u8, Look),
 ) -> Result<(), String> {
-    sequence_driven(gpu, deck, look, width, height, frames, wanted, drive)
+    sequence_driven(gpu, deck, width, height, frames, wanted, drive)
 }
 
 fn sequence(
@@ -84,7 +85,11 @@ fn sequence(
     frames: u32,
     wanted: impl Fn(u32) -> Option<std::path::PathBuf>,
 ) -> Result<(), String> {
-    sequence_driven(gpu, deck, look, width, height, frames, wanted, |_, _| 1)
+    // One step a frame and the same look throughout, which is what an offscreen
+    // run with no stream driving it means.
+    sequence_driven(gpu, deck, width, height, frames, wanted, move |_, _| {
+        (1, look)
+    })
 }
 
 /// [`sequence`] with the frame's step count, and whatever else has to happen,
@@ -94,17 +99,26 @@ fn sequence(
 /// `steps` from a clock and a replay reads it from a `tick`, and everything
 /// else about rendering a frame is the same. `drive` is handed the frame index
 /// and the deck, applies whatever the stream says belongs before that frame,
-/// and returns what to advance by.
+/// and returns what to advance by **and what look to advance under**.
+///
+/// **The look comes back through `drive` rather than as a parameter beside it,
+/// and that is the fix for a real bug rather than a tidier signature.** There
+/// used to be both: a `look` argument, applied once before the loop, and a
+/// `&mut Look` the replay's closure wrote into and nothing ever read again. So
+/// `t`, `-`, `=` and `` ` `` moved the exposure live and moved nothing on
+/// replay — a session where the operator changed the tone mapper replayed
+/// entirely under whatever look it started with, while `replay_session` said in
+/// a comment that the look "is read per frame". One source or the divergence
+/// comes back.
 #[allow(clippy::too_many_arguments)]
 fn sequence_driven(
     gpu: &Gpu,
     deck: &mut Deck,
-    look: Look,
     width: u32,
     height: u32,
     frames: u32,
     wanted: impl Fn(u32) -> Option<std::path::PathBuf>,
-    mut drive: impl FnMut(u32, &mut Deck) -> u8,
+    mut drive: impl FnMut(u32, &mut Deck) -> (u8, Look),
 ) -> Result<(), String> {
     // **The row a texture-to-buffer copy needs is padded; the row a PNG needs is
     // not.** This used to assert the two were the same, which made every width
@@ -120,7 +134,6 @@ fn sequence_driven(
     // Rgba8UnormSrgb, so the hardware does the linear-to-sRGB encode on write.
     let format = wgpu::TextureFormat::Rgba8UnormSrgb;
     let present = Present::new(&gpu.device, format, width, height);
-    present.set_tonemap(&gpu.queue, look.op, look.exposure, look.white_point);
 
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("png target"),
@@ -154,7 +167,13 @@ fn sequence_driven(
         // belongs to rather than into an encoder of this function's own.
         // Before the frame opens: `drive` may move a fader or a residency, and
         // a `Frame` holds the only `&mut Deck` there is while it is alive.
-        let steps = drive(i, deck);
+        let (steps, look) = drive(i, deck);
+        // Per frame, unconditionally. It is one `queue.write_buffer` into
+        // storage sized at construction — the same claim `Present`'s module doc
+        // makes about switching operators mid-set being free — so there is
+        // nothing to gain by tracking whether it changed and a whole class of
+        // staleness to lose.
+        present.set_tonemap(&gpu.queue, look.op, look.exposure, look.white_point);
         let mut frame = deck.begin_frame(&gpu.device, &gpu.queue);
         frame.render(present.hdr_view(), present.size(), steps);
 
