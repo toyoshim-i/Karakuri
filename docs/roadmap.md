@@ -164,8 +164,8 @@ L5 blend modes. Each bullet below says
 what it cost against what it promised — the ones marked **Done** are worth reading for
 where the promise was wrong, not only for the fact that it is kept.
 
-**Still open**, and the shape of the rest of this milestone: masks, output routing, and
-Ableton Link. The panic key is **decided against** rather than pending —
+**Still open**, and the shape of the rest of this milestone: output routing and Ableton
+Link. The panic key is **decided against** rather than pending —
 see its bullet.
 
 The one debt this milestone was carrying — **`Deck::set_opacity` unreachable**, no key and
@@ -346,7 +346,22 @@ fine alone and is unreadable next to lights.
   into an input.** It had been out of range all along and there was nothing to notice
 
   The layer stack is still slot order, which is what determinism wanted anyway, and there is
-  no reordering control. Masks are the remaining half of this bullet
+  no reordering control.
+
+  **Masks landed too, and they cost less than the bullet implied.** A mask multiplies a
+  layer's opacity per texel — everything the fader does, done to part of the frame — so it
+  needed no new place in the composite and no second notion of what a layer contributes.
+  Two shapes: a straight front at an angle, and an iris. Both ends of the front are exact,
+  0 revealing nothing anywhere and 1 revealing everything everywhere, which is what lets a
+  layer masked to nothing be *skipped* — a third escape from broken material beside
+  residency and the fader — and what makes a wipe actually finish.
+
+  **A wipe turned out to be a mask and one scheduled move**, and neither half knows about
+  the other: the transition carries a number and the mask reads one. `docs/ir-spec.md` says
+  a crossfade is two `transition`s and there is no `crossfade` record; the same is true here
+  and for the same reason. What is not built is a mask read from a **texture** — an
+  arbitrary shape, or another layer's luminance — because that needs somewhere for the shape
+  to come from, and the answer is M3's `Field` rather than a third kind
 - Tone mapping, once, after the mix. Three different things get called exposure and only
   one of them belongs to the artifact: the `param exposure` inside a procedure is how bright
   that material is, the per-Set gain at L5 is how it balances against the others, and tone
