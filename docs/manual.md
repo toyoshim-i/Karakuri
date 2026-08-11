@@ -105,6 +105,57 @@ it thinks it might be.
 where the audience is standing; lower it if the sound does. You are the only instrument in
 the room that can see the projector and hear the PA at once.
 
+### Change it by asking
+
+```sh
+cargo run -p karakuri-cli -- --watch --mcp 8737
+```
+
+Point a chat client at `http://127.0.0.1:8737/` and it can **read a slot's procedure, rewrite
+it, and be told what happened**. "The one that's showing now, a bit more vivid" is a small
+edit to a declarative file, and hot-swapping that file is what `--watch` already does.
+
+Three tools. `read_procedure` gives you the source; `write_procedure` checks it and, if it
+compiles, writes it — **and if it does not compile, what comes back is the checker's
+diagnostics, against the source**, which is what lets a model fix its own mistake;
+`swap_outcome` says whether the result landed, was rolled back for costing too much, or
+failed to build. A write returning cleanly means it compiled, not that it is on screen, so
+the third tool is where the loop closes.
+
+Two resources come with it: the IR specification, and a list of every built-in the checker
+accepts **generated from the checker's own table** rather than written down beside it. Prose
+goes stale; that list cannot, because the same table is what rejects a procedure.
+
+It is the third control surface after the keyboard and MIDI — but with one difference that
+matters and that the other two do not have. A key press goes through a **record**, so a
+session replays; a procedure rewrite is a **file**, and nothing records that a file changed
+under a running set. **So a set in which a model rewrote a slot replays with the procedure
+it started with.** That has been true of a human with an editor and `--watch` for as long as
+`--watch` has existed; it is worth saying here because "the AI's set replays without the AI"
+is the sort of thing somebody would otherwise assume.
+
+Three things worth knowing before you rely on it:
+
+- **`--watch` is what picks a write up.** Without it the file changes and the screen does
+  not; the tool says so, but it is easier to just pass it.
+- **A model that writes something too expensive is caught by the same machinery that catches
+  you** — thirty measured frames, then the previous procedure comes back at the time it was
+  parked at.
+- **There is no undo tool.** If the client read the source before it wrote, the previous
+  version is in the conversation and "put it back" works — but nothing makes it read first,
+  and a write **replaces your file with no backup**. Keep procedures you care about in
+  version control, the same as any other source.
+
+**Loopback only, and deliberately.** A venue network is shared and a port that can rewrite
+the projector is not something to expose with a flag. Reaching a render machine from a
+laptop is `ssh -L 8737:localhost:8737 …`, which is something you do on purpose.
+
+Loopback is **not** on its own a boundary, and treating it as one was a real hole here: a
+page on any website can POST to `127.0.0.1` from your browser, and a write does not need a
+readable reply to have happened. Requests carrying a cross-site `Origin` are refused. There
+is still no authentication, so anything already running on the machine can drive it — which
+is the same trust boundary a MIDI port has.
+
 ### Keep it
 
 ```sh
@@ -158,6 +209,7 @@ run reads a microphone — so what comes back is the performance and not just th
 
 | | |
 |---|---|
+| `--mcp PORT` | serve the Model Context Protocol on `127.0.0.1:PORT`, so a chat client can rewrite what is playing. See below |
 | `--tempo-source CMD` | run `CMD` as a child process and follow the beat it reports. See below |
 | `--audio-in DEVICE` | open a microphone. Without it the signal bus answers with invented values at low confidence |
 | `--bpm N` | the tempo the grid starts at, and the centre of the octave the tracker looks in |

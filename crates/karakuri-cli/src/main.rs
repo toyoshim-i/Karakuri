@@ -20,6 +20,7 @@
 mod audio;
 mod compile;
 mod frame;
+mod mcp;
 mod midi;
 mod mix;
 mod render;
@@ -296,6 +297,13 @@ options:
                         where the tracker's one-octave window starts, so a value
                         within about 40% of the real tempo settles the octave —
                         and `,`/`.` are the fix when it does not
+  --mcp PORT            serve the Model Context Protocol on 127.0.0.1:PORT, so
+                        a chat client can read a slot's procedure, rewrite it,
+                        and be told what the compiler and the frame budget
+                        made of it. **Loopback only, deliberately**: reaching a
+                        render machine from elsewhere is `ssh -L`, which is a
+                        thing an operator does on purpose. Best with --watch,
+                        which is what picks a written procedure up
   --tempo-source CMD    run CMD as a child process and follow the beat it
                         reports. A shared grid carries a beat *number*, so
                         `bar` becomes the room's bar rather than one counted
@@ -576,6 +584,11 @@ struct Args {
     /// default: a run that is not being edited should not carry a worker
     /// thread per slot and a watchdog it will never use.
     watch: bool,
+    /// `--mcp`. A port to serve the Model Context Protocol on, loopback only.
+    /// `None` is the ordinary case and nothing in the frame path changes: this
+    /// is a third control surface beside the keyboard and MIDI, and like them
+    /// it can do nothing they cannot.
+    mcp: Option<u16>,
     /// `--tempo-source`. A command to run as a child process that says where
     /// the beat is — see [`crate::tempo_source`]. `None` is the ordinary case
     /// and changes nothing: the grid comes from `--bpm`, the beat tracker and
@@ -884,6 +897,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         canvas: (1920, 1080),
         canvas_given: false,
         watch: false,
+        mcp: None,
         tempo_source: None,
         audio_in: None,
         midi_in: None,
@@ -986,6 +1000,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                     }
                 }
             }
+            "--mcp" => args_out.mcp = Some(number_for("--mcp", "a port number", &mut it)?),
             "--tempo-source" => {
                 args_out.tempo_source = Some(value_for("--tempo-source", &mut it)?);
             }
@@ -1107,6 +1122,28 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         );
     }
     let offscreen = args_out.render_to.is_some() || args_out.seq_to.is_some();
+    // A surface with nothing to reach: `--load-set` builds from the store, so
+    // there are no procedure files on disk for a model to read or rewrite, and
+    // `args.sets` is empty. Refused rather than served empty, which is what
+    // `serve` would otherwise be handed.
+    if args_out.mcp.is_some() && args_out.load_set.is_some() {
+        return Err(
+            "`--mcp` with `--load-set` — a Set built from the store has no procedure files \
+             to rewrite. Give the `.kir` pair with `--set` instead"
+                .to_string(),
+        );
+    }
+    // A surface with nobody at it, on the same terms as the other two — and
+    // one more reason besides: an offscreen run is a function of its arguments,
+    // and a port that can rewrite a procedure mid-render is the opposite of
+    // that.
+    if args_out.mcp.is_some() && (offscreen || args_out.replay.is_some()) {
+        return Err(
+            "`--mcp` with `--render`, `--seq` or `--replay` — an offscreen run takes no \
+             live input, because its output has to be a function of its arguments"
+                .to_string(),
+        );
+    }
     // Third of the same kind, and the same argument: a tempo source is another
     // machine's clock, and an offscreen run's output has to be a function of
     // its arguments. A replay has a stronger reason still — it follows the grid
@@ -2158,6 +2195,9 @@ struct Live {
     /// existed. That is the same property `audio` and `midi` have and it is
     /// the one worth keeping.
     tempo_source: Option<tempo_source::Source>,
+    /// The MCP server's half of the channel, when `--mcp` asked for one. Told
+    /// what the swap machinery said, and nothing else — see [`crate::mcp`].
+    mcp: Option<mcp::Reporter>,
     /// Scratch for [`midi::Surface::take`], owned so the frame path allocates
     /// nothing. Empty on every frame nothing was touched.
     actions: Vec<karakuri_midi::Action>,
@@ -2364,6 +2404,38 @@ impl ApplicationHandler for App {
             None => None,
         };
 
+        // Fourth of the same kind. Fatal for the same reason the others are:
+        // `--mcp` was asked for, and a run that went on without it would look
+        // exactly like one whose client is connected and idle.
+        let mcp = match self.args.mcp {
+            Some(port) => {
+                let slots = mcp::Slots(self.args.sets.clone());
+                match mcp::serve(port, slots, self.args.watch) {
+                    Ok(reporter) => {
+                        // The port bound rather than the one asked for: `--mcp 0`
+                        // takes an ephemeral one, and printing the 0 would name
+                        // a port that is not the port.
+                        let port = reporter.port();
+                        eprintln!(
+                            "mcp: 127.0.0.1:{port} — a client can read and rewrite a slot's \
+                             procedure{}",
+                            if self.args.watch {
+                                ""
+                            } else {
+                                ", but without --watch nothing will pick a write up"
+                            }
+                        );
+                        Some(reporter)
+                    }
+                    Err(e) => {
+                        eprintln!("karakuri-cli: mcp: {e}");
+                        std::process::exit(2);
+                    }
+                }
+            }
+            None => None,
+        };
+
         eprint!("\n{BINDINGS}\n");
 
         // Opened before the first frame and never on one: it creates a file
@@ -2405,6 +2477,7 @@ impl ApplicationHandler for App {
             audio,
             midi,
             tempo_source,
+            mcp,
             actions: Vec::new(),
             quantum: QUANTA[0].0,
             fade_beats: FADE_BEATS[0],
@@ -3400,7 +3473,21 @@ impl Live {
         for slot in 0..self.deck.slot_count() {
             for event in self.deck.events(slot) {
                 set_changed |= matches!(event, Event::Swapped { .. } | Event::RolledBack { .. });
-                eprintln!("slot {slot}: {event}");
+                // **The same words, to whoever is not at the terminal.** A
+                // model that wrote a procedure has no other way to learn that
+                // it was rolled back for cost, and "it compiled" is not the
+                // same news as "it is on screen".
+                //
+                // Formatted once and only when there is somebody to tell: a run
+                // with no `--mcp` used to pay for a `String` it then dropped.
+                match &self.mcp {
+                    Some(mcp) => {
+                        let said = event.to_string();
+                        eprintln!("slot {slot}: {said}");
+                        mcp.swap(slot, &said);
+                    }
+                    None => eprintln!("slot {slot}: {event}"),
+                }
             }
         }
         if set_changed {
@@ -4378,6 +4465,29 @@ mod value_tests {
         assert!(parse(&["--size", "800x600"]).is_none());
         assert!(parse(&["--size", "800x600", "--canvas", "1920x1080"]).is_none());
         assert!(parse(&["--render", "out.png", "--canvas", "1920x1080"]).is_none());
+    }
+
+    /// A surface with nobody at it, and one more reason besides.
+    ///
+    /// The other refusals are "an offscreen run takes no live input". This one
+    /// is that plus the sharper version: a port that can rewrite a procedure
+    /// mid-render is the opposite of an output that is a function of its
+    /// arguments.
+    #[test]
+    fn an_mcp_port_is_refused_where_there_is_no_run_to_drive() {
+        for args in [
+            vec!["--mcp", "8000", "--render", "out.png"],
+            vec!["--mcp", "8000", "--seq", "frames/"],
+            vec!["--mcp", "8000", "--replay", "a", "--render", "out.png"],
+        ] {
+            let err = parse(&args).unwrap_or_else(|| panic!("{args:?} was accepted"));
+            assert!(err.contains("--mcp"), "{args:?} -> {err}");
+        }
+        assert!(parse(&["--mcp", "8000"]).is_none());
+        assert!(parse(&["--mcp", "8000", "--watch"]).is_none());
+        // A port is a number, and a flag given a value it cannot use says so
+        // rather than keeping a default.
+        assert!(parse(&["--mcp", "eight-thousand"]).is_some());
     }
 
     /// A tempo source is a live input, and an offscreen run has none.
