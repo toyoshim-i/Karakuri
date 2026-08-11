@@ -164,8 +164,11 @@ blend modes; slot preview; MIDI in; transitions; masks; window output as a previ
 against what it promised — the ones marked **Done** are worth reading for where the promise
 was wrong, not only for the fact that it is kept.
 
-**Still open**, and it is two: **Ableton Link**, as an out-of-process plugin, and the
-**operator's manual** that `docs/manual.md` now is. Output routing is **out of this
+**Still open**: verifying **Ableton Link** against a second peer. The manual
+(`docs/manual.md`) is written, and the Link seam is built — `--tempo-source` runs a helper
+and follows the beat it reports, checked end to end against a real Link peer on this
+machine. What that does *not* check is Link itself finding another application, which needs
+a second peer in the room. Output routing is **out of this
 milestone** — the window is a preview and an OBS capture of it covers the ordinary case, so
 Syphon changes where the pixels go and not what the system does.
 

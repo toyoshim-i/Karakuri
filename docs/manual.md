@@ -158,6 +158,7 @@ run reads a microphone — so what comes back is the performance and not just th
 
 | | |
 |---|---|
+| `--tempo-source CMD` | run `CMD` as a child process and follow the beat it reports. See below |
 | `--audio-in DEVICE` | open a microphone. Without it the signal bus answers with invented values at low confidence |
 | `--bpm N` | the tempo the grid starts at, and the centre of the octave the tracker looks in |
 | `--latency-offset-ms N` | the room's offset, default 20, and it may be negative |
@@ -263,6 +264,7 @@ is up and an absent blend means `add`.
 | `heard` `err` | what the tracker last estimated, and how far the grid is from it |
 | `x2?` | the tracker thinks the grid may be an octave off. It will not fix it; `,` and `.` will |
 | `off` | the latency offset |
+| `ableton-link 2p` | the tempo source and its peer count, with ` ?` not yet heard from, ` stop` stopped, ` GONE` died, `xN` anchors rejected |
 
 The audio group is absent entirely without `--audio-in`.
 
@@ -279,19 +281,41 @@ press.
 Everything here is known, and none of it is going to surprise you mid-set if you have read
 it once.
 
-### The downbeat is arbitrary
+### The downbeat is arbitrary — **unless a tempo source is attached**
 
-The grid knows how fast beats go and where they are. **It does not know which one is beat
-one**, because that cannot be recovered from audio by anything this program does — downbeat
-detection is a separate and harder problem and it is not attempted.
+The grid knows how fast beats go and where they are. **On its own it does not know which one
+is beat one**, because that cannot be recovered from audio by anything this program does —
+downbeat detection is a separate and harder problem and it is not attempted.
 
-So `bar` in a binding, "the next bar" on `n`, and an 8-beat fade are all on the right grid
-at an offset that was decided by whenever your session happened to start. They are musical
-in *length* and arbitrary in *alignment*, by up to three beats.
+Without a source, `bar` in a binding, "the next bar" on `n`, and an 8-beat fade are all on
+the right grid at an offset decided by whenever your session happened to start. They are
+musical in *length* and arbitrary in *alignment*, by up to three beats. If that matters,
+start the session on a downbeat and tap `b` on one.
 
-This is the single strongest reason Ableton Link is the next thing to be built: Link carries
-a shared beat *number*, not just a tempo, so the downbeat stops being a guess. Until then,
-if alignment matters, start the session on a downbeat and tap `b` on one.
+**`--tempo-source` fixes it, because a shared grid carries a beat *number*.**
+
+```sh
+cargo run -p karakuri-cli -- --tempo-source ~/path/to/karakuri-link
+```
+
+That command is a separate program — an Ableton Link peer is the first one, so Rekordbox,
+Ableton or anything else on the session puts this on the room's bar. It is separate on
+purpose: Link is GPL and this is MIT, and a helper that crashes takes its own process with
+it rather than the show. See `docs/plugins.md`.
+
+The first anchor **aligns** the grid, however far it has to move, and prints what it did.
+Every anchor after that **trims** by at most a twentieth of a beat, and it takes three in a
+row disagreeing by more than a whole beat before the grid is moved outright — because the
+source is another program from another repository, and a wrong reading should be a wobble
+rather than a jump. While a source is attached the beat tracker keeps measuring `energy`,
+`onset` and the bands, and stops moving the grid; otherwise the two would fight over the
+phase sixty times a second.
+
+The status line grows a group: `ableton-link 2p` is the source's name and how many other
+peers it can see. `0p` means it is running and alone — check the network before you check
+this program. ` ?` means it has not said yet, ` stop` that the session is stopped, ` GONE`
+that the helper died (the grid holds where it was), and `x3` that it sent three anchors
+whose numbers could not be used.
 
 ### Nothing follows a control that is not the keyboard
 
