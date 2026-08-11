@@ -974,9 +974,9 @@ known. The total-cost decision lives there, not in the artifact.
   what would let the collision through harmlessly; until then a rejection the generator can
   act on beats a value nobody chose.
 - Unknown `t` values are ignored, for forward compatibility.
-- **`gain`, `opacity`, `blend`, `preview`, `residency`, `look` and `transport` are not in
-  this list and must never be.** They are the session's state rather than any Set's — see
-  the session stream format.
+- **`gain`, `opacity`, `blend`, `transition`, `preview`, `residency`, `look` and
+  `transport` are not in this list and must never be.** They are the session's rather than
+  any Set's — see the session stream format.
 
 **Implemented, and the engine obeys it.** `karakuri-cli`'s `--save-set` writes one of
 these and puts both `.kir` sources in the store as content-addressed artifacts;
@@ -1217,17 +1217,18 @@ session tempo, which **v0.2 had no record for**.
 Neither is state, so neither appears in a Set file: both are what a frame *saw* or
 *decided*, and the tempo belongs to the session rather than to any one Set.
 
-### The mix in the stream — `gain`, `opacity`, `blend`, `preview`, `residency`, `look` and `transport`
+### The mix in the stream — `gain`, `opacity`, `blend`, `transition`, `preview`, `residency`, `look` and `transport`
 
 A session that carried the material and not the performance would replay the same Sets, on
 the same beat, all at whatever gain they happened to start at, with nothing ever going on
-or off air. Seven records carry what an operator moves:
+or off air. Eight records carry what an operator moves — seven states and one event:
 
 ```ndjson
 {"t":"gain","slot":0,"value":0.75}
 {"t":"opacity","slot":0,"value":0.5}
 {"t":"blend","slot":1,"mode":"over"}
 {"t":"preview","slot":2}
+{"t":"transition","slot":0,"control":"opacity","to":0.0,"start":64.0,"beats":8.0,"curve":"smooth"}
 {"t":"residency","slot":1,"level":"priming"}
 {"t":"look","op":"aces","exposure":1.2,"white_point":4.0}
 ```
@@ -1264,6 +1265,27 @@ colour that reaches L5 is premultiplied and emissive material still sums past wh
 coverage would allow. Sparse material barely covers, so `over` on a thin point cloud reads
 close to `add` — which is correct rather than a defect, since a handful of sprites does not
 occlude anything.
+
+**`transition` is a mix control moving over musical time** — a fade, a cut, or half of a
+crossfade. One record for the whole move, and **the values it produces are not recorded**: a
+value per frame would be 216,000 lines an hour describing something the grid already
+determines, which is the argument `tick` makes from the other end.
+
+`start` is an absolute position on the session's beat count rather than "in two bars",
+because a relative instant is a different instant depending on when it is read. Quantising
+to the next bar happens where the operator asked, once. `beats` of 0 is a cut. **`from` is
+deliberately absent**: it is read where the move is *scheduled*, and a reader replaying the
+stream reads it the same way. Capturing it at the start instead would mean capturing it on
+the first frame at or after a musical instant, and a machine running at a different rate
+would capture it at a different beat — which is the one property this record exists to
+have. Nothing can move the control in between: a hand cancels the move and another move
+replaces it.
+
+`control` is `gain` or `opacity`, and `curve` is a `bind`'s vocabulary — `lin`, `pow2`,
+`sqrt`, `smooth` — because a fade's shape and a signal's shape are the same question. There
+is no `crossfade` record and there should not be: a crossfade is two of these sharing a
+start and a length, a fade-in is one, and a cut is one with a duration of zero. The
+first-class thing is the move.
 
 **`preview` is which slot the output is showing**, or `null` for the mix. It is not a mix
 control — it changes nothing about how the Sets are combined — and it is in the stream for
@@ -1315,7 +1337,8 @@ one value in this format that is meant to go backwards. Both are carried under e
 including `free` where neither does anything, so that a slot moved back onto the grid
 returns to where the operator left it rather than to a default.
 
-**These seven are state, and a Set file still must not contain them.** That is a second
+**These eight stay out of a Set file**, seven because they are state that is the
+session's rather than any Set's and `transition` because it is not state at all. That is a second
 reason for a record to be absent from a Set file and it is not the `audio` one: there is
 something to fold here, and this is not the projection it folds into. A Set file that
 restored a gain would apply it to whatever slot it was next loaded into, and one whose

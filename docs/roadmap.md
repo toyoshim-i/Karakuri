@@ -164,8 +164,8 @@ L5 blend modes. Each bullet below says
 what it cost against what it promised — the ones marked **Done** are worth reading for
 where the promise was wrong, not only for the fact that it is kept.
 
-**Still open**, and the shape of the rest of this milestone: transitions, masks, output
-routing, and Ableton Link. The panic key is **decided against** rather than pending —
+**Still open**, and the shape of the rest of this milestone: masks, output routing, and
+Ableton Link. The panic key is **decided against** rather than pending —
 see its bullet.
 
 The one debt this milestone was carrying — **`Deck::set_opacity` unreachable**, no key and
@@ -405,7 +405,42 @@ fine alone and is unreadable next to lights.
   *the same state*, not an approximation. So a rewind is priced rather than impossible, and
   the governor's per-Set measurement is what prices it. That is a second payoff of the
   determinism invariant, alongside undo, replay, A/B and session recording
-- Transitions as first-class objects, not just crossfade
+- ~~Transitions as first-class objects, not just crossfade.~~ **Done, and the object it
+  wanted turned out to be smaller than a crossfade rather than larger**: one control, one
+  destination, one musical duration, one curve. A crossfade is two of them issued together,
+  a fade-in is one, and a cut on the bar is one with a duration of zero — so what is
+  first-class is the *scheduled move*, and every gesture anyone names is made of those. A
+  `Crossfade` type would have been one gesture with the other three left out.
+
+  **It is the first thing in the engine that *schedules* on the middle clock.** The
+  three-clock table has said since M1 that beat and bar are for "variant switching,
+  parameter morphs, transitions"; `Sync::Beat` already follows the grid continuously, and
+  this is the first thing to arrange to happen at a named instant on it. A transition is a
+  function of the
+  beat count and of nothing else — not wall time, not frames — so the same records produce
+  the same fade on a machine running at a different rate, and a tempo correction mid-fade is
+  *correct* rather than a glitch. Eight beats is eight beats.
+
+  Where a fade starts *from* is read when it is **scheduled**, not when it begins, and the
+  reason is the paragraph above: the start is a musical instant, so "the value at the start"
+  would be captured on the first *frame* at or after it and a machine at a different rate
+  would capture it at a different beat. Nothing can move a control in between anyway — a
+  hand cancels, another transition replaces. What a scheduled move does *not* do is touch
+  its control before it starts, which would freeze a fader for up to a bar between the press
+  and the music.
+
+  Two rules it needed, both of which state something larger than themselves. **The values a
+  fade produces are not recorded** — one record schedules it and the grid determines the
+  rest, which is `tick`'s shape seen from the other end and is what the three-clock model
+  means by the runtime selecting rather than computing. And **the operator wins**: a hand on
+  a control cancels whatever was moving it, because the one place an operator reaches when
+  something is wrong must not be the one place an automatic thing is writing. That is M6's
+  rule for agents — manual intervention demoting a layer to `Suggest` — arriving early
+  because the first automatic writer arrived early.
+
+  What is not built: a transition that is not a fade. A wipe wants a mask and a stutter
+  wants a clock the transport does not offer, so both are the next bullet's and the
+  transport's rather than this one's
 - `VideoSource` interface with `color` required and AOVs optional
 - ~~Audio input. Spectrum, energy, onset detection, tempo estimation~~ **Done**, plus beat
   tracking with latency compensation. Analysis runs in the driver's callback rather than on

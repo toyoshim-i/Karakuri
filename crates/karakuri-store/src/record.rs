@@ -153,8 +153,8 @@ pub enum Record {
     // contain them — a Set does not know what fader it is under or whether it
     // is on air, and one that carried its gain would restore that gain
     // wherever it was next loaded. They are state all the same, which is what
-    // separates them from the three below: `is_set_state` says no to all ten
-    // and means two different things by it.
+    // separates them from the three below: `is_set_state` says no to all
+    // eleven and means two different things by it.
     /// A deck slot's linear gain into the mix.
     ///
     /// The slot is an index into the deck rather than anything about the Set
@@ -222,6 +222,43 @@ pub enum Record {
         op: String,
         exposure: f32,
         white_point: f32,
+    },
+    /// **A mix control moving over musical time**: a fade, a cut, or half of a
+    /// crossfade.
+    ///
+    /// One record for the whole move, and **the values it produces are not
+    /// recorded at all**. A value per frame would be 216,000 lines an hour
+    /// describing something the grid already determines — the same argument
+    /// `tick` makes, where the engine advances by a step count and everything
+    /// downstream is a function of it.
+    ///
+    /// `start` is an absolute position on the session's beat count rather than
+    /// "in two bars", because a relative instant is a different instant
+    /// depending on when it is read and a beat count is the same one on every
+    /// run. Quantising to the next bar happens where the operator asked, once.
+    ///
+    /// **`from` is deliberately absent**, and is read where the move is
+    /// *scheduled* rather than where it starts. Capturing it at the start would
+    /// mean capturing it on the first frame at or after a musical instant, and
+    /// a machine running at a different rate would capture it at a different
+    /// beat — which is the one property this record exists to have. Nothing can
+    /// move the control in between: a hand cancels the move, another move
+    /// replaces it.
+    ///
+    /// `control` and `curve` are strings on the same terms as `curve` on a
+    /// `bind`: what a name is allowed to be is the engine's to say.
+    Transition {
+        slot: u8,
+        /// `gain` or `opacity`.
+        control: String,
+        /// Where the control ends up.
+        to: f32,
+        /// The musical instant it begins, in beats.
+        start: f64,
+        /// How long it lasts, in beats. Zero is a cut.
+        beats: f64,
+        /// `lin`, `pow2`, `sqrt` or `smooth`.
+        curve: String,
     },
     /// **Which slot is being auditioned**, or none of them for the mix.
     ///
@@ -351,7 +388,7 @@ pub enum Record {
 pub const MAX_STEPS: u8 = 4;
 
 impl Record {
-    /// Whether this record belongs in a Set file. **Ten say no, for two
+    /// Whether this record belongs in a Set file. **Eleven say no, for two
     /// different reasons, and keeping them apart is the point of the name** —
     /// it is `is_set_state` rather than `is_state` because two thirds of what
     /// it refuses is state.
@@ -361,14 +398,18 @@ impl Record {
     ///   carries no time, and one holding an audio frame would be claiming a
     ///   particular moment's microphone reading is part of what a Set is.
     /// - [`Record::Gain`], [`Record::Opacity`], [`Record::Blend`],
-    ///   [`Record::Residency`], [`Record::Look`], [`Record::Transport`] and
-    ///   [`Record::Preview`] are durable state, but the **session's** rather
-    ///   than any Set's. A Set does
+    ///   [`Record::Residency`], [`Record::Look`], [`Record::Transport`],
+    ///   [`Record::Preview`] and [`Record::Transition`] are the **session's**
+    ///   rather than any Set's. The last is the one that is not durable state
+    ///   at all but an *event* — a move scheduled at an instant — and it is
+    ///   here rather than beside `tick` because what it moves is the deck.
+    ///   Folding a session down to a Set file drops it for both reasons at
+    ///   once. A Set does
     ///   not know what fader it is under; one that carried its gain would
     ///   restore that gain wherever it was next loaded, which is a Set file
     ///   reaching outside the Set.
     ///
-    /// A session stream carries all ten. That is the difference between the
+    /// A session stream carries all eleven. That is the difference between the
     /// two files, stated from this side.
     pub fn is_set_state(&self) -> bool {
         !matches!(
@@ -383,6 +424,7 @@ impl Record {
                 | Record::Look { .. }
                 | Record::Transport { .. }
                 | Record::Preview { .. }
+                | Record::Transition { .. }
         )
     }
 }
@@ -390,6 +432,29 @@ impl Record {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **The wire line the spec documents, parsed and written back.** Every
+    /// other record has one of these; without it a rename or a reordered field
+    /// breaks every recorded session and nothing says so.
+    #[test]
+    fn a_transition_round_trips_through_the_line_the_spec_prints() {
+        let line = r#"{"t":"transition","slot":0,"control":"opacity","to":0.0,"start":64.0,"beats":8.0,"curve":"smooth"}"#;
+        let rec = round_trip(line);
+        assert_eq!(
+            rec,
+            Record::Transition {
+                slot: 0,
+                control: "opacity".to_string(),
+                to: 0.0,
+                start: 64.0,
+                beats: 8.0,
+                curve: "smooth".to_string(),
+            }
+        );
+        // And it is the session's rather than a Set's, for both reasons at
+        // once: it is the deck's, and it is an event rather than state.
+        assert!(!rec.is_set_state());
+    }
 
     fn round_trip(line: &str) -> Record {
         let rec: Record = serde_json::from_str(line).expect("parse");

@@ -40,7 +40,9 @@
 //! replay the same; under `over` one dims a layer and the other stops it
 //! hiding what is beneath.
 
+use karakuri_engine::binding::Curve;
 use karakuri_engine::deck::{Blend, Residency};
+use karakuri_engine::transition::Control;
 use karakuri_engine::transport::{Sync, Transport};
 use karakuri_store::record::Record;
 
@@ -63,6 +65,17 @@ pub enum Change {
     /// control; see [`Record::Preview`] for why it is in the stream anyway and
     /// for when it will stop being.
     Preview { slot: Option<usize> },
+    /// A scheduled move. Carried as its parts rather than as a
+    /// `karakuri_engine::Transition`, because building one needs the value the
+    /// control is at *now* and that is the applier's to read, not the decoder's.
+    Transition {
+        slot: usize,
+        control: Control,
+        to: f32,
+        start: f64,
+        beats: f64,
+        curve: Curve,
+    },
     Residency { slot: usize, level: Residency },
     Look(Look),
     /// What a slot's clock does with the session's. Carried as a value rather
@@ -97,6 +110,25 @@ pub fn blend_record(slot: usize, mode: Blend) -> Record {
     Record::Blend {
         slot: slot as u8,
         mode: mode.name().to_string(),
+    }
+}
+
+/// A scheduled move, as the record that carries it.
+pub fn transition_record(
+    slot: usize,
+    control: Control,
+    to: f32,
+    start: f64,
+    beats: f64,
+    curve: Curve,
+) -> Record {
+    Record::Transition {
+        slot: slot as u8,
+        control: control.name().to_string(),
+        to,
+        start,
+        beats,
+        curve: curve.name().to_string(),
     }
 }
 
@@ -230,6 +262,61 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
             })?;
             Ok(Some(Change::Blend { slot, mode }))
         }
+        Record::Transition {
+            slot,
+            control,
+            to,
+            start,
+            beats,
+            curve,
+        } => {
+            let slot = in_range(*slot)?;
+            let control = Control::from_name(control).ok_or_else(|| {
+                format!(
+                    "transition control `{control}` — expected {}",
+                    Control::ALL
+                        .iter()
+                        .map(|c| c.name())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })?;
+            let curve = Curve::parse(curve).ok_or_else(|| {
+                format!(
+                    "transition curve `{curve}` — expected {}",
+                    karakuri_engine::binding::CURVES
+                        .iter()
+                        .map(|c| c.name())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })?;
+            // **The numbers, not only the names.** A `start` that is not a
+            // number is a control pinned forever — `finished` is never true
+            // past it — and a negative duration is a move that ends before it
+            // begins. The engine clamps both as a backstop; this is where an
+            // operator can be told, which is the whole reason a decode reports
+            // rather than rejects.
+            if !start.is_finite() {
+                return Err(format!("transition start `{start}` is not a position"));
+            }
+            if !(beats.is_finite() && *beats >= 0.0) {
+                return Err(format!(
+                    "transition length `{beats}` — expected a number of beats, or 0 for a cut"
+                ));
+            }
+            if !to.is_finite() {
+                return Err(format!("transition to `{to}` is not a value"));
+            }
+            Ok(Some(Change::Transition {
+                slot,
+                control,
+                to: *to,
+                start: *start,
+                beats: *beats,
+                curve,
+            }))
+        }
         Record::Preview { slot } => Ok(Some(Change::Preview {
             slot: slot.map(in_range).transpose()?,
         })),
@@ -301,6 +388,17 @@ mod tests {
                 },
             ),
             (
+                transition_record(1, Control::Opacity, 0.0, 64.0, 8.0, Curve::Smooth),
+                Change::Transition {
+                    slot: 1,
+                    control: Control::Opacity,
+                    to: 0.0,
+                    start: 64.0,
+                    beats: 8.0,
+                    curve: Curve::Smooth,
+                },
+            ),
+            (
                 preview_record(Some(2)),
                 Change::Preview { slot: Some(2) },
             ),
@@ -364,6 +462,32 @@ mod tests {
                 Some(Change::Residency { slot: 0, level }),
                 "{level:?} did not survive its own wire name"
             );
+        }
+    }
+
+    /// **Every control and every curve a transition can name round-trips**, so
+    /// one added to the engine and not to the wire vocabulary is a move that
+    /// fails to decode rather than one that moves the wrong thing.
+    #[test]
+    fn every_transition_control_and_curve_has_a_wire_name_that_decodes_back() {
+        for control in Control::ALL {
+            for curve in karakuri_engine::binding::CURVES {
+                let record = transition_record(0, control, 1.0, 0.0, 4.0, curve);
+                assert_eq!(
+                    change(&record, 1).expect("built here"),
+                    Some(Change::Transition {
+                        slot: 0,
+                        control,
+                        to: 1.0,
+                        start: 0.0,
+                        beats: 4.0,
+                        curve,
+                    }),
+                    "{} / {} did not survive its own wire name",
+                    control.name(),
+                    curve.name()
+                );
+            }
         }
     }
 
@@ -450,6 +574,48 @@ mod tests {
         let message = change(&unknown_op, 4).expect_err("`filmic` is not an operator here");
         assert!(message.contains("filmic"), "{message}");
         assert!(message.contains("aces"), "{message}");
+
+        for (start, beats, to, wanted) in [
+            (f64::NAN, 4.0, 1.0, "not a position"),
+            (0.0, -4.0, 1.0, "expected a number of beats"),
+            (0.0, f64::NAN, 1.0, "expected a number of beats"),
+            (0.0, 4.0, f32::NAN, "not a value"),
+        ] {
+            let record = Record::Transition {
+                slot: 0,
+                control: "gain".to_string(),
+                to,
+                start,
+                beats,
+                curve: "lin".to_string(),
+            };
+            let message = change(&record, 4).expect_err("a number no move can use");
+            assert!(message.contains(wanted), "{start}/{beats}/{to}: {message}");
+        }
+
+        let unknown_control = Record::Transition {
+            slot: 0,
+            control: "residency".to_string(),
+            to: 1.0,
+            start: 0.0,
+            beats: 4.0,
+            curve: "lin".to_string(),
+        };
+        let message = change(&unknown_control, 4).expect_err("`residency` is not a control");
+        assert!(message.contains("residency"), "{message}");
+        assert!(message.contains("opacity"), "{message}");
+
+        let unknown_curve = Record::Transition {
+            slot: 0,
+            control: "gain".to_string(),
+            to: 1.0,
+            start: 0.0,
+            beats: 4.0,
+            curve: "bezier".to_string(),
+        };
+        let message = change(&unknown_curve, 4).expect_err("`bezier` is not a curve");
+        assert!(message.contains("bezier"), "{message}");
+        assert!(message.contains("smooth"), "{message}");
 
         let unknown_mode = Record::Blend {
             slot: 0,
