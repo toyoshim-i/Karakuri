@@ -18,6 +18,8 @@ use std::path::Path;
 
 use karakuri_engine::{Deck, Gpu, Present};
 
+use crate::frame::{Committed, Outcome, Sink, Skip};
+
 use crate::Look;
 
 /// Rows in a texture-to-buffer copy must be a multiple of this.
@@ -92,25 +94,171 @@ fn sequence(
     })
 }
 
+/// A [`Sink`] that writes chosen frames to PNG files.
+///
+/// **Chosen, not every one.** A sequence renders every frame — the simulation
+/// has to advance through the ones nobody keeps — and writes only the ones
+/// `wanted` names. The draw happens regardless, because the draw is a
+/// fullscreen triangle and skipping it was one more thing that happened on one
+/// path and not the other; what is conditional is the readback, which stalls
+/// the pipeline and is the whole cost.
+pub struct PngSink {
+    format: wgpu::TextureFormat,
+    target: wgpu::Texture,
+    view: wgpu::TextureView,
+    readback: wgpu::Buffer,
+    width: u32,
+    height: u32,
+    unpadded_row: u32,
+    padded_row: u32,
+    /// The path for the frame in flight, `None` when this one is not kept.
+    /// Set by the loop before each frame — see [`PngSink::want`].
+    writing: Option<std::path::PathBuf>,
+}
+
+impl PngSink {
+    pub fn new(gpu: &Gpu, width: u32, height: u32) -> PngSink {
+        // **The row a texture-to-buffer copy needs is padded; the row a PNG
+        // needs is not.** This used to assert the two were the same, which made
+        // every width that is not a multiple of 64 a panic — and once the
+        // canvas became a *record*, that stopped being a limitation of
+        // `--render` and became a way to record a session nothing could replay:
+        // `--canvas 800x600` runs perfectly live, and `--canvas` is refused
+        // with `--replay`, so there was no way back. Padding costs one copy per
+        // written frame and removes the constraint instead of reporting it.
+        let unpadded_row = width * 4;
+        let padded_row = unpadded_row.div_ceil(COPY_ALIGN) * COPY_ALIGN;
+
+        // Rgba8UnormSrgb, so the hardware does the linear-to-sRGB encode on
+        // write — the same one a window gets, for the same reason.
+        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("png target"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let view = target.create_view(&Default::default());
+        let readback = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("png readback"),
+            size: u64::from(padded_row * height),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        PngSink {
+            format,
+            target,
+            view,
+            readback,
+            width,
+            height,
+            unpadded_row,
+            padded_row,
+            writing: None,
+        }
+    }
+
+    /// Where the next frame goes, or `None` to render it and keep nothing.
+    ///
+    /// **Told rather than counted.** This sink briefly kept its own frame
+    /// counter and asked `wanted(self.index)` itself, which meant two counters
+    /// for one sequence and nothing asserting they agreed — the loop's `i` and
+    /// the sink's. They did agree, and that is not a reason to keep them: the
+    /// agreement had simply stopped being visible.
+    pub fn want(&mut self, path: Option<std::path::PathBuf>) {
+        self.writing = path;
+    }
+
+    pub fn format(&self) -> wgpu::TextureFormat {
+        self.format
+    }
+}
+
+impl Sink for PngSink {
+    /// Never skips. An offscreen target is made once and is always there,
+    /// which is exactly the property a live surface does not have — and having
+    /// both behind one trait is what lets a test supply a third that skips on
+    /// demand.
+    fn acquire(&mut self, _gpu: &Gpu) -> Result<(), Skip> {
+        Ok(())
+    }
+
+    fn view(&self) -> &wgpu::TextureView {
+        &self.view
+    }
+
+    /// The attachment **is** the canvas here: an offscreen render has no window
+    /// to fit into, so the viewport is the whole of it and no bars exist.
+    fn size(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+
+    fn after_draw(&mut self, encoder: &mut wgpu::CommandEncoder) {
+        if self.writing.is_none() {
+            return;
+        }
+        encoder.copy_texture_to_buffer(
+            self.target.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &self.readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(self.padded_row),
+                    rows_per_image: Some(self.height),
+                },
+            },
+            wgpu::Extent3d {
+                width: self.width,
+                height: self.height,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+
+    fn present(&mut self, gpu: &Gpu) -> Result<(), String> {
+        let Some(path) = self.writing.take() else {
+            return Ok(());
+        };
+        let slice = self.readback.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
+        gpu.device
+            .poll(wgpu::PollType::Wait)
+            .map_err(|e| format!("{e}"))?;
+        let mapped = slice.get_mapped_range();
+        let pixels = unpad_rows(&mapped, self.padded_row, self.unpadded_row);
+        drop(mapped);
+        self.readback.unmap();
+
+        let file = std::fs::File::create(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let mut png = png::Encoder::new(std::io::BufWriter::new(file), self.width, self.height);
+        png.set_color(png::ColorType::Rgba);
+        png.set_depth(png::BitDepth::Eight);
+        png.write_header()
+            .and_then(|mut w| w.write_image_data(&pixels))
+            .map_err(|e| format!("{e}"))
+    }
+}
+
 /// [`sequence`] with the frame's step count, and whatever else has to happen,
 /// decided per frame by the caller.
 ///
 /// The seam a replay needs and the only thing it needs: a live run measures
-/// `steps` from a clock and a replay reads it from a `tick`, and everything
-/// else about rendering a frame is the same. `drive` is handed the frame index
-/// and the deck, applies whatever the stream says belongs before that frame,
-/// and returns what to advance by **and what look to advance under**.
+/// `steps` from a clock and a replay reads it from a `tick`. `drive` is handed
+/// the frame index and the deck, applies whatever the stream says belongs
+/// before that frame, and returns what to advance by and under what look.
 ///
-/// **The look comes back through `drive` rather than as a parameter beside it,
-/// and that is the fix for a real bug rather than a tidier signature.** There
-/// used to be both: a `look` argument, applied once before the loop, and a
-/// `&mut Look` the replay's closure wrote into and nothing ever read again. So
-/// `t`, `-`, `=` and `` ` `` moved the exposure live and moved nothing on
-/// replay — a session where the operator changed the tone mapper replayed
-/// entirely under whatever look it started with, while `replay_session` said in
-/// a comment that the look "is read per frame". One source or the divergence
-/// comes back.
-#[allow(clippy::too_many_arguments)]
+/// **The loop itself is [`crate::frame::compose`]**, which is also what the
+/// window runs. This function is now the offscreen half of the seam and nothing
+/// else: a sink, a driver, and the decision to stop after `frames`.
 fn sequence_driven(
     gpu: &Gpu,
     deck: &mut Deck,
@@ -120,106 +268,24 @@ fn sequence_driven(
     wanted: impl Fn(u32) -> Option<std::path::PathBuf>,
     mut drive: impl FnMut(u32, &mut Deck) -> (u8, Look),
 ) -> Result<(), String> {
-    // **The row a texture-to-buffer copy needs is padded; the row a PNG needs is
-    // not.** This used to assert the two were the same, which made every width
-    // that is not a multiple of 64 a panic — and once the canvas became a
-    // *record*, that stopped being a limitation of `--render` and became a way
-    // to record a session nothing could replay: `--canvas 800x600` runs
-    // perfectly live, and `--canvas` is refused with `--replay`, so there was
-    // no way back. Padding here costs one copy per written frame and removes
-    // the constraint instead of reporting it.
-    let unpadded_row = width * 4;
-    let padded_row = unpadded_row.div_ceil(COPY_ALIGN) * COPY_ALIGN;
-
-    // Rgba8UnormSrgb, so the hardware does the linear-to-sRGB encode on write.
-    let format = wgpu::TextureFormat::Rgba8UnormSrgb;
-    let present = Present::new(&gpu.device, format, width, height);
-
-    let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("png target"),
-        size: wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-        view_formats: &[],
-    });
-    let view = target.create_view(&Default::default());
-
-    let readback = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("png readback"),
-        size: u64::from(padded_row * height),
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
+    let mut sink = PngSink::new(gpu, width, height);
+    let present = Present::new(&gpu.device, sink.format(), width, height);
 
     // Simulation is advanced by whole steps, so frame N here is the same image
     // the window shows at frame N — no clock is involved anywhere, which is
     // what makes an offline preview and a live run agree.
     for i in 0..frames {
-        // One `begin_frame` per encoder, and the guard is what says so: the
-        // readback copy is recorded through `Frame::encoder` into the frame it
-        // belongs to rather than into an encoder of this function's own.
-        // Before the frame opens: `drive` may move a fader or a residency, and
-        // a `Frame` holds the only `&mut Deck` there is while it is alive.
-        let (steps, look) = drive(i, deck);
-        // Per frame, unconditionally. It is one `queue.write_buffer` into
-        // storage sized at construction — the same claim `Present`'s module doc
-        // makes about switching operators mid-set being free — so there is
-        // nothing to gain by tracking whether it changed and a whole class of
-        // staleness to lose.
-        present.set_tonemap(&gpu.queue, look.op, look.exposure, look.white_point);
-        let mut frame = deck.begin_frame(&gpu.device, &gpu.queue);
-        frame.render(present.hdr_view(), present.size(), steps);
-
-        let Some(path) = wanted(i) else {
-            frame.finish();
-            continue;
-        };
-
-        // The attachment is the canvas here: an offscreen render has no window
-        // to fit into, so the viewport is the whole of it and no bars exist.
-        present.draw(frame.encoder(), &view, (width, height));
-        frame.encoder().copy_texture_to_buffer(
-            target.as_image_copy(),
-            wgpu::TexelCopyBufferInfo {
-                buffer: &readback,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(padded_row),
-                    rows_per_image: Some(height),
-                },
-            },
-            wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-        );
-        frame.finish();
-
-        let slice = readback.slice(..);
-        slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
-        gpu.device
-            .poll(wgpu::PollType::Wait)
-            .map_err(|e| format!("{e}"))?;
-        let mapped = slice.get_mapped_range();
-        let pixels = unpad_rows(&mapped, padded_row, unpadded_row);
-        drop(mapped);
-        readback.unmap();
-
-        let file = std::fs::File::create(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let mut png = png::Encoder::new(std::io::BufWriter::new(file), width, height);
-        png.set_color(png::ColorType::Rgba);
-        png.set_depth(png::BitDepth::Eight);
-        png.write_header()
-            .and_then(|mut w| w.write_image_data(&pixels))
-            .map_err(|e| format!("{e}"))?;
+        sink.want(wanted(i));
+        let outcome = crate::frame::compose(gpu, deck, &present, &mut sink, |deck| {
+            let (steps, look) = drive(i, deck);
+            Committed { steps, look }
+        })?;
+        // A `PngSink` never skips, so this cannot happen — and saying so out
+        // loud is cheaper than a reader wondering what an offscreen run does
+        // about a missing target.
+        if let Outcome::Skipped(skip) = outcome {
+            return Err(format!("the offscreen sink skipped a frame: {skip:?}"));
+        }
     }
     Ok(())
 }

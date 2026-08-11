@@ -165,7 +165,10 @@ against what it promised — the ones marked **Done** are worth reading for wher
 was wrong, not only for the fact that it is kept.
 
 **Still open**, and it is one thing rather than two: **the plugin seam**, with output
-routing and Ableton Link hanging off it. Both bring a non-Rust toolchain into a workspace
+routing and Ableton Link hanging off it. Its in-repo half — one frame loop, and a `Sink`
+trait with the window and the PNG writer behind it — is built; what is not is the interface
+a plugin crosses, deliberately, because an interface designed before its first
+implementation is a guess. Both bring a non-Rust toolchain into a workspace
 that is otherwise cleanly closed — Syphon wants Objective-C, Link wants cmake and a C++
 compiler — and both are outside the deterministic path, which is what makes them safe to
 put behind an interface rather than into the build. See `docs/plugins.md`. The panic key is

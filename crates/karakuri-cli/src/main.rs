@@ -19,6 +19,7 @@
 
 mod audio;
 mod compile;
+mod frame;
 mod midi;
 mod mix;
 mod render;
@@ -850,8 +851,6 @@ fn parse_bind(value: &str) -> Result<Binding, String> {
     setfile::binding_from_record(&record).map_err(|e| bad(&e))
 }
 
-
-
 /// The `noise.kind` names, in the order the spec lists them. One list, so the
 /// check and the message cannot drift apart.
 const NOISE_KINDS: [&str; 4] = ["white", "value", "perlin", "fbm"];
@@ -1403,7 +1402,22 @@ fn apply_replayed(
             beats,
             curve,
         })) => deck.schedule(schedule_from(deck, slot, control, to, start, beats, curve)),
-        Ok(Some(mix::Change::Residency { slot, level })) => deck.set_residency(slot, level),
+        // **Governed, exactly as the live path governs.** `set_residency`
+        // writes the request *and* grants it, and only a governor pass
+        // re-derives what the deck is actually doing against the budget of the
+        // machine it is on. A replay used to skip the pass entirely, so every
+        // request was granted — which is precisely what `Record::Residency`'s
+        // documentation says must not happen, since it records the request and
+        // never the effective level for the reason that a session recorded on a
+        // fast machine and replayed on a slow one has to re-derive it.
+        //
+        // Latent until a session can carry a deck: a replay builds one slot, and
+        // one slot does not exhaust a budget. Closed anyway, because the reason
+        // it was invisible is that the two paths were different code.
+        Ok(Some(mix::Change::Residency { slot, level })) => {
+            deck.set_residency(slot, level);
+            report_governing(&deck.govern(), "residency");
+        }
         Ok(Some(mix::Change::Look(l))) => *look = l,
         Ok(Some(mix::Change::Transport {
             slot,
@@ -1866,11 +1880,154 @@ struct App {
     live: Option<Live>,
 }
 
+/// This frame's measurement, and what it does to the session.
+///
+/// **Before the frame is rendered and never inside it.** The measured frame and
+/// the tempo correction are latched here, exactly where `steps` is measured, so
+/// that everything drawn this frame reads one set of values — two bindings
+/// sampling `energy` in one frame have to get one answer, or the record saying
+/// what this frame saw is a record of neither.
+///
+/// The session's signals are taken by value, given this frame's measurement,
+/// and handed back. `Signals` is `Copy` and the copy carries the phase, so this
+/// is not the "restart the session clock" that `Deck::set_signals` warns about
+/// — it is the same clock with one frame's input attached.
+///
+/// **A free function rather than a method on `Live`**, for the reason [`Clock`]
+/// is its own type: it is called from inside the closure that commits a frame,
+/// which already holds the deck, so a `&mut self` here would borrow the whole
+/// of `Live` a second time. Taking the three pieces it actually touches is also
+/// a fair description of what it touches.
+fn measure_audio(
+    audio: &mut Option<audio::Audio>,
+    deck: &mut Deck,
+    recorder: &mut Option<session::Recorder>,
+    interval: f32,
+    steps: u8,
+) {
+    let Some(audio) = audio.as_mut() else {
+        return;
+    };
+    let mut signals = *deck.signals();
+    let (_audio_record, tempo) = audio.frame(&mut signals, interval, f32::from(steps) * DT);
+    deck.set_signals(signals);
+
+    // **Swapped, not cloned.** The record carries a `Vec` of bands and this is
+    // the frame path; `push_audio` takes this one and leaves an empty shell
+    // behind, so the buffer moves and nothing allocates.
+    if let Some(recorder) = recorder.as_mut() {
+        recorder.push_audio(audio.record_mut());
+    }
+
+    // A correction is worth saying out loud when it is a decision rather than a
+    // trim: acquiring, re-acquiring, and a tap all move the grid at once, and an
+    // operator who cannot see that happen cannot tell a lock from a coincidence.
+    // Scalars only, so pushing it allocates nothing — which is why the tempo
+    // half of the audio path can be recorded on a frame and the measurement half
+    // cannot yet. See the note in `session.rs`.
+    let reason = audio.reason();
+    if let Some(record) = tempo {
+        if let (karakuri_store::record::Record::Tempo { bpm, .. }, Some(reason)) = (&record, reason)
+        {
+            if !matches!(reason, karakuri_audio::Reason::Trim) {
+                eprintln!("beat: {reason:?} at {bpm:.1} bpm");
+            }
+        }
+        if let Some(recorder) = recorder.as_mut() {
+            recorder.push(record);
+        }
+    }
+}
+
+/// What a governor pass decided, said out loud.
+///
+/// **One function because there is one thing to say.** A replay governs too —
+/// `Record::Residency` carries the request and never the effective level,
+/// precisely so that the machine replaying re-derives it — and the first
+/// version of that had its own smaller copy of these three loops, printing the
+/// parked slots and not the summary. That is the shape this whole change exists
+/// to remove: a second implementation that agrees until it does not.
+fn report_governing(report: &karakuri_engine::governor::Report, why: &str) {
+    eprintln!("{why}: {report}");
+    for decision in report.parked() {
+        eprintln!(
+            "  slot {} parked, request held: {:?}",
+            decision.slot, decision.reason
+        );
+    }
+    for decision in &report.decisions {
+        if decision.effective == Residency::Priming && decision.prime_one_in > 1 {
+            eprintln!(
+                "  slot {} priming at one step in {}",
+                decision.slot, decision.prime_one_in
+            );
+        }
+    }
+}
+
+/// The one measurement in the program: elapsed real time as a step count, which
+/// is exactly what a `tick` record carries.
+///
+/// **Its own type so that reading it borrows only itself.** A frame acquires a
+/// target, and only then commits — measuring the clock among other things — and
+/// the committing work is a closure holding the deck and the recorder. A method
+/// on `Live` would have borrowed all of it at once and the closure could not be
+/// written. Splitting the clock out is what makes the ordering expressible.
+///
+/// **`steps` is told what time it is rather than asking.** One line of
+/// plumbing, and it is what makes the thing this type exists to guarantee
+/// checkable: that a frame which does not draw leaves its interval for the next
+/// one instead of consuming it. With `Instant::now()` inside, a test could
+/// state no elapsed time and could therefore assert nothing but tautologies —
+/// which is exactly what the first test written against it did.
+struct Clock {
+    last: Instant,
+    /// Fractional steps carried between frames, so a frame rate that does not
+    /// divide the step rate still advances at the right average rate. The same
+    /// accumulator shape as spawn quantisation, for the same reason.
+    carry: f32,
+    /// The last measured frame interval.
+    interval: f32,
+}
+
+impl Clock {
+    fn new(now: Instant) -> Clock {
+        Clock {
+            last: now,
+            carry: 0.0,
+            interval: DT,
+        }
+    }
+
+    /// How many steps to advance by, and **only called by a frame that is going
+    /// ahead.** `last` moves here and nowhere else, so an abandoned frame
+    /// leaves the interval it did not use to be counted by the next one — which
+    /// is why the acquire has to come first.
+    fn steps(&mut self, now: Instant) -> u8 {
+        let elapsed = now.duration_since(self.last).as_secs_f32();
+        self.last = now;
+        // Kept because the output lag a beat correction leads by starts with
+        // the frame queue, which is a number of *frames* — and the frame rate
+        // is the display's, not `dt`'s. See `audio::Audio::output_lag`.
+        self.interval = elapsed;
+
+        self.carry += elapsed / DT;
+        let whole = self.carry.floor();
+        self.carry -= whole;
+        (whole as u32).min(u32::from(MAX_STEPS)) as u8
+    }
+
+    fn interval(&self) -> f32 {
+        self.interval
+    }
+}
+
 struct Live {
     window: Arc<Window>,
     gpu: Gpu,
-    surface: wgpu::Surface<'static>,
-    config: wgpu::SurfaceConfiguration,
+    /// Where a composed frame goes. The window is **a** sink rather than *the*
+    /// output — see `docs/plugins.md`, where the others hang.
+    sink: frame::WindowSink,
     present: Present,
     /// Every Set, whatever is being built to replace any of them, and the mix.
     /// Without `--watch` every slot is a `HotSwap::fixed` and there is no
@@ -1880,10 +2037,7 @@ struct Live {
     /// The slot the gain keys act on. There is no on-screen UI, so this is
     /// printed on every change and marked in the status line.
     focus: usize,
-    /// Fractional steps carried between frames, so a frame rate that does not
-    /// divide the step rate still advances at the right average rate. The same
-    /// accumulator shape as spawn quantisation, for the same reason.
-    carry: f32,
+    clock: Clock,
     /// The audio input, the beat lock, and the operator's latency offset.
     /// `None` without `--audio-in`, and then nothing in the frame path below
     /// changes at all — which is the property the whole slice is about.
@@ -1908,17 +2062,8 @@ struct Live {
     /// and travels in the record stream.
     mask_kind: MaskKind,
     mask_angle: f32,
-    /// The last measured frame interval, from [`Live::steps`].
-    last_interval: f32,
-    /// Whether a surface error that is not recoverable by reconfiguring has
-    /// already been named. Once, not once a frame: the condition persists, so
-    /// reporting it every frame would bury the line that says what happened
-    /// under sixty copies a second of itself.
-    surface_fault: bool,
     /// When the session started, so a tap has an origin to be measured from.
-    /// The clock stays out here with the other one, for the same reason.
     started: Instant,
-    last: Instant,
     status_at: Instant,
     frames_since_status: u32,
     /// Writes the timeline, when `--record-session` asked for one. The frame
@@ -2119,13 +2264,12 @@ impl ApplicationHandler for App {
         let live = Live {
             window,
             gpu,
-            surface,
-            config,
+            sink: frame::WindowSink::new(surface, config),
             present,
             deck,
             look: self.args.look,
             focus: 0,
-            carry: 0.0,
+            clock: Clock::new(Instant::now()),
             audio,
             midi,
             actions: Vec::new(),
@@ -2133,10 +2277,7 @@ impl ApplicationHandler for App {
             fade_beats: FADE_BEATS[0],
             mask_kind: MASK_SHAPES[0].0,
             mask_angle: MASK_SHAPES[0].1,
-            last_interval: DT,
-            surface_fault: false,
             started: Instant::now(),
-            last: Instant::now(),
             status_at: Instant::now(),
             frames_since_status: 0,
             status: String::with_capacity(256),
@@ -2234,12 +2375,7 @@ impl Live {
     /// performance. All that is left here is the swapchain, which has to follow
     /// the window because it *is* the window.
     fn resize(&mut self, width: u32, height: u32) {
-        if width == 0 || height == 0 {
-            return;
-        }
-        self.config.width = width;
-        self.config.height = height;
-        self.surface.configure(&self.gpu.device, &self.config);
+        self.sink.resize(&self.gpu.device, width, height);
     }
 
     /// Resize the window so the canvas lands in it one texel to one texel.
@@ -2499,22 +2635,7 @@ impl Live {
     /// `CommittedUnknown` for a measurement, and `NoPrimingNeeded` for nothing
     /// at all — that Set is closed form and can go straight on air.
     fn govern(&mut self, why: &str) {
-        let report = self.deck.govern();
-        eprintln!("{why}: {report}");
-        for decision in report.parked() {
-            eprintln!(
-                "  slot {} parked, request held: {:?}",
-                decision.slot, decision.reason
-            );
-        }
-        for decision in &report.decisions {
-            if decision.effective == Residency::Priming && decision.prime_one_in > 1 {
-                eprintln!(
-                    "  slot {} priming at one step in {}",
-                    decision.slot, decision.prime_one_in
-                );
-            }
-        }
+        report_governing(&self.deck.govern(), why);
     }
 
     /// **Cycle the focused slot's sync mode**, skipping the modes its material
@@ -3031,10 +3152,12 @@ impl Live {
                 // moment there is room.
                 self.govern("residency");
             }
-            mix::Change::Look(look) => {
-                self.look = look;
-                self.apply_look();
-            }
+            // **Stored and not applied.** `frame::compose` writes the tone map
+            // uniform every frame from the look the committing closure hands
+            // it, so writing it here as well would be a second writer of one
+            // value — the shape this whole module set out to remove, in
+            // miniature. `Live::apply_look` is gone with it.
+            mix::Change::Look(look) => self.look = look,
             mix::Change::Transport {
                 slot,
                 sync,
@@ -3056,122 +3179,70 @@ impl Live {
         }
     }
 
-    /// One `queue.write_buffer`. Not a pipeline rebuild, not a frame-boundary
-    /// swap, and nothing for `HotSwap` to know about — which is what makes
-    /// comparing operators on moving material possible at all.
-    fn apply_look(&self) {
-        self.present.set_tonemap(
-            &self.gpu.queue,
-            self.look.op,
-            self.look.exposure,
-            self.look.white_point,
-        );
-    }
-
-    /// The one measurement in the program: elapsed real time becomes a step
-    /// count, which is exactly what a `tick` record carries.
-    fn steps(&mut self) -> u8 {
-        let now = Instant::now();
-        let elapsed = now.duration_since(self.last).as_secs_f32();
-        self.last = now;
-        // Kept because the output lag a beat correction leads by starts with
-        // the frame queue, which is a number of *frames* — and the frame rate
-        // is the display's, not `dt`'s. See `audio::Audio::output_lag`.
-        self.last_interval = elapsed;
-
-        self.carry += elapsed / DT;
-        let whole = self.carry.floor();
-        self.carry -= whole;
-        (whole as u32).min(u32::from(MAX_STEPS)) as u8
-    }
-
     fn frame(&mut self) {
         self.run_demo();
         self.run_surface();
 
-        // **Acquired before the clock is read, and the order is the whole
-        // point.** A `tick` is a promise that the deck advanced by that many
-        // steps, and everything below this point is what keeps it: if the
-        // frame is abandoned, nothing was recorded to be kept to.
+        // **The ordering that used to be a comment is now the shape of the
+        // call.** A `tick` is a promise that the deck advanced by that many
+        // steps, so nothing about a frame may be measured or recorded until
+        // there is somewhere to draw it; `frame::compose` calls the closure
+        // below only after its sink has a target, so there is no order left to
+        // get wrong. It used to read the clock, write the `tick`, measure the
+        // audio, and *then* find out the swapchain had nothing — and `Outdated`
+        // arrives on every resize, so resizing during a recorded session made
+        // the replay diverge from the performance.
         //
-        // It used to read the clock, write the `tick`, measure the audio, and
-        // *then* find out there was no texture to draw into — so an abandoned
-        // frame told the stream it had simulated steps the deck never took, and
-        // a replay obeyed the record. `Outdated` arrives on every resize and on
-        // a display change, so resizing a window during a recorded session was
-        // enough to make the replay diverge from the performance.
-        //
-        // Not calling `steps` is also what makes the skipped time *survive*:
-        // `Live::last` is only moved by a frame that draws, so the interval
-        // this frame did not use is carried into the next one and simulated
-        // there. Before, it was recorded, never simulated, and lost. Only up to
+        // The clock not being read on an abandoned frame is what makes the
+        // skipped interval *survive*: `Clock::last` moves only in `steps`, so
+        // the time this frame did not use is counted by the next one. Up to
         // `MAX_STEPS`, which is the anti-spiral clamp and applies to any long
-        // gap however it arose — a run of abandoned frames past four steps'
-        // worth still falls behind rather than catching up, on purpose.
-        let surface_frame = match self.surface.get_current_texture() {
-            Ok(frame) => frame,
-            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                self.surface.configure(&self.gpu.device, &self.config);
+        // gap however it arose.
+        let Live {
+            gpu,
+            deck,
+            present,
+            sink,
+            clock,
+            audio,
+            recorder,
+            look,
+            ..
+        } = self;
+        let outcome = frame::compose(gpu, deck, present, sink, |deck| {
+            let steps = clock.steps(Instant::now());
+            // **Everything this frame decided, and only then the `tick` that
+            // closes it.** A tick is a terminator rather than a header:
+            // `session::split` files each record into the frame of the *next*
+            // tick, so a record written after this frame's tick belongs to the
+            // next frame. The audio was on the wrong side of that line, which
+            // showed a replay frame N what frame N−1 heard.
+            measure_audio(audio, deck, recorder, clock.interval(), steps);
+            if let Some(recorder) = recorder {
+                recorder.push(karakuri_store::record::Record::Tick { steps });
+            }
+            frame::Committed { steps, look: *look }
+        });
+
+        match outcome {
+            Ok(frame::Outcome::Drawn) => {}
+            // Ordinary: the swapchain is being remade and the next frame asks
+            // again. Nothing was committed, so there is nothing to undo.
+            Ok(frame::Outcome::Skipped(frame::Skip::Transient)) => return,
+            // Printed unconditionally, because a `Fault` is already at most
+            // one per condition: the sink latches it — see `frame::Skip`. The
+            // latch used to be here, which meant the message was *built* every
+            // frame and thrown away, an allocation on the frame path for as
+            // long as the window stayed broken.
+            Ok(frame::Outcome::Skipped(frame::Skip::Fault(why))) => {
+                eprintln!("surface: {why}");
                 return;
             }
-            // Genuinely transient and self-describing — the next frame asks
-            // again. Naming it would be naming ordinary jitter.
-            Err(wgpu::SurfaceError::Timeout) => return,
-            // These two are not self-correcting the way `Timeout` is — one is
-            // fatal and the other is a generic failure the caller cannot act
-            // on — and returning silently left a frozen window with no reason
-            // for it anywhere. Retried regardless, since a wedged window that
-            // recovers is better than one that gave up; said once, since a
-            // reason repeated sixty times a second is a reason nobody reads.
             Err(e) => {
-                if !self.surface_fault {
-                    self.surface_fault = true;
-                    eprintln!("surface: {e} — the window has stopped drawing");
-                }
+                eprintln!("surface: {e}");
                 return;
             }
-        };
-        let view = surface_frame.texture.create_view(&Default::default());
-
-        let steps = self.steps();
-        // **Everything this frame decided, and only then the `tick` that closes
-        // it.** A `tick` is a terminator rather than a header: `session::split`
-        // files each record into the frame of the *next* tick, so a record
-        // written after this frame's tick belongs to the next frame.
-        //
-        // The audio was on the wrong side of that line. `measure_audio` pushes
-        // an `audio` record and, when the grid moved, a `tempo` — and both went
-        // out after the tick, so a replay showed frame N what frame N−1 heard
-        // while the live run had shown it frame N's own reading. One frame,
-        // every frame, in the two signals every binding is driven by.
-        //
-        // Not something the latency offset can absorb, and it should not be
-        // asked to: that offset is the room's — the frame queue plus the PA and
-        // the projector — it is folded into the `tempo` corrections that get
-        // recorded, and it is therefore the same number live and on replay. A
-        // divergence that exists only on replay cannot be spelled with it
-        // without making the correct offset differ between the two paths.
-        self.measure_audio(steps);
-        // **The one measurement in the program, as the record that carries
-        // it.** `tick` had no writer until this line; everything else the
-        // engine is driven by already went through a record.
-        if let Some(recorder) = &mut self.recorder {
-            recorder.push(karakuri_store::record::Record::Tick { steps });
         }
-
-        // The guard owns the encoder, so everything recorded here is one
-        // generation of Sets: builds are installed inside `begin_frame`, before
-        // the encoder exists, and there is no way to reach a second generation
-        // while this one is open. The present pass goes through
-        // `Frame::encoder`, which is what that accessor is for.
-        {
-            let mut frame = self.deck.begin_frame(&self.gpu.device, &self.gpu.queue);
-            frame.render(self.present.hdr_view(), self.present.size(), steps);
-            self.present
-                .draw(frame.encoder(), &view, (self.config.width, self.config.height));
-            frame.finish();
-        }
-        surface_frame.present();
 
         // A build landing replaces the Set in a slot, and with it the
         // measurement the deck is budgeting against — a swap and a rollback
@@ -3192,59 +3263,6 @@ impl Live {
         self.frames_since_status += 1;
         if self.status_at.elapsed() >= STATUS_INTERVAL {
             self.print_status();
-        }
-    }
-
-    /// This frame's measurement, and what it does to the session.
-    ///
-    /// **Before the frame is rendered and never inside it.** The measured frame
-    /// and the tempo correction are latched here, exactly where `steps` is
-    /// measured, so that everything drawn this frame reads one set of values —
-    /// two bindings sampling `energy` in one frame have to get one answer, or
-    /// the record saying what this frame saw is a record of neither.
-    ///
-    /// The session's signals are taken by value, given this frame's
-    /// measurement, and handed back. `Signals` is `Copy` and the copy carries
-    /// the phase, so this is not the "restart the session clock" that
-    /// `Deck::set_signals` warns about — it is the same clock with one frame's
-    /// input attached.
-    fn measure_audio(&mut self, steps: u8) {
-        let Some(audio) = self.audio.as_mut() else {
-            return;
-        };
-        let mut signals = *self.deck.signals();
-        let (_audio_record, tempo) = audio.frame(
-            &mut signals,
-            self.last_interval,
-            f32::from(steps) * DT,
-        );
-        self.deck.set_signals(signals);
-
-        // **Swapped, not cloned.** The record carries a `Vec` of bands and this
-        // is the frame path; `push_audio` takes this one and leaves an empty
-        // shell behind, so the buffer moves and nothing allocates. This is the
-        // last record that had no writer in a session stream.
-        if let Some(recorder) = &mut self.recorder {
-            recorder.push_audio(audio.record_mut());
-        }
-
-        // A correction is worth saying out loud when it is a decision rather
-        // than a trim: acquiring, re-acquiring, and a tap all move the grid at
-        // once, and an operator who cannot see that happen cannot tell a lock
-        // from a coincidence.
-        // Scalars only, so pushing it allocates nothing — which is why the
-        // tempo half of the audio path can be recorded on a frame and the
-        // measurement half cannot yet. See the note in `session.rs`.
-        let reason = audio.reason();
-        if let Some(record) = tempo {
-            if let (karakuri_store::record::Record::Tempo { bpm, .. }, Some(reason)) =
-                (&record, reason)
-            {
-                if !matches!(reason, karakuri_audio::Reason::Trim) {
-                    eprintln!("beat: {reason:?} at {bpm:.1} bpm");
-                }
-            }
-            self.push_tempo(record);
         }
     }
 

@@ -6,7 +6,8 @@ is otherwise cleanly closed. Syphon needs Objective-C interop; Link needs cmake 
 compiler. Neither cost is paid once: it is paid by everyone who builds the repository,
 including on platforms where the feature does not exist.
 
-This document draws the line they hang off. Nothing here is built yet.
+This document draws the line they hang off. **The sink half of it is built** and the rest
+is not — see "The window never waits" for what exists.
 
 ## Why these two and not other things
 
@@ -66,6 +67,14 @@ The window is the default sink and plugins are additional ones, so the composite
 to *n* sinks rather than being handed to one. A plugin that is slow or wedged gets its frame
 dropped; presenting is never delayed for it. The per-frame call is non-blocking by
 specification, not by convention.
+
+**The in-repo half of this is built.** `karakuri-cli`'s `frame` module has a `Sink` trait —
+acquire a target, draw into it, present — with the window and the PNG writer behind it and
+one frame loop over both. That was worth doing on its own account, because the two loops it
+replaced had drifted apart and every replay defect this project has found came from the
+difference. What it means here is that a plugin is a third sink rather than a change to how
+a frame works, and that the interface a plugin needs already has two implementations to be
+extracted from rather than one to be guessed at.
 
 ## Distribution
 
