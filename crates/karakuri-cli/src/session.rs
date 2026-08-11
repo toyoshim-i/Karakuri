@@ -440,6 +440,56 @@ mod tests {
         assert_eq!(session.frames[1].steps, 2);
     }
 
+    /// **A `tick` is a terminator, not a header**, and that is what decides
+    /// where a frame's own measurements land.
+    ///
+    /// Written in the order `Live::frame` emits them — the edits an operator
+    /// made, then the audio that frame heard, then the tick that closes it —
+    /// every record reaches the frame it was produced during. The audio used to
+    /// go out *after* the tick, which put frame N's reading in front of frame
+    /// N+1: live, frame N rendered with what frame N heard; replayed, with what
+    /// N−1 heard. One frame late, every frame, in the two signals every binding
+    /// is driven by.
+    ///
+    /// **What this test cannot see is the writer.** `Live::frame` needs a
+    /// window, so the order it pushes in is checked by reading it and this
+    /// checks only that `split` honours that order once written. Swap the two
+    /// pushes back and nothing here goes red — said out loud rather than left
+    /// for someone to assume otherwise.
+    #[test]
+    fn a_frames_own_records_land_in_that_frame_and_not_the_next() {
+        let audio = |energy: f32| {
+            Line::new(Record::Audio {
+                energy,
+                onset: 0.0,
+                bands: vec![energy; 4],
+                confidence: 1.0,
+            })
+        };
+        let session = split(vec![
+            set_line(),
+            audio(0.1),
+            Line::new(Record::Tick { steps: 1 }),
+            audio(0.9),
+            Line::new(Record::Tick { steps: 1 }),
+        ]);
+
+        assert_eq!(session.frames.len(), 2);
+        assert!(
+            session.trailing.is_empty(),
+            "a stream that ends on its tick leaves nothing over"
+        );
+        for (i, expected) in [0.1f32, 0.9].into_iter().enumerate() {
+            match session.frames[i].before.as_slice() {
+                [Record::Audio { energy, .. }] => assert_eq!(
+                    *energy, expected,
+                    "frame {i} got the audio of another frame"
+                ),
+                other => panic!("frame {i} carries {other:?}"),
+            }
+        }
+    }
+
     /// The canvas is read out of the stream, not out of the head.
     ///
     /// It is session state, so `split` puts it in the *first frame's* edits

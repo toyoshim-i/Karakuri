@@ -336,8 +336,11 @@ options:
                         is printed rather than dropped in silence
   --record-session ID   write the timeline to sessions/ID.ndjson as it
                         happens: the Set's records, then a `tick` a frame and
-                        every edit between them. Needs --load-set, so the
-                        stream begins with the material it is a timeline of
+                        every edit between them. The material goes at the head
+                        either way — from --load-set when given, and saved
+                        under ID-material when not — so --replay needs nothing
+                        else. Refused with --render, --seq and --replay, which
+                        have no performance to record
   --replay ID           render sessions/ID.ndjson instead of running: the
                         material comes from the stream's head and every frame
                         advances by the `tick` that was recorded, so nothing
@@ -1106,6 +1109,27 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                 .to_string(),
         );
     }
+    // **Not the argument the two above make.** `--record-session` is an output,
+    // so "an offscreen run takes no live input" does not reach it. The reason is
+    // that there is no performance here to record: an offscreen run advances one
+    // step a frame and every edit it makes is a flag, so the stream would be
+    // `--save-set`'s output followed by a constant — a file that looks like a
+    // timeline and is a re-encoding of the command line.
+    //
+    // It was silently dropped instead, which is the failure the recorder's own
+    // construction site has a comment warning against: a run that continued
+    // without the recorder is "a performance nobody can replay and nothing
+    // saying so". That guard fires when the *file* cannot be opened, and did
+    // nothing when the flag never reached it at all — exit 0, no warning, no
+    // session.
+    if args_out.record_session.is_some() && (offscreen || args_out.replay.is_some()) {
+        return Err(
+            "`--record-session` with `--render`, `--seq` or `--replay` — there is no \
+             performance to record: an offscreen run is a function of its arguments, and \
+             the stream would say only what they already say"
+                .to_string(),
+        );
+    }
     if args_out.sets.len() > MAX_SLOTS {
         return Err(format!(
             "{} Sets, and the deck holds {MAX_SLOTS}",
@@ -1298,13 +1322,17 @@ fn replay_session(args: &Args, id: &str) {
         out.display()
     );
 
-    // A `Look` record in the stream moves this, so it is read per frame rather
-    // than fixed before the run — the same reason the deck is.
+    // A `look` record in the stream moves this, so it is **returned** from the
+    // driver each frame rather than handed to the renderer once before the run.
+    // It used to be both, and the parameter is the one that won: a session where
+    // the operator changed the tone mapper or the exposure replayed under
+    // whatever it started with, however many `look` records the stream carried.
+    // The `--look` and `--exposure` flags are only the value it starts at, on
+    // the same terms as a live run.
     let mut look = args.look;
     let result = render::replay(
         &gpu,
         &mut deck,
-        look,
         w,
         h,
         frames,
@@ -1322,7 +1350,7 @@ fn replay_session(args: &Args, id: &str) {
             for record in &frame.before {
                 apply_replayed(deck, &mut look, record);
             }
-            frame.steps
+            (frame.steps, look)
         },
     );
     if let Err(e) = result {
@@ -3106,13 +3134,30 @@ impl Live {
         let view = surface_frame.texture.create_view(&Default::default());
 
         let steps = self.steps();
+        // **Everything this frame decided, and only then the `tick` that closes
+        // it.** A `tick` is a terminator rather than a header: `session::split`
+        // files each record into the frame of the *next* tick, so a record
+        // written after this frame's tick belongs to the next frame.
+        //
+        // The audio was on the wrong side of that line. `measure_audio` pushes
+        // an `audio` record and, when the grid moved, a `tempo` — and both went
+        // out after the tick, so a replay showed frame N what frame N−1 heard
+        // while the live run had shown it frame N's own reading. One frame,
+        // every frame, in the two signals every binding is driven by.
+        //
+        // Not something the latency offset can absorb, and it should not be
+        // asked to: that offset is the room's — the frame queue plus the PA and
+        // the projector — it is folded into the `tempo` corrections that get
+        // recorded, and it is therefore the same number live and on replay. A
+        // divergence that exists only on replay cannot be spelled with it
+        // without making the correct offset differ between the two paths.
+        self.measure_audio(steps);
         // **The one measurement in the program, as the record that carries
         // it.** `tick` had no writer until this line; everything else the
         // engine is driven by already went through a record.
         if let Some(recorder) = &mut self.recorder {
             recorder.push(karakuri_store::record::Record::Tick { steps });
         }
-        self.measure_audio(steps);
 
         // The guard owns the encoder, so everything recorded here is one
         // generation of Sets: builds are installed inside `begin_frame`, before
@@ -4122,6 +4167,30 @@ mod value_tests {
         assert!(parse(&["--size", "800x600"]).is_none());
         assert!(parse(&["--size", "800x600", "--canvas", "1920x1080"]).is_none());
         assert!(parse(&["--render", "out.png", "--canvas", "1920x1080"]).is_none());
+    }
+
+    /// A recorder that never gets built is refused rather than dropped.
+    ///
+    /// It used to exit 0 having written the PNG and no session at all — no
+    /// warning, no file — because the recorder is only constructed on the path
+    /// that opens a window. **The worst shape of failure this program has**: not
+    /// a wrong output but a missing one, reported as success, from a flag whose
+    /// whole purpose is to leave something behind.
+    #[test]
+    fn recording_is_refused_where_there_is_no_performance() {
+        for args in [
+            vec!["--render", "out.png", "--record-session", "s"],
+            vec!["--seq", "frames", "--record-session", "s"],
+            vec!["--replay", "a", "--render", "out.png", "--record-session", "s"],
+        ] {
+            let err = parse(&args).unwrap_or_else(|| panic!("{args:?} was accepted"));
+            assert!(err.contains("--record-session"), "{args:?} -> {err}");
+        }
+        // A live run is where it belongs, and it does **not** need `--load-set`:
+        // the material is saved under `ID-material` and put at the head. The
+        // help text said otherwise long after that stopped being true.
+        assert!(parse(&["--record-session", "s"]).is_none());
+        assert!(parse(&["--record-session", "s", "--load-set", "base"]).is_none());
     }
 
     /// A replay renders at the size the session recorded, and `--canvas` is
