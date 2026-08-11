@@ -71,6 +71,28 @@ const STATUS_INTERVAL: Duration = Duration::from_millis(500);
 /// not a proportion of wherever the slot happens to be.
 const GAIN_STEP: f32 = 0.1;
 
+/// Where a scheduled fade starts, and what to call it. **A bar is four beats**
+/// here, which is an assumption rather than a measurement: nothing in the
+/// signal bus knows a time signature, and four is what the `bar` signal already
+/// means. A set in three would want this to be a dial, and would say so by
+/// having a fade land in the wrong place — which is a better way to find out
+/// than a setting nobody knew to change.
+const QUANTA: [(f64, &str); 3] = [(4.0, "the next bar"), (1.0, "the next beat"), (0.0, "now")];
+
+/// How long a scheduled fade lasts, in beats. A bar, half a bar, two bars, and
+/// a cut — the four an operator reaches for, in the order they are reached for.
+const FADE_BEATS: [f64; 4] = [4.0, 2.0, 8.0, 0.0];
+
+/// The shape every scheduled fade takes.
+///
+/// `smooth` rather than `lin`, and the reason is in `binding.rs`: its
+/// derivative is zero at both ends, so a fade neither jumps off the floor nor
+/// slams into the ceiling. A crossfade of two linear ramps has a visible corner
+/// at each end; two smooth ones do not. Not on a key, because the other three
+/// curves are for *signals* — a fade wants easing and nothing else, and a
+/// fourth cycling key for a choice nobody would revisit is a key in the way.
+const FADE_CURVE: Curve = Curve::Smooth;
+
 /// One press of an opacity key. Additive for the same reason as [`GAIN_STEP`],
 /// and clamped to `[0, 1]` where gain is not: opacity is a proportion of a
 /// blend and there is no such thing as 1.4 of one, while gain is a level into
@@ -156,13 +178,19 @@ const DEMO_SCRIPT: &[(f32, char)] = &[
     // Back to free running, which prints the refusal `tempo` earns on material
     // that reads `beats` on its way past.
     (16.0, 'y'),
+    // Then a fade out and back in, on the defaults — the next bar, four beats
+    // — so what a watcher sees is the gesture as it ships rather than one
+    // tuned to be visible. The gap between the press and the movement is the
+    // quantum doing its job and is the thing worth watching for.
+    (17.5, 'f'),
+    (22.0, 'g'),
 ];
 
 /// How long one pass through [`DEMO_SCRIPT`] lasts before it starts over. Past
 /// the last entry, so the run ends free-running for a few seconds — the state
 /// it began in, which is what makes the next pass legible as a repeat rather
 /// than as something new.
-const DEMO_LOOP_SECONDS: f32 = 20.0;
+const DEMO_LOOP_SECONDS: f32 = 27.0;
 
 /// Where the store lives when nothing says otherwise. A directory in the
 /// working tree rather than under `$HOME`: a session's material belongs beside
@@ -316,6 +344,17 @@ keys:
              the only control that silences a slot under every mode. Pull this
              one, not the gain, to get out of material that has gone bad: an
              `over` layer at zero gain is a black card and still covers
+  f g        fade the focused slot's fader out / in, over the current length,
+             starting on the current grid. Opacity rather than gain: opacity
+             silences under every blend mode, where a gain of zero under
+             `over` is a black card that still covers
+  x          crossfade — the focused slot out and the next one in, together.
+             Two scheduled moves sharing a start and a length rather than one
+             crossfade object, which is what makes a fade-in, a fade-out and a
+             cut the same thing with different numbers. The slot being faded
+             in is put on air first
+  n          cycle where a fade starts: the next bar, the next beat, now
+  j          cycle how long a fade lasts: 4, 2, 8 beats, or 0 for a cut
   v          cycle what the output shows: the mix, then each slot, then the
              mix again. Auditioning — an off-air slot is drawn while it is
              being looked at, so an allocated one shows the still it stopped
@@ -1141,6 +1180,14 @@ fn apply_replayed(
         Ok(Some(mix::Change::Opacity { slot, value })) => deck.set_opacity(slot, value),
         Ok(Some(mix::Change::Blend { slot, mode })) => deck.set_blend(slot, mode),
         Ok(Some(mix::Change::Preview { slot })) => deck.set_preview(slot),
+        Ok(Some(mix::Change::Transition {
+            slot,
+            control,
+            to,
+            start,
+            beats,
+            curve,
+        })) => deck.schedule(schedule_from(deck, slot, control, to, start, beats, curve)),
         Ok(Some(mix::Change::Residency { slot, level })) => deck.set_residency(slot, level),
         Ok(Some(mix::Change::Look(l))) => *look = l,
         Ok(Some(mix::Change::Transport {
@@ -1156,6 +1203,32 @@ fn apply_replayed(
         Ok(None) => {}
         Err(message) => eprintln!("  {message} — skipped"),
     }
+}
+
+/// Build a scheduled move out of a decoded record and the value the control is
+/// at **now**.
+///
+/// The `from` end is read here rather than carried in the record, which is the
+/// whole of why this function exists and is shared by the live path and the
+/// replay path: both have to read it at the same point in the stream or a
+/// replay would fade from somewhere the run did not. `session::split` puts a
+/// key press between two ticks into that frame's `before` list, which is the
+/// position it was applied at live, so they do.
+fn schedule_from(
+    deck: &Deck,
+    slot: usize,
+    control: karakuri_engine::transition::Control,
+    to: f32,
+    start: f64,
+    beats: f64,
+    curve: Curve,
+) -> karakuri_engine::Transition {
+    use karakuri_engine::transition::Control;
+    let from = match control {
+        Control::Gain => deck.gain(slot),
+        Control::Opacity => deck.opacity(slot),
+    };
+    karakuri_engine::Transition::new(slot, control, from, to, start, beats, curve)
 }
 
 /// Open the store, or stop with the reason. Both directions need one and
@@ -1606,6 +1679,13 @@ struct Live {
     /// Scratch for [`midi::Surface::take`], owned so the frame path allocates
     /// nothing. Empty on every frame nothing was touched.
     actions: Vec<karakuri_midi::Action>,
+    /// The musical grid a scheduled fade starts on — see [`QUANTA`]. State on
+    /// the operator rather than in the record: what reaches the stream is the
+    /// resolved beat count, so this is a setting for the hand and not for the
+    /// timeline.
+    quantum: f64,
+    /// How long a scheduled fade lasts, in beats. Same reasoning.
+    fade_beats: f64,
     /// The last measured frame interval, from [`Live::steps`].
     last_interval: f32,
     /// When the session started, so a tap has an origin to be measured from.
@@ -1806,6 +1886,8 @@ impl ApplicationHandler for App {
             audio,
             midi,
             actions: Vec::new(),
+            quantum: QUANTA[0].0,
+            fade_beats: FADE_BEATS[0],
             last_interval: DT,
             started: Instant::now(),
             last: Instant::now(),
@@ -1995,6 +2077,11 @@ impl Live {
                 '\'' => self.nudge_opacity(OPACITY_STEP),
                 'm' => self.cycle_blend(self.focus),
                 'v' => self.cycle_preview(),
+                'f' => self.fade(0.0),
+                'g' => self.fade(1.0),
+                'x' => self.crossfade(),
+                'n' => self.cycle_quantum(),
+                'j' => self.cycle_fade_beats(),
                 't' => self.cycle_tonemap(),
                 '-' => self.set_exposure(self.look.exposure / EXPOSURE_STEP),
                 '=' => self.set_exposure(self.look.exposure * EXPOSURE_STEP),
@@ -2314,6 +2401,116 @@ impl Live {
         );
     }
 
+    /// **Fade the focused slot's fader to `to`**, over the current length,
+    /// starting on the current quantum.
+    ///
+    /// Opacity rather than gain, because opacity is the fader: it silences a
+    /// slot under every blend mode, where a gain of zero under `over` is a
+    /// black card that still covers. A gain fade is reachable through the
+    /// record and deliberately has no key — two keys that look alike and differ
+    /// only under one blend mode is how an operator ends up fading the wrong
+    /// one in the dark.
+    fn fade(&mut self, to: f32) {
+        let slot = self.focus;
+        self.fade_slot(slot, to);
+        eprintln!(
+            "slot {slot} fading to {to:.2} over {} beat{} from {}",
+            self.fade_beats,
+            if self.fade_beats == 1.0 { "" } else { "s" },
+            self.quantum_name()
+        );
+    }
+
+    /// **A crossfade: the focused slot out and the next one in, together.**
+    ///
+    /// Two scheduled moves rather than a `Crossfade` object, which is the whole
+    /// argument of `karakuri_engine::transition` seen from the keyboard — the
+    /// first-class thing is the move, and every gesture anyone names is made of
+    /// those. They share a start and a length, so they are one gesture without
+    /// being one type.
+    ///
+    /// **The incoming slot is put at silence and then on air**, in that order,
+    /// and both halves of that are load-bearing. A slot comes up at full
+    /// opacity and going off air does not lower it, so putting one on air
+    /// without silencing it first shows it at full immediately — up to a bar
+    /// before the fade it is supposed to arrive on, which is a cut with a
+    /// decorative fade attached. And a fade to something that is not being
+    /// composited is a fade to black, so it does have to go on air.
+    ///
+    /// The silencing is a `opacity` record like any other, so it cancels
+    /// nothing the operator wanted and replays like anything else.
+    fn crossfade(&mut self) {
+        let from = self.focus;
+        let to = (from + 1) % self.deck.slot_count();
+        if to == from {
+            eprintln!("crossfade needs somewhere to go — this deck holds one slot");
+            return;
+        }
+        self.record(mix::opacity_record(to, 0.0));
+        if self.deck.residency(to) != Residency::Live {
+            self.record(mix::residency_record(to, Residency::Live));
+        }
+        self.fade_slot(from, 0.0);
+        self.fade_slot(to, 1.0);
+        eprintln!(
+            "crossfade {from} to {to} over {} beat{} from {}",
+            self.fade_beats,
+            if self.fade_beats == 1.0 { "" } else { "s" },
+            self.quantum_name()
+        );
+    }
+
+    /// One scheduled move on a slot's fader, through the record.
+    ///
+    /// The start is resolved **here**, once, against the grid as it stands: the
+    /// record carries an absolute beat count, because "at the next bar" is a
+    /// different instant depending on when it is read and a beat count is the
+    /// same one on every run.
+    fn fade_slot(&mut self, slot: usize, to: f32) {
+        let now = self.deck.signals().oscillator().beats();
+        let start = karakuri_engine::transition::quantise(now, self.quantum);
+        self.record(mix::transition_record(
+            slot,
+            karakuri_engine::transition::Control::Opacity,
+            to,
+            start,
+            self.fade_beats,
+            FADE_CURVE,
+        ));
+    }
+
+    /// Where a scheduled move starts: now, the next beat, or the next bar.
+    fn cycle_quantum(&mut self) {
+        let at = QUANTA
+            .iter()
+            .position(|(q, _)| *q == self.quantum)
+            .unwrap_or(0);
+        self.quantum = QUANTA[(at + 1) % QUANTA.len()].0;
+        eprintln!("fades start {}", self.quantum_name());
+    }
+
+    /// How long a scheduled move lasts.
+    fn cycle_fade_beats(&mut self) {
+        let at = FADE_BEATS
+            .iter()
+            .position(|b| *b == self.fade_beats)
+            .unwrap_or(0);
+        self.fade_beats = FADE_BEATS[(at + 1) % FADE_BEATS.len()];
+        eprintln!(
+            "fades last {} beat{}",
+            self.fade_beats,
+            if self.fade_beats == 1.0 { "" } else { "s" }
+        );
+    }
+
+    fn quantum_name(&self) -> &'static str {
+        QUANTA
+            .iter()
+            .find(|(q, _)| *q == self.quantum)
+            .map(|(_, name)| *name)
+            .unwrap_or("now")
+    }
+
     /// **Cycle what the output is showing**: the mix, then each slot in turn,
     /// then the mix again.
     ///
@@ -2441,6 +2638,17 @@ impl Live {
             mix::Change::Opacity { slot, value } => self.deck.set_opacity(slot, value),
             mix::Change::Blend { slot, mode } => self.deck.set_blend(slot, mode),
             mix::Change::Preview { slot } => self.deck.set_preview(slot),
+            mix::Change::Transition {
+                slot,
+                control,
+                to,
+                start,
+                beats,
+                curve,
+            } => {
+                let t = schedule_from(&self.deck, slot, control, to, start, beats, curve);
+                self.deck.schedule(t);
+            }
             mix::Change::Residency { slot, level } => {
                 self.deck.set_residency(slot, level);
                 // A slot arriving or leaving changes what is committed, and the
@@ -2648,6 +2856,23 @@ impl Live {
                 self.deck.gain(slot),
                 self.deck.slot(slot).set().time()
             );
+            // **What is moving, and where it is going.** An armed fade is
+            // invisible otherwise: with the default quantum it is due up to a
+            // bar after the key, and the only thing that said so was one line
+            // at press time. A control that changes something invisible is
+            // indistinguishable from a control that is broken, which is this
+            // file's own argument for printing on every key.
+            for t in self.deck.transitions_on(slot) {
+                let _ = write!(
+                    self.status,
+                    "{}>{:.2} ",
+                    match t.control() {
+                        karakuri_engine::transition::Control::Gain => "g",
+                        karakuri_engine::transition::Control::Opacity => "o",
+                    },
+                    t.to()
+                );
+            }
             // The fader and the mode, **only when they are doing something**,
             // on the same terms as the transport below: a deck nobody has
             // touched prints the line it always printed. Full opacity under

@@ -340,6 +340,7 @@ use crate::present::Present;
 use crate::probe::Probe;
 use crate::set::{DT, MAX_STEPS};
 use crate::swap::{Event, HotSwap, PROBE_RESOLUTION};
+use crate::transition::{Control, Transition};
 use crate::transport::{Advance, Sync, Transport};
 use crate::video_source::VideoSource;
 
@@ -355,6 +356,32 @@ pub const MAX_SLOTS: usize = 4;
 /// Bytes in the composite's uniform block: four `vec4`s, one per slot-indexed
 /// field — gain, opacity, blend mode, live flag. See `shaders/composite.wgsl`.
 const MIX_UNIFORM_SIZE: u64 = 64;
+
+/// A gain the mix can use: floored at zero, NaN read as zero, and deliberately
+/// open above 1.0.
+///
+/// A function rather than two copies of an expression, because a *scheduled*
+/// move writes the field without going through [`Deck::set_gain`] — see
+/// [`Deck::advance_transitions`] — and a transition able to reach a value a
+/// hand could not would be an automatic thing with more authority than the
+/// operator.
+fn clamp_gain(gain: f32) -> f32 {
+    if gain.is_nan() {
+        0.0
+    } else {
+        gain.max(0.0)
+    }
+}
+
+/// A fader the mix can use: `[0, 1]`, NaN read as silence. Same reasoning as
+/// [`clamp_gain`].
+fn clamp_opacity(opacity: f32) -> f32 {
+    if opacity.is_nan() {
+        0.0
+    } else {
+        opacity.clamp(0.0, 1.0)
+    }
+}
 
 /// **How a slot's layer meets the ones under it**, at L5.
 ///
@@ -560,6 +587,13 @@ pub struct Deck {
     /// **Which slot is being auditioned**, or `None` for the mix. See
     /// [`Deck::set_preview`].
     preview: Option<usize>,
+    /// Scheduled moves, at most one per `(slot, control)` — see
+    /// [`Deck::schedule`]. A `Vec` rather than a map because there are eight
+    /// possible entries on a deck of four and a linear scan of eight is not
+    /// worth a hash; index order is also the order they are applied in, which
+    /// keeps them inside the determinism invariant the same way slot order
+    /// does.
+    transitions: Vec<Transition>,
     width: u32,
     height: u32,
 }
@@ -615,6 +649,11 @@ impl Deck {
             signals: Signals::default(),
             governor: Governor::default(),
             preview: None,
+            // At its bound from the start: at most one per `(slot, control)`,
+            // so this never grows and `schedule` never allocates. That matters
+            // on the replay path, where a scheduled move arrives inside the
+            // per-frame callback rather than from a key press.
+            transitions: Vec::with_capacity(MAX_SLOTS * Control::ALL.len()),
             width,
             height,
         }
@@ -1190,7 +1229,10 @@ impl Deck {
     /// Not the fader. See [`Deck::set_opacity`], and [`Blend`] for why the
     /// difference is only visible under a mode that is not `add`.
     pub fn set_gain(&mut self, slot: usize, gain: f32) {
-        self.slots[slot].gain = if gain.is_nan() { 0.0 } else { gain.max(0.0) };
+        // A hand on the control stops whatever was moving it. See "The operator
+        // wins" in [`crate::transition`].
+        self.cancel(slot, Control::Gain);
+        self.slots[slot].gain = clamp_gain(gain);
     }
 
     pub fn opacity(&self, slot: usize) -> f32 {
@@ -1215,11 +1257,8 @@ impl Deck {
     /// slot goes dark" and "the whole mix goes dark" — only one of them is a
     /// fader.
     pub fn set_opacity(&mut self, slot: usize, opacity: f32) {
-        self.slots[slot].opacity = if opacity.is_nan() {
-            0.0
-        } else {
-            opacity.clamp(0.0, 1.0)
-        };
+        self.cancel(slot, Control::Opacity);
+        self.slots[slot].opacity = clamp_opacity(opacity);
     }
 
     pub fn preview(&self) -> Option<usize> {
@@ -1322,6 +1361,78 @@ impl Deck {
         self.slots[slot].blend
     }
 
+    /// **Schedule a move**, replacing whatever was already moving that control.
+    ///
+    /// One per `(slot, control)`, and the later one wins: two fades on one
+    /// fader is an operator changing their mind, and running both would put the
+    /// control wherever the second one's arithmetic happened to land after the
+    /// first had also written it.
+    ///
+    /// Applied from [`Frame::render`], every frame, against the session
+    /// oscillator's beat count — see [`crate::transition`] for why that is the
+    /// only clock it may read.
+    pub fn schedule(&mut self, transition: Transition) {
+        // Here rather than in the frame, where the index would panic on the
+        // render thread three seconds after the mistake. `set_gain` and
+        // `set_opacity` panic at the call site for the same reason; the record
+        // path never reaches either, because `mix::change` checks the range
+        // where it can say something about it.
+        assert!(
+            transition.slot() < self.slots.len(),
+            "no slot {}: this deck holds slots 0-{}",
+            transition.slot(),
+            self.slots.len() - 1
+        );
+        self.cancel(transition.slot(), transition.control());
+        self.transitions.push(transition);
+    }
+
+    /// Stop moving a control, leaving it where it is.
+    ///
+    /// **Called by hand on every manual write**, which is the rule: an operator
+    /// reaching for a fader is the one place an automatic thing must not be
+    /// writing too. See "The operator wins" in [`crate::transition`].
+    pub fn cancel(&mut self, slot: usize, control: Control) {
+        self.transitions
+            .retain(|t| !(t.slot() == slot && t.control() == control));
+    }
+
+    /// What is moving on this slot, for a status line. Empty on a deck nobody
+    /// has scheduled anything on.
+    pub fn transitions_on(&self, slot: usize) -> impl Iterator<Item = &Transition> {
+        self.transitions.iter().filter(move |t| t.slot() == slot)
+    }
+
+    /// Every scheduled move applied at this musical position, and the finished
+    /// ones dropped.
+    ///
+    /// Writes the slot fields directly rather than going through
+    /// [`Deck::set_gain`] and [`Deck::set_opacity`], and it has to: those cancel
+    /// the transition, which is what makes a hand on the fader win. The clamps
+    /// they carry are applied here instead, so a scheduled move cannot reach a
+    /// value a manual one could not.
+    fn advance_transitions(&mut self, beats: f64) {
+        for i in 0..self.transitions.len() {
+            let t = self.transitions[i];
+            // `None` until it starts, which is "leave the control alone"
+            // rather than "hold it where it was": a fade armed for the next
+            // bar must not take a fader away from the operator for four beats
+            // before it is due. See `crate::transition`.
+            let Some(value) = t.value_at(beats) else {
+                continue;
+            };
+            match t.control() {
+                Control::Gain => {
+                    self.slots[t.slot()].gain = clamp_gain(value);
+                }
+                Control::Opacity => {
+                    self.slots[t.slot()].opacity = clamp_opacity(value);
+                }
+            }
+        }
+        self.transitions.retain(|t| !t.finished(beats));
+    }
+
     /// How this slot's layer meets the ones under it. See [`Blend`].
     pub fn set_blend(&mut self, slot: usize, blend: Blend) {
         self.slots[slot].blend = blend;
@@ -1411,6 +1522,14 @@ impl Frame<'_> {
         // Borrowed out of the deck before the slots are: every Live slot reads
         // the same signals, from the same frame, which is the same reason they
         // are all advanced by the same `steps`.
+        // **After the session clock and before anything reads a fader.** A
+        // transition is a function of the beat count and of nothing else, so it
+        // has to be evaluated at this frame's position rather than the last
+        // one's — and it has to be written before the composite reads the
+        // faders it moves. See `crate::transition`.
+        let beats = self.deck.signals.oscillator().beats();
+        self.deck.advance_transitions(beats);
+
         let signals = &self.deck.signals;
         let preview = self.deck.preview;
         for (i, slot) in self.deck.slots.iter_mut().enumerate() {

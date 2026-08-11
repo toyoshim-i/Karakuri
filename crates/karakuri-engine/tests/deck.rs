@@ -31,7 +31,9 @@
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
+use karakuri_engine::binding::Curve;
 use karakuri_engine::deck::{Blend, Deck, Residency};
+use karakuri_engine::transition::{Control, Transition};
 use karakuri_engine::swap::{Event, HotSwap, Request};
 use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
 use karakuri_ir::typed::Checked;
@@ -534,6 +536,247 @@ fn a_slot_faded_to_silence_cannot_take_the_mix_with_it() {
             nans(&faded)
         );
     }
+}
+
+/// **A scheduled fade moves the fader on the beat grid and nowhere else.**
+///
+/// The claim that makes a transition reproducible: it is a function of the
+/// session's beat count, so two runs given the same ticks fade identically —
+/// and a run at a different frame rate reaching the same beat is at the same
+/// point in the fade. Checked against the arithmetic rather than against a
+/// second run of the deck, which would agree with any implementation.
+#[test]
+fn a_scheduled_fade_is_a_function_of_the_beat_count() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+    let mut deck = deck_of(&gpu, &[SEED_A]);
+    // 120 bpm and dt of 1/60 is exactly two beats a second, so a frame is
+    // 1/30 of a beat and the arithmetic below is exact.
+    deck.set_signals(Signals::new(120.0, 1));
+
+    let start = deck.signals().oscillator().beats();
+    deck.schedule(Transition::new(
+        0,
+        Control::Opacity,
+        1.0,
+        0.0,
+        start,
+        4.0,
+        Curve::Lin,
+    ));
+
+    // 120 frames is four beats: the whole fade.
+    for i in 0..120 {
+        let beats = deck.signals().oscillator().beats();
+        let expected = 1.0 - (beats - start) as f32 / 4.0;
+        assert!(
+            (deck.opacity(0) - expected).abs() < 1e-6,
+            "frame {i} at {beats} beats: the fader is {} rather than {expected}",
+            deck.opacity(0)
+        );
+        frame(&gpu, &mut deck, &present, 1);
+    }
+    // Exactly at silence, and the transition gone rather than still writing.
+    assert_eq!(deck.opacity(0), 0.0);
+    assert_eq!(deck.transitions_on(0).count(), 0, "a finished fade is still scheduled");
+}
+
+/// **A hand on the fader wins.**
+///
+/// The one place an operator reaches when something is wrong is the one place
+/// an automatic thing is writing, so a transition that kept going after a
+/// manual move would be the worst control on the deck. Asserted for both ways
+/// of touching it, since either is what a hand does.
+#[test]
+fn moving_a_control_by_hand_cancels_the_transition_moving_it() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+    let mut deck = deck_of(&gpu, &[SEED_A]);
+    deck.set_signals(Signals::new(120.0, 1));
+
+    let start = deck.signals().oscillator().beats();
+    deck.schedule(Transition::new(0, Control::Opacity, 1.0, 0.0, start, 8.0, Curve::Lin));
+    for _ in 0..30 {
+        frame(&gpu, &mut deck, &present, 1);
+    }
+    let mid = deck.opacity(0);
+    assert!(mid > 0.0 && mid < 1.0, "the fade did not start: {mid}");
+
+    deck.set_opacity(0, 0.75);
+    for _ in 0..60 {
+        frame(&gpu, &mut deck, &present, 1);
+    }
+    assert_eq!(
+        deck.opacity(0),
+        0.75,
+        "the fade kept writing after the fader was moved by hand"
+    );
+    assert_eq!(deck.transitions_on(0).count(), 0);
+
+    // And the other control's transition is untouched by the wrong fader:
+    // cancelling has to be per control, or a gain move would stop an opacity
+    // fade and an operator would never find out why.
+    deck.schedule(Transition::new(0, Control::Gain, 1.0, 0.0, start, 8.0, Curve::Lin));
+    deck.set_opacity(0, 0.5);
+    assert_eq!(deck.transitions_on(0).count(), 1, "the gain fade was cancelled too");
+
+    // **The gain half of the rule, which this test claimed and did not check.**
+    // `[`, `]` and `\` all end in `set_gain`, so a gain fade that kept writing
+    // after one of them would be a control fighting the hand on it.
+    let start = deck.signals().oscillator().beats();
+    deck.schedule(Transition::new(0, Control::Gain, 1.0, 0.0, start, 8.0, Curve::Lin));
+    for _ in 0..30 {
+        frame(&gpu, &mut deck, &present, 1);
+    }
+    let mid = deck.gain(0);
+    assert!(mid > 0.0 && mid < 1.0, "the gain fade did not start: {mid}");
+    deck.set_gain(0, 2.0);
+    for _ in 0..60 {
+        frame(&gpu, &mut deck, &present, 1);
+    }
+    assert_eq!(
+        deck.gain(0),
+        2.0,
+        "the gain fade kept writing after the level was moved by hand"
+    );
+    assert_eq!(deck.transitions_on(0).count(), 0);
+}
+
+/// **A move onto a slot the deck does not have is refused where it is asked
+/// for**, not three seconds later inside a frame.
+///
+/// `advance_transitions` indexes the slots directly, so an unchecked schedule
+/// is a panic on the render thread at some unrelated moment. `set_gain` and
+/// `set_opacity` panic at the call site; this joins them.
+#[test]
+#[should_panic(expected = "no slot 3")]
+fn scheduling_a_move_onto_a_slot_that_is_not_there_is_refused_at_the_call() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let mut deck = deck_of(&gpu, &[SEED_A]);
+    deck.schedule(Transition::new(3, Control::Opacity, 1.0, 0.0, 0.0, 4.0, Curve::Lin));
+}
+
+/// **The composite sees this frame's fader, not the last one's.**
+///
+/// A transition that ran *after* the mix was recorded would put every fade one
+/// frame late — invisible in a four-beat fade and exactly wrong in a cut, which
+/// is the case this uses. Compared against a deck whose fader was moved by hand
+/// before the frame, which is the path that was already exact: the two are the
+/// same picture if and only if the scheduled cut landed on the frame it was
+/// scheduled for.
+///
+/// The comparison it replaces was `assert_ne!` against an earlier frame, which
+/// this material passes with no transition scheduled at all — it rotates on `t`.
+#[test]
+fn a_scheduled_cut_lands_on_the_frame_it_was_scheduled_for() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    const LEAD: usize = 12;
+
+    // The reference: the same deck, the same ticks, the fader moved by hand
+    // before the frame in question.
+    let by_hand = {
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+        let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
+        deck.set_signals(Signals::new(120.0, 1));
+        for _ in 0..LEAD {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        deck.set_opacity(1, 0.0);
+        frame(&gpu, &mut deck, &present, 1);
+        readback(&gpu, present.hdr_texture())
+    };
+
+    // The same run, with the cut scheduled for the beat that frame lands on.
+    let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+    let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
+    deck.set_signals(Signals::new(120.0, 1));
+    for _ in 0..LEAD {
+        frame(&gpu, &mut deck, &present, 1);
+    }
+    // Where the clock stands. The next frame advances it first, so this
+    // instant is already past by the time the transition is read — which is
+    // the frame it is due on, and the frame the composite has to see it on.
+    let cut_at = deck.signals().oscillator().beats();
+    deck.schedule(Transition::new(1, Control::Opacity, 1.0, 0.0, cut_at, 0.0, Curve::Lin));
+    frame(&gpu, &mut deck, &present, 1);
+    let scheduled = readback(&gpu, present.hdr_texture());
+
+    assert_eq!(
+        deck.opacity(1),
+        0.0,
+        "the cut did not land on the frame it was scheduled for"
+    );
+    assert_eq!(
+        scheduled, by_hand,
+        "the mix on the frame of a scheduled cut is not the mix of the same fader moved \
+         by hand — the composite is reading a fader the transition has not written yet"
+    );
+}
+
+/// **A scheduled move cannot reach a value a hand could not.**
+///
+/// It writes the slot's field directly rather than through `set_gain` and
+/// `set_opacity`, because those cancel it — so the clamps they carry have to be
+/// applied on the way past, or a `transition` record would be the one path into
+/// the mix with no bound on it. An opacity above 1.0 makes an `over` layer
+/// subtract more than it covers.
+#[test]
+fn a_scheduled_move_is_clamped_the_way_a_manual_one_is() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+    let mut deck = deck_of(&gpu, &[SEED_A]);
+    deck.set_signals(Signals::new(120.0, 1));
+    let start = deck.signals().oscillator().beats();
+
+    deck.schedule(Transition::new(0, Control::Opacity, 1.0, 4.0, start, 0.0, Curve::Lin));
+    deck.schedule(Transition::new(0, Control::Gain, 1.0, -3.0, start, 0.0, Curve::Lin));
+    frame(&gpu, &mut deck, &present, 1);
+
+    assert_eq!(deck.opacity(0), 1.0, "a scheduled fader passed 1.0");
+    assert_eq!(deck.gain(0), 0.0, "a scheduled level went negative");
+}
+
+/// **A crossfade is two scheduled moves**, and what makes that a crossfade
+/// rather than two fades is that they share a start and a length.
+///
+/// The mix is checked rather than the fields: halfway through, the outgoing
+/// slot is dimmer than it was and the incoming one is brighter, and the frame
+/// carries both. That is the thing the roadmap asked for, and it needed no type
+/// of its own.
+#[test]
+fn a_crossfade_is_two_moves_sharing_a_start_and_a_length() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+    let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
+    deck.set_signals(Signals::new(120.0, 1));
+    deck.set_opacity(1, 0.0);
+    for _ in 0..12 {
+        frame(&gpu, &mut deck, &present, 1);
+    }
+
+    let start = deck.signals().oscillator().beats();
+    deck.schedule(Transition::new(0, Control::Opacity, 1.0, 0.0, start, 4.0, Curve::Smooth));
+    deck.schedule(Transition::new(1, Control::Opacity, 0.0, 1.0, start, 4.0, Curve::Smooth));
+
+    // Two beats: halfway, where both are somewhere in the middle.
+    for _ in 0..60 {
+        frame(&gpu, &mut deck, &present, 1);
+    }
+    let a = deck.opacity(0);
+    let b = deck.opacity(1);
+    assert!(a > 0.0 && a < 1.0 && b > 0.0 && b < 1.0, "{a} / {b}");
+    assert!(
+        (a + b - 1.0).abs() < 0.05,
+        "a smooth crossfade should be near unity through the middle: {a} + {b}"
+    );
+
+    // Two more beats: the other end, exactly.
+    for _ in 0..60 {
+        frame(&gpu, &mut deck, &present, 1);
+    }
+    assert_eq!(deck.opacity(0), 0.0);
+    assert_eq!(deck.opacity(1), 1.0);
+    assert_eq!(deck.transitions_on(0).count() + deck.transitions_on(1).count(), 0);
 }
 
 /// **An audition shows the slot's own target, bit for bit, at unity.**
