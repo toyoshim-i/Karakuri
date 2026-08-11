@@ -320,10 +320,12 @@ is no master in Link for a fader to be the master of, so rekordbox never publish
 deck's BPM. A knob can be MIDI-mapped to the subscreen's BPM, but nothing makes it follow
 the track.
 
-So with rekordbox, a shared grid is a number a human enters — which is a tap performed in
-another application, and `b` already does that here. It is genuinely useful with a peer that
-*drives* Link, such as Ableton Live. It is not useful with rekordbox, and that is worth
-knowing before you build a set around it.
+So with rekordbox the picture does not follow the music by itself; the tempo is something
+you set, the way you set everything else here. What you get for setting it is that it is
+**shared** — `b` taps a grid on this machine, and a tap in the Link subscreen puts every peer
+on it at once, which is what you want the moment there is a second machine or a second
+application in the rig. With a peer that *drives* Link, such as Ableton Live, it follows on
+its own.
 
 The status line grows a group: `ableton-link 2p` is the source's name and how many other
 peers it can see. `0p` means it is running and alone — check the network before you check
