@@ -154,7 +154,7 @@ pub enum Record {
     // is on air, and one that carried its gain would restore that gain
     // wherever it was next loaded. They are state all the same, which is what
     // separates them from the three below: `is_set_state` says no to all
-    // eleven and means two different things by it.
+    // twelve and means two different things by it.
     /// A deck slot's linear gain into the mix.
     ///
     /// The slot is an index into the deck rather than anything about the Set
@@ -222,6 +222,29 @@ pub enum Record {
         op: String,
         exposure: f32,
         white_point: f32,
+    },
+    /// **What shape of the frame a deck slot's layer reaches.**
+    ///
+    /// A mask multiplies the layer's opacity per texel, which is what makes it
+    /// a mask rather than a second fader — everything opacity does, done to
+    /// part of the frame. `position` is how far the front has travelled and is
+    /// the number a `transition` moves, so **a wipe is this record plus a
+    /// `transition` on `mask`** and needs nothing of its own.
+    ///
+    /// `kind` is a `String` on the same terms as `blend` and `residency`: what
+    /// a shape is allowed to be is the engine's to say. `angle` is in radians
+    /// and is the linear front's alone.
+    Mask {
+        slot: u8,
+        /// `none`, `linear` or `radial`.
+        kind: String,
+        /// Which way a linear front runs, in radians.
+        angle: f32,
+        /// How far it has travelled, `[0, 1]`. 0 reveals nothing, 1 reveals
+        /// everything — both exactly.
+        position: f32,
+        /// How wide the soft edge is, `[0, 1]`. 0 is a hard edge.
+        softness: f32,
     },
     /// **A mix control moving over musical time**: a fade, a cut, or half of a
     /// crossfade.
@@ -388,7 +411,7 @@ pub enum Record {
 pub const MAX_STEPS: u8 = 4;
 
 impl Record {
-    /// Whether this record belongs in a Set file. **Eleven say no, for two
+    /// Whether this record belongs in a Set file. **Twelve say no, for two
     /// different reasons, and keeping them apart is the point of the name** —
     /// it is `is_set_state` rather than `is_state` because two thirds of what
     /// it refuses is state.
@@ -399,7 +422,8 @@ impl Record {
     ///   particular moment's microphone reading is part of what a Set is.
     /// - [`Record::Gain`], [`Record::Opacity`], [`Record::Blend`],
     ///   [`Record::Residency`], [`Record::Look`], [`Record::Transport`],
-    ///   [`Record::Preview`] and [`Record::Transition`] are the **session's**
+    ///   [`Record::Preview`], [`Record::Mask`] and [`Record::Transition`] are
+    ///   the **session's**
     ///   rather than any Set's. The last is the one that is not durable state
     ///   at all but an *event* — a move scheduled at an instant — and it is
     ///   here rather than beside `tick` because what it moves is the deck.
@@ -409,7 +433,7 @@ impl Record {
     ///   restore that gain wherever it was next loaded, which is a Set file
     ///   reaching outside the Set.
     ///
-    /// A session stream carries all eleven. That is the difference between the
+    /// A session stream carries all twelve. That is the difference between the
     /// two files, stated from this side.
     pub fn is_set_state(&self) -> bool {
         !matches!(
@@ -425,6 +449,7 @@ impl Record {
                 | Record::Transport { .. }
                 | Record::Preview { .. }
                 | Record::Transition { .. }
+                | Record::Mask { .. }
         )
     }
 }
@@ -453,6 +478,24 @@ mod tests {
         );
         // And it is the session's rather than a Set's, for both reasons at
         // once: it is the deck's, and it is an event rather than state.
+        assert!(!rec.is_set_state());
+    }
+
+    /// The wire line the spec prints, parsed and written back.
+    #[test]
+    fn a_mask_round_trips_through_the_line_the_spec_prints() {
+        let line = r#"{"t":"mask","slot":1,"kind":"linear","angle":0.0,"position":0.5,"softness":0.1}"#;
+        let rec = round_trip(line);
+        assert_eq!(
+            rec,
+            Record::Mask {
+                slot: 1,
+                kind: "linear".to_string(),
+                angle: 0.0,
+                position: 0.5,
+                softness: 0.1,
+            }
+        );
         assert!(!rec.is_set_state());
     }
 

@@ -67,21 +67,34 @@ use crate::binding::Curve;
 
 /// Which mix control a transition moves.
 ///
-/// The two that are a number an operator fades. Blend mode and residency are
-/// not here and should not be: they are choices rather than positions, and
-/// "half way to `over`" does not name a picture. A cut between them is a
-/// transition of duration zero on the *fader*, which is how it is done.
+/// The three that are a number an operator moves. Blend mode, residency and a
+/// mask's *shape* are not here and should not be: they are choices rather than
+/// positions, and "half way to `over`" does not name a picture. A cut between
+/// them is a transition of duration zero on a control that is here, which is
+/// how it is done.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Control {
     /// The level the material arrives at.
     Gain,
     /// The fader across the blend.
     Opacity,
+    /// **How far a mask's front has travelled**, `[0, 1]`.
+    ///
+    /// This is what makes a wipe a transition rather than a mode: an incoming
+    /// layer under `over`, with a linear mask, and one scheduled move carrying
+    /// this from 0 to 1. Neither half had to know about the other — the
+    /// transition moves a number and the mask reads one.
+    ///
+    /// Moving it on a slot with no mask does nothing, which is the honest
+    /// answer rather than a special case: the shape is what decides whether a
+    /// position means anything, and `MaskKind::None` reveals everything at
+    /// every position.
+    MaskPosition,
 }
 
 impl Control {
     /// Every control there is, in the order they are documented.
-    pub const ALL: [Control; 2] = [Control::Gain, Control::Opacity];
+    pub const ALL: [Control; 3] = [Control::Gain, Control::Opacity, Control::MaskPosition];
 
     /// The wire and status-line spelling. A match rather than a table, so a
     /// control added to the enum does not compile until it has a name.
@@ -89,6 +102,7 @@ impl Control {
         match self {
             Control::Gain => "gain",
             Control::Opacity => "opacity",
+            Control::MaskPosition => "mask",
         }
     }
 

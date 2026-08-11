@@ -59,6 +59,14 @@
 // place a level reaches alpha: `gain` scales colour and nothing else, but a
 // gain of exactly zero silences the layer under `add` and `max`, and a
 // silenced layer is not there at all. See `deck.rs`'s `Blend::silent_at`.
+//
+// **A mask is the fader varying across the frame**, and it multiplies opacity
+// for exactly that reason: everything opacity already does — how much of the
+// blend lands, and under `over` how much the layer covers — is what a mask
+// wants done per texel. That is what makes a wipe fall out of the parts that
+// were already here rather than needing a mode of its own: an incoming layer
+// under `over`, with a linear mask whose position a transition is moving,
+// hides the outgoing one exactly where the front has passed.
 
 struct Mix {
     // Per slot: the level the material arrives at. Colour only.
@@ -71,6 +79,12 @@ struct Mix {
     // and not at a fader its mode counts as silence. See above for why
     // silence is a skip.
     live: vec4<u32>,
+    // Per slot: which `MASK_` below, and the three numbers that shape it.
+    // See `deck.rs`'s `Mask`.
+    mask: vec4<u32>,
+    mask_angle: vec4<f32>,
+    mask_position: vec4<f32>,
+    mask_softness: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> mix_in: Mix;
@@ -82,6 +96,58 @@ struct Mix {
 const MODE_ADD: u32 = 0u;
 const MODE_OVER: u32 = 1u;
 const MODE_MAX: u32 = 2u;
+
+const MASK_NONE: u32 = 0u;
+const MASK_LINEAR: u32 = 1u;
+const MASK_RADIAL: u32 = 2u;
+
+// **How much of this layer reaches the mix at this texel**, in `[0, 1]`.
+//
+// A mask multiplies the layer's *opacity*, which is what makes it a mask
+// rather than a second fader: `deck.rs` calls opacity the fader across the
+// blend, and this is that fader varying across the frame. Under `over` it is
+// therefore how much of the layer *covers* here too, which is what a wipe is —
+// the incoming layer hides the outgoing one where the mask has arrived and
+// nowhere else.
+//
+// `position` is how far the reveal has travelled, `[0, 1]`, and both ends are
+// exact: **0 shows nothing anywhere and 1 shows everything everywhere**, for
+// any softness. That is not decoration. A wipe is a transition on this number,
+// so a `position` of 1 that left a corner half-lit would be a wipe that never
+// finished, and `deck.rs` skips a layer at 0 outright — which is only sound if
+// 0 really is nothing.
+//
+// `uv` is `[0, 1]` across the frame. `aspect` is width over height and is used
+// by the radial mask alone, because an iris that is not round is not an iris,
+// where a linear wipe's angle is measured in frame space on purpose: 45
+// degrees should run corner to corner whatever shape the frame is.
+fn mask_at(uv: vec2<f32>, aspect: f32, kind: u32, angle: f32, position: f32, softness: f32) -> f32 {
+    if kind == MASK_NONE {
+        return 1.0;
+    }
+    let centred = uv - vec2<f32>(0.5, 0.5);
+    var d: f32;
+    if kind == MASK_RADIAL {
+        // Normalised so the corner is at 1, which is what makes `position` of
+        // 1 reveal the whole frame rather than the inscribed circle.
+        let wide = centred * vec2<f32>(aspect, 1.0);
+        d = length(wide) / length(vec2<f32>(0.5 * aspect, 0.5));
+    } else {
+        let dir = vec2<f32>(cos(angle), sin(angle));
+        // The half-extent of the frame along `dir`, so `d` spans exactly
+        // `[0, 1]` whichever way the wipe runs. A fixed divisor would make a
+        // diagonal wipe finish early and a vertical one finish late.
+        let extent = abs(dir.x) * 0.5 + abs(dir.y) * 0.5;
+        d = dot(centred, dir) / (2.0 * extent) + 0.5;
+    }
+    // The soft edge is *added* to the travel rather than eaten out of it, so
+    // that the front starts entirely off one side and finishes entirely off
+    // the other. Without that, a soft wipe would begin with a band already
+    // showing and end with one still hidden.
+    let soft = max(softness, 1.0 / 4096.0);
+    let front = position * (1.0 + soft) - soft * 0.5;
+    return clamp((front - d) / soft + 0.5, 0.0, 1.0);
+}
 
 // One oversized triangle, for the same reasons as `present.wgsl`: no seam, no
 // vertex buffer, one fewer vertex.
@@ -159,19 +225,30 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     // `pos` is the framebuffer coordinate at the pixel centre, so truncating
     // it is the texel index rather than a rounding decision.
     let at = vec2<i32>(pos.xy);
+    // Every slot target is the size of the mix target — the assertion in
+    // `Frame::render` is what makes that true — so one of them answers for the
+    // frame. `uv` is at the texel centre, which is where the mask is sampled
+    // for the same reason `textureLoad` is used rather than a sampler.
+    let dims = vec2<f32>(textureDimensions(slot0));
+    let uv = pos.xy / dims;
+    let aspect = dims.x / dims.y;
 
     var acc = vec4<f32>(0.0, 0.0, 0.0, 0.0);
     if mix_in.live.x != 0u {
-        acc = layer(acc, textureLoad(slot0, at, 0i), mix_in.gain.x, mix_in.opacity.x, mix_in.mode.x);
+        let m = mask_at(uv, aspect, mix_in.mask.x, mix_in.mask_angle.x, mix_in.mask_position.x, mix_in.mask_softness.x);
+        acc = layer(acc, textureLoad(slot0, at, 0i), mix_in.gain.x, mix_in.opacity.x * m, mix_in.mode.x);
     }
     if mix_in.live.y != 0u {
-        acc = layer(acc, textureLoad(slot1, at, 0i), mix_in.gain.y, mix_in.opacity.y, mix_in.mode.y);
+        let m = mask_at(uv, aspect, mix_in.mask.y, mix_in.mask_angle.y, mix_in.mask_position.y, mix_in.mask_softness.y);
+        acc = layer(acc, textureLoad(slot1, at, 0i), mix_in.gain.y, mix_in.opacity.y * m, mix_in.mode.y);
     }
     if mix_in.live.z != 0u {
-        acc = layer(acc, textureLoad(slot2, at, 0i), mix_in.gain.z, mix_in.opacity.z, mix_in.mode.z);
+        let m = mask_at(uv, aspect, mix_in.mask.z, mix_in.mask_angle.z, mix_in.mask_position.z, mix_in.mask_softness.z);
+        acc = layer(acc, textureLoad(slot2, at, 0i), mix_in.gain.z, mix_in.opacity.z * m, mix_in.mode.z);
     }
     if mix_in.live.w != 0u {
-        acc = layer(acc, textureLoad(slot3, at, 0i), mix_in.gain.w, mix_in.opacity.w, mix_in.mode.w);
+        let m = mask_at(uv, aspect, mix_in.mask.w, mix_in.mask_angle.w, mix_in.mask_position.w, mix_in.mask_softness.w);
+        acc = layer(acc, textureLoad(slot3, at, 0i), mix_in.gain.w, mix_in.opacity.w * m, mix_in.mode.w);
     }
     return acc;
 }

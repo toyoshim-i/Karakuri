@@ -41,7 +41,7 @@
 //! hiding what is beneath.
 
 use karakuri_engine::binding::Curve;
-use karakuri_engine::deck::{Blend, Residency};
+use karakuri_engine::deck::{Blend, Mask, MaskKind, Residency};
 use karakuri_engine::transition::Control;
 use karakuri_engine::transport::{Sync, Transport};
 use karakuri_store::record::Record;
@@ -61,6 +61,7 @@ pub enum Change {
     /// separate — see [`Blend`].
     Opacity { slot: usize, value: f32 },
     Blend { slot: usize, mode: Blend },
+    Mask { slot: usize, mask: Mask },
     /// Which slot the output is showing, or `None` for the mix. Not a mix
     /// control; see [`Record::Preview`] for why it is in the stream anyway and
     /// for when it will stop being.
@@ -110,6 +111,17 @@ pub fn blend_record(slot: usize, mode: Blend) -> Record {
     Record::Blend {
         slot: slot as u8,
         mode: mode.name().to_string(),
+    }
+}
+
+/// A slot's mask, as the record that carries it.
+pub fn mask_record(slot: usize, mask: Mask) -> Record {
+    Record::Mask {
+        slot: slot as u8,
+        kind: mask.kind().name().to_string(),
+        angle: mask.angle(),
+        position: mask.position(),
+        softness: mask.softness(),
     }
 }
 
@@ -262,6 +274,34 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
             })?;
             Ok(Some(Change::Blend { slot, mode }))
         }
+        Record::Mask {
+            slot,
+            kind,
+            angle,
+            position,
+            softness,
+        } => {
+            let slot = in_range(*slot)?;
+            let kind = MaskKind::from_name(kind).ok_or_else(|| {
+                format!(
+                    "mask `{kind}` — expected {}",
+                    MaskKind::ALL
+                        .iter()
+                        .map(|k| k.name())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })?;
+            Ok(Some(Change::Mask {
+                slot,
+                // The numbers are clamped rather than refused: unlike a
+                // transition's start, every value outside the range has one
+                // sensible reading — a front past the end has arrived, and one
+                // before the start has not. `Mask::new` is where that lives, so
+                // a record and a key press cannot disagree about it.
+                mask: Mask::new(kind, *angle, *position, *softness),
+            }))
+        }
         Record::Transition {
             slot,
             control,
@@ -388,6 +428,13 @@ mod tests {
                 },
             ),
             (
+                mask_record(2, Mask::new(MaskKind::Linear, 1.5, 0.25, 0.1)),
+                Change::Mask {
+                    slot: 2,
+                    mask: Mask::new(MaskKind::Linear, 1.5, 0.25, 0.1),
+                },
+            ),
+            (
                 transition_record(1, Control::Opacity, 0.0, 64.0, 8.0, Curve::Smooth),
                 Change::Transition {
                     slot: 1,
@@ -461,6 +508,21 @@ mod tests {
                 change(&record, 1).expect("built here"),
                 Some(Change::Residency { slot: 0, level }),
                 "{level:?} did not survive its own wire name"
+            );
+        }
+    }
+
+    /// **Every mask shape round-trips**, so a shape added to the engine and not
+    /// to the wire vocabulary is a layer silently unmasked.
+    #[test]
+    fn every_mask_shape_has_a_wire_name_that_decodes_back() {
+        for kind in MaskKind::ALL {
+            let mask = Mask::new(kind, 0.5, 0.75, 0.2);
+            assert_eq!(
+                change(&mask_record(1, mask), 4).expect("built here"),
+                Some(Change::Mask { slot: 1, mask }),
+                "{} did not survive its own wire name",
+                kind.name()
             );
         }
     }
@@ -592,6 +654,17 @@ mod tests {
             let message = change(&record, 4).expect_err("a number no move can use");
             assert!(message.contains(wanted), "{start}/{beats}/{to}: {message}");
         }
+
+        let unknown_shape = Record::Mask {
+            slot: 0,
+            kind: "diagonal".to_string(),
+            angle: 0.0,
+            position: 1.0,
+            softness: 0.0,
+        };
+        let message = change(&unknown_shape, 4).expect_err("`diagonal` is not a shape");
+        assert!(message.contains("diagonal"), "{message}");
+        assert!(message.contains("radial"), "{message}");
 
         let unknown_control = Record::Transition {
             slot: 0,

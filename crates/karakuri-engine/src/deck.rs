@@ -353,9 +353,10 @@ use crate::video_source::VideoSource;
 /// layout constant", says M2 of the budget governor.
 pub const MAX_SLOTS: usize = 4;
 
-/// Bytes in the composite's uniform block: four `vec4`s, one per slot-indexed
-/// field — gain, opacity, blend mode, live flag. See `shaders/composite.wgsl`.
-const MIX_UNIFORM_SIZE: u64 = 64;
+/// Bytes in the composite's uniform block: eight `vec4`s, one per slot-indexed
+/// field — gain, opacity, blend mode, live flag, and the four a mask takes. See
+/// `shaders/composite.wgsl`.
+const MIX_UNIFORM_SIZE: u64 = 128;
 
 /// A gain the mix can use: floored at zero, NaN read as zero, and deliberately
 /// open above 1.0.
@@ -380,6 +381,161 @@ fn clamp_opacity(opacity: f32) -> f32 {
         0.0
     } else {
         opacity.clamp(0.0, 1.0)
+    }
+}
+
+/// **What shape of the frame a layer reaches**, at L5.
+///
+/// A mask multiplies the layer's *opacity*, which is what makes it a mask
+/// rather than a second fader: opacity is the fader across the blend, and this
+/// is that fader varying across the frame. Everything it already does —
+/// how much of the blend lands, and under [`Blend::Over`] how much the layer
+/// covers — is what a mask wants done per texel.
+///
+/// **A wipe is this and the transition system and nothing else.** An incoming
+/// layer under `over`, with a linear mask whose `position` a scheduled move is
+/// carrying from 0 to 1, hides the outgoing one exactly where the front has
+/// passed. `docs/roadmap.md` said a wipe "wants a mask"; it turned out to want
+/// only that, because the parts that animate it were already here.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Mask {
+    kind: MaskKind,
+    /// Which way a linear front runs, in radians. Ignored by the others.
+    /// Measured in frame space rather than corrected for aspect, on purpose: a
+    /// wipe at 45 degrees should run corner to corner whatever shape the frame
+    /// is, where an iris that is not round is not an iris.
+    angle: f32,
+    /// How far the reveal has travelled, `[0, 1]`. **Both ends are exact**: 0
+    /// shows nothing anywhere and 1 shows everything everywhere, for any
+    /// softness — which [`Blend::silent_at`] depends on at the bottom and a
+    /// wipe that has to actually finish depends on at the top.
+    position: f32,
+    /// How wide the soft edge is, in the same units as `position`. 0 is a hard
+    /// edge. Added to the travel rather than eaten out of it, so a soft wipe
+    /// still starts entirely hidden and ends entirely shown.
+    softness: f32,
+}
+
+/// The shape of a mask's front.
+///
+/// Two, and they are the two an operator draws with a hand: a straight edge
+/// crossing the frame, and a circle opening out of the middle. What is not here
+/// is a mask read from a *texture* — an arbitrary shape, or another slot's
+/// luminance — which is a different feature with a different cost: it needs
+/// somewhere for the shape to come from, and the answer is M3's `Field` rather
+/// than a fourth variant here.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum MaskKind {
+    /// The whole frame. What every slot comes up as, and free: the shader
+    /// returns 1.0 without touching the numbers beside it.
+    #[default]
+    None,
+    /// A straight front crossing the frame at `angle`.
+    Linear,
+    /// A circle opening from the middle, round on screen whatever the frame's
+    /// aspect ratio is.
+    Radial,
+}
+
+impl MaskKind {
+    /// Every shape there is, in cycle order. `None` first, because it is the
+    /// default and a cycle should start where a slot starts.
+    pub const ALL: [MaskKind; 3] = [MaskKind::None, MaskKind::Linear, MaskKind::Radial];
+
+    /// The wire and status-line spelling. A match rather than a table, so a
+    /// shape added to the enum does not compile until it has a name.
+    pub fn name(self) -> &'static str {
+        match self {
+            MaskKind::None => "none",
+            MaskKind::Linear => "linear",
+            MaskKind::Radial => "radial",
+        }
+    }
+
+    /// The spelling back, or `None`. Derived from [`MaskKind::name`] over
+    /// [`MaskKind::ALL`], so the two directions cannot disagree.
+    pub fn from_name(name: &str) -> Option<MaskKind> {
+        MaskKind::ALL.iter().copied().find(|k| k.name() == name)
+    }
+
+    /// What the shader switches on. The numbers are the wire format between
+    /// `deck.rs` and `composite.wgsl` and nothing else.
+    fn index(self) -> u32 {
+        match self {
+            MaskKind::None => 0,
+            MaskKind::Linear => 1,
+            MaskKind::Radial => 2,
+        }
+    }
+}
+
+impl Default for Mask {
+    fn default() -> Mask {
+        Mask {
+            kind: MaskKind::None,
+            angle: 0.0,
+            // Fully revealed, so that giving a slot a shape shows the whole
+            // frame until something moves the front. A default of 0 would make
+            // choosing a mask look like turning the slot off.
+            position: 1.0,
+            softness: 0.0,
+        }
+    }
+}
+
+impl Mask {
+    /// A mask of `kind`, with the numbers clamped to what the shader can use.
+    pub fn new(kind: MaskKind, angle: f32, position: f32, softness: f32) -> Mask {
+        Mask {
+            kind,
+            angle: if angle.is_finite() { angle } else { 0.0 },
+            position: clamp_unit(position),
+            softness: clamp_unit(softness),
+        }
+    }
+
+    pub fn kind(self) -> MaskKind {
+        self.kind
+    }
+
+    pub fn angle(self) -> f32 {
+        self.angle
+    }
+
+    pub fn position(self) -> f32 {
+        self.position
+    }
+
+    pub fn softness(self) -> f32 {
+        self.softness
+    }
+
+    /// The same mask with the front somewhere else. What a scheduled move
+    /// writes — see [`crate::transition::Control::MaskPosition`].
+    pub fn at(self, position: f32) -> Mask {
+        Mask {
+            position: clamp_unit(position),
+            ..self
+        }
+    }
+
+    /// **Whether this mask hides the whole frame.** A shape at position 0
+    /// reveals nothing anywhere, exactly, so the layer can be skipped — which
+    /// is the same NaN escape a fader at zero is, arriving through a different
+    /// control.
+    fn hides_everything(self) -> bool {
+        self.kind != MaskKind::None && self.position == 0.0
+    }
+}
+
+/// A `[0, 1]` number the mix can use, NaN read as zero. The same shape as
+/// [`clamp_opacity`], and a separate function only because the name says what
+/// it is for.
+fn clamp_unit(x: f32) -> f32 {
+    if x.is_nan() {
+        0.0
+    } else {
+        x.clamp(0.0, 1.0)
     }
 }
 
@@ -544,6 +700,8 @@ struct Slot {
     /// order, so this is the only per-slot control whose meaning depends on
     /// where the slot sits.
     blend: Blend,
+    /// What shape of the frame this layer reaches. See [`Mask`].
+    mask: Mask,
     /// While [`Residency::Priming`], step one frame in this many. `1` is every
     /// frame. Set by [`crate::governor`] out of the budget, or by hand.
     prime_one_in: u32,
@@ -633,6 +791,7 @@ impl Deck {
                     gain: 1.0,
                     opacity: 1.0,
                     blend: Blend::default(),
+                    mask: Mask::default(),
                     prime_one_in: 1,
                     prime_phase: 0,
                     transport: Transport::default(),
@@ -1361,6 +1520,21 @@ impl Deck {
         self.slots[slot].blend
     }
 
+    pub fn mask(&self, slot: usize) -> Mask {
+        self.slots[slot].mask
+    }
+
+    /// What shape of the frame this slot's layer reaches. See [`Mask`].
+    ///
+    /// Not cancelled by a scheduled move the way the faders are: a transition
+    /// on a mask carries its *position* and leaves the shape alone, so
+    /// changing the shape mid-wipe is a change to what is being wiped rather
+    /// than a hand on the control that is moving. The position it writes is
+    /// the one a move would have written next frame anyway.
+    pub fn set_mask(&mut self, slot: usize, mask: Mask) {
+        self.slots[slot].mask = mask;
+    }
+
     /// **Schedule a move**, replacing whatever was already moving that control.
     ///
     /// One per `(slot, control)`, and the later one wins: two fades on one
@@ -1427,6 +1601,14 @@ impl Deck {
                 }
                 Control::Opacity => {
                     self.slots[t.slot()].opacity = clamp_opacity(value);
+                }
+                // The position and nothing else, which is why `set_mask` does
+                // not cancel: changing the shape mid-wipe is a change to what
+                // is being wiped rather than a hand on the control that is
+                // moving.
+                Control::MaskPosition => {
+                    let mask = self.slots[t.slot()].mask;
+                    self.slots[t.slot()].mask = mask.at(value);
                 }
             }
         }
@@ -1890,7 +2072,14 @@ impl Composite {
             // silence would take the whole deck down with it. Which settings
             // count as silence is the mode's answer: see [`Blend::silent_at`].
             let live = u32::from(
-                slot.effective == Residency::Live && !slot.blend.silent_at(slot.gain, slot.opacity),
+                slot.effective == Residency::Live
+                    && !slot.blend.silent_at(slot.gain, slot.opacity)
+                    // A shape revealing nothing is silence too, and exactly:
+                    // the shader's `position` of 0 is 0 everywhere for any
+                    // softness. Skipping rather than multiplying is the same
+                    // NaN escape a fader at zero is, reached through a
+                    // different control.
+                    && !slot.mask.hides_everything(),
             );
             // **An audition is the mix with one term in it, at unity.** Not a
             // second pass and not a copy: `0.0 + 1.0 * src` is `src` exactly,
@@ -1901,16 +2090,22 @@ impl Composite {
             // is being judged is the level the material arrives at, which is
             // the input to setting a fader and not the output of having set
             // one. That is the same ordering `meter.rs` measures in.
-            let (gain, opacity, blend, live) = match preview {
-                Some(shown) if shown == i => (1.0, 1.0, Blend::Add, 1),
-                Some(_) => (slot.gain, slot.opacity, slot.blend, 0),
-                None => (slot.gain, slot.opacity, slot.blend, live),
+            let (gain, opacity, blend, mask, live) = match preview {
+                // The mask goes with the faders: an audition shows the
+                // material, and a shape is a thing done *to* the material.
+                Some(shown) if shown == i => (1.0, 1.0, Blend::Add, Mask::default(), 1),
+                Some(_) => (slot.gain, slot.opacity, slot.blend, slot.mask, 0),
+                None => (slot.gain, slot.opacity, slot.blend, slot.mask, live),
             };
             let fields = [
                 gain.to_le_bytes(),
                 opacity.to_le_bytes(),
                 blend.index().to_le_bytes(),
                 live.to_le_bytes(),
+                mask.kind().index().to_le_bytes(),
+                mask.angle().to_le_bytes(),
+                mask.position().to_le_bytes(),
+                mask.softness().to_le_bytes(),
             ];
             for (field, value) in fields.iter().enumerate() {
                 let at = field * 16 + i * 4;

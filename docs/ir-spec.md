@@ -974,7 +974,7 @@ known. The total-cost decision lives there, not in the artifact.
   what would let the collision through harmlessly; until then a rejection the generator can
   act on beats a value nobody chose.
 - Unknown `t` values are ignored, for forward compatibility.
-- **`gain`, `opacity`, `blend`, `transition`, `preview`, `residency`, `look` and
+- **`gain`, `opacity`, `blend`, `mask`, `transition`, `preview`, `residency`, `look` and
   `transport` are not in this list and must never be.** They are the session's rather than
   any Set's — see the session stream format.
 
@@ -1217,18 +1217,19 @@ session tempo, which **v0.2 had no record for**.
 Neither is state, so neither appears in a Set file: both are what a frame *saw* or
 *decided*, and the tempo belongs to the session rather than to any one Set.
 
-### The mix in the stream — `gain`, `opacity`, `blend`, `transition`, `preview`, `residency`, `look` and `transport`
+### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `preview`, `residency`, `look` and `transport`
 
 A session that carried the material and not the performance would replay the same Sets, on
 the same beat, all at whatever gain they happened to start at, with nothing ever going on
-or off air. Eight records carry what an operator moves — seven states and one event:
+or off air. Nine records carry what an operator moves — eight states and one event:
 
 ```ndjson
 {"t":"gain","slot":0,"value":0.75}
 {"t":"opacity","slot":0,"value":0.5}
 {"t":"blend","slot":1,"mode":"over"}
 {"t":"preview","slot":2}
-{"t":"transition","slot":0,"control":"opacity","to":0.0,"start":64.0,"beats":8.0,"curve":"smooth"}
+{"t":"mask","slot":1,"kind":"linear","angle":0.0,"position":0.0,"softness":0.02}
+{"t":"transition","slot":1,"control":"mask","to":1.0,"start":64.0,"beats":8.0,"curve":"smooth"}
 {"t":"residency","slot":1,"level":"priming"}
 {"t":"look","op":"aces","exposure":1.2,"white_point":4.0}
 ```
@@ -1287,6 +1288,25 @@ is no `crossfade` record and there should not be: a crossfade is two of these sh
 start and a length, a fade-in is one, and a cut is one with a duration of zero. The
 first-class thing is the move.
 
+**`mask` is what shape of the frame a layer reaches.** It multiplies that layer's
+opacity per texel, which is what makes it a mask rather than a second fader: everything
+opacity does — how much of the blend lands, and under `over` how much the layer covers — is
+what a mask wants done to part of the frame. `kind` is `none`, `linear` or `radial`;
+`angle` is the linear front's, in radians; `position` is how far it has travelled, `[0, 1]`,
+**exact at both ends** — 0 reveals nothing anywhere and 1 reveals everything everywhere, for
+any `softness`.
+
+**The two lines above are a wipe, and there is no `wipe` record.** A mask at position 0 on a
+layer that blends `over`, and a `transition` carrying `mask` to 1: the front hides what is
+beneath it exactly where it has passed. Neither half knows about the other — the transition
+moves a number and the mask reads one — which is the same shape as a crossfade being two
+`transition`s. Both ends being exact is what makes it *finish*: a `position` of 1 that left
+a corner half-lit would be a wipe that stopped short.
+
+What is deliberately not here is a mask read from a **texture** — an arbitrary shape, or
+another layer's luminance. That needs somewhere for the shape to come from, and the answer
+is M3's `Field` rather than a third `kind`.
+
 **`preview` is which slot the output is showing**, or `null` for the mix. It is not a mix
 control — it changes nothing about how the Sets are combined — and it is in the stream for
 one reason: today the preview *is* the output, so a replay that ignored it would show the
@@ -1337,7 +1357,7 @@ one value in this format that is meant to go backwards. Both are carried under e
 including `free` where neither does anything, so that a slot moved back onto the grid
 returns to where the operator left it rather than to a default.
 
-**These eight stay out of a Set file**, seven because they are state that is the
+**These nine stay out of a Set file**, eight because they are state that is the
 session's rather than any Set's and `transition` because it is not state at all. That is a second
 reason for a record to be absent from a Set file and it is not the `audio` one: there is
 something to fold here, and this is not the projection it folds into. A Set file that

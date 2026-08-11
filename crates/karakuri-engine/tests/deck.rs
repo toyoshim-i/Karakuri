@@ -32,7 +32,7 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use karakuri_engine::binding::Curve;
-use karakuri_engine::deck::{Blend, Deck, Residency};
+use karakuri_engine::deck::{Blend, Deck, Mask, MaskKind, Residency};
 use karakuri_engine::transition::{Control, Transition};
 use karakuri_engine::swap::{Event, HotSwap, Request};
 use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
@@ -218,6 +218,55 @@ proc overdrawn_card {{
 }}
 "#
     )
+}
+
+/// **A wash over the whole frame**, for the mask tests.
+///
+/// Every other fixture here draws a sphere in the middle, and a mask's ends are
+/// at the *edges*: a front that stops short of the corner, or a radial one that
+/// stops at the inscribed circle, is invisible against material that never
+/// reaches either. Four such defects walked past the first version of those
+/// tests for exactly that reason.
+///
+/// The vertex stage ignores `position` and puts every sprite at the origin, so
+/// one of them covers a target of [`MASK_SIZE`]. It still `consumes position`,
+/// because an L4 is compiled against its L1's element layout and dropping the
+/// attribute would change what is being tested.
+const L4_WASH: &str = r#"
+proc wash {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  param exposure : float [0.0, 8.0] = 1.0
+
+  vertex {
+    let ignored = position;
+    clip       = vec4(0.0, 0.0, 0.0, 1.0);
+    point_size = 128.0;
+  }
+
+  fragment {
+    color = vec4(vec3(1.0, 1.0, 1.0) * exposure, 1.0);
+  }
+}
+"#;
+
+/// The target the mask tests render at. Small, because [`L4_WASH`] overdraws
+/// the whole frame once per element and the number that matters is coverage
+/// rather than resolution.
+const MASK_SIZE: u32 = 64;
+
+/// A deck whose slot 1 covers the frame, at [`MASK_SIZE`].
+fn wash_deck(gpu: &Gpu) -> Deck {
+    let swaps = vec![
+        HotSwap::fixed(build(gpu, SEED_A, CAPACITY)),
+        HotSwap::fixed(build_with(gpu, L4_WASH, SEED_B, CAPACITY)),
+    ];
+    let mut deck = Deck::new(&gpu.device, swaps, MASK_SIZE, MASK_SIZE);
+    deck.resize(&gpu.device, MASK_SIZE, MASK_SIZE);
+    deck
 }
 
 fn compile(src: &str) -> Checked {
@@ -536,6 +585,248 @@ fn a_slot_faded_to_silence_cannot_take_the_mix_with_it() {
             nans(&faded)
         );
     }
+}
+
+/// **A mask at either end is exact: nothing, or everything.**
+///
+/// Both matter and for different reasons. At the top, a wipe is a transition
+/// carrying `position` to 1.0, so a corner left half-lit would be a wipe that
+/// never finished. At the bottom, `Blend::silent_at` *skips* a layer whose mask
+/// reveals nothing — which is only sound if it really is nothing, and skipping
+/// is what keeps a NaN out of the mix.
+///
+/// Compared against the fader, which is the path that was already exact: a
+/// masked-out slot must render exactly what the same slot at opacity 0 renders,
+/// and a fully revealed one exactly what it renders with no mask at all. The
+/// material is [`L4_WASH`], because a mask's ends are at the edges of the frame
+/// and the sphere every other fixture draws never gets there.
+#[test]
+fn a_mask_at_either_end_is_exactly_nothing_or_exactly_everything() {
+    let gpu = Gpu::headless().expect("no GPU available");
+
+    let run = |mask: Option<Mask>, opacity: f32| -> Vec<u16> {
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, MASK_SIZE, MASK_SIZE);
+        let mut deck = wash_deck(&gpu);
+        deck.set_opacity(1, opacity);
+        if let Some(mask) = mask {
+            deck.set_mask(1, mask);
+        }
+        for _ in 0..4 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        readback(&gpu, present.hdr_texture())
+    };
+
+    let unmasked = run(None, 1.0);
+    let silent = run(None, 0.0);
+    assert!(lit(&unmasked) > 100, "the deck drew nothing");
+    assert_ne!(unmasked, silent, "the two references are the same picture");
+    // The wash has to reach every texel, or an end that is wrong at the edge
+    // is an end nothing here can see.
+    assert_eq!(
+        lit(&unmasked),
+        (MASK_SIZE * MASK_SIZE) as usize,
+        "the wash does not cover the frame, so a mask's edges are untested"
+    );
+
+    for kind in [MaskKind::Linear, MaskKind::Radial] {
+        // Every angle, because a linear front's normalisation is per-direction
+        // and one that overshot would show at one angle and not another.
+        for angle in [0.0, 0.7, std::f32::consts::FRAC_PI_2, 2.4, -0.7] {
+            assert_eq!(
+                run(Some(Mask::new(kind, angle, 1.0, 0.3)), 1.0),
+                unmasked,
+                "{} at {angle} rad, fully open, is not the unmasked frame",
+                kind.name()
+            );
+            assert_eq!(
+                run(Some(Mask::new(kind, angle, 0.0, 0.3)), 1.0),
+                silent,
+                "{} at {angle} rad, fully closed, is not a silent slot",
+                kind.name()
+            );
+        }
+    }
+}
+
+/// **A mask that reveals nothing is a skip, not a multiply by zero.**
+///
+/// The only way to see the difference, and the reason the skip is there: a
+/// slot's target may hold a NaN — `sqrt` of a negative is a procedure that
+/// passes every stage of this pipeline — and `0.0 * NaN` is NaN. With clean
+/// material a mask at position 0 and a skipped layer are the same picture, so
+/// this is the case that tells them apart, exactly as it does for the fader.
+///
+/// It is also what makes a mask a third escape from broken material, beside
+/// residency and the fader.
+#[test]
+fn a_mask_that_reveals_nothing_keeps_a_nan_out_of_the_mix() {
+    let gpu = Gpu::headless().expect("no GPU available");
+
+    let run = |silence: Residency, mask: Mask| -> Vec<u16> {
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![
+                HotSwap::fixed(build(&gpu, SEED_A, CAPACITY)),
+                HotSwap::fixed(build_with(&gpu, L4_NAN, SEED_B, CAPACITY)),
+            ],
+            WIDTH,
+            HEIGHT,
+        );
+        deck.set_residency(1, silence);
+        deck.set_mask(1, mask);
+        for _ in 0..12 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        if silence == Residency::Live {
+            assert!(
+                decode(&readback(&gpu, deck.slot_target(1)))
+                    .iter()
+                    .any(|v| v.is_nan()),
+                "the NaN slot rendered no NaN, so this test is asserting nothing"
+            );
+        }
+        readback(&gpu, present.hdr_texture())
+    };
+
+    let parked = run(Residency::Allocated, Mask::default());
+    assert!(lit(&parked) > 100, "the surviving slot drew nothing");
+
+    for kind in [MaskKind::Linear, MaskKind::Radial] {
+        let closed = run(Residency::Live, Mask::new(kind, 0.4, 0.0, 0.1));
+        let nans = decode(&closed).iter().filter(|v| v.is_nan()).count();
+        assert_eq!(
+            closed,
+            parked,
+            "a slot masked to nothing under `{}` reached the mix ({nans} NaN channels), \
+             while the same slot taken off air did not",
+            kind.name()
+        );
+    }
+}
+
+/// **A mask in the middle shapes the frame rather than dimming it.**
+///
+/// The difference between a mask and a fader, and the only assertion that can
+/// tell them apart: half way across, part of the frame is exactly what it would
+/// be with the slot present and part exactly what it would be without. A fader
+/// at 0.5 is neither, everywhere.
+#[test]
+fn a_mask_half_way_leaves_one_part_untouched_and_removes_another() {
+    let gpu = Gpu::headless().expect("no GPU available");
+
+    let run = |mask: Option<Mask>, opacity: f32| -> Vec<f32> {
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, MASK_SIZE, MASK_SIZE);
+        let mut deck = wash_deck(&gpu);
+        deck.set_opacity(1, opacity);
+        if let Some(mask) = mask {
+            deck.set_mask(1, mask);
+        }
+        for _ in 0..4 {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        decode(&readback(&gpu, present.hdr_texture()))
+    };
+
+    let silent = run(None, 0.0);
+    // A hard front straight up the middle, left to right, on a slot at half
+    // opacity — so "revealed" and "unmasked" are different pictures and the
+    // mask cannot be mistaken for the fader that is also on.
+    let halfway = run(Some(Mask::new(MaskKind::Linear, 0.0, 0.5, 0.0)), 0.5);
+    let faded = run(None, 0.5);
+
+    // **Only where the slot actually contributes.** Where it drew nothing, the
+    // masked frame, the faded one and the silent one all agree, and counting
+    // those would drown the claim in background.
+    let mut hidden = 0;
+    let mut revealed = 0;
+    let mut between = 0;
+    for i in (0..halfway.len()).filter(|i| i % 4 != 3) {
+        if faded[i] == silent[i] {
+            continue;
+        }
+        if halfway[i] == silent[i] {
+            hidden += 1;
+        } else if halfway[i] == faded[i] {
+            revealed += 1;
+        } else {
+            between += 1;
+        }
+    }
+
+    assert!(
+        hidden > 100,
+        "the mask removed the slot from {hidden} of the channels it drew, so the front \
+         is not on the frame"
+    );
+    assert!(
+        revealed > 100,
+        "the mask left the slot in {revealed} of the channels it drew, so it is hiding \
+         everything rather than shaping"
+    );
+    // A hard edge, so every contributing channel is on one side or the other.
+    // A *fader* would put all of them in `between`, which is the difference
+    // this test exists to see.
+    assert!(
+        between * 20 < hidden + revealed,
+        "{between} channels are neither the revealed picture nor the hidden one, \
+         against {} that are — a hard-edged mask is one or the other",
+        hidden + revealed
+    );
+    // And the front is where it was asked for: half the covered frame, either
+    // side. A wipe that finished early would still be "one or the other".
+    let split = hidden as f32 / (hidden + revealed) as f32;
+    assert!(
+        (split - 0.5).abs() < 0.1,
+        "the front left {split:.2} of the frame hidden rather than half, so it is not \
+         where `position` says"
+    );
+}
+
+/// **A wipe is a mask and one scheduled move**, and neither had to know about
+/// the other.
+///
+/// The claim the whole design rests on: `Control::MaskPosition` carries the
+/// front, the mask reads a number, and the picture between the two ends is
+/// neither of them. Checked at three points, because a wipe that jumped would
+/// pass a two-point test.
+#[test]
+fn a_wipe_is_a_transition_carrying_a_masks_front() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+    let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
+    deck.set_signals(Signals::new(120.0, 1));
+    deck.set_blend(1, Blend::Over);
+    deck.set_mask(1, Mask::new(MaskKind::Linear, 0.0, 0.0, 0.02));
+
+    let start = deck.signals().oscillator().beats();
+    deck.schedule(Transition::new(
+        1,
+        Control::MaskPosition,
+        0.0,
+        1.0,
+        start,
+        4.0,
+        Curve::Lin,
+    ));
+
+    let mut fronts = Vec::new();
+    for i in 0..121 {
+        frame(&gpu, &mut deck, &present, 1);
+        if i % 30 == 0 {
+            fronts.push(deck.mask(1).position());
+        }
+    }
+    // Monotone and strictly moving, which a jump would not be.
+    for pair in fronts.windows(2) {
+        assert!(pair[1] > pair[0], "the front went backwards or stood still: {fronts:?}");
+    }
+    assert_eq!(deck.mask(1).position(), 1.0, "the wipe did not finish");
+    // The shape survived: a move carries the position and leaves the kind
+    // alone, which is why `set_mask` does not cancel a transition.
+    assert_eq!(deck.mask(1).kind(), MaskKind::Linear);
+    assert_eq!(deck.transitions_on(1).count(), 0);
 }
 
 /// **A scheduled fade moves the fader on the beat grid and nowhere else.**

@@ -36,8 +36,8 @@ use karakuri_engine::deck::MAX_SLOTS;
 use karakuri_engine::swap::Event;
 use karakuri_engine::transport::{Sync, Transport};
 use karakuri_engine::{
-    Binding, Blend, Deck, Gpu, HotSwap, Present, Residency, Set, Signals, TonemapOp,
-    DEFAULT_BUDGET_MS,
+    Binding, Blend, Deck, Gpu, HotSwap, Mask, MaskKind, Present, Residency, Set, Signals,
+    TonemapOp, DEFAULT_BUDGET_MS,
 };
 use karakuri_midi::Action;
 use karakuri_signal::NoiseConfig;
@@ -82,6 +82,30 @@ const QUANTA: [(f64, &str); 3] = [(4.0, "the next bar"), (1.0, "the next beat"),
 /// How long a scheduled fade lasts, in beats. A bar, half a bar, two bars, and
 /// a cut — the four an operator reaches for, in the order they are reached for.
 const FADE_BEATS: [f64; 4] = [4.0, 2.0, 8.0, 0.0];
+
+/// The shapes a wipe can take, in cycle order, with the angle each runs at and
+/// what to call it.
+///
+/// `None` first, so that a deck nobody has touched wipes with nothing and says
+/// so rather than doing something. The rest are the four directions and the
+/// iris — the ones a hand reaches for. An arbitrary angle is a dial, and a dial
+/// with nowhere to show its value is a control an operator cannot read.
+const MASK_SHAPES: [(MaskKind, f32, &str); 6] = [
+    (MaskKind::None, 0.0, "off — `c` needs a shape"),
+    (MaskKind::Linear, 0.0, "linear, left to right"),
+    (MaskKind::Linear, std::f32::consts::FRAC_PI_2, "linear, bottom to top"),
+    (MaskKind::Linear, std::f32::consts::FRAC_PI_4, "linear, diagonal"),
+    (MaskKind::Linear, -std::f32::consts::FRAC_PI_4, "linear, the other diagonal"),
+    (MaskKind::Radial, 0.0, "an iris"),
+];
+
+/// How wide a wipe's soft edge is.
+///
+/// Not zero, and not a key. A hard front is an aliased staircase wherever it is
+/// not axis-aligned, and this is the narrowest edge that hides that at the
+/// resolutions this renders at — narrow enough that a wipe still reads as a
+/// wipe rather than a gradient.
+const MASK_SOFTNESS: f32 = 0.02;
 
 /// The shape every scheduled fade takes.
 ///
@@ -353,6 +377,13 @@ keys:
              crossfade object, which is what makes a fade-in, a fade-out and a
              cut the same thing with different numbers. The slot being faded
              in is put on air first
+  c          wipe the next slot in over the focused one — a mask at position
+             0 on the incoming slot, put on air under `over`, and one
+             scheduled move carrying the front to 1. Nothing in the
+             transition knows what a mask is and nothing in the mask knows
+             what a beat is; a wipe is the two of them. Needs a shape from `z`
+  z          cycle the wipe's shape: off, left to right, bottom to top, the
+             two diagonals, an iris
   n          cycle where a fade starts: the next bar, the next beat, now
   j          cycle how long a fade lasts: 4, 2, 8 beats, or 0 for a cut
   v          cycle what the output shows: the mix, then each slot, then the
@@ -1180,6 +1211,7 @@ fn apply_replayed(
         Ok(Some(mix::Change::Opacity { slot, value })) => deck.set_opacity(slot, value),
         Ok(Some(mix::Change::Blend { slot, mode })) => deck.set_blend(slot, mode),
         Ok(Some(mix::Change::Preview { slot })) => deck.set_preview(slot),
+        Ok(Some(mix::Change::Mask { slot, mask })) => deck.set_mask(slot, mask),
         Ok(Some(mix::Change::Transition {
             slot,
             control,
@@ -1227,6 +1259,7 @@ fn schedule_from(
     let from = match control {
         Control::Gain => deck.gain(slot),
         Control::Opacity => deck.opacity(slot),
+        Control::MaskPosition => deck.mask(slot).position(),
     };
     karakuri_engine::Transition::new(slot, control, from, to, start, beats, curve)
 }
@@ -1686,6 +1719,11 @@ struct Live {
     quantum: f64,
     /// How long a scheduled fade lasts, in beats. Same reasoning.
     fade_beats: f64,
+    /// The shape the next wipe uses, and which way it runs. Not a slot's mask:
+    /// this is what `c` will *give* a slot, where the slot's own is deck state
+    /// and travels in the record stream.
+    mask_kind: MaskKind,
+    mask_angle: f32,
     /// The last measured frame interval, from [`Live::steps`].
     last_interval: f32,
     /// When the session started, so a tap has an origin to be measured from.
@@ -1888,6 +1926,8 @@ impl ApplicationHandler for App {
             actions: Vec::new(),
             quantum: QUANTA[0].0,
             fade_beats: FADE_BEATS[0],
+            mask_kind: MASK_SHAPES[0].0,
+            mask_angle: MASK_SHAPES[0].1,
             last_interval: DT,
             started: Instant::now(),
             last: Instant::now(),
@@ -2080,6 +2120,8 @@ impl Live {
                 'f' => self.fade(0.0),
                 'g' => self.fade(1.0),
                 'x' => self.crossfade(),
+                'c' => self.wipe(),
+                'z' => self.cycle_mask(),
                 'n' => self.cycle_quantum(),
                 'j' => self.cycle_fade_beats(),
                 't' => self.cycle_tonemap(),
@@ -2460,6 +2502,76 @@ impl Live {
         );
     }
 
+    /// **Wipe the next slot in over the focused one.**
+    ///
+    /// A mask and one scheduled move, and that is the whole of it: the incoming
+    /// slot is given the current shape at position 0 — revealing nothing — put
+    /// on air under `over` so that what it reveals *hides* what is beneath, and
+    /// then one transition carries the front from 0 to 1. Nothing in the
+    /// transition system knows what a mask is and nothing in the mask knows
+    /// what a beat is.
+    ///
+    /// Under `add` the same gesture is a wipe *on* rather than a wipe *over*,
+    /// which is a different picture and a legitimate one — so the mode is left
+    /// wherever the operator had it, and `over` is only forced when the slot
+    /// was still at the default. That way `m` in front of `c` means something.
+    fn wipe(&mut self) {
+        let under = self.focus;
+        let over = (under + 1) % self.deck.slot_count();
+        if over == under {
+            eprintln!("a wipe needs somewhere to come from — this deck holds one slot");
+            return;
+        }
+        if self.mask_kind == MaskKind::None {
+            eprintln!("no mask shape — `z` chooses one, and a wipe is a shape moving");
+            return;
+        }
+        let mask = Mask::new(self.mask_kind, self.mask_angle, 0.0, MASK_SOFTNESS);
+        self.record(mix::mask_record(over, mask));
+        self.record(mix::opacity_record(over, 1.0));
+        if self.deck.blend(over) == Blend::Add {
+            self.record(mix::blend_record(over, Blend::Over));
+        }
+        if self.deck.residency(over) != Residency::Live {
+            self.record(mix::residency_record(over, Residency::Live));
+        }
+        let now = self.deck.signals().oscillator().beats();
+        let start = karakuri_engine::transition::quantise(now, self.quantum);
+        self.record(mix::transition_record(
+            over,
+            karakuri_engine::transition::Control::MaskPosition,
+            1.0,
+            start,
+            self.fade_beats,
+            FADE_CURVE,
+        ));
+        eprintln!(
+            "wipe {over} over {under} — {} at {:.0}°, over {} beat{} from {}",
+            self.mask_kind.name(),
+            self.mask_angle.to_degrees(),
+            self.fade_beats,
+            if self.fade_beats == 1.0 { "" } else { "s" },
+            self.quantum_name()
+        );
+    }
+
+    /// The shape the next wipe uses, and which way it runs.
+    ///
+    /// One key for both, because the shapes and the angles an operator actually
+    /// reaches for are a short list rather than two dials: across, up, the two
+    /// diagonals, and an iris. A dial for the angle is M5's, where there is
+    /// somewhere to see it.
+    fn cycle_mask(&mut self) {
+        let at = MASK_SHAPES
+            .iter()
+            .position(|(k, a, _)| *k == self.mask_kind && *a == self.mask_angle)
+            .unwrap_or(0);
+        let (kind, angle, name) = MASK_SHAPES[(at + 1) % MASK_SHAPES.len()];
+        self.mask_kind = kind;
+        self.mask_angle = angle;
+        eprintln!("wipes are {name}");
+    }
+
     /// One scheduled move on a slot's fader, through the record.
     ///
     /// The start is resolved **here**, once, against the grid as it stands: the
@@ -2638,6 +2750,7 @@ impl Live {
             mix::Change::Opacity { slot, value } => self.deck.set_opacity(slot, value),
             mix::Change::Blend { slot, mode } => self.deck.set_blend(slot, mode),
             mix::Change::Preview { slot } => self.deck.set_preview(slot),
+            mix::Change::Mask { slot, mask } => self.deck.set_mask(slot, mask),
             mix::Change::Transition {
                 slot,
                 control,
@@ -2869,6 +2982,7 @@ impl Live {
                     match t.control() {
                         karakuri_engine::transition::Control::Gain => "g",
                         karakuri_engine::transition::Control::Opacity => "o",
+                        karakuri_engine::transition::Control::MaskPosition => "w",
                     },
                     t.to()
                 );
