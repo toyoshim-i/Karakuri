@@ -13,14 +13,14 @@ karakuri-midi = { version = "0.1.0", path = "../karakuri-midi" }
 karakuri-signal = { version = "0.1.0", path = "../karakuri-signal" }
 karakuri-store = { version = "0.1.0", path = "../karakuri-store" }
 png = "0.18.1"
+# The tempo-source wire format is read at run time, not only in tests.
+serde.workspace = true
+serde_json.workspace = true
 pollster = "1.0.1"
 wgpu = "26.0.1"
 winit = "0.30.13"
 
 [dev-dependencies]
-# The record conversions are checked through the JSON a session stream would
-# actually hold, rather than only as Rust values.
-serde_json.workspace = true
 # A Set file is a directory of artifacts and a file; the round trip is only
 # worth checking against a real one.
 tempfile = "3"

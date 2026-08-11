@@ -25,7 +25,22 @@ things go outside" — Link runs everywhere and is out here for its toolchain, n
 That distinction survives into what the host says when something is missing; see the table
 below.
 
-## The input side already exists
+## The input side is built
+
+`--tempo-source COMMAND` runs a program and follows the beat it reports. The wire format is
+specified in `crates/karakuri-cli/src/tempo_source.rs`: versioned ndjson over a pipe, an
+**anchor** rather than a sample — a beat, a tempo, and the source's own clock reading at
+which both were true — so the transport's delay never becomes phase error. Karakuri
+estimates the offset between that clock and its own as the minimum over a sliding window,
+which filters out delivery delay and forgets a bad reading.
+
+**How far a source may move the grid is bounded**, and that bound is the interface's, not
+the source's. The first anchor aligns; every one after it trims by at most a twentieth of a
+beat; three consecutive anchors disagreeing by more than a beat re-align and say so. An
+in-process beat tracker has had gates and evidence counters since it was written, and the
+out-of-process program is the one that most needs them.
+
+## The other input side already exists
 
 `karakuri-midi` plus the CLI's `Router` and `Surface` are the shape, working, in tree:
 every MIDI action ends in the method a key press ends in, so a controller can do nothing a
@@ -78,8 +93,19 @@ extracted from rather than one to be guessed at.
 
 ## Distribution
 
-Plugins live in their own repositories, imported as submodules under `third_party/`
-alongside the SDK. **The built artifacts are not committed here.** What is committed is a
+Plugins live in their own repositories, and **this one prescribes nothing about where a
+checkout of them goes** — not a submodule, not a directory, not a gitignore entry. Whoever
+develops one puts it wherever they keep repositories. A layout invented here would be this
+project's answer to somebody else's question, and it would outlive the reason for it.
+
+Keeping the source out entirely is also the simplest thing to explain, and the Link helper
+gives that a second reason the first draft of this document did not know: it is
+**GPL-2.0-or-later**, because Ableton Link is, where this workspace is MIT. The combination
+is permitted and would mean a binary linking it is distributed under the GPL, so the
+boundary that matters is between two *programs*. Nothing about a directory changes that, and
+nothing about a directory has to.
+
+**The built artifacts are not committed here either.** What is committed is a
 manifest — per plugin: name, interface version, the plugin repository's tag, and per target
 triple an asset name and a sha256. `cargo xtask plugins` fetches the current triple's assets,
 verifies them, and drops them in a gitignored directory that is also the default plugin

@@ -183,11 +183,25 @@ impl Audio {
     ///
     /// Never blocks: the device read is a `try_lock` that keeps the previous
     /// value on contention, and nothing on this path allocates.
+    /// `grid` says whether this tracker is allowed to move the session's grid.
+    ///
+    /// **`Grid::Followed` when something else is already on it.** A tempo
+    /// source carries a beat number every peer agrees on; this tracker carries
+    /// an estimate made from a microphone. When both are present the estimate
+    /// must not fight the agreement — and it would, every frame: once locked,
+    /// `Lock::update` returns a trim on *every* call, so the two would take
+    /// turns writing the phase sixty times a second and the picture would sit
+    /// between them.
+    ///
+    /// Everything else the tracker does is unaffected. `energy`, `onset` and
+    /// the bands are still measured, still recorded, and still drive every
+    /// binding — what is withheld is only the authority to move the grid.
     pub fn frame(
         &mut self,
         signals: &mut Signals,
         elapsed: f32,
         step: f32,
+        grid: Grid,
     ) -> (&Record, Option<Record>) {
         // A frame interval measured on the host clock, smoothed hard: this is
         // an input to a latency, and a single hitched frame is not a change in
@@ -214,6 +228,13 @@ impl Audio {
         let correction = self
             .lock
             .update(&reading.estimate, ahead, signals.oscillator(), step);
+        // The lock is updated either way, so that a source going away leaves a
+        // tracker that has been following all along rather than one starting
+        // cold — it is only the *writing* that is withheld.
+        let correction = match grid {
+            Grid::Owned => correction,
+            Grid::Followed => None,
+        };
         let tempo = correction.map(|c| {
             let record = tempo_record(&c);
             apply_tempo(signals, &record);
@@ -302,6 +323,16 @@ impl Audio {
 /// tuning problem forever after.
 pub fn output_lag(frame_interval: f32, latency_offset_ms: f32) -> f32 {
     QUEUE_FRAMES * frame_interval + latency_offset_ms / 1000.0
+}
+
+/// Who is allowed to move the session's grid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Grid {
+    /// This tracker's, because nothing else is on it.
+    Owned,
+    /// Something else's — a tempo source. The tracker keeps tracking and keeps
+    /// quiet.
+    Followed,
 }
 
 /// Clamp the operator's offset into [`LATENCY_OFFSET_RANGE`].

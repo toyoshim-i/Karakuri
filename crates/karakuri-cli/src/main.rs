@@ -24,6 +24,7 @@ mod midi;
 mod mix;
 mod render;
 mod session;
+mod tempo_source;
 mod setfile;
 mod watch;
 
@@ -295,6 +296,15 @@ options:
                         where the tracker's one-octave window starts, so a value
                         within about 40% of the real tempo settles the octave —
                         and `,`/`.` are the fix when it does not
+  --tempo-source CMD    run CMD as a child process and follow the beat it
+                        reports. A shared grid carries a beat *number*, so
+                        `bar` becomes the room's bar rather than one counted
+                        from when this started — which a beat tracker cannot
+                        do, because a downbeat is not recoverable from audio.
+                        The first anchor aligns the grid and every one after
+                        it is trimmed, because the source is another program;
+                        while one is attached the beat tracker keeps measuring
+                        and stops moving the grid. See docs/plugins.md
   --audio-in NAME       open an audio input: `default`, or any part of a
                         device's name. `energy`, `onset` and band0..7 become
                         measured signals at full confidence, and the beat is
@@ -566,6 +576,11 @@ struct Args {
     /// default: a run that is not being edited should not carry a worker
     /// thread per slot and a watchdog it will never use.
     watch: bool,
+    /// `--tempo-source`. A command to run as a child process that says where
+    /// the beat is — see [`crate::tempo_source`]. `None` is the ordinary case
+    /// and changes nothing: the grid comes from `--bpm`, the beat tracker and
+    /// the tap keys exactly as it always has.
+    tempo_source: Option<String>,
     /// `--audio-in`. `None` is no device at all, which is not the same as a
     /// device that is silent: with no device the bus answers `energy` and the
     /// bands exactly as it did before audio existed, and the oscillator
@@ -869,6 +884,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         canvas: (1920, 1080),
         canvas_given: false,
         watch: false,
+        tempo_source: None,
         audio_in: None,
         midi_in: None,
         midi_map: None,
@@ -969,6 +985,9 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                         ))
                     }
                 }
+            }
+            "--tempo-source" => {
+                args_out.tempo_source = Some(value_for("--tempo-source", &mut it)?);
             }
             "--audio-in" => {
                 args_out.audio_in = Some(value_for("--audio-in", &mut it)?);
@@ -1087,6 +1106,19 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                 .to_string(),
         );
     }
+    let offscreen = args_out.render_to.is_some() || args_out.seq_to.is_some();
+    // Third of the same kind, and the same argument: a tempo source is another
+    // machine's clock, and an offscreen run's output has to be a function of
+    // its arguments. A replay has a stronger reason still — it follows the grid
+    // the session recorded, so a live source would be overwriting the
+    // performance it is supposed to be reproducing.
+    if args_out.tempo_source.is_some() && (offscreen || args_out.replay.is_some()) {
+        return Err(
+            "`--tempo-source` with `--render`, `--seq` or `--replay` — an offscreen run \
+             takes no live input, and a replay follows the grid the session recorded"
+                .to_string(),
+        );
+    }
     // A map with no port is a file nothing reads, and the likely cause is a
     // forgotten `--midi-in` rather than a deliberate one.
     if args_out.midi_map.is_some() && args_out.midi_in.is_none() {
@@ -1100,7 +1132,6 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
     // removed: a reader who types `--render out.png --size 1920x1080` today
     // means `--canvas`, and quietly rendering at 1280x720 because `--size` no
     // longer reaches the canvas would be the worst of the three outcomes.
-    let offscreen = args_out.render_to.is_some() || args_out.seq_to.is_some();
     if size_given && (offscreen || args_out.replay.is_some()) {
         return Err(
             "`--size` sets the preview window, and this run has no window. \
@@ -1880,6 +1911,79 @@ struct App {
     live: Option<Live>,
 }
 
+/// Put the session's grid where the tempo source says the shared grid is.
+///
+/// **The subtraction happens here and not in the source**, for the reason
+/// `schedule_from` reads a transition's `from` end here: the two numbers — the
+/// shared beat and this session's beat — are only both in hand at this moment.
+/// A source that sent a shift would be sending a difference from a grid it
+/// cannot see.
+///
+/// That subtraction is the whole of what a shared grid adds. A beat tracker can
+/// find how fast beats go and where they are, and **cannot find which one is
+/// beat one**; a number every peer agrees on can, and putting `beats()` onto
+/// that number is what makes `bar` the room's bar rather than one counted from
+/// whenever this program started.
+///
+/// **How far it is allowed to move is [`tempo_source::Source::correction`]'s**,
+/// and that bound is not optional: the source is another program, from another
+/// repository, released on its own schedule. This used to apply whatever
+/// arrived, whole and instantly, which made a helper with a wrong clock able to
+/// throw the grid thousands of beats.
+///
+/// Returns whether the grid is being followed, which is what takes the
+/// authority to move it away from the beat tracker.
+fn follow_tempo_source(
+    source: &mut Option<tempo_source::Source>,
+    deck: &mut Deck,
+    recorder: &mut Option<session::Recorder>,
+) -> audio::Grid {
+    let Some(source) = source.as_mut() else {
+        return audio::Grid::Owned;
+    };
+    let heard = source.poll();
+    // **Said once and then nothing changes.** The grid is not reset when a
+    // source dies: the last tempo it gave is still the best information anyone
+    // has, and a show whose beat jumped because a helper crashed would be worse
+    // off than one that simply stopped being corrected.
+    if let Some(why) = source.unreported_end() {
+        eprintln!("tempo source: {why} — the grid holds where it was");
+    }
+    // A dead source stops being an authority, so the tracker gets the grid back
+    // rather than nothing having it.
+    if source.ended().is_some() {
+        return audio::Grid::Owned;
+    }
+    let Some(anchor) = heard.anchor else {
+        return audio::Grid::Followed;
+    };
+
+    let ours = deck.signals().oscillator().beats();
+    let (bpm, shift) = match source.correction(anchor, ours, source.now_us()) {
+        tempo_source::Correction::Align { bpm, shift } => {
+            eprintln!("tempo source: grid aligned, {shift:+.2} beats to {bpm:.1} bpm");
+            (bpm, shift)
+        }
+        tempo_source::Correction::Trim { bpm, shift } => (bpm, shift),
+        tempo_source::Correction::Hold => return audio::Grid::Followed,
+    };
+
+    let record = karakuri_store::record::Record::Tempo {
+        bpm: bpm as f32,
+        shift: shift as f32,
+        // Not an estimate. A tracker's confidence says how much to believe a
+        // guess made from audio; a shared grid is not a guess.
+        confidence: 1.0,
+    };
+    let mut signals = *deck.signals();
+    audio::apply_tempo(&mut signals, &record);
+    deck.set_signals(signals);
+    if let Some(recorder) = recorder.as_mut() {
+        recorder.push(record);
+    }
+    audio::Grid::Followed
+}
+
 /// This frame's measurement, and what it does to the session.
 ///
 /// **Before the frame is rendered and never inside it.** The measured frame and
@@ -1904,12 +2008,13 @@ fn measure_audio(
     recorder: &mut Option<session::Recorder>,
     interval: f32,
     steps: u8,
+    grid: audio::Grid,
 ) {
     let Some(audio) = audio.as_mut() else {
         return;
     };
     let mut signals = *deck.signals();
-    let (_audio_record, tempo) = audio.frame(&mut signals, interval, f32::from(steps) * DT);
+    let (_audio_record, tempo) = audio.frame(&mut signals, interval, f32::from(steps) * DT, grid);
     deck.set_signals(signals);
 
     // **Swapped, not cloned.** The record carries a `Vec` of bands and this is
@@ -2047,6 +2152,12 @@ struct Live {
     /// [`crate::midi`] — so nothing in the frame path below changes at all when
     /// this is `None`.
     midi: Option<midi::Surface>,
+    /// The tempo source, when `--tempo-source` asked for one. `None` and
+    /// nothing in the frame path below changes at all — the grid comes from
+    /// `--bpm`, the tracker and the tap keys, exactly as it did before this
+    /// existed. That is the same property `audio` and `midi` have and it is
+    /// the one worth keeping.
+    tempo_source: Option<tempo_source::Source>,
     /// Scratch for [`midi::Surface::take`], owned so the frame path allocates
     /// nothing. Empty on every frame nothing was touched.
     actions: Vec<karakuri_midi::Action>,
@@ -2232,6 +2343,27 @@ impl ApplicationHandler for App {
             None => None,
         };
 
+        // Third of the same kind. Fatal for the same reason: `--tempo-source`
+        // was asked for, and a run that quietly went on following its own grid
+        // would look exactly like one whose source is attached and agreeing.
+        let tempo_source = match &self.args.tempo_source {
+            Some(command) => match tempo_source::Source::open(command) {
+                Ok(source) => {
+                    eprintln!(
+                        "tempo source: `{}` — the grid follows its beat, and `bar` is the \
+                         room's rather than one counted from when this started",
+                        source.name()
+                    );
+                    Some(source)
+                }
+                Err(e) => {
+                    eprintln!("karakuri-cli: tempo source: {e}");
+                    std::process::exit(2);
+                }
+            },
+            None => None,
+        };
+
         eprint!("\n{BINDINGS}\n");
 
         // Opened before the first frame and never on one: it creates a file
@@ -2272,6 +2404,7 @@ impl ApplicationHandler for App {
             clock: Clock::new(Instant::now()),
             audio,
             midi,
+            tempo_source,
             actions: Vec::new(),
             quantum: QUANTA[0].0,
             fade_beats: FADE_BEATS[0],
@@ -2328,6 +2461,11 @@ impl ApplicationHandler for App {
         if let Some(live) = &mut self.live {
             // Before the counts, because it ends a thread and flushes a file
             // and those are the things worth knowing failed.
+            // Before the counts and before the recorder: it is another process
+            // and leaving it running would outlive the window that started it.
+            if let Some(source) = live.tempo_source.take() {
+                source.close();
+            }
             if let Some(recorder) = live.recorder.take() {
                 match recorder.finish() {
                     Ok(w) => {
@@ -3207,17 +3345,26 @@ impl Live {
             audio,
             recorder,
             look,
+            tempo_source,
             ..
         } = self;
         let outcome = frame::compose(gpu, deck, present, sink, |deck| {
             let steps = clock.steps(Instant::now());
+            // **The source first, and it takes the grid with it.** Both end in
+            // a `tempo` record and `Oscillator::correct` is last-writer-wins,
+            // so running the source first and letting the tracker follow would
+            // have meant the tracker winning — it returns a trim on every
+            // frame once locked, against the source's four a second. The order
+            // is not what settles it: `Grid::Followed` is, by telling the
+            // tracker to keep tracking and keep quiet.
+            let grid = follow_tempo_source(tempo_source, deck, recorder);
             // **Everything this frame decided, and only then the `tick` that
             // closes it.** A tick is a terminator rather than a header:
             // `session::split` files each record into the frame of the *next*
             // tick, so a record written after this frame's tick belongs to the
             // next frame. The audio was on the wrong side of that line, which
             // showed a replay frame N what frame N−1 heard.
-            measure_audio(audio, deck, recorder, clock.interval(), steps);
+            measure_audio(audio, deck, recorder, clock.interval(), steps, grid);
             if let Some(recorder) = recorder {
                 recorder.push(karakuri_store::record::Record::Tick { steps });
             }
@@ -3389,6 +3536,38 @@ impl Live {
         // What audio is doing, when there is any. A performer cannot tune what
         // they cannot see: the confidence says whether the input is alive, and
         // the phase error says which way the offset wants nudging.
+        // **Where the grid is coming from, before what it currently is.** The
+        // number an operator needs to trust is the tempo; the thing that tells
+        // them whether to trust it is its source, and until now there was only
+        // ever one. `link 2p` is a shared grid with two other peers on it;
+        // `link 0p` is a source running and alone, which is a different
+        // situation from no source at all and has to look different.
+        if let Some(source) = &self.tempo_source {
+            let _ = write!(
+                self.status,
+                "| {} {}p{}{} ",
+                source.name(),
+                source.peers(),
+                // **Counted, not swallowed.** Anchors thrown away for
+                // unusable numbers mean a source that has gone wrong, and
+                // nothing else would ever say so.
+                match source.rejected() {
+                    0 => String::new(),
+                    n => format!(" x{n}"),
+                },
+                match (source.ended().is_some(), source.playing()) {
+                    (true, _) => " GONE",
+                    // **Three states and not two.** A source that has greeted
+                    // and said nothing else is not a stopped source, and the
+                    // two used to print the same thing — which is the pair an
+                    // operator would act differently on. Shown and not acted
+                    // on, like every other measurement here.
+                    (false, None) => " ?",
+                    (false, Some(false)) => " stop",
+                    (false, Some(true)) => "",
+                }
+            );
+        }
         if let Some(audio) = &self.audio {
             let a = audio.status();
             let _ = write!(
@@ -4185,6 +4364,25 @@ mod value_tests {
         assert!(parse(&["--size", "800x600"]).is_none());
         assert!(parse(&["--size", "800x600", "--canvas", "1920x1080"]).is_none());
         assert!(parse(&["--render", "out.png", "--canvas", "1920x1080"]).is_none());
+    }
+
+    /// A tempo source is a live input, and an offscreen run has none.
+    ///
+    /// The replay half has its own reason and it is the stronger one: a replay
+    /// follows the grid the session recorded, so a live source would be
+    /// overwriting the performance it is supposed to be reproducing.
+    #[test]
+    fn a_tempo_source_is_refused_where_there_is_no_performance_to_follow() {
+        for args in [
+            vec!["--tempo-source", "helper", "--render", "out.png"],
+            vec!["--tempo-source", "helper", "--seq", "frames/"],
+            vec!["--tempo-source", "helper", "--replay", "a", "--render", "out.png"],
+        ] {
+            let err = parse(&args).unwrap_or_else(|| panic!("{args:?} was accepted"));
+            assert!(err.contains("--tempo-source"), "{args:?} -> {err}");
+        }
+        assert!(parse(&["--tempo-source", "helper"]).is_none());
+        assert!(parse(&["--tempo-source", "helper", "--audio-in", "default"]).is_none());
     }
 
     /// A recorder that never gets built is refused rather than dropped.
