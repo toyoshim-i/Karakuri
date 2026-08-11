@@ -217,7 +217,7 @@ Three properties, all of them load-bearing:
 
 What it is **not** is a seek. Reading `beats` says where the room is; it does not let a
 procedure be evaluated at another time. That is the transport, it needs `closed_form`, and
-it is not built. Nor does reading `beats` disqualify a procedure from being closed form: the
+it is built — see the `transport` record. Nor does reading `beats` disqualify a procedure from being closed form: the
 grid is a pure function of `t` given its current tempo and anchor, so a procedure of
 `(seed, t, params, beats)` is still evaluable at any `t` — against the grid **as it stands**,
 which is what a scrub wants and is not what the grid historically was.

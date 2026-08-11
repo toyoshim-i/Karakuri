@@ -161,7 +161,7 @@ hint: the signal bus is not readable from IR — declare `param energy` and atta
 | VideoSource | The interface L5 consumes. Set is one implementation of it |
 | Signal bus | Input distributed to every layer. Always complete; values carry a confidence |
 | Local oscillator | The single source of truth for phase and tempo. External input is only correction |
-| Record stream | The path engine state is meant to be mutated through, so that a session replays. ndjson. **Audio, tempo, the mix and the transport go through it today; the material does not** — see Invariants |
+| Record stream | The path engine state is mutated through, so that a session replays. ndjson. **Everything an operator moves goes through it, and so does the material** — see Invariants |
 | Set file | A Set's state projection. No time in it |
 | Session stream | The timeline. A Set file followed by `tick` records and the edits between them |
 
@@ -195,21 +195,35 @@ during implementation, these win.
   an invariant that reads like a report of the code is worse than one that admits it is
   not there yet.
 
-  What goes through a record: `audio` and `tempo` every frame, and `gain`, `residency`,
-  `look` and `transport` on every key that moves them. All five are built, read back, and only then
-  applied, so what drives the engine is what a replay would decode rather than a second
-  path that happens to agree with it.
+  What goes through a record: `audio` and `tempo` every frame, and `gain`, `opacity`,
+  `blend`, `mask`, `transition`, `preview`, `residency`, `look` and `transport` on every key
+  that moves them. Each is built, read back, and only then applied, so what drives the
+  engine is what a replay would decode rather than a second path that happens to agree with
+  it.
+
+  **A control surface is what put that under load**, because it is the first thing that is
+  not the keyboard: every MIDI action ends in the method a key press ends in, so a session
+  recorded from a controller replays with neither controller nor map attached. Building it
+  found the one place the invariant was already false — the beat tap moved the grid and
+  dropped the `tempo` record it had just built, so a session replayed on a different phase
+  from the one it was played on. Two keys were doing it. That is the value of stating an
+  invariant as a claim rather than keeping it as a habit.
 
   The **material** joined them: `--load-set` builds a Set from `set`, `slot`, `capacity`,
   `param`, `bind`, `camera` and `seed` records, and `--bind` is now a way of *writing* a
   `bind` record rather than a second path beside it — one decoder, so a command line and a
   Set file cannot mean different things by the same fields.
 
-  **Every record type now has a writer.** `--record-session` writes the timeline as it
-  happens — the Set's records, a `tick` a frame, and every edit between them — and
-  `--replay` renders it back, reading `tick` where a live run reads a clock and `audio`
-  where it reads a microphone. So a performance is replayed rather than only rebuilt, and
-  the invariant above is a description at last.
+  **Every record type has a writer**, and a session carries its own material:
+  `--record-session` writes the Set at the head of the stream and then the timeline — a
+  `tick` a frame and every edit between them — and `--replay` renders it back, reading
+  `tick` where a live run reads a clock and `audio` where it reads a microphone. So a
+  performance is replayed rather than only rebuilt.
+
+  **What is still short is one thing, and it is the format's**: a session stream has no way
+  to say what a *deck* held. A Set file describes one Set, so only slot 0's material reaches
+  the head and a multi-slot session replays the rest of the performance against a deck of
+  one, reporting what it skipped. Closing that is a format change.
 
   The frame path still writes nothing itself: serialising allocates, so a frame moves a
   record into a buffer that already has room and a writer thread does the rest. An `audio`
@@ -391,16 +405,16 @@ governor, alongside the decision about whether GPU timestamps can be trusted at 
 | **The store, in use** | The CLI does not use it. Artifacts are loose files |
 | Tone mapping | Works. Four operators — clamp, Reinhard, ACES, AgX — chosen by a uniform, so switching one mid-set is a buffer write. ACES by default, picked by rendering all four across five exposures and looking; `cargo run -p karakuri-engine --example tonemap_compare` regenerates that. Applied once, immediately before the single sRGB encode |
 | The deck and the mix | Works. Up to four slots, each with its own `HotSwap` and its own HDR target, folded together in slot order with a per-slot **gain, opacity and blend mode**. Allocated holds its state, so a slot brought back resumes rather than restarts |
-| Blend modes | Works: `add`, `over`, `max`. The set is what survives an **unbounded linear HDR** mix rather than what a VJ mixer usually lists — `screen` and `multiply` assume `[0, 1]` and nothing has tone mapped this far up the pipeline, so `screen` of two 2.0s is 0.0. `over` is the only mode in which one layer hides another, and what it hides with is coverage the L4 pass accumulates into alpha; thin material barely covers, which is correct rather than a defect. This is also what finally separates **gain from opacity** — gain is the level the material arrives at, opacity is the fader across the blend and the only control that silences a slot under every mode. What is not built: masks, and a layer stack that is anything other than slot order |
+| Blend modes | Works: `add`, `over`, `max`. The set is what survives an **unbounded linear HDR** mix rather than what a VJ mixer usually lists — `screen` and `multiply` assume `[0, 1]` and nothing has tone mapped this far up the pipeline, so `screen` of two 2.0s is 0.0. `over` is the only mode in which one layer hides another, and what it hides with is coverage the L4 pass accumulates into alpha; thin material barely covers, which is correct rather than a defect. This is also what finally separates **gain from opacity** — gain is the level the material arrives at, opacity is the fader across the blend and the only control that silences a slot under every mode. What is not built: a layer stack that is anything other than slot order |
 | Priming and the governor | Works. Priming steps a slot and does not draw it — L1 owns every piece of per-element state and L4 is stateless, so warming is the compute passes and nothing else. The governor computes each slot's effective residency from the operator's request and a budget of per-Set costs measured by the probe at build time. It **never demotes a Live slot**: an over-budget deck reports and suspends priming. An unmeasured Live slot means the committed cost is unknown, and unknown is not headroom, so priming is suspended until every slot has been measured |
 | Audio | Works. Analysis runs in the driver's callback, not on the frame path, and the frame reads one small value through a `try_lock` on both sides so neither can block. Level is RMS mapped −60 to −6 dBFS: a mastered track's loud windows sit near the top of that, where a top at 0 dBFS would leave real music between 0.80 and 0.90 and a bound parameter barely moving |
 | Beat tracking | Works. The grid is **predicted, not chased**: once locked it free-runs, takes a slow trim, and moves not at all for a single disagreeing estimate — re-acquiring takes eight consecutive consistent revisions. **The octave is folded, not judged**: every candidate period is halved or doubled into a one-octave window centred on the grid, which starts at `--bpm`. So a window centred an octave off tracks an octave off, `,` and `.` are the fix, and there is deliberately no automatic one — the alternative is a heuristic that can be confidently wrong, which is the failure that shows on stage. A 3:2 error is a different problem and is not touched. The correction leads by the analysis lag plus the output lag, so what is shown lands on the beat rather than behind it |
 | Where the lead comes from | The measurable part is computed and the rest is a **signed operator offset**, on `o`/`p`. That is not a gap waiting for a better sensor: sound and picture leave by different paths, neither ends at this machine, and what has to line up is what a person in the room sees and hears. So the measured half aims at being *stable* rather than complete — a constant unknown costs one adjustment, a drifting one costs the whole night — and the offset goes negative, because a delayed PA makes the sound the late one |
 | Per-slot metering | Works. Mean and peak linear Rec.709 luminance per drawn slot — Live, or being auditioned — reduced on the GPU and read back without ever waiting, so it lags a few frames and says by how many. A slot nobody is drawing reads nothing rather than reading what it last drew. Texels whose luminance is not a finite number are counted and left out of both figures: one NaN admitted to a sum makes the mean NaN, and dividing by a value that reaches zero is ordinary enough in a shader that a routine artifact would otherwise cost a slot the number its fader is set by |
 | Masks | Works: a straight front at an angle, and an iris, per slot. A mask multiplies the layer's opacity per texel — everything the fader does, done to part of the frame — so it needed no new place in the composite. Both ends of the front are exact, 0 revealing nothing anywhere and 1 revealing everything everywhere, which is what lets a layer masked to nothing be **skipped**: a third escape from material that has gone NaN, beside residency and the fader. **A wipe is a mask and one scheduled move** (`c`), and neither half knows about the other. Out: a mask read from a texture — an arbitrary shape, or another layer's luminance — which wants M3's `Field` |
-| Transitions | Works. One scheduled move — a control, a destination, a musical duration, a curve — and a crossfade is two of them sharing a start and a length. `f`/`g` fade the focused slot out and in, `x` crossfades to the next slot, `n` and `j` choose where a fade starts and how long it lasts. **The first thing in the engine that schedules on the beat clock** — the transport already *follows* it — and a fade is a function of the session's beat count and of nothing else, so the same records reproduce it on a machine at a different frame rate and a tempo change mid-fade moves the fade with it. One record schedules the whole move and the values it produces are not recorded, which is `tick`'s shape from the other end. A hand on a control cancels whatever was moving it. What is not built: a transition that is not a fade — a wipe wants masks |
+| Transitions | Works. One scheduled move — a control, a destination, a musical duration, a curve — and a crossfade is two of them sharing a start and a length. `f`/`g` fade the focused slot out and in, `x` crossfades to the next slot, `n` and `j` choose where a fade starts and how long it lasts. **The first thing in the engine that schedules on the beat clock** — the transport already *follows* it — and a fade is a function of the session's beat count and of nothing else, so the same records reproduce it on a machine at a different frame rate and a tempo change mid-fade moves the fade with it. One record schedules the whole move and the values it produces are not recorded, which is `tick`'s shape from the other end. A hand on a control cancels whatever was moving it. A wipe is one of these carrying a mask's front, which is why there is no `wipe` record and no `crossfade` record — the first-class things are the shape and the move |
 | Slot preview | Works. `v` cycles what the output shows: the mix, then each slot. An audition **adds a draw and never a step**, so an off-air slot is drawn while it is being looked at and nothing moves that would not have moved anyway — an allocated slot shows the still it stopped at, a priming one shows what it is warming into. Not a second pass: the mix runs as always with that slot's terms at unity and the others skipped, so what lands is its own texels through the same tone mapper. Shown ignoring its faders, and metered, because the number wanted before putting it on air is the level the material arrives at. What is not built is a default renderer per topology — there is no slot holding geometry with no L4 to draw it, so there is nothing yet for one to do |
-| MIDI in | Works. `--midi-in` opens a port, `--midi-map` says what each knob and pad does, and every action ends in **the same record a key press writes** — so a surface can do nothing a key cannot, and a session recorded from one replays with neither attached. The map is a file and is deliberately **not** in the stream: which knob is which belongs to the hardware in the room. With no map, every message prints the line that would map it, which is how a surface is discovered until M5 has a UI to assign one in. 7-bit; the 14-bit MSB/LSB convention is not implemented, which is about 0.8% of a fader's range per step. Out: not built |
+| MIDI in | Works. `--midi-in` opens a port, `--midi-map` says what each knob and pad does, and every action ends in **the same record a key press writes** — so a surface can do nothing a key cannot, and a session recorded from one replays with neither attached. The map is a file and is deliberately **not** in the stream: which knob is which belongs to the hardware in the room. With no map, every message prints the line that would map it, which is how a surface is discovered until M5 has a UI to assign one in. 7-bit; the 14-bit MSB/LSB convention is not implemented, which is about 0.8% of a fader's range per step. **MIDI out is not built**, so a surface's LEDs and motorised faders do not follow the deck — which starts to matter the moment two things can move one fader, and a transition is now one of them |
 | **A panic key** | Deliberately not built, and the reasoning is in `docs/roadmap.md`. Everything it would undo is already manually recoverable, and an anomaly is usually one frame and usually harmless — so a control that resets a performance in response to one does more damage than the thing it responds to. What was missing was a way to *see*, not a way to recover, which is the third time this milestone has landed on **show the number, act on nothing** |
 | **Bloom** | Does not exist. Values above 1.0 are what would feed it |
 | **Automatic gain** | Deliberately not built. The meter shows the number; nothing acts on it. An exposure that moves by itself is the worst thing that can happen on stage, and the honest order is to show the measurement first |
