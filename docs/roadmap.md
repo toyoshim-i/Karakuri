@@ -164,9 +164,7 @@ blend modes; slot preview; MIDI in; transitions; masks; window output as a previ
 against what it promised — the ones marked **Done** are worth reading for where the promise
 was wrong, not only for the fact that it is kept.
 
-**Ableton Link is built and verified**, and the verification produced a negative result
-worth more than the feature: **it does not solve the problem it was chosen for, with
-rekordbox.**
+**Ableton Link is built and verified**, and the verification changed what it is for.
 
 `--tempo-source` works — a helper joins a Link session and Karakuri follows the shared beat,
 checked end to end through a real peer, a proposed tempo change, and into a recorded
@@ -176,10 +174,24 @@ Link has no master mechanism, so a tempo fader cannot be the thing that drives a
 tempo. The Link tempo is entered by hand in a subscreen, or from a MIDI-mapped knob, and
 nothing connects it to the track that is playing.
 
-So with rekordbox a shared grid is a number a human types, which is a tap done in another
-application — and `b` is a tap done here. The downbeat that Link was chosen to provide is
-only as aligned as whoever typed it. **Link earns its place with a peer that drives it**
-(Ableton Live), and not with the deck software this project was aimed at.
+So with rekordbox, Link does not make the picture follow the music by itself. It was chosen
+on the expectation that it would, and it does not.
+
+**That is a narrower failure than it first looked, and the first draft of this paragraph
+got it wrong.** A set is not a rehearsed timeline played back; matching the timing on the
+night is the craft, and an operator is riding controls all evening anyway. "It has to be set
+by hand" is the same answer this milestone gave to semi-automatic gain, the tempo octave and
+the panic key — and calling it a failure here contradicted the position taken everywhere
+else.
+
+What Link gives even when it is set by hand is that the setting is **shared**. `b` taps a
+grid on this machine; a tap in the Link subscreen puts every peer on it at once, which is
+worth having the moment there is more than one machine or more than one application in the
+rig. The downbeat is only as good as the hand that set it — and it is that good on every
+peer simultaneously.
+
+Where it does deliver what was hoped for is a peer that *drives* Link, such as Ableton
+Live.
 
 What that does *not* invalidate is the seam. `--tempo-source` is an interface for tempo
 sources in general and was deliberately not Link's, so the next candidate — a MIDI clock
