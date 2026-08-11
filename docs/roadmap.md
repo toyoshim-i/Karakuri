@@ -159,10 +159,10 @@ not the expensive half.
 **Landed so far**, in order: the deck with an L5 mix and a per-slot level meter; tone
 mapping once after the mix; signal binding; priming, the budget governor and `closed_form`;
 audio input with beat tracking; a record vocabulary for the mix; the `beats` ambient;
-per-slot transport; Set files, saved and loaded; a session writer and a replay driver; the
-L5 blend modes. Each bullet below says
-what it cost against what it promised — the ones marked **Done** are worth reading for
-where the promise was wrong, not only for the fact that it is kept.
+per-slot transport; Set files, saved and loaded; a session writer and a replay driver; L5
+blend modes; slot preview; MIDI in; transitions; masks. Each bullet below says what it cost
+against what it promised — the ones marked **Done** are worth reading for where the promise
+was wrong, not only for the fact that it is kept.
 
 **Still open**, and the shape of the rest of this milestone: output routing and Ableton
 Link. The panic key is **decided against** rather than pending —
