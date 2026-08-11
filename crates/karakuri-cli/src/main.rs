@@ -1175,6 +1175,84 @@ fn open_store(args: &Args) -> karakuri_store::store::Store {
 /// The first `--set` pair only. A Set file describes **one Set**, and a deck of
 /// four is a session's arrangement rather than a Set's — that is the same line
 /// `Record::is_set_state` draws, seen from the writing side.
+/// **The material a session carries at its head**, so that a replay can build
+/// what the run was playing.
+///
+/// This used to be the `--load-set` file or nothing, and "or nothing" was a
+/// hole in the invariant the whole record stream exists for: recording without
+/// `--load-set` wrote a timeline of ticks with no material under it, and
+/// `--replay` refused it with "has no L1 slot" long after the set was over.
+/// Nothing said so at the time.
+///
+/// So the head is written from **what the run is actually playing**. Without a
+/// Set file there is one to make: the `.kir` pair, the capacity, the params,
+/// the bindings and the seed are exactly what `--save-set` writes, and putting
+/// the sources in the store is what makes the head's hashes resolve on the way
+/// back. The Set file it leaves behind is named after the session, so a
+/// recording is also a saved Set and neither had to be asked for twice.
+///
+/// **Only slot 0's material, and it says so**, which is the limitation
+/// underneath rather than a choice made here: a Set file describes one Set and
+/// a session stream has no way to say what a *deck* held. Everything else about
+/// the performance is recorded per slot — gain, blend, residency, preview — so
+/// a multi-slot session replays those against a deck of one and reports the
+/// rest. Closing it is a format change, and it is named in `docs/ir-spec.md`
+/// where the records are.
+fn session_head(
+    args: &Args,
+    store: &karakuri_store::store::Store,
+    id: &str,
+) -> Vec<karakuri_store::ndjson::Line> {
+    if args.sets.len() > 1 {
+        eprintln!(
+            "  only slot 0's material is in the session's head — a session stream cannot \
+             say what a deck held, so the other {} will not replay",
+            args.sets.len() - 1
+        );
+    }
+    if let Some(set) = &args.load_set {
+        return match store.read_set(set) {
+            Ok(lines) => lines,
+            Err(e) => {
+                eprintln!("karakuri-cli: reading set `{set}` for the session's head: {e}");
+                std::process::exit(2);
+            }
+        };
+    }
+    let Some((l1, l4)) = args.sets.first() else {
+        eprintln!("karakuri-cli: nothing to record — no Set to put at the session's head");
+        std::process::exit(2);
+    };
+    let material = format!("{id}-material");
+    let camera = karakuri_engine::camera::Orbit::default();
+    if let Err(e) = setfile::save(
+        store,
+        &material,
+        setfile::Saving {
+            l1_path: l1,
+            l4_path: l4,
+            capacity: args.capacity,
+            params: &args.overrides,
+            bindings: &args.bindings,
+            camera: &camera,
+            seed: seed_for(0),
+        },
+    ) {
+        // Fatal, on the same terms the recorder itself is: `--record-session`
+        // was asked for, and a run that continued would be a performance
+        // nobody can replay with nothing saying so.
+        eprintln!("karakuri-cli: writing the session's material: {e}");
+        std::process::exit(2);
+    }
+    match store.read_set(&material) {
+        Ok(lines) => lines,
+        Err(e) => {
+            eprintln!("karakuri-cli: reading back the session's material: {e}");
+            std::process::exit(2);
+        }
+    }
+}
+
 fn save_set(args: &Args, id: &str) {
     let store = open_store(args);
     let Some((l1, l4)) = args.sets.first() else {
@@ -1695,14 +1773,12 @@ impl ApplicationHandler for App {
         let recorder = match &self.args.record_session {
             Some(id) => {
                 let store = open_store(&self.args);
-                let head = match &self.args.load_set {
-                    Some(set) => store.read_set(set).unwrap_or_default(),
-                    None => Vec::new(),
-                };
+                let head = session_head(&self.args, &store, id);
                 match session::Recorder::open(&store, id, &head) {
                     Ok(recorder) => {
                         eprintln!(
-                            "recording session `{id}` — {} record{} of material at its head",
+                            "recording session `{id}` — {} record{} of material at its head, \
+                             so `--replay {id}` needs nothing else",
                             head.len(),
                             if head.len() == 1 { "" } else { "s" }
                         );
@@ -2849,6 +2925,39 @@ mod tests {
     }
 
     // -- defaults and the positional pair --------------------------------
+
+    /// **A session recorded with no flags carries its material and replays.**
+    ///
+    /// The head used to be the `--load-set` file or nothing, and "or nothing"
+    /// meant a timeline of ticks with no material under it: `--replay` refused
+    /// it with "has no L1 slot" long after the set was over, and nothing said
+    /// so at the time. This is the round trip that catches it — the head is
+    /// written the way the recorder writes it and read back the way the replay
+    /// reads it, so a head that describes nothing fails here rather than on
+    /// stage.
+    #[test]
+    fn a_session_head_carries_the_material_a_replay_needs() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let l1 = root.join("examples/drift_shell.kir");
+        let l4 = root.join("examples/soft_points.kir");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = karakuri_store::store::Store::open(dir.path()).expect("store");
+
+        let mut args = parse(&[]).expect("parses");
+        args.sets = vec![(l1, l4)];
+        args.store = dir.path().to_path_buf();
+
+        let head = session_head(&args, &store, "a_set");
+        assert!(!head.is_empty(), "the head describes nothing");
+
+        // Read back the way `--replay` reads it, which is the whole claim: the
+        // artifacts resolve out of the store and both slots are there.
+        let loaded = setfile::from_lines(&store, "a_set", &head)
+            .expect("the head a recording writes is a head a replay can load");
+        assert_eq!(loaded.l1.kind, karakuri_ir::Kind::L1);
+        assert_eq!(loaded.l4.kind, karakuri_ir::Kind::L4);
+        assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
+    }
 
     #[test]
     fn no_arguments_is_the_default_pair() {
