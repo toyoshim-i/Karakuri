@@ -224,13 +224,25 @@ conversation and undo is context rather than API — a property a prompt box cou
 had. But nothing *makes* a client read first, and a write replaces the operator's file with
 no backup, so the claim describes a well-behaved client rather than the interface.
 
-**The one that mattered most was the replay claim, and it was simply false.** A procedure
-rewrite is a file and not a record: `session_head` writes the material once before the first
-frame, and nothing pushes a record when a `.kir` changes mid-run. An AI-driven set replays
-with the procedures it started with. The hole predates MCP — a human editor and `--watch`
-have always had it — but until this feature nothing had claimed otherwise, and the claim was
-the whole reason the feature looked safe. Closing it means a record carrying a procedure
-change, which is a format decision and is now the first item this project owes itself.
+**The one that mattered most was the replay claim, and it was simply false** — and it is
+now true, because it was worth closing rather than qualifying. A procedure rewrite was a
+file and not a record, so an AI-driven set replayed with the procedures it started with. The
+hole predated MCP by as long as `--watch` has existed, but until this feature nothing had
+claimed otherwise, and the claim was the whole reason the feature looked safe.
+
+`Record::Procedure` closes it, and the shape is worth recording because it needed something
+of the engine. The record is one line naming a slot, a layer and a content address; the
+source goes in the store where a Set file's already does. What was missing was a way to say
+*which build landed*: `label` is for a human and repeats on every rebuild of the same pair,
+and the queue collapses superseded builds, so counting does not work either. So a build
+request carries an **id** now and every event about it echoes it back — which is a thing an
+asynchronous build queue should have had anyway, and which `Request`'s own documentation was
+already reaching for when it said a request must not depend on what happens to be live.
+
+One infidelity is named rather than hidden: a rollback restores the outgoing Set at the `t`
+it was parked at, and a replay meeting these records builds afresh, so `t` restarts there. A
+swap *in* is defined to start cold and so replays exactly. A rollback means the candidate
+was over budget, which is an exceptional frame already.
 
 The review also found the surface was a network service written like a local one: an
 attacker-supplied `Content-Length` was allocated before it was believed, and a fifty-six byte

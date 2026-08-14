@@ -136,6 +136,7 @@ fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
 
 fn request(l4_src: &str, capacity: u32, label: &str) -> Request {
     Request {
+        id: 1,
         l1: compile(L1),
         l4: compile(l4_src),
         capacity,

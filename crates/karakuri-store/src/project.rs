@@ -82,6 +82,7 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         | Record::Residency { .. }
         | Record::Look { .. }
         | Record::Canvas { .. }
+        | Record::Procedure { .. }
         | Record::Transport { .. }
         | Record::Preview { .. }
         | Record::Transition { .. }
