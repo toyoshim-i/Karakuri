@@ -229,6 +229,17 @@ pub const POLL_INTERVAL: Duration = Duration::from_millis(50);
 /// worker is on another thread and cannot hold anything belonging to the
 /// render loop.
 pub struct Request {
+    /// The caller's own name for this build, echoed back on every event about
+    /// it.
+    ///
+    /// **The engine never interprets it and never invents one.** What it is for
+    /// is the thing a caller cannot otherwise do: say *which* build landed.
+    /// `label` is for a human and repeats on every rebuild of the same pair,
+    /// and the queue collapses superseded builds, so counting does not work
+    /// either — a caller recording what a session actually played needs to
+    /// match an outcome to the source that produced it, and this is the only
+    /// thread between them.
+    pub id: u64,
     pub l1: Checked,
     pub l4: Checked,
     pub capacity: u32,
@@ -293,12 +304,17 @@ impl Source for Receiver<Request> {
 pub enum Event {
     /// A build finished and is now the live Set. It is on trial until the
     /// watchdog reports on it.
-    Swapped { label: Arc<str> },
+    Swapped { id: u64, label: Arc<str> },
     /// A build failed. **Nothing changed**: the running Set is still running,
     /// with its `t` and its live count untouched.
-    Rejected { label: Arc<str>, error: SetError },
+    Rejected {
+        id: u64,
+        label: Arc<str>,
+        error: SetError,
+    },
     /// The watchdog's verdict, in favour. The previous Set is released.
     Accepted {
+        id: u64,
         label: Arc<str>,
         median_ms: f32,
         /// Reported alongside, because "held the budget" is not a useful
@@ -310,6 +326,7 @@ pub enum Event {
     /// The watchdog's verdict, against. The previous Set is live again, at the
     /// `t` it was parked at, and the candidate is released.
     RolledBack {
+        id: u64,
         label: Arc<str>,
         median_ms: f32,
         budget_ms: f32,
@@ -323,14 +340,15 @@ pub enum Event {
 impl std::fmt::Display for Event {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Event::Swapped { label } => {
+            Event::Swapped { label, .. } => {
                 write!(f, "swapped in `{label}` — cold, t back to zero")
             }
-            Event::Rejected { label, error } => {
+            Event::Rejected { label, error, .. } => {
                 write!(f, "`{label}` was refused, nothing changed:\n{error}")
             }
             Event::Accepted {
                 label,
+                id: _,
                 median_ms,
                 budget_ms,
             } => write!(
@@ -340,6 +358,7 @@ impl std::fmt::Display for Event {
             ),
             Event::RolledBack {
                 label,
+                id: _,
                 median_ms,
                 budget_ms,
             } => write!(
@@ -359,6 +378,7 @@ impl std::fmt::Display for Event {
 
 /// A finished build on its way back to the render thread.
 struct Built {
+    id: u64,
     label: Arc<str>,
     result: Result<Set, SetError>,
     /// What the worker measured this Set at, if it got that far. Travels with
@@ -369,6 +389,7 @@ struct Built {
 
 /// The candidate currently being watched.
 struct Trial {
+    id: u64,
     label: Arc<str>,
     /// Frame intervals attributed to this Set so far, warmup included.
     seen: u32,
@@ -475,6 +496,30 @@ impl HotSwap {
             worker: Some(worker),
             worker_lost: false,
         }
+    }
+
+    /// Put `set` in, now, with no worker and no trial.
+    ///
+    /// **For a replay, and only a replay.** A live run's swaps arrive from a
+    /// worker and are judged for thirty frames against the budget; a replay is
+    /// reading what a live run already decided, out of a `procedure` record, so
+    /// there is nothing left to judge. Judging again would be worse than
+    /// pointless — an offscreen render has no frame budget to fail, and a
+    /// rollback the live run did not have would put the replay on a procedure
+    /// the performance never showed.
+    ///
+    /// The outgoing Set is retired rather than parked: there is no rollback to
+    /// park it for. Its measured cost goes with it, so the governor treats the
+    /// incoming one as unmeasured — which is what it is.
+    pub fn install(&mut self, mut set: Set) {
+        set.resize(self.viewport.0, self.viewport.1);
+        let outgoing = std::mem::replace(&mut self.live, set);
+        self.retire(outgoing);
+        self.cost = None;
+        self.previous = None;
+        self.previous_cost = None;
+        self.trial = None;
+        self.samples.clear();
     }
 
     /// One Set and no worker, for `--render`, `--seq`, and a window run
@@ -755,6 +800,7 @@ impl HotSwap {
             self.cost = self.previous_cost.take();
             self.retire(candidate);
             self.events.push(Event::RolledBack {
+                id: trial.id,
                 label: trial.label,
                 median_ms,
                 budget_ms: self.budget_ms,
@@ -763,6 +809,7 @@ impl HotSwap {
             self.previous_cost = None;
             self.retire(previous);
             self.events.push(Event::Accepted {
+                id: trial.id,
                 label: trial.label,
                 median_ms,
                 budget_ms: self.budget_ms,
@@ -795,6 +842,7 @@ impl HotSwap {
                         match stale.result {
                             Ok(set) => self.retire(set),
                             Err(error) => self.events.push(Event::Rejected {
+                                id: stale.id,
                                 label: stale.label,
                                 error,
                             }),
@@ -820,6 +868,7 @@ impl HotSwap {
 
         match built.result {
             Err(error) => self.events.push(Event::Rejected {
+                id: built.id,
                 label: built.label,
                 error,
             }),
@@ -830,10 +879,14 @@ impl HotSwap {
                 self.previous_cost = std::mem::replace(&mut self.cost, built.cost);
                 self.samples.clear();
                 self.trial = Some(Trial {
+                    id: built.id,
                     label: Arc::clone(&built.label),
                     seen: 0,
                 });
-                self.events.push(Event::Swapped { label: built.label });
+                self.events.push(Event::Swapped {
+                    id: built.id,
+                    label: built.label,
+                });
             }
         }
     }
@@ -972,6 +1025,7 @@ fn run_worker(
         let Some(request) = source.poll() else {
             continue;
         };
+        let id = request.id;
         let label: Arc<str> = request.label.into();
 
         // Caught, not allowed to propagate. A panic here would take the whole
@@ -1069,7 +1123,14 @@ fn run_worker(
             let _ = device.poll(wgpu::PollType::Wait);
         }
 
-        if out.send(Built { label, result, cost }).is_err() {
+        if out.send(Built {
+            id,
+            label,
+            result,
+            cost,
+        })
+        .is_err()
+        {
             // The render thread is gone.
             break;
         }

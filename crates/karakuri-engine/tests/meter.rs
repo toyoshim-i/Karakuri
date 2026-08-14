@@ -824,6 +824,7 @@ fn a_build_landing_on_a_slot_retires_its_meter() {
 
     requests
         .send(Request {
+            id: 1,
             l1: compile(L1),
             l4: compile(&L4.replace("{{EXPOSURE}}", "0.000")),
             capacity: CAPACITY,

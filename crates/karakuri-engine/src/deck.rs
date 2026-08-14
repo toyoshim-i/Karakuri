@@ -1058,6 +1058,17 @@ impl Deck {
     /// budget. Deliberately not mutable: [`HotSwap::begin_frame`] is the one
     /// place a Set is replaced, and letting a caller reach it here would put
     /// the hole the frame guard closes straight back.
+    /// Put a Set into a slot, now.
+    ///
+    /// **A replay's only way to follow a `procedure` record**, and deliberately
+    /// not reachable from a key or a surface: a live run changes its material
+    /// by editing a file and letting the worker build it, which is what the
+    /// budget watchdog is attached to. This is the other end of that — reading
+    /// back what a run already did.
+    pub fn install(&mut self, slot: usize, set: crate::set::Set) {
+        self.slots[slot].swap.install(set);
+    }
+
     pub fn slot(&self, slot: usize) -> &HotSwap {
         &self.slots[slot].swap
     }

@@ -18,20 +18,15 @@
 //! > structurally incapable of doing anything a human could not do through the
 //! > same interface
 //!
-//! An agent from outside the process is still an agent, and **the one thing
-//! this surface does is the one thing that invariant does not cover.** Every
-//! control a model reaches through `tools/call` today is a *procedure*, and a
-//! procedure change is a file, not a record: `session_head` writes the material
-//! once before the first frame, and nothing pushes a record when a `.kir`
-//! changes under a running set. So a session in which a model rewrote slot 0 at
-//! minute ten replays with the procedure it started with.
-//!
-//! That hole is not this module's — a human with an editor and `--watch` has
-//! had it since `--watch` existed — but it is this module's to state, because
-//! nobody was going to be misled by a human typing in vim and somebody would
-//! certainly be misled by "an AI-driven set replays with no AI attached". It
-//! does not, yet. Closing it means a record that carries a procedure change,
-//! which is a format decision rather than a patch.
+//! An agent from outside the process is still an agent — and this surface is
+//! the reason the invariant is now true of *material* as well as of the mix.
+//! It was not: a procedure change was a file and not a record, so a session in
+//! which a model rewrote slot 0 at minute ten replayed with the procedure it
+//! started with, silently. The hole predated this module by as long as
+//! `--watch` has existed, and nobody was going to be misled by a human typing
+//! in vim; somebody would certainly have been misled by this. `Record::Procedure`
+//! closes it, so **a session driven by a model does replay with no model
+//! attached**, and what an agent did during a set can be watched back.
 //!
 //! ## Most of this never touches the frame
 //!

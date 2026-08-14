@@ -58,7 +58,30 @@ use crate::compile;
 /// anyway.
 const INTERVAL: Duration = Duration::from_millis(100);
 
+/// What a build was made from, as the session stream will name it.
+///
+/// **Hashes and not text, and put in the store on this side of the channel**,
+/// which is the worker's thread. A session that records what it played has to
+/// name the procedure, and the two ways to get the bytes there both end on the
+/// render thread: reading the file when the swap lands is too late, because it
+/// may have changed again, and carrying the text across means writing it to
+/// disk on a frame. This is neither.
+pub struct Built {
+    /// The id carried on every `swap::Event` about this build. **`(slot << 32)
+    /// | n`**, so it names the slot as well and no two builds in a run share
+    /// one.
+    pub id: u64,
+    pub l1: karakuri_store::hash::Hash,
+    pub l4: karakuri_store::hash::Hash,
+}
+
 pub struct Watch {
+    /// How many builds this watcher has requested, which with the slot makes
+    /// an id no other build in the run shares.
+    builds: u64,
+    /// Where to record what was built, when a session is being recorded.
+    /// `None` and nothing here reads or writes a store at all.
+    recording: Option<(std::sync::Arc<karakuri_store::store::Store>, std::sync::mpsc::Sender<Built>)>,
     /// Which slot this rebuilds. Carried only so that the diagnostics this
     /// prints — from a worker thread, interleaved with every other slot's — say
     /// which of the four they are about.
@@ -92,6 +115,8 @@ impl Watch {
         bindings: Vec<Binding>,
     ) -> Watch {
         let mut watch = Watch {
+            builds: 0,
+            recording: None,
             slot,
             l1,
             l4,
@@ -123,6 +148,18 @@ impl Watch {
     }
 }
 
+impl Watch {
+    /// Record what this watcher builds, into `store`, reported on `tx`.
+    pub fn recording_to(
+        mut self,
+        store: std::sync::Arc<karakuri_store::store::Store>,
+        tx: std::sync::mpsc::Sender<Built>,
+    ) -> Watch {
+        self.recording = Some((store, tx));
+        self
+    }
+}
+
 impl Source for Watch {
     fn poll(&mut self) -> Option<Request> {
         std::thread::sleep(INTERVAL);
@@ -143,23 +180,75 @@ impl Source for Watch {
         // Both files, not just the changed one: the composition check needs
         // the pair, and an L4 that stopped being compatible with its L1 is a
         // diagnostic rather than a half-applied edit.
-        let l1 = match compile::load(&self.l1) {
-            Ok(checked) => checked,
-            Err(report) => {
-                eprintln!("{report}\nslot {slot} unchanged; its Set is still running");
+        // **The source is read here and handed on**, rather than compiled and
+        // thrown away. A session that records what it played has to name the
+        // procedure that was playing, and the only moment both the text and the
+        // build it produced are in the same hand is this one — by the time the
+        // swap lands, the file may have changed again.
+        let l1_src = match std::fs::read_to_string(&self.l1) {
+            Ok(src) => src,
+            Err(e) => {
+                eprintln!("{}: {e}\nslot {slot} unchanged", self.l1.display());
                 return None;
             }
         };
-        let l4 = match compile::load(&self.l4) {
+        let l4_src = match std::fs::read_to_string(&self.l4) {
+            Ok(src) => src,
+            Err(e) => {
+                eprintln!("{}: {e}\nslot {slot} unchanged", self.l4.display());
+                return None;
+            }
+        };
+        let l1 = match compile::check(&l1_src) {
             Ok(checked) => checked,
             Err(report) => {
-                eprintln!("{report}\nslot {slot} unchanged; its Set is still running");
+                eprintln!(
+                    "{}:\n{report}\nslot {slot} unchanged; its Set is still running",
+                    self.l1.display()
+                );
+                return None;
+            }
+        };
+        let l4 = match compile::check(&l4_src) {
+            Ok(checked) => checked,
+            Err(report) => {
+                eprintln!(
+                    "{}:\n{report}\nslot {slot} unchanged; its Set is still running",
+                    self.l4.display()
+                );
                 return None;
             }
         };
 
         let label = format!("{} + {}", l1.name, l4.name);
+        // **Unique across the whole run**, because that is what it is for: the
+        // caller matches an outcome back to the source that produced it, and
+        // labels repeat on every rebuild of the same pair.
+        self.builds += 1;
+        let id = (self.slot as u64) << 32 | self.builds;
+        // **On this thread, which is the worker's.** Two artifacts of a few
+        // kilobytes, written where a whole Set is about to be compiled anyway
+        // — rather than on the frame that installs it.
+        if let Some((store, tx)) = &self.recording {
+            match (
+                store.put_artifact(l1_src.as_bytes()),
+                store.put_artifact(l4_src.as_bytes()),
+            ) {
+                (Ok(l1_hash), Ok(l4_hash)) => {
+                    let _ = tx.send(Built {
+                        id,
+                        l1: l1_hash,
+                        l4: l4_hash,
+                    });
+                }
+                (Err(e), _) | (_, Err(e)) => eprintln!(
+                    "slot {slot}: this build is not in the session's record: {e} — \
+                     a replay will show the procedure it started with"
+                ),
+            }
+        }
         Some(Request {
+            id,
             l1,
             l4,
             capacity: self.capacity,

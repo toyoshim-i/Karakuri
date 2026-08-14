@@ -126,13 +126,11 @@ Two resources come with it: the IR specification, and a list of every built-in t
 accepts **generated from the checker's own table** rather than written down beside it. Prose
 goes stale; that list cannot, because the same table is what rejects a procedure.
 
-It is the third control surface after the keyboard and MIDI — but with one difference that
-matters and that the other two do not have. A key press goes through a **record**, so a
-session replays; a procedure rewrite is a **file**, and nothing records that a file changed
-under a running set. **So a set in which a model rewrote a slot replays with the procedure
-it started with.** That has been true of a human with an editor and `--watch` for as long as
-`--watch` has existed; it is worth saying here because "the AI's set replays without the AI"
-is the sort of thing somebody would otherwise assume.
+Nothing here can do anything a key cannot — it is the third control surface after the
+keyboard and MIDI, on the same terms. **A set a model rewrote replays with no model
+attached**: `--record-session` writes a `procedure` record whenever a swap lands, so
+`--replay` rebuilds the slot at the frame it changed on. That was not true when this surface
+was first built, and it is the one thing it needed of the format.
 
 Three things worth knowing before you rely on it:
 

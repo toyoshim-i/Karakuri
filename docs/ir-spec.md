@@ -975,7 +975,7 @@ known. The total-cost decision lives there, not in the artifact.
   act on beats a value nobody chose.
 - Unknown `t` values are ignored, for forward compatibility.
 - **`gain`, `opacity`, `blend`, `mask`, `transition`, `preview`, `residency`, `look`,
-  `canvas` and `transport` are not in this list and must never be.** They are the session's
+  `canvas`, `procedure` and `transport` are not in this list and must never be.** They are the session's
   rather than any Set's — see the session stream format. `canvas` is the sharpest case: a
   Set renders at whatever size it is handed, so a Set file that carried one would resize
   every *other* Set in the deck by being loaded.
@@ -1219,11 +1219,11 @@ session tempo, which **v0.2 had no record for**.
 Neither is state, so neither appears in a Set file: both are what a frame *saw* or
 *decided*, and the tempo belongs to the session rather than to any one Set.
 
-### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `preview`, `residency`, `look`, `canvas` and `transport`
+### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `preview`, `residency`, `look`, `canvas`, `procedure` and `transport`
 
 A session that carried the material and not the performance would replay the same Sets, on
 the same beat, all at whatever gain they happened to start at, with nothing ever going on
-or off air. Ten records carry what an operator moves — nine states and one event:
+or off air. Eleven records carry what an operator moves — ten states and one event:
 
 ```ndjson
 {"t":"gain","slot":0,"value":0.75}
@@ -1235,6 +1235,7 @@ or off air. Ten records carry what an operator moves — nine states and one eve
 {"t":"residency","slot":1,"level":"priming"}
 {"t":"look","op":"aces","exposure":1.2,"white_point":4.0}
 {"t":"canvas","width":1920,"height":1080}
+{"t":"procedure","slot":0,"layer":"L4","proc":"sha256:486779…"}
 ```
 
 **`gain` is a deck slot's level into the mix**, and **`opacity` is its fader.** The slot is
@@ -1375,7 +1376,36 @@ a canvas reallocates every slot's target and the frame path allocates nothing, s
 is a property of a *run*. A reader that meets a later one should report it rather than obey
 it: a replay sizes everything it allocates from the first, before any frame exists.
 
-**These ten stay out of a Set file**, nine because they are state that is the
+**`procedure` is the material a deck slot is playing, from that moment on.**
+
+```ndjson
+{"t":"procedure","slot":0,"layer":"L1","proc":"sha256:9da973…"}
+{"t":"procedure","slot":0,"layer":"L4","proc":"sha256:486779…"}
+```
+
+Written when a hot swap lands and when one is rolled back — the two moments the material
+actually changes. **Without it a session recorded the material once, before the first frame,
+and replayed the whole run with whatever it started with**: a set in which a procedure was
+rewritten at minute ten replayed as though it never had, silently. That was survivable while
+the only way to rewrite one was a human with an editor; it stopped being survivable when a
+model could, because rewriting procedures is the whole of what that surface does.
+
+It is the **session's** and not the Set's, which is what `is_set_state` is for: a Set file's
+`slot` record says what a Set *is*, and this says what a deck slot *became*, at a point in
+time. That is a fact about a performance.
+
+`proc` is a content address and the source lives in the store, on the same terms `slot`
+uses — so a rewrite costs one line here and a few kilobytes once, however many times the
+same procedure comes back. **A slot's two layers are written as a pair** even when only one
+changed, because a Set is built from both and a reader that rebuilt on the first would
+compile an L1 against the L4 it is replacing.
+
+**One thing it cannot carry.** A rollback restores the outgoing Set at the `t` it was parked
+at; a reader meeting these records builds afresh, so `t` restarts there. A swap *in* is
+defined to start cold and therefore replays exactly — only a rollback differs, and a
+rollback means the candidate was over budget, which is an exceptional frame already.
+
+**These eleven stay out of a Set file**, ten because they are state that is the
 session's rather than any Set's and `transition` because it is not state at all. That is a second
 reason for a record to be absent from a Set file and it is not the `audio` one: there is
 something to fold here, and this is not the projection it folds into. A Set file that

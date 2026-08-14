@@ -223,6 +223,36 @@ pub enum Record {
         exposure: f32,
         white_point: f32,
     },
+    /// **The procedure a deck slot is playing, from this moment on.**
+    ///
+    /// Written when a hot swap lands and when one is rolled back — the two
+    /// moments the material a session is playing actually changes. Without it a
+    /// session recorded the material *once*, before the first frame, and
+    /// replayed the whole run with whatever it started with: a set in which a
+    /// procedure was rewritten at minute ten replayed as though it never had.
+    ///
+    /// **The session's, not the Set's**, which is the distinction `is_set_state`
+    /// exists for. A Set file's `slot` record says what a Set *is*; this says
+    /// what a deck slot *became*, at a point in time, which is a fact about a
+    /// performance.
+    ///
+    /// `proc` is a content address and the source is in the store, on the same
+    /// terms a Set file's `slot` record uses — so a rewrite costs one line here
+    /// and a few kilobytes once, however many times the same procedure comes
+    /// back.
+    ///
+    /// **One thing it cannot carry**: a rollback restores the outgoing Set at
+    /// the `t` it was parked at, and a replay meeting this record builds afresh
+    /// from the source, so `t` restarts there. A swap-*in* is documented to
+    /// start cold and so replays exactly; only the rollback differs, and a
+    /// rollback means the candidate was over budget, which is already an
+    /// exceptional frame.
+    Procedure {
+        slot: u8,
+        layer: Layer,
+        #[serde(rename = "proc")]
+        proc_hash: Hash,
+    },
     /// **What size the session renders at**, in texels — the canvas every
     /// `VideoSource` draws into and every deck slot is sized to match.
     ///
@@ -431,7 +461,7 @@ pub enum Record {
 pub const MAX_STEPS: u8 = 4;
 
 impl Record {
-    /// Whether this record belongs in a Set file. **Thirteen say no, for two
+    /// Whether this record belongs in a Set file. **Fourteen say no, for two
     /// different reasons, and keeping them apart is the point of the name** —
     /// it is `is_set_state` rather than `is_state` because most of what it
     /// refuses is state.
@@ -442,6 +472,7 @@ impl Record {
     ///   particular moment's microphone reading is part of what a Set is.
     /// - [`Record::Gain`], [`Record::Opacity`], [`Record::Blend`],
     ///   [`Record::Residency`], [`Record::Look`], [`Record::Canvas`],
+    ///   [`Record::Procedure`],
     ///   [`Record::Transport`],
     ///   [`Record::Preview`], [`Record::Mask`] and [`Record::Transition`] are
     ///   the **session's**
@@ -458,7 +489,7 @@ impl Record {
     ///   a Set renders at whatever size it is given, and one that carried a
     ///   canvas would make loading it resize every *other* Set in the deck.
     ///
-    /// A session stream carries all thirteen. That is the difference between
+    /// A session stream carries all fourteen. That is the difference between
     /// the two files, stated from this side.
     pub fn is_set_state(&self) -> bool {
         !matches!(
@@ -472,6 +503,7 @@ impl Record {
                 | Record::Residency { .. }
                 | Record::Look { .. }
                 | Record::Canvas { .. }
+                | Record::Procedure { .. }
                 | Record::Transport { .. }
                 | Record::Preview { .. }
                 | Record::Transition { .. }

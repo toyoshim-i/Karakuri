@@ -1327,6 +1327,17 @@ fn replay_session(args: &Args, id: &str) {
         std::process::exit(1);
     };
     let sequence = args.seq_to.is_some();
+    // **`--seq` creates its directory, and a replay reaching it did not.**
+    // `render::to_sequence` does this and `render::replay` goes straight to the
+    // driven loop beside it, so `--replay --seq` into a directory that does not
+    // exist failed on the first frame it tried to write — after rendering every
+    // frame before it.
+    if let Some(dir) = &args.seq_to {
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            eprintln!("karakuri-cli: {}: {e}", dir.display());
+            std::process::exit(1);
+        }
+    }
     let gpu = Gpu::headless().expect("no GPU");
     // **The stream's, not the flag's** — `--canvas` with `--replay` is refused
     // for this reason. A session written by this program always carries one;
@@ -1389,6 +1400,11 @@ fn replay_session(args: &Args, id: &str) {
         out.display()
     );
 
+    // What each slot is playing, as the stream names it. Seeded from nothing:
+    // the head already built the Sets a run started with, so the first
+    // `procedure` record is the first *change*.
+    let mut playing: Vec<(Option<karakuri_store::hash::Hash>, Option<karakuri_store::hash::Hash>)> =
+        vec![(None, None); deck.slot_count()];
     // A `look` record in the stream moves this, so it is **returned** from the
     // driver each frame rather than handed to the renderer once before the run.
     // It used to be both, and the parameter is the one that won: a session where
@@ -1414,8 +1430,47 @@ fn replay_session(args: &Args, id: &str) {
         },
         |i, deck| {
             let frame = &stream.frames[i as usize];
+            // **Procedures are gathered and applied together, after the rest.**
+            // A slot's two layers arrive as a pair, and a Set is built from
+            // both — rebuilding on the first of them would compile an L1
+            // against the L4 it is replacing, which is a composition the
+            // performance never had and may not even check.
+            let mut changed: Vec<usize> = Vec::new();
             for record in &frame.before {
+                if let karakuri_store::record::Record::Procedure {
+                    slot,
+                    layer,
+                    proc_hash,
+                } = record
+                {
+                    let slot = usize::from(*slot);
+                    if slot >= playing.len() {
+                        eprintln!(
+                            "  a `procedure` for slot {slot} was skipped: this replay \
+                             builds a deck of one"
+                        );
+                        continue;
+                    }
+                    match layer {
+                        Layer::L1 => playing[slot].0 = Some(*proc_hash),
+                        Layer::L4 => playing[slot].1 = Some(*proc_hash),
+                        other => {
+                            eprintln!("  a `procedure` for {other:?} was skipped");
+                            continue;
+                        }
+                    }
+                    if !changed.contains(&slot) {
+                        changed.push(slot);
+                    }
+                    continue;
+                }
                 apply_replayed(deck, &mut look, record);
+            }
+            for slot in changed {
+                match rebuild(&gpu, &store, &playing[slot], args, slot) {
+                    Ok(set) => deck.install(slot, set),
+                    Err(e) => eprintln!("  slot {slot}: {e} — it keeps what it had"),
+                }
             }
             (frame.steps, look)
         },
@@ -1424,6 +1479,50 @@ fn replay_session(args: &Args, id: &str) {
         eprintln!("karakuri-cli: {e}");
         std::process::exit(1);
     }
+}
+
+/// Build the Set a slot's `procedure` records name.
+///
+/// **Both layers or nothing.** A `procedure` record names one layer, and a Set
+/// is the pair — so until both have been seen there is nothing to build, and a
+/// slot whose stream only ever names one layer keeps what the head gave it.
+/// That is not a corner case: the writer emits both, but a stream from a
+/// future version might name only what changed.
+fn rebuild(
+    gpu: &Gpu,
+    store: &karakuri_store::store::Store,
+    playing: &(
+        Option<karakuri_store::hash::Hash>,
+        Option<karakuri_store::hash::Hash>,
+    ),
+    args: &Args,
+    slot: usize,
+) -> Result<Set, String> {
+    let (Some(l1_hash), Some(l4_hash)) = playing else {
+        return Err("only one of its two layers has been named".into());
+    };
+    let source = |hash: &karakuri_store::hash::Hash| -> Result<String, String> {
+        let bytes = store
+            .get_artifact(hash)
+            .map_err(|e| format!("reading `{hash}`: {e}"))?;
+        String::from_utf8(bytes).map_err(|e| format!("`{hash}` is not text: {e}"))
+    };
+    // Checked again rather than trusted. The store is content-addressed, so
+    // these are the exact bytes that compiled during the performance — but a
+    // build this program can refuse is a build it must refuse, and the
+    // diagnostics belong on the terminal either way.
+    let l1 = compile::check(&source(l1_hash)?).map_err(|report| format!("L1:\n{report}"))?;
+    let l4 = compile::check(&source(l4_hash)?).map_err(|report| format!("L4:\n{report}"))?;
+    Ok(build(
+        gpu,
+        &l1,
+        &l4,
+        args.capacity,
+        &args.overrides,
+        &args.bindings,
+        seed_for(slot),
+        None,
+    ))
 }
 
 /// One record from a session, applied to a replaying deck.
@@ -1744,7 +1843,7 @@ fn main() {
             // Fixed, never watching: an offscreen run is a function of its
             // inputs, and a save landing halfway through a sequence would make
             // it a function of the operator's editor as well.
-            let mut deck = build_deck(&gpu, &procs, &args, false, false, w, h);
+            let mut deck = build_deck(&gpu, &procs, &args, false, false, w, h, None);
             eprintln!(
                 "rendering the mix of {} Set{}, {w}x{h}, {} elements each, {} frames, \
                  {} at exposure {:.2} -> {}",
@@ -1800,6 +1899,7 @@ fn report_live_counts(gpu: &Gpu, deck: &Deck) {
 /// `meters` is false for the offscreen paths: a `--render` has nobody to show
 /// a level to, and a meter that nothing reads is a compute pass and a staging
 /// ring per frame for no reason. That is the whole point of it being opt-in.
+#[allow(clippy::too_many_arguments)]
 fn build_deck(
     gpu: &Gpu,
     procs: &[Pair],
@@ -1808,6 +1908,12 @@ fn build_deck(
     meters: bool,
     width: u32,
     height: u32,
+    // Where a rebuilt procedure is stored and reported, when a session is
+    // being recorded. `None` and no watcher touches a store.
+    recording: Option<(
+        std::sync::Arc<karakuri_store::store::Store>,
+        std::sync::mpsc::Sender<watch::Built>,
+    )>,
 ) -> Deck {
     let swaps = procs
         .iter()
@@ -1842,15 +1948,26 @@ fn build_deck(
                     &gpu.queue,
                     set,
                     args.budget_ms,
-                    Box::new(watch::Watch::new(
-                        slot,
-                        args.sets[slot].0.clone(),
-                        args.sets[slot].1.clone(),
-                        args.capacity,
-                        seed_for(slot),
-                        args.overrides.clone(),
-                        args.bindings.clone(),
-                    )),
+                    {
+                        let watcher = watch::Watch::new(
+                            slot,
+                            args.sets[slot].0.clone(),
+                            args.sets[slot].1.clone(),
+                            args.capacity,
+                            seed_for(slot),
+                            args.overrides.clone(),
+                            args.bindings.clone(),
+                        );
+                        // **Only when a session is being recorded.** Without
+                        // one there is nothing to name and no store to name it
+                        // in, and the watcher does no I/O it did not do before.
+                        Box::new(match &recording {
+                            Some((store, tx)) => {
+                                watcher.recording_to(store.clone(), tx.clone())
+                            }
+                            None => watcher,
+                        })
+                    },
                 )
             } else {
                 HotSwap::fixed(set)
@@ -2195,6 +2312,16 @@ struct Live {
     /// existed. That is the same property `audio` and `midi` have and it is
     /// the one worth keeping.
     tempo_source: Option<tempo_source::Source>,
+    /// What each slot's watcher built, by build id, until the swap that build
+    /// produced lands. **Not a log**: an entry is taken when its build lands or
+    /// dropped when a newer one supersedes it.
+    rebuilds: Option<std::sync::mpsc::Receiver<watch::Built>>,
+    pending_builds: std::collections::HashMap<u64, watch::Built>,
+    /// The procedure each slot is recorded as playing, and the one before it.
+    /// The second is what a rollback restores, and the only way to name it: a
+    /// rollback brings back a Set the stream never named again.
+    playing: Vec<Option<(karakuri_store::hash::Hash, karakuri_store::hash::Hash)>>,
+    previous: Vec<Option<(karakuri_store::hash::Hash, karakuri_store::hash::Hash)>>,
     /// The MCP server's half of the channel, when `--mcp` asked for one. Told
     /// what the swap machinery said, and nothing else — see [`crate::mcp`].
     mcp: Option<mcp::Reporter>,
@@ -2291,6 +2418,18 @@ impl ApplicationHandler for App {
         let (canvas_w, canvas_h) = self.args.canvas;
         check_canvas(&gpu.device, canvas_w, canvas_h);
         let present = Present::new(&gpu.device, format, canvas_w, canvas_h);
+        // **Opened before the deck, because a watcher needs it.** A rebuilt
+        // procedure has to reach the store from the worker thread that built
+        // it; by the time the swap lands on a frame, the file may have changed
+        // again and the render thread is the wrong place for file I/O.
+        let (rebuilds, rebuild_rx) = match &self.args.record_session {
+            Some(_) => {
+                let store = std::sync::Arc::new(open_store(&self.args));
+                let (tx, rx) = std::sync::mpsc::channel();
+                (Some((store, tx)), Some(rx))
+            }
+            None => (None, None),
+        };
         let mut deck = build_deck(
             &gpu,
             &procs,
@@ -2299,6 +2438,7 @@ impl ApplicationHandler for App {
             true,
             canvas_w,
             canvas_h,
+            rebuilds,
         );
         // Here and nowhere else: before the first frame, where the stall it
         // costs is free. Nothing else measures the Sets a run starts with —
@@ -2465,6 +2605,7 @@ impl ApplicationHandler for App {
             None => None,
         };
 
+        let slot_count = deck.slot_count();
         let live = Live {
             window,
             gpu,
@@ -2477,6 +2618,10 @@ impl ApplicationHandler for App {
             audio,
             midi,
             tempo_source,
+            rebuilds: rebuild_rx,
+            pending_builds: std::collections::HashMap::new(),
+            playing: vec![None; slot_count],
+            previous: vec![None; slot_count],
             mcp,
             actions: Vec::new(),
             quantum: QUANTA[0].0,
@@ -2845,6 +2990,73 @@ impl Live {
     /// different actions: `NoHeadroom` waits for a slot to come off air,
     /// `CommittedUnknown` for a measurement, and `NoPrimingNeeded` for nothing
     /// at all — that Set is closed form and can go straight on air.
+    /// Say what a slot is playing, now that it changed.
+    ///
+    /// `landed` is the build id when a swap went in, or `None` when one was
+    /// rolled back — which is the case the pair kept in `previous` exists for.
+    /// A rollback brings back a Set the stream will never name again, so the
+    /// only way to say what came back is to have remembered it.
+    ///
+    /// **One thing this cannot carry.** The rollback restores the outgoing Set
+    /// at the `t` it was parked at; a replay meeting these records builds
+    /// afresh, so `t` restarts there. A swap *in* is documented to start cold
+    /// and so replays exactly. Only a rollback differs, and a rollback means
+    /// the candidate was over budget — an exceptional frame already.
+    fn record_procedure(&mut self, slot: usize, landed: Option<u64>) {
+        if self.recorder.is_none() {
+            return;
+        }
+        // Drained here rather than per frame: the channel only has anything in
+        // it when a build has just been requested, and this runs when one has
+        // just landed.
+        if let Some(rx) = &self.rebuilds {
+            while let Ok(built) = rx.try_recv() {
+                self.pending_builds.insert(built.id, built);
+            }
+        }
+
+        let pair = match landed {
+            Some(id) => {
+                let Some(built) = self.pending_builds.remove(&id) else {
+                    // The watcher could not store this build's source and said
+                    // so at the time. Nothing to name.
+                    return;
+                };
+                self.previous[slot] = self.playing[slot];
+                self.playing[slot] = Some((built.l1, built.l4));
+                self.playing[slot]
+            }
+            None => {
+                let restored = self.previous[slot].take();
+                self.playing[slot] = restored;
+                restored
+            }
+        };
+        let Some((l1, l4)) = pair else {
+            // A rollback to the procedure the run started with, which the head
+            // already names. Nothing changed that the stream does not say.
+            return;
+        };
+        for (layer, hash) in [(Layer::L1, l1), (Layer::L4, l4)] {
+            self.record_only(karakuri_store::record::Record::Procedure {
+                slot: slot as u8,
+                layer,
+                proc_hash: hash,
+            });
+        }
+    }
+
+    /// Push a record without applying it.
+    ///
+    /// The one place this is right: a `procedure` record *describes* a change
+    /// the engine has already made, rather than asking for one. Everything else
+    /// goes through `Live::record`, which applies what it wrote.
+    fn record_only(&mut self, record: karakuri_store::record::Record) {
+        if let Some(recorder) = &mut self.recorder {
+            recorder.push(record);
+        }
+    }
+
     fn govern(&mut self, why: &str) {
         report_governing(&self.deck.govern(), why);
     }
@@ -3470,6 +3682,10 @@ impl Live {
         // drain, because `Deck::events` borrows the deck for as long as it is
         // being read.
         let mut set_changed = false;
+        // Collected rather than recorded inside the loop: `Deck::events`
+        // borrows the deck for as long as it is read, and writing a record
+        // needs the recorder.
+        let mut procedures: Vec<(usize, Option<u64>)> = Vec::new();
         for slot in 0..self.deck.slot_count() {
             for event in self.deck.events(slot) {
                 set_changed |= matches!(event, Event::Swapped { .. } | Event::RolledBack { .. });
@@ -3488,7 +3704,20 @@ impl Live {
                     }
                     None => eprintln!("slot {slot}: {event}"),
                 }
+                // **What a session says it played, at the moment it changed.**
+                // The material used to be written once, before the first frame,
+                // so a run in which a procedure was rewritten replayed as
+                // though it never had — and with a model at the other end of
+                // `--mcp` that is the common case rather than a corner.
+                match event {
+                    Event::Swapped { id, .. } => procedures.push((slot, Some(id))),
+                    Event::RolledBack { .. } => procedures.push((slot, None)),
+                    _ => {}
+                }
             }
+        }
+        for (slot, landed) in procedures {
+            self.record_procedure(slot, landed);
         }
         if set_changed {
             self.govern("build landed");

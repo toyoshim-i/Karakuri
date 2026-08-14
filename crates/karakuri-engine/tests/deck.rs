@@ -2272,6 +2272,7 @@ fn a_swap_in_one_slot_leaves_the_other_slot_alone() {
     let neighbour_live_before = deck.slot(1).set().live_count(&gpu.device, &gpu.queue);
 
     tx.send(Request {
+        id: 1,
         l1: compile(L1),
         l4: compile(L4),
         capacity: SWAPPED,
@@ -2378,6 +2379,7 @@ fn an_off_air_slot_is_not_judged_against_its_neighbours_frames() {
     deck.set_residency(1, Residency::Allocated);
 
     tx.send(Request {
+        id: 1,
         l1: compile(L1),
         l4: compile(L4),
         capacity: SWAPPED,

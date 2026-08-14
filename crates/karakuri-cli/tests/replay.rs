@@ -187,6 +187,83 @@ fn the_stream_decides_what_a_replay_renders_at() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **A procedure rewritten mid-session replays as the rewrite.**
+///
+/// The thing that was false until there was a record for it: the material was
+/// written once, before the first frame, so a set in which a procedure changed
+/// at minute ten replayed as though it never had. With `--mcp` at the other end
+/// that is the ordinary case rather than a corner, which is why it stopped
+/// being acceptable.
+///
+/// Paired with a control, as everything here is: the same stream without the
+/// one record, so "the pixels differ" is about the record and not about
+/// material that moves on `t` anyway.
+#[test]
+fn a_procedure_record_changes_what_the_rest_of_the_session_renders() {
+    let dir = scratch("procedure");
+    let (store, head) = store_with_a_set(&dir);
+
+    // The same L4 with its saturation taken out — a change nobody could miss,
+    // and one that leaves the cost identical so the swap cannot be judged
+    // differently for it.
+    let root = workspace();
+    let original = std::fs::read_to_string(root.join("examples/soft_points.kir")).expect("L4");
+    let drained = original.replace(
+        "hsv_to_rgb(vec3(hue + hash1(seed) * spread, 0.75, 1.0))",
+        "hsv_to_rgb(vec3(hue + hash1(seed) * spread, 0.0, 1.0))",
+    );
+    assert_ne!(drained, original, "the fixture's L4 is not what this expects");
+
+    // Both procedures into the store, which is where a `procedure` record
+    // points. The L1 is unchanged and named anyway: a Set is the pair.
+    let l1 = std::fs::read_to_string(root.join("examples/drift_shell.kir")).expect("L1");
+    // Through the store's own API rather than by writing a file with a name
+    // this test guessed: the record spells a hash one way and the filename
+    // another, and a test that reproduces the layout by hand is testing its own
+    // reproduction.
+    let opened = karakuri_store::store::Store::open(&store).expect("store");
+    let put = |source: &str| -> String {
+        opened
+            .put_artifact(source.as_bytes())
+            .expect("artifact")
+            .to_string()
+    };
+    let l1_hash = put(&l1);
+    let l4_hash = put(&drained);
+
+    let ticks = [TICK; 8];
+    let plain: Vec<&str> = std::iter::once(CANVAS).chain(ticks.iter().copied()).collect();
+    write_session(&store, "plain", &head, &plain);
+
+    let procedure_l1 =
+        format!(r#"{{"t":"procedure","slot":0,"layer":"L1","proc":"{l1_hash}"}}"#);
+    let procedure_l4 =
+        format!(r#"{{"t":"procedure","slot":0,"layer":"L4","proc":"{l4_hash}"}}"#);
+    let changed: Vec<&str> = vec![
+        CANVAS,
+        TICK,
+        TICK,
+        procedure_l1.as_str(),
+        procedure_l4.as_str(),
+        TICK,
+        TICK,
+        TICK,
+        TICK,
+        TICK,
+        TICK,
+    ];
+    write_session(&store, "changed", &head, &changed);
+
+    let before = replay(&store, "plain", &dir.join("plain.png"));
+    let after = replay(&store, "changed", &dir.join("changed.png"));
+    assert_ne!(
+        before, after,
+        "the `procedure` record changed nothing — the material is still whatever the \
+         head said"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Width and height out of a PNG header, which is fixed-layout: an 8-byte
 /// signature, then a length and `IHDR`, then the two dimensions big-endian.
 fn png_size(bytes: &[u8]) -> (u32, u32) {
