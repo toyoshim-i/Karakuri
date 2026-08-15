@@ -436,6 +436,148 @@ fn the_accumulation_targets_follow_a_resize_and_cover_what_additive_covers() {
     assert_eq!(control, weighted, "the two modes did not cover the same texels");
 }
 
+/// Two strokes that land on **the same screen line** while running through depth
+/// in opposite directions.
+///
+/// Both lie in a plane through the eye, so each one's projection runs between
+/// the same two screen points: any point at `eye + s * v` projects where `v`
+/// does, whatever `s` is. `near_strand` starts three units from the eye at the
+/// right-hand end and finishes twelve away at the left; `far_strand` does the
+/// reverse. So they overlap along their whole length, and which of them is
+/// nearer *changes sign half way across*.
+///
+/// That is the only arrangement in which a stroke's depth has to vary **along**
+/// it for the picture to be right. The numbers are literals because they are
+/// computed against a stationary camera the test installs — see the test.
+const CROSSING_STRANDS_L1: &str = r#"
+proc strands {
+  kind     L1
+  topology lines
+  capacity [2, 2] = 2
+
+  emit position, velocity
+
+  element {
+    var head = vec3(5.127, 0.0, -0.862);
+    var tail = vec3(-3.494, 0.0, 3.448);
+    if seed == 1u {
+      head = vec3(-3.494, 0.0, -3.448);
+      tail = vec3(5.127, 0.0, 0.862);
+    }
+    position = head;
+    velocity = tail - head;
+  }
+}
+"#;
+
+/// A segment renderer: `clip_b` is the whole declaration. Flat colour, red for
+/// the near-at-the-right strand and blue for the other.
+fn strand_l4(blend: &str) -> String {
+    format!(
+        r#"
+proc flat_strand {{
+  kind  L4
+  blend {blend}
+
+  param alpha : float [0.0, 2.0] = 0.5
+
+  consumes position, velocity
+
+  vertex {{
+    clip       = camera * vec4(position, 1.0);
+    clip_b     = camera * vec4(position + velocity, 1.0);
+    point_size = 12.0;
+  }}
+
+  fragment {{
+    var c = vec3(1.0, 0.0, 0.0);
+    if seed == 1u {{
+      c = vec3(0.0, 0.0, 1.0);
+    }}
+    color = vec4(c, alpha);
+  }}
+}}
+"#
+    )
+}
+
+/// **A stroke is weighted along its length, not at one end.**
+///
+/// The claim `SEGMENT_EXPANSION`'s `w = mix(_clip.w, _clip_b.w, corner.x)` makes
+/// and the only one in this change that had no picture behind it: a review
+/// replaced that `w` with `_clip.w` — every corner taking the head's depth — and
+/// the whole suite stayed green, because everything else here draws sprites,
+/// where all six corners are at one depth anyway and the two are the same
+/// expression.
+///
+/// The camera is stopped for this test, at the origin's height, because the
+/// fixture's coordinates are worked out against a particular eye. `Orbit`'s
+/// default speed would have the answer depend on which instant the frame is.
+#[test]
+fn a_weighted_stroke_is_weighted_along_its_length() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let stationary = karakuri_engine::Orbit { speed: 0.0, height: 0.0, ..Default::default() };
+
+    let mut set = try_build(&gpu, CROSSING_STRANDS_L1, &strand_l4("weighted")).expect("a pair");
+    set.camera = stationary;
+    set.resize(&gpu.device, W, H);
+    let w = draw(&gpu, &mut set);
+
+    // The control: the same two strands added rather than resolved. Additive
+    // cannot tell them apart at any point along the overlap, so a picture that
+    // flips is the weighting and not the geometry.
+    let mut control = try_build(&gpu, CROSSING_STRANDS_L1, &strand_l4("additive")).expect("a pair");
+    control.camera = stationary;
+    control.resize(&gpu.device, W, H);
+    let a = draw(&gpu, &mut control);
+
+    let lit = covered(&a);
+    assert!(lit.len() > 200, "the strands cover only {} texels", lit.len());
+    let x = |i: &usize| (i % W as usize) as u32;
+    let (left, right) = (
+        lit.iter().map(x).min().expect("a covered texel"),
+        lit.iter().map(x).max().expect("a covered texel"),
+    );
+    assert!(right - left > 20, "the strands run only {} texels across", right - left);
+
+    // A quarter in from each end, so neither sample is on a cap.
+    let quarter = (right - left) / 4;
+    let sample = |px: &[[f32; 4]], band: u32| -> [f32; 4] {
+        let mut sum = [0.0; 4];
+        let mut n = 0.0;
+        for &i in &lit {
+            if x(&i).abs_diff(band) <= 2 {
+                for c in 0..4 {
+                    sum[c] += px[i][c];
+                }
+                n += 1.0;
+            }
+        }
+        assert!(n > 0.0, "nothing covered at x = {band}");
+        [sum[0] / n, sum[1] / n, sum[2] / n, sum[3] / n]
+    };
+
+    let near_right = sample(&w, right - quarter);
+    let near_left = sample(&w, left + quarter);
+    let control_right = sample(&a, right - quarter);
+    let control_left = sample(&a, left + quarter);
+
+    assert!(
+        (control_right[0] - control_right[2]).abs() < 0.05
+            && (control_left[0] - control_left[2]).abs() < 0.05,
+        "additive already favours one strand ({control_left:?} against {control_right:?}), so it \
+         is not the control it is being used as"
+    );
+    assert!(
+        near_right[0] > near_right[2] * 1.05,
+        "the strand that is near at the right did not dominate there: {near_right:?}"
+    );
+    assert!(
+        near_left[2] > near_left[0] * 1.05,
+        "the strand that is near at the left did not dominate there: {near_left:?}"
+    );
+}
+
 /// A fullscreen L4 declaring `weighted` is refused, and the same procedure under
 /// `additive` builds. See `SetError::WeightedFullscreen` for why this is a rule
 /// about the Set rather than about the procedure.
