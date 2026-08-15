@@ -487,10 +487,10 @@ The window is a preview, and an OBS capture of it covers the ordinary case — p
 first so the capture is the canvas exactly. Anything past that is output routing, which is
 deliberately outside this repository; see `docs/plugins.md`.
 
-### There are two ways to draw, and one way to blend
+### There are three ways to draw, and one way to blend
 
-`Topology` has two values now — `points` and `lines` — and `Blend` still has one, so
-everything is **additive**, as either a sprite or a stroke.
+`Topology` has three values now — `points`, `lines` and `fullscreen` — and `Blend` still has
+one, so everything is **additive**: a sprite, a stroke, or a marched field.
 
 **Lines cost an L4 and nothing else.** A renderer draws segments by assigning `clip_b`, a
 second clip-space endpoint, alongside `clip`; leave it out and it draws sprites. The two
@@ -521,10 +521,24 @@ draws nothing.** A sprite at zero velocity is still a sprite; a stroke of zero l
 zero-area and gone. So a parameter that scales the gap between the ends must not reach zero,
 and `drift_streaks`' `streak` starts at 0.05 rather than 0 for exactly that reason.
 
-What is still missing is the blend and the marcher. The checker accepts `sd_sphere`,
-`sd_box`, `op_smooth_union` and five more, so a plausible procedure using them will compile
-— and nothing will march it, because there is no renderer that consumes a distance field. A
-fullscreen raymarch and `blend weighted` are what remains of this milestone's front.
+**A fullscreen renderer has no `vertex` block at all.** That is the whole declaration: a
+procedure with no per-element position has nothing for one to do. It gets two values nothing
+else does — `eye` and `ray`, the camera's position and the direction through this fragment —
+and `point_coord` runs across the frame. `examples/field_march.kir` marches a sphere, a box
+and a torus with the SDF builtins that had no renderer until now:
+
+```sh
+cargo run -p karakuri-cli -- examples/drift_shell.kir examples/field_march.kir --capacity 4096
+```
+
+Two things about it worth knowing. It **consumes nothing** — there is no element to read
+from — and because of that **the L1 it is paired with is never stepped**, so pair it with
+something small and cheap; only that file's `capacity` line is read. And its fragment budget
+is eight times a sprite renderer's, because a fullscreen pass covers the canvas once where
+sprites overdraw an unknown number of times.
+
+What is still missing is the blend. `blend weighted` is what remains of this milestone's
+front: additive is why everything glows, and a marched solid glows exactly as a sprite does.
 
 **The old workaround still runs, and it is worth knowing what it cost.** Before `lines`
 existed, asked for line art, a model found that points laid densely along a curve read as

@@ -213,7 +213,9 @@ The only implicit values readable inside a block:
 | `beats` | `float` | musical position on the session's tempo grid, at the instant `t` names | all |
 | `dt` | `float` | fixed simulation step. Scaled on an element's first update — see [Spawn timing](#spawn-timing) | L1 |
 | `camera` | `mat4` | view-projection matrix | L4 |
-| `point_coord` | `vec2` | 0..1 across the primitive: within the sprite under `points`, along-by-across the stroke under `lines` | L4 fragment |
+| `point_coord` | `vec2` | 0..1 across the primitive: within the sprite under `points`, along-by-across the stroke under `lines`, across the frame under `fullscreen` | L4 fragment |
+| `eye` | `vec3` | the camera's world-space position. `fullscreen` only | L4 fragment |
+| `ray` | `vec3` | unit direction from `eye` through this fragment. `fullscreen` only | L4 fragment |
 
 `seed` is readable in every block as well, but it is a carried attribute rather than an
 ambient value — see [Element identity](#element-identity).
@@ -736,7 +738,8 @@ attributes.
 
 ### How an L4 says what it draws
 
-By assigning `clip_b`, or by not assigning it. There is no `topology` declaration on an L4
+By assigning `clip_b`, or by not assigning it — and, for the whole frame, by
+having no `vertex` block at all. There is no `topology` declaration on an L4
 header and adding one is an error — a second endpoint is the only thing that could make a
 procedure a line renderer, so a header field would be a second place for the same fact to
 be stated and a first place for the file to contradict itself.
@@ -769,6 +772,44 @@ Under `lines`:
   plane**, and **a segment whose two ends coincide draws nothing** — zero length is zero
   area, where a sprite at zero velocity is still a sprite. See the [L4 lowering](#l4)
   section for both
+
+### fullscreen
+
+An L4 with **no `vertex` block** covers the frame once and draws no geometry. A procedure
+with no per-element position has nothing for a vertex block to do, so its absence is the
+declaration, on the same principle `clip_b` settles.
+
+Two rules come with it:
+
+- **`consumes` must be empty.** There is nowhere to read an element from. It is stated as a
+  rule rather than left as a consequence because it is what makes the next line provable:
+  **the paired L1's simulation is skipped entirely.** Nothing reads those buffers, so
+  nothing steps them — `t` still advances, because a marcher reads it.
+- **`eye` and `ray` are readable, and only here.** The camera's position in world space, and
+  the unit direction from it through this fragment. Given rather than derived: the camera is
+  a built-in, so the projection convention is the engine's, and a procedure that rebuilt it
+  would be restating that convention in every shader that marches — where getting it
+  slightly wrong is a picture that looks nearly right. It also keeps a `mat4` inverse out of
+  a language with no operator for one.
+
+`point_coord` runs 0..1 across the frame, x to the right and y down, which is the same
+sentence it already means: 0..1 across the primitive.
+
+A Set is still one L1 and one L4, so a fullscreen renderer still needs an L1 to be paired
+with, and that L1 is dead weight. Pick something small; only its `capacity` declaration is
+read.
+
+**The fragment cost ceiling is different here, and deliberately.** A per-element renderer is
+held to 512 ops per fragment because nobody knows how many fragments there will be —
+`capacity` sprites, times their area, times whatever they overlap. A fullscreen procedure
+covers the canvas exactly once and nothing overdraws, so the number is known and the ceiling
+is an element's instead. A raymarch is thirty-odd iterations of a distance function by
+construction; under 512 there is no marcher at all, which is a ceiling refusing the mode
+rather than an excess.
+
+**This is what the SDF builtins were for.** `sd_sphere`, `sd_box`, `sd_torus`, `sd_plane`
+and the four CSG operators have passed the checker since the beginning with nothing able to
+draw them. See `examples/field_march.kir`.
 
 Consumed attributes and `seed` are readable in both blocks. Per-element values reach
 `fragment` with **flat** interpolation. That is exact under both topologies for the same

@@ -66,11 +66,39 @@ pub const MAX_OPS_PER_ELEMENT: u64 = 4096;
 /// state and then coasts, which is a shape worth allowing.
 pub const MAX_OPS_PER_SPAWN: u64 = 16_384;
 
-/// Ceiling on [`Cost::ops_per_fragment`]. Tighter than either, because a
-/// fragment is evaluated far more often than an element: one soft sprite covers
-/// tens of pixels, and they overlap. Like the others this is ordinal and
+/// Ceiling on [`Cost::ops_per_fragment`] for a **per-element** renderer.
+/// Tighter than either of the above, because a fragment is evaluated far more
+/// often than an element: one soft sprite covers tens of pixels, they overlap,
+/// and there are `capacity` of them. Like the others this is ordinal and
 /// untested — stage 7's probe is what actually knows.
 pub const MAX_OPS_PER_FRAGMENT: u64 = 512;
+
+/// Ceiling on [`Cost::ops_per_fragment`] for a **fullscreen** renderer.
+///
+/// **Higher because the fragment count is known here and unknown there**, which
+/// is the whole reason the two differ. The number above is a stand-in for an
+/// unbounded quantity: `capacity` sprites times their area times whatever they
+/// overlap. A fullscreen procedure covers the canvas exactly once and nothing
+/// overdraws, so the stand-in has nothing to stand in for — and applying it
+/// anyway forbids the one thing the mode exists for. A raymarch is thirty-odd
+/// iterations of a distance function by construction; at 512 there is no
+/// marcher that fits, which is a ceiling saying no to the feature rather than
+/// to an excess.
+///
+/// Set to [`MAX_OPS_PER_ELEMENT`] deliberately: a fullscreen fragment is the
+/// analogue of an element — one evaluation per thing drawn — so it is priced
+/// like one rather than given a number of its own to drift.
+pub const MAX_OPS_PER_FULLSCREEN_FRAGMENT: u64 = MAX_OPS_PER_ELEMENT;
+
+/// Which fragment ceiling this procedure is held to. See
+/// [`MAX_OPS_PER_FULLSCREEN_FRAGMENT`] for why there are two.
+fn fragment_ceiling(checked: &Checked) -> u64 {
+    if checked.topology == Some(crate::ast::Topology::Fullscreen) {
+        MAX_OPS_PER_FULLSCREEN_FRAGMENT
+    } else {
+        MAX_OPS_PER_FRAGMENT
+    }
+}
 
 /// Every attribute buffer is 16-byte aligned per the WGSL lowering section.
 const BUFFER_ALIGN: u32 = 16;
@@ -388,7 +416,7 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
     for (measured, ceiling, unit) in [
         (ops_per_element, MAX_OPS_PER_ELEMENT, "ops/element"),
         (ops_per_spawn, MAX_OPS_PER_SPAWN, "ops/spawn"),
-        (ops_per_fragment, MAX_OPS_PER_FRAGMENT, "ops/fragment"),
+        (ops_per_fragment, fragment_ceiling(checked), "ops/fragment"),
     ] {
         if measured > ceiling {
             return Err(vec![reject(

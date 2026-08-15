@@ -1,0 +1,110 @@
+// The first renderer here that draws no elements at all.
+//
+// **How an L4 says it covers the frame: it has no `vertex` block.** A procedure
+// with no per-element position has nothing for one to do, so its absence is the
+// declaration — the same way assigning `clip_b` is the whole of saying "lines".
+// There is nothing else to write and nothing to keep in step.
+//
+// Two rules come with it, and both are checked:
+//
+//   * **`consumes` must be empty.** With no vertex block there is nowhere to
+//     read an element from. It is also what lets the engine skip the paired
+//     L1's simulation entirely — nothing reads those buffers, and the checker
+//     is what makes that provable rather than merely likely.
+//   * **`eye` and `ray` are readable, and only here.** They are the camera's
+//     position and the unit direction through this fragment. Given rather than
+//     derived: the camera is a built-in, so the projection convention belongs
+//     to the engine, and a procedure that rebuilt it would be restating that
+//     convention in every shader that marches.
+//
+// `point_coord` runs 0..1 across the frame — the same sentence it already means
+// for a sprite and for a stroke, applied to a bigger primitive.
+//
+// **This is what the SDF builtins were for.** `sd_sphere`, `sd_box`, `sd_torus`
+// and the CSG operators have passed the checker since M1 with nothing able to
+// draw them: a distance field is a shape you march, and nothing marched. This
+// marches.
+//
+// Parameter names are keyed across a whole Set, so this one says `ball` rather
+// than `radius`: the L1 it is paired with already has a `radius` and the two
+// would have become one value. `Set::build` refuses that rather than resolving
+// it, which is how this file came to be renamed.
+//
+// It is paired with an L1 it ignores. A Set is still one L1 and one L4, so
+// something has to fill that slot; pick the cheapest thing you have, because
+// its simulation is skipped and only its `capacity` declaration is read.
+//
+//   karakuri-cli examples/drift_shell.kir examples/field_march.kir --capacity 4096
+//
+// **The cost model prices this differently on purpose.** A per-element renderer
+// is held to 512 ops per fragment because nobody knows how many fragments there
+// will be — capacity sprites, times their area, times whatever they overlap. A
+// fullscreen one covers the canvas exactly once, so the number is known and the
+// ceiling is the same as an element's. A marcher is thirty-odd iterations of a
+// distance function by construction and fits nowhere else.
+
+proc field_march {
+  kind  L4
+  blend additive
+
+  param ball     : float [0.2, 4.0]  = 1.6
+  param box      : float [0.2, 4.0]  = 1.2
+  param ring     : float [0.2, 4.0]  = 2.6
+  param thick    : float [0.05, 1.0] = 0.35
+  // How softly the sphere and the box melt into each other. At 0 it is a hard
+  // union and the seam is a crease; the whole reason `op_smooth_union` exists.
+  param blend_k   : float [0.0, 1.5] = 0.55
+  param spin      : float [0.0, 2.0] = 0.35
+  param exposure  : float [0.0, 8.0] = 1.0
+  param glow      : float [0.0, 4.0] = 0.7
+
+  fragment {
+    // **The figure turns by turning the ray, not the samples.** Rotating the
+    // sample point inside the loop is one `rot_y` per step; rotating the eye
+    // and the direction once before it is two for the whole march, and the
+    // picture is identical. The cost estimator is what made that non-optional:
+    // the per-step version came to 7022 ops against a 4096 ceiling, and its
+    // hint named `rot_y` as 18% of the estimate.
+    let a  = -t * spin;
+    var p  = rot_y(eye, a);
+    let rd = rot_y(ray, a);
+
+    var d  = 10.0;
+    var it = 0.0;
+
+    // `for` bounds are compile-time constants — cost estimation resolves them
+    // at parse time — so the iteration count is part of what this procedure
+    // costs rather than something it decides at run time.
+    for i in 0..48 {
+      // A sphere and a box melted together, with a ring through them. At
+      // `blend_k` 0 the union is hard and the seam is a crease; softening it is
+      // the whole reason `op_smooth_union` exists.
+      let sph = sd_sphere(p - vec3(0.9, 0.0, 0.0), ball);
+      let bx  = sd_box(p + vec3(0.9, 0.0, 0.0), vec3(box, box, box));
+      d = op_union(op_smooth_union(sph, bx, blend_k), sd_torus(p, vec2(ring, thick)));
+
+      if d < 0.004 {
+        it = 1.0;
+      }
+      // `max` keeps a step from stalling on a surface it has already reached,
+      // and from marching backwards where the field is not exact.
+      p = p + rd * max(d, 0.004);
+    }
+
+    // A cheap normal: the gradient of the sphere alone, which is exact where
+    // the sphere is the nearest surface and wrong on the box's faces. Six more
+    // field evaluations would fix it and do not fit under the ceiling — an
+    // honest limit of this example rather than of the mode.
+    let n = normalize(p - vec3(0.9, 0.0, 0.0));
+
+    let key = max(0.0, dot(n, normalize(vec3(0.5, 0.8, 0.3))));
+    let rim = pow(1.0 - max(0.0, dot(n, -rd)), 3.0);
+
+    let c = hsv_to_rgb(vec3(0.58 + rim * 0.25, 0.7, 1.0));
+
+    // Alpha is coverage, and a fullscreen pass covers what it hit and nothing
+    // else — so the mix composites this over the slots below it exactly where
+    // the figure is.
+    color = vec4(c * (key + rim * glow) * exposure * it, it);
+  }
+}

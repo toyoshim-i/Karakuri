@@ -31,7 +31,46 @@ impl Default for Orbit {
     }
 }
 
+/// Where the camera is and the three vectors a ray through a pixel is built
+/// from, in world space.
+///
+/// **`right` and `up` are pre-scaled** by the field of view and the aspect
+/// ratio, so a fragment's ray is `normalize(forward + right * ndc.x + up *
+/// ndc.y)` and nothing downstream has to know what the projection was. That is
+/// the whole reason this exists rather than an inverse view-projection matrix:
+/// the convention stays here, where the camera is, instead of being restated in
+/// every procedure that marches — and a `mat4` inverse stays out of a language
+/// that has no operator for one.
+#[derive(Debug, Clone, Copy)]
+pub struct Basis {
+    pub eye: [f32; 3],
+    pub forward: [f32; 3],
+    pub right: [f32; 3],
+    pub up: [f32; 3],
+}
+
 impl Orbit {
+    /// The eye, and the ray basis at this instant. `t` is simulation time.
+    ///
+    /// Derived from the same three lines `view_proj` uses, so the marched
+    /// picture and the rasterized one are looking from the same place. A second
+    /// derivation of the orbit would be two cameras that agree until one of
+    /// them is edited.
+    pub fn basis(&self, t: f32, aspect: f32) -> Basis {
+        let a = t * self.speed * std::f32::consts::TAU;
+        let eye = [self.radius * a.cos(), self.height, self.radius * a.sin()];
+        let forward = normalize(sub([0.0, 0.0, 0.0], eye));
+        let right = normalize(cross(forward, [0.0, 1.0, 0.0]));
+        let up = cross(right, forward);
+        let half = (self.fov_y * 0.5).tan();
+        Basis {
+            eye,
+            forward,
+            right: scale(right, half * aspect),
+            up: scale(up, half),
+        }
+    }
+
     /// `t` is simulation time, never wall clock.
     pub fn view_proj(&self, t: f32, aspect: f32) -> Mat4 {
         let a = t * self.speed * std::f32::consts::TAU;
@@ -52,6 +91,10 @@ fn perspective_rh(fov_y: f32, aspect: f32, near: f32, far: f32) -> Mat4 {
     m[2][3] = -1.0;
     m[3][2] = (near * far) / (near - far);
     m
+}
+
+fn scale(v: [f32; 3], k: f32) -> [f32; 3] {
+    [v[0] * k, v[1] * k, v[2] * k]
 }
 
 fn look_at_rh(eye: [f32; 3], centre: [f32; 3], up: [f32; 3]) -> Mat4 {

@@ -202,6 +202,15 @@ pub struct Set {
     viewport: [f32; 2],
     parity: bool,
     has_spawn: bool,
+    /// Whether the L4 draws the whole frame rather than one primitive per
+    /// element — see `Topology::Fullscreen`.
+    ///
+    /// **It gates the compute passes as well as the draw.** A fullscreen
+    /// procedure consumes nothing, which the check pass enforces rather than
+    /// merely expects, so the element buffers have no reader and stepping them
+    /// is work for nobody. That is the difference between an optimisation and a
+    /// consequence of what the pair means.
+    fullscreen: bool,
     /// Both procedures are a pure function of `seed`, `t`, and their params —
     /// see [`Set::is_closed_form`]. Decided by the check pass and carried here
     /// rather than re-derived; the engine never looks at IR.
@@ -360,11 +369,9 @@ impl Set {
             });
         }
 
-        // Before generation, because generation would panic rather than refuse:
-        // see `SetError::Unrenderable`.
-        if l4.topology == Some(karakuri_ir::Topology::Fullscreen) {
-            return Err(SetError::Unrenderable { l4: l4.name.clone() });
-        }
+        // Decided before anything is generated, because it changes the shape of
+        // the pipeline as well as the shader — see `Set::fullscreen`.
+        let fullscreen = l4.topology == Some(karakuri_ir::Topology::Fullscreen);
 
         let l1_shader = generate_l1(l1);
         let l4_shader = generate_l4(l4, &l1_shader.element_layout);
@@ -660,9 +667,18 @@ impl Set {
         let element = compute("element", &compute_pl);
         let spawn = l1_shader.has_spawn.then(|| compute("spawn", &compute_pl));
 
+        // **No attribute group for a fullscreen shader**, which declares none:
+        // it consumes nothing, so it binds nothing. A layout naming a group the
+        // module does not use is a validation error rather than a harmless
+        // extra.
+        let render_groups: Vec<&wgpu::BindGroupLayout> = if fullscreen {
+            vec![&l4_uniform_bgl]
+        } else {
+            vec![&l4_uniform_bgl, &l4_attr_bgl]
+        };
         let render_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("L4"),
-            bind_group_layouts: &[&l4_uniform_bgl, &l4_attr_bgl],
+            bind_group_layouts: &render_groups,
             push_constant_ranges: &[],
         });
         let render = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -757,6 +773,11 @@ impl Set {
             viewport: [1.0, 1.0],
             parity: false,
             has_spawn: l1_shader.has_spawn,
+            // **What this decides is not only how to draw**: a fullscreen L4
+            // consumes nothing — the check pass refuses one that says
+            // otherwise — so nothing reads the element buffers and the L1's
+            // passes are skipped entirely. See `Set::step`.
+            fullscreen,
             // Both, because a Set is only seekable if everything in it is. L4
             // is stateless and its flag is vacuously true, so in practice this
             // is the L1's — but writing the conjunction is what keeps it
@@ -1148,13 +1169,24 @@ impl Set {
         let beats = self.last_beats;
         let aspect = self.viewport[0] / self.viewport[1];
         let camera = self.camera.view_proj(t, aspect);
+        let basis = self.camera.basis(t, aspect);
         let (bindings, params) = (&self.bindings, &self.params);
+        let fullscreen = self.fullscreen;
         let mut p = self.l4_scratch.pack(&self.l4_uniform_layout);
-        p.f32("t", t)
-            .f32("beats", beats)
-            .u32("seed_salt", self.seed_salt)
-            .vec2("viewport", self.viewport)
-            .mat4("camera", camera);
+        p.f32("t", t).f32("beats", beats).u32("seed_salt", self.seed_salt);
+        // Two shapes of uniform, because the two shaders need different things:
+        // a per-element one projects points and needs the matrix and the
+        // viewport in pixels; a fullscreen one marches and needs a ray. Writing
+        // a field the layout does not declare is a panic in the packer, which
+        // is the right way round — it means the two halves cannot drift.
+        if fullscreen {
+            p.vec3("eye", basis.eye)
+                .vec3("cam_fwd", basis.forward)
+                .vec3("cam_right", basis.right)
+                .vec3("cam_up", basis.up);
+        } else {
+            p.vec2("viewport", self.viewport).mat4("camera", camera);
+        }
         for name in &self.l4_param_names {
             p.f32(name, effective(bindings, params, Kind::L4, name));
         }
@@ -1368,7 +1400,11 @@ impl Set {
         // Steps 1, 3 and 4 do not run for a static procedure: its live set
         // cannot change, `range` stays at `capacity` from initialization,
         // and `element` writes in place.
-        let steps = steps.min(MAX_STEPS);
+        // **Nothing reads what these passes would write.** A fullscreen L4
+        // consumes no attribute — the check pass refuses one that claims to —
+        // so the whole simulation is work for a reader that does not exist.
+        // `t` still advances below, because a marcher reads it.
+        let steps = if self.fullscreen { 0 } else { steps.min(MAX_STEPS) };
         for step in 0..usize::from(steps) {
             let parity = self.parity;
             if let Some(compaction) = &self.compaction {
@@ -1455,6 +1491,14 @@ impl Set {
             });
             pass.set_pipeline(&self.render);
             pass.set_bind_group(group::UNIFORMS, &self.l4_uniform_bg, &[]);
+            if self.fullscreen {
+                // Three vertices, one instance, and no indirect read: the count
+                // is a property of the shape rather than of how many elements
+                // survived. See `FULLSCREEN_VS` for why it is a triangle and
+                // not a quad.
+                pass.draw(0..3, 0..1);
+                return;
+            }
             pass.set_bind_group(group::ATTRS, &self.l4_attr_bg[render_parity], &[]);
             // The instance count is GPU state now, so this is indirect even
             // for a static procedure whose count the host does know — one
