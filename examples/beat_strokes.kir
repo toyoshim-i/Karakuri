@@ -1,0 +1,208 @@
+// Unbroken strokes with a comet head chasing around each one, sparks thrown off
+// on the beat, a strobe on the downbeat, and the image torn into screen-space
+// bands that drop out and go the wrong colour.
+//
+// **There is a screen-space coordinate in here, and the language does not have
+// one.** The complete list of ambients is `capacity`, `t`, `beats`, `dt`,
+// `camera`, `point_coord` — no fragment position, no resolution. But `camera` is
+// available in the `fragment` block and not only in `vertex`, and `position` and
+// `velocity` are attributes a fragment can read, so both ends of this element's
+// segment can be projected *here* and interpolated between with `point_coord.x`,
+// which runs 0 to 1 along the stroke. That interpolation varies per fragment. It
+// is a real screen position.
+//
+// Two things it is not. The across-stroke offset is left out, because converting
+// `point_size` from pixels to NDC needs a resolution nothing exposes — so the
+// position is right to within the width of a stroke, far finer than the bands
+// drawn with it. And **a fragment cannot displace itself**: moving pixels is a
+// vertex operation, so the slab shear stays in the L1. What the fragment can do
+// is everything on the colour side, which is most of what the look is made of.
+//
+// **The glitch is layered and it bursts, and both are why.** One band set on a
+// musical subdivision holds still between steps, and a pattern that holds still
+// for an eighth of a second reads as stiff however violent it is; so a second
+// set runs on the frame clock at tens of hertz, in both axes, giving blocks that
+// change faster than they can be read. And a constant rate reads as a *texture*
+// rather than as an event, so the density is gated by a burst envelope: most
+// eighths are quiet, some detonate and decay across their own length. `idle` is
+// the floor under that, not the level.
+//
+// **The band block below is duplicated verbatim in `beat_bloom`**, and has to
+// be. Every other shared decision is made once in the L1 and carried in an
+// attribute, but this one is per *fragment* and in screen space, which an L1 has
+// no access to at all. If the halo does not tear with the body, the halo floats
+// over the damage and the whole effect reads as pasted on.
+//
+// `glitch_burst` is not called `burst` because `beat_strands` already has a
+// `burst` — parameter values are keyed by name across the whole Set, so two
+// declarations of one name would be one value, and `Set::build` refuses it
+// rather than picking a winner.
+//
+// Pairs with `beat_strands`, and makes the identical split of the seed space:
+// below 65536 is a strand sample, above it is a spark.
+//
+// **Strands.** `beat_strands` puts the offset to the next sample in `velocity`,
+// so `clip_b` is `position - velocity` exactly — **no `streak` and no taper**.
+// Scaling the segment pulls it off its neighbour's endpoint and the polyline
+// comes apart into dashes; fading each segment head to tail would draw 128
+// scallops around every strand. **Sparks are the opposite case**: independent
+// segments, so tapering one is exactly right.
+//
+// **Colour comes from the geometry, not from a hash** — hue is a function of
+// radius, continuous along a strand, over a narrow interval. That is what makes
+// the glitch legible: leaving a tight family is what reads as damage. Hue taken
+// from `hash1(strand)` over the whole wheel, as an early version did, left
+// nothing for a corrupted band to be different *from*.
+//
+// **`age` is not an age.** `beat_strands` puts the geometric glitch amount there.
+
+proc beat_strokes {
+  kind  L4
+  blend additive
+
+  consumes position, velocity, age
+
+  param width       : float [0.5, 24.0] = 1.6
+  param exposure    : float [0.0, 8.0]  = 0.35
+  param falloff     : float [0.5, 8.0]  = 2.0
+
+  param hue         : float [0.0, 1.0]  = 0.55
+  param spread      : float [0.0, 1.0]  = 0.20
+  param sat         : float [0.0, 1.0]  = 0.90
+
+  param comet       : float [0.0, 1.0]  = 0.80
+  param tail_len    : float [1.0, 32.0] = 8.0
+  param chase       : float [0.0, 4.0]  = 1.0
+
+  param spark_hue   : float [0.0, 1.0]  = 0.07
+  param spark_sat   : float [0.0, 1.0]  = 0.65
+  param spark_gain  : float [0.0, 8.0]  = 3.0
+  param spark_wide  : float [0.5, 8.0]  = 2.0
+
+  param strobe      : float [0.0, 4.0]  = 1.2
+
+  param corrupt     : float [0.0, 1.0]  = 0.5
+  param glitch_lit  : float [0.0, 4.0]  = 1.6
+
+  // --- the screen-space glitch ---
+  // Fraction of eighths that detonate, and the floor under the envelope.
+  param glitch_burst : float [0.0, 1.0] = 0.35
+  param idle         : float [0.0, 1.0] = 0.25
+  // Coarse bands across the height of the frame, on a musical subdivision.
+  param slice_n      : float [1.0, 60.0] = 22.0
+  param srate        : float [0.5, 16.0] = 8.0
+  // Fine blocks, on the frame clock. This is the one that makes it move.
+  param fine_hz      : float [1.0, 120.0] = 45.0
+  // Fraction blanked, and fraction torn to the wrong hue, at full heat.
+  param drop         : float [0.0, 0.5] = 0.10
+  param tear         : float [0.0, 0.6] = 0.28
+  // Fine scanlines, always on, deliberately not on the beat.
+  param scan         : float [0.0, 1.0] = 0.22
+  param scan_n       : float [1.0, 600.0] = 160.0
+
+  vertex {
+    clip   = camera * vec4(position, 1.0);
+    clip_b = camera * vec4(position - velocity, 1.0);
+
+    if seed < 65536u {
+      let strand = seed / 128u;
+      point_size = width * (0.6 + 0.8 * hash1(strand + 3u)) * (1.0 + age);
+    } else {
+      point_size = width * spark_wide * (1.0 + age);
+    }
+  }
+
+  fragment {
+    // --- where this fragment is on screen ---
+    let ca = camera * vec4(position, 1.0);
+    let cb = camera * vec4(position - velocity, 1.0);
+    let ax = ca.x / max(ca.w, 0.0001);
+    let ay = ca.y / max(ca.w, 0.0001);
+    let bx = cb.x / max(cb.w, 0.0001);
+    let by = cb.y / max(cb.w, 0.0001);
+    let sx = mix(ax, bx, point_coord.x);
+    let sy = mix(ay, by, point_coord.x);
+
+    // --- how violent the glitch is right now ---
+    let eq     = floor(beats * 2.0);
+    let ein    = fract(beats * 2.0);
+    let roll_e = fract(sin(eq * 17.1317) * 9271.317);
+    let heat   = smoothstep(1.0 - glitch_burst, 1.0, roll_e) * pow(1.0 - ein, 1.5);
+    let hot    = idle + (1.0 - idle) * heat;
+
+    // --- coarse bands: musical, and their boundaries move every step ---
+    let q1 = floor(beats * srate);
+    let j1 = fract(sin(q1 * 3.7717) * 1237.13);
+    let r1 = floor(sy * slice_n + j1 * 9.0);
+    let b1 = fract(sin(q1 * 91.7137 + r1 * 47.9231) * 31719.137);
+
+    // --- fine blocks: frame clock, both axes, faster than it can be read ---
+    let q2 = floor(t * fine_hz);
+    let j2 = fract(sin(q2 * 5.1131) * 811.317);
+    let r2 = floor(sy * slice_n * 5.0 + j2 * 17.0);
+    let c2 = floor(sx * slice_n * 2.5);
+    let b2 = fract(sin(q2 * 27.3131 + r2 * 13.7137 + c2 * 61.3171) * 17431.71);
+
+    var band     = 1.0 - scan * step(0.5, fract(sy * scan_n));
+    var band_hue = 0.0;
+
+    if b1 < drop * hot {
+      band = 0.0;
+    }
+    if b1 > 1.0 - tear * hot {
+      band     = band * 2.4;
+      band_hue = corrupt;
+    }
+    if b2 < drop * hot * 0.7 {
+      band = 0.0;
+    }
+    if b2 > 1.0 - tear * hot * 1.2 {
+      band     = band * 1.8;
+      band_hue = band_hue + corrupt * 0.5;
+    }
+    // Colour may go past 1 to burn; coverage may not.
+    let band_a = clamp(band, 0.0, 1.0);
+
+    // --- the material ---
+    let across = abs(point_coord.y * 2.0 - 1.0);
+    let edge   = pow(max(0.0, 1.0 - across), falloff);
+
+    let flash = pow(1.0 - fract(beats * 0.25), 32.0);
+    let lift  = (1.0 + strobe * flash * 2.5) * (1.0 + glitch_lit * age);
+
+    if seed < 65536u {
+      let strand = seed / 128u;
+      let index  = seed % 128u;
+      let s      = float(index) / 128.0;
+
+      let rn = clamp((length(position) - 1.0) / 2.2, 0.0, 1.0);
+      let h  = hue + rn * spread + corrupt * age + band_hue;
+
+      let behind = fract(s - beats * 0.25 * chase - hash1(strand + 17u));
+      let glow   = pow(1.0 - behind, tail_len);
+      let core   = pow(1.0 - behind, tail_len * 3.0);
+
+      let c = hsv_to_rgb(vec3(h, sat * (1.0 - 0.35 * age), 1.0));
+
+      let lit = c * (0.35 + comet * glow * 5.0)
+              + vec3(comet * core, comet * core, comet * core);
+
+      color = vec4(lit * exposure * lift * band, edge * band_a);
+    } else {
+      let sp = seed - 65536u;
+
+      let group = floor(hash1(sp + 13u) * 4.0) * 0.25;
+      let local = fract(beats * 0.25 + group);
+      let fly   = clamp(local * 4.0, 0.0, 1.0);
+      let life  = pow(max(0.0, 1.0 - fly), 1.6);
+
+      let along = 1.0 - 0.85 * point_coord.x;
+
+      let c     = hsv_to_rgb(vec3(spark_hue + corrupt * age + band_hue, spark_sat, 1.0));
+      let hot_s = life * life;
+      let lit   = c * (spark_gain * life) + vec3(hot_s, hot_s, hot_s);
+
+      color = vec4(lit * exposure * lift * band, edge * along * life * band_a);
+    }
+  }
+}
