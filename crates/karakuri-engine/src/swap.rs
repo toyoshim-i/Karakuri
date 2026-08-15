@@ -511,8 +511,8 @@ impl HotSwap {
     /// The outgoing Set is retired rather than parked: there is no rollback to
     /// park it for. Its measured cost goes with it, so the governor treats the
     /// incoming one as unmeasured — which is what it is.
-    pub fn install(&mut self, mut set: Set) {
-        set.resize(self.viewport.0, self.viewport.1);
+    pub fn install(&mut self, device: &wgpu::Device, mut set: Set) {
+        set.resize(device, self.viewport.0, self.viewport.1);
         let outgoing = std::mem::replace(&mut self.live, set);
         self.retire(outgoing);
         self.cost = None;
@@ -570,8 +570,8 @@ impl HotSwap {
     ///
     /// Allocates nothing, compiles nothing, and never blocks: the channel is
     /// polled with `try_recv` and the graveyard with `try_lock`.
-    pub fn begin_frame(&mut self) -> &mut Set {
-        self.frame_boundary(true);
+    pub fn begin_frame(&mut self, device: &wgpu::Device) -> &mut Set {
+        self.frame_boundary(device, true);
         &mut self.live
     }
 
@@ -595,11 +595,11 @@ impl HotSwap {
     /// budget that fits one Set rolls back every candidate in a deck of four.
     /// Fixing *that* needs a per-Set measurement, which is M2's budget
     /// governor.
-    pub(crate) fn begin_frame_parked(&mut self) {
-        self.frame_boundary(false);
+    pub(crate) fn begin_frame_parked(&mut self, device: &wgpu::Device) {
+        self.frame_boundary(device, false);
     }
 
-    fn frame_boundary(&mut self, on_air: bool) {
+    fn frame_boundary(&mut self, device: &wgpu::Device, on_air: bool) {
         let now = Instant::now();
         let last = self.last_frame.replace(now);
         if on_air {
@@ -617,7 +617,7 @@ impl HotSwap {
         }
         self.frames += 1;
         self.hand_over_retired();
-        self.install_if_ready();
+        self.install_if_ready(device);
     }
 
     /// The live Set, outside a frame. Read-only, so it cannot be rendered
@@ -759,11 +759,11 @@ impl HotSwap {
     /// Remembered as well as forwarded: a Set built while the window was one
     /// size must not arrive on screen still believing it, and the parked Set
     /// must not come back through a rollback with a stale aspect ratio.
-    pub fn resize(&mut self, width: u32, height: u32) {
+    pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         self.viewport = (width, height);
-        self.live.resize(width, height);
+        self.live.resize(device, width, height);
         if let Some(previous) = &mut self.previous {
-            previous.resize(width, height);
+            previous.resize(device, width, height);
         }
     }
 
@@ -818,7 +818,7 @@ impl HotSwap {
     }
 
     /// Install a finished build, if one is waiting and there is room for it.
-    fn install_if_ready(&mut self) {
+    fn install_if_ready(&mut self, device: &wgpu::Device) {
         // Not while something is on trial: `previous` is the rollback target
         // and there is exactly one of it, so accepting a second candidate
         // would mean losing the only Set known to work. A build that finishes
@@ -873,7 +873,7 @@ impl HotSwap {
                 error,
             }),
             Ok(mut candidate) => {
-                candidate.resize(self.viewport.0, self.viewport.1);
+                candidate.resize(device, self.viewport.0, self.viewport.1);
                 let outgoing = std::mem::replace(&mut self.live, candidate);
                 self.previous = Some(outgoing);
                 self.previous_cost = std::mem::replace(&mut self.cost, built.cost);
@@ -968,7 +968,7 @@ pub fn measure(
 ) -> Measurement {
     let capacity = set.capacity();
     let viewport = set.viewport();
-    set.resize(PROBE_RESOLUTION.0, PROBE_RESOLUTION.1);
+    set.resize(device, PROBE_RESOLUTION.0, PROBE_RESOLUTION.1);
     // The uniforms have never been written otherwise — `build` allocates them
     // and leaves them at whatever the driver's fresh buffer holds — so the
     // measured frame has to be preceded by a real `prepare`, exactly as an
@@ -980,7 +980,7 @@ pub fn measure(
     let measurement = probe.run(device, queue, set, PROBE_STEPS, capacity);
     // Back to cold. `Set::rewind` is documented for this one caller.
     set.rewind(device, queue);
-    set.resize(viewport.0, viewport.1);
+    set.resize(device, viewport.0, viewport.1);
     measurement
 }
 

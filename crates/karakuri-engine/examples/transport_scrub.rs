@@ -115,7 +115,7 @@ fn main() {
     let l4 = compile(Path::new("examples/soft_points.kir"));
     let mut set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, SEED)
         .expect("the pair is compatible");
-    set.resize(WIDTH, HEIGHT);
+    set.resize(&gpu.device, WIDTH, HEIGHT);
 
     let mut deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], WIDTH, HEIGHT);
     deck.set_signals(Signals::new(BPM, u64::from(SEED)));

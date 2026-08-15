@@ -783,7 +783,7 @@ impl Deck {
             .into_iter()
             .zip(targets)
             .map(|(mut swap, (target, view))| {
-                swap.resize(width, height);
+                swap.resize(device, width, height);
                 Slot {
                     swap,
                     requested: Residency::Live,
@@ -957,7 +957,7 @@ impl Deck {
                 // is the whole point of the guard — between these two moments
                 // nothing the caller can hold reaches a Set.
                 Residency::Live => {
-                    let _ = slot.swap.begin_frame();
+                    let _ = slot.swap.begin_frame(device);
                 }
                 // Installs and retirement, but no watchdog sample: this frame
                 // is not this slot's to be judged by.
@@ -974,7 +974,7 @@ impl Deck {
                 // as it does for a parked one. What judges a priming slot is
                 // the per-Set measurement `crate::governor` budgets against,
                 // which is a different question and a different number.
-                Residency::Priming | Residency::Allocated => slot.swap.begin_frame_parked(),
+                Residency::Priming | Residency::Allocated => slot.swap.begin_frame_parked(device),
             }
             // A build landing, and a rollback putting the outgoing Set back,
             // both replace what the slot is drawing — a swapped-in Set is
@@ -1025,7 +1025,7 @@ impl Deck {
             // Forwarded as well as remembered, for the reason
             // `HotSwap::resize` gives: a Set built at one size must not arrive
             // on screen still believing it.
-            slot.swap.resize(width, height);
+            slot.swap.resize(device, width, height);
         }
         let views: Vec<&wgpu::TextureView> = self.slots.iter().map(|s| &s.view).collect();
         self.composite.rebind(device, &views);
@@ -1065,8 +1065,8 @@ impl Deck {
     /// by editing a file and letting the worker build it, which is what the
     /// budget watchdog is attached to. This is the other end of that — reading
     /// back what a run already did.
-    pub fn install(&mut self, slot: usize, set: crate::set::Set) {
-        self.slots[slot].swap.install(set);
+    pub fn install(&mut self, device: &wgpu::Device, slot: usize, set: crate::set::Set) {
+        self.slots[slot].swap.install(device, set);
     }
 
     pub fn slot(&self, slot: usize) -> &HotSwap {

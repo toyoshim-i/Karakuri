@@ -93,7 +93,7 @@ fn build(gpu: &Gpu, l1_src: &str, capacity: u32) -> Set {
     let l1 = compile(l1_src);
     let l4 = compile(L4);
     let mut set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, capacity, 19274).expect("compatible pair");
-    set.resize(WIDTH, HEIGHT);
+    set.resize(&gpu.device, WIDTH, HEIGHT);
     set
 }
 
@@ -271,7 +271,7 @@ proc plain {
 }
 "#;
     let mut set = Set::build(&gpu.device, &gpu.queue, &compile(l1), &compile(l4), 256, 1).expect("pair");
-    set.resize(WIDTH, HEIGHT);
+    set.resize(&gpu.device, WIDTH, HEIGHT);
 
     assert_eq!(set.live_count(&gpu.device, &gpu.queue), 256, "everything starts alive");
 
@@ -377,7 +377,7 @@ proc plain {
 }
 "#;
     let mut set = Set::build(&gpu.device, &gpu.queue, &compile(l1), &compile(l4), 64, 1).expect("pair");
-    set.resize(WIDTH, HEIGHT);
+    set.resize(&gpu.device, WIDTH, HEIGHT);
 
     let dt = 1.0f32 / 60.0;
     for _ in 0..4 {
@@ -550,7 +550,7 @@ proc plain {
 }
 "#;
     let mut set = Set::build(&gpu.device, &gpu.queue, &compile(l1), &compile(l4), 4096, 1).expect("pair");
-    set.resize(WIDTH, HEIGHT);
+    set.resize(&gpu.device, WIDTH, HEIGHT);
 
     for _ in 0..4 {
         step(&gpu, &mut set, 1);

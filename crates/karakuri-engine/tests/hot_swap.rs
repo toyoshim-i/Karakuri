@@ -185,7 +185,7 @@ impl Harness {
             Present::new(&gpu.device, wgpu::TextureFormat::Rgba16Float, size.0, size.1);
         let set = Harness::build(&gpu, L4, capacity);
         let mut swap = HotSwap::new(&gpu.device, &gpu.queue, set, budget_ms, source);
-        swap.resize(size.0, size.1);
+        swap.resize(&gpu.device, size.0, size.1);
         Harness {
             gpu,
             present,
@@ -237,7 +237,7 @@ impl Harness {
         let device = &self.gpu.device;
         let queue = &self.gpu.queue;
 
-        let set = self.swap.begin_frame();
+        let set = self.swap.begin_frame(device);
         let at_top = set.capacity();
         set.prepare(queue, 1, &Signals::default());
         let mut encoder = device.create_command_encoder(&Default::default());
@@ -853,7 +853,7 @@ fn stateful(gpu: &Gpu) -> Set {
         19274,
     )
     .expect("the pair is compatible and the capacity is in range");
-    set.resize(WIDTH, HEIGHT);
+    set.resize(&gpu.device, WIDTH, HEIGHT);
     set
 }
 

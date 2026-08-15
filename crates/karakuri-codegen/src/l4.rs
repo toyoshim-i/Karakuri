@@ -76,7 +76,7 @@
 use std::collections::HashSet;
 
 use karakuri_ir::typed::{Checked, TBlock, TExpr, TExprKind, TStmt, Target};
-use karakuri_ir::{Ambient, Attr, BlockKind, Kind, Output, Topology};
+use karakuri_ir::{Ambient, Attr, Blend, BlockKind, Kind, Output, Topology};
 
 use crate::layout::{self, group, ElementLayout, UniformLayout, UniformLayoutBuilder};
 use crate::lower::{lower_expr, mangle_local, Resolver};
@@ -275,7 +275,7 @@ fn corner_of(i: u32) -> vec2<f32> {
 }
 ";
 
-fn write_vsout_struct(out: &mut String, seed_used: bool, attrs_used: &[Attr]) {
+fn write_vsout_struct(out: &mut String, seed_used: bool, attrs_used: &[Attr], depth: bool) {
     out.push_str("struct VsOut {\n");
     out.push_str("    @builtin(position) clip: vec4<f32>,\n");
     out.push_str("    @location(0) point_coord: vec2<f32>,\n");
@@ -292,6 +292,14 @@ fn write_vsout_struct(out: &mut String, seed_used: bool, attrs_used: &[Attr]) {
         ));
         loc += 1;
     }
+    // Last, so that adding it leaves every other varying's location where it
+    // was. **Interpolated rather than flat**, and that is the whole reason it
+    // is a varying at all: perspective-correct interpolation of `w` is exactly
+    // the view depth at the fragment, because the hardware's own divide is what
+    // makes it so. Only `blend weighted` needs it — see [`WEIGHTED_FS_EPILOGUE`].
+    if depth {
+        out.push_str(&format!("    @location({loc}) view_depth: f32,\n"));
+    }
     out.push_str("};\n");
 }
 
@@ -301,6 +309,7 @@ fn vertex_entry(
     attrs_used: &[Attr],
     body: &str,
     topology: Topology,
+    weighted: bool,
 ) -> String {
     let mut out = String::new();
     out.push_str("@vertex\n");
@@ -327,8 +336,22 @@ fn vertex_entry(
             out.push_str("    let ndc_offset = corner * _point_size / u.viewport * _clip.w;\n");
             out.push_str("    out.clip = vec4<f32>(_clip.xy + ndc_offset, _clip.zw);\n");
             out.push_str("    out.point_coord = corner_of(corner_idx);\n");
+            // The whole sprite is at one depth, because a billboard is: all six
+            // corners take the element's own `w` and the interpolation across
+            // them is constant.
+            if weighted {
+                out.push_str("    out.view_depth = _clip.w;\n");
+            }
         }
-        Topology::Lines => out.push_str(SEGMENT_EXPANSION),
+        Topology::Lines => {
+            out.push_str(SEGMENT_EXPANSION);
+            // `w` is the endpoint this corner belongs to — `SEGMENT_EXPANSION`
+            // selects it rather than blending it — so a stroke running away from
+            // the eye is weighted along its length rather than at one depth.
+            if weighted {
+                out.push_str("    out.view_depth = w;\n");
+            }
+        }
         // Never reached: a fullscreen procedure has no vertex block to lower,
         // so `generate_l4` takes the other path entirely.
         Topology::Fullscreen => unreachable!("fullscreen has no per-element vertex stage"),
@@ -458,10 +481,74 @@ const SEGMENT_EXPANSION: &str = "\
     out.point_coord = corner;
 ";
 
-fn fragment_entry(seed_used: bool, attrs_used: &[Attr], body: &str) -> String {
+/// The two targets a [`Blend::Weighted`] fragment stage writes, and the signature
+/// that says so.
+///
+/// The engine builds the pipeline against exactly this pair — `Rgba16Float` for
+/// the accumulation and `R16Float` for the revealage — with a different blend
+/// state on each. See `Set::draw`.
+const WEIGHTED_FS_OUT: &str = "struct FsOut {
+    @location(0) accum: vec4<f32>,
+    @location(1) reveal: f32,
+};
+
+";
+
+/// The whole difference between the two blend modes, as WGSL: an `additive`
+/// fragment returns the colour it computed and a `weighted` one returns these
+/// two accumulations of it.
+///
+/// **Alpha is opacity here and is clamped**, where `additive` reads it as
+/// emission strength and lets it past 1.0. `prod(1 - a)` stops meaning "what is
+/// still visible behind this" the moment a term goes negative, so an alpha of
+/// 1.5 would not merely be bright — it would put negative light in the frame,
+/// and two of them would put it back. The clamp is the mode's contract, stated
+/// in `docs/ir-spec.md` beside the declaration.
+///
+/// **The weight's absolute scale is arbitrary and is chosen for `f16`.** The
+/// resolve divides the colour sum by the weight sum, so multiplying every
+/// weight by a constant changes nothing it computes — which is why the `3e3`
+/// factor the published weight functions carry is absent here. It is not
+/// harmless: this pipeline is unbounded linear HDR, colours of 20 are ordinary,
+/// and a target that is `Rgba16Float` overflows to infinity a little past
+/// 65504. Keeping the weight in `(0, 1]` is what makes the accumulation of an
+/// HDR colour no larger than the accumulation of the colour itself.
+///
+/// What survives the scaling is the *ratio*, and that is what the floor sets:
+/// a fragment at the far plane counts a hundredth of one at the near plane.
+const WEIGHTED_FS_EPILOGUE: &str = "    let _a = clamp(_color.a, 0.0, 1.0);
+    let _w = _a * max(1e-2, pow(1.0 - _depth01, 3.0));
+    var _out: FsOut;
+    _out.accum = vec4<f32>(_color.rgb * _a * _w, _a * _w);
+    _out.reveal = _a;
+    return _out;
+";
+
+/// Where this fragment sits between the camera's near and far planes, in
+/// `[0, 1]`.
+///
+/// **Linear in view depth, not in the depth buffer's.** NDC depth would need no
+/// uniform at all — it is already `[0, 1]` — and it is useless for this: with the
+/// default 0.1 near and 100 far it crushes everything past ten units into the
+/// last percent of its range, so a whole scene would land on one weight. This
+/// costs a `vec2` and keeps the two ends of the frustum a hundred to one apart.
+///
+/// **The consequence is stated rather than hidden.** Material occupying a thin
+/// slice of a wide frustum gets near-equal weights and the resolve approaches a
+/// plain alpha-weighted average. That degradation is graceful — what still
+/// separates `weighted` from `additive` there is that the layer *occludes* —
+/// and the operator's lever on it is the camera's `far`.
+const WEIGHTED_DEPTH: &str =
+    "    let _depth01 = clamp((in.view_depth - u.depth_range.x) * u.depth_range.y, 0.0, 1.0);\n";
+
+fn fragment_entry(seed_used: bool, attrs_used: &[Attr], body: &str, weighted: bool) -> String {
     let mut out = String::new();
     out.push_str("@fragment\n");
-    out.push_str("fn fs(in: VsOut) -> @location(0) vec4<f32> {\n");
+    if weighted {
+        out.push_str("fn fs(in: VsOut) -> FsOut {\n");
+    } else {
+        out.push_str("fn fs(in: VsOut) -> @location(0) vec4<f32> {\n");
+    }
     out.push_str("    let point_coord = in.point_coord;\n");
     if seed_used {
         out.push_str("    let seed = in.seed;\n");
@@ -471,7 +558,12 @@ fn fragment_entry(seed_used: bool, attrs_used: &[Attr], body: &str) -> String {
     }
     out.push_str("    var _color: vec4<f32>;\n");
     out.push_str(body);
-    out.push_str("    return _color;\n");
+    if weighted {
+        out.push_str(WEIGHTED_DEPTH);
+        out.push_str(WEIGHTED_FS_EPILOGUE);
+    } else {
+        out.push_str("    return _color;\n");
+    }
     out.push_str("}\n");
     out
 }
@@ -501,6 +593,10 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
     let topology = checked
         .topology
         .expect("a checked L4 procedure always carries an inferred topology");
+    // Declared, never inferred — the two modes differ in how the results of
+    // identical assignments are combined, so there is nothing an L4 could write
+    // that would imply one. See `karakuri_ir::Blend`.
+    let weighted = checked.blend == Some(Blend::Weighted);
 
     let fragment_blk = checked
         .block(BlockKind::Fragment)
@@ -513,7 +609,7 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
     // below textually unchanged rather than threading a condition through it,
     // and keeps `viewport` and `camera` out of a uniform that never reads them.
     if topology == Topology::Fullscreen {
-        return generate_fullscreen(checked, fragment_blk, elements);
+        return generate_fullscreen(checked, fragment_blk, elements, weighted);
     }
 
     let mut b = UniformLayoutBuilder::new();
@@ -526,6 +622,13 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
     // for the same reason.
     b.field("viewport", "vec2<f32>");
     b.field("camera", "mat4x4<f32>");
+    // `(near, 1 / (far - near))`, and only for the mode that reads it — see
+    // [`WEIGHTED_DEPTH`]. The engine writes it from the same `Orbit` the matrix
+    // above comes from, so the plane a fragment is measured against is the plane
+    // it was projected with.
+    if weighted {
+        b.field("depth_range", "vec2<f32>");
+    }
     for p in &checked.params {
         b.param_field(p.name.clone(), wgsl_ty(p.ty));
     }
@@ -562,16 +665,20 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
     src.push('\n');
     src.push_str(CORNER_OF);
     src.push('\n');
-    write_vsout_struct(&mut src, seed_used, &attrs_used);
+    write_vsout_struct(&mut src, seed_used, &attrs_used, weighted);
     src.push('\n');
+    if weighted {
+        src.push_str(WEIGHTED_FS_OUT);
+    }
     src.push_str(&vertex_entry(
         &checked.consumes,
         seed_used,
         &attrs_used,
         &vertex_body,
         topology,
+        weighted,
     ));
-    src.push_str(&fragment_entry(seed_used, &attrs_used, &fragment_body));
+    src.push_str(&fragment_entry(seed_used, &attrs_used, &fragment_body, weighted));
 
     L4Shader { source: src, uniform_layout, uniform_pad_f32, element_layout: elements.clone() }
 }
@@ -588,6 +695,7 @@ fn generate_fullscreen(
     checked: &Checked,
     fragment_blk: &TBlock,
     elements: &ElementLayout,
+    weighted: bool,
 ) -> L4Shader {
     let mut b = UniformLayoutBuilder::new();
     b.field("t", "f32");
@@ -619,12 +727,30 @@ fn generate_fullscreen(
     src.push_str(&prelude::render(&req));
     src.push('\n');
     src.push_str(FULLSCREEN_VS);
-    src.push_str("@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n");
+    if weighted {
+        src.push_str(WEIGHTED_FS_OUT);
+        src.push_str("@fragment\nfn fs(in: VsOut) -> FsOut {\n");
+    } else {
+        src.push_str("@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n");
+    }
     src.push_str("    let point_coord = in.point_coord;\n");
     src.push_str(FULLSCREEN_RAY);
     src.push_str("    var _color: vec4<f32>;\n");
     src.push_str(&body);
-    src.push_str("    return _color;\n}\n");
+    if weighted {
+        // **A frame is not at a depth**, so there is nothing to normalise
+        // against the camera's planes and no `depth_range` in the uniform above.
+        // Every fragment weighs the same, which for one layer per texel makes
+        // the resolve the identity — and that is exactly why `Set::build`
+        // refuses this pairing rather than paying two targets and a pass for it.
+        // The generator stays total anyway: a rule about what a *Set* is worth
+        // building is not a hole in what this function can lower.
+        src.push_str("    let _depth01 = 0.0;\n");
+        src.push_str(WEIGHTED_FS_EPILOGUE);
+        src.push_str("}\n");
+    } else {
+        src.push_str("    return _color;\n}\n");
+    }
 
     // Echoed back unchanged, as the per-element path does. Nothing here reads
     // an element — the check pass refuses a fullscreen `consumes` — but the

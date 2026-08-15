@@ -1,0 +1,76 @@
+// The same cloud as `soft_points`, drawn as material that hides what is behind
+// it.
+//
+// This file is the first thing in the repository that occludes anything. It
+// pairs with `drift_shell.kir` — **the same L1, byte for byte, as
+// `soft_points.kir` and `drift_streaks.kir` pair with**. Nothing about the
+// geometry changed; only how the fragments are combined did:
+//
+//   karakuri-cli examples/drift_shell.kir examples/soft_points.kir     additive
+//   karakuri-cli examples/drift_shell.kir examples/glass_shell.kir     weighted
+//
+// Run the two side by side. The additive one is a lamp: every sprite adds, the
+// middle of the shell is the brightest part because that is where the most of
+// them overlap, and nothing is ever in front of anything. This one is a solid:
+// the near face is what you see, and the far face is behind it.
+//
+// **`blend weighted` is weighted blended OIT**, and the one thing you have to
+// know as an author is what `color`'s alpha means under it. Under `additive` it
+// is emission strength and may exceed 1.0 — it scales what the fragment adds.
+// Here it is **opacity**, and it is clamped to [0, 1]: 0 is glass, 1 is paint.
+// Writing 1.5 does not make anything brighter; it makes it exactly 1.
+//
+// **Exposure and opacity separate here, where additive fuses them.** Under
+// additive, doubling `exposure` and doubling alpha do the same thing to the
+// picture. Under weighted they are two different controls: `exposure` is how
+// bright the material is, `opacity` is how much of what is behind it survives.
+// A dim opaque shell and a bright transparent one are different pictures now,
+// which they were not before.
+//
+// **It is an approximation and it does not sort.** What it resolves toward is
+// the nearer fragment, weighted by where it sits between the camera's near and
+// far planes — so a cloud occupying a thin slice of a wide frustum gets
+// near-equal weights and reads closer to an average than to a sort. That is not
+// a failure mode to work around; the occlusion is what changes the picture, and
+// the ordering is a refinement on top of it. `drift_shell`'s default radius sits
+// in about a twentieth of the default frustum, so most of what you see below is
+// the occlusion.
+//
+// **Defaults.** `exposure` is far below `soft_points`' 1.0 because nothing is
+// summing any more: an additive shell needs every sprite to be dim so that a
+// thousand of them are not white, where here a sprite's colour is roughly the
+// colour it lands as. `falloff` is lower too — a hard-edged disc reads as a
+// bead of glass, where additive's soft edge exists to keep the sum smooth.
+
+proc glass_shell {
+  kind  L4
+  blend weighted
+
+  consumes position, velocity, age
+
+  param point_scale : float [0.5, 40.0] = 6.0
+  param hue         : float [0.0, 1.0]  = 0.58
+  param spread      : float [0.0, 1.0]  = 0.30
+  param exposure    : float [0.0, 8.0]  = 0.30
+  param opacity     : float [0.0, 1.0]  = 0.55
+  param falloff     : float [0.5, 8.0]  = 1.5
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = point_scale * (0.35 + 0.65 * clamp(length(velocity) * 0.6, 0.0, 1.0));
+  }
+
+  fragment {
+    // The same soft disc `soft_points` draws, read as coverage rather than as
+    // emission: this is how much of the texel the bead covers, not how much
+    // light it adds.
+    let d = length(point_coord * 2.0 - 1.0);
+    let a = pow(max(0.0, 1.0 - d), falloff) * opacity;
+
+    // Older elements go slightly toward the far end of the hue range, which is
+    // legible here in a way it never was under additive — a colour that is
+    // being summed with a thousand others is not a colour anyone can see.
+    let c = hsv_to_rgb(vec3(hue + hash1(seed) * spread + age * 0.01, 0.75, 1.0));
+    color = vec4(c * exposure, a);
+  }
+}

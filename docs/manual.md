@@ -537,8 +537,44 @@ something small and cheap; only that file's `capacity` line is read. And its fra
 is eight times a sprite renderer's, because a fullscreen pass covers the canvas once where
 sprites overdraw an unknown number of times.
 
-What is still missing is the blend. `blend weighted` is what remains of this milestone's
-front: additive is why everything glows, and a marched solid glows exactly as a sprite does.
+**`blend weighted` is how material stops glowing and starts hiding things.** It is the
+other value of the L4 header's `blend`, and unlike the topology it is a declaration rather
+than something the checker infers — nothing a procedure writes could imply it, because the
+two modes differ in how the results of identical assignments are combined:
+
+```sh
+cargo run -p karakuri-cli -- examples/drift_shell.kir examples/soft_points.kir   # additive
+cargo run -p karakuri-cli -- examples/drift_shell.kir examples/glass_shell.kir   # weighted
+```
+
+Same L1, byte for byte. The first is a lamp — every sprite adds, the brightest part of the
+shell is wherever the most of them overlap, and nothing is ever in front of anything. The
+second is a solid.
+
+**The one thing to know as an author is what `color`'s alpha means.** Under `additive` it is
+emission strength: it scales what the fragment adds, and values above 1.0 are expected the
+way they are for colour. Under `weighted` it is **opacity** — 0 is glass, 1 is paint — and
+it is clamped to `[0, 1]`, because the revealage a weighted pass accumulates is
+`prod(1 - a)` and that stops meaning anything the moment a term goes negative. Writing 1.5
+does not make material brighter; it makes it exactly 1.
+
+**Exposure and opacity separate, where additive fuses them.** Under additive, doubling the
+exposure and doubling the alpha do the same thing to the picture. Under weighted they are
+two controls: how bright the material is, and how much of what is behind it survives. A dim
+opaque shell and a bright transparent one are different pictures now.
+
+**It does not sort, and it is not trying to.** Weighted blended OIT resolves toward the
+nearer fragment, weighted by where it sits between the camera's near and far planes — so
+material occupying a thin slice of a wide frustum gets near-equal weights and reads closer
+to an average than to a sort. The occlusion is what changes the picture; the ordering is a
+refinement on top of it. Being order-independent is also what lets it exist at this scale at
+all: nothing is sorted, so nothing fights compaction.
+
+Two costs. It allocates **two more render targets per weighted slot**, 8.79 MB each at
+1280x720 on top of the 7.03 MB every slot already has — nothing for additive slots. And a
+**fullscreen L4 may not declare it**: one fragment per texel makes the resolve give back
+exactly what additive accumulates, so the Set refuses to build rather than charge for the
+identity. The diagnostic says so.
 
 **The old workaround still runs, and it is worth knowing what it cost.** Before `lines`
 existed, asked for line art, a model found that points laid densely along a curve read as
