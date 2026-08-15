@@ -96,14 +96,21 @@ pub enum SetError {
     },
     /// `blend weighted` on a procedure that draws the whole frame.
     ///
-    /// **Refused because it is provably the identity, not because it is
-    /// unbuilt.** A fullscreen L4 puts exactly one fragment on each texel, and
-    /// for one layer the resolve gives back what the accumulation was made of:
+    /// **Refused because it is the identity, not because it is unbuilt.** A
+    /// fullscreen L4 puts exactly one fragment on each texel, and for one layer
+    /// the resolve gives back what the accumulation was made of:
     /// `(c * a * w) / (a * w) * (1 - (1 - a))` is `c * a`, whatever the weight
     /// was, which is precisely what additive blending into a cleared target
     /// leaves. So the two extra targets and the resolve pass buy an identical
-    /// picture, and the only thing that *would* differ is the alpha clamp — a
-    /// difference nobody wants.
+    /// picture.
+    ///
+    /// **Identical for an alpha in `[0, 1]`**, which is the caveat and is the
+    /// clamp. A fullscreen fragment writing `color = vec4(rgb, 1.5)` is legal
+    /// under `additive` and comes out half again as bright as the weighted
+    /// version would have been — so the hint below, which says to declare
+    /// `additive`, is not always a picture-preserving swap. It is the right
+    /// advice anyway: an alpha above 1 means nothing under a mode that reads it
+    /// as opacity, so a procedure writing one is asking for `additive`.
     ///
     /// **It is a rule about the Set and not about the procedure**, which is why
     /// it lives here rather than in the checker: what makes it true is that a

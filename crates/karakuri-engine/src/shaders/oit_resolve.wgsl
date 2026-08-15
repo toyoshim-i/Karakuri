@@ -39,16 +39,33 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     // different route.
     let coverage = 1.0 - textureLoad(reveal, at, 0i).r;
 
-    // **The divide is what makes the weight's scale arbitrary.** Whatever
-    // constant every `w` was multiplied by cancels here, which is why the
-    // generated shader keeps its weights inside `(0, 1]` instead of carrying
-    // the published `3e3` factor into an `Rgba16Float` target holding unbounded
-    // HDR colour.
+    // **The divide is what makes the weight's scale arbitrary — everywhere
+    // except in this guard.** Whatever constant every `w` was multiplied by
+    // cancels in `acc.rgb / acc.a`, which is why the generated shader keeps its
+    // weights inside `(0, 1]` instead of carrying the published `3e3` factor
+    // into an `Rgba16Float` target holding unbounded HDR colour. The floor is
+    // the one term the cancellation does not reach: it is compared against
+    // `acc.a` directly, so a floor chosen for one weight scale is a different
+    // floor under another.
     //
-    // The guard is not a formality. A texel nothing drew on has `acc.a` of
-    // exactly zero — and `coverage` of exactly zero with it, so the result is
-    // black either way; the guard is there so the intermediate is a number
-    // rather than a NaN, because `0 * NaN` is NaN and would reach the mix.
-    let colour = acc.rgb / max(acc.a, 1e-5);
+    // **So it is tied to the storage format instead**, and 2^-24 is where
+    // `f16` stops representing anything at all. Anything the accumulation
+    // target actually holds is either zero or at least this, so the guard can
+    // only bite on a texel whose weight sum underflowed — where `acc.rgb`
+    // underflowed with it, since `rgb <= max(c) * acc.a` term by term, and the
+    // quotient stays bounded by the colour rather than exploding.
+    //
+    // **A floor above that is an invisible darkening of thin material**, and
+    // this was 1e-5 for one commit — inherited from a weight function whose
+    // `3e3` factor had been dropped. `a * w` goes as `a^2`, so a floor on it
+    // eats alpha as its square root: 1e-5 started taking colour away at an
+    // opacity of about 0.0034 and had removed 90% of it by 0.001. See
+    // `a_lone_sprite_resolves_to_what_additive_accumulates_at_every_opacity`.
+    //
+    // A texel nothing drew on has `acc.a` of exactly zero — and `coverage` of
+    // exactly zero with it, so the result is black either way; what the guard
+    // buys there is that the intermediate is a number rather than a NaN,
+    // because `0 * NaN` is NaN and would reach the mix.
+    let colour = acc.rgb / max(acc.a, 5.96e-8);
     return vec4<f32>(colour * coverage, coverage);
 }

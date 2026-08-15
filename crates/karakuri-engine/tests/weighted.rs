@@ -180,7 +180,13 @@ fn brightest(px: &[[f32; 4]]) -> [f32; 4] {
 /// Every texel any material covered, in both frames. The overlap is what the
 /// two modes disagree about, and it is where the interesting texels are.
 fn covered(px: &[[f32; 4]]) -> Vec<usize> {
-    px.iter().enumerate().filter(|(_, t)| t[3] > 0.01).map(|(i, _)| i).collect()
+    covered_above(px, 0.01)
+}
+
+/// The same, with the threshold named — a sweep down to an opacity of 0.002 has
+/// to look below the coverage that counts as "anything at all" at 0.5.
+fn covered_above(px: &[[f32; 4]], floor: f32) -> Vec<usize> {
+    px.iter().enumerate().filter(|(_, t)| t[3] > floor).map(|(i, _)| i).collect()
 }
 
 /// **Coverage never exceeds 1, which additive's does not promise.** This is the
@@ -259,30 +265,76 @@ fn the_nearer_sprite_dominates_the_overlap_only_under_weighted() {
 /// resolve gives back `c * a`, which is what additive blending into a cleared
 /// target leaves. Outside the overlap, this fixture is that case.
 ///
-/// Not asserted bit for bit: the weighted path multiplies by a weight and then
-/// divides it out again, so the two differ by whatever `f32` rounding that costs
-/// before both are stored as `f16`.
+/// **Swept across three orders of magnitude of opacity**, because the agreement
+/// is not scale-free and the first version of this test — at alpha 0.5 alone —
+/// missed that. The resolve divides the accumulated colour by the accumulated
+/// weight and guards that divide against zero; a guard set too high is a floor
+/// under `a * w`, and since `w` is itself proportional to `a`, the alpha it
+/// starts eating is the *square root* of it. Thin material is what this mode is
+/// for, so a floor there is a floor on the mode.
+///
+/// **The colour and the coverage are asserted separately, and they have to be**,
+/// because only one of them is the resolve's arithmetic. `weighted.rgb / alpha`
+/// is what the divide produced and it must match additive's colour outright.
+/// The coverage is a read of the `R16Float` revealage, whose spacing just below
+/// 1.0 is one part in 2048 — so at an opacity of 0.005 the coverage is quantised
+/// to a tenth of itself no matter what the resolve does. Folding the two
+/// together would make a tolerance loose enough to hide the divide.
 #[test]
-fn a_lone_sprite_resolves_to_what_additive_accumulates() {
+fn a_lone_sprite_resolves_to_what_additive_accumulates_at_every_opacity() {
     let gpu = Gpu::headless().expect("no GPU available");
-    let mut additive = build(&gpu, &sprite_l4("additive"));
-    let mut weighted = build(&gpu, &sprite_l4("weighted"));
-    let a = draw(&gpu, &mut additive);
-    let w = draw(&gpu, &mut weighted);
+    // The spacing of `f16` immediately below 1.0. Coverage comes out of
+    // `1 - revealage`, so this is the finest coverage the mode can express, and
+    // the error bar on every coverage below it.
+    const REVEAL_QUANTUM: f32 = 1.0 / 2048.0;
 
-    // Covered by exactly one sprite: coverage is a single alpha of 0.5 rather
-    // than the overlap's 0.75.
-    let lone: Vec<usize> = covered(&a).into_iter().filter(|&i| a[i][3] < 0.6).collect();
-    assert!(lone.len() > 100, "only {} texels are covered by one sprite", lone.len());
+    for alpha in [0.5, 0.05, 0.005, 0.003, 0.002] {
+        let mut additive = build(&gpu, &sprite_l4("additive"));
+        additive.params.insert("alpha".to_string(), alpha);
+        let mut weighted = build(&gpu, &sprite_l4("weighted"));
+        weighted.params.insert("alpha".to_string(), alpha);
+        let a = draw(&gpu, &mut additive);
+        let w = draw(&gpu, &mut weighted);
 
-    for i in lone {
-        for c in 0..4 {
+        // The fixture writes a flat alpha over the whole quad, so a covered
+        // texel holds exactly `alpha` or exactly `1 - (1 - alpha)^2` and nothing
+        // between.
+        let both = 1.0 - (1.0 - alpha) * (1.0 - alpha);
+        let lone: Vec<usize> = covered_above(&a, alpha * 0.5)
+            .into_iter()
+            .filter(|&i| a[i][3] < (alpha + both) * 0.5)
+            .collect();
+        assert!(
+            lone.len() > 100,
+            "at alpha {alpha}, only {} texels are covered by exactly one sprite",
+            lone.len()
+        );
+
+        for i in lone {
             assert!(
-                (a[i][c] - w[i][c]).abs() < 0.01,
-                "channel {c} at texel {i}: additive {:?} against weighted {:?}",
-                a[i],
-                w[i]
+                (a[i][3] - w[i][3]).abs() < (alpha * 0.05).max(REVEAL_QUANTUM),
+                "at alpha {alpha}, coverage at texel {i} is {} against additive's {}",
+                w[i][3],
+                a[i][3]
             );
+            for c in 0..3 {
+                // Both are premultiplied by their own coverage, so dividing it
+                // back out is what leaves the colour the resolve computed. The
+                // fixture's colours are 1.0 and 0.0 exactly; skip the zeroes.
+                if a[i][c] < 1e-4 {
+                    continue;
+                }
+                let (colour_a, colour_w) = (a[i][c] / a[i][3], w[i][c] / w[i][3]);
+                let error = (colour_a - colour_w).abs() / colour_a;
+                assert!(
+                    error < 0.05,
+                    "at alpha {alpha}, channel {c} of texel {i} resolved {:.0}% off: \
+                     additive {:?} against weighted {:?}",
+                    error * 100.0,
+                    a[i],
+                    w[i]
+                );
+            }
         }
     }
 }
