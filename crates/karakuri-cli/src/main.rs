@@ -20,10 +20,12 @@
 mod audio;
 mod compile;
 mod frame;
+mod history;
 mod mcp;
 mod midi;
 mod mix;
 mod render;
+mod scratch;
 mod session;
 mod tempo_source;
 mod setfile;
@@ -1936,6 +1938,41 @@ fn main() {
     let mut args = args;
     let loaded = args.load_set.clone().map(|id| load_set(&mut args, &id));
 
+    // **Before anything reads a `.kir`**, so that the deck, the watcher and the
+    // MCP surface all get the same rewritten paths from one place — they each
+    // read `args.sets` and none of them has to know this happened.
+    //
+    // Only when the run can write one. `--watch` and `--mcp` are the two things
+    // that edit a procedure; a render or a replay opens every file read-only,
+    // so copying would leave a directory behind for a run that is supposed to
+    // be a function of its arguments. See `scratch.rs` for the rest of the
+    // reasoning, including what happened when there was no such place.
+    // The run's edit history, seeded below from the scratch. `None` for a run
+    // that cannot be edited, which is the same condition the scratch has and
+    // for the same reason: nothing writes a `.kir`, so there is no version to
+    // preserve and no directory to leave behind.
+    let mut snapshots: Option<history::Shared> = None;
+    if args.watch || args.mcp.is_some() {
+        let root = args.store.clone();
+        match scratch::materialise(&root, &mut args.sets) {
+            Ok(dir) => eprintln!(
+                "scratch: {} — the deck runs from copies here, so the files you named are \
+                 not written to. Point an editor at these",
+                dir.display()
+            ),
+            Err(e) => {
+                eprintln!("karakuri-cli: {e}");
+                std::process::exit(1);
+            }
+        }
+        // **Seeded from the scratch, before the first compile.** The first edit
+        // records what replaced the original; without this, what it replaced was
+        // never written down and the first edit is the one that cannot be undone.
+        let shared = history::Snapshots::shared(&args.store);
+        history::seed(&shared, &args.sets);
+        snapshots = Some(shared);
+    }
+
     eprintln!("compiling:");
     let mut procs: Vec<Pair> = Vec::new();
     if let Some(loaded) = loaded {
@@ -1975,7 +2012,7 @@ fn main() {
             // Fixed, never watching: an offscreen run is a function of its
             // inputs, and a save landing halfway through a sequence would make
             // it a function of the operator's editor as well.
-            let mut deck = build_deck(&gpu, &procs, &args, false, false, w, h, None);
+            let mut deck = build_deck(&gpu, &procs, &args, false, false, w, h, None, None);
             eprintln!(
                 "rendering the mix of {} Set{}, {w}x{h}, {} frames, \
                  {} at exposure {:.2} -> {}",
@@ -2005,6 +2042,7 @@ fn main() {
                     args,
                     procs: Some(procs),
                     live: None,
+                    snapshots,
                 })
                 .expect("run");
         }
@@ -2045,6 +2083,10 @@ fn build_deck(
         std::sync::Arc<karakuri_store::store::Store>,
         std::sync::mpsc::Sender<watch::Built>,
     )>,
+    // The run's edit history, shared by every slot's watcher and already
+    // holding what the run started with. `None` for a run that cannot be
+    // edited — see `history`.
+    snapshots: Option<history::Shared>,
 ) -> Deck {
     let swaps = procs
         .iter()
@@ -2092,6 +2134,15 @@ fn build_deck(
                         // **Only when a session is being recorded.** Without
                         // one there is nothing to name and no store to name it
                         // in, and the watcher does no I/O it did not do before.
+                        // The history is kept whether or not a session is
+                        // being recorded: the two answer different questions —
+                        // see `Watch::snapshots`. One `Shared` across every
+                        // slot, because it is also what the launch-time seed
+                        // wrote into.
+                        let watcher = match &snapshots {
+                            Some(shared) => watcher.snapshotting_to(shared.clone()),
+                            None => watcher,
+                        };
                         Box::new(match &recording {
                             Some((store, tx)) => {
                                 watcher.recording_to(store.clone(), tx.clone())
@@ -2194,6 +2245,9 @@ struct App {
     args: Args,
     procs: Option<Vec<Pair>>,
     live: Option<Live>,
+    /// The run's edit history, already holding what it started with. Handed to
+    /// every slot's watcher when the deck is built — see [`history`].
+    snapshots: Option<history::Shared>,
 }
 
 /// Put the session's grid where the tempo source says the shared grid is.
@@ -2570,6 +2624,7 @@ impl ApplicationHandler for App {
             canvas_w,
             canvas_h,
             rebuilds,
+            self.snapshots.clone(),
         );
         // Here and nowhere else: before the first frame, where the stall it
         // costs is free. Nothing else measures the Sets a run starts with —
