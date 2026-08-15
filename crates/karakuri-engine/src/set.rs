@@ -94,6 +94,21 @@ pub enum SetError {
         l4: String,
         keys: String,
     },
+    /// A blend mode the language admits and this engine cannot run yet.
+    ///
+    /// **Named rather than left to draw the wrong picture.** `blend` reaches no
+    /// part of lowering today, so a procedure declaring `weighted` would compile,
+    /// build, and render additively — the one failure mode worse than refusing,
+    /// because the author's next move is to wonder why their material still
+    /// glows. The language accepting something the engine does not run is a state
+    /// worth having briefly and worth saying out loud.
+    #[error(
+        "`{l4}` declares `blend {mode}`, which this engine cannot run yet\n\
+         hint: `additive` is the mode that runs. Declaring one the engine has no path for \
+         would render additively and look like a bug in the procedure rather than a gap in \
+         the engine, so it is refused instead"
+    )]
+    UnbuiltBlend { l4: String, mode: &'static str },
     /// A build panicked rather than returning. Not reachable through any
     /// `.kir` a checker accepts, which is exactly why it needs a variant:
     /// wgpu's default handler for an uncaptured validation error is a panic,
@@ -350,6 +365,15 @@ impl Set {
                 requested: capacity,
                 min: range.min,
                 max: range.max,
+            });
+        }
+
+        // Before anything is generated, because generating it is exactly what
+        // would produce a plausible wrong picture — see `SetError::UnbuiltBlend`.
+        if l4.blend == Some(karakuri_ir::Blend::Weighted) {
+            return Err(SetError::UnbuiltBlend {
+                l4: l4.name.clone(),
+                mode: karakuri_ir::Blend::Weighted.name(),
             });
         }
 

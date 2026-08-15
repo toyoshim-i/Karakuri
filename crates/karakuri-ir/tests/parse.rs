@@ -386,3 +386,68 @@ proc guessed {
     let hints: String = errs.iter().filter_map(|e| e.hint.clone()).collect();
     assert!(hints.contains("points") && hints.contains("lines"), "hint was: {hints}");
 }
+
+/// `blend weighted` is a distinct value and not a spelling of `additive`.
+///
+/// The mirror of `topology_lines_parses_as_lines`, and it exists for the same
+/// reason: a parser that mapped every blend name to one variant would satisfy
+/// `soft_points_parses_to_expected_shape` alone.
+#[test]
+fn blend_weighted_parses_as_weighted() {
+    let src = r#"
+proc glassy {
+  kind  L4
+  blend weighted
+
+  consumes position
+
+  vertex {
+    clip = camera * vec4(position, 1.0);
+    point_size = 8.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 0.5);
+  }
+}
+"#;
+    let proc = parse(src).unwrap_or_else(|errs| {
+        panic!("{}", errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n"))
+    });
+    assert_eq!(proc.blend, Some(karakuri_ir::ast::Blend::Weighted));
+}
+
+/// An unknown blend mode is refused, and the hint names both of the ones that
+/// exist *and* what separates them.
+///
+/// Same argument as `an_unknown_topology_is_refused_and_names_the_ones_that_exist`:
+/// this is the diagnostic a model reads after guessing `over` or `screen` from
+/// the L5 vocabulary, where those names are real. What the hint lists is what it
+/// tries next, so listing the names without the distinction would send it back
+/// with a coin flip.
+#[test]
+fn an_unknown_blend_is_refused_and_names_the_ones_that_exist() {
+    let src = r#"
+proc guessed {
+  kind  L4
+  blend screen
+
+  consumes position
+
+  vertex {
+    clip = camera * vec4(position, 1.0);
+    point_size = 8.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+    let errs = parse(src).expect_err("`screen` is not an L4 blend mode");
+    let hints: String = errs.iter().filter_map(|e| e.hint.clone()).collect();
+    assert!(
+        hints.contains("additive") && hints.contains("weighted") && hints.contains("opacity"),
+        "hint was: {hints}"
+    );
+}
