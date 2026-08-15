@@ -1,0 +1,80 @@
+// Strands, not particles — and there is no line primitive.
+//
+// `topology` admits `points` and nothing else, so a line here is points laid
+// densely enough along a curve to read as one. `seed` is split into a **strand
+// id** and a **position along that strand** (512 x 256), and the curve is
+// analytic: a great circle on a randomly tilted basis, displaced by curl noise.
+// Both are continuous in the along-strand coordinate, so neighbouring samples
+// are neighbours in space and the eye joins them.
+//
+// **Why analytic rather than integrated.** The honest way to grow a strand is
+// to integrate a flow field from its root, one step per sample — and `for`
+// bounds here must be compile-time constants, because cost estimation resolves
+// them at parse time. Every element would pay the full loop. An analytic curve
+// costs the same per element as a particle does.
+//
+// Its pair is `strand_strokes.kir`, which must take hue and width from the
+// strand rather than from the element. Per-element colour gives each sample
+// along a line its own hue and the line reads as noise.
+//
+// The knobs that decide whether it looks like line art at all:
+//
+//   turbulence, detail   raise them and the curve stretches, the samples spread,
+//                        and the strands break into dashes
+//   point_scale (L4)     how much of the gap between samples a sprite covers
+//   crawl                how fast a strand flows along itself
+//
+// This file declares its own `capacity`, and it matters: 512 x 256 is what the
+// seed split assumes.
+
+proc strand_shell {
+  kind     L1
+  topology points
+  capacity [4096, 1048576] = 131072   // 512 strands * 256 samples
+
+  param radius     : float [0.1, 8.0] = 2.6
+  param turbulence : float [0.0, 3.0] = 0.30
+  param swirl      : float [0.0, 2.0] = 0.35
+  param drift      : float [0.0, 2.0] = 0.6
+  param churn      : float [0.0, 4.0] = 1.4
+  param detail     : float [0.0, 1.0] = 0.20
+  param breathe    : float [0.0, 0.6] = 0.18
+  param crawl      : float [0.0, 2.0] = 0.5
+
+  emit position, velocity, age
+
+  element {
+    let strand = seed / 256u;
+    let index  = seed % 256u;
+    let s      = float(index) / 256.0;
+
+    // A tilted great circle: two basis vectors from the strand's own seed.
+    let a  = sphere_point(hash1(strand), hash1(strand + 1000u));
+    let a2 = sphere_point(hash1(strand + 77u), hash1(strand + 991u));
+    let b  = normalize(cross(a, a2));
+
+    let ph_b = hash1(strand + 31u) * 6.2831853;
+    let ph_s = hash1(strand + 7u)  * 6.2831853;
+
+    // Strands sit at their own radii, and each breathes on its own phase.
+    let r = radius
+          * (0.55 + 0.45 * hash1(strand + 5u))
+          * (1.0 + breathe * sin(t * 0.7 * churn + ph_b));
+
+    // The whole strand also slides along itself, so the line appears to flow.
+    let ang  = s * 6.2831853 + t * crawl + ph_s;
+    let ring = (a * cos(ang) + b * sin(ang)) * r;
+
+    let flow_a = curl(ring * 0.4 + vec3(0.0, t * 0.15 * churn, 0.0)) * turbulence;
+    let flow_b = curl(ring * 1.6 + vec3(t * 0.42 * churn,
+                                       -t * 0.31 * churn,
+                                        t * 0.37 * churn)) * turbulence * detail;
+    let flow = flow_a + flow_b;
+
+    let amp = 0.35 + 0.30 * sin(t * 0.23 * churn + ph_s * 0.5);
+
+    position = rot_y(ring + flow * amp, t * swirl + sin(t * drift + ph_s) * 0.2);
+    velocity = flow;
+    age      = age + dt;
+  }
+}
