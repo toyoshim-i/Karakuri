@@ -734,7 +734,7 @@ fn read_resource(request: &Value) -> Result<Value, String> {
 /// one that does.
 fn vocabulary() -> String {
     use karakuri_ir::builtin::Builtin;
-    use karakuri_ir::{Output, Topology};
+    use karakuri_ir::{Blend, Output, Topology};
     let mut out = String::from(
         "# Built-in functions\n\n\
          Generated from the checker's own table, so this is exactly what will be \
@@ -780,20 +780,55 @@ fn vocabulary() -> String {
         let note = match topology {
             Topology::Points => "one sprite per element",
             Topology::Lines => "one segment per element, `clip` to `clip_b`",
-            // Listed with what it is *not* able to do yet, because a page that
-            // said only "the whole frame" would have a model writing one and
-            // getting a Set-build refusal it could not have predicted.
+            // Listed with the rule it brings rather than only with what it
+            // draws, because `consumes` is checked rather than merely expected
+            // and a model that did not know would meet the refusal after
+            // writing the file. An earlier version of this arm said the engine
+            // could not run one at all, and stayed there after it could.
             Topology::Fullscreen => {
-                "the whole frame, from an L4 with no `vertex` block and no `consumes`.                  **The language accepts one and this engine cannot run it yet** — building                  such a pair is refused"
+                "the whole frame, from an L4 with **no `vertex` block**. It must \
+                 `consumes` nothing — there is no element to read from — and it gets `eye` \
+                 and `ray` in `fragment`, which nothing else does"
             }
         };
         out.push_str(&format!("- `{}` — {note}\n", topology.name()));
     }
 
+    // Between the two, because a blend is declared where a topology is not and
+    // the contrast is the point: a model that has just read "the renderer's
+    // topology is inferred" will assume the same of `blend` unless told.
+    out.push_str(
+        "\n# Blend modes\n\nDeclared by an L4's `blend`, and **declared rather than \
+         inferred** — unlike the topology above. Nothing an L4 writes could imply one over \
+         the other, because the two differ in how the results of identical assignments are \
+         combined.\n\nThey read `color`'s alpha differently, which is the part that \
+         changes how a procedure is written.\n\n",
+    );
+    for blend in [Blend::Additive, Blend::Weighted] {
+        let note = match blend {
+            Blend::Additive => {
+                "colour sums and nothing occludes. Alpha is **emission strength** and may \
+                 exceed 1.0, scaling what the fragment adds"
+            }
+            // Named with the refusal it can meet, so that a model writing a
+            // marcher does not reach for it and get a Set-build error it had no
+            // way to predict.
+            Blend::Weighted => {
+                "order-independent transparency, so material **occludes** what is behind \
+                 it. Alpha is **opacity** and is clamped to `[0, 1]`. Not available on a \
+                 fullscreen L4: one fragment per texel makes it identical to `additive`, \
+                 and building such a pair is refused"
+            }
+        };
+        out.push_str(&format!("- `{}` — {note}\n", blend.name()));
+    }
+
     out.push_str("\n# Stage outputs\n\nAssigned like attributes; reading one is an error. \
-                  `clip`, `point_size` and `color` are required on every path through their \
-                  block. `clip_b` is the one optional output, and assigning it on only some \
-                  paths is rejected.\n\n");
+                  `clip` and `point_size` are required in a `vertex` block, and `color` in a \
+                  `fragment` block, on every path through it — but **a `vertex` block is \
+                  itself optional**, which is how an L4 says it draws the whole frame. \
+                  `clip_b` is the one optional output, and assigning it on only some paths \
+                  is rejected.\n\n");
     out.push_str("| name | type | block |\n|---|---|---|\n");
     for output in Output::ALL {
         out.push_str(&format!(
@@ -1316,7 +1351,7 @@ mod tests {
     /// that omitted it would leave the language looking exactly as it did
     /// before lines existed.
     #[test]
-    fn the_vocabulary_lists_every_topology_and_every_stage_output() {
+    fn the_vocabulary_lists_every_topology_every_blend_and_every_stage_output() {
         let rendered = vocabulary();
 
         let topologies = section(&rendered, "# Topologies");
@@ -1329,6 +1364,29 @@ mod tests {
                 karakuri_ir::parse(&format!(
                     "proc p {{ kind L1 topology {name} capacity [1, 2] = 1 \
                      emit position element {{ position = vec3(0.0, 0.0, 0.0); }} }}"
+                ))
+                .is_ok(),
+                "the vocabulary lists `{name}`, which the parser does not accept"
+            );
+        }
+
+        // **Every blend mode, and each one round-tripped through the parser**,
+        // for the same reason the topologies are: a page listing a mode the
+        // language does not accept sends a model into a diagnostic, and one
+        // omitting a mode hides a whole way of drawing. `weighted` is this
+        // milestone's `clip_b` — the only way to make material occlude
+        // anything, and invisible to anyone not told it exists.
+        let blends = section(&rendered, "# Blend modes");
+        for name in ["additive", "weighted"] {
+            assert!(
+                blends.contains(&format!("`{name}`")),
+                "the vocabulary does not mention the `{name}` blend mode"
+            );
+            assert!(
+                karakuri_ir::parse(&format!(
+                    "proc p {{ kind L4 blend {name} consumes position \
+                     vertex {{ clip = vec4(position, 1.0); point_size = 1.0; }} \
+                     fragment {{ color = vec4(1.0, 1.0, 1.0, 1.0); }} }}"
                 ))
                 .is_ok(),
                 "the vocabulary lists `{name}`, which the parser does not accept"
