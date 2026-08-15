@@ -1,0 +1,49 @@
+// Strokes, not sprites.
+//
+// The hue and the width are taken from the strand id — `seed / 256u`, matching
+// the split in L1 — and not from the element. Per-element hue would give each
+// sample along a line its own colour and the line would read as noise; per
+// strand, each line is one continuous stroke of one colour.
+//
+// Exposure is much lower than the sprite version because the samples along a
+// strand overlap and this blend is additive: what looks dim for one point is
+// what keeps a whole line from blowing out to white.
+//
+// `color` is linear and `hsv_to_rgb` returns linear: sRGB encoding happens once,
+// at final output. Values above 1.0 are expected — they are what will feed bloom.
+
+proc strand_strokes {
+  kind  L4
+  blend additive
+
+  consumes position, velocity, age
+
+  param point_scale : float [0.5, 40.0] = 8.0
+  param hue         : float [0.0, 1.0]  = 0.58
+  param spread      : float [0.0, 1.0]  = 0.75
+  param exposure    : float [0.0, 8.0]  = 0.55
+  param falloff     : float [0.5, 8.0]  = 2.2
+  param sat         : float [0.0, 1.0]  = 1.00
+  param width_var   : float [0.0, 1.0]  = 0.45
+
+  vertex {
+    let strand = seed / 256u;
+
+    clip = camera * vec4(position, 1.0);
+
+    // Constant along a strand, so the stroke keeps an even weight end to end.
+    point_size = point_scale * (1.0 - width_var + width_var * hash1(strand + 3u) * 2.0);
+  }
+
+  fragment {
+    let strand = seed / 256u;
+
+    let d = length(point_coord * 2.0 - 1.0);
+    let a = pow(max(0.0, 1.0 - d), falloff);
+
+    let h = hue + hash1(strand) * spread;
+    let c = hsv_to_rgb(vec3(h, sat, 1.0));
+
+    color = vec4(c * exposure, a);
+  }
+}

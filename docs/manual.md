@@ -182,7 +182,7 @@ run reads a microphone — so what comes back is the performance and not just th
 |---|---|
 | `--set L1.kir,L4.kir` | one deck slot. Repeat up to four times |
 | `L1.kir L4.kir` | the same, positionally, for one slot |
-| `--capacity N` | elements per Set (default 262144) |
+| `--capacity N` | elements per Set. **Without it each procedure's own declared default is used**, which is what a `.kir`'s `capacity [min, max] = N` line is for; give this and it overrides every slot |
 | `--param name=value` | a uniform write, applied to every Set |
 | `--bind FIELDS` | attach a signal to a parameter — `layer=L1,key=turbulence,signal=energy,range=0.0..3.0` |
 | `--watch` | recompile and hot-swap when a `.kir` changes |

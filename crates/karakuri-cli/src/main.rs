@@ -562,6 +562,9 @@ struct Args {
     /// One (L1, L4) pair per deck slot, in composite order.
     sets: Vec<(PathBuf, PathBuf)>,
     capacity: u32,
+    /// Whether `--capacity` was *typed*. Without it a procedure's own declared
+    /// default is used — see [`capacity_for`].
+    capacity_given: bool,
     render_to: Option<PathBuf>,
     seq_to: Option<PathBuf>,
     frames: u32,
@@ -890,6 +893,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         bpm: DEFAULT_BPM,
         sets: Vec::new(),
         capacity: 262_144,
+        capacity_given: false,
         render_to: None,
         seq_to: None,
         frames: 240,
@@ -1045,7 +1049,8 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
             }
             "--frames" => args_out.frames = number_for("--frames", "a frame count", &mut it)?,
             "--capacity" => {
-                args_out.capacity = number_for("--capacity", "an element count", &mut it)?
+                args_out.capacity = number_for("--capacity", "an element count", &mut it)?;
+                args_out.capacity_given = true;
             }
             "--size" => {
                 args_out.size = extent("--size", value_for("--size", &mut it)?)?;
@@ -1249,6 +1254,23 @@ fn replay_canvas(
             )),
         )),
     }
+}
+
+/// How many elements a Set gets: what was asked for, or what the procedure asks
+/// for itself.
+///
+/// **A `.kir` declares `capacity [min, max] = default` and the default was never
+/// used.** The range was enforced and the default silently lost to
+/// `--capacity`'s own, so a procedure written for 131072 elements ran at 262144
+/// unless somebody knew to say so — and an example whose point is visible only
+/// at the count it was written for did not show its point. The same shape as
+/// `--size` overriding a canvas: a general flag with a default beating a
+/// specific declaration that meant it.
+fn capacity_for(args: &Args, l1: &karakuri_ir::typed::Checked) -> u32 {
+    if args.capacity_given {
+        return args.capacity;
+    }
+    l1.capacity.map_or(args.capacity, |declared| declared.default)
 }
 
 /// Refuse a canvas the GPU cannot make a texture of, by name.
@@ -1845,11 +1867,10 @@ fn main() {
             // it a function of the operator's editor as well.
             let mut deck = build_deck(&gpu, &procs, &args, false, false, w, h, None);
             eprintln!(
-                "rendering the mix of {} Set{}, {w}x{h}, {} elements each, {} frames, \
+                "rendering the mix of {} Set{}, {w}x{h}, {} frames, \
                  {} at exposure {:.2} -> {}",
                 deck.slot_count(),
                 if deck.slot_count() == 1 { "" } else { "s" },
-                args.capacity,
                 args.frames,
                 args.look.name(),
                 args.look.exposure,
@@ -1923,7 +1944,7 @@ fn build_deck(
                 gpu,
                 l1,
                 l4,
-                args.capacity,
+                capacity_for(args, l1),
                 &args.overrides,
                 &args.bindings,
                 // A Set file's own seed when it named one, so a saved Set
@@ -1953,7 +1974,7 @@ fn build_deck(
                             slot,
                             args.sets[slot].0.clone(),
                             args.sets[slot].1.clone(),
-                            args.capacity,
+                            capacity_for(args, l1),
                             seed_for(slot),
                             args.overrides.clone(),
                             args.bindings.clone(),
