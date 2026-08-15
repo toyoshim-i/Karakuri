@@ -38,6 +38,17 @@ pub enum Topology {
     /// stores 2*n* points rather than *n*+1. That is the price of the
     /// primitive being smaller than the gesture.
     Lines,
+    /// **The whole frame, once, with no geometry at all.**
+    ///
+    /// Inferred for an L4 that has no `vertex` block, because a procedure with
+    /// no per-element position has nothing for one to do. **Refused on an L1**:
+    /// geometry cannot be fullscreen, and the value exists on this enum only
+    /// because an L4's answer and an L1's declaration share a field.
+    ///
+    /// Such a procedure consumes nothing — there is nowhere to read an element
+    /// from — which is what lets the engine skip the paired L1's simulation
+    /// entirely rather than run it for a reader that does not exist.
+    Fullscreen,
 }
 
 impl Topology {
@@ -45,6 +56,7 @@ impl Topology {
         match self {
             Topology::Points => "points",
             Topology::Lines => "lines",
+            Topology::Fullscreen => "fullscreen",
         }
     }
 }
@@ -254,10 +266,24 @@ pub enum Ambient {
     Dt,
     Camera,
     PointCoord,
+    /// **Where the camera is**, in world space. L4 fragment only.
+    ///
+    /// One half of what a fullscreen procedure needs to march: a ray is an
+    /// origin and a direction, and the origin is the same for every fragment.
+    Eye,
+    /// **The unit direction from [`Ambient::Eye`] through this fragment**, in
+    /// world space. L4 fragment only.
+    ///
+    /// Given rather than derived, because the camera is a built-in here: a
+    /// procedure that built its own would be restating the engine's projection
+    /// convention, and getting it slightly wrong is a picture that looks nearly
+    /// right. It also keeps a `mat4` inverse out of a language that has no
+    /// operator for one.
+    Ray,
 }
 
 impl Ambient {
-    pub const ALL: [Ambient; 7] = [
+    pub const ALL: [Ambient; 9] = [
         Ambient::Seed,
         Ambient::Capacity,
         Ambient::T,
@@ -265,6 +291,8 @@ impl Ambient {
         Ambient::Dt,
         Ambient::Camera,
         Ambient::PointCoord,
+        Ambient::Eye,
+        Ambient::Ray,
     ];
 
     pub fn name(self) -> &'static str {
@@ -276,6 +304,8 @@ impl Ambient {
             Ambient::Dt => "dt",
             Ambient::Camera => "camera",
             Ambient::PointCoord => "point_coord",
+            Ambient::Eye => "eye",
+            Ambient::Ray => "ray",
         }
     }
 
@@ -288,6 +318,7 @@ impl Ambient {
             Ambient::Seed | Ambient::Capacity => Ty::Uint,
             Ambient::T | Ambient::Beats | Ambient::Dt => Ty::Float,
             Ambient::Camera => Ty::Mat4,
+            Ambient::Eye | Ambient::Ray => Ty::Vec3,
             Ambient::PointCoord => Ty::Vec2,
         }
     }
@@ -299,6 +330,14 @@ impl Ambient {
             Ambient::Capacity | Ambient::Dt => kind == Kind::L1,
             Ambient::Camera => kind == Kind::L4,
             Ambient::PointCoord => block == BlockKind::Fragment,
+            // Fragment-only, and not because a vertex stage could not be given
+            // them: a fullscreen procedure has no vertex block at all, and in a
+            // per-element one a ray through the fragment is not a thing a
+            // vertex has. Offering them where they mean nothing would be one
+            // more way to write a procedure that compiles and is wrong.
+            Ambient::Eye | Ambient::Ray => {
+                kind == Kind::L4 && block == BlockKind::Fragment
+            }
         }
     }
 }

@@ -146,7 +146,7 @@ impl Resolver for L1Resolver {
                 _ => unreachable!("L1 resolver used on a non-L1 block"),
             },
             Ambient::Seed => unreachable!("read_seed handles this"),
-            Ambient::Camera | Ambient::PointCoord => {
+            Ambient::Camera | Ambient::PointCoord | Ambient::Eye | Ambient::Ray => {
                 unreachable!("{amb:?} is L4-only and cannot appear in a Checked L1 block")
             }
         }

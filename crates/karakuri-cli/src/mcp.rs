@@ -776,10 +776,16 @@ fn vocabulary() -> String {
     out.push_str("\n# Topologies\n\nDeclared by an L1's `topology`. What a *renderer* draws \
                   is not declared: an L4 draws segments when its `vertex` block assigns \
                   `clip_b` and sprites when it does not.\n\n");
-    for topology in [Topology::Points, Topology::Lines] {
+    for topology in [Topology::Points, Topology::Lines, Topology::Fullscreen] {
         let note = match topology {
             Topology::Points => "one sprite per element",
             Topology::Lines => "one segment per element, `clip` to `clip_b`",
+            // Listed with what it is *not* able to do yet, because a page that
+            // said only "the whole frame" would have a model writing one and
+            // getting a Set-build refusal it could not have predicted.
+            Topology::Fullscreen => {
+                "the whole frame, from an L4 with no `vertex` block and no `consumes`.                  **The language accepts one and this engine cannot run it yet** — building                  such a pair is refused"
+            }
         };
         out.push_str(&format!("- `{}` — {note}\n", topology.name()));
     }

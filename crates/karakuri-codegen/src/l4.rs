@@ -133,6 +133,12 @@ impl Resolver for L4Resolver {
                 L4Block::Fragment => "in.point_coord".to_string(),
                 L4Block::Vertex => unreachable!("point_coord is fragment-only"),
             },
+            // Fullscreen only, and the fullscreen draw path is not built — see
+            // `SetError::Unrenderable`, which refuses such a pair before this
+            // generator is ever reached.
+            Ambient::Eye | Ambient::Ray => {
+                unreachable!("{amb:?} is fullscreen-only and `Set::build` refuses those")
+            }
             Ambient::Seed => unreachable!("read_seed handles this"),
             Ambient::Capacity | Ambient::Dt => {
                 unreachable!("{amb:?} is L1-only and cannot appear in a Checked L4 block")
@@ -323,6 +329,7 @@ fn vertex_entry(
             out.push_str("    out.point_coord = corner_of(corner_idx);\n");
         }
         Topology::Lines => out.push_str(SEGMENT_EXPANSION),
+        Topology::Fullscreen => unreachable!("`Set::build` refuses a fullscreen pair"),
     }
     if seed_used {
         out.push_str("    out.seed = seed;\n");
@@ -342,6 +349,7 @@ fn vertex_entry(
         // [`SEGMENT_EXPANSION`] for why a segment that straddles the eye is
         // dropped rather than clipped.
         Topology::Lines => "alive[elem] == 0u || _clip.w <= 0.0 || _clip_b.w <= 0.0",
+        Topology::Fullscreen => unreachable!("`Set::build` refuses a fullscreen pair"),
     };
     out.push_str(&format!("    if {dropped} {{\n"));
     out.push_str("        out.clip = vec4<f32>(0.0, 0.0, 0.0, 1.0);\n");

@@ -201,11 +201,12 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
 /// so a procedure with none falls back to `points` rather than being given a
 /// second diagnostic about a block it does not have.
 fn drawn_topology(blocks: &[TBlock]) -> Topology {
-    let assigns = blocks
-        .iter()
-        .find(|b| b.kind == BlockKind::Vertex)
-        .is_some_and(|b| assigns_clip_b(&b.stmts));
-    if assigns {
+    let Some(vertex) = blocks.iter().find(|b| b.kind == BlockKind::Vertex) else {
+        // No per-element position to compute, so nothing per element to draw:
+        // the frame, once. See `Topology::Fullscreen`.
+        return Topology::Fullscreen;
+    };
+    if assigns_clip_b(&vertex.stmts) {
         Topology::Lines
     } else {
         Topology::Points
@@ -247,11 +248,26 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 ),
                 Some(_) => {}
             }
-            if proc.topology.is_none() {
-                errors.push(IrError::contract(
+            match proc.topology {
+                None => errors.push(IrError::contract(
                     proc.span,
                     "L1 procedures require a `topology` declaration",
-                ));
+                )),
+                // The value exists because an L1's declaration and an L4's
+                // inferred answer share one field, not because geometry can be
+                // fullscreen. Refused where it is written rather than left to
+                // mean something arbitrary downstream.
+                Some(Topology::Fullscreen) => errors.push(
+                    IrError::contract(
+                        proc.span,
+                        "`fullscreen` describes a renderer, not geometry",
+                    )
+                    .with_hint(
+                        "use `points` or `lines` here. An L4 draws the whole frame by \
+                         having no `vertex` block, which is the only way to say it",
+                    ),
+                ),
+                Some(_) => {}
             }
             if proc.blend.is_some() {
                 errors.push(
@@ -317,11 +333,30 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     "L4 procedures require a `blend` declaration",
                 ));
             }
-            if proc.blocks.iter().all(|b| b.kind != BlockKind::Vertex) {
-                errors.push(IrError::contract(
-                    proc.span,
-                    "L4 procedures require a `vertex` block",
-                ));
+            // **A `vertex` block is what makes an L4 per-element**, and an L4
+            // without one draws the whole frame instead — see
+            // `Topology::Fullscreen`. So its absence is a declaration rather
+            // than an omission, and what it declares brings one rule with it:
+            // with no vertex block there is nowhere to read an element from, so
+            // `consumes` must be empty. Stated as a rule rather than left as a
+            // consequence, because it is what lets the engine skip the paired
+            // L1's simulation — an optimisation that is provable with this and
+            // merely plausible without it.
+            if proc.blocks.iter().all(|b| b.kind != BlockKind::Vertex)
+                && !proc.consumes.is_empty()
+            {
+                errors.push(
+                    IrError::contract(
+                        proc.span,
+                        "an L4 with no `vertex` block draws the whole frame and cannot \
+                         consume attributes",
+                    )
+                    .with_hint(
+                        "remove `consumes`, or add a `vertex` block — a fullscreen procedure \
+                         has no element to read an attribute from, and it is what lets the \
+                         paired L1 skip its simulation entirely",
+                    ),
+                );
             }
             if proc.blocks.iter().all(|b| b.kind != BlockKind::Fragment) {
                 errors.push(IrError::contract(
