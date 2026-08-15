@@ -94,22 +94,6 @@ pub enum SetError {
         l4: String,
         keys: String,
     },
-    /// A rendering mode the language admits and this engine cannot run yet.
-    ///
-    /// **Named rather than left to panic.** `generate_l4` used to `expect` a
-    /// vertex block, so a procedure without one — which is how a fullscreen
-    /// renderer says what it is — would have killed the build worker silently.
-    /// The language accepting something the engine refuses is a state worth
-    /// having briefly and worth saying out loud: it is what the eight SDF
-    /// builtins have been in since M1, and the whole point of the fullscreen
-    /// work is to end it.
-    #[error(
-        "`{l4}` draws the whole frame, which this engine cannot do yet\n\
-         hint: a fullscreen renderer is an L4 with no `vertex` block. The language accepts \
-         one; the draw path that would run it is not built. Give it a `vertex` block to \
-         draw per element in the meantime"
-    )]
-    Unrenderable { l4: String },
     /// A build panicked rather than returning. Not reachable through any
     /// `.kir` a checker accepts, which is exactly why it needs a variant:
     /// wgpu's default handler for an uncaptured validation error is a panic,
