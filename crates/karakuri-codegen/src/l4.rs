@@ -12,6 +12,12 @@
 //! which this module follows structurally (`corner_of`, the six-corner
 //! winding, the `viewport`-based clip-space offset).
 //!
+//! **Both topologies are that same quad**, which is why `lines` cost the
+//! engine nothing: `VERTICES_PER_ELEMENT` is six either way, the pipeline
+//! stays a `TriangleList`, and the indirect draw arguments are untouched.
+//! Only where the six corners land changes — around a point, or along the
+//! segment from `clip` to `clip_b`. See [`SEGMENT_EXPANSION`].
+//!
 //! One thing worth being suspicious of, per the brief: the spec's L4
 //! lowering section motivates quad expansion by saying "the corner in
 //! `@builtin(vertex_index)` **and the element in `@builtin(instance_index)`**",
@@ -22,16 +28,27 @@
 //! `instance_index` identifies the element. Every attribute read in this
 //! module is indexed by `instance_index`, never `vertex_index`.
 //!
-//! # What decides quad expansion
+//! # What decides which expansion
 //!
-//! `topology` is declared on the L1 procedure's header, not L4's —
-//! `Checked::topology` is `None` for an L4 tree, so this generator has no
-//! field to branch on even in principle. v0.2 has exactly one L4 rendering
-//! strategy, so quad expansion is unconditional here rather than gated on a
-//! topology check the L4 side has no way to perform. Should a second L4
-//! output style arrive later, `Checked` would need a way to say which one a
-//! given L4 procedure wants — that is a gap in today's tree, not a decision
-//! this crate is positioned to paper over.
+//! `Checked::topology`, which for an L4 is **inferred by the check pass**
+//! from whether the `vertex` block assigns `clip_b`. It used to be `None`
+//! here — `topology` was an L1 header field and this generator had nothing to
+//! branch on even in principle, which was fine while there was one rendering
+//! strategy and a gap the moment there were two.
+//!
+//! What closed it is *not* a `topology` declaration on the L4 header. A
+//! procedure that writes a second endpoint is drawing a segment and there is
+//! nothing else it could be doing, so a header field would only be a second
+//! place for that fact to be stated and a first place for it to disagree with
+//! itself.
+//!
+//! **The L1's declaration is not consulted here, and nothing consults it.**
+//! An L1 declaring `lines` may be paired with a points L4 and the reverse, on
+//! purpose: a segment gets both of its ends from attributes the L4 consumes,
+//! so a renderer needs nothing from the geometry that Set composition does not
+//! already check. `examples/drift_shell.kir` says `topology points` and is
+//! paired with `drift_streaks.kir`, which draws segments. See the comment in
+//! `Set::build` for why that is allowed rather than overlooked.
 //!
 //! # Dead elements inside the draw range
 //!
@@ -59,7 +76,7 @@
 use std::collections::HashSet;
 
 use karakuri_ir::typed::{Checked, TBlock, TExpr, TExprKind, TStmt, Target};
-use karakuri_ir::{Ambient, Attr, BlockKind, Kind, Output};
+use karakuri_ir::{Ambient, Attr, BlockKind, Kind, Output, Topology};
 
 use crate::layout::{self, group, ElementLayout, UniformLayout, UniformLayoutBuilder};
 use crate::lower::{lower_expr, mangle_local, Resolver};
@@ -127,6 +144,7 @@ impl Resolver for L4Resolver {
 fn output_local(o: Output) -> &'static str {
     match o {
         Output::Clip => "_clip",
+        Output::ClipB => "_clip_b",
         Output::PointSize => "_point_size",
         Output::Color => "_color",
     }
@@ -271,7 +289,13 @@ fn write_vsout_struct(out: &mut String, seed_used: bool, attrs_used: &[Attr]) {
     out.push_str("};\n");
 }
 
-fn vertex_entry(consumes: &[Attr], seed_used: bool, attrs_used: &[Attr], body: &str) -> String {
+fn vertex_entry(
+    consumes: &[Attr],
+    seed_used: bool,
+    attrs_used: &[Attr],
+    body: &str,
+    topology: Topology,
+) -> String {
     let mut out = String::new();
     out.push_str("@vertex\n");
     out.push_str("fn vs(@builtin(vertex_index) corner_idx: u32, @builtin(instance_index) elem: u32) -> VsOut {\n");
@@ -285,13 +309,21 @@ fn vertex_entry(consumes: &[Attr], seed_used: bool, attrs_used: &[Attr], body: &
         ));
     }
     out.push_str("    var _clip: vec4<f32>;\n");
+    if topology == Topology::Lines {
+        out.push_str("    var _clip_b: vec4<f32>;\n");
+    }
     out.push_str("    var _point_size: f32;\n");
     out.push_str(body);
     out.push_str("    var out: VsOut;\n");
-    out.push_str("    let corner = corner_of(corner_idx) * 2.0 - 1.0;\n");
-    out.push_str("    let ndc_offset = corner * _point_size / u.viewport * _clip.w;\n");
-    out.push_str("    out.clip = vec4<f32>(_clip.xy + ndc_offset, _clip.zw);\n");
-    out.push_str("    out.point_coord = corner_of(corner_idx);\n");
+    match topology {
+        Topology::Points => {
+            out.push_str("    let corner = corner_of(corner_idx) * 2.0 - 1.0;\n");
+            out.push_str("    let ndc_offset = corner * _point_size / u.viewport * _clip.w;\n");
+            out.push_str("    out.clip = vec4<f32>(_clip.xy + ndc_offset, _clip.zw);\n");
+            out.push_str("    out.point_coord = corner_of(corner_idx);\n");
+        }
+        Topology::Lines => out.push_str(SEGMENT_EXPANSION),
+    }
     if seed_used {
         out.push_str("    out.seed = seed;\n");
     }
@@ -304,13 +336,77 @@ fn vertex_entry(consumes: &[Attr], seed_used: bool, attrs_used: &[Attr], body: &
     // drops it without the fragment stage running at all. Written as an
     // override of `out.clip` rather than folded into the expression above so
     // that the live path's arithmetic is textually unchanged.
-    out.push_str("    if alive[elem] == 0u {\n");
+    let dropped = match topology {
+        Topology::Points => "alive[elem] == 0u",
+        // Plus both endpoints being in front of the eye — see
+        // [`SEGMENT_EXPANSION`] for why a segment that straddles the eye is
+        // dropped rather than clipped.
+        Topology::Lines => "alive[elem] == 0u || _clip.w <= 0.0 || _clip_b.w <= 0.0",
+    };
+    out.push_str(&format!("    if {dropped} {{\n"));
     out.push_str("        out.clip = vec4<f32>(0.0, 0.0, 0.0, 1.0);\n");
     out.push_str("    }\n");
     out.push_str("    return out;\n");
     out.push_str("}\n\n");
     out
 }
+
+/// The quad expansion for [`Topology::Lines`]: the same six corners, laid over
+/// the segment from `_clip` to `_clip_b` instead of around a point.
+///
+/// **The work happens in pixels**, because that is the space `point_size` is
+/// given in — the direction of the segment and the perpendicular the width is
+/// laid along are both properties of the projected picture, not of the world,
+/// so both ends are divided through by `w` first. What goes back out is
+/// multiplied by `w` again, which is what makes the rasterizer's own divide
+/// land on the pixel position computed here.
+///
+/// **Nothing here interpolates**, and an earlier version of this comment said
+/// it did. `corner_of` returns 0.0 or 1.0 in each component, so every `mix`
+/// below is *selection*: each of the six vertices belongs to one end of the
+/// segment and takes that end's `w` and that end's divided `z`. The values in
+/// between are the rasterizer's, produced from the six it is given.
+///
+/// What keeps the stroke straight on screen is the last line rather than the
+/// mixes — `p_px / half_vp * w` cancels the divide the rasterizer is about to
+/// perform, so the vertex lands on the pixel computed here whatever `w` is.
+/// Deleting that `* w` is what a depth-varying segment fails on.
+///
+/// **A segment with an endpoint behind the eye is dropped, not clipped.**
+/// Doing it properly means intersecting the segment with the near plane and
+/// moving the endpoint there, which is real work; the rasterizer would have
+/// done it for free had the divide not already happened here, and the divide
+/// is what makes a width in pixels expressible at all. The honest failure is a
+/// missing stroke rather than one drawn through the camera.
+///
+/// **A zero-length segment needs no guard, and draws nothing.** Both ends land
+/// on the same pixel, every corner offsets from it by the perpendicular of a
+/// zero direction, and the quad is zero-area. That is the arithmetic behaving;
+/// what it is *not* is the same behaviour a sprite has, and the difference
+/// reaches the operator. A sprite at zero velocity is still a sprite; a stroke
+/// whose two ends coincide is gone. Any parameter that scales the distance
+/// between the ends therefore has a value that blanks the material, and its
+/// declared range should not include it — see `examples/drift_streaks.kir`.
+///
+/// A second way for a stroke to vanish silently, and the only one with no
+/// operator in front of it: `length(seg)` overflows `f32` above roughly 1.8e19
+/// pixels, making `dir` zero and the quad zero-width. Reaching it takes a
+/// vertex essentially at the eye, since `w` is only guarded against being
+/// non-positive rather than against being tiny.
+const SEGMENT_EXPANSION: &str = "\
+    let corner = corner_of(corner_idx);
+    let half_vp = u.viewport * 0.5;
+    let a_px = _clip.xy / _clip.w * half_vp;
+    let b_px = _clip_b.xy / _clip_b.w * half_vp;
+    let seg = b_px - a_px;
+    let dir = seg / max(length(seg), 1e-6);
+    let across = vec2<f32>(-dir.y, dir.x) * (_point_size * 0.5) * (corner.y * 2.0 - 1.0);
+    let p_px = mix(a_px, b_px, corner.x) + across;
+    let w = mix(_clip.w, _clip_b.w, corner.x);
+    let z = mix(_clip.z / _clip.w, _clip_b.z / _clip_b.w, corner.x);
+    out.clip = vec4<f32>(p_px / half_vp * w, z * w, w);
+    out.point_coord = corner;
+";
 
 fn fragment_entry(seed_used: bool, attrs_used: &[Attr], body: &str) -> String {
     let mut out = String::new();
@@ -348,6 +444,13 @@ fn fragment_entry(seed_used: bool, attrs_used: &[Attr], body: &str) -> String {
 /// just declares the full struct so its layout matches.
 pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
     assert_eq!(checked.kind, Kind::L4, "generate_l4 called on a non-L4 procedure");
+    // Inferred by the check pass from whether `vertex` assigns `clip_b`. It is
+    // **the L4's own answer and the only one that reaches lowering** — the
+    // paired L1's declaration is never read, here or anywhere, and the two are
+    // allowed to differ. See the module doc.
+    let topology = checked
+        .topology
+        .expect("a checked L4 procedure always carries an inferred topology");
 
     let mut b = UniformLayoutBuilder::new();
     b.field("t", "f32");
@@ -396,7 +499,13 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
     src.push('\n');
     write_vsout_struct(&mut src, seed_used, &attrs_used);
     src.push('\n');
-    src.push_str(&vertex_entry(&checked.consumes, seed_used, &attrs_used, &vertex_body));
+    src.push_str(&vertex_entry(
+        &checked.consumes,
+        seed_used,
+        &attrs_used,
+        &vertex_body,
+        topology,
+    ));
     src.push_str(&fragment_entry(seed_used, &attrs_used, &fragment_body));
 
     L4Shader { source: src, uniform_layout, uniform_pad_f32, element_layout: elements.clone() }

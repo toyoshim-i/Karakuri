@@ -1,0 +1,94 @@
+// The same cloud as `soft_points`, drawn as streaks instead of sprites.
+//
+// This file is the first thing in the repository that draws something other
+// than a point sprite. It pairs with `drift_shell.kir` — **the same L1, byte
+// for byte, as `soft_points.kir` pairs with**. Nothing about the geometry
+// changed; only the renderer did:
+//
+//   karakuri-cli examples/drift_shell.kir examples/soft_points.kir     sprites
+//   karakuri-cli examples/drift_shell.kir examples/drift_streaks.kir   streaks
+//
+// The defaults below are set for `drift_shell`'s own default of 262144
+// elements, where a quarter of a million overlapping strokes read as brushed
+// fur. To see the primitive itself — separate strokes, each one a segment —
+// thin the population out and lengthen them:
+//
+//   karakuri-cli examples/drift_shell.kir examples/drift_streaks.kir \
+//     --capacity 16384 --param exposure=0.6 --param streak=1.2 --param width=1.6
+//
+// **How an L4 says it draws lines.** It assigns `clip_b`, the far end of a
+// segment, alongside `clip`. There is no `topology` declaration on an L4 and
+// no second thing to keep in step: writing a second endpoint is the whole of
+// the declaration. Assign it and every element is a segment; leave it out and
+// every element is a sprite.
+//
+// **Where the far end comes from is this file's own business.** The IR has no
+// notion of one element linking to another — a segment's two ends both belong
+// to one element, which is what lets a streak survive spawning and killing
+// material, where an index into the element buffer would not. Here the far end
+// is the element's own position pushed back along its velocity, so each stroke
+// is the path that element is on. Other useful far ends: a fixed direction (a
+// rain field), a point on a curve one step behind (a strand — see
+// `strand_shell.kir`), or the origin (a burst).
+//
+// **`point_size` is the width of the stroke in pixels**, the same number and
+// the same units a sprite's extent uses.
+//
+// **`streak` does not go to zero, and that is not a rounding of the range.** A
+// segment whose two ends coincide is zero-area and draws nothing, where a
+// sprite at zero velocity is still a sprite — so `streak = 0` would be a fader
+// that blanks the slot rather than one that shortens the stroke. The floor is
+// the shortest stroke that is still a stroke. (Elements whose `velocity` is
+// zero disappear at any setting, for the same reason and with nothing to set.)
+//
+// **`point_coord` runs along the segment in x and across it in y**, both in
+// [0, 1]. So the falloff below is `abs(point_coord.y * 2 - 1)` — distance from
+// the centre *line*, not from a centre point — and `point_coord.x` is what
+// tapers the stroke from head to tail.
+//
+// Exposure sits below `soft_points`' because a streak covers many more texels
+// than the sprite it replaces, and this blend is additive.
+
+proc drift_streaks {
+  kind  L4
+  blend additive
+
+  consumes position, velocity
+
+  param width    : float [0.5, 24.0] = 1.2
+  param streak   : float [0.05, 2.0] = 0.70
+  param hue      : float [0.0, 1.0]  = 0.55
+  param spread   : float [0.0, 1.0]  = 0.30
+  param exposure : float [0.0, 8.0]  = 0.10
+  param falloff  : float [0.5, 8.0]  = 2.0
+  param taper    : float [0.0, 1.0]  = 0.85
+
+  vertex {
+    // The head is where the element is; the tail is where it was, near enough.
+    // `velocity` here is the curl field `drift_shell` emits, so a stroke lies
+    // along the flow rather than along the rotation the shell is under — the
+    // rotation moves the whole cloud and would give every stroke the same
+    // direction.
+    let tail = position - velocity * streak;
+
+    clip   = camera * vec4(position, 1.0);
+    clip_b = camera * vec4(tail, 1.0);
+
+    // Faster elements are drawn heavier, as in `soft_points` — the same
+    // reading of `velocity`, applied to width instead of to extent.
+    point_size = width * (0.35 + 0.65 * clamp(length(velocity) * 0.6, 0.0, 1.0));
+  }
+
+  fragment {
+    // Across the stroke: 0 at the centre line, 1 at either edge.
+    let across = abs(point_coord.y * 2.0 - 1.0);
+    let edge   = pow(max(0.0, 1.0 - across), falloff);
+
+    // Along the stroke: 1 at the head, fading toward the tail. This is what
+    // makes a streak read as motion rather than as a stick.
+    let along = 1.0 - taper * point_coord.x;
+
+    let c = hsv_to_rgb(vec3(hue + hash1(seed) * spread, 0.75, 1.0));
+    color = vec4(c * exposure, edge * along);
+  }
+}

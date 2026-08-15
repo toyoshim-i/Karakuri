@@ -49,9 +49,30 @@ then the camera is a built-in.
 ### capacity / topology (L1 only)
 
 ```
-topology points
+topology points          // or: topology lines
 capacity [65536, 1048576] = 262144
 ```
+
+`topology` says **what the geometry is meant to read as**. `points` means one sprite per
+element; `lines` means one *segment* per element, drawn from the paired L4's `clip` to its
+`clip_b`. See [L4 blocks and outputs](#l4-blocks-and-outputs) for how a renderer says which
+it draws.
+
+**It constrains no renderer, and that is deliberate.** A segment gets both of its ends from
+attributes the L4 consumes, so a line renderer needs nothing from the geometry that the
+`consumes ⊆ emit` check does not already cover — which means one L1 file can be paired with
+a sprite renderer and a stroke renderer alike. `examples/drift_shell.kir` is paired with
+both `soft_points.kir` and `drift_streaks.kir` for exactly that reason. Requiring the two
+declarations to agree would have invented a dependency the lowering does not have, and would
+have made "the same cloud, drawn two ways" cost two L1 *files*.
+
+It does still cost two *simulations*: a Set owns its element buffers, so the same L1 in two
+slots is stepped twice. Sharing one simulation between several renderers is "multiple L4
+renderers over shared geometry" in `docs/roadmap.md`, and it is not built.
+
+What it *is* for: it is the geometry's own statement of intent, which is what a reader
+picking a pairing goes on, and what a default renderer per topology will select on when one
+exists.
 
 `capacity` is the allocated element count. It takes a mandatory range and a default — the
 same shape as a `param` — because a Set overrides it:
@@ -95,7 +116,8 @@ param <name> : <type> [<min>, <max>] = <default>
   knows what the range is. Without one, every revision falls back to regenerating code.
 - **Every name the language already gives meaning to is reserved.** A `param` may not be
   called `position`, `size`, `tint` or any other attribute; nor `seed`, `t`, `dt`,
-  `capacity`, `camera` or `point_coord`; nor `clip`, `point_size` or `color`; nor `id`.
+  `capacity`, `camera` or `point_coord`; nor `clip`, `clip_b`, `point_size` or `color`; nor
+  `id`.
   Params, attributes, ambients and stage outputs share one scope inside a block, and the
   lowering packs params and ambients into one uniform struct — `param t : float` would
   collide with the ambient `t` in the generated WGSL, silently, at a point far from the
@@ -167,11 +189,16 @@ the approximation for bright distant elements. None of that reaches the IR surfa
 Blend mode is part of an artifact's identity: a procedure writes its `color` and alpha
 knowing how they will be combined.
 
-One gap to close before a second L4 style exists. Quad expansion is justified by
-`topology points`, but `topology` is declared on the **L1** header — an L4 procedure never
-declares one and the checked tree has no field for it. With one topology and one blend mode
-the question does not arise, and the moment there are two of either, an L4 procedure will
-need a way to say which it is written for.
+**The equivalent gap on the topology side is closed**, and how it closed is worth reading
+before `blend` grows a second value. Quad expansion used to be justified by
+`topology points` while `topology` was declared on the **L1** header, so an L4 had no way to
+say what it was written for. The fix was not a `topology` declaration on the L4 header: an
+L4 that assigns `clip_b` is drawing a segment and there is nothing else it could be doing,
+so the check pass *infers* it and there is exactly one place the fact can be stated.
+
+`blend` is not the same shape. Nothing an L4 writes could imply `weighted` rather than
+`additive` — the two differ in how the results of identical assignments are combined, not in
+what is assigned — so `blend` stays a declaration.
 
 ---
 
@@ -186,7 +213,7 @@ The only implicit values readable inside a block:
 | `beats` | `float` | musical position on the session's tempo grid, at the instant `t` names | all |
 | `dt` | `float` | fixed simulation step. Scaled on an element's first update — see [Spawn timing](#spawn-timing) | L1 |
 | `camera` | `mat4` | view-projection matrix | L4 |
-| `point_coord` | `vec2` | 0..1 within point sprite | L4 fragment |
+| `point_coord` | `vec2` | 0..1 across the primitive: within the sprite under `points`, along-by-across the stroke under `lines` | L4 fragment |
 
 `seed` is readable in every block as well, but it is a carried attribute rather than an
 ambient value — see [Element identity](#element-identity).
@@ -699,16 +726,55 @@ state. Reading one is a compile error.
 
 | Name | Type | Stage | Meaning |
 |---|---|---|---|
-| `clip` | `vec4` | vertex | clip-space position. Required |
-| `point_size` | `float` | vertex | sprite size in pixels. Required when the source topology is `points` |
+| `clip` | `vec4` | vertex | clip-space position. A sprite's centre, or a segment's near end. Required |
+| `clip_b` | `vec4` | vertex | a segment's far end, in clip space. **Optional — assigning it is what makes the procedure draw lines** |
+| `point_size` | `float` | vertex | sprite size in pixels, or stroke width in pixels. Required |
 | `color` | `vec4` | fragment | linear RGB, straight alpha. Required |
 
 Each required output must be assigned on every path, under the same rule as emitted
 attributes.
 
+### How an L4 says what it draws
+
+By assigning `clip_b`, or by not assigning it. There is no `topology` declaration on an L4
+header and adding one is an error — a second endpoint is the only thing that could make a
+procedure a line renderer, so a header field would be a second place for the same fact to
+be stated and a first place for the file to contradict itself.
+
+`clip_b` is the only optional output, and it is optional in a strict sense: assigning it on
+*some* paths through `vertex` is rejected. A procedure either draws segments or it does not,
+and one that wrote a far end under a condition would lay a stroke along an uninitialised
+value on the other path.
+
+Under `lines`:
+
+- **the segment runs from `clip` to `clip_b`**, and the two ends belong to the same element.
+  The IR has no notion of one element linking to another, deliberately: an index into the
+  element buffer is invalidated by compaction, so the one shape that would express a shared
+  vertex is also the one that spawning material breaks. A polyline is *n* segments, a trail
+  is one segment per particle, and both survive spawning and killing because neither refers
+  to anything outside itself. The cost is that a strip stores its interior points twice, and
+  that the ends are **butt caps** — the quad stops exactly at each endpoint, so two wide
+  segments meeting at an angle leave a wedge at the joint. Invisible on thin or densely
+  sampled strokes, and the reason a heavy polyline wants its samples closer together rather
+  than its width raised
+- **`point_size` is the width of the stroke in pixels**, uniform along it — the same number
+  and the same units a sprite's extent uses. A stroke that tapers takes its taper from the
+  `fragment` block, or from consecutive elements carrying different widths
+- **`point_coord.x` runs along the segment** — 0 at `clip`, 1 at `clip_b` — and
+  **`point_coord.y` runs across it**, 0 at one edge and 1 at the other. So a soft edge is
+  `abs(point_coord.y * 2 - 1)`, distance from the centre *line*, where the sprite equivalent
+  is `length(point_coord * 2 - 1)`
+- **a segment with either endpoint behind the eye is dropped, not clipped at the near
+  plane**, and **a segment whose two ends coincide draws nothing** — zero length is zero
+  area, where a sprite at zero velocity is still a sprite. See the [L4 lowering](#l4)
+  section for both
+
 Consumed attributes and `seed` are readable in both blocks. Per-element values reach
-`fragment` with **flat** interpolation, which is exact for point sprites; the rule will
-need revisiting when a topology with real vertices arrives.
+`fragment` with **flat** interpolation. That is exact under both topologies for the same
+reason: a sprite and a segment are each one element's worth of values, so there is nothing
+to interpolate between. It is a topology with real *shared* vertices that would need the
+rule revisited.
 
 ---
 
@@ -739,6 +805,52 @@ proc soft_points {
   }
 }
 ```
+
+## L4 example — the same geometry as lines
+
+One assignment apart from the one above, and it pairs with the same L1. The far end is this
+procedure's own arithmetic on attributes it already consumes; nothing about the geometry
+changed.
+
+```
+proc soft_streaks {
+  kind  L4
+  blend additive
+
+  consumes position, velocity, age
+
+  param width    : float [0.5, 24.0] = 2.0
+  param streak   : float [0.05, 2.0] = 0.8
+  param exposure : float [0.0, 8.0]  = 0.5
+  param falloff  : float [0.5, 8.0]  = 2.0
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    clip_b     = camera * vec4(position - velocity * streak, 1.0);
+    point_size = width;
+  }
+
+  fragment {
+    // Across the stroke, not around a point: `point_coord.y` is the axis that
+    // crosses it, and `point_coord.x` runs from `clip` to `clip_b`.
+    let across = abs(point_coord.y * 2.0 - 1.0);
+    let a      = pow(max(0.0, 1.0 - across), falloff) * (1.0 - point_coord.x);
+    color      = vec4(hsv_to_rgb(vec3(0.55, 0.75, 1.0)) * exposure, a);
+  }
+}
+```
+
+Two things about that file are consequences of the topology rather than of taste.
+
+Exposure is well below the sprite version's because a streak covers many more texels than
+the sprite it replaces, and the blend is additive — `examples/drift_streaks.kir` sits a
+factor of ten under `soft_points.kir` at the same element count. **Changing the topology
+changes what a given exposure means.**
+
+And `streak`'s range starts above zero. A segment whose two ends coincide is zero-area and
+draws nothing, where a sprite at zero velocity is still a sprite, so a parameter that scales
+the distance between the ends has a value that blanks the material — and a declared range
+that includes it is a fader that turns the slot off at one end.
 
 ---
 
@@ -888,6 +1000,26 @@ disc_point(float, float) -> vec2
   six vertices per instance, the corner in `@builtin(vertex_index)` and the element in
   `@builtin(instance_index)`. `point_size` scales the quad in clip space so a sprite keeps
   its pixel size at any depth, and `point_coord` falls out of the corner
+- **`topology lines` does not lower to `PrimitiveTopology::LineList` either**, and for the
+  same reason: a line primitive is one pixel wide. It is the *same quad*, laid along the
+  segment instead of around a point — six vertices per instance, one instance per element,
+  a `TriangleList` pipeline, and the same indirect draw arguments. The topology costs the
+  engine nothing; only where the corners land changes.
+
+  The placement happens **in pixels**, because that is the space `point_size` is given in:
+  both endpoints are divided through by `w`, the segment's direction and the perpendicular
+  the width is laid along are computed there, and the result is multiplied by `w` again so
+  the rasterizer's own divide returns the position computed here. That last multiply is what
+  keeps the stroke straight on screen at any depth. Each of the six vertices belongs to one
+  end of the segment and carries that end's `w` and that end's divided `z`; nothing is
+  interpolated in the vertex stage, because the rasterizer is what interpolates.
+
+  **A segment with an endpoint behind the eye is dropped rather than clipped.** Doing it
+  properly means intersecting the segment with the near plane; the rasterizer would have
+  done that for free had the divide not already happened, and the divide is what makes a
+  width in pixels expressible at all. The honest failure is a missing stroke rather than one
+  drawn through the camera. A zero-length segment needs no special case — both ends land on
+  the same pixel and the quad is zero-area, which is what a guard would have arranged
 - L1 buffers are read as storage, indexed by `@builtin(instance_index)`, not as vertex
   buffers
 - Per-element values used in `fragment` become `@interpolate(flat)` varyings

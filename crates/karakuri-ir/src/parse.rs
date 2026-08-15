@@ -453,14 +453,16 @@ impl Parser {
 
     fn parse_topology(&mut self) -> Option<Topology> {
         self.advance(); // "topology"
-        let (name, span) = self.expect_ident("`points`")?;
+        let (name, span) = self.expect_ident("`points` or `lines`")?;
         match name.as_str() {
             "points" => Some(Topology::Points),
+            "lines" => Some(Topology::Lines),
             _ => {
                 self.error_with_hint(
                     span,
                     format!("unknown topology `{name}`"),
-                    "v0.2 defines `points` only",
+                    "the topologies are `points` and `lines` — `lines` makes each element \
+                     one segment, whose far end the paired L4 writes to `clip_b`",
                 );
                 None
             }

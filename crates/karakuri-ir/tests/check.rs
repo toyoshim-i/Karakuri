@@ -98,7 +98,10 @@ fn soft_points_checks_clean_with_expected_shape() {
 
     assert_eq!(checked.name, "soft_points");
     assert_eq!(checked.kind, Kind::L4);
-    assert!(checked.topology.is_none());
+    // Was `is_none()` while `topology` was an L1 field with no L4 counterpart.
+    // An L4's is now inferred from whether `vertex` writes a second endpoint,
+    // and this one does not — see `an_l4_that_assigns_clip_b_is_inferred_to_draw_lines`.
+    assert_eq!(checked.topology, Some(Topology::Points));
     assert!(checked.capacity.is_none());
     assert_eq!(checked.consumes, vec![Attr::Position, Attr::Velocity, Attr::Age]);
     assert!(checked.emit.is_empty());
@@ -962,4 +965,183 @@ proc odd_l4 {
          vacuously true — a stray `emit` on a stateless procedure made the whole \
          Set look like it needed priming"
     );
+}
+
+// ---------------------------------------------------------------------------
+// `topology lines`: what an L4 draws is inferred from `clip_b`, not declared.
+// ---------------------------------------------------------------------------
+
+/// An L4 whose `vertex` block assigns a second endpoint is drawing segments,
+/// and the check pass is where that is decided — nothing downstream re-derives
+/// it, so a wrong answer here silently picks the wrong quad expansion.
+#[test]
+fn an_l4_that_assigns_clip_b_is_inferred_to_draw_lines() {
+    let src = r#"
+proc streaks {
+  kind  L4
+  blend additive
+
+  consumes position, velocity
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    clip_b     = camera * vec4(position - velocity, 1.0);
+    point_size = 2.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+    let checked = check_ok(src);
+    assert_eq!(
+        checked.topology,
+        Some(Topology::Lines),
+        "a second endpoint is the only thing that could make a procedure draw segments"
+    );
+}
+
+/// The control for the test above, and not a redundant one: an inference that
+/// answered `Lines` unconditionally would satisfy it, and this is what says
+/// the answer depends on the source.
+#[test]
+fn an_l4_without_clip_b_is_inferred_to_draw_points() {
+    let src = r#"
+proc sprites {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 2.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+    let checked = check_ok(src);
+    assert_eq!(checked.topology, Some(Topology::Points));
+}
+
+/// A procedure either draws segments or it does not. Assigning the far end
+/// under a condition would leave it uninitialised on the other path, which is
+/// a stroke laid along whatever the register happened to hold.
+#[test]
+fn clip_b_assigned_on_only_one_path_is_rejected() {
+    let src = r#"
+proc sometimes {
+  kind  L4
+  blend additive
+
+  consumes position, velocity
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 2.0;
+    if length(velocity) > 0.5 {
+      clip_b = camera * vec4(position - velocity, 1.0);
+    }
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+    let errs = check_err(src);
+    assert!(
+        errs.iter()
+            .any(|e| e.message.contains("clip_b") && e.message.contains("every path")),
+        "expected a coverage diagnostic naming `clip_b`, got: {errs:?}"
+    );
+}
+
+/// `clip_b` is a vertex output, and the fragment stage has no second endpoint
+/// to place. Reusing the existing output-legality rule rather than a new one is
+/// the point — a new output that quietly escaped it would be assignable in a
+/// block that cannot lower it.
+#[test]
+fn clip_b_in_a_fragment_block_is_rejected() {
+    let src = r#"
+proc misplaced {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 2.0;
+  }
+
+  fragment {
+    clip_b = vec4(1.0, 1.0, 1.0, 1.0);
+    color  = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+    let errs = check_err(src);
+    assert!(
+        errs.iter().any(|e| e.message.contains("clip_b")),
+        "expected a diagnostic naming `clip_b`, got: {errs:?}"
+    );
+}
+
+/// An L4 still may not declare `topology`. The inference is not a second way
+/// of saying it — it is the only way, and a header field would be a place for
+/// the file to contradict its own `vertex` block.
+#[test]
+fn an_l4_that_declares_topology_is_still_rejected() {
+    let src = r#"
+proc declared {
+  kind     L4
+  topology lines
+  blend    additive
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    clip_b     = camera * vec4(position, 1.0);
+    point_size = 2.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+    let errs = check_err(src);
+    assert!(
+        errs.iter().any(|e| e.message.contains("topology")
+            && e.hint.as_deref().unwrap_or_default().contains("clip_b")),
+        "expected the diagnostic to point at `clip_b` as the way to say it, got: {errs:?}"
+    );
+}
+
+/// An L1 may declare `topology lines`, and it survives checking as itself.
+/// Nothing lowers from it — see `Set::build` — but a declaration that silently
+/// became `points` would make the geometry's own statement of what it is a lie.
+#[test]
+fn an_l1_may_declare_topology_lines() {
+    let src = r#"
+proc strands {
+  kind     L1
+  topology lines
+  capacity [1, 64] = 8
+
+  emit position
+
+  element {
+    position = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#;
+    let checked = check_ok(src);
+    assert_eq!(checked.topology, Some(Topology::Lines));
 }

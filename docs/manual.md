@@ -122,9 +122,10 @@ diagnostics, against the source**, which is what lets a model fix its own mistak
 failed to build. A write returning cleanly means it compiled, not that it is on screen, so
 the third tool is where the loop closes.
 
-Two resources come with it: the IR specification, and a list of every built-in the checker
-accepts **generated from the checker's own table** rather than written down beside it. Prose
-goes stale; that list cannot, because the same table is what rejects a procedure.
+Two resources come with it: the IR specification, and a vocabulary page — every built-in,
+every topology, and every stage output — **generated from the checker's own tables** rather
+than written down beside them. Prose goes stale; those lists cannot, because the same tables
+are what reject a procedure.
 
 Nothing here can do anything a key cannot — it is the third control surface after the
 keyboard and MIDI, on the same terms. **A set a model rewrote replays with no model
@@ -408,25 +409,53 @@ The window is a preview, and an OBS capture of it covers the ordinary case — p
 first so the capture is the canvas exactly. Anything past that is output routing, which is
 deliberately outside this repository; see `docs/plugins.md`.
 
-### There is one way to draw
+### There are two ways to draw, and one way to blend
 
-`Topology` has a single value and so does `Blend`: everything is an **additive point
-sprite**. That is why every example looks like a relative of every other, and it is the
-hardest limit on this instrument — a procedure can arrange elements any way at all and they
-still arrive as glowing dots.
+`Topology` has two values now — `points` and `lines` — and `Blend` still has one, so
+everything is **additive**, as either a sprite or a stroke.
 
-If you ask a model for something the language cannot draw, this is usually why. The
-checker accepts `sd_sphere`, `sd_box`, `op_smooth_union` and five more, so a plausible
-procedure using them will compile — and nothing will march it, because there is no
-renderer that consumes a distance field. Lines, a fullscreen raymarch and a non-additive
-blend are the front of the next milestone.
+**Lines cost an L4 and nothing else.** A renderer draws segments by assigning `clip_b`, a
+second clip-space endpoint, alongside `clip`; leave it out and it draws sprites. The two
+ends of a segment both belong to one element, so the far end is whatever arithmetic that L4
+does on attributes it already consumes — a position pushed back along its velocity is a
+motion streak, a point on a curve one step behind is a strand, the origin is a burst.
+Nothing about the geometry has to change, which is why one L1 file can be on screen twice,
+drawn two ways:
 
-**It is less of a wall than it sounds.** Ask for line art and a model will find that points
-laid densely along a curve read as strokes — the trick is to take hue and width from the
-strand rather than the element, or every sample gets its own colour and the line reads as
-noise. Expect to pay for it in element count. And expect the model to find this by probing
-the compiler: a procedure that does not compile is never written, so guessing at the
-language is free, and the diagnostics carry hints that say *why* rather than only what.
+```
+karakuri-cli --set examples/drift_shell.kir,examples/soft_points.kir \
+             --set examples/drift_shell.kir,examples/drift_streaks.kir
+```
+
+That is two slots and therefore **two simulations** of the same procedure, not one shared
+between two renderers — a Set owns its element buffers. Sharing them is a later milestone;
+until then, budget for it as two.
+
+Three things worth knowing before you ask for strokes. `point_size` becomes the stroke's
+**width in pixels**. `point_coord` runs **along** the segment in x and **across** it in y,
+so a soft edge is `abs(point_coord.y * 2 - 1)` where a sprite would use
+`length(point_coord * 2 - 1)`. And a stroke covers far more texels than the sprite it
+replaces, so **the same exposure is much brighter** — `drift_streaks` sits a factor of ten
+under `soft_points` for that reason alone.
+
+One more, and it is the one that will look like a bug: **a segment whose two ends coincide
+draws nothing.** A sprite at zero velocity is still a sprite; a stroke of zero length is
+zero-area and gone. So a parameter that scales the gap between the ends must not reach zero,
+and `drift_streaks`' `streak` starts at 0.05 rather than 0 for exactly that reason.
+
+What is still missing is the blend and the marcher. The checker accepts `sd_sphere`,
+`sd_box`, `op_smooth_union` and five more, so a plausible procedure using them will compile
+— and nothing will march it, because there is no renderer that consumes a distance field. A
+fullscreen raymarch and `blend weighted` are what remains of this milestone's front.
+
+**The old workaround still runs, and it is worth knowing what it cost.** Before `lines`
+existed, asked for line art, a model found that points laid densely along a curve read as
+strokes — taking hue and width from the strand rather than the element, or every sample gets
+its own colour and the line reads as noise. That is `examples/strand_shell.kir`, kept as
+written. It works, and it spends roughly twice the elements a segment would. Expect a model
+to find things like that by probing the compiler: a procedure that does not compile is never
+written, so guessing at the language is free, and the diagnostics carry hints that say *why*
+rather than only what.
 
 ### Nothing moves by itself
 

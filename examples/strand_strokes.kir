@@ -1,4 +1,9 @@
-// Strokes, not sprites.
+// Strokes made of sprites — the long way round, kept for what it teaches.
+//
+// `examples/drift_streaks.kir` is the short way: assign `clip_b` and each
+// element becomes one segment. This file predates that and gets a stroke out
+// of a point cloud instead, which is why every decision below is about hiding
+// the fact that it is one.
 //
 // The hue and the width are taken from the strand id — `seed / 256u`, matching
 // the split in L1 — and not from the element. Per-element hue would give each

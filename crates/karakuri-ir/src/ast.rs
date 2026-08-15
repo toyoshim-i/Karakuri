@@ -17,9 +17,36 @@ pub enum Kind {
     L4,
 }
 
+/// What a procedure's geometry *is*, on an L1 header, and what an L4 procedure
+/// *draws*, inferred rather than declared — see [`crate::typed::Checked::topology`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Topology {
+    /// One sprite per element.
     Points,
+    /// **One segment per element**, from [`Output::Clip`] to [`Output::ClipB`].
+    ///
+    /// The connectivity is deliberately not a graph. An element nominating
+    /// *another element* as its far end would be an index into the element
+    /// buffer, and compaction moves elements between steps — so the one shape
+    /// that would express a strip is also the one that spawning material
+    /// invalidates. A segment whose two ends both belong to one element has
+    /// no such dependency: a polyline is *n* segments, a trail is one segment
+    /// per particle, and both survive compaction because neither refers to
+    /// anything outside itself.
+    ///
+    /// It costs the duplication of shared endpoints — a strip of *n* samples
+    /// stores 2*n* points rather than *n*+1. That is the price of the
+    /// primitive being smaller than the gesture.
+    Lines,
+}
+
+impl Topology {
+    pub fn name(self) -> &'static str {
+        match self {
+            Topology::Points => "points",
+            Topology::Lines => "lines",
+        }
+    }
 }
 
 /// The v0.2 grammar admits exactly one value. The declaration exists so that
@@ -151,20 +178,30 @@ impl Attr {
 /// Stage outputs. Written with attribute syntax; reading one is an error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Output {
-    /// vertex: clip-space position.
+    /// vertex: clip-space position. A sprite's centre, or a segment's near end.
     Clip,
-    /// vertex: point sprite size in pixels.
+    /// vertex: **a segment's far end**, in clip space.
+    ///
+    /// Optional, and the only optional output. Assigning it is how an L4
+    /// procedure says it draws [`Topology::Lines`] — there is nothing else a
+    /// second endpoint could mean, so it is inferred rather than declared
+    /// twice. Assigning it on *some* paths is an error: a procedure either
+    /// draws segments or it does not.
+    ClipB,
+    /// vertex: point sprite size in pixels. Under [`Topology::Lines`], the
+    /// width of the stroke, uniform along the segment.
     PointSize,
     /// fragment: linear RGB, straight alpha.
     Color,
 }
 
 impl Output {
-    pub const ALL: [Output; 3] = [Output::Clip, Output::PointSize, Output::Color];
+    pub const ALL: [Output; 4] = [Output::Clip, Output::ClipB, Output::PointSize, Output::Color];
 
     pub fn name(self) -> &'static str {
         match self {
             Output::Clip => "clip",
+            Output::ClipB => "clip_b",
             Output::PointSize => "point_size",
             Output::Color => "color",
         }
@@ -176,14 +213,14 @@ impl Output {
 
     pub fn ty(self) -> Ty {
         match self {
-            Output::Clip | Output::Color => Ty::Vec4,
+            Output::Clip | Output::ClipB | Output::Color => Ty::Vec4,
             Output::PointSize => Ty::Float,
         }
     }
 
     pub fn block(self) -> BlockKind {
         match self {
-            Output::Clip | Output::PointSize => BlockKind::Vertex,
+            Output::Clip | Output::ClipB | Output::PointSize => BlockKind::Vertex,
             Output::Color => BlockKind::Fragment,
         }
     }
