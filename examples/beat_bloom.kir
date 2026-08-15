@@ -1,0 +1,205 @@
+// A bloom pass, built out of a second renderer instead of a post stage.
+//
+// **There is no post-processing in this engine.** The only thing after the mix
+// is the tone mapper, and `README.md` says of bloom: "Does not exist. Values
+// above 1.0 are what would feed it." So this is not a blur of the frame — a
+// shader here cannot read the frame — it is the *same geometry drawn again*,
+// wide and soft and dim, composited additively with the crisp version in slot 0.
+// That is what a bloom pass produces, arrived at from the other side.
+//
+// It is affordable because slot 0 and slot 1 share one L1. `docs/roadmap.md`
+// calls drawing one geometry several ways "the cheapest visual variety per unit
+// of GPU time in the whole system"; the caveat it also gives is that a Set owns
+// its element buffers, so the simulation is stepped twice rather than shared.
+// Both slots were already stepping before this file, so this layer costs a draw
+// and not a second shell.
+//
+// **It follows brightness, not geometry**, which is what makes it read as bloom
+// rather than as a fat blurry copy: real bloom is what the bright parts of an
+// image spill, so the dim body of a strand gets no halo at all. Only the comet
+// head, the sparks, and the sheared slabs do.
+//
+// **And that is also what makes it affordable, which the first version of this
+// file got wrong and was rolled back for.** Drawing every element at full width
+// and multiplying by zero in the `fragment` block costs the same as drawing it:
+// the quad is rasterized before anything decides it is invisible, and 82000 wide
+// segments came to 24.35 ms against a 20.00 ms budget. The width is therefore
+// decided in the `vertex` block, from the same brightness the fragment will use —
+// a dark element gets a degenerate quad and generates no fragments at all.
+//
+// **The screen-space band glitch is duplicated verbatim from `beat_strokes`, and
+// that duplication is the point of this revision.** Every other shared decision
+// is made once in the L1 and carried in an attribute, but this one is per
+// fragment and in screen space, which an L1 has no access to — there is nowhere
+// else to put it. Without it the halo did not tear with the body: a band the
+// body had dropped still had its glow, so the damage floated on top of an intact
+// image and read as pasted on rather than as the picture breaking. A halo that
+// dies with the thing casting it is what makes the glitch belong to the frame.
+//
+// Every constant that decides *where* things are is slot 0's and has to match
+// it: the seed split at 65536, the 128 samples per strand, the radius-to-hue
+// map, `chase`, `corrupt`, and every parameter of the band block.
+
+proc beat_bloom {
+  kind  L4
+  blend additive
+
+  consumes position, velocity, age
+
+  // Wide and soft: the blur radius and the blur kernel. The width is a
+  // *maximum* — what each element gets is this times how bright it is.
+  param width       : float [0.5, 24.0] = 10.0
+  param falloff     : float [0.5, 8.0]  = 0.8
+  param exposure    : float [0.0, 8.0]  = 0.22
+
+  // Matched to slot 0, so the halo is the same colour as what casts it.
+  param hue         : float [0.0, 1.0]  = 0.55
+  param spread      : float [0.0, 1.0]  = 0.20
+  param sat         : float [0.0, 1.0]  = 0.90
+  param tail_len    : float [1.0, 32.0] = 8.0
+  param chase       : float [0.0, 4.0]  = 1.0
+  param corrupt     : float [0.0, 1.0]  = 0.5
+
+  // How much of the head spills. Higher is a tighter bloom — and a cheaper one,
+  // because it is the exponent that collapses the quads.
+  param threshold   : float [1.0, 8.0]  = 2.2
+
+  // How much halo a sheared slab gets. This is the knob here most able to put
+  // the layer back over budget.
+  param glitch_glow : float [0.0, 1.0] = 0.5
+
+  param spark_hue   : float [0.0, 1.0]  = 0.07
+  param spark_sat   : float [0.0, 1.0]  = 0.65
+  param spark_wide  : float [0.5, 8.0]  = 1.8
+
+  param strobe      : float [0.0, 4.0]  = 1.2
+
+  // --- the screen-space glitch, identical to slot 0's ---
+  param glitch_burst : float [0.0, 1.0] = 0.35
+  param idle         : float [0.0, 1.0] = 0.25
+  param slice_n      : float [1.0, 60.0] = 22.0
+  param srate        : float [0.5, 16.0] = 8.0
+  param fine_hz      : float [1.0, 120.0] = 45.0
+  param drop         : float [0.0, 0.5] = 0.10
+  param tear         : float [0.0, 0.6] = 0.28
+  param scan         : float [0.0, 1.0] = 0.22
+  param scan_n       : float [1.0, 600.0] = 160.0
+
+  vertex {
+    clip   = camera * vec4(position, 1.0);
+    clip_b = camera * vec4(position - velocity, 1.0);
+
+    if seed < 65536u {
+      let strand = seed / 128u;
+      let index  = seed % 128u;
+      let s      = float(index) / 128.0;
+
+      // The same head slot 0 draws. Only the bright end of it gets any width,
+      // so most of the 65536 segments collapse to nothing here.
+      let behind = fract(s - beats * 0.25 * chase - hash1(strand + 17u));
+      let spill  = pow(pow(1.0 - behind, tail_len), threshold);
+
+      point_size = width * max(spill, age * glitch_glow);
+    } else {
+      let sp = seed - 65536u;
+
+      // A spark is alive for one beat in four; for the other three this is zero
+      // and it costs nothing.
+      let group = floor(hash1(sp + 13u) * 4.0) * 0.25;
+      let local = fract(beats * 0.25 + group);
+      let fly   = clamp(local * 4.0, 0.0, 1.0);
+      let life  = pow(max(0.0, 1.0 - fly), 1.6);
+
+      point_size = width * spark_wide * max(life, age * glitch_glow);
+    }
+  }
+
+  fragment {
+    // --- where this fragment is on screen ---
+    let ca = camera * vec4(position, 1.0);
+    let cb = camera * vec4(position - velocity, 1.0);
+    let ax = ca.x / max(ca.w, 0.0001);
+    let ay = ca.y / max(ca.w, 0.0001);
+    let bx = cb.x / max(cb.w, 0.0001);
+    let by = cb.y / max(cb.w, 0.0001);
+    let sx = mix(ax, bx, point_coord.x);
+    let sy = mix(ay, by, point_coord.x);
+
+    // --- how violent the glitch is right now ---
+    let eq     = floor(beats * 2.0);
+    let ein    = fract(beats * 2.0);
+    let roll_e = fract(sin(eq * 17.1317) * 9271.317);
+    let heat   = smoothstep(1.0 - glitch_burst, 1.0, roll_e) * pow(1.0 - ein, 1.5);
+    let hot    = idle + (1.0 - idle) * heat;
+
+    // --- coarse bands: musical, and their boundaries move every step ---
+    let q1 = floor(beats * srate);
+    let j1 = fract(sin(q1 * 3.7717) * 1237.13);
+    let r1 = floor(sy * slice_n + j1 * 9.0);
+    let b1 = fract(sin(q1 * 91.7137 + r1 * 47.9231) * 31719.137);
+
+    // --- fine blocks: frame clock, both axes, faster than it can be read ---
+    let q2 = floor(t * fine_hz);
+    let j2 = fract(sin(q2 * 5.1131) * 811.317);
+    let r2 = floor(sy * slice_n * 5.0 + j2 * 17.0);
+    let c2 = floor(sx * slice_n * 2.5);
+    let b2 = fract(sin(q2 * 27.3131 + r2 * 13.7137 + c2 * 61.3171) * 17431.71);
+
+    var band     = 1.0 - scan * step(0.5, fract(sy * scan_n));
+    var band_hue = 0.0;
+
+    if b1 < drop * hot {
+      band = 0.0;
+    }
+    if b1 > 1.0 - tear * hot {
+      band     = band * 2.4;
+      band_hue = corrupt;
+    }
+    if b2 < drop * hot * 0.7 {
+      band = 0.0;
+    }
+    if b2 > 1.0 - tear * hot * 1.2 {
+      band     = band * 1.8;
+      band_hue = band_hue + corrupt * 0.5;
+    }
+    let band_a = clamp(band, 0.0, 1.0);
+
+    // --- the halo ---
+    let across = abs(point_coord.y * 2.0 - 1.0);
+    // A wide soft skirt rather than a stroke: a low exponent, so it reaches most
+    // of the way to the edge of the quad.
+    let edge = pow(1.0 - across, falloff);
+
+    let flash = pow(1.0 - fract(beats * 0.25), 32.0);
+    let lift  = 1.0 + strobe * flash * 3.0;
+
+    if seed < 65536u {
+      let strand = seed / 128u;
+      let index  = seed % 128u;
+      let s      = float(index) / 128.0;
+
+      let rn = clamp((length(position) - 1.0) / 2.2, 0.0, 1.0);
+      let h  = hue + rn * spread + corrupt * age + band_hue;
+
+      let behind = fract(s - beats * 0.25 * chase - hash1(strand + 17u));
+      let spill  = pow(pow(1.0 - behind, tail_len), threshold);
+      let amount = max(spill, age * glitch_glow);
+
+      let c = hsv_to_rgb(vec3(h, sat * (1.0 - 0.35 * age), 1.0));
+      color = vec4(c * amount * exposure * lift * band, edge * amount * band_a);
+    } else {
+      let sp = seed - 65536u;
+
+      let group = floor(hash1(sp + 13u) * 4.0) * 0.25;
+      let local = fract(beats * 0.25 + group);
+      let fly   = clamp(local * 4.0, 0.0, 1.0);
+      let life  = pow(max(0.0, 1.0 - fly), 1.6);
+      let amount = max(life, age * glitch_glow);
+
+      let c     = hsv_to_rgb(vec3(spark_hue + corrupt * age + band_hue, spark_sat, 1.0));
+      let hot_s = life * life;
+      color = vec4((c + vec3(hot_s, hot_s, hot_s)) * amount * exposure * lift * band,
+                   edge * amount * band_a);
+    }
+  }
+}

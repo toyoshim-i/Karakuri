@@ -1,0 +1,217 @@
+// Luminous threads looping through a turbulent shell, sparks thrown off it on
+// every beat, the whole thing shearing into slabs on the eighth note — and the
+// shell no longer turning as one object.
+//
+// **Rotation is differential, and it is keyed to radius on purpose.** Every
+// strand used to share one `turn`, which made 512 threads read as the surface of
+// a single rotating body. Each strand now takes its speed from the same random
+// number that sets its radius: the inner half turns one way and the outer half
+// the other, at speeds that rise with distance from the middle. Because hue is
+// *also* a function of radius, the direction a thread travels and the colour it
+// is are two views of one number — the blue core and the violet shell visibly
+// counter-rotate, and the strands between them shear past each other. Keying it
+// to a fresh hash instead would have given the same speeds and no legibility.
+//
+// **The seed space is split.** Elements below 65536 are strand samples; the rest
+// are sparks. This is how one slot holds two kinds of geometry without a second
+// L1 — the IR has no notion of an element type, so the type *is* a range of
+// `seed`. The paired L4s make the identical split.
+//
+// **Strands.** 512 of 128 samples. With `clip_b` an element is a segment, so a
+// strand is 128 segments rather than a dense spray of points pretending to be a
+// line. The field is evaluated at both ends of every segment, because displacing
+// the two ends differently would tear the curve at every joint.
+//
+// **Sparks.** 16384, in four groups, one launching on each beat of the bar. They
+// take a rotation of their own now too, so a burst curves instead of going
+// straight out — and so that nothing in the frame is on the shell's old
+// single clock.
+//
+// **The glitch here is geometric, and it has to be.** There is no fullscreen
+// pass and a shader cannot read the frame, so the screen-space half of the
+// glitch vocabulary lives in the L4s, which reconstruct a screen position from
+// `camera` and `point_coord`. What is reachable *here* is breaking the material:
+// the shell is cut into horizontal slabs and slabs slide sideways on a musical
+// subdivision. The trigger is `fract(sin(...))` rather than `hash1`, because
+// `hash1` takes a `u32` and the step index is a float.
+//
+// **Two attributes are reinterpreted, both deliberately.** `velocity` is the
+// offset to the segment's far end, not a speed: the renderer draws from
+// `position` back along it, so making it exact is what joins consecutive
+// segments into an unbroken polyline. And `age` carries **how glitched this
+// element is**, 0 when clean — computing that here and passing it on means the
+// decision is made in one place instead of being recomputed identically in both
+// renderers.
+//
+// Closed form on purpose — no `spawn`, no `kill()`, and nothing reads an
+// attribute this procedure emits — so there is nothing to prime and a scrub is
+// exact.
+
+proc beat_strands {
+  kind     L1
+  topology lines
+  capacity [4096, 1048576] = 81920   // 512 * 128 strand samples + 16384 sparks
+
+  param radius     : float [0.1, 8.0] = 2.4
+  // How far the shell swells between one beat and the next, `pow2`-shaped so it
+  // reads as a hit rather than a wobble.
+  param punch      : float [0.0, 2.0] = 0.40
+  // Turns per bar. One bar is four beats, so 1.0 is a full rotation every four
+  // beats however fast the room is going.
+  param spin       : float [0.0, 4.0] = 0.5
+  // How far the strands disagree about that. 0 turns the shell as one body;
+  // 1 gives the inner half full reverse against the outer half's full forward.
+  param differ     : float [0.0, 1.0] = 0.85
+  param turbulence : float [0.0, 3.0] = 1.1
+  param churn      : float [0.0, 4.0] = 1.4
+  param detail     : float [0.0, 1.0] = 0.55
+  // How fast a strand slides along itself, in turns per bar. Signed with the
+  // strand's own rotation, so a reversed shell slides backwards too.
+  param crawl      : float [0.0, 2.0] = 0.25
+  // How far a spark travels past the shell.
+  param burst      : float [0.0, 6.0] = 2.6
+  // Length of a spark's streak, as a fraction of how far it has to travel.
+  param spark_len  : float [0.0, 0.5] = 0.14
+
+  // Fraction of slabs displaced on any given step. 0 turns the glitch off.
+  param glitch     : float [0.0, 1.0] = 0.14
+  // How far a displaced slab slides, in world units.
+  param shear      : float [0.0, 3.0] = 0.9
+  // Slabs per world unit of height. Higher is finer banding.
+  param bands      : float [1.0, 40.0] = 7.0
+  // Steps per beat the slab pattern is redrawn on. 2 is eighth notes.
+  param rate       : float [0.5, 8.0] = 2.0
+
+  emit position, velocity, age
+
+  element {
+    // The base rotation everything is a multiple of.
+    let turn = beats * 0.25 * spin * 6.2831853;
+
+    // The two ends of this element's segment, whichever population it is in.
+    var pa = vec3(0.0, 0.0, 0.0);
+    var pb = vec3(0.0, 0.0, 0.0);
+
+    if seed < 65536u {
+      let strand = seed / 128u;
+      let index  = seed % 128u;
+
+      // A tilted great circle: two basis vectors from the strand's own seed.
+      let a  = sphere_point(hash1(strand), hash1(strand + 1000u));
+      let a2 = sphere_point(hash1(strand + 77u), hash1(strand + 991u));
+
+      // `cross` of two nearly parallel vectors is nearly zero and normalizing it
+      // divides by nearly nothing. A strand's basis is fixed for the whole run,
+      // so a degenerate one is not an intermittent glitch — it is a few strands
+      // wrong in every frame. Fall back to a fixed axis, which can only fail for
+      // a strand that is also aligned with it.
+      var raw = cross(a, a2);
+      if length(raw) < 0.05 {
+        raw = cross(a, vec3(0.0, 1.0, 0.0));
+      }
+      let b = normalize(raw);
+
+      let ph = hash1(strand + 7u) * 6.2831853;
+
+      // **One number, three jobs**: this strand's radius, its hue in the L4, and
+      // now the direction and rate it turns. Inner strands run one way, outer
+      // the other, and the middle of the range is the slowest rather than the
+      // stalled — a shell frozen in place would read as a bug.
+      let rg  = hash1(strand + 5u);
+      let mag = 0.35 + 0.65 * clamp(abs(rg - 0.5) * 2.0, 0.0, 1.0);
+      let rot = mix(1.0, sign(rg - 0.5) * mag, differ);
+
+      // Position within the beat, 0 at the instant of it, squared so the swell
+      // decays away from the hit instead of ramping into the next one.
+      let into = fract(beats);
+      let hit  = (1.0 - into) * (1.0 - into);
+
+      let r = radius * (0.55 + 0.45 * rg) * (1.0 + hit * punch);
+
+      // This element's sample and the next one along the strand. `cos`/`sin` are
+      // periodic, so the last sample joins the first with no wrap to handle.
+      let step = 6.2831853 / 128.0;
+      let ang  = float(index) * step
+               + beats * 0.25 * crawl * rot * 6.2831853
+               + ph;
+
+      let p0 = (a * cos(ang) + b * sin(ang)) * r;
+      let p1 = (a * cos(ang + step) + b * sin(ang + step)) * r;
+
+      let f0 = curl(p0 * 0.4 + vec3(0.0, t * 0.15 * churn, 0.0)) * turbulence
+             + curl(p0 * 1.6 + vec3(t * 0.42 * churn,
+                                   -t * 0.31 * churn,
+                                    t * 0.37 * churn)) * turbulence * detail;
+
+      let f1 = curl(p1 * 0.4 + vec3(0.0, t * 0.15 * churn, 0.0)) * turbulence
+             + curl(p1 * 1.6 + vec3(t * 0.42 * churn,
+                                   -t * 0.31 * churn,
+                                    t * 0.37 * churn)) * turbulence * detail;
+
+      // The displacement amplitude wanders, so the shell loosens and gathers.
+      // The per-strand phase is `ph` and not `ph * 0.5`, which was a mistake:
+      // halving it spread 512 strands over half a cycle, so most of them were on
+      // the same side of the swing at once and the whole image breathed bright
+      // and dim on a ~20 second period.
+      let amp = 0.35 + 0.30 * sin(t * 0.23 * churn + ph);
+
+      pa = rot_y(p0 + f0 * amp, turn * rot);
+      pb = rot_y(p1 + f1 * amp, turn * rot);
+    } else {
+      let sp = seed - 65536u;
+
+      // Four groups, one launching on each beat of the bar.
+      let group = floor(hash1(sp + 13u) * 4.0) * 0.25;
+      let local = fract(beats * 0.25 + group);
+
+      // The flight lasts one beat — a quarter of the bar — and the element sits
+      // dark at full reach for the other three. The L4 fades it out on the same
+      // number, so nothing is drawn once `fly` reaches 1.
+      let fly = clamp(local * 4.0, 0.0, 1.0);
+
+      // A fixed direction per spark, pushed around by a slow field so a bar is
+      // never quite the bar before.
+      let dir  = sphere_point(hash1(sp), hash1(sp + 1000u));
+      let bend = curl(dir * 0.7 + vec3(0.0, t * 0.05, 0.0)) * 0.35;
+      let out  = normalize(dir + bend);
+
+      // Ease out: fast off the shell, slowing as it goes.
+      let reach = burst * (0.3 + 0.7 * hash1(sp + 5u));
+      let head  = radius + reach * fly * (2.0 - fly);
+
+      // Sparks disagree about the rotation too, so a burst curves rather than
+      // going straight out, and half of them curve the other way.
+      let sg  = hash1(sp + 29u);
+      let smg = 0.35 + 0.65 * clamp(abs(sg - 0.5) * 2.0, 0.0, 1.0);
+      let srt = mix(1.0, sign(sg - 0.5) * smg, differ);
+
+      let q = out * head;
+      pa = rot_y(q, turn * srt);
+      // Tail points back toward the shell, so a spark streaks along its flight.
+      pb = rot_y(q - out * (reach * spark_len), turn * srt);
+    }
+
+    // The slab this element's head falls in, and whether that slab is displaced
+    // on this step. Both ends take the *same* offset, so a strand shears at slab
+    // boundaries and stays whole in between — which is where the look comes
+    // from. A segment straddling a boundary is stretched across the gap, and
+    // that is wanted rather than tolerated.
+    let stepq = floor(beats * rate);
+    let band  = floor(pa.y * bands);
+
+    var gl = 0.0;
+    if fract(sin(stepq * 12.9898 + band * 78.233) * 43758.5453) < glitch {
+      let rx = fract(sin(stepq * 39.3468 + band * 11.135) * 24634.6345);
+      let rz = fract(sin(stepq * 27.1234 + band * 51.771) * 13921.1234);
+      let d  = vec3((rx - 0.5) * shear, 0.0, (rz - 0.5) * shear * 0.4);
+      pa = pa + d;
+      pb = pb + d;
+      // How hard this slab was hit, for the renderers to colour with.
+      gl = 0.35 + 0.65 * rx;
+    }
+
+    position = pa;
+    velocity = pa - pb;
+    age      = gl;
+  }
+}
