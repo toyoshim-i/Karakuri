@@ -847,42 +847,42 @@ not already cover, and requiring agreement invents a dependency the lowering doe
 The declaration on the L1 side says what the geometry is meant to read as; it constrains no
 renderer.
 
-Two additions remain, and the vocabulary still says so. `sd_sphere`, `sd_box`, `sd_torus`,
-`sd_plane`, `op_union`, `op_smooth_union`, `op_subtract` and `op_intersect` pass the checker
-today, appear in no example, and have nothing that could consume them: an SDF is a shape you
-march, and nothing marches. **A language that speaks a rendering mode its engine cannot run
-is a design saying out loud what it is missing.**
+**One addition remains.** The vocabulary no longer runs ahead of the engine: `sd_sphere`,
+`sd_box`, `sd_torus`, `sd_plane` and the four CSG operators have a renderer now, and
+`examples/field_march.kir` uses six of the eight. What is left is the blend.
 
-- **A fullscreen L4.** A procedure that draws no geometry and marches an SDF instead. This is
-  what the eight orphan builtins are for, and it is also the shape M3's `Field` wants: the
-  extraction the last section of this document describes — an LLM pulling the SDF out of a
-  shader and discarding the raymarch loop — has nowhere to put the result until a fullscreen
-  node exists. **This is now the largest single gap in what the system can express**, and
-  unlike `lines` it will not be free: there is no element buffer to instance over, so it is
-  a second draw shape rather than a second placement of the same one.
+- ~~**A fullscreen L4.**~~ **Built.** An L4 with no `vertex` block covers the frame and
+  marches instead, and `examples/field_march.kir` is the first picture here made of no
+  elements — a sphere, a box smoothly unioned into it, a torus through both, all from
+  builtins that had passed the checker since M1 with nothing able to draw them.
 
-  The design, decided before building so that the expensive half is not guessed at:
+  Four things it turned out to need, and the last two are the ones worth carrying.
 
-  - **It is declared by having no `vertex` block**, on the same principle `clip_b` settled:
-    a procedure with no per-element position has nothing for a vertex block to do, so its
-    absence is the declaration and there is one place for the fact. `Checked::topology`
-    gains a third value for it. That value is inferred on an L4 and **refused on an L1** —
-    geometry cannot be fullscreen — which is a rule to state rather than a wart to explain.
-  - **`consumes` must be empty.** With no vertex block there is nowhere to read an element
-    from. That is worth having as a rule rather than as a consequence, because it is what
-    makes the next point provable.
-  - **The L1's compute is skipped.** Nothing reads the elements, and the checker says so, so
-    a fullscreen Set pays for no simulation at all. Without the `consumes` rule this would
-    be an optimisation nobody could justify; with it, it is what the pair means.
-  - **Two ambients carry the ray: `eye` and `ray`.** The alternative is handing a procedure
-    the inverse camera and letting it build its own, which puts the projection convention in
-    every shader that marches and makes a `mat4` inverse an IR problem. The camera is a
-    built-in here, so the convention is the engine's to own. `point_coord` runs across the
-    frame, which is the same sentence it already means.
-  - **What it does not change is that a Set is one L1 and one L4.** A fullscreen L4 still
-    needs an L1 to be paired with, and that L1 is dead weight the operator has to choose
-    (something small). A Set that can hold no geometry is the graph model's, not this
-    change's.
+  **The declaration is the absence of a `vertex` block**, exactly as `clip_b`'s presence is
+  the declaration for lines. One place for the fact.
+
+  **The ray is given, not derived.** `Orbit::basis` hands a fragment the eye and three
+  pre-scaled vectors, so `ray` is an interpolation and a normalize. Handing a procedure an
+  inverse camera instead would put the projection convention inside every shader that
+  marches, and a convention restated is a convention that drifts.
+
+  **`consumes` must be empty, and that is a rule rather than a consequence.** With no vertex
+  block there is nowhere to read an element from — but *stating* it is what makes skipping
+  the paired L1's entire simulation provable instead of plausible. The same fact left
+  implicit would have been an optimisation resting on a reading of the language.
+
+  **The fragment cost ceiling had to become two numbers**, and the reason generalises. 512
+  ops was a stand-in for a quantity nobody knows: `capacity` sprites, times their area, times
+  their overdraw. A fullscreen pass covers the canvas exactly once, so the number is known
+  and the stand-in has nothing to stand in for — and applied anyway it forbids raymarching
+  outright, because thirty-odd iterations of a distance function is what a marcher *is*.
+  **A ceiling calibrated against one shape refuses the next one**, and that is worth
+  remembering before `blend weighted` meets the same table.
+
+  What it does *not* change: a Set is still one L1 and one L4, so a fullscreen renderer is
+  paired with geometry it ignores. That L1 is dead weight the operator has to choose. A Set
+  that can hold no geometry is the graph model's.
+
 - **`blend weighted`.** Already listed below, and it is the other half of the point-sprite
   monotony: additive is why everything glows. Lines did not change that — a stroke glows
   exactly as a sprite does.
