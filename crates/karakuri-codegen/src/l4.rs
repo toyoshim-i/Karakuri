@@ -133,12 +133,12 @@ impl Resolver for L4Resolver {
                 L4Block::Fragment => "in.point_coord".to_string(),
                 L4Block::Vertex => unreachable!("point_coord is fragment-only"),
             },
-            // Fullscreen only, and the fullscreen draw path is not built — see
-            // `SetError::Unrenderable`, which refuses such a pair before this
-            // generator is ever reached.
-            Ambient::Eye | Ambient::Ray => {
-                unreachable!("{amb:?} is fullscreen-only and `Set::build` refuses those")
-            }
+            // Bound in the fragment prologue: `eye` straight from the
+            // uniform, `ray` built there from the basis and this fragment's
+            // screen position. Fullscreen only, and the check pass refuses
+            // them anywhere else.
+            Ambient::Eye => "u.eye".to_string(),
+            Ambient::Ray => "ray".to_string(),
             Ambient::Seed => unreachable!("read_seed handles this"),
             Ambient::Capacity | Ambient::Dt => {
                 unreachable!("{amb:?} is L1-only and cannot appear in a Checked L4 block")
@@ -329,7 +329,9 @@ fn vertex_entry(
             out.push_str("    out.point_coord = corner_of(corner_idx);\n");
         }
         Topology::Lines => out.push_str(SEGMENT_EXPANSION),
-        Topology::Fullscreen => unreachable!("`Set::build` refuses a fullscreen pair"),
+        // Never reached: a fullscreen procedure has no vertex block to lower,
+        // so `generate_l4` takes the other path entirely.
+        Topology::Fullscreen => unreachable!("fullscreen has no per-element vertex stage"),
     }
     if seed_used {
         out.push_str("    out.seed = seed;\n");
@@ -349,7 +351,7 @@ fn vertex_entry(
         // [`SEGMENT_EXPANSION`] for why a segment that straddles the eye is
         // dropped rather than clipped.
         Topology::Lines => "alive[elem] == 0u || _clip.w <= 0.0 || _clip_b.w <= 0.0",
-        Topology::Fullscreen => unreachable!("`Set::build` refuses a fullscreen pair"),
+        Topology::Fullscreen => unreachable!("fullscreen has no per-element vertex stage"),
     };
     out.push_str(&format!("    if {dropped} {{\n"));
     out.push_str("        out.clip = vec4<f32>(0.0, 0.0, 0.0, 1.0);\n");
@@ -358,6 +360,46 @@ fn vertex_entry(
     out.push_str("}\n\n");
     out
 }
+
+/// The whole vertex stage for [`Topology::Fullscreen`], generated rather than
+/// lowered — the procedure has no `vertex` block to lower.
+///
+/// **One triangle, not two.** Three vertices covering the frame beat a quad's
+/// six: no diagonal seam where two triangles meet, and the rasterizer walks one
+/// primitive. The corners are (-1,-1), (3,-1) and (-1,3) in NDC, which is the
+/// standard trick — the triangle is twice the frame and the half outside it is
+/// clipped for free.
+///
+/// `point_coord` comes out 0..1 across the *frame*, which is the same sentence
+/// it already means for a sprite and for a stroke: 0..1 across the primitive.
+const FULLSCREEN_VS: &str = "struct VsOut {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) point_coord: vec2<f32>,
+};
+
+@vertex
+fn vs(@builtin(vertex_index) i: u32) -> VsOut {
+    // (0,0), (2,0), (0,2) in `point_coord`, so the frame is the 0..1 corner.
+    let uv = vec2<f32>(f32((i << 1u) & 2u), f32(i & 2u));
+    var out: VsOut;
+    out.clip = vec4<f32>(uv * 2.0 - 1.0, 0.0, 1.0);
+    // Flipped in y: NDC runs up and a framebuffer runs down, and the whole
+    // point of this value is that a fragment can say where on screen it is.
+    out.point_coord = vec2<f32>(uv.x, 1.0 - uv.y);
+    return out;
+}
+
+";
+
+/// The ray, built once at the top of a fullscreen fragment stage.
+///
+/// `u.cam_right` and `u.cam_up` arrive pre-scaled by the field of view and the
+/// aspect ratio — see `Orbit::basis` — so this is an interpolation and a
+/// normalize rather than a projection. Everything about *which* projection is
+/// on the engine's side of the seam, where the camera is.
+const FULLSCREEN_RAY: &str = "    let _ndc = vec2<f32>(in.point_coord.x * 2.0 - 1.0, 1.0 - in.point_coord.y * 2.0);
+    let ray = normalize(u.cam_fwd + u.cam_right * _ndc.x + u.cam_up * _ndc.y);
+";
 
 /// The quad expansion for [`Topology::Lines`]: the same six corners, laid over
 /// the segment from `_clip` to `_clip_b` instead of around a point.
@@ -460,6 +502,20 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
         .topology
         .expect("a checked L4 procedure always carries an inferred topology");
 
+    let fragment_blk = checked
+        .block(BlockKind::Fragment)
+        .expect("an L4 procedure must have a fragment block");
+
+    // **A fullscreen procedure has no vertex block to lower**, so it takes an
+    // entirely separate path: the vertex stage is generated, there are no
+    // element bindings to declare, and no varyings to choose because the only
+    // one is the screen position. Returning early keeps the per-element path
+    // below textually unchanged rather than threading a condition through it,
+    // and keeps `viewport` and `camera` out of a uniform that never reads them.
+    if topology == Topology::Fullscreen {
+        return generate_fullscreen(checked, fragment_blk, elements);
+    }
+
     let mut b = UniformLayoutBuilder::new();
     b.field("t", "f32");
     b.field("beats", "f32");
@@ -475,8 +531,9 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
     }
     let (uniform_layout, uniform_pad_f32) = b.finish();
 
-    let vertex_blk = checked.block(BlockKind::Vertex).expect("an L4 procedure must have a vertex block");
-    let fragment_blk = checked.block(BlockKind::Fragment).expect("an L4 procedure must have a fragment block");
+    let vertex_blk = checked
+        .block(BlockKind::Vertex)
+        .expect("a per-element L4 procedure has a vertex block");
 
     let (seed_used, attrs_used_set) = used_in_fragment(fragment_blk);
     let attrs_used: Vec<Attr> = checked.consumes.iter().copied().filter(|a| attrs_used_set.contains(a)).collect();
@@ -517,4 +574,66 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
     src.push_str(&fragment_entry(seed_used, &attrs_used, &fragment_body));
 
     L4Shader { source: src, uniform_layout, uniform_pad_f32, element_layout: elements.clone() }
+}
+
+
+/// The whole of a [`Topology::Fullscreen`] shader.
+///
+/// Split out rather than branched into `generate_l4` because almost nothing is
+/// shared: no element buffer is bound, no attribute is read, no varying is
+/// chosen, and the vertex stage is [`FULLSCREEN_VS`] rather than anything the
+/// procedure wrote. What *is* shared is the uniform — the same `t`, `beats` and
+/// params every L4 gets — plus the four fields the ray needs.
+fn generate_fullscreen(
+    checked: &Checked,
+    fragment_blk: &TBlock,
+    elements: &ElementLayout,
+) -> L4Shader {
+    let mut b = UniformLayoutBuilder::new();
+    b.field("t", "f32");
+    b.field("beats", "f32");
+    b.field("seed_salt", "u32");
+    // The ray basis. Only here, so a per-element shader's uniform does not grow
+    // four vectors it would never read — and no `viewport` or `camera`, which
+    // this path has no use for: the projection is already in the basis.
+    b.field("eye", "vec3<f32>");
+    b.field("cam_fwd", "vec3<f32>");
+    b.field("cam_right", "vec3<f32>");
+    b.field("cam_up", "vec3<f32>");
+    for p in &checked.params {
+        b.param_field(p.name.clone(), wgsl_ty(p.ty));
+    }
+    let (uniform_layout, uniform_pad_f32) = b.finish();
+
+    let mut req = Requirements::default();
+    let body = {
+        let resolver = L4Resolver { block: L4Block::Fragment };
+        let mut out = String::new();
+        emit_stmts(&fragment_blk.stmts, &resolver, &mut req, 1, &mut out);
+        out
+    };
+
+    let mut src = String::new();
+    layout::write_uniform_struct(&mut src, &uniform_layout, uniform_pad_f32);
+    src.push_str("\n@group(0) @binding(0) var<uniform> u: Uniforms;\n\n");
+    src.push_str(&prelude::render(&req));
+    src.push('\n');
+    src.push_str(FULLSCREEN_VS);
+    src.push_str("@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n");
+    src.push_str("    let point_coord = in.point_coord;\n");
+    src.push_str(FULLSCREEN_RAY);
+    src.push_str("    var _color: vec4<f32>;\n");
+    src.push_str(&body);
+    src.push_str("    return _color;\n}\n");
+
+    // Echoed back unchanged, as the per-element path does. Nothing here reads
+    // an element — the check pass refuses a fullscreen `consumes` — but the
+    // caller's contract is that an `L4Shader` says what buffer it expects, and
+    // "the one its L1 wrote, and it reads none of it" is the honest answer.
+    L4Shader {
+        source: src,
+        uniform_layout,
+        uniform_pad_f32,
+        element_layout: elements.clone(),
+    }
 }
