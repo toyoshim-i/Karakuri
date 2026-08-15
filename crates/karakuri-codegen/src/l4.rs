@@ -546,6 +546,14 @@ const WEIGHTED_FS_EPILOGUE: &str = "    let _a = clamp(_color.a, 0.0, 1.0);
 /// plain alpha-weighted average. That degradation is graceful — what still
 /// separates `weighted` from `additive` there is that the layer *occludes* —
 /// and the operator's lever on it is the camera's `far`.
+///
+/// **The degenerate end of that is a procedure that never projects.** An L4
+/// writing `clip = vec4(position, 1.0)` — legal, and what a hand-written test
+/// fixture usually does — leaves `w` at 1 for every element, so every fragment
+/// lands on one depth and every weight is the same. There is no diagnostic and
+/// there should not be: `w` is whatever the procedure put there, and a renderer
+/// that declines to project is asking for a flat picture. It gets one, with the
+/// occlusion intact and the ordering gone.
 const WEIGHTED_DEPTH: &str =
     "    let _depth01 = clamp((in.view_depth - u.depth_range.x) * u.depth_range.y, 0.0, 1.0);\n";
 
