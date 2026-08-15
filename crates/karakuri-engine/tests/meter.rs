@@ -572,7 +572,7 @@ fn build_l4(gpu: &Gpu, l4: &str) -> Set {
         SEED,
     )
     .expect("the pair is compatible and the capacity is in range");
-    set.resize(WIDTH, HEIGHT);
+    set.resize(&gpu.device, WIDTH, HEIGHT);
     set
 }
 

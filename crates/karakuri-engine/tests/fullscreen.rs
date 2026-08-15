@@ -86,7 +86,7 @@ fn build(gpu: &Gpu, l1: &str, l4: &str) -> Set {
     let l1 = compile(l1);
     let l4 = compile(l4);
     let mut set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, 16, 3).expect("a compatible pair");
-    set.resize(W, H);
+    set.resize(&gpu.device, W, H);
     set
 }
 

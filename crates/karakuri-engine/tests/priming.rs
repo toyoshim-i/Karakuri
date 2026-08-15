@@ -118,7 +118,7 @@ fn build(gpu: &Gpu, seed: u32) -> Set {
         seed,
     )
     .expect("the pair is compatible and the capacity is in range");
-    set.resize(WIDTH, HEIGHT);
+    set.resize(&gpu.device, WIDTH, HEIGHT);
     set
 }
 

@@ -103,7 +103,7 @@ fn build(gpu: &Gpu, capacity: u32, seed: u32) -> Set {
         seed,
     )
     .expect("the pair is compatible and the capacity is in range");
-    set.resize(WIDTH, HEIGHT);
+    set.resize(&gpu.device, WIDTH, HEIGHT);
     set
 }
 
@@ -379,7 +379,7 @@ proc accumulate {
     let make = || {
         let mut set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, 19274)
             .expect("the pair is compatible");
-        set.resize(WIDTH, HEIGHT);
+        set.resize(&gpu.device, WIDTH, HEIGHT);
         set
     };
 

@@ -298,7 +298,7 @@ fn build_with(gpu: &Gpu, l4: &str, seed: u32, capacity: u32) -> Set {
         seed,
     )
     .expect("the pair is compatible and the capacity is in range");
-    set.resize(WIDTH, HEIGHT);
+    set.resize(&gpu.device, WIDTH, HEIGHT);
     set
 }
 
@@ -2505,7 +2505,7 @@ fn the_cost_of_a_slot_and_of_the_composite_are_measured_and_reported() {
         SEED_A,
     )
     .expect("the pair is compatible");
-    bare.resize(W, H);
+    bare.resize(&gpu.device, W, H);
     let mut bare_ms = Vec::new();
     for i in 0..WARMUP + MEASURED {
         let at = Instant::now();
@@ -2528,7 +2528,7 @@ fn the_cost_of_a_slot_and_of_the_composite_are_measured_and_reported() {
                     seed,
                 )
                 .expect("the pair is compatible");
-                set.resize(W, H);
+                set.resize(&gpu.device, W, H);
                 HotSwap::fixed(set)
             })
             .collect();

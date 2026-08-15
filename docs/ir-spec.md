@@ -1078,11 +1078,33 @@ disc_point(float, float) -> vec2
   buffers
 - Per-element values used in `fragment` become `@interpolate(flat)` varyings
 - `blend additive` lowers to additive blending with no depth write, which is what avoids
-  any sort requirement. It is the only mode v0.2 accepts. **Colour is what it applies to.**
-  The alpha channel of the target composes as `over` instead, accumulating
-  `1 - prod(1 - a_i)` — the coverage L5's `over` blend mode needs, which nothing else
-  writes. So the colour that leaves L4 is premultiplied by coverage, and a fragment block
-  that assigns an alpha above 1.0 is writing a coverage the mix will saturate
+  any sort requirement. **Colour is what it applies to.** The alpha channel of the target
+  composes as `over` instead, accumulating `1 - prod(1 - a_i)` — the coverage L5's `over`
+  blend mode needs, which nothing else writes. So the colour that leaves L4 is
+  premultiplied by coverage, and a fragment block that assigns an alpha above 1.0 is
+  writing a coverage the mix will saturate
+- `blend weighted` lowers to **two colour attachments and a resolve pass**, still with no
+  depth write and still needing no sort. The fragment stage returns a struct rather than a
+  `vec4`: `sum(c * a * w)` and `sum(a * w)` into an `Rgba16Float` accumulation, and `a`
+  into an `R16Float` revealage whose blend state is `dst * (1 - src)`, so what it holds is
+  `prod(1 - a_i)` however the fragments were ordered. The resolve divides the colour sum by
+  the weight sum and composites against `1 - revealage`, and **what it writes is exactly
+  what the additive path writes** — premultiplied colour, coverage in alpha — so L5 reads a
+  weighted slot without knowing the mode exists
+- The weight is `a * max(1e-2, (1 - d)^3)` where `d` is the fragment's view depth mapped
+  linearly onto the camera's near and far planes. Two things about it are worth carrying.
+  **Its absolute scale is arbitrary**, because the resolve divides it out — so it is chosen
+  to stay inside `(0, 1]` rather than carrying the published `3e3` factor, which an
+  `Rgba16Float` target holding unbounded HDR colour would overflow. And **linear in view
+  depth, not in the depth buffer's**: NDC depth needs no uniform at all and is useless
+  here, since a 0.1 near against a 100 far crushes everything past ten units into the last
+  percent of its range
+- A **fullscreen L4 may not declare `weighted`**, and this is refused by `Set::build`
+  rather than by the checker. One fragment per texel makes the resolve the identity —
+  `(c·a·w) / (a·w) · (1 - (1 - a))` is `c·a`, which is what additive blending into a
+  cleared target leaves — so the second target and the resolve pass would buy a picture
+  `additive` gives for nothing. It is a rule about the *Set* holding one L4, not about the
+  procedure, which is why it lives where that assumption does
 - Target format `Rgba16Float`
 
 ### Lowering notes

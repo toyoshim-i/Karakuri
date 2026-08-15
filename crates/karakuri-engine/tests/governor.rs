@@ -467,7 +467,7 @@ fn swap_of(gpu: &Gpu, l1: &str, seed: u32, ms: Option<f32>) -> HotSwap {
         seed,
     )
     .expect("the pair is compatible");
-    set.resize(WIDTH, HEIGHT);
+    set.resize(&gpu.device, WIDTH, HEIGHT);
     let mut swap = HotSwap::fixed(set);
     if let Some(ms) = ms {
         swap.set_measured_cost(cost(ms));

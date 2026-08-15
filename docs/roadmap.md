@@ -847,9 +847,10 @@ not already cover, and requiring agreement invents a dependency the lowering doe
 The declaration on the L1 side says what the geometry is meant to read as; it constrains no
 renderer.
 
-**One addition remains.** The vocabulary no longer runs ahead of the engine: `sd_sphere`,
+**Nothing remains.** The vocabulary no longer runs ahead of the engine: `sd_sphere`,
 `sd_box`, `sd_torus`, `sd_plane` and the four CSG operators have a renderer now, and
-`examples/field_march.kir` uses six of the eight. What is left is the blend.
+`examples/field_march.kir` uses six of the eight. `Topology` has three values, `Blend` has
+two, and neither enum is a promise any more.
 
 - ~~**A fullscreen L4.**~~ **Built.** An L4 with no `vertex` block covers the frame and
   marches instead, and `examples/field_march.kir` is the first picture here made of no
@@ -876,16 +877,53 @@ renderer.
   their overdraw. A fullscreen pass covers the canvas exactly once, so the number is known
   and the stand-in has nothing to stand in for — and applied anyway it forbids raymarching
   outright, because thirty-odd iterations of a distance function is what a marcher *is*.
-  **A ceiling calibrated against one shape refuses the next one**, and that is worth
-  remembering before `blend weighted` meets the same table.
+  **A ceiling calibrated against one shape refuses the next one.** It was worth remembering
+  before `blend weighted`, and the warning half landed: what bit there was a borrowed
+  weight function's constant rather than this table.
 
   What it does *not* change: a Set is still one L1 and one L4, so a fullscreen renderer is
   paired with geometry it ignores. That L1 is dead weight the operator has to choose. A Set
   that can hold no geometry is the graph model's.
 
-- **`blend weighted`.** Already listed below, and it is the other half of the point-sprite
-  monotony: additive is why everything glows. Lines did not change that — a stroke glows
-  exactly as a sprite does.
+- ~~**`blend weighted`.**~~ **Built.** The other half of the point-sprite monotony:
+  additive is why everything glowed, and lines did not change that — a stroke glowed
+  exactly as a sprite did. **Material in this project now occludes**, which nothing it had
+  ever drawn did.
+
+  Four things it turned out to need, and the last two are the ones worth carrying.
+
+  **A second attachment, because a slot target has room for two of the three running
+  quantities.** `sum(c * a * w)` and `sum(a * w)` fit in one `Rgba16Float`; `prod(1 - a)`
+  composes by multiplication where those compose by addition, and a colour attachment has
+  one blend state. So the revealage is its own `R16Float` target with `dst * (1 - src)` on
+  it — `R16Float` rather than the published technique's `R8Unorm`, because 8 bits quantises
+  coverage to 1/255 exactly where soft material is thinnest.
+
+  **It cost L5 nothing.** The resolve writes premultiplied colour and coverage in alpha,
+  which is precisely what the additive path writes, so `composite.wgsl` reads a weighted
+  slot without knowing the mode exists. That was not luck — it is what picking the resolve's
+  output convention to match the existing one buys, and it was worth checking before
+  building anything, because the alternative was OIT knowledge in the mix.
+
+  **The ceiling this section warned about did arrive, in a different shape.** The caution
+  was that a number calibrated against one thing refuses the next; what actually bit was
+  the published weight function's `3e3` factor, which assumes colours in `[0, 1]` and
+  overflows `f16` immediately in a pipeline where colours of 20 are ordinary. The fix was to
+  notice that **the resolve divides the weight out**, so its absolute scale means nothing
+  and only the ratio survives — the constant could simply be dropped. A borrowed formula
+  carries its author's assumptions in its constants, and the useful question is which of
+  them the code around it still holds.
+
+  **`Set::resize` takes a device now**, because a Set can own render targets. Twenty-odd
+  call sites, all mechanical — and it is *joining* a convention rather than breaking one:
+  `Present::resize`, `Deck::resize`, `Composite::rebind` and `Meters::rebind` all already
+  take one, and `Set::resize` was the outlier only because it had nothing to allocate.
+
+  What it does *not* do: sort. It is an approximation, and where it is coarse is stated in
+  the spec rather than hidden — material occupying a thin slice of a wide frustum gets
+  near-equal weights and the resolve approaches a plain alpha-weighted average. That
+  degradation is graceful, because what still separates it from `additive` there is the
+  occlusion rather than the ordering.
 
 **How hard the old limit actually bit** was measured once, by accident, and the measurement
 is now a fixed point to compare against: asked for line art, a model denied a line primitive
@@ -915,7 +953,7 @@ being forced into it. `examples/strand_shell.kir` is kept as written for that re
 - The `Field` type — a spatial function represented as code rather than data
 - Graph compiler. Node graph as authoring representation, render graph as execution
   representation, with fusion of `Field` chains into single shaders
-- `blend weighted` (weighted blended OIT) alongside `blend additive`
+- ~~`blend weighted` (weighted blended OIT) alongside `blend additive`~~ — **built**
 
 **Demands on earlier work**
 

@@ -1507,7 +1507,7 @@ fn replay_session(args: &Args, id: &str) {
         loaded.seed.unwrap_or_else(|| seed_for(0)),
         loaded.camera,
     );
-    set.resize(w, h);
+    set.resize(&gpu.device, w, h);
     // **A deck of one, from one Set file**, which is what a replay can build
     // today: a session stream names the slots its records act on but carries no
     // way to say what was in them, since a Set file describes one Set and there
@@ -1596,7 +1596,7 @@ fn replay_session(args: &Args, id: &str) {
             }
             for slot in changed {
                 match rebuild(&gpu, &store, &playing[slot], args, slot) {
-                    Ok(set) => deck.install(slot, set),
+                    Ok(set) => deck.install(&gpu.device, slot, set),
                     Err(e) => eprintln!("  slot {slot}: {e} — it keeps what it had"),
                 }
             }

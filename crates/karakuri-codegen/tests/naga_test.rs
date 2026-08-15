@@ -886,3 +886,121 @@ fn each_topology_emits_its_own_placement_and_not_the_others() {
     let fs = |s: &str| s[s.find("@fragment").expect("a fragment stage")..].to_string();
     assert_eq!(fs(&points), fs(&lines), "the topology reached the fragment stage");
 }
+
+/// `soft_points` under the other blend mode. A *modification* of the points
+/// fixture for the same reason `soft_streaks` is: what differs between the two
+/// generated shaders is then the blend mode and nothing else.
+fn soft_glass() -> Checked {
+    let mut checked = soft_points();
+    checked.name = "soft_glass".to_string();
+    checked.blend = Some(Blend::Weighted);
+    checked
+}
+
+/// The weighted fragment stage is two targets, a clamp, a `pow` and a divide
+/// that has not happened yet — none of which a reviewer can confirm is WGSL a
+/// front end accepts. A struct-returning `@fragment` with a scalar at
+/// `@location(1)` is the part most likely to be almost right.
+#[test]
+fn a_weighted_l4_compiles_and_validates() {
+    let shader = karakuri_codegen::generate_l4(&soft_glass(), &layout_for(&drift_shell()));
+    validate(&shader.source);
+}
+
+/// And the same for segments, because the depth a weighted stroke is weighted
+/// by comes out of the segment expansion rather than straight off `clip`.
+#[test]
+fn a_weighted_lines_l4_compiles_and_validates() {
+    let mut checked = soft_streaks();
+    checked.blend = Some(Blend::Weighted);
+    let shader = karakuri_codegen::generate_l4(&checked, &layout_for(&drift_shell()));
+    validate(&shader.source);
+}
+
+/// A weighted L4 with no `vertex` block. **`Set::build` refuses this pairing**
+/// — one layer per texel makes the resolve the identity — so nothing in the
+/// engine's tests can reach the code that lowers it, and without this the
+/// generator's fullscreen-plus-weighted arm would be the one path in the crate
+/// no front end had ever read.
+#[test]
+fn a_weighted_fullscreen_l4_compiles_and_validates() {
+    let fragment = TBlock {
+        kind: BlockKind::Fragment,
+        span: span(),
+        stmts: vec![assign_output(
+            Output::Color,
+            construct(Ty::Vec4, vec![ambient(Ambient::Ray, Ty::Vec3), lit_f(0.5)]),
+        )],
+    };
+    let l4 = Checked {
+        name: "weighted_march".to_string(),
+        kind: Kind::L4,
+        topology: Some(Topology::Fullscreen),
+        capacity: None,
+        blend: Some(Blend::Weighted),
+        params: vec![],
+        emit: vec![],
+        consumes: vec![],
+        blocks: vec![fragment],
+        cost: None,
+        closed_form: false,
+        reads_beats: false,
+        span: span(),
+    };
+    let shader = karakuri_codegen::generate_l4(&l4, &layout_for(&drift_shell()));
+    validate(&shader.source);
+    assert!(
+        !shader.uniform_layout.fields.iter().any(|f| f.name == "depth_range"),
+        "a frame is not at a depth, so there is nothing for a range to normalise it against"
+    );
+}
+
+/// **Each blend mode emits its own fragment epilogue, and neither emits the
+/// other's** — the same shape of assertion as
+/// `each_topology_emits_its_own_placement_and_not_the_others`, and written after
+/// that one caught a generator ignoring the topology it was handed.
+///
+/// The three things named are the three that have to move together: the second
+/// target, the varying the weight is computed from, and the uniform field that
+/// varying is measured against. A shader with any one of them missing would
+/// still compile.
+#[test]
+fn each_blend_mode_emits_its_own_fragment_epilogue_and_not_the_others() {
+    let layout = layout_for(&drift_shell());
+    let additive = karakuri_codegen::generate_l4(&soft_points(), &layout);
+    let weighted = karakuri_codegen::generate_l4(&soft_glass(), &layout);
+
+    assert!(weighted.source.contains("@location(1) reveal"), "no revealage target");
+    assert!(weighted.source.contains("view_depth"), "no depth to weigh by");
+    assert!(
+        weighted.uniform_layout.fields.iter().any(|f| f.name == "depth_range"),
+        "no camera planes to measure the depth against"
+    );
+
+    // Not `@location(1)`: an additive shader has one of those already, for its
+    // first varying. What it must not have is a fragment output struct.
+    assert!(!additive.source.contains("FsOut"), "the additive shader grew a second target");
+    assert!(!additive.source.contains("reveal"), "the additive shader accumulates revealage");
+    assert!(!additive.source.contains("view_depth"), "the additive shader carries a depth nothing reads");
+    assert!(
+        !additive.uniform_layout.fields.iter().any(|f| f.name == "depth_range"),
+        "the additive shader's uniform grew a field nothing reads"
+    );
+
+    // The vertex stage's *placement* is blend-blind: the same six corners land
+    // in the same six places whichever way the fragments are combined.
+    let placement = |s: &str| {
+        let vs = &s[s.find("@vertex").expect("a vertex stage")..];
+        vs[..vs.find("@fragment").expect("a fragment stage")]
+            .lines()
+            .filter(|l| !l.contains("view_depth"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    assert_eq!(
+        placement(&additive.source),
+        placement(&weighted.source),
+        "the blend mode moved the geometry"
+    );
+}
+

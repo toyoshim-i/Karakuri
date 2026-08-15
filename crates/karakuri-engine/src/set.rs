@@ -94,21 +94,31 @@ pub enum SetError {
         l4: String,
         keys: String,
     },
-    /// A blend mode the language admits and this engine cannot run yet.
+    /// `blend weighted` on a procedure that draws the whole frame.
     ///
-    /// **Named rather than left to draw the wrong picture.** `blend` reaches no
-    /// part of lowering today, so a procedure declaring `weighted` would compile,
-    /// build, and render additively — the one failure mode worse than refusing,
-    /// because the author's next move is to wonder why their material still
-    /// glows. The language accepting something the engine does not run is a state
-    /// worth having briefly and worth saying out loud.
+    /// **Refused because it is provably the identity, not because it is
+    /// unbuilt.** A fullscreen L4 puts exactly one fragment on each texel, and
+    /// for one layer the resolve gives back what the accumulation was made of:
+    /// `(c * a * w) / (a * w) * (1 - (1 - a))` is `c * a`, whatever the weight
+    /// was, which is precisely what additive blending into a cleared target
+    /// leaves. So the two extra targets and the resolve pass buy an identical
+    /// picture, and the only thing that *would* differ is the alpha clamp — a
+    /// difference nobody wants.
+    ///
+    /// **It is a rule about the Set and not about the procedure**, which is why
+    /// it lives here rather than in the checker: what makes it true is that a
+    /// Set holds one L4. When several L4s can draw into one slot the sentence
+    /// stops being true and this goes with it — and `generate_l4` lowers the
+    /// combination perfectly well already, so there will be nothing else to
+    /// change.
     #[error(
-        "`{l4}` declares `blend {mode}`, which this engine cannot run yet\n\
-         hint: `additive` is the mode that runs. Declaring one the engine has no path for \
-         would render additively and look like a bug in the procedure rather than a gap in \
-         the engine, so it is refused instead"
+        "`{l4}` draws the whole frame, where `blend weighted` resolves to exactly what \
+         `additive` accumulates\n\
+         hint: one fragment per texel makes the weighted resolve the identity — it would \
+         cost a revealage target and a resolve pass to reproduce the picture `blend \
+         additive` gives for nothing. Declare `additive`"
     )]
-    UnbuiltBlend { l4: String, mode: &'static str },
+    WeightedFullscreen { l4: String },
     /// A build panicked rather than returning. Not reachable through any
     /// `.kir` a checker accepts, which is exactly why it needs a variant:
     /// wgpu's default handler for an uncaptured validation error is a panic,
@@ -246,6 +256,12 @@ pub struct Set {
     /// Present only when the procedure declares a `spawn` block.
     spawn: Option<wgpu::ComputePipeline>,
     render: wgpu::RenderPipeline,
+    /// Present only under `blend weighted`: the two accumulation targets the
+    /// render pipeline above writes to, and the pass that folds them into the
+    /// caller's one. `None` is `blend additive`, which draws straight into it.
+    ///
+    /// It is what makes [`Set::resize`] need a device — see the note there.
+    oit: Option<crate::oit::Oit>,
 
     l1_uniform_bg: wgpu::BindGroup,
     l4_uniform_bg: wgpu::BindGroup,
@@ -368,18 +384,14 @@ impl Set {
             });
         }
 
-        // Before anything is generated, because generating it is exactly what
-        // would produce a plausible wrong picture — see `SetError::UnbuiltBlend`.
-        if l4.blend == Some(karakuri_ir::Blend::Weighted) {
-            return Err(SetError::UnbuiltBlend {
-                l4: l4.name.clone(),
-                mode: karakuri_ir::Blend::Weighted.name(),
-            });
-        }
-
-        // Decided before anything is generated, because it changes the shape of
-        // the pipeline as well as the shader — see `Set::fullscreen`.
+        // Both decided before anything is generated, because between them they
+        // choose the shape of the render pipeline as well as of the shader — see
+        // `Set::fullscreen` and `Set::oit`.
         let fullscreen = l4.topology == Some(karakuri_ir::Topology::Fullscreen);
+        let weighted = l4.blend == Some(karakuri_ir::Blend::Weighted);
+        if weighted && fullscreen {
+            return Err(SetError::WeightedFullscreen { l4: l4.name.clone() });
+        }
 
         let l1_shader = generate_l1(l1);
         let l4_shader = generate_l4(l4, &l1_shader.element_layout);
@@ -689,6 +701,59 @@ impl Set {
             bind_group_layouts: &render_groups,
             push_constant_ranges: &[],
         });
+        // **What the fragment stage writes to, which the blend mode chooses.**
+        // The generated shader returns one `vec4` or a two-field struct — see
+        // `karakuri_codegen`'s `WEIGHTED_FS_OUT` — and a pipeline whose targets
+        // did not match would be a validation error rather than a wrong picture.
+        let weighted_targets = crate::oit::colour_targets();
+        let additive_target = [Some(wgpu::ColorTargetState {
+            // Always the linear HDR format, never the surface's. A
+            // `VideoSource` renders into the HDR target and the present
+            // pass is the one place that encodes to sRGB; taking this
+            // as a parameter would let a caller quietly break "the
+            // pipeline is linear and HDR end to end".
+            format: crate::present::Present::HDR_FORMAT,
+            // `blend additive`, no depth write.
+            //
+            // **Colour adds; alpha accumulates coverage.** The two
+            // components answer different questions and this is the
+            // only pairing that answers both: colour is emissive and
+            // sums past what any coverage would allow, which is what
+            // `blend additive` is for, while alpha comes out as
+            // `1 - prod(1 - a_i)` — the probability that *something*
+            // drew at this texel, and order-independent because
+            // `a_s + a_d(1 - a_s)` is symmetric in the two.
+            //
+            // **Not bounded at 1, and the mix does not assume it is.**
+            // Nothing clamps what a fragment block assigns to alpha —
+            // the IR calls it straight alpha and says values above 1.0
+            // are expected — so this accumulates whatever the material
+            // wrote. `composite.wgsl` saturates on the way in rather
+            // than L4 clamping on the way out, because clamping here
+            // would change the colour too: additive blending
+            // multiplies colour by this same alpha.
+            //
+            // Nothing in this pass reads it back. It exists for L5:
+            // `Blend::Over` needs to know what a layer covers, and
+            // before this the channel was written by nothing and held
+            // the clear value forever. Colour is premultiplied by
+            // coverage on the way out, which is what makes the mix's
+            // `over` a multiply-add rather than a divide by an alpha
+            // that is allowed to be zero.
+            blend: Some(wgpu::BlendState {
+                color: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::SrcAlpha,
+                    dst_factor: wgpu::BlendFactor::One,
+                    operation: wgpu::BlendOperation::Add,
+                },
+                alpha: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::One,
+                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                    operation: wgpu::BlendOperation::Add,
+                },
+            }),
+            write_mask: wgpu::ColorWrites::ALL,
+        })];
         let render = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some(&l4.name),
             layout: Some(&render_layout),
@@ -702,54 +767,7 @@ impl Set {
                 module: &l4_module,
                 entry_point: Some("fs"),
                 compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    // Always the linear HDR format, never the surface's. A
-                    // `VideoSource` renders into the HDR target and the present
-                    // pass is the one place that encodes to sRGB; taking this
-                    // as a parameter would let a caller quietly break "the
-                    // pipeline is linear and HDR end to end".
-                    format: crate::present::Present::HDR_FORMAT,
-                    // `blend additive`, no depth write.
-                    //
-                    // **Colour adds; alpha accumulates coverage.** The two
-                    // components answer different questions and this is the
-                    // only pairing that answers both: colour is emissive and
-                    // sums past what any coverage would allow, which is what
-                    // `blend additive` is for, while alpha comes out as
-                    // `1 - prod(1 - a_i)` — the probability that *something*
-                    // drew at this texel, and order-independent because
-                    // `a_s + a_d(1 - a_s)` is symmetric in the two.
-                    //
-                    // **Not bounded at 1, and the mix does not assume it is.**
-                    // Nothing clamps what a fragment block assigns to alpha —
-                    // the IR calls it straight alpha and says values above 1.0
-                    // are expected — so this accumulates whatever the material
-                    // wrote. `composite.wgsl` saturates on the way in rather
-                    // than L4 clamping on the way out, because clamping here
-                    // would change the colour too: additive blending
-                    // multiplies colour by this same alpha.
-                    //
-                    // Nothing in this pass reads it back. It exists for L5:
-                    // `Blend::Over` needs to know what a layer covers, and
-                    // before this the channel was written by nothing and held
-                    // the clear value forever. Colour is premultiplied by
-                    // coverage on the way out, which is what makes the mix's
-                    // `over` a multiply-add rather than a divide by an alpha
-                    // that is allowed to be zero.
-                    blend: Some(wgpu::BlendState {
-                        color: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::SrcAlpha,
-                            dst_factor: wgpu::BlendFactor::One,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                        alpha: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::One,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                    }),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
+                targets: if weighted { &weighted_targets } else { &additive_target },
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -807,6 +825,7 @@ impl Set {
             element,
             spawn,
             render,
+            oit: weighted.then(|| crate::oit::Oit::new(device)),
             l1_uniform_bg,
             l4_uniform_bg,
             step_bg,
@@ -839,8 +858,19 @@ impl Set {
         queue.write_buffer(&self.counts, 0, &initial_counts(self.capacity, self.has_spawn));
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) {
+    /// **Takes a device because a Set can own render targets.** Under `blend
+    /// weighted` it holds two of them and they are the size of the frame, so a
+    /// resize is a reallocation — the same shape as [`Present::resize`] and
+    /// [`Deck::resize`](crate::deck::Deck::resize), which is what every other
+    /// owner of a target in this engine already does. Under `additive` the
+    /// device is unused and this is the one-line assignment it always was.
+    ///
+    /// Never from the render thread mid-frame, on those same terms.
+    pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         self.viewport = [width.max(1) as f32, height.max(1) as f32];
+        if let Some(oit) = &mut self.oit {
+            oit.resize(device, width, height);
+        }
     }
 
     /// What [`Set::resize`] last set, as it was clamped. The camera's aspect
@@ -1194,6 +1224,18 @@ impl Set {
                 .vec3("cam_up", basis.up);
         } else {
             p.vec2("viewport", self.viewport).mat4("camera", camera);
+            // **The same camera the matrix above came from**, which is the whole
+            // point of writing it here rather than picking a scene scale: a
+            // weighted fragment is weighed by where it sits between the planes
+            // it was projected with. Packed as `(near, 1 / (far - near))` so the
+            // shader multiplies rather than divides, and present only for the
+            // mode that declares it — the packer panics on a field the layout
+            // does not have, which is what keeps these two halves from drifting.
+            if self.oit.is_some() {
+                let near = self.camera.near;
+                let span = (self.camera.far - near).max(f32::MIN_POSITIVE);
+                p.vec2("depth_range", [near, 1.0 / span]);
+            }
         }
         for name in &self.l4_param_names {
             p.f32(name, effective(bindings, params, Kind::L4, name));
@@ -1474,46 +1516,75 @@ impl Set {
     /// Nothing here touches `t`, `steps_taken` or `parity`. That is what lets
     /// an operator look at an `Allocated` slot without the act of looking
     /// moving it — see [`Deck::set_preview`](crate::deck::Deck::set_preview).
+    /// **Two shapes of draw, and the geometry is the same in both.** Under
+    /// `blend additive` the L4 pass writes straight into `target`. Under
+    /// `weighted` it writes into two accumulation targets instead, and a second
+    /// pass resolves those into `target` — which comes out holding exactly what
+    /// the additive path would have left there, colour premultiplied by coverage
+    /// and coverage in alpha, so nothing downstream can tell which mode ran.
+    /// See [`crate::oit`].
     pub fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
         let render_parity = usize::from(self.parity);
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("L4"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: target,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        // `TRANSPARENT`, not `BLACK`: alpha in this target is
-                        // coverage, accumulated by the blend state below, and
-                        // it has to start at "nothing drew here". `BLACK` is
-                        // opaque black and would hand the L5 mix a slot that
-                        // covers the frame before a single sprite has run.
-                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-            pass.set_pipeline(&self.render);
-            pass.set_bind_group(group::UNIFORMS, &self.l4_uniform_bg, &[]);
-            if self.fullscreen {
-                // Three vertices, one instance, and no indirect read: the count
-                // is a property of the shape rather than of how many elements
-                // survived. See `FULLSCREEN_VS` for why it is a triangle and
-                // not a quad.
-                pass.draw(0..3, 0..1);
-                return;
+        if let Some(oit) = &self.oit {
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("L4 (weighted)"),
+                    color_attachments: &oit.attachments(),
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                self.record_geometry(&mut pass, render_parity);
             }
-            pass.set_bind_group(group::ATTRS, &self.l4_attr_bg[render_parity], &[]);
-            // The instance count is GPU state now, so this is indirect even
-            // for a static procedure whose count the host does know — one
-            // render path rather than two, at the cost of one buffer read
-            // the command processor was going to do anyway.
-            pass.draw_indirect(&self.counts, counts::DRAW);
+            oit.resolve_into(encoder, target);
+            return;
         }
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("L4"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    // `TRANSPARENT`, not `BLACK`: alpha in this target is
+                    // coverage, accumulated by the blend state the pipeline
+                    // carries, and it has to start at "nothing drew here".
+                    // `BLACK` is opaque black and would hand the L5 mix a slot
+                    // that covers the frame before a single sprite has run.
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        self.record_geometry(&mut pass, render_parity);
+    }
+
+    /// The draw itself, into whatever pass the caller opened.
+    ///
+    /// One copy for the same reason [`Set::draw`] is one copy: the blend mode
+    /// changes what the fragments are written *into* and nothing about which
+    /// primitives run, so two transcriptions of "a triangle, or every element
+    /// indirectly" is how the two modes would come to draw different geometry.
+    fn record_geometry(&self, pass: &mut wgpu::RenderPass<'_>, render_parity: usize) {
+        pass.set_pipeline(&self.render);
+        pass.set_bind_group(group::UNIFORMS, &self.l4_uniform_bg, &[]);
+        if self.fullscreen {
+            // Three vertices, one instance, and no indirect read: the count
+            // is a property of the shape rather than of how many elements
+            // survived. See `FULLSCREEN_VS` for why it is a triangle and
+            // not a quad.
+            pass.draw(0..3, 0..1);
+            return;
+        }
+        pass.set_bind_group(group::ATTRS, &self.l4_attr_bg[render_parity], &[]);
+        // The instance count is GPU state now, so this is indirect even
+        // for a static procedure whose count the host does know — one
+        // render path rather than two, at the cost of one buffer read
+        // the command processor was going to do anyway.
+        pass.draw_indirect(&self.counts, counts::DRAW);
     }
 }
 

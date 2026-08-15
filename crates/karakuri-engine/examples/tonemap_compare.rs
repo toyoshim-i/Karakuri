@@ -172,7 +172,7 @@ fn material_exposure_sweep(gpu: &Gpu, l1: &Checked, l4: &Checked, out_dir: &Path
     for material_exposure in material_exposures {
         let mut set = Set::build(&gpu.device, &gpu.queue, l1, l4, CAPACITY, SEED)
             .expect("spark_fountain + soft_points must build");
-        set.resize(WIDTH, HEIGHT);
+        set.resize(&gpu.device, WIDTH, HEIGHT);
         *set
             .params
             .get_mut("exposure")
@@ -208,7 +208,7 @@ fn main() {
         let l1 = compile(Path::new(l1_path));
         let mut set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, SEED)
             .unwrap_or_else(|e| panic!("{scene_name} + soft_points: {e}"));
-        set.resize(WIDTH, HEIGHT);
+        set.resize(&gpu.device, WIDTH, HEIGHT);
 
         let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba8UnormSrgb, WIDTH, HEIGHT);
         warm_up(&gpu, &mut set, &present);

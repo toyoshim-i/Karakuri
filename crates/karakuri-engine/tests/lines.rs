@@ -111,7 +111,7 @@ fn draw(gpu: &Gpu, l1: &str, l4: &str) -> Vec<[f32; 4]> {
     let mut set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, 1, 7).expect("a compatible pair");
     // Without this the viewport uniform is 1x1 and every width in pixels is
     // meaningless — the one piece of engine state the expansion depends on.
-    set.resize(W, H);
+    set.resize(&gpu.device, W, H);
 
     let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba16Float, W, H);
     set.prepare(&gpu.queue, 1, &Signals::default());

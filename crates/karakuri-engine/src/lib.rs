@@ -28,6 +28,9 @@ pub mod deck;
 pub mod governor;
 pub mod gpu;
 pub mod meter;
+/// Private: `blend weighted` is declared in a `.kir` and everything about how
+/// it is run belongs to [`set`]. Nothing outside chooses these targets.
+mod oit;
 pub mod points;
 pub mod present;
 pub mod probe;
