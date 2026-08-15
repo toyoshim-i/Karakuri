@@ -219,6 +219,98 @@ const DEMO_SCRIPT: &[(f32, char)] = &[
 /// than as something new.
 const DEMO_LOOP_SECONDS: f32 = 27.0;
 
+/// **The two topologies, over geometry that does not change**, as a list of
+/// `(seconds, key)` on the same terms as [`DEMO_SCRIPT`].
+///
+/// `v` cycles what the output shows — the mix, then each slot alone — and this
+/// script does nothing else, because there is nothing else to do: the deck
+/// holds one L1 file paired with a sprite renderer in slot 0 and a stroke
+/// renderer in slot 1, so cycling the preview *is* the demonstration. What a
+/// watcher sees is the same cloud, in the same places, at the same instant,
+/// drawn two ways.
+///
+/// The mix comes first and last on purpose. Both slots composited is the state
+/// that shows they are the same geometry — the strokes lie along the dots —
+/// and each slot alone is what shows how different the two look when the other
+/// is not there to anchor it.
+///
+/// **Nothing here presses a key that only means something to someone who was
+/// told what to expect.** Each `v` produces a visibly different frame on its
+/// own, which is the property [`DEMO_SCRIPT`]'s first entry deliberately does
+/// not have and has to say so.
+const DEMO_LINES_SCRIPT: &[(f32, char)] = &[
+    // Five seconds of the mix: strokes and sprites over each other.
+    (5.0, 'v'), // slot 0 alone — sprites
+    (10.0, 'v'), // slot 1 alone — strokes, the same elements
+    (15.0, 'v'), // back to the mix
+];
+
+/// One pass through [`DEMO_LINES_SCRIPT`], with five seconds of the mix after
+/// the last press before it starts over.
+const DEMO_LINES_LOOP_SECONDS: f32 = 20.0;
+
+/// Which demonstration `--demo` runs.
+///
+/// A named script rather than a flag, because there is now more than one thing
+/// worth showing and a single `--demo` would have to pick. Each is a
+/// demonstration harness and not a feature: both drive [`Live::key`], so
+/// neither can do anything a person at the keyboard could not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Demo {
+    /// The transport: beat sync engaged, scrubbed two bars back, held, and run
+    /// forward past where it was.
+    Transport,
+    /// `topology lines`: one L1, drawn as sprites and as strokes.
+    Lines,
+}
+
+impl Demo {
+    fn from_name(name: &str) -> Option<Demo> {
+        match name {
+            "transport" => Some(Demo::Transport),
+            "lines" => Some(Demo::Lines),
+            _ => None,
+        }
+    }
+
+    fn script(self) -> &'static [(f32, char)] {
+        match self {
+            Demo::Transport => DEMO_SCRIPT,
+            Demo::Lines => DEMO_LINES_SCRIPT,
+        }
+    }
+
+    fn loop_seconds(self) -> f32 {
+        match self {
+            Demo::Transport => DEMO_LOOP_SECONDS,
+            Demo::Lines => DEMO_LINES_LOOP_SECONDS,
+        }
+    }
+
+    /// The deck this demonstration needs, for a run that named no material.
+    ///
+    /// **A demonstration that requires the operator to assemble the scene is
+    /// not one.** `--demo lines` is about two renderers over one geometry, and
+    /// a watcher handed a one-slot deck sees the script cycle a preview between
+    /// the mix and the only thing in it. Overridden the moment any `--set` is
+    /// given, so this supplies a scene rather than imposing one.
+    fn deck(self) -> Vec<(PathBuf, PathBuf)> {
+        match self {
+            Demo::Transport => Vec::new(),
+            Demo::Lines => vec![
+                (
+                    "examples/drift_shell.kir".into(),
+                    "examples/soft_points.kir".into(),
+                ),
+                (
+                    "examples/drift_shell.kir".into(),
+                    "examples/drift_streaks.kir".into(),
+                ),
+            ],
+        }
+    }
+}
+
 /// Where the store lives when nothing says otherwise. A directory in the
 /// working tree rather than under `$HOME`: a session's material belongs beside
 /// the session, and a global store shared by every run is a decision an
@@ -364,10 +456,17 @@ options:
                         material comes from the stream's head and every frame
                         advances by the `tick` that was recorded, so nothing
                         reads a clock. Needs --render or --seq
-  --demo                drive the transport from a script instead of the
-                        keyboard, so a window shows it without anyone at one.
-                        A demonstration harness: it presses `y`, `u` and `i`
-                        and can do nothing a person could not
+  --demo NAME           drive the deck from a script instead of the keyboard,
+                        so a window shows it without anyone at one. A
+                        demonstration harness: it presses keys and can do
+                        nothing a person could not.
+                          transport   beat sync engaged, scrubbed two bars
+                                      back, held, then run forward past where
+                                      it was
+                          lines       one L1 drawn as sprites and as strokes,
+                                      cycling the preview between them. Brings
+                                      its own two-slot deck unless --set says
+                                      otherwise
   --watch               recompile and swap the slot whose files changed
   --budget-ms MS        frame budget a swapped-in Set is held to
   -h, --help            this
@@ -628,9 +727,9 @@ struct Args {
     /// that a file could be read would be adding surface to carry a value
     /// rather than to be used.
     from_set: Option<(Option<u32>, Option<karakuri_engine::camera::Orbit>)>,
-    /// Drive the transport from [`DEMO_SCRIPT`] instead of waiting for a
-    /// keyboard. A demonstration harness, not a feature: it presses keys.
-    demo: bool,
+    /// Drive the deck from a named script instead of waiting for a keyboard.
+    /// A demonstration harness, not a feature: it presses keys.
+    demo: Option<Demo>,
     /// The frame budget the watchdog holds a swapped-in Set to, in
     /// milliseconds. Exposed mostly so that rollback can be provoked on
     /// demand — `--budget-ms 0` rejects everything — rather than only by
@@ -908,7 +1007,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         midi_map: None,
         latency_offset_ms: audio::DEFAULT_LATENCY_OFFSET_MS,
         budget_ms: DEFAULT_BUDGET_MS,
-        demo: false,
+        demo: None,
         store: PathBuf::from(DEFAULT_STORE),
         save_set: None,
         load_set: None,
@@ -1036,7 +1135,12 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                 }
             }
             "--watch" => args_out.watch = true,
-            "--demo" => args_out.demo = true,
+            "--demo" => {
+                let name = value_for("--demo", &mut it)?;
+                args_out.demo = Some(Demo::from_name(&name).ok_or_else(|| {
+                    format!("no demonstration named `{name}` — `transport` or `lines`")
+                })?);
+            }
             "--store" => args_out.store = PathBuf::from(value_for("--store", &mut it)?),
             "--save-set" => args_out.save_set = Some(value_for("--save-set", &mut it)?),
             "--load-set" => args_out.load_set = Some(value_for("--load-set", &mut it)?),
@@ -1088,10 +1192,16 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
     // not merely extra, it is a `--bind` from the file landing on material that
     // has no such parameter and saying so.
     if args_out.sets.is_empty() && args_out.load_set.is_none() {
-        args_out.sets.push((
-            "examples/drift_shell.kir".into(),
-            "examples/soft_points.kir".into(),
-        ));
+        // A demonstration that needs a particular scene brings it, because one
+        // that asks the operator to assemble it first is not a demonstration.
+        // Only when nothing else named material: `--set` still wins.
+        match args_out.demo.map(Demo::deck).filter(|d| !d.is_empty()) {
+            Some(deck) => args_out.sets = deck,
+            None => args_out.sets.push((
+                "examples/drift_shell.kir".into(),
+                "examples/soft_points.kir".into(),
+            )),
+        }
     }
     // Refused rather than resolved: a Set file describes the material, and two
     // `.kir` paths describe the material, and a run given both has been told
@@ -2369,9 +2479,9 @@ struct Live {
     /// path pushes into it and never blocks or allocates — see
     /// [`crate::session`].
     recorder: Option<session::Recorder>,
-    /// How far into [`DEMO_SCRIPT`] the run is, or `None` when `--demo` was not
-    /// given and nothing drives itself.
-    demo: Option<usize>,
+    /// Which demonstration is running and how far into its script, or `None`
+    /// when `--demo` was not given and nothing drives itself.
+    demo: Option<(Demo, usize)>,
     /// When the current pass through [`DEMO_SCRIPT`] started. The script loops,
     /// so this is not [`Live::started`]: that one is the session's origin and a
     /// tap is measured from it.
@@ -2653,7 +2763,7 @@ impl ApplicationHandler for App {
             status_at: Instant::now(),
             frames_since_status: 0,
             status: String::with_capacity(256),
-            demo: self.args.demo.then_some(0),
+            demo: self.args.demo.map(|d| (d, 0)),
             recorder,
             demo_started: Instant::now(),
         };
@@ -2807,12 +2917,13 @@ impl Live {
     /// presses goes through [`Live::key`], so it can do nothing a person at the
     /// keyboard could not.
     fn run_demo(&mut self) {
-        let Some(next) = self.demo else {
+        let Some((demo, next)) = self.demo else {
             return;
         };
+        let script = demo.script();
         let elapsed = self.demo_started.elapsed().as_secs_f32();
         let mut at = next;
-        while let Some((due, key)) = DEMO_SCRIPT.get(at) {
+        while let Some((due, key)) = script.get(at) {
             if elapsed < *due {
                 break;
             }
@@ -2821,14 +2932,14 @@ impl Live {
             at += 1;
         }
         // **It loops**, because a demonstration nobody happened to be looking
-        // at is a demonstration that did not happen. The whole script is under
-        // twenty seconds and it starts over, so glancing at the window at any
-        // moment eventually shows the thing.
-        if at >= DEMO_SCRIPT.len() && elapsed >= DEMO_LOOP_SECONDS {
+        // at is a demonstration that did not happen. Every script is under half
+        // a minute and starts over, so glancing at the window at any moment
+        // eventually shows the thing.
+        if at >= script.len() && elapsed >= demo.loop_seconds() {
             self.demo_started = Instant::now();
             at = 0;
         }
-        self.demo = Some(at);
+        self.demo = Some((demo, at));
     }
 
     /// **Whatever the control surface did since the last frame**, as the same
@@ -4169,6 +4280,71 @@ mod tests {
                 PathBuf::from("examples/soft_points.kir"),
             )]
         );
+    }
+
+    /// **A demonstration brings the scene it is about.** `--demo lines` cycles
+    /// the preview between the mix and each slot, and on the one-slot default
+    /// deck that shows the same picture twice — the demonstration would run,
+    /// look like it worked, and demonstrate nothing.
+    #[test]
+    fn the_lines_demo_supplies_its_own_two_slot_deck() {
+        let args = parse(&["--demo", "lines"]).expect("should parse");
+        assert_eq!(
+            args.sets,
+            vec![
+                (
+                    PathBuf::from("examples/drift_shell.kir"),
+                    PathBuf::from("examples/soft_points.kir"),
+                ),
+                (
+                    PathBuf::from("examples/drift_shell.kir"),
+                    PathBuf::from("examples/drift_streaks.kir"),
+                ),
+            ],
+            "the two slots differ only in their L4, which is the whole demonstration"
+        );
+    }
+
+    /// And supplies it rather than imposing it: material named on the command
+    /// line still wins, so `--demo lines` over someone else's pair shows their
+    /// material and not the examples.
+    #[test]
+    fn material_on_the_command_line_beats_a_demos_own_deck() {
+        let args = parse(&["--demo", "lines", "a.kir", "b.kir"]).expect("should parse");
+        assert_eq!(
+            args.sets,
+            vec![(PathBuf::from("a.kir"), PathBuf::from("b.kir"))]
+        );
+    }
+
+    /// The transport demonstration works on whatever is loaded, so it brings
+    /// nothing and the ordinary default still applies. The control for the two
+    /// above: a `deck()` that answered the same for every demonstration would
+    /// satisfy them and break this.
+    #[test]
+    fn the_transport_demo_leaves_the_default_pair_alone() {
+        let args = parse(&["--demo", "transport"]).expect("should parse");
+        assert_eq!(
+            args.sets,
+            vec![(
+                PathBuf::from("examples/drift_shell.kir"),
+                PathBuf::from("examples/soft_points.kir"),
+            )]
+        );
+    }
+
+    /// Both scripts must end after their last press, or the loop restarts
+    /// mid-gesture and what a watcher sees depends on when they looked.
+    #[test]
+    fn every_demo_script_finishes_before_it_loops() {
+        for demo in [Demo::Transport, Demo::Lines] {
+            let last = demo.script().last().expect("a script with entries").0;
+            assert!(
+                demo.loop_seconds() > last,
+                "{demo:?} loops at {}s, before its last press at {last}s",
+                demo.loop_seconds()
+            );
+        }
     }
 
     #[test]

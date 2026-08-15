@@ -187,7 +187,7 @@ run reads a microphone — so what comes back is the performance and not just th
 | `--param name=value` | a uniform write, applied to every Set |
 | `--bind FIELDS` | attach a signal to a parameter — `layer=L1,key=turbulence,signal=energy,range=0.0..3.0` |
 | `--watch` | recompile and hot-swap when a `.kir` changes |
-| `--demo` | drive itself from a script, for showing rather than playing |
+| `--demo NAME` | drive itself from a script, for showing rather than playing. `transport` scrubs the beat clock; `lines` draws one L1 as sprites and as strokes and brings its own two-slot deck. Both loop |
 
 **Size**
 
