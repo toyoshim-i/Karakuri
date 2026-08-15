@@ -1145,3 +1145,126 @@ proc strands {
     let checked = check_ok(src);
     assert_eq!(checked.topology, Some(Topology::Lines));
 }
+
+// ---------------------------------------------------------------------------
+// `fullscreen`: an L4 with no `vertex` block draws the frame.
+// ---------------------------------------------------------------------------
+
+/// The declaration is the absence. A procedure with nothing to place per
+/// element has nothing for a vertex block to do, so not having one is how it
+/// says it covers the frame.
+#[test]
+fn an_l4_with_no_vertex_block_is_inferred_to_draw_the_whole_frame() {
+    let src = r#"
+proc marcher {
+  kind  L4
+  blend additive
+
+  fragment {
+    let d = length(ray) + length(eye) + point_coord.x;
+    color = vec4(d, d, d, 1.0);
+  }
+}
+"#;
+    let checked = check_ok(src);
+    assert_eq!(checked.topology, Some(Topology::Fullscreen));
+}
+
+/// **The rule that makes skipping the paired L1's simulation provable.** With
+/// no vertex block there is nowhere to read an element from, so a `consumes`
+/// here is a claim the procedure cannot honour.
+#[test]
+fn a_fullscreen_l4_that_consumes_attributes_is_rejected() {
+    let src = r#"
+proc marcher {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+    let errs = check_err(src);
+    assert!(
+        errs.iter().any(|e| e.message.contains("whole frame")
+            && e.hint.as_deref().unwrap_or_default().contains("vertex")),
+        "expected a diagnostic pairing the two, got: {errs:?}"
+    );
+}
+
+/// `eye` and `ray` are fragment-only, and an L4 with a vertex block is
+/// per-element, where a ray through a fragment is not a thing a vertex has.
+#[test]
+fn the_ray_ambients_are_refused_in_a_vertex_block() {
+    let src = r#"
+proc misplaced {
+  kind  L4
+  blend additive
+
+  vertex {
+    clip       = vec4(ray, 1.0);
+    point_size = 1.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+    let errs = check_err(src);
+    assert!(
+        errs.iter().any(|e| e.message.contains("ray")),
+        "expected a diagnostic naming `ray`, got: {errs:?}"
+    );
+}
+
+/// `fullscreen` is a renderer, not geometry. The value exists on the shared
+/// field because an L4's inferred answer and an L1's declaration live there
+/// together; an L1 declaring it is refused where it is written.
+#[test]
+fn an_l1_declaring_fullscreen_is_rejected() {
+    let src = r#"
+proc bad {
+  kind     L1
+  topology fullscreen
+  capacity [1, 64] = 8
+
+  emit position
+
+  element {
+    position = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#;
+    let errs = check_err(src);
+    assert!(
+        errs.iter().any(|e| e.message.contains("not geometry")
+            && e.hint.as_deref().unwrap_or_default().contains("vertex")),
+        "expected the diagnostic to say how an L4 does say it, got: {errs:?}"
+    );
+}
+
+/// The control: an L4 *with* a vertex block is still per-element, so removing
+/// the block is what changes the answer rather than the answer being fixed.
+#[test]
+fn an_l4_with_a_vertex_block_is_not_fullscreen() {
+    let src = r#"
+proc sprites {
+  kind  L4
+  blend additive
+
+  vertex {
+    clip       = vec4(0.0, 0.0, 0.0, 1.0);
+    point_size = 2.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+    assert_eq!(check_ok(src).topology, Some(Topology::Points));
+}

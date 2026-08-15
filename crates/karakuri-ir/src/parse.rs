@@ -457,6 +457,10 @@ impl Parser {
         match name.as_str() {
             "points" => Some(Topology::Points),
             "lines" => Some(Topology::Lines),
+            // Parsed so that the *contract* check can say why it is wrong here
+            // rather than the parser saying the word does not exist. It does
+            // exist; it is not something geometry can be.
+            "fullscreen" => Some(Topology::Fullscreen),
             _ => {
                 self.error_with_hint(
                     span,
