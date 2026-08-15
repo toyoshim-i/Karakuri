@@ -362,6 +362,23 @@ A run that *cannot* be edited — `--render`, `--seq`, `--replay`, or a window w
 neither `--watch` nor `--mcp` — copies nothing and creates no directory. It opens
 every file read-only, so there is nothing to protect them from.
 
+**A Set loaded with `--load-set` is materialised here too**, under its procedures'
+own names, even though it has no `.kir` anywhere — it names them by hash and the
+sources come out of the store. So a saved Set can be watched, edited and driven
+over MCP like any other material:
+
+```sh
+cargo run -p karakuri-cli -- --load-set night01 --watch --mcp 8737
+```
+
+That used to be refused, because there was nothing on disk for a model to read.
+
+**What is still missing is the other end of that loop.** `--save-set` writes
+what the flags say and exits, so there is no way to save the version you like
+*from a running session* — you can load, edit and watch, but keeping the result
+means noting which file in the history you wanted and starting a run from it.
+A control that saves the current material is not built.
+
 ### The edit history
 
 Every version that **compiles** is kept, whoever wrote it:

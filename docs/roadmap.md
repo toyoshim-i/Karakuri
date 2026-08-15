@@ -982,6 +982,17 @@ better code immediately. So resources stay a curated few and *search* over a lar
 a tool call — which is also the only way round the fact that `resources/list` is a list a
 client reads in full.
 
+**One gap the three-place layout opened and did not close.** A user preset can
+now be loaded into the scratch, edited by a hand or a model, and every version
+that compiles is kept — but **nothing saves the result from a running session**.
+`--save-set` writes what the flags say and exits, so the loop ends at "find the
+version you liked in `<store>/history/` and start a run from it". What it wants
+is one control that writes the current material as a Set, reachable from a key,
+from MCP, and from whatever surface M5 builds — the same three-way reach every
+other control in this system has. Small, and it is the difference between a
+library you can put things into and one you can only put things into before you
+start playing.
+
 **Adds**
 
 - Library thumbnails. Every artifact gets a short loop and a still at promotion time, for
