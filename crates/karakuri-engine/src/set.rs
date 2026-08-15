@@ -321,6 +321,17 @@ impl Set {
             });
         }
 
+        // **There is deliberately no third check, comparing the two
+        // topologies.** An L1 declares one and an L4 now carries an inferred
+        // one, so the comparison is available and looks principled — and it
+        // would refuse the pairing M3 exists to enable: the same cloud drawn
+        // as sprites by one L4 and as streaks by another. A segment under
+        // `Topology::Lines` gets both of its ends from attributes the L4
+        // consumes, so a renderer needs nothing from the geometry beyond what
+        // the composition check above already verifies. The declaration on
+        // the L1 side says what the geometry is *meant to read as*; it
+        // constrains no renderer, and requiring the two to agree would invent
+        // a dependency the lowering does not have.
         let range = l1
             .capacity
             .ok_or_else(|| SetError::NoCapacity(l1.name.clone()))?;

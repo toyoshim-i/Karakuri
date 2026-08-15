@@ -60,7 +60,7 @@ V1 implements L1 and L4 inside a single Set. The full model:
 | L1 | Geometry generation. Vertices, particles, SDF builtins used inline. **"Used inline" is aspirational**: the SDF builtins compile, and no example uses one, because the shape they describe has nothing to draw it. The first-class `Field` type is M3 | M1 |
 | L2 | Deformation and motion. Time-axis modulation, physics | M3 |
 | L3 | Camera and space. Viewpoint, motion grammars | M3 |
-| L4 | Render and material. Raster, raymarch, splatting | M1 for *one* raster mode; raymarch and splatting are unbuilt |
+| L4 | Render and material. Raster, raymarch, splatting | M1 for sprites, M3 for segments; raymarch and splatting are unbuilt |
 | L5 | Composite. Set mixing, transitions, post, output routing | M2 |
 
 Orthogonal to the layers:
@@ -121,9 +121,16 @@ Each layer composes differently, and each needs its own semantics.
 - **L3 multiple** — weighted blend or cut. Blending interpolates trajectories, so an orbit
   and a handheld rig can be mixed at 0.3.
 - **L4 multiple** — overdraw on shared geometry. The same point cloud drawn as points, and
-  as lines between neighbours, and as an SDF raymarch. Geometry is shared, so the marginal
-  cost is one draw pass. This is the cheapest visual variety per unit of GPU time in the
-  whole system, and it is the payoff for being primitive-centric.
+  as segments, and as an SDF raymarch. Geometry is shared, so the marginal cost is one draw
+  pass. This is the cheapest visual variety per unit of GPU time in the whole system, and it
+  is the payoff for being primitive-centric.
+
+  **Half of this arrived early and the expensive half did not.** `topology lines` means one
+  L1 can be paired with a sprite renderer and a stroke renderer, and nothing in the language
+  or the pairing rules objects — `examples/drift_shell.kir` has both. But a Set owns its
+  element buffers, so putting that L1 in two slots steps it twice: today the marginal cost
+  is a whole second simulation, not one draw pass. **Sharing the geometry is what is left**,
+  and it is the part that needs a Set to stop being the unit that owns everything.
 
 ---
 
@@ -795,40 +802,75 @@ fine alone and is unreadable next to lights.
 
 **First, and before any of the list below: more than one way to draw.**
 
-`Topology` has one value and `Blend` has one value. Every frame this project has ever
-rendered is an additive point sprite, and every example looks like a relative of every other
-for that reason and no other. No amount of L2 amplification, cross-source interpolation or
-graph compilation changes what a pixel can be while that is true — those multiply the ways
-geometry can be *arranged*, over a single way it can be *seen*.
+`Topology` had one value and `Blend` had one value. Every frame this project had ever
+rendered was an additive point sprite, and every example looked like a relative of every
+other for that reason and no other. No amount of L2 amplification, cross-source
+interpolation or graph compilation changes what a pixel can be while that is true — those
+multiply the ways geometry can be *arranged*, over a single way it can be *seen*.
 
-The vocabulary already says so. `sd_sphere`, `sd_box`, `sd_torus`, `sd_plane`, `op_union`,
-`op_smooth_union`, `op_subtract` and `op_intersect` pass the checker today, appear in no
-example, and have nothing that could consume them: an SDF is a shape you march, and nothing
-marches. **A language that speaks a rendering mode its engine cannot run is a design saying
-out loud what it is missing.**
+**`Topology::Lines` is built**, and it is the cheapest thing in this milestone by a wide
+margin. Three things about how it landed are worth carrying.
 
-Three additions, roughly in order of what they buy per unit of work:
+**It cost the engine nothing.** A line primitive in WebGPU is one pixel wide, exactly as a
+point primitive is, so `lines` is the *same quad* the sprite path already expands: six
+vertices per instance, a `TriangleList` pipeline, the same indirect draw arguments,
+`VERTICES_PER_ELEMENT` unchanged. Only where the six corners land differs. Nothing in
+`karakuri-engine` was touched to add a rendering mode — which is the bet the enum was
+declared with one variant to make, paying off exactly as stated.
 
-- **Lines.** `Topology::Lines`, drawn between elements a procedure nominates. Trails,
-  wireframes, constellations, connective structure — none of which is expressible now, all
-  of which reuses the element buffers exactly as they are. The cheapest large gain available.
+**The connectivity question answered itself in the opposite direction from the plan.** This
+bullet used to read "drawn between elements a procedure nominates", and nomination is
+precisely what compaction forbids: an element naming another is an index into the element
+buffer, and the scan moves elements between steps, so the one shape that expresses a shared
+vertex is the one that spawning material invalidates. **A segment whose two ends both belong
+to one element has no such dependency.** A polyline is *n* segments, a trail is one segment
+per particle, and both survive spawning and killing because neither refers to anything
+outside itself. It costs the duplication of shared endpoints, which is the price of the
+primitive being smaller than the gesture — the same answer transitions gave in M2, arrived
+at from a different direction.
+
+**It closed the "give an L4 a way to say what it renders" question below, without adding a
+declaration.** An L4 draws segments by assigning `clip_b`, a second clip-space endpoint, and
+sprites by not assigning it; the check pass infers the topology from that and records it in
+`Checked::topology`, which was previously an L1-only field. A `topology` line on an L4 header
+would have been a second place for one fact to be stated and a first place for a file to
+contradict its own `vertex` block. **`blend` is not the same shape** and should not be given
+the same treatment: nothing an L4 writes could imply `weighted` over `additive`, because the
+two differ in how identical assignments are combined.
+
+**And a check that looked principled turned out to be wrong.** With a topology on both sides
+it is natural to refuse a pair that disagrees, and `Set::build` briefly did. It would have
+forbidden the one thing this milestone exists for: the same cloud drawn as sprites by one L4
+and as strokes by another. A segment gets both ends from attributes the L4 already
+`consumes`, so a renderer needs *nothing* from the geometry that the composition check does
+not already cover, and requiring agreement invents a dependency the lowering does not have.
+The declaration on the L1 side says what the geometry is meant to read as; it constrains no
+renderer.
+
+Two additions remain, and the vocabulary still says so. `sd_sphere`, `sd_box`, `sd_torus`,
+`sd_plane`, `op_union`, `op_smooth_union`, `op_subtract` and `op_intersect` pass the checker
+today, appear in no example, and have nothing that could consume them: an SDF is a shape you
+march, and nothing marches. **A language that speaks a rendering mode its engine cannot run
+is a design saying out loud what it is missing.**
+
 - **A fullscreen L4.** A procedure that draws no geometry and marches an SDF instead. This is
   what the eight orphan builtins are for, and it is also the shape M3's `Field` wants: the
   extraction the last section of this document describes — an LLM pulling the SDF out of a
   shader and discarding the raymarch loop — has nowhere to put the result until a fullscreen
-  node exists.
+  node exists. **This is now the largest single gap in what the system can express**, and
+  unlike `lines` it will not be free: there is no element buffer to instance over, so it is
+  a second draw shape rather than a second placement of the same one.
 - **`blend weighted`.** Already listed below, and it is the other half of the point-sprite
-  monotony: additive is why everything glows.
+  monotony: additive is why everything glows. Lines did not change that — a stroke glows
+  exactly as a sprite does.
 
-`Blend` and `Topology` were both declared as enums with one variant precisely so this would
-be an addition rather than a format change. That bet is now due.
-
-**How hard the limit actually bites** was measured once, by accident: asked for line art, a
-model denied a line primitive decomposed `seed` into a strand id and a position along a
-strand, laid points densely along an analytic curve, and moved hue and width from the
-element to the strand. It works — it reads as strokes. It cost half the element budget and a
-technique nobody finds without being forced into it. That is the shape of the limit: not
-"only one look is possible" but "every other look is paid for twice".
+**How hard the old limit actually bit** was measured once, by accident, and the measurement
+is now a fixed point to compare against: asked for line art, a model denied a line primitive
+decomposed `seed` into a strand id and a position along a strand, laid points densely along
+an analytic curve, and moved hue and width from the element to the strand. It works — it
+reads as strokes. It cost roughly twice the elements and a technique nobody finds without
+being forced into it. `examples/strand_shell.kir` is kept as written for that reason, beside
+`examples/drift_streaks.kir`, which gets the same look out of one assignment.
 
 **Adds**
 
@@ -874,10 +916,15 @@ technique nobody finds without being forced into it. That is the shape of the li
   same struct over the same buffer. That is the slot interface contract arriving early and
   informally. When the contract becomes a real declaration, it should subsume this rather
   than sit beside it.
-- **Give an L4 procedure a way to say what it renders.** Quad expansion is justified by
-  `topology points`, but `topology` is declared on the L1 header and a checked L4 tree has
-  no field for it. One topology and one blend mode hide the problem; M3 adds a second of
-  each.
+- ~~**Give an L4 procedure a way to say what it renders.**~~ **Done, and the answer was to
+  add no declaration at all.** The problem was real: quad expansion was justified by
+  `topology points` while `topology` was an L1 header field a checked L4 tree had no
+  counterpart for. What closed it is *inference* — an L4 that assigns `clip_b` is drawing a
+  segment and there is nothing else it could be doing, so the check pass reads it off the
+  `vertex` block and fills in `Checked::topology`. One place for the fact, and no way for a
+  file to disagree with itself. The same move does **not** work for `blend`, which is why it
+  stays declared: two blend modes differ in how identical assignments are combined, so
+  nothing an L4 writes distinguishes them.
 
 ~8–10 weeks.
 

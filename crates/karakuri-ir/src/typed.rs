@@ -34,6 +34,24 @@ use crate::span::Span;
 pub struct Checked {
     pub name: String,
     pub kind: Kind,
+    /// **What the geometry is on an L1, and what the renderer draws on an L4.**
+    ///
+    /// Declared by an L1 file; *inferred* for an L4 from whether its `vertex`
+    /// block assigns [`Output::ClipB`], because a second endpoint is the only
+    /// thing that could make a procedure draw segments and a header field
+    /// would be a second place for the same fact to be wrong. `None` only
+    /// where checking already failed.
+    ///
+    /// One field for both because the two are the same question asked of the
+    /// two halves of a Set. Before `lines` existed this was an L1 field with
+    /// no L4 counterpart, which is what made `docs/roadmap.md`'s "give an L4 a
+    /// way to say what it renders" an open question.
+    ///
+    /// **The two halves are allowed to disagree**, and nothing compares them:
+    /// only the L4's value reaches lowering, and a line renderer needs nothing
+    /// of the geometry that Set composition does not already check. That is
+    /// what lets one L1 be drawn as sprites by one L4 and as strokes by
+    /// another. See the comment in `Set::build`.
     pub topology: Option<Topology>,
     pub capacity: Option<CapacityDecl>,
     pub blend: Option<Blend>,

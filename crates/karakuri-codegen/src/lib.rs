@@ -85,7 +85,7 @@ mod tests {
 
     use karakuri_ir::builtin::Builtin;
     use karakuri_ir::typed::{Checked, TBlock, TExpr, TExprKind, TStmt, Target};
-    use karakuri_ir::{Ambient, Attr, BinOp, BlockKind, Kind, Lit, Output, Param, Ty};
+    use karakuri_ir::{Ambient, Attr, BinOp, BlockKind, Kind, Lit, Output, Param, Topology, Ty};
 
     use crate::{generate_l1, generate_l4};
 
@@ -105,7 +105,11 @@ mod tests {
         Checked {
             name: name.to_string(),
             kind,
-            topology: None,
+            // Not `None`: an L4's topology is inferred by the check pass, and
+            // `generate_l4` reads it to choose the quad expansion. These are
+            // hand-built stand-ins for checked trees, so they carry what
+            // `check` would have put here.
+            topology: Some(Topology::Points),
             capacity: None,
             blend: None,
             params: Vec::new(),

@@ -1,11 +1,21 @@
-// Strands, not particles — and there is no line primitive.
+// Strands, not particles — made of points, on purpose.
 //
-// `topology` admits `points` and nothing else, so a line here is points laid
-// densely enough along a curve to read as one. `seed` is split into a **strand
-// id** and a **position along that strand** (512 x 256), and the curve is
-// analytic: a great circle on a randomly tilted basis, displaced by curl noise.
-// Both are continuous in the along-strand coordinate, so neighbouring samples
-// are neighbours in space and the eye joins them.
+// **There is a line primitive now**, and this file deliberately does not use
+// it: see `topology lines` and `examples/drift_streaks.kir`. It is kept as
+// written because what it does is still worth reading, and because it is the
+// measurement of what one topology cost. Asked for line art with only sprites
+// available, a model arrived at this — and it works.
+//
+// A line here is points laid densely enough along a curve to read as one.
+// `seed` is split into a **strand id** and a **position along that strand**
+// (512 x 256), and the curve is analytic: a great circle on a randomly tilted
+// basis, displaced by curl noise. Both are continuous in the along-strand
+// coordinate, so neighbouring samples are neighbours in space and the eye joins
+// them.
+//
+// What it costs against a real segment: roughly half the element budget, since
+// a stroke needs many samples where one segment would do, and a technique
+// nobody finds without being forced into it.
 //
 // **Why analytic rather than integrated.** The honest way to grow a strand is
 // to integrate a flow field from its root, one step per sample — and `for`

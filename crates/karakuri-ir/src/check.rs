@@ -44,10 +44,20 @@
 //! - **`point_size` is required unconditionally in an L4 `vertex` block.**
 //!   The rule as stated ("required when the source topology is points") is a
 //!   property of the *paired* L1 procedure's `topology`, which an L4 file
-//!   never declares and this pass never sees. Since v0.2's `Topology` enum
-//!   has exactly one inhabitant (`points`), the condition is always true in
-//!   practice, so this pass requires `point_size` unconditionally rather than
-//!   leaving it unchecked.
+//!   never declares and this pass never sees. It stays unconditional now that
+//!   `lines` exists, because it means something under both: a sprite's extent
+//!   and a stroke's width are the same number in the same units.
+//! - **What an L4 draws is inferred here, not declared.** Assigning
+//!   [`Output::ClipB`](crate::ast::Output::ClipB) — a segment's far end — is
+//!   the only thing that could make a procedure a line renderer, so this pass
+//!   reads it off the `vertex` block and records it in
+//!   [`Checked::topology`](crate::typed::Checked::topology), which is
+//!   otherwise an L1 field. Whether it agrees with the L1 it is paired with is
+//!   **not checked anywhere**, and deliberately: a segment gets both of its
+//!   ends from attributes the L4 consumes, so a renderer needs nothing of the
+//!   geometry beyond what the `emit`/`consumes` check at Set composition
+//!   already covers. Requiring agreement would forbid one L1 being drawn as
+//!   sprites by one L4 and as strokes by another.
 //! - **Attribute names are only readable/writable when declared.** The spec
 //!   states this explicitly for L4 ("Consumed attributes and seed are
 //!   readable in both blocks"); it does not restate it for L1, but the
@@ -95,7 +105,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
-    Ambient, Attr, BinOp, BlockKind, Expr, Kind, Lit, Output, Proc, Stmt, Ty, UnOp,
+    Ambient, Attr, BinOp, BlockKind, Expr, Kind, Lit, Output, Proc, Stmt, Topology, Ty, UnOp,
 };
 use crate::builtin::{Builtin, Domain, Shape};
 use crate::error::{IrError, IrResult, Stage};
@@ -127,7 +137,7 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
         errors.append(&mut checker.errors);
 
         let covered = coverage(&stmts);
-        for key in required_keys(block.kind, &emit_set) {
+        for key in required_keys(block.kind, &emit_set, assigns_clip_b(&stmts)) {
             if !covered.contains(&key) {
                 errors.push(
                     IrError::contract(
@@ -161,7 +171,13 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
         Ok(Checked {
             name: proc.name.clone(),
             kind: proc.kind,
-            topology: proc.topology,
+            // Declared on an L1, inferred on an L4 — see `Output::ClipB` and
+            // `Checked::topology`. An L4 that declared one was rejected by
+            // `check_header`, so this never overwrites something a file said.
+            topology: match proc.kind {
+                Kind::L1 => proc.topology,
+                Kind::L4 => Some(drawn_topology(&blocks)),
+            },
             capacity: proc.capacity,
             blend: proc.blend,
             params: proc.params.clone(),
@@ -175,6 +191,24 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
         })
     } else {
         Err(errors)
+    }
+}
+
+/// What an L4 procedure draws, read off its `vertex` block: a second endpoint
+/// means a segment, and there is nothing else it could mean.
+///
+/// A vertex block is required of every L4 and its absence was already reported,
+/// so a procedure with none falls back to `points` rather than being given a
+/// second diagnostic about a block it does not have.
+fn drawn_topology(blocks: &[TBlock]) -> Topology {
+    let assigns = blocks
+        .iter()
+        .find(|b| b.kind == BlockKind::Vertex)
+        .is_some_and(|b| assigns_clip_b(&b.stmts));
+    if assigns {
+        Topology::Lines
+    } else {
+        Topology::Points
     }
 }
 
@@ -269,8 +303,12 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             }
             if proc.topology.is_some() {
                 errors.push(
-                    IrError::contract(proc.span, "`topology` is L1 only")
-                        .with_hint("remove `topology`, or change `kind` to `L1`"),
+                    IrError::contract(proc.span, "`topology` is declared on L1 and inferred on L4")
+                        .with_hint(
+                            "remove `topology`: an L4 draws segments by assigning `clip_b` in \
+                             `vertex` and sprites by not assigning it, so declaring it here \
+                             would be a second place for the same fact to be wrong",
+                        ),
                 );
             }
             if proc.blend.is_none() {
@@ -651,13 +689,40 @@ impl CovKey {
     }
 }
 
-fn required_keys(block: BlockKind, emit: &HashSet<Attr>) -> Vec<CovKey> {
+/// Whether the block assigns [`Output::ClipB`] **anywhere**, including on a
+/// path coverage does not count — one arm of an `if`, or a `for` body.
+///
+/// Deliberately not the same question coverage asks. Mentioning `clip_b` is
+/// what makes it *required*, and then coverage decides whether it was assigned
+/// on every path: a procedure that writes a second endpoint under some
+/// condition and not others is drawing a segment sometimes and an
+/// uninitialised one the rest of the time, which is a diagnostic rather than a
+/// picture. Asking only the coverage question would silently accept it as a
+/// points procedure with a dead store.
+fn assigns_clip_b(stmts: &[TStmt]) -> bool {
+    stmts.iter().any(|s| match s {
+        TStmt::Assign { target, .. } => matches!(target, Target::Output(Output::ClipB)),
+        TStmt::If { then, els, .. } => assigns_clip_b(then) || assigns_clip_b(els),
+        TStmt::For { body, .. } => assigns_clip_b(body),
+        TStmt::Let { .. } | TStmt::Var { .. } | TStmt::Kill { .. } => false,
+    })
+}
+
+fn required_keys(block: BlockKind, emit: &HashSet<Attr>, draws_lines: bool) -> Vec<CovKey> {
     match block {
         BlockKind::Spawn | BlockKind::Element => emit.iter().map(|a| CovKey::Attr(*a)).collect(),
         // `point_size` is required unconditionally here — see the module
         // docs on why the literal "when the topology is points" condition
-        // cannot be evaluated from an L4 file alone.
-        BlockKind::Vertex => vec![CovKey::Output(Output::Clip), CovKey::Output(Output::PointSize)],
+        // cannot be evaluated from an L4 file alone. It stays required now
+        // that `lines` exists, because a segment has a width for the same
+        // reason a sprite has a size.
+        BlockKind::Vertex => {
+            let mut keys = vec![CovKey::Output(Output::Clip), CovKey::Output(Output::PointSize)];
+            if draws_lines {
+                keys.push(CovKey::Output(Output::ClipB));
+            }
+            keys
+        }
         BlockKind::Fragment => vec![CovKey::Output(Output::Color)],
     }
 }

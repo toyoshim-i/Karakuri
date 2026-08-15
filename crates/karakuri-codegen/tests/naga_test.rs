@@ -252,7 +252,11 @@ fn soft_points() -> Checked {
     Checked {
         name: "soft_points".to_string(),
         kind: Kind::L4,
-        topology: None,
+        // Not `None`: an L4's topology is inferred by the check pass, and
+        // `generate_l4` reads it to choose the quad expansion. These are
+        // hand-built stand-ins for checked trees, so they carry what `check`
+        // would have put here.
+        topology: Some(Topology::Points),
         capacity: None,
         blend: Some(Blend::Additive),
         params: vec![
@@ -394,7 +398,11 @@ fn shadowing_locals_l4() -> Checked {
     Checked {
         name: "shadowing_locals_l4".to_string(),
         kind: Kind::L4,
-        topology: None,
+        // Not `None`: an L4's topology is inferred by the check pass, and
+        // `generate_l4` reads it to choose the quad expansion. These are
+        // hand-built stand-ins for checked trees, so they carry what `check`
+        // would have put here.
+        topology: Some(Topology::Points),
         capacity: None,
         blend: Some(Blend::Additive),
         params: vec![param_decl("point_scale", Ty::Float, 0.5, 40.0), param_decl("hue", Ty::Float, 0.0, 1.0)],
@@ -583,7 +591,11 @@ fn reordered_subset_l4() -> Checked {
     Checked {
         name: "reordered_subset_l4".to_string(),
         kind: Kind::L4,
-        topology: None,
+        // Not `None`: an L4's topology is inferred by the check pass, and
+        // `generate_l4` reads it to choose the quad expansion. These are
+        // hand-built stand-ins for checked trees, so they carry what `check`
+        // would have put here.
+        topology: Some(Topology::Points),
         capacity: None,
         blend: Some(Blend::Additive),
         params: vec![],
@@ -626,7 +638,11 @@ fn consumes_nothing_l4() -> Checked {
     Checked {
         name: "consumes_nothing_l4".to_string(),
         kind: Kind::L4,
-        topology: None,
+        // Not `None`: an L4's topology is inferred by the check pass, and
+        // `generate_l4` reads it to choose the quad expansion. These are
+        // hand-built stand-ins for checked trees, so they carry what `check`
+        // would have put here.
+        topology: Some(Topology::Points),
         capacity: None,
         blend: Some(Blend::Additive),
         params: vec![],
@@ -736,7 +752,11 @@ fn l4_consuming_every_attribute_compiles_and_validates() {
     let l4 = Checked {
         name: "consumes_every_attribute".to_string(),
         kind: Kind::L4,
-        topology: None,
+        // Not `None`: an L4's topology is inferred by the check pass, and
+        // `generate_l4` reads it to choose the quad expansion. These are
+        // hand-built stand-ins for checked trees, so they carry what `check`
+        // would have put here.
+        topology: Some(Topology::Points),
         capacity: None,
         blend: Some(Blend::Additive),
         params: vec![],
@@ -798,4 +818,71 @@ fn fs() -> @location(0) f32 {
     let result = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
         .validate(&module);
     assert!(result.is_err(), "expected a return-type mismatch to fail validation");
+}
+
+/// `soft_points` with a second endpoint: the same procedure, made a line
+/// renderer by the one assignment that decides it.
+///
+/// Deliberately a *modification* of the points fixture rather than a fresh
+/// tree, so the difference between the two generated shaders is the
+/// difference between the two topologies and nothing else.
+fn soft_streaks() -> Checked {
+    let mut checked = soft_points();
+    checked.name = "soft_streaks".to_string();
+    checked.topology = Some(Topology::Lines);
+    let tail = bin(
+        BinOp::Mul,
+        ambient(Ambient::Camera, Ty::Mat4),
+        construct(
+            Ty::Vec4,
+            vec![
+                bin(BinOp::Sub, attr(Attr::Position), attr(Attr::Velocity), Ty::Vec3),
+                lit_f(1.0),
+            ],
+        ),
+        Ty::Vec4,
+    );
+    let vertex = checked
+        .blocks
+        .iter_mut()
+        .find(|b| b.kind == BlockKind::Vertex)
+        .expect("the points fixture has a vertex block");
+    vertex.stmts.push(assign_output(Output::ClipB, tail));
+    checked
+}
+
+/// The segment expansion has to be WGSL a front end accepts, not merely text
+/// that reads correctly. It uses `mix` on vectors, a swizzle-built
+/// perpendicular, and a division by an interpolated `w` — three things that
+/// are easy to write and easy to get past a reviewer while naga refuses them.
+#[test]
+fn a_lines_l4_compiles_and_validates() {
+    let shader = karakuri_codegen::generate_l4(&soft_streaks(), &layout_for(&drift_shell()));
+    validate(&shader.source);
+}
+
+/// Each topology emits **its own** placement, and neither emits the other's.
+///
+/// The first version of this asserted only that the two sources differed,
+/// which they do for a reason that has nothing to do with the expansion: a
+/// lines procedure declares `_clip_b` and assigns it in the body whatever the
+/// generator then does with it. A generator that ignored the topology and ran
+/// the point path twice passed. So the assertion names the two placements
+/// instead — `ndc_offset`, the offset around a point, and `half_vp`, the pixel
+/// conversion only the segment expansion needs — and requires each shader to
+/// have exactly one of them.
+#[test]
+fn each_topology_emits_its_own_placement_and_not_the_others() {
+    let layout = layout_for(&drift_shell());
+    let points = karakuri_codegen::generate_l4(&soft_points(), &layout).source;
+    let lines = karakuri_codegen::generate_l4(&soft_streaks(), &layout).source;
+
+    assert!(points.contains("ndc_offset"), "the points shader lost the sprite offset");
+    assert!(!points.contains("half_vp"), "the points shader is expanding a segment");
+    assert!(lines.contains("half_vp"), "the lines shader is not expanding a segment");
+    assert!(!lines.contains("ndc_offset"), "the lines shader is still offsetting around a point");
+
+    // The fragment stage is topology-blind: same entry point, same varyings.
+    let fs = |s: &str| s[s.find("@fragment").expect("a fragment stage")..].to_string();
+    assert_eq!(fs(&points), fs(&lines), "the topology reached the fragment stage");
 }

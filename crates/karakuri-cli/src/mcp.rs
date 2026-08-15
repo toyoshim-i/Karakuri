@@ -692,6 +692,7 @@ fn read_resource(request: &Value) -> Result<Value, String> {
 /// one that does.
 fn vocabulary() -> String {
     use karakuri_ir::builtin::Builtin;
+    use karakuri_ir::{Output, Topology};
     let mut out = String::from(
         "# Built-in functions\n\n\
          Generated from the checker's own table, so this is exactly what will be \
@@ -721,6 +722,37 @@ fn vocabulary() -> String {
             builtin.name(),
             signature.ret,
             signature.domain
+        ));
+    }
+
+    // Generated for the same reason the table above is: these are closed
+    // vocabularies in the checker, so a hand-written list here could name a
+    // topology or an output that does not exist. What cannot be generated is
+    // which outputs are *required* — that is a rule in the check pass rather
+    // than a property of the enum — so the prose says it and the spec resource
+    // carries the detail.
+    out.push_str("\n# Topologies\n\nDeclared by an L1's `topology`. What a *renderer* draws \
+                  is not declared: an L4 draws segments when its `vertex` block assigns \
+                  `clip_b` and sprites when it does not.\n\n");
+    for topology in [Topology::Points, Topology::Lines] {
+        let note = match topology {
+            Topology::Points => "one sprite per element",
+            Topology::Lines => "one segment per element, `clip` to `clip_b`",
+        };
+        out.push_str(&format!("- `{}` — {note}\n", topology.name()));
+    }
+
+    out.push_str("\n# Stage outputs\n\nAssigned like attributes; reading one is an error. \
+                  `clip`, `point_size` and `color` are required on every path through their \
+                  block. `clip_b` is the one optional output, and assigning it on only some \
+                  paths is rejected.\n\n");
+    out.push_str("| name | type | block |\n|---|---|---|\n");
+    for output in Output::ALL {
+        out.push_str(&format!(
+            "| `{}` | {} | `{}` |\n",
+            output.name(),
+            output.ty().name(),
+            output.block().name()
         ));
     }
     out
@@ -1074,6 +1106,24 @@ mod tests {
         ])
     }
 
+    /// The text under one `# ` heading of the rendered vocabulary.
+    ///
+    /// The two halves of the test below ask opposite questions of one section
+    /// each, and mixing sections silently weakens both — the "nothing
+    /// invented" half went looking for `clip` in `Builtin::from_name` the
+    /// moment stage outputs were added to the page, which is the failure
+    /// working rather than a nuisance.
+    fn section<'a>(rendered: &'a str, heading: &str) -> &'a str {
+        let start = rendered
+            .find(heading)
+            .unwrap_or_else(|| panic!("the vocabulary has no `{heading}` section"));
+        let rest = &rendered[start + heading.len()..];
+        match rest.find("\n# ") {
+            Some(end) => &rest[..end],
+            None => rest,
+        }
+    }
+
     /// **The vocabulary is generated, so it cannot say a function exists that
     /// does not.** That is the whole reason it is served beside the prose spec:
     /// `docs/ir-spec.md` describes this language in English and English goes
@@ -1081,15 +1131,16 @@ mod tests {
     #[test]
     fn the_vocabulary_is_the_checkers_own_table() {
         let rendered = vocabulary();
+        let builtins = section(&rendered, "# Built-in functions");
         for builtin in karakuri_ir::builtin::Builtin::ALL {
             assert!(
-                rendered.contains(&format!("| `{}` |", builtin.name())),
+                builtins.contains(&format!("| `{}` |", builtin.name())),
                 "`{}` is accepted by the checker and missing from the vocabulary",
                 builtin.name()
             );
         }
         // And nothing invented: every row names something `from_name` knows.
-        for line in rendered.lines().filter(|l| l.starts_with("| `")) {
+        for line in builtins.lines().filter(|l| l.starts_with("| `")) {
             let name = line
                 .trim_start_matches("| `")
                 .split('`')
@@ -1098,6 +1149,52 @@ mod tests {
             assert!(
                 karakuri_ir::builtin::Builtin::from_name(name).is_some(),
                 "the vocabulary lists `{name}`, which the checker does not know"
+            );
+        }
+    }
+
+    /// The same claim about the two other closed vocabularies a procedure is
+    /// written against — the topologies and the stage outputs.
+    ///
+    /// A model that is told the wrong set here writes a file the checker
+    /// refuses, which is the cheap failure; one that is told *too few* never
+    /// discovers a whole rendering mode, which is not cheap at all. `clip_b`
+    /// is the case in point: it is the only way to draw a segment, and a page
+    /// that omitted it would leave the language looking exactly as it did
+    /// before lines existed.
+    #[test]
+    fn the_vocabulary_lists_every_topology_and_every_stage_output() {
+        let rendered = vocabulary();
+
+        let topologies = section(&rendered, "# Topologies");
+        for name in ["points", "lines"] {
+            assert!(
+                topologies.contains(&format!("`{name}`")),
+                "the vocabulary does not mention the `{name}` topology"
+            );
+            assert!(
+                karakuri_ir::parse(&format!(
+                    "proc p {{ kind L1 topology {name} capacity [1, 2] = 1 \
+                     emit position element {{ position = vec3(0.0, 0.0, 0.0); }} }}"
+                ))
+                .is_ok(),
+                "the vocabulary lists `{name}`, which the parser does not accept"
+            );
+        }
+
+        let outputs = section(&rendered, "# Stage outputs");
+        for output in karakuri_ir::Output::ALL {
+            assert!(
+                outputs.contains(&format!("| `{}` |", output.name())),
+                "`{}` is assignable and missing from the vocabulary",
+                output.name()
+            );
+        }
+        for line in outputs.lines().filter(|l| l.starts_with("| `")) {
+            let name = line.trim_start_matches("| `").split('`').next().expect("a name");
+            assert!(
+                karakuri_ir::Output::from_name(name).is_some(),
+                "the vocabulary lists an output `{name}` the checker does not know"
             );
         }
     }

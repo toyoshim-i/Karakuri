@@ -337,3 +337,52 @@ proc uses_id {
         "the diagnostic must name the replacement, not just the absence"
     );
 }
+
+/// `topology lines` is a distinct value and not a spelling of `points`.
+///
+/// Paired with the `points` assertion in
+/// `drift_shell_parses_with_expected_shape`: a parser that mapped every
+/// topology name to one variant would satisfy either test alone.
+#[test]
+fn topology_lines_parses_as_lines() {
+    let src = r#"
+proc strands {
+  kind     L1
+  topology lines
+  capacity [1, 64] = 8
+
+  emit position
+
+  element {
+    position = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#;
+    let proc = parse(src).unwrap_or_else(|errs| {
+        panic!("{}", errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n"))
+    });
+    assert_eq!(proc.topology, Some(Topology::Lines));
+}
+
+/// An unknown topology is still refused, and the hint says what the language
+/// does have. This is the diagnostic a model reads when it guesses a name —
+/// `strips`, `triangles` — so what it lists is the vocabulary it will try next.
+#[test]
+fn an_unknown_topology_is_refused_and_names_the_ones_that_exist() {
+    let src = r#"
+proc guessed {
+  kind     L1
+  topology triangles
+  capacity [1, 64] = 8
+
+  emit position
+
+  element {
+    position = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#;
+    let errs = parse(src).expect_err("`triangles` is not a topology");
+    let hints: String = errs.iter().filter_map(|e| e.hint.clone()).collect();
+    assert!(hints.contains("points") && hints.contains("lines"), "hint was: {hints}");
+}
