@@ -69,6 +69,15 @@ pub struct Loaded {
     pub id: String,
     pub l1: Checked,
     pub l4: Checked,
+    /// The two procedures as text.
+    ///
+    /// **Carried because a Set file has no `.kir` on disk and an editable run
+    /// needs one.** A Set names its procedures by hash; the sources come out of
+    /// the store, or out of the file when it was bundled. Before the scratch
+    /// existed there was nowhere to put them and `--mcp` with `--load-set` was
+    /// refused for exactly that reason. See `scratch::place`.
+    pub l1_src: String,
+    pub l4_src: String,
     /// `None` when the file gave no `capacity` record, which means the `.kir`
     /// default applies — the spec's own wording.
     pub capacity: Option<u32>,
@@ -461,13 +470,17 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         String::from_utf8(bytes).map_err(|e| format!("set `{file_id}`: {layer} is not UTF-8: {e}"))
     };
 
-    let l1 = crate::compile::check(&source("L1")?)?;
-    let l4 = crate::compile::check(&source("L4")?)?;
+    let l1_src = source("L1")?;
+    let l4_src = source("L4")?;
+    let l1 = crate::compile::check(&l1_src)?;
+    let l4 = crate::compile::check(&l4_src)?;
 
     Ok(Loaded {
         id: file_id,
         l1,
         l4,
+        l1_src,
+        l4_src,
         capacity,
         params,
         bindings,

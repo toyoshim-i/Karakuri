@@ -27,6 +27,18 @@
 //! that leaves a mark. The caller gates on that; see [`materialise`]'s
 //! documentation for the condition.
 //!
+//! # Material that has no file of its own
+//!
+//! A Set loaded with `--load-set` names its procedures by hash: the sources are
+//! in the store and there is no `.kir` anywhere to copy. [`place`] writes them
+//! here, which is what makes a saved Set editable at all — before there was a
+//! scratch, `--mcp` with `--load-set` was refused because there was nothing for
+//! a model to read or rewrite.
+//!
+//! That closes the loop the three places were separated for: a user preset is
+//! materialised here, edited by a hand or a model, and saved back with
+//! `--save-set`. Saving worked already; reading one back to edit it did not.
+//!
 //! # Sharing is preserved, deliberately
 //!
 //! Two slots naming one file share it — `watch.rs` documents that as supported,
@@ -69,6 +81,16 @@ pub fn materialise(
 
     for (l1, l4) in sets.iter_mut() {
         for path in [l1, l4] {
+            // Already the working copy — a Set loaded from the store, placed
+            // here by `place` before this ran. Copying it onto itself would at
+            // best be a no-op and at worst rename it out from under the deck
+            // when its basename collided with something else's.
+            if path.starts_with(&dir) {
+                if let Some(name) = path.file_name().map(|n| n.to_string_lossy().to_string()) {
+                    taken.push(name);
+                }
+                continue;
+            }
             if let Some(existing) = copied.get(path.as_path()) {
                 *path = existing.clone();
                 continue;
@@ -111,6 +133,34 @@ fn unique_name(source: &Path, taken: &mut Vec<String>) -> String {
         }
     }
     unreachable!("the loop returns")
+}
+
+/// Write a procedure that has no file of its own into the scratch, and return
+/// the path the deck should use.
+///
+/// `name` is a suggestion — the procedure's own name makes the scratch readable
+/// — and is made safe as a path component here, because it arrives from a Set
+/// file rather than from this program.
+pub fn place(store_root: &Path, name: &str, source: &str) -> Result<PathBuf, String> {
+    let dir = store_root.join(DIR);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let path = dir.join(format!("{}.kir", sanitize(name)));
+    std::fs::write(&path, source).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(path)
+}
+
+/// A name as a path component. The same rule the edit history uses, and here
+/// for the same reason: the name comes out of a file somebody else wrote.
+fn sanitize(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .collect();
+    if cleaned.is_empty() {
+        "procedure".to_string()
+    } else {
+        cleaned
+    }
 }
 
 #[cfg(test)]
@@ -179,6 +229,48 @@ mod tests {
         assert_ne!(sets[0].0, sets[1].0, "two different sources became one file");
         assert_eq!(std::fs::read_to_string(&sets[0].0).expect("read"), "first");
         assert_eq!(std::fs::read_to_string(&sets[1].0).expect("read"), "second");
+    }
+
+    /// A Set loaded from the store becomes a file the deck can run from and an
+    /// editor can open — the half of the three places that saving alone did not
+    /// give.
+    #[test]
+    fn a_procedure_from_the_store_gets_a_readable_file() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let store = tmp.path().join("store");
+        let path = place(&store, "beat_strands", "proc beat_strands {}").expect("place");
+
+        assert!(path.starts_with(store.join(DIR)), "{}", path.display());
+        assert_eq!(path.file_name().expect("name"), "beat_strands.kir");
+        assert_eq!(std::fs::read_to_string(&path).expect("read"), "proc beat_strands {}");
+    }
+
+    /// And a name out of a Set file cannot walk out of the scratch.
+    #[test]
+    fn a_placed_name_cannot_escape_the_scratch() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let store = tmp.path().join("store");
+        let path = place(&store, "../../etc/passwd", "x").expect("place");
+
+        assert!(path.starts_with(store.join(DIR)), "{} escaped", path.display());
+        assert!(!path.to_string_lossy().contains(".."), "{}", path.display());
+    }
+
+    /// A path already in the scratch is the working copy and is left alone —
+    /// otherwise the pass that protects the originals would rewrite the one
+    /// thing that has no original.
+    #[test]
+    fn a_path_already_in_the_scratch_is_not_copied_again() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let store = tmp.path().join("store");
+        let placed = place(&store, "loaded", "from the store").expect("place");
+        let l4 = write(tmp.path(), "draw.kir", "l4");
+        let mut sets = vec![(placed.clone(), l4)];
+
+        materialise(&store, &mut sets).expect("materialise");
+
+        assert_eq!(sets[0].0, placed, "the placed procedure was moved");
+        assert_eq!(std::fs::read_to_string(&placed).expect("read"), "from the store");
     }
 
     /// A source that is not there is a diagnostic, not a scratch file holding

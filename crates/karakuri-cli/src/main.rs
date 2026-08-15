@@ -1239,17 +1239,11 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         );
     }
     let offscreen = args_out.render_to.is_some() || args_out.seq_to.is_some();
-    // A surface with nothing to reach: `--load-set` builds from the store, so
-    // there are no procedure files on disk for a model to read or rewrite, and
-    // `args.sets` is empty. Refused rather than served empty, which is what
-    // `serve` would otherwise be handed.
-    if args_out.mcp.is_some() && args_out.load_set.is_some() {
-        return Err(
-            "`--mcp` with `--load-set` — a Set built from the store has no procedure files \
-             to rewrite. Give the `.kir` pair with `--set` instead"
-                .to_string(),
-        );
-    }
+    // **`--mcp` with `--load-set` used to be refused here**, because a Set
+    // built from the store had no procedure files on disk for a model to read
+    // or rewrite. The scratch is where they go now: `--load-set` writes its two
+    // procedures there like any other material, so a saved Set is editable and
+    // the round trip — save, load, edit, save — closes. See `scratch::place`.
     // A surface with nobody at it, on the same terms as the other two — and
     // one more reason besides: an offscreen run is a function of its arguments,
     // and a port that can rewrite a procedure mid-render is the opposite of
@@ -1952,8 +1946,31 @@ fn main() {
     // for the same reason: nothing writes a `.kir`, so there is no version to
     // preserve and no directory to leave behind.
     let mut snapshots: Option<history::Shared> = None;
-    if args.watch || args.mcp.is_some() {
+    // Whether anything in this run can write a `.kir`. Named because two things
+    // turn on it and they have to turn on the same one: what gets copied into
+    // the scratch, and what gets compiled out of `args.sets` rather than out of
+    // the Set file directly.
+    let editable = args.watch || args.mcp.is_some();
+    if editable {
         let root = args.store.clone();
+        // A loaded Set names its procedures by hash and has no file anywhere,
+        // so it is written into the scratch first and then joins `args.sets` as
+        // ordinary material. Everything downstream — the compile, the watcher,
+        // the MCP surface — then treats it exactly like a `--set` pair, which
+        // is what makes a saved Set editable rather than only playable.
+        if let Some(loaded) = &loaded {
+            let placed = [
+                scratch::place(&root, &loaded.l1.name, &loaded.l1_src),
+                scratch::place(&root, &loaded.l4.name, &loaded.l4_src),
+            ];
+            match placed {
+                [Ok(l1), Ok(l4)] => args.sets.insert(0, (l1, l4)),
+                [Err(e), _] | [_, Err(e)] => {
+                    eprintln!("karakuri-cli: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
         match scratch::materialise(&root, &mut args.sets) {
             Ok(dir) => eprintln!(
                 "scratch: {} — the deck runs from copies here, so the files you named are \
@@ -1975,7 +1992,10 @@ fn main() {
 
     eprintln!("compiling:");
     let mut procs: Vec<Pair> = Vec::new();
-    if let Some(loaded) = loaded {
+    // Only when it was *not* materialised into the scratch above. An editable
+    // run compiles it out of `args.sets` with everything else, which is the
+    // point: one path, so a loaded Set can be watched and rewritten.
+    if let Some(loaded) = loaded.filter(|_| !editable) {
         eprintln!("  slot 0: set `{}`", loaded.id);
         procs.push((loaded.l1, loaded.l4));
     }
