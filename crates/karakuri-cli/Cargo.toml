@@ -13,6 +13,14 @@ karakuri-midi = { version = "0.1.0", path = "../karakuri-midi" }
 karakuri-signal = { version = "0.1.0", path = "../karakuri-signal" }
 karakuri-store = { version = "0.1.0", path = "../karakuri-store" }
 png = "0.18.1"
+# **Local dates, for the edit history's directories.** The one thing needed of
+# it is "what day is it where the operator is", so that a day's snapshots can be
+# found and deleted by hand. `chrono` rather than `time`: `time`'s local-offset
+# lookup is soundness-gated and returns nothing from a multi-threaded process on
+# Unix, and this one always has an audio thread, a build worker and (with
+# `--mcp`) a thread per connection running. It would have fallen back to UTC
+# every time, which is the one thing the directory name must not do.
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 # The tempo-source wire format is read at run time, not only in tests.
 serde.workspace = true
 serde_json.workspace = true

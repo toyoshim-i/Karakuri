@@ -39,8 +39,10 @@ capturing the window.
 cargo run -p karakuri-cli -- --watch
 ```
 
-Edit either `.kir` and save. The new procedure is compiled on a worker thread and swapped in
-between two frames. Then it is **judged**: eight warmup frames, thirty measured ones, and if
+Edit either `.kir` and save — **the copies under `.karakuri/scratch/`, whose path is printed
+at startup**, not the files you named on the command line. A run that can be edited never
+writes to those; see [Where your work lives](#where-your-work-lives). The new procedure is
+compiled on a worker thread and swapped in between two frames. Then it is **judged**: eight warmup frames, thirty measured ones, and if
 the median frame interval over those thirty is over the budget the candidate is dropped and
 the outgoing Set is live again at exactly the `t` it was parked at. A file that does not
 compile prints its diagnostics and never becomes a candidate at all.
@@ -140,10 +142,14 @@ Three things worth knowing before you rely on it:
 - **A model that writes something too expensive is caught by the same machinery that catches
   you** — thirty measured frames, then the previous procedure comes back at the time it was
   parked at.
-- **There is no undo tool.** If the client read the source before it wrote, the previous
-  version is in the conversation and "put it back" works — but nothing makes it read first,
-  and a write **replaces your file with no backup**. Keep procedures you care about in
-  version control, the same as any other source.
+- **A write cannot reach the files you named.** It reaches the scratch copy, and every
+  version that compiles is kept under `<store>/history/` — including the one the run started
+  with. See [Where your work lives](#where-your-work-lives). Before that existed, a model
+  replaced three of this repository's own shipped examples in one session, and what saved
+  them was that they happened to be in version control.
+- **There is still no undo *tool*.** The versions are on disk and nothing walks them for you
+  yet: putting one back is copying a file from the history over the scratch. If the client
+  read the source before it wrote, the previous version is also in the conversation.
 
 **Loopback only, and deliberately.** A venue network is shared and a port that can rewrite
 the projector is not something to expose with a flag. Reaching a render machine from a
@@ -187,6 +193,7 @@ run reads a microphone — so what comes back is the performance and not just th
 | `--param name=value` | a uniform write, applied to every Set |
 | `--bind FIELDS` | attach a signal to a parameter — `layer=L1,key=turbulence,signal=energy,range=0.0..3.0` |
 | `--watch` | recompile and hot-swap when a `.kir` changes |
+| `--store DIR` | where the library, the scratch and the edit history live (default `.karakuri`) |
 | `--demo NAME` | drive itself from a script, for showing rather than playing. `transport` scrubs the beat clock; `lines` draws one L1 as sprites and as strokes and brings its own two-slot deck. Both loop |
 
 **Size**
@@ -324,6 +331,60 @@ most ordinary things a shader does, and it usually shows as a blown-out pixel. T
 are excluded from the mean and peak so one of them cannot poison the number; nothing is
 reset and nothing is disabled. If a slot is unusable, `;` is the way out and it is yours to
 press.
+
+---
+
+## Where your work lives
+
+Three places, and only one of them is written to.
+
+| | where | who writes it |
+|---|---|---|
+| **App presets** | `examples/` | nobody. They ship with the program |
+| **Your presets** | `<store>/sets/<id>.set.ndjson` | `--save-set`, and nothing else |
+| **Scratch** | `<store>/scratch/` | `--watch`, `--mcp`, and your editor |
+
+**A run that can be edited copies its material into the scratch and runs from
+the copy.** So `karakuri-cli --watch examples/drift_shell.kir examples/soft_points.kir`
+never writes to `examples/`, and neither does a model over MCP. The path is
+printed at startup — **that is the file to open in your editor**, not the one you
+named on the command line:
+
+```
+scratch: .karakuri/scratch — the deck runs from copies here, so the files you
+         named are not written to. Point an editor at these
+```
+
+Two slots naming one file still share one scratch file, so an edit to it moves
+both, exactly as before.
+
+A run that *cannot* be edited — `--render`, `--seq`, `--replay`, or a window with
+neither `--watch` nor `--mcp` — copies nothing and creates no directory. It opens
+every file read-only, so there is nothing to protect them from.
+
+### The edit history
+
+Every version that **compiles** is kept, whoever wrote it:
+
+```
+.karakuri/history/2026/08/16/143052-271_slot0_L4_beat_strokes.kir
+```
+
+Including the version the run started with, so the first edit is undoable and
+not only the second. Including versions that compiled and were then rolled back
+for costing too much — those are the ones a session recording does *not* have,
+because it only records what reached the screen.
+
+A procedure that did not change is not written again, so a day's directory is
+the edits and not the rebuilds.
+
+**There is no retention policy and no cleanup command, on purpose.** A directory
+per day means `rm -rf .karakuri/history/2026/07` is the cleanup. The date is
+your local date, so the directory is named the day you would call it.
+
+What is not built yet is anything that *walks* the history — undo is a surface
+that reads these files, and the surface is a later milestone. Today it is a
+directory you open.
 
 ---
 

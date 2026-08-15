@@ -102,6 +102,15 @@ pub struct Watch {
     stamps: [Option<u64>; 2],
     /// A change has been seen but not yet acted on — see "Debouncing" above.
     settling: bool,
+    /// Where every version that compiled is kept, so an edit can be undone.
+    /// `None` when no store root was given, which is the offscreen paths.
+    ///
+    /// **Separate from `recording`, and not folded into it.** A session
+    /// recording names what reached the *screen*; this keeps what reached the
+    /// *compiler*, and the difference is the whole value — a build that was
+    /// rolled back for costing too much never becomes a `Record::Procedure`
+    /// and is exactly the version an operator wants back.
+    snapshots: Option<crate::history::Shared>,
 }
 
 impl Watch {
@@ -117,6 +126,7 @@ impl Watch {
         let mut watch = Watch {
             builds: 0,
             recording: None,
+            snapshots: None,
             slot,
             l1,
             l4,
@@ -156,6 +166,13 @@ impl Watch {
         tx: std::sync::mpsc::Sender<Built>,
     ) -> Watch {
         self.recording = Some((store, tx));
+        self
+    }
+
+    /// Keep every version that compiles under `store_root`, so an edit can be
+    /// walked back. See [`crate::history`].
+    pub fn snapshotting_to(mut self, snapshots: crate::history::Shared) -> Watch {
+        self.snapshots = Some(snapshots);
         self
     }
 }
@@ -219,6 +236,29 @@ impl Source for Watch {
                 return None;
             }
         };
+
+        // **Both compiled**, which is this feature's whole gate: a version that
+        // does not compile is not a version, and one that compiled is worth
+        // keeping whether or not it goes on to fit the frame budget.
+        //
+        // Reported and never acted on. A snapshot that could not be written
+        // must not stop a build that compiled — the operator asked for a
+        // picture and this is bookkeeping.
+        if let Some(snapshots) = &self.snapshots {
+            // A poisoned lock means another thread panicked mid-snapshot. That
+            // is a bug to find in the log, not a reason to stop a build that
+            // compiled — this is bookkeeping either way.
+            match snapshots.lock() {
+                Ok(mut snapshots) => {
+                    for (layer, name, src) in [("L1", &l1.name, &l1_src), ("L4", &l4.name, &l4_src)] {
+                        if let Err(e) = snapshots.record(slot, layer, name, src.as_bytes()) {
+                            eprintln!("slot {slot}: this version is not in the edit history: {e}");
+                        }
+                    }
+                }
+                Err(_) => eprintln!("slot {slot}: the edit history is not being written"),
+            }
+        }
 
         let label = format!("{} + {}", l1.name, l4.name);
         // **Unique across the whole run**, because that is what it is for: the
