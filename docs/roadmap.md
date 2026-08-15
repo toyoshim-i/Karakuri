@@ -57,10 +57,10 @@ V1 implements L1 and L4 inside a single Set. The full model:
 | Layer | Role | Milestone |
 |---|---|---|
 | L0 | Signal bus. Synthesized values from M1; audio and tempo landed in M2, MIDI has not | M1 / M2 |
-| L1 | Geometry generation. Vertices, particles, SDF builtins used inline. The first-class `Field` type is M3 | M1 |
+| L1 | Geometry generation. Vertices, particles, SDF builtins used inline. **"Used inline" is aspirational**: the SDF builtins compile, and no example uses one, because the shape they describe has nothing to draw it. The first-class `Field` type is M3 | M1 |
 | L2 | Deformation and motion. Time-axis modulation, physics | M3 |
 | L3 | Camera and space. Viewpoint, motion grammars | M3 |
-| L4 | Render and material. Raster, raymarch, splatting | M1 |
+| L4 | Render and material. Raster, raymarch, splatting | M1 for *one* raster mode; raymarch and splatting are unbuilt |
 | L5 | Composite. Set mixing, transitions, post, output routing | M2 |
 
 Orthogonal to the layers:
@@ -244,6 +244,48 @@ it was parked at, and a replay meeting these records builds afresh, so `t` resta
 swap *in* is defined to start cold and so replays exactly. A rollback means the candidate
 was over budget, which is an exceptional frame already.
 
+**It connects to a real client.** `claude mcp add --transport http karakuri
+http://127.0.0.1:8737/` and Claude Code drives it — read a procedure, rewrite it, ask what
+happened. That was genuinely uncertain until it was tried: what is implemented here is the
+minimum of the Streamable HTTP transport, POST with a JSON reply and 405 on anything else,
+and no real client had ever spoken to it. The caveat worth keeping is that the same model
+wrote both ends, so shared assumptions may be carrying more of the weight than the
+specification is.
+
+**What the first real session revealed is worth more than the feature.** Asked for line
+art, the model could not find an example to copy — the deck had one slot — and fell back on
+the compiler as its only source of truth, deliberately: *"compilation failing means the file
+is not written, so probing is safe."* The check-before-write ordering exists so a model can
+see the checker's answer; it turns out to double as a **free, safe probe**, and the model
+found that on its own.
+
+Then the diagnostics taught it the language. `hint: v0.2 defines 'points' only` closed off
+line primitives in one try. And this one changed its whole approach rather than its syntax:
+
+> `hint: loop bounds cannot reference a param, an ambient, or any other expression — cost
+> estimation needs them fixed at parse time`
+
+A hint that only corrected the syntax would have produced a working `for` loop and a
+procedure that could not be afforded. Because the hint carried the *why*, the model
+concluded that integrating a streamline per element was incompatible with the cost model at
+all, and switched to an analytic curve with curl displacement — same per-element cost,
+continuous strands. **Hints were written to be kind to a human and turned out to be the
+specification an LLM reads.** Fifty-eight of them exist; that number should grow, and every
+one should say why rather than what.
+
+The result also moderates this milestone's own complaint about a single topology. Denied a
+line primitive, the model decomposed `seed` into a strand id and a position along the
+strand, laid points densely along an analytic curve, moved hue and width from the element to
+the strand — *"per-element hue would give each sample along a line its own colour and the
+line would read as noise"* — and dropped exposure by a factor of four because additive
+samples along a strand overlap. It got line art out of a point cloud. So the limit is real
+and it is softer than "everything looks alike": what it costs is a halved element budget and
+a technique nobody would find without being pushed into it.
+
+One thing it wanted and did not have: **an example to read.** It looked for another slot's
+procedure first. A library of procedures exposed as MCP resources would have answered in one
+call what four failed compiles answered slowly.
+
 The review also found the surface was a network service written like a local one: an
 attacker-supplied `Content-Length` was allocated before it was believed, and a fifty-six byte
 request aborted the render process. Loopback was treated as a boundary and is not one — a
@@ -251,8 +293,22 @@ page on any site can POST to `127.0.0.1`, and a write needs no readable reply to
 happened. Both are fixed, and the second is a reminder that **"it is only on loopback" is a
 sentence to distrust**.
 
-**Still open**: nothing in this milestone, pending the decision about what to try next for
-the downbeat. Output routing is **out of this
+**M2 is closed.** What it delivered, in one sentence each: a deck with four slots, an L5
+mix with blend modes and masks, transitions on the beat clock, a per-slot meter, tone
+mapping once after the mix, priming with a budget governor, audio in with beat tracking,
+per-slot transport, Set files and session recording and replay, MIDI in, the window as a
+preview with the canvas as a recorded property of the run, a tempo source, and MCP.
+
+**What it taught, beyond the bullets above**, is that the two invariants stated at the start
+paid for themselves in ways nobody planned. "Everything an operator moves goes through a
+record" is why a session driven by a model can be replayed without one. "No allocation on
+the frame path" is why the frame loop could be handed to a `Sink` and a test double at all.
+Both were also *wrong* in places nobody had checked until something new leaned on them —
+which is the argument for stating an invariant as a claim rather than keeping it as a habit,
+made four times over.
+
+**What M2 did not touch, and should have worried about sooner**, is what any of this draws.
+See the next milestone. Output routing is **out of this
 milestone** — the window is a preview and an OBS capture of it covers the ordinary case, so
 Syphon changes where the pixels go and not what the system does.
 
@@ -735,6 +791,43 @@ fine alone and is unreadable next to lights.
 ### M3 — Expressive depth
 
 **Goal:** the combinatorial range that makes the library worth having.
+
+**First, and before any of the list below: more than one way to draw.**
+
+`Topology` has one value and `Blend` has one value. Every frame this project has ever
+rendered is an additive point sprite, and every example looks like a relative of every other
+for that reason and no other. No amount of L2 amplification, cross-source interpolation or
+graph compilation changes what a pixel can be while that is true — those multiply the ways
+geometry can be *arranged*, over a single way it can be *seen*.
+
+The vocabulary already says so. `sd_sphere`, `sd_box`, `sd_torus`, `sd_plane`, `op_union`,
+`op_smooth_union`, `op_subtract` and `op_intersect` pass the checker today, appear in no
+example, and have nothing that could consume them: an SDF is a shape you march, and nothing
+marches. **A language that speaks a rendering mode its engine cannot run is a design saying
+out loud what it is missing.**
+
+Three additions, roughly in order of what they buy per unit of work:
+
+- **Lines.** `Topology::Lines`, drawn between elements a procedure nominates. Trails,
+  wireframes, constellations, connective structure — none of which is expressible now, all
+  of which reuses the element buffers exactly as they are. The cheapest large gain available.
+- **A fullscreen L4.** A procedure that draws no geometry and marches an SDF instead. This is
+  what the eight orphan builtins are for, and it is also the shape M3's `Field` wants: the
+  extraction the last section of this document describes — an LLM pulling the SDF out of a
+  shader and discarding the raymarch loop — has nowhere to put the result until a fullscreen
+  node exists.
+- **`blend weighted`.** Already listed below, and it is the other half of the point-sprite
+  monotony: additive is why everything glows.
+
+`Blend` and `Topology` were both declared as enums with one variant precisely so this would
+be an addition rather than a format change. That bet is now due.
+
+**How hard the limit actually bites** was measured once, by accident: asked for line art, a
+model denied a line primitive decomposed `seed` into a strand id and a position along a
+strand, laid points densely along an analytic curve, and moved hue and width from the
+element to the strand. It works — it reads as strokes. It cost half the element budget and a
+technique nobody finds without being forced into it. That is the shape of the limit: not
+"only one look is possible" but "every other look is paid for twice".
 
 **Adds**
 

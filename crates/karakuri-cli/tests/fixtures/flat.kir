@@ -1,0 +1,30 @@
+// A test fixture, and deliberately not one of `examples/`.
+//
+// The tests that need "a procedure different from the one the session started
+// with" used to derive one by substituting a phrase out of `examples/*.kir`.
+// That broke the first time somebody rewrote an example through MCP — which is
+// a thing this program exists to let them do. **A fixture the product can
+// rewrite is not a fixture.**
+//
+// Flat grey at a fixed size, consuming only `position`, so it composes with any
+// L1 and its output cannot be confused with the example's.
+proc flat {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  param level : float [0.0, 4.0] = 0.35
+  param dot   : float [0.5, 40.0] = 6.0
+
+  vertex {
+    clip = camera * vec4(position, 1.0);
+    point_size = dot;
+  }
+
+  fragment {
+    let d = length(point_coord * 2.0 - 1.0);
+    let a = max(0.0, 1.0 - d);
+    color = vec4(vec3(level, level, level) * a, a);
+  }
+}

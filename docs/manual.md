@@ -408,6 +408,26 @@ The window is a preview, and an OBS capture of it covers the ordinary case — p
 first so the capture is the canvas exactly. Anything past that is output routing, which is
 deliberately outside this repository; see `docs/plugins.md`.
 
+### There is one way to draw
+
+`Topology` has a single value and so does `Blend`: everything is an **additive point
+sprite**. That is why every example looks like a relative of every other, and it is the
+hardest limit on this instrument — a procedure can arrange elements any way at all and they
+still arrive as glowing dots.
+
+If you ask a model for something the language cannot draw, this is usually why. The
+checker accepts `sd_sphere`, `sd_box`, `op_smooth_union` and five more, so a plausible
+procedure using them will compile — and nothing will march it, because there is no
+renderer that consumes a distance field. Lines, a fullscreen raymarch and a non-additive
+blend are the front of the next milestone.
+
+**It is less of a wall than it sounds.** Ask for line art and a model will find that points
+laid densely along a curve read as strokes — the trick is to take hue and width from the
+strand rather than the element, or every sample gets its own colour and the line reads as
+noise. Expect to pay for it in element count. And expect the model to find this by probing
+the compiler: a procedure that does not compile is never written, so guessing at the
+language is free, and the diagnostics carry hints that say *why* rather than only what.
+
 ### Nothing moves by itself
 
 There is no automatic gain, no automatic exposure, no automatic octave correction, and no
