@@ -728,13 +728,16 @@ state. Reading one is a compile error.
 
 | Name | Type | Stage | Meaning |
 |---|---|---|---|
-| `clip` | `vec4` | vertex | clip-space position. A sprite's centre, or a segment's near end. Required |
+| `clip` | `vec4` | vertex | clip-space position. A sprite's centre, or a segment's near end. Required *in a `vertex` block* |
 | `clip_b` | `vec4` | vertex | a segment's far end, in clip space. **Optional — assigning it is what makes the procedure draw lines** |
-| `point_size` | `float` | vertex | sprite size in pixels, or stroke width in pixels. Required |
+| `point_size` | `float` | vertex | sprite size in pixels, or stroke width in pixels. Required *in a `vertex` block* |
 | `color` | `vec4` | fragment | linear RGB, straight alpha. Required |
 
 Each required output must be assigned on every path, under the same rule as emitted
-attributes.
+attributes. **A `vertex` block is itself optional**: an L4 without one draws the frame rather
+than an element, so `clip` and `point_size` are required of a block that exists rather than
+of every L4. `color` is required unconditionally, because every renderer has a fragment
+stage.
 
 ### How an L4 says what it draws
 
