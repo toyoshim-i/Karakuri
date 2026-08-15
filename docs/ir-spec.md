@@ -1092,18 +1092,31 @@ disc_point(float, float) -> vec2
   what the additive path writes** — premultiplied colour, coverage in alpha — so L5 reads a
   weighted slot without knowing the mode exists
 - The weight is `a * max(1e-2, (1 - d)^3)` where `d` is the fragment's view depth mapped
-  linearly onto the camera's near and far planes. Two things about it are worth carrying.
-  **Its absolute scale is arbitrary**, because the resolve divides it out — so it is chosen
-  to stay inside `(0, 1]` rather than carrying the published `3e3` factor, which an
-  `Rgba16Float` target holding unbounded HDR colour would overflow. And **linear in view
+  linearly onto the camera's near and far planes. Three things about it are worth carrying.
+  **Its absolute scale is nearly arbitrary**, because the resolve divides it out — so it is
+  chosen to stay inside `(0, 1]` rather than carrying the published `3e3` factor, which an
+  `Rgba16Float` target holding unbounded HDR colour would overflow. *Nearly*: the guard on
+  the resolve's divide is compared against the weight sum directly and so does not cancel,
+  which is why it is tied to `f16`'s smallest representable value rather than to any weight —
+  a floor above that eats the colour of thin material, and since `a * w` goes as `a²` it eats
+  it from an opacity of about the square root of the floor upward. And **linear in view
   depth, not in the depth buffer's**: NDC depth needs no uniform at all and is useless
   here, since a 0.1 near against a 100 far crushes everything past ten units into the last
   percent of its range
+- **The revealage target's precision is the mode's floor on thin material.** `f16` spacing
+  just below 1.0 is one part in 2048, so an opacity under about 2.4e-4 leaves `1 - a`
+  rounding back to 1.0 and contributes no coverage at all — a million such fragments still
+  contribute none, where `additive` would have summed their light. `R32Float` would fix it
+  and is not blendable in WebGPU core, so this is a property of the mode rather than a
+  choice left open
 - A **fullscreen L4 may not declare `weighted`**, and this is refused by `Set::build`
-  rather than by the checker. One fragment per texel makes the resolve the identity —
-  `(c·a·w) / (a·w) · (1 - (1 - a))` is `c·a`, which is what additive blending into a
-  cleared target leaves — so the second target and the resolve pass would buy a picture
-  `additive` gives for nothing. It is a rule about the *Set* holding one L4, not about the
+  rather than by the checker. One fragment per texel makes the resolve the identity *for an
+  alpha in `[0, 1]`* — `(c·a·w) / (a·w) · (1 - (1 - a))` is `c·a`, which is what additive
+  blending into a cleared target leaves — so the second target and the resolve pass would
+  buy a picture `additive` gives for nothing. The qualifier is the clamp: a fullscreen
+  fragment writing an alpha of 1.5 is legal under `additive` and *brighter* than the
+  weighted version would have been, so the refusal's advice to declare `additive` is not
+  always a picture-preserving swap. It is a rule about the *Set* holding one L4, not about the
   procedure, which is why it lives where that assumption does
 - Target format `Rgba16Float`
 

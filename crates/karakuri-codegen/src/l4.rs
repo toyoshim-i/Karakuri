@@ -505,17 +505,25 @@ const WEIGHTED_FS_OUT: &str = "struct FsOut {
 /// and two of them would put it back. The clamp is the mode's contract, stated
 /// in `docs/ir-spec.md` beside the declaration.
 ///
-/// **The weight's absolute scale is arbitrary and is chosen for `f16`.** The
-/// resolve divides the colour sum by the weight sum, so multiplying every
-/// weight by a constant changes nothing it computes — which is why the `3e3`
-/// factor the published weight functions carry is absent here. It is not
-/// harmless: this pipeline is unbounded linear HDR, colours of 20 are ordinary,
-/// and a target that is `Rgba16Float` overflows to infinity a little past
-/// 65504. Keeping the weight in `(0, 1]` is what makes the accumulation of an
-/// HDR colour no larger than the accumulation of the colour itself.
+/// **The weight's absolute scale is nearly arbitrary, and is chosen for `f16`.**
+/// The resolve divides the colour sum by the weight sum, so multiplying every
+/// weight by a constant changes almost nothing it computes — which is why the
+/// `3e3` factor the published weight functions carry is absent here. Dropping it
+/// is not optional: this pipeline is unbounded linear HDR, colours of 20 are
+/// ordinary, and an `Rgba16Float` target overflows to infinity a little past
+/// 65504. Keeping the weight in `(0, 1]` makes the accumulation of an HDR colour
+/// no larger than the accumulation of the colour itself.
 ///
-/// What survives the scaling is the *ratio*, and that is what the floor sets:
-/// a fragment at the far plane counts a hundredth of one at the near plane.
+/// **"Almost" is load-bearing.** The one place the cancellation does not reach
+/// is the guard on the resolve's divide, which is compared against the weight
+/// sum directly — so changing this scale moves what that guard eats. It was
+/// missed once and cost thin material its colour; see `oit_resolve.wgsl`, where
+/// the floor is now tied to `f16`'s smallest representable value rather than to
+/// any weight.
+///
+/// What survives the scaling is the *ratio*, and that is what the floor here
+/// sets: a fragment at the far plane counts a hundredth of one at the near
+/// plane.
 const WEIGHTED_FS_EPILOGUE: &str = "    let _a = clamp(_color.a, 0.0, 1.0);
     let _w = _a * max(1e-2, pow(1.0 - _depth01, 3.0));
     var _out: FsOut;
