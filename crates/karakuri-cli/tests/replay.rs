@@ -203,16 +203,18 @@ fn a_procedure_record_changes_what_the_rest_of_the_session_renders() {
     let dir = scratch("procedure");
     let (store, head) = store_with_a_set(&dir);
 
-    // The same L4 with its saturation taken out — a change nobody could miss,
-    // and one that leaves the cost identical so the swap cannot be judged
-    // differently for it.
+    // **A fixture of this test's own, not one of `examples/`.** This used to
+    // derive a different L4 by substituting a phrase out of the example, and it
+    // broke the first time somebody rewrote that example through MCP — which is
+    // a thing this program exists to let them do. A fixture the product can
+    // rewrite is not a fixture. `flat.kir` is grey dots and consumes only
+    // `position`, so it composes with any L1 and cannot be confused with what
+    // the head was playing.
     let root = workspace();
-    let original = std::fs::read_to_string(root.join("examples/soft_points.kir")).expect("L4");
-    let drained = original.replace(
-        "hsv_to_rgb(vec3(hue + hash1(seed) * spread, 0.75, 1.0))",
-        "hsv_to_rgb(vec3(hue + hash1(seed) * spread, 0.0, 1.0))",
-    );
-    assert_ne!(drained, original, "the fixture's L4 is not what this expects");
+    let drained = std::fs::read_to_string(
+        root.join("crates/karakuri-cli/tests/fixtures/flat.kir"),
+    )
+    .expect("the flat fixture");
 
     // Both procedures into the store, which is where a `procedure` record
     // points. The L1 is unchanged and named anyway: a Set is the pair.

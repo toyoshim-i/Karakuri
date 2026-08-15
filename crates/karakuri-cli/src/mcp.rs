@@ -826,7 +826,13 @@ mod wire_tests {
         assert!(!failed, "{source}");
         assert!(source.contains("proc soft_points"), "{}", &source[..80.min(source.len())]);
 
-        let edited = source.replace("// Soft additive sprites.", "// Edited over the wire.");
+        // **Prepended rather than substituted.** This asserted a phrase out of
+        // the example's own comment header once, and broke the day somebody
+        // rewrote the example — the substitution found nothing, the "edit" was
+        // identical to the source, and the failure read as "the write did not
+        // reach the file". A test of *writing* must not depend on what the
+        // fixture happens to say.
+        let edited = format!("// Edited over the wire.\n{source}");
         let (failed, said) = call(
             server.port,
             "write_procedure",
