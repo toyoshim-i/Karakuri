@@ -266,7 +266,17 @@ fn handle(
         if read_capped(&mut reader, &mut line)? == 0 {
             return Ok(()); // the client hung up
         }
-        let method = line.split_whitespace().next().unwrap_or("").to_string();
+        let mut request_line = line.split_whitespace();
+        let method = request_line.next().unwrap_or("").to_string();
+        // **The path, which the first version threw away.** It answered 405 to
+        // every request whatever it asked for, and a client's auth discovery
+        // asks for `/.well-known/oauth-protected-resource` before it does
+        // anything else. 405 says "that exists, but not by this verb", so the
+        // client concluded there was protected-resource metadata to fetch and
+        // went looking for it — then failed parsing `this server only answers
+        // POST` as JSON. The whole handshake died on a path this server has
+        // never had.
+        let target = request_line.next().unwrap_or("").to_string();
 
         let mut length: Option<usize> = None;
         let mut origin: Option<String> = None;
@@ -320,11 +330,38 @@ fn handle(
             }
         }
 
+        // **Path before method**, because "no such thing here" and "not by that
+        // verb" are different answers and only one of them is true of a path
+        // this server does not serve. A 404 is what tells a client there is no
+        // authorization metadata to find, which is how a server with no auth
+        // says so.
+        let path = target.split(['?', '#']).next().unwrap_or("");
+        if path != ENDPOINT {
+            return respond(
+                &mut writer,
+                404,
+                "application/json",
+                br#"{"error":"no such path: this server serves MCP at / and nothing else"}"#,
+            );
+        }
+
         if method != "POST" {
-            // Answered and closed rather than answered and continued: the body
-            // of a non-POST was left in the reader, so it became the next
-            // request line and ran. Closing cannot be smuggled through.
-            return respond(&mut writer, 405, "text/plain", b"this server only answers POST");
+            // 405 rather than 404 *here*: the path is real, and the Streamable
+            // HTTP transport says a server offering no SSE stream at its
+            // endpoint answers GET with exactly this. Answered and closed
+            // rather than answered and continued: the body of a non-POST was
+            // left in the reader, so it became the next request line and ran.
+            // Closing cannot be smuggled through.
+            //
+            // JSON rather than plain text because a client that reached here
+            // is a client parsing JSON — the same reason the 404 above carries
+            // a body it can read.
+            return respond(
+                &mut writer,
+                405,
+                "application/json",
+                br#"{"error":"this endpoint answers POST only: there is no SSE stream here"}"#,
+            );
         }
 
         let Some(length) = length else {
@@ -399,6 +436,7 @@ fn respond(
         202 => "Accepted",
         400 => "Bad Request",
         403 => "Forbidden",
+        404 => "Not Found",
         405 => "Method Not Allowed",
         411 => "Length Required",
         413 => "Payload Too Large",
@@ -643,6 +681,10 @@ fn swap_outcome(state: &mut State) -> Result<String, String> {
 
 // -- resources -------------------------------------------------------------
 
+/// The one path this server serves. Everything else is a 404, which is what
+/// tells a client probing for authorization metadata that there is none.
+const ENDPOINT: &str = "/";
+
 const SPEC: &str = "karakuri://ir-spec";
 const VOCABULARY: &str = "karakuri://ir-vocabulary";
 
@@ -775,13 +817,56 @@ mod wire_tests {
         dir: tempfile::TempDir,
     }
 
+    /// **The pair these tests serve, written out rather than copied from
+    /// `examples/`.**
+    ///
+    /// It was a copy, and the examples are the files this very surface exists
+    /// to rewrite — so the day a model renamed `soft_points` to something else
+    /// over MCP, a test of *reading a procedure* failed on the new name. The
+    /// comment inside `a_procedure_can_be_read_and_rewritten_over_the_wire`
+    /// already recorded that lesson about the *write* half and the *read* half
+    /// went on depending on the same file anyway.
+    ///
+    /// Minimal on purpose: nothing here is about what a procedure can express,
+    /// only that one goes over the wire intact and comes back.
+    const PROBE_L1: &str = r#"
+proc probe_l1 {
+  kind     L1
+  topology points
+  capacity [1, 64] = 8
+
+  emit position
+
+  element {
+    position = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#;
+
+    const PROBE_L4: &str = r#"
+proc probe_l4 {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 2.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+
     fn start(watching: bool) -> Server {
         let dir = tempfile::tempdir().expect("tempdir");
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let l1 = dir.path().join("l1.kir");
         let l4 = dir.path().join("l4.kir");
-        std::fs::copy(root.join("examples/drift_shell.kir"), &l1).expect("l1");
-        std::fs::copy(root.join("examples/soft_points.kir"), &l4).expect("l4");
+        std::fs::write(&l1, PROBE_L1).expect("l1");
+        std::fs::write(&l4, PROBE_L4).expect("l4");
         // Port 0: the operating system picks, and `serve` reports what it got —
         // which is also the fix for `--mcp 0` naming a port that is not the port.
         let reporter = serve(0, Slots(vec![(l1, l4)]), watching).expect("serve");
@@ -856,7 +941,7 @@ mod wire_tests {
         let server = start(true);
         let (failed, source) = call(server.port, "read_procedure", json!({"slot":0,"layer":"L4"}));
         assert!(!failed, "{source}");
-        assert!(source.contains("proc soft_points"), "{}", &source[..80.min(source.len())]);
+        assert!(source.contains("proc probe_l4"), "{}", &source[..80.min(source.len())]);
 
         // **Prepended rather than substituted.** This asserted a phrase out of
         // the example's own comment header once, and broke the day somebody
@@ -954,6 +1039,69 @@ mod wire_tests {
 
     /// The body of a non-POST used to be left in the reader and become the next
     /// request line, so a `GET` with a body ran a smuggled call.
+    /// **A path this server does not have is a 404, and that is what lets a
+    /// client connect at all.**
+    ///
+    /// A client's first move is authorization discovery:
+    /// `GET /.well-known/oauth-protected-resource`. This server answered 405 to
+    /// every path, which says "that resource exists, just not by this verb" —
+    /// so the client went off to fetch protected-resource metadata, tried to
+    /// parse `this server only answers POST` as JSON, and reported the server
+    /// as unreachable. Nothing was unreachable; the handshake died on a path
+    /// that has never existed here.
+    ///
+    /// Asserted over a socket rather than against a handler, because a status
+    /// code is a property of the wire — see this module's other wire tests for
+    /// why that distinction has already mattered here.
+    #[test]
+    fn a_path_this_server_does_not_serve_is_not_found_rather_than_not_allowed() {
+        let server = start(true);
+        for path in [
+            "/.well-known/oauth-protected-resource",
+            "/.well-known/oauth-authorization-server",
+            "/mcp",
+        ] {
+            let (status, body) = raw(
+                server.port,
+                &format!("GET {path} HTTP/1.1\r\nContent-Length: 0\r\n\r\n"),
+            );
+            assert_eq!(status, 404, "GET {path} answered {status}");
+            // And a body a JSON client can read, because the one that got here
+            // was parsing JSON when it failed.
+            serde_json::from_str::<Value>(&body)
+                .unwrap_or_else(|e| panic!("the 404 body for {path} is not JSON: {e} — {body}"));
+        }
+    }
+
+    /// The endpoint itself still answers 405 to a GET, which is the Streamable
+    /// HTTP transport's own rule for a server offering no SSE stream there.
+    ///
+    /// The control for the test above: answering 404 everywhere would satisfy
+    /// it and break the transport.
+    #[test]
+    fn the_endpoint_itself_answers_405_to_a_get() {
+        let server = start(true);
+        let (status, body) = raw(server.port, "GET / HTTP/1.1\r\nContent-Length: 0\r\n\r\n");
+        assert_eq!(status, 405);
+        serde_json::from_str::<Value>(&body).expect("the 405 body is JSON too");
+    }
+
+    /// And a POST to a path that is not the endpoint is a 404 as well — the
+    /// path decides, not the verb.
+    #[test]
+    fn a_post_to_another_path_is_also_not_found() {
+        let server = start(true);
+        let body = json!({"jsonrpc":"2.0","id":1,"method":"ping"}).to_string();
+        let (status, _) = raw(
+            server.port,
+            &format!(
+                "POST /somewhere HTTP/1.1\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            ),
+        );
+        assert_eq!(status, 404);
+    }
+
     #[test]
     fn a_non_post_cannot_smuggle_a_second_request() {
         let server = start(true);
@@ -1005,11 +1153,10 @@ mod wire_tests {
     #[test]
     fn a_write_names_the_other_slots_it_reached() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let l1 = dir.path().join("l1.kir");
         let l4 = dir.path().join("l4.kir");
-        std::fs::copy(root.join("examples/drift_shell.kir"), &l1).expect("l1");
-        std::fs::copy(root.join("examples/soft_points.kir"), &l4).expect("l4");
+        std::fs::write(&l1, PROBE_L1).expect("l1");
+        std::fs::write(&l4, PROBE_L4).expect("l4");
         let shared = Slots(vec![(l1.clone(), l4.clone()), (l1, l4)]);
         let reporter = serve(0, shared, true).expect("serve");
         let port = reporter.port();
