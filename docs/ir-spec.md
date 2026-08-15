@@ -171,26 +171,36 @@ Available attributes:
 blend additive
 ```
 
-`additive` is the only legal value in v0.2. The declaration exists now so that adding the
-next mode is a format addition rather than a format change — the same move as defining
-`VideoSource` before there is a second implementation of it.
+```
+blend weighted
+```
 
-Additive needs no sorting, which is why it is where v0.2 starts: `capacity` elements cannot
+Two legal values. `additive` was the only one in v0.2, and the declaration existed before
+there was a second so that adding one would be a format addition rather than a format
+change — the same move as defining `VideoSource` before there is a second implementation of
+it. That is what it turned out to be.
+
+Additive needs no sorting, which is why it is where v0.2 started: `capacity` elements cannot
 be depth-sorted per frame at this scale, even sorting indices alone. The successor is not
 depth sorting but **weighted blended OIT** — order independent, two targets (accumulation
 and revealage) that the existing `Rgba16Float` pipeline accommodates naturally, and an
 approximation whose coarseness does not show on soft sprites. Being order independent, it
-also does not interact with compaction at all.
+does not interact with compaction at all.
 
-When `blend weighted` lands it will need a depth range from the camera for its weight
-function, plus the revealage target and a resolve pass, and wide depth ranges will degrade
-the approximation for bright distant elements. None of that reaches the IR surface.
+**The two modes read `color`'s alpha differently, and that is the part an author has to
+know.** Under `additive`, alpha is emission strength: it scales what a fragment adds, and
+the spec's "values above 1.0 are expected" applies to it as much as to the colour. Under
+`weighted`, alpha is **opacity**, and opacity above 1.0 is not a thing — the revealage a
+weighted pass accumulates is `prod(1 - a)`, which stops meaning "what is still visible
+behind this" the moment a term goes negative. The generated shader clamps it to `[0, 1]`,
+so a fragment block that writes 1.5 gets 1.0 rather than a picture with negative light in
+it.
 
 Blend mode is part of an artifact's identity: a procedure writes its `color` and alpha
 knowing how they will be combined.
 
-**The equivalent gap on the topology side is closed**, and how it closed is worth reading
-before `blend` grows a second value. Quad expansion used to be justified by
+**The equivalent gap on the topology side closed first**, and how it closed is what settled
+the shape of this declaration. Quad expansion used to be justified by
 `topology points` while `topology` was declared on the **L1** header, so an L4 had no way to
 say what it was written for. The fix was not a `topology` declaration on the L4 header: an
 L4 that assigns `clip_b` is drawing a segment and there is nothing else it could be doing,
@@ -1833,9 +1843,10 @@ producing eight mirrored copies costs one simulation and eight draws, not eight 
   substepping later touches the engine and nothing else. Capped at 4. See
   [On `dt` and simulation time](#on-dt-and-simulation-time).
 - **Sorting.** Not depth sorting — weighted blended OIT, which is order independent and so
-  cannot conflict with compaction. `blend additive` is declared in the L4 header now, as
-  the only legal value, so the second mode is an addition rather than a change. See
-  [blend](#blend-l4-only).
+  cannot conflict with compaction. `blend additive` was declared in the L4 header from the
+  start, as the only legal value, so that the second mode would be an addition rather than a
+  change. `blend weighted` is that addition, and it was: one enum variant, one parse arm,
+  and nothing in the grammar moved. See [blend](#blend-l4-only).
 - **Runtime capacity.** This one was a design error, not a constraint to keep: `capacity`
   is a performance dial, not part of a procedure's identity, and leaving it in the artifact
   would have multiplied the library by every size anyone wanted. It moves to the Set, with

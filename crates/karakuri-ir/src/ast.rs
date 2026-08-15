@@ -61,11 +61,52 @@ impl Topology {
     }
 }
 
-/// The v0.2 grammar admits exactly one value. The declaration exists so that
-/// weighted blended OIT is a later addition rather than a format change.
+/// **How the fragments that land on one texel are combined**, declared on the
+/// L4 header.
+///
+/// Unlike [`Topology`] this is a declaration and not an inference, and the
+/// reason is worth keeping beside the enum: the two modes differ in how the
+/// results of *identical* assignments are combined, not in what is assigned, so
+/// there is nothing an L4 could write that would imply one over the other.
+///
+/// **The two read `color`'s alpha differently**, which is the part an author
+/// has to know. Under [`Blend::Additive`] alpha is emission strength and is
+/// allowed past 1.0 — it scales what a fragment adds. Under [`Blend::Weighted`]
+/// it is *opacity*, and opacity above 1.0 is not a thing: the revealage a
+/// weighted pass accumulates is `prod(1 - a)`, which stops meaning "what is
+/// still visible behind this" the moment a term goes negative. The generated
+/// shader clamps it, so the value an author can usefully write is `[0, 1]`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Blend {
+    /// Colour adds and nothing occludes. Needs no sorting, which is why it is
+    /// where v0.2 started — and it is why everything this project rendered
+    /// before `weighted` glowed.
     Additive,
+    /// **Weighted blended OIT**: order-independent transparency, approximated.
+    ///
+    /// Each fragment contributes to a colour accumulation weighted by how near
+    /// the eye it is, and to a running `prod(1 - a)` revealage; a resolve pass
+    /// divides the first by its own weight sum and composites it against the
+    /// second. Order independent, so it does not interact with compaction —
+    /// which is the whole reason it is the successor to `additive` rather than
+    /// depth sorting, at `capacity` elements per frame.
+    ///
+    /// It is an approximation, and where it is coarse is stated rather than
+    /// hidden: the weight is a function of where a fragment sits between the
+    /// camera's near and far planes, so material occupying a thin slice of a
+    /// wide frustum gets near-equal weights and the result approaches a plain
+    /// alpha-weighted average. That degradation is graceful — what still
+    /// separates it from `additive` is that a weighted layer *occludes*.
+    Weighted,
+}
+
+impl Blend {
+    pub fn name(self) -> &'static str {
+        match self {
+            Blend::Additive => "additive",
+            Blend::Weighted => "weighted",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

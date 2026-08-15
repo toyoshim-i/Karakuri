@@ -475,14 +475,17 @@ impl Parser {
 
     fn parse_blend(&mut self) -> Option<Blend> {
         self.advance(); // "blend"
-        let (name, span) = self.expect_ident("`additive`")?;
+        let (name, span) = self.expect_ident("`additive` or `weighted`")?;
         match name.as_str() {
             "additive" => Some(Blend::Additive),
+            "weighted" => Some(Blend::Weighted),
             _ => {
                 self.error_with_hint(
                     span,
                     format!("unknown blend mode `{name}`"),
-                    "v0.2 defines `additive` only",
+                    "the blend modes are `additive`, which sums colour and occludes nothing, \
+                     and `weighted`, which is order-independent transparency and reads \
+                     `color`'s alpha as opacity",
                 );
                 None
             }
