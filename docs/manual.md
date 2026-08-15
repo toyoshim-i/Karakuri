@@ -570,8 +570,11 @@ to an average than to a sort. The occlusion is what changes the picture; the ord
 refinement on top of it. Being order-independent is also what lets it exist at this scale at
 all: nothing is sorted, so nothing fights compaction.
 
-Two costs. It allocates **two more render targets per weighted slot**, 8.79 MB each at
-1280x720 on top of the 7.03 MB every slot already has — nothing for additive slots. And a
+Two costs. It allocates **two more render targets per weighted slot** — 7.03 MB of
+accumulation plus 1.76 MB of revealage at 1280x720, so 8.79 MB the pair, on top of the
+7.03 MB every slot already has, and nothing at all for an additive slot. A slot under
+`--watch` holds more than one Set at a time (the live one, the candidate on trial, and up to
+four waiting to be freed), so a weighted slot mid-swap is a multiple of that. And a
 **fullscreen L4 may not declare it**: one fragment per texel makes the resolve give back
 exactly what additive accumulates, so the Set refuses to build rather than charge for the
 identity. The diagnostic says so.

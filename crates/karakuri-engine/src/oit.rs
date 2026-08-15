@@ -24,10 +24,20 @@
 //! # What it costs
 //!
 //! At 1280x720: 7.03 MB of accumulation plus 1.76 MB of revealage, so 8.79 MB
-//! for each slot whose L4 declares `weighted`, on top of the 7.03 MB slot target
+//! for each *Set* whose L4 declares `weighted`, on top of the 7.03 MB slot target
 //! every slot has. A deck of four, all weighted, is 63 MB of render target —
-//! against 28 MB for four additive ones. Worth knowing before a fifth slot is
-//! ever considered; not worth an allocator.
+//! against 28 MB for four additive ones.
+//!
+//! **Per Set and not per slot, which is the number that surprises.** A
+//! [`HotSwap`](crate::swap::HotSwap) holds the live Set, the candidate on trial
+//! behind it, and up to `GRAVEYARD_CAPACITY` more waiting for the GPU to be done
+//! with them — every one of which owns its own pair while it exists. A weighted
+//! slot mid-swap is 17.6 MB and a `--watch` session churning builds can be
+//! several times that before the graveyard drains. `swap::measure` also resizes
+//! a Set to the probe resolution and back, so each weighted build allocates its
+//! pair twice on the way in.
+//!
+//! Worth knowing before a fifth slot is ever considered; not worth an allocator.
 
 use crate::present::Present;
 

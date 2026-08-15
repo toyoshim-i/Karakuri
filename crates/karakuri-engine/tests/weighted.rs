@@ -189,16 +189,23 @@ fn covered_above(px: &[[f32; 4]], floor: f32) -> Vec<usize> {
     px.iter().enumerate().filter(|(_, t)| t[3] > floor).map(|(i, _)| i).collect()
 }
 
-/// **Coverage never exceeds 1, which additive's does not promise.** This is the
-/// mode's whole point restated as a number: two half-covering sprites over one
-/// another cover three quarters, not one and a half, because `1 - prod(1 - a)`
-/// is a probability where a sum is not.
+/// **The blend mode does not change what a texel is covered by.** Two sprites of
+/// opacity 0.5 over one another cover three quarters under both modes, because
+/// `1 - prod(1 - a)` is what both accumulate — weighted in a revealage target
+/// and additive in its alpha channel, by different arithmetic reaching the same
+/// number.
 ///
-/// Asserted on the alpha channel because that is what L5 composites with. An
-/// additive slot at the same alpha hands the mix a coverage above 1, which
-/// `composite.wgsl` then has to saturate.
+/// That agreement is what lets L5 stay out of this: `composite.wgsl` reads a
+/// slot's alpha as coverage and does not care which pass wrote it.
+///
+/// **An earlier version of this called itself a saturation test** — "weighted
+/// saturates where additive sums" — which is false and was never what it
+/// asserted. Additive's alpha blend is `One` / `OneMinusSrcAlpha`, so it
+/// produces exactly the same probability; the two only part company for an
+/// alpha above 1, which is `an_alpha_above_one_is_clamped`'s business and not
+/// this test's.
 #[test]
-fn weighted_coverage_saturates_where_additive_coverage_sums() {
+fn the_blend_mode_does_not_change_what_a_texel_is_covered_by() {
     let gpu = Gpu::headless().expect("no GPU available");
     let mut additive = build(&gpu, &sprite_l4("additive"));
     let mut weighted = build(&gpu, &sprite_l4("weighted"));

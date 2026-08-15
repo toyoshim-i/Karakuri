@@ -126,7 +126,10 @@ impl Points {
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba16Float,
                     // `blend additive`, no depth write: this is what avoids any
-                    // sort requirement, and it is the only mode v0.2 accepts.
+                    // sort requirement. **This renderer is additive and has no
+                    // other mode** — `blend weighted` is a property of a
+                    // generated L4, and this is the hand-written stand-in that
+                    // predates them.
                     // Alpha accumulates coverage for the L5 mix rather than
                     // being discarded — the argument is in `set.rs`, on the
                     // generated L4 pipeline this one shadows.
