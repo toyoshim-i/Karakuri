@@ -284,7 +284,8 @@ a technique nobody would find without being pushed into it.
 
 One thing it wanted and did not have: **an example to read.** It looked for another slot's
 procedure first. A library of procedures exposed as MCP resources would have answered in one
-call what four failed compiles answered slowly.
+call what four failed compiles answered slowly — see M4, where a slice of that library is
+now scheduled ahead of the search it was originally about.
 
 The review also found the surface was a network service written like a local one: an
 attacker-supplied `Content-Length` was allocated before it was believed, and a fifty-six byte
@@ -886,6 +887,32 @@ technique nobody finds without being forced into it. That is the shape of the li
 
 **Goal:** finding the right thing among two thousand artifacts is faster than generating a
 new one.
+
+**A slice of this should arrive long before the rest: procedures a model can read.**
+
+The first real MCP session opened by looking for an example — *"is there a worked example of
+lines in another slot?"* — found none, because the deck had one slot, and fell back on four
+failed compiles to learn what the language allows. A handful of readable procedures would
+have answered in one call.
+
+That is the same shape as M5's staging lane, which has a first producer needing no agents:
+this library has a **first consumer needing no search**. Two steps, in order of cost:
+
+- **The shipped examples as MCP resources.** They are files in the repository and they
+  already work; exposing them is a `resources/list` entry each. Nothing infrastructural.
+- **Saved Sets and their artifacts as resources.** `--save-set` already writes one and the
+  store already content-addresses what it points at, so this is a lookup rather than a
+  feature.
+
+Embeddings, thumbnails and genealogy stay here in M4, because they answer *"which of two
+thousand"* and the above answers *"how is this written"*.
+
+**One design point worth fixing before either is built: the resource list is a curriculum,
+not an index.** A model handed two thousand procedures learns nothing it could not have
+guessed; a model handed four good ones, chosen to span what the language can do, writes
+better code immediately. So resources stay a curated few and *search* over a large library is
+a tool call — which is also the only way round the fact that `resources/list` is a list a
+client reads in full.
 
 **Adds**
 

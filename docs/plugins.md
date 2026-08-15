@@ -91,6 +91,18 @@ difference. What it means here is that a plugin is a third sink rather than a ch
 a frame works, and that the interface a plugin needs already has two implementations to be
 extracted from rather than one to be guessed at.
 
+## What a surface offers, not only what it accepts
+
+MCP taught this the moment it was first used: a model with no worked example spent four
+failed compiles learning what the language allows. **A control surface for a model is half
+tools and half things to read**, and the reading half is the cheaper of the two to get
+wrong — a keyboard needs no curriculum and a model does.
+
+The rule that falls out is worth stating before anyone builds the library version: **the
+resource list is a curriculum, not an index.** Four procedures chosen to span what the
+language can do beat two thousand, and searching a large library is a tool call rather than
+a list a client reads in full. See M4 in `docs/roadmap.md`.
+
 ## Distribution
 
 Plugins live in their own repositories, and **this one prescribes nothing about where a
