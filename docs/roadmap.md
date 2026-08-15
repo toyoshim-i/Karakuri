@@ -935,21 +935,42 @@ being forced into it. `examples/strand_shell.kir` is kept as written for that re
 **Goal:** finding the right thing among two thousand artifacts is faster than generating a
 new one.
 
-**A slice of this should arrive long before the rest: procedures a model can read.**
+**A slice of this was scheduled long before the rest — procedures a model can read — and is
+now deferred on evidence rather than on cost.**
 
-The first real MCP session opened by looking for an example — *"is there a worked example of
-lines in another slot?"* — found none, because the deck had one slot, and fell back on four
-failed compiles to learn what the language allows. A handful of readable procedures would
-have answered in one call.
+It was scheduled because the *first* real MCP session opened by looking for an example —
+*"is there a worked example of lines in another slot?"* — found none, because the deck had
+one slot, and fell back on four failed compiles to learn what the language allows. A handful
+of readable procedures would have answered in one call.
 
-That is the same shape as M5's staging lane, which has a first producer needing no agents:
-this library has a **first consumer needing no search**. Two steps, in order of cost:
+**The second session did not reproduce that**, and the difference is worth reading before
+this is picked up again. Asked for line art with `topology lines` in the language, a model
+wrote three procedures that landed and held the frame budget, and worked out two hazards the
+specification does not state — that scaling a segment by anything but 1.0 pulls consecutive
+segments apart, and that a per-segment taper scallops a joined strand. It did that from the
+spec resource and the generated vocabulary, with no example to copy.
+
+What changed in between was not the library. It was the *reference material*: the vocabulary
+page is generated from the checker's own tables and now carries the topologies and the stage
+outputs as well as the builtins, and `docs/ir-spec.md` gained a worked lines example. The
+gap the first session hit was a documentation gap that read as a library gap.
+
+So this waits for the failure to recur. **What would revive it**: a session where a model
+reaches for something the spec and the vocabulary describe correctly and still gets it wrong,
+or asks for an example twice. That is a specific observation to watch for rather than a
+feeling, and it is the point of writing it down instead of quietly dropping the item.
+
+The two steps, if it does recur, in order of cost:
 
 - **The shipped examples as MCP resources.** They are files in the repository and they
   already work; exposing them is a `resources/list` entry each. Nothing infrastructural.
 - **Saved Sets and their artifacts as resources.** `--save-set` already writes one and the
   store already content-addresses what it points at, so this is a lookup rather than a
   feature.
+
+Both now have a complication they did not have when they were scheduled: **`examples/` is
+app presets and a user's Sets are their own**, so a resource list has to say which is which.
+See the file layout in `docs/manual.md`.
 
 Embeddings, thumbnails and genealogy stay here in M4, because they answer *"which of two
 thousand"* and the above answers *"how is this written"*.
