@@ -860,6 +860,29 @@ is a design saying out loud what it is missing.**
   node exists. **This is now the largest single gap in what the system can express**, and
   unlike `lines` it will not be free: there is no element buffer to instance over, so it is
   a second draw shape rather than a second placement of the same one.
+
+  The design, decided before building so that the expensive half is not guessed at:
+
+  - **It is declared by having no `vertex` block**, on the same principle `clip_b` settled:
+    a procedure with no per-element position has nothing for a vertex block to do, so its
+    absence is the declaration and there is one place for the fact. `Checked::topology`
+    gains a third value for it. That value is inferred on an L4 and **refused on an L1** —
+    geometry cannot be fullscreen — which is a rule to state rather than a wart to explain.
+  - **`consumes` must be empty.** With no vertex block there is nowhere to read an element
+    from. That is worth having as a rule rather than as a consequence, because it is what
+    makes the next point provable.
+  - **The L1's compute is skipped.** Nothing reads the elements, and the checker says so, so
+    a fullscreen Set pays for no simulation at all. Without the `consumes` rule this would
+    be an optimisation nobody could justify; with it, it is what the pair means.
+  - **Two ambients carry the ray: `eye` and `ray`.** The alternative is handing a procedure
+    the inverse camera and letting it build its own, which puts the projection convention in
+    every shader that marches and makes a `mat4` inverse an IR problem. The camera is a
+    built-in here, so the convention is the engine's to own. `point_coord` runs across the
+    frame, which is the same sentence it already means.
+  - **What it does not change is that a Set is one L1 and one L4.** A fullscreen L4 still
+    needs an L1 to be paired with, and that L1 is dead weight the operator has to choose
+    (something small). A Set that can hold no geometry is the graph model's, not this
+    change's.
 - **`blend weighted`.** Already listed below, and it is the other half of the point-sprite
   monotony: additive is why everything glows. Lines did not change that — a stroke glows
   exactly as a sprite does.
