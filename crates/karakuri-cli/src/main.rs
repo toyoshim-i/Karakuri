@@ -1008,6 +1008,7 @@ fn parse_bind(value: &str) -> Result<Binding, String> {
         layer: match layer {
             karakuri_ir::Kind::L1 => Layer::L1,
             karakuri_ir::Kind::L2 => Layer::L2,
+            karakuri_ir::Kind::L3 => Layer::L3,
             karakuri_ir::Kind::L4 => Layer::L4,
         },
         index,
@@ -2168,6 +2169,20 @@ fn main() {
             match checked.kind {
                 karakuri_ir::Kind::L2 => l2s.push(checked),
                 karakuri_ir::Kind::L4 => l4s.push(checked),
+                // **Parsed, checked, lowered — and not yet buildable.** The IR
+                // knows what an L3 is and `karakuri-codegen` emits its shader;
+                // what does not exist is a node in a Set to bind it to. Said
+                // plainly rather than ignored: a slot that quietly dropped the
+                // camera would draw from the built-in orbit and look like the
+                // procedure had no effect.
+                karakuri_ir::Kind::L3 => {
+                    eprintln!(
+                        "slot {slot}: {} is an L3, and a Set cannot hold one yet — the camera \
+                         is still the built-in orbit. See `docs/roadmap.md`, M3",
+                        path.display()
+                    );
+                    std::process::exit(1);
+                }
                 karakuri_ir::Kind::L1 => {
                     eprintln!(
                         "slot {slot}: {} is an L1 and so is {} — a slot simulates with one \

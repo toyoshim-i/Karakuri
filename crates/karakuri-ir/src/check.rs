@@ -181,6 +181,8 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
                 // the way down a chain — a deformation moves elements about and
                 // does not turn a cloud into strands.
                 Kind::L2 => None,
+                // An L3 has no geometry at all — it produces a viewpoint.
+                Kind::L3 => None,
                 Kind::L4 => Some(drawn_topology(&blocks)),
             },
             capacity: proc.capacity,
@@ -222,6 +224,7 @@ fn kind_name(kind: Kind) -> &'static str {
     match kind {
         Kind::L1 => "L1",
         Kind::L2 => "L2",
+        Kind::L3 => "L3",
         Kind::L4 => "L4",
     }
 }
@@ -359,6 +362,67 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 errors.push(
                     IrError::contract(proc.span, "L2 procedures require a `deform` block")
                         .with_hint("add `deform { … }`: it is the whole of what an L2 does"),
+                );
+            }
+        }
+        // **An L3 declares nothing about geometry, because it has none.** It
+        // produces the six numbers a camera is; what is drawn with them is the
+        // renderer's business, and how many elements there are is the L1's.
+        Kind::L3 => {
+            if let Some(cap) = &proc.capacity {
+                errors.push(
+                    IrError::contract(cap.span, "`capacity` is L1 only")
+                        .with_hint(
+                            "remove `capacity`: an L3 produces one viewpoint per frame and \
+                             has no elements of its own",
+                        ),
+                );
+            }
+            if proc.topology.is_some() {
+                errors.push(
+                    IrError::contract(proc.span, "`topology` is L1's")
+                        .with_hint("remove `topology`: an L3 is a viewpoint, not geometry"),
+                );
+            }
+            if proc.blend.is_some() {
+                errors.push(
+                    IrError::contract(proc.span, "`blend` is L4 only")
+                        .with_hint("remove `blend`: an L3 draws nothing"),
+                );
+            }
+            if !proc.emit.is_empty() {
+                errors.push(
+                    IrError::contract(proc.span, "`emit` is for procedures that write elements")
+                        .with_hint(
+                            "remove `emit`: what an L3 produces is a camera, and the six values \
+                             it writes are named by the `camera` block rather than declared",
+                        ),
+                );
+            }
+            // **Refused rather than ignored, and it will not always be.**
+            // `docs/ir-spec.md` settles that an L3 may read geometry — a camera
+            // that follows an element is the first thing anyone asks a camera to
+            // do — and what it reads is a *reduction* or element zero rather
+            // than a per-element attribute, which is syntax this language does
+            // not have yet. Until it does, `consumes position` would check
+            // clean and lower to a camera that ignores it.
+            if !proc.consumes.is_empty() {
+                errors.push(
+                    IrError::contract(
+                        proc.span,
+                        "an L3 cannot consume attributes yet",
+                    )
+                    .with_hint(
+                        "remove `consumes`: a camera that reads geometry points at a reduction \
+                         — a centroid, or element zero — and that addressing is specified in \
+                         `docs/ir-spec.md` but not built. A camera on the clock alone works today",
+                    ),
+                );
+            }
+            if !proc.blocks.iter().any(|b| b.kind == BlockKind::Camera) {
+                errors.push(
+                    IrError::contract(proc.span, "L3 procedures require a `camera` block")
+                        .with_hint("add `camera { … }`: it is the whole of what an L3 does"),
                 );
             }
         }
@@ -828,6 +892,17 @@ fn required_keys(block: BlockKind, emit: &HashSet<Attr>, draws_lines: bool) -> V
         // it to assign everything it emits would make every one of them restate
         // the whole element.
         BlockKind::Deform => Vec::new(),
+        // **Two of the six, and the other four have defaults.** Where the
+        // camera is and what it looks at are the whole of what makes one
+        // camera different from another; `up`, the field of view and the two
+        // planes have answers that are right far more often than not, and
+        // requiring them would make the simplest camera anyone writes four
+        // lines longer for nothing. The lowering writes the defaults before
+        // the block runs, so an author overrides rather than restates — the
+        // same shape as an L2's pass-through.
+        BlockKind::Camera => {
+            vec![CovKey::Output(Output::Eye), CovKey::Output(Output::Target)]
+        }
     }
 }
 
@@ -1075,7 +1150,8 @@ impl<'a> Checker<'a> {
                 Some(BlockKind::Deform) => {
                     self.emit.contains(&attr) || self.consumes.contains(&attr)
                 }
-                Some(BlockKind::Vertex) | Some(BlockKind::Fragment) | None => false,
+                Some(BlockKind::Vertex) | Some(BlockKind::Fragment) | Some(BlockKind::Camera)
+                | None => false,
             };
             if !available {
                 let hint = match self.block {
@@ -1099,6 +1175,20 @@ impl<'a> Checker<'a> {
                 return TargetRes::Invalid;
             }
             return TargetRes::Attr(attr);
+        }
+        // **In a `camera` block, `eye` is the output rather than the ambient.**
+        // The two name one thing — where the camera is — written here and read
+        // in a marching fragment stage, the same way `position` is written by
+        // an L1 and read by an L4. Ambients are tried first below, which is
+        // right everywhere else and wrong in exactly this block: without this,
+        // the one word an L3 author writes most reports "cannot assign to an
+        // ambient value".
+        if self.block == Some(BlockKind::Camera) {
+            if let Some(output) = Output::from_name(name) {
+                if output.block() == BlockKind::Camera {
+                    return TargetRes::Output(output);
+                }
+            }
         }
         if Ambient::from_name(name).is_some() {
             self.err(
@@ -1367,7 +1457,8 @@ impl<'a> Checker<'a> {
                     self.emit.contains(&attr) || self.consumes.contains(&attr)
                 }
                 Some(BlockKind::Vertex) | Some(BlockKind::Fragment) => self.consumes.contains(&attr),
-                None => false,
+                // An L3 has no element in hand — see `check_header`.
+                Some(BlockKind::Camera) | None => false,
             };
             if available {
                 return Some(TExpr::new(attr.ty(), span, TExprKind::Attr(attr)));
@@ -1383,6 +1474,10 @@ impl<'a> Checker<'a> {
                     "add `{name}` to `consumes` to read what reaches this node, or to \
                      `emit` to add it to what leaves"
                 ),
+                Some(BlockKind::Camera) => "a camera reads the clock and its params, not \
+                     elements — pointing one at geometry means naming a reduction or element \
+                     zero, which `docs/ir-spec.md` specifies and nothing builds yet"
+                    .to_string(),
                 None => "attributes are not available in a header expression".to_string(),
             };
             self.err_hint(

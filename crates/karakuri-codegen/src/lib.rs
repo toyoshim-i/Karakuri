@@ -9,11 +9,14 @@
 //! nothing here re-derives a type or re-validates a rule the earlier stages
 //! already enforce.
 //!
-//! Two independent lowerings, one per `Kind`:
+//! One independent lowering per `Kind`:
 //!
 //! - [`l1::generate_l1`] — `spawn`/`element` as compute entry points. See
 //!   the module doc for the state model (prev/next double buffering) and
 //!   what is deliberately *not* generated (the compaction scan).
+//! - [`l3::generate_l3`] — `camera` as one compute invocation writing the
+//!   camera state. See the module doc for why a camera on the clock alone is
+//!   lowered to a GPU pass anyway.
 //! - [`l4::generate_l4`] — `vertex`/`fragment` as a render pipeline. See the
 //!   module doc for why `topology points` becomes a quad, not a point
 //!   primitive.
@@ -26,6 +29,7 @@
 
 pub mod l1;
 pub mod l2;
+pub mod l3;
 pub mod l4;
 pub mod layout;
 mod lower;
@@ -34,6 +38,7 @@ mod ty;
 
 pub use l1::{generate_l1, L1Shader};
 pub use l2::{generate_l2, L2Shader};
+pub use l3::{generate_l3, L3Shader};
 pub use l4::{generate_l4, L4Shader};
 
 use karakuri_ir::typed::Checked;
@@ -46,6 +51,7 @@ use crate::layout::ElementLayout;
 #[derive(Debug, Clone)]
 pub enum Shader {
     L1(L1Shader),
+    L3(L3Shader),
     L4(L4Shader),
 }
 
@@ -66,6 +72,7 @@ pub fn generate(checked: &Checked, elements: Option<&ElementLayout>) -> Shader {
         // a list rather than one upstream layout — `Set::build` has it and this
         // signature does not. Call `generate_l2` directly.
         Kind::L2 => panic!("an L2 is generated against its position in a chain: call generate_l2"),
+        Kind::L3 => Shader::L3(generate_l3(checked)),
         Kind::L4 => {
             let elements = elements.expect("an L4 procedure needs its paired L1's ElementLayout");
             Shader::L4(generate_l4(checked, elements))

@@ -212,12 +212,14 @@ pub fn binding_from_record(record: &Record) -> Result<Binding, String> {
 /// which puts the Set-wide value above the narrower ones that override it.
 type ParamKey<'a> = (Option<(u8, u32)>, &'a str);
 
-/// `Layer` as a number, so an address can sort. Only the two a Set builds.
+/// `Layer` as a number, so an address can sort. In node order, which is the
+/// order a Set holds them in.
 fn layer_ordinal(layer: Kind) -> u8 {
     match layer {
         Kind::L1 => 0,
         Kind::L2 => 1,
-        Kind::L4 => 2,
+        Kind::L3 => 2,
+        Kind::L4 => 3,
     }
 }
 
@@ -225,6 +227,7 @@ fn layer_from_ordinal(n: u8) -> Layer {
     match n {
         0 => Layer::L1,
         1 => Layer::L2,
+        2 => Layer::L3,
         _ => Layer::L4,
     }
 }
@@ -235,8 +238,8 @@ fn kind_of(layer: Layer) -> Option<Kind> {
     match layer {
         Layer::L1 => Some(Kind::L1),
         Layer::L2 => Some(Kind::L2),
+        Layer::L3 => Some(Kind::L3),
         Layer::L4 => Some(Kind::L4),
-        _ => None,
     }
 }
 
@@ -247,6 +250,7 @@ pub fn record_from_binding(binding: &Binding) -> Record {
         layer: match binding.layer {
             Kind::L1 => Layer::L1,
             Kind::L2 => Layer::L2,
+            Kind::L3 => Layer::L3,
             Kind::L4 => Layer::L4,
         },
         index: binding.index,

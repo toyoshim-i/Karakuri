@@ -40,11 +40,18 @@ One `proc` per file.
 
 ```
 kind L1        // geometry generation
+kind L2        // geometry modulation
+kind L3        // the camera
 kind L4        // rendering
 ```
 
-v0.2 defines `L1` and `L4` only. `L2` (deformation) and `L3` (camera) come later; until
-then the camera is a built-in.
+All four are built. `L5` is a `kind` in the design and not yet in the language — see
+[L2 and L3](#l2-and-l3--m3) and `docs/roadmap.md`.
+
+Each brings its own header rules, and a declaration belonging to another layer is refused
+where it is written rather than ignored: `capacity` and `topology` are L1's, `blend` is L4's,
+`emit` belongs to procedures that write elements. An L3 declares none of them — it produces a
+viewpoint, and what is drawn with it is the renderer's business.
 
 ### capacity / topology (L1 only)
 
@@ -578,9 +585,18 @@ alternatives selectable means three simulations resident.
 ### Blocks
 
 ```
-spawn   { ... }      // initialize a newly allocated element
-element { ... }      // update a live element; may call kill()
+spawn   { ... }      // L1: initialize a newly allocated element
+element { ... }      // L1: update a live element; may call kill()
+deform  { ... }      // L2: rewrite a live element's attributes; may not kill()
+camera  { ... }      // L3: produce this frame's camera
+vertex  { ... }      // L4: once per element
+fragment{ ... }      // L4: once per rasterised fragment
 ```
+
+**A block name belongs to exactly one layer**, and a block in the wrong kind of procedure is
+refused. That is what each new name buys — `deform` rather than a second meaning for
+`element`, `camera` rather than a mode of `vertex` — and it is why the list above is a
+partition rather than a menu.
 
 `spawn` requires a spawn rate. Declare it as a parameter named `spawn_rate`
 (elements per second); the engine reads it specially:
@@ -593,6 +609,55 @@ If a procedure declares no `spawn` block, all `capacity` elements are live from 
 and `element` alone drives them. This is the simplest form and a good default. Emitted
 attributes are zero-initialized before the first frame — the frame-zero `element` pass
 reads zeros, not garbage — and `seed` equals the element's initial slot index.
+
+### The `camera` block (L3)
+
+```
+proc sweep {
+  kind L3
+
+  param radius : float [1.0, 40.0] = 8.0
+  param speed  : float [0.0, 2.0]  = 0.15
+
+  camera {
+    let a  = t * speed * 6.2831853;
+    eye    = vec3(cos(a) * radius, 2.0, sin(a) * radius);
+    target = vec3(0.0, 0.0, 0.0);
+  }
+}
+```
+
+Six outputs, of which **two are required**:
+
+| Output | Type | Default |
+|---|---|---|
+| `eye` | `vec3` | — |
+| `target` | `vec3` | — |
+| `up` | `vec3` | `vec3(0.0, 1.0, 0.0)` |
+| `fov_y` | `float` | `1.0471976` (a third of pi) |
+| `near` | `float` | `0.1` |
+| `far` | `float` | `100.0` |
+
+Where the camera is and what it looks at are the whole of what makes one camera different
+from another. The other four are written before the block runs — the same shape as an L2's
+pass-through — so an author overrides what they mean to change and restates nothing. Their
+values are the built-in orbit's, so replacing it with the simplest L3 anyone would write does
+not move the field of view underneath the picture.
+
+`target` is a **point**, not a direction, because pointing at a thing is what a camera here is
+asked to do; a direction would make every "follow this" a subtraction and a normalize the
+author had to remember. `near` and `far` are not decorative — see the note under
+[L3 — the camera](#l3--the-camera).
+
+**It reads the clock, `dt`, and its params, and nothing else.** No `seed`, because that is a
+per-element value and an L3 runs once a frame over no element. No attributes, and `consumes`
+is refused rather than ignored: an L3 *will* read geometry, and what it will read is a
+reduction or element zero — see [What an L3 can point at](#what-an-l3-can-point-at-a-reduction-or-element-zero) —
+which is addressing this language does not have yet. `dt` is there although nothing can use it
+yet, because an L3 is allowed to hold state and smoothing is written against a step.
+
+`eye` is also readable, as an ambient, in a marching L4's `fragment` block. One concept,
+written here and read there — the same relationship `position` has between an L1 and an L4.
 
 ### Spawn timing
 
