@@ -992,6 +992,21 @@ What falls out with no further work: `examples/drift_shell.kir` drawn as sprites
 streaks *and* as a solid, for one simulation and three draw passes — the payoff the
 primitive-centric bet was made for, which today costs three simulations.
 
+**Built: several renderers over one geometry.** `Set::build_many` takes the L4s in draw
+order and they run in that order over the one attachment — the first clears, the rest load —
+so `drift_shell` drawn as sprites *and* as streaks *and* as a solid is one simulation and
+three draw passes, where it used to be three simulations. **Nothing about a renderer had to
+change to be in a list**, which is the node split paying for itself: it was already a node
+owning its pipeline, its uniform and its targets, reading the geometry across a typed edge.
+
+Two rules moved to where their premises live. `SetError::WeightedFullscreen` said `blend
+weighted` on a fullscreen procedure is the identity — true only while that procedure is the
+*only* one drawing, since a later one composites `over` what is under it rather than
+replacing a clear. It was refused inside `Renderer::build`, which cannot know the count; it is
+now refused in `Set::build_many`, which can, and only for a lone renderer. And the fullscreen
+simulation skip became a question about *every* renderer rather than the one: a node that
+reads no attribute does not excuse the simulation if another reads them all.
+
 **Built: both nodes own their state.** `crate::node` holds an L1 node and an L4 node —
 element buffers, counts, compaction, the spawn accumulator, pipelines and bind groups on one
 side; pipeline, uniform, accumulation targets and its own bind groups on the other — with

@@ -163,11 +163,29 @@ impl Oit {
                 module: &shader,
                 entry_point: Some("fs"),
                 compilation_options: Default::default(),
-                // **No blend state.** The resolve replaces the slot target
-                // rather than composing into it: it is the whole of what this
-                // Set drew, and the pass below clears first for the same reason
-                // the additive path does.
-                targets: &[Some(Present::HDR_FORMAT.into())],
+                // **`over`, premultiplied**, and the same state whether this
+                // node is the first to reach the target or the fifth. The
+                // resolve emits colour already multiplied by coverage with
+                // coverage in alpha, so `src + dst * (1 - src.a)` is the
+                // composite — and onto the transparent black the first node
+                // clears to, `over` gives back exactly `src`. One blend state
+                // rather than two paths that have to agree about the first one.
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: Present::HDR_FORMAT,
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        alpha: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
             }),
             primitive: wgpu::PrimitiveState::default(),
             depth_stencil: None,
@@ -225,7 +243,17 @@ impl Oit {
 
     /// Draws the resolve into `target`, which is the slot target the additive
     /// path would have written directly.
-    pub(crate) fn resolve_into(&self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
+    ///
+    /// `first` says whether this node is the first to reach that target. The
+    /// first clears it and the rest load what is already there — see
+    /// [`Renderer::draw`](crate::node::Renderer::draw), which makes the same
+    /// choice for the same reason.
+    pub(crate) fn resolve_into(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        first: bool,
+    ) {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("oit resolve"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -233,9 +261,16 @@ impl Oit {
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    // The triangle covers every texel, so this is a formality
-                    // on an immediate-mode backend and a saved read on a tiler.
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    // The triangle covers every texel, so the clear is a
+                    // formality on an immediate-mode backend and a saved read
+                    // on a tiler — for the first node. For any later one the
+                    // load is not a formality at all: it is what the `over`
+                    // above composites against.
+                    load: if first {
+                        wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+                    } else {
+                        wgpu::LoadOp::Load
+                    },
                     store: wgpu::StoreOp::Store,
                 },
             })],
