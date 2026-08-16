@@ -98,7 +98,7 @@ impl Reporter {
     }
 }
 
-/// Where a slot's two procedures live, so a tool can name a slot rather than a
+/// Where a slot's procedures live, so a tool can name a slot rather than a
 /// path.
 ///
 /// **Paths never cross the protocol.** A client may be on another machine

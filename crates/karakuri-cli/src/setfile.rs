@@ -72,7 +72,7 @@ pub struct Loaded {
     /// draw order. **Several `slot` records on L4 is how a file says a stack**;
     /// the format already allowed it and nothing new had to be added.
     pub l4s: Vec<Checked>,
-    /// The two procedures as text.
+    /// Every procedure as text — the L1, then each renderer in draw order.
     ///
     /// **Carried because a Set file has no `.kir` on disk and an editable run
     /// needs one.** A Set names its procedures by hash; the sources come out of
@@ -286,6 +286,7 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
         }),
         Line::new(Record::Slot {
             layer: Layer::L1,
+            index: 0,
             proc_hash: l1_hash,
         }),
         // On L1, because that is the layer whose element buffers it sizes. The
@@ -299,11 +300,12 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
     // **One `slot` record per renderer, in draw order.** Several on L4 is how
     // the format says a stack, and it needed no new record to say it — a file
     // with one reads exactly as it always did.
-    for proc_hash in l4_hashes {
+    for (index, proc_hash) in l4_hashes.into_iter().enumerate() {
         lines.insert(
             lines.len() - 1,
             Line::new(Record::Slot {
                 layer: Layer::L4,
+                index: index as u32,
                 proc_hash,
             }),
         );
@@ -359,8 +361,9 @@ pub fn load(store: &Store, id: &str) -> Result<Loaded, String> {
 pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, String> {
     let mut notes = Vec::new();
     let mut slots: BTreeMap<&str, Hash> = BTreeMap::new();
-    // The renderers, in the order their records appeared.
-    let mut l4_slots: Vec<Hash> = Vec::new();
+    // The renderers, by index. `None` is a gap — an index nothing claimed —
+    // which is refused below rather than silently closed up.
+    let mut l4_slots: Vec<Option<Hash>> = Vec::new();
     let mut inlined: BTreeMap<Hash, BTreeMap<u32, String>> = BTreeMap::new();
     let mut capacity = None;
     let mut params = Vec::new();
@@ -380,15 +383,32 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                 }
                 file_id = id.clone();
             }
-            Record::Slot { layer, proc_hash } => match layer {
+            Record::Slot {
+                layer,
+                index,
+                proc_hash,
+            } => match layer {
                 Layer::L1 => {
                     slots.insert("L1", *proc_hash);
                 }
-                // **Appended, not replaced.** A second L4 `slot` record is a
-                // second renderer over the same geometry rather than a
-                // correction of the first, which is what makes a stack
-                // expressible in the format as it stands.
-                Layer::L4 => l4_slots.push(*proc_hash),
+                // **Placed by index, not appended.** A second L4 `slot` record
+                // is a second renderer over the same geometry rather than a
+                // correction of the first — and the index says which, so the
+                // records need not arrive in order and the projection can fold
+                // them without one. A file from before stacks existed carries
+                // one L4 at index 0 and lands where it always did.
+                Layer::L4 => {
+                    let at = *index as usize;
+                    if l4_slots.len() <= at {
+                        l4_slots.resize(at + 1, None);
+                    }
+                    if l4_slots[at].is_some() {
+                        notes.push(format!(
+                            "two L4 slots both claim index {at}; the later one is used"
+                        ));
+                    }
+                    l4_slots[at] = Some(*proc_hash);
+                }
                 other => notes.push(format!(
                     "slot {} was skipped: this engine builds L1 and L4 only",
                     layer_name(*other)
@@ -490,7 +510,16 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     }
     let l4_srcs = l4_slots
         .iter()
-        .map(|h| source_of("L4", Some(h)))
+        .enumerate()
+        .map(|(at, h)| {
+            source_of("L4", h.as_ref()).map_err(|e| match h {
+                Some(_) => e,
+                // A gap rather than a missing artifact: index 2 without index 1
+                // describes a stack with a hole in it, and closing it up would
+                // silently change draw order.
+                None => format!("set `{file_id}` names an L4 at index {at} but none before it"),
+            })
+        })
         .collect::<Result<Vec<_>, _>>()?;
     let l1 = crate::compile::check(&l1_src)?;
     let l4s = l4_srcs
@@ -665,7 +694,7 @@ proc points {
         // Bundle it: every slot's source inlined, line by line, as `src`.
         let mut bundled = Vec::new();
         for line in &lines {
-            if let Record::Slot { proc_hash, layer } = line.record() {
+            if let Record::Slot { proc_hash, layer, .. } = line.record() {
                 let src = match layer {
                     Layer::L1 => L1,
                     _ => L4,

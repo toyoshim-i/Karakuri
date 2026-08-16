@@ -2,9 +2,9 @@
 
 Extension `.kir`. Plain text. Written by LLMs, validated by the compiler, lowered to WGSL.
 
-One `.kir` file is one procedure and fills exactly one slot. A Set is a combination of
-procedures, one per slot. Cross-slot combination works because of the `emit` / `consumes`
-contract described below.
+One `.kir` file is one procedure. A Set is a combination of procedures: one L1 that
+simulates, and one or more L4s drawn over it in order. Combination works because of the
+`emit` / `consumes` contract described below.
 
 ## Design principles
 
@@ -815,9 +815,10 @@ Two rules come with it:
 `point_coord` runs 0..1 across the frame, x to the right and y down, which is the same
 sentence it already means: 0..1 across the primitive.
 
-A Set is still one L1 and one L4, so a fullscreen renderer still needs an L1 to be paired
-with, and that L1 is dead weight. Pick something small; only its `capacity` declaration is
-read.
+A Set always has an L1, so a fullscreen renderer is still paired with geometry — and if it
+is the *only* renderer, that geometry is dead weight: pick something small, since only its
+`capacity` declaration is read. In a stack beside a per-element renderer it is not dead
+weight at all, and the simulation runs for the node that reads it.
 
 **The fragment cost ceiling is different here, and deliberately.** A per-element renderer is
 held to 512 ops per fragment because nobody knows how many fragments there will be —
@@ -1867,9 +1868,9 @@ Two consequences worth stating rather than discovering:
 ### What a Set publishes — M3
 
 A Set publishes every `param` every procedure in it declares, addressed by the node that
-declares it. With one L1 and one L4 that is about nine controls and the addressing is
-invisible — a bare name still reaches them, because it reaches every node that declares it. With the graph M3
-introduces — several pipelines, L2s, an L3, a nested L5 — it is twenty-five, most of which
+declares it. With one L1 and one renderer that is about nine controls and the addressing is
+invisible — a bare name still reaches them, because it reaches every node that declares it.
+With the graph M3 introduces — several pipelines, L2s, an L3, a nested L5 — it is twenty-five, most of which
 are **authoring decisions the Set's author already made** rather than anything an operator
 wants under their hands at two in the morning.
 

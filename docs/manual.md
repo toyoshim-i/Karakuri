@@ -502,13 +502,17 @@ Nothing about the geometry has to change, which is why one L1 file can be on scr
 drawn two ways:
 
 ```
-karakuri-cli --set examples/drift_shell.kir,examples/soft_points.kir \
-             --set examples/drift_shell.kir,examples/drift_streaks.kir
+karakuri-cli --set examples/drift_shell.kir,examples/soft_points.kir,examples/drift_streaks.kir
 ```
 
-That is two slots and therefore **two simulations** of the same procedure, not one shared
-between two renderers — a Set owns its element buffers. Sharing them is a later milestone;
-until then, budget for it as two.
+**One slot, one simulation, two renderers over it**, drawn in the order given. The passes
+run over one render target — the first clears it, the rest load what is there — so the
+second renderer costs a draw pass and no memory at all.
+
+Two `--set` flags instead would be two slots, which is a different thing and sometimes the
+thing you want: two slots have their own faders, their own blend into the mix, and their own
+residency. They also cost **two simulations** of the same procedure. Reach for a stack when
+you want one cloud shown two ways; reach for two slots when you want to mix between them.
 
 Three things worth knowing before you ask for strokes. `point_size` becomes the stroke's
 **width in pixels**. `point_coord` runs **along** the segment in x and **across** it in y,

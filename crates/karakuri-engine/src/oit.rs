@@ -24,11 +24,19 @@
 //! # What it costs
 //!
 //! At 1280x720: 7.03 MB of accumulation plus 1.76 MB of revealage, so 8.79 MB
-//! for each *Set* whose L4 declares `weighted`, on top of the 7.03 MB slot target
-//! every slot has. A deck of four, all weighted, is 63 MB of render target —
-//! against 28 MB for four additive ones.
+//! for each *renderer* that declares `weighted`, on top of the 7.03 MB slot
+//! target every slot has. A deck of four, one weighted renderer apiece, is 63 MB
+//! of render target — against 28 MB for four additive ones.
 //!
-//! **Per Set and not per slot, which is the number that surprises.** A
+//! **Per renderer, and a slot may hold several.** A Set draws with a list of L4
+//! nodes over one geometry and each weighted one owns its own pair, so a stack
+//! of three weighted renderers in one slot is 26 MB rather than 8.79. Sharing
+//! one pair across a stack is available — the passes are sequential, so no two
+//! nodes accumulate at once — and is the same trade as sharing across slots
+//! below: it would put one implementation's scratch buffers into an interface
+//! that is deliberately about targets.
+//!
+//! **Per Set and not per slot, which is the other number that surprises.** A
 //! [`HotSwap`](crate::swap::HotSwap) holds the live Set, the candidate on trial
 //! behind it, and up to `GRAVEYARD_CAPACITY` more waiting for the GPU to be done
 //! with them — every one of which owns its own pair while it exists. A weighted

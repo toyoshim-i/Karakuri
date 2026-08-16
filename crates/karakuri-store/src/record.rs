@@ -105,6 +105,19 @@ pub enum Record {
     },
     Slot {
         layer: Layer,
+        /// **Which node of that layer**, on the same terms
+        /// [`Record::Procedure`] uses it: a Set draws with one L1 and however
+        /// many L4s, so a layer alone no longer names a procedure.
+        ///
+        /// Absent means 0 and 0 is not written, so a file from before stacks
+        /// existed round-trips byte for byte. It is what the *projection* folds
+        /// on — several `slot` records on one layer are several nodes rather
+        /// than one node corrected several times, and a fold keyed by layer
+        /// alone would keep the last of them. Reading order would have been
+        /// enough for the file format and is not enough for the fold, because a
+        /// fold has no order to appeal to.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        index: u32,
         #[serde(rename = "proc")]
         proc_hash: Hash,
     },
@@ -600,6 +613,68 @@ mod tests {
         let again: Record = serde_json::from_str(&back).expect("reparse");
         assert_eq!(rec, again);
         rec
+    }
+
+    /// The same, and **the bytes have to match too**.
+    ///
+    /// `round_trip` compares the parsed values, which cannot see a field that
+    /// was added with a default: a record gaining `index: 0` re-serialises with
+    /// `"index":0` in it and still equals itself. That is a changed stream for
+    /// every session ever recorded, and the only assertion that catches it is
+    /// this one. Only for records whose fields are written in declaration order
+    /// with nothing optional set.
+    fn round_trip_verbatim(line: &str) -> Record {
+        let rec = round_trip(line);
+        assert_eq!(
+            serde_json::to_string(&rec).expect("serialise"),
+            line,
+            "the record did not come back as the bytes it went in as"
+        );
+        rec
+    }
+
+    /// **`procedure` names a node, and `index` is what says which.**
+    ///
+    /// A deck slot draws with one L1 and however many L4s, so a layer alone
+    /// stopped being enough. The compatibility claim is the whole point of the
+    /// field being optional: a stream recorded before stacks existed carries no
+    /// `index`, must parse as index 0, and must come back **byte for byte** —
+    /// `round_trip` alone would not notice `"index":0` appearing in every
+    /// `procedure` line of every session ever recorded.
+    #[test]
+    fn a_procedure_round_trips_and_an_absent_index_stays_absent() {
+        let hash = "sha256:486779000000000000000000000000000000000000000000000000000000abcd";
+        let old = format!(r#"{{"t":"procedure","slot":0,"layer":"L4","proc":"{hash}"}}"#);
+        let Record::Procedure { index, slot, .. } = round_trip_verbatim(&old) else {
+            panic!("not a procedure");
+        };
+        assert_eq!((slot, index), (0, 0), "an absent index is the first node");
+
+        let stacked =
+            format!(r#"{{"t":"procedure","slot":2,"layer":"L4","index":1,"proc":"{hash}"}}"#);
+        let Record::Procedure { index, slot, .. } = round_trip_verbatim(&stacked) else {
+            panic!("not a procedure");
+        };
+        assert_eq!((slot, index), (2, 1), "the second renderer of slot 2");
+    }
+
+    /// The same for `slot`, which gained the same field for the same reason —
+    /// and needs it for one more: the projection folds a Set file's records by
+    /// key, so several renderers keyed by layer alone would fold to the last.
+    #[test]
+    fn a_slot_round_trips_and_an_absent_index_stays_absent() {
+        let hash = "sha256:9c1b04000000000000000000000000000000000000000000000000000000abcd";
+        let old = format!(r#"{{"t":"slot","layer":"L4","proc":"{hash}"}}"#);
+        let Record::Slot { index, .. } = round_trip_verbatim(&old) else {
+            panic!("not a slot");
+        };
+        assert_eq!(index, 0);
+
+        let stacked = format!(r#"{{"t":"slot","layer":"L4","index":2,"proc":"{hash}"}}"#);
+        let Record::Slot { index, .. } = round_trip_verbatim(&stacked) else {
+            panic!("not a slot");
+        };
+        assert_eq!(index, 2);
     }
 
     #[test]

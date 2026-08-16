@@ -29,7 +29,7 @@ use crate::record::{Layer, Record};
 #[derive(Clone, PartialEq, Eq, Hash)]
 enum Key {
     Set,
-    Slot(Layer),
+    Slot(Layer, u32),
     Capacity(Layer),
     Param(Layer, String),
     Bind(Layer, String),
@@ -66,7 +66,7 @@ enum Key {
 fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
     match record {
         Record::Set { .. } => Some(Key::Set),
-        Record::Slot { layer, .. } => Some(Key::Slot(*layer)),
+        Record::Slot { layer, index, .. } => Some(Key::Slot(*layer, *index)),
         Record::Capacity { layer, .. } => Some(Key::Capacity(*layer)),
         Record::Param { layer, key, .. } => Some(Key::Param(*layer, key.clone())),
         Record::Bind { layer, key, .. } => Some(Key::Bind(*layer, key.clone())),
