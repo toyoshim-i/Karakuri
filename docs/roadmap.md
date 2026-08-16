@@ -1054,6 +1054,19 @@ than against one being taught to.
   dies, which makes index 0 *the oldest living element* rather than an arbitrary slot. Nothing
   is declared and nothing is checked; an L1 that expects to be looked at can make that element
   a leader, and one that does not still offers its oldest survivor
+- **A Set declares what it publishes**, which is the other half of the console being a real
+  layer. Today every `param` of every procedure reaches the desk, flat and by name — nine
+  controls for a pair, twenty-five for a graph, most of them authoring decisions the author
+  already made. So a Set names which of its controls appear, under what name, over what part
+  of their declared range; the rest keep the values they were left at. **Publishing decides
+  what is shown, never what is reachable** — a `param` record still addresses any control in
+  any node, because a surface is a choice about attention and not about authority, which is
+  this project's standing position everywhere else it has come up. Driving a control from
+  something other than a knob is not a third mechanism: `bind` already maps a source through a
+  curve and a range, so its source becomes "a signal, or a published control" and macros fall
+  out of it. And it **dissolves `SetError::ParamCollision`** rather than fixing it — two
+  renderers both declaring `exposure` become two published controls or one driving both, which
+  is an authoring decision rather than an error
 - **L5 becomes a `kind`, with two roles and one implementation.** The console an operator
   mixes on is the top-level one; the same node nested inside a Set folds several L4s into one
   texture. What differs is only whether a surface is wired to it — which finally separates
@@ -1222,7 +1235,10 @@ retrofitting it into decisions already made.
 **Adds**
 
 - Node editor for the graph model introduced in M3
-- Parameter surfaces with MIDI learn and signal binding UI
+- Parameter surfaces with MIDI learn and signal binding UI. **What they show is decided in
+  M3** — a Set declares which of its controls it publishes, so this surface renders an
+  interface rather than inventing one. Without that it would be twenty-five knobs per slot
+  and a filter nobody can save
 - Set browser with live previews of priming Sets
 - Staging lane — where candidates appear before they go live. Its first producer is the
   operator's own regeneration of a slot, which needs no agents and makes the lane useful

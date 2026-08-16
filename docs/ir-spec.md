@@ -1853,6 +1853,87 @@ Two consequences worth stating rather than discovering:
   allowed to have; snapping would put a hard cut in a set at the exact moment material ran
   out, which is when an operator is least able to answer for it.
 
+### What a Set publishes — M3
+
+A Set publishes every `param` every procedure in it declares, flat, keyed by name. With one
+L1 and one L4 that is about nine controls and the flatness is invisible. With the graph M3
+introduces — several pipelines, L2s, an L3, a nested L5 — it is twenty-five, most of which
+are **authoring decisions the Set's author already made** rather than anything an operator
+wants under their hands at two in the morning.
+
+So a Set declares an interface: **which of its internal controls appear on the console, under
+what names, and over what part of their declared range.** This is the node-group analogy the
+whole node model came from — a group promotes selected inputs and hides the rest — applied to
+the one place it matters most, which is the mixing desk.
+
+#### Three states, and the third is not a new mechanism
+
+- **Published.** It appears on the console under a name the Set chose.
+- **Fixed.** The author found a value and froze it. This is the *default* state: a control
+  nobody publishes keeps whatever the `.kir` default and the Set's `param` records left it
+  at, and is simply not on the desk.
+- **Driven.** Something moves it that is not a knob.
+
+The third one already exists twice over and should not become a third thing. A `bind` record
+attaches a **signal** to a control through a curve and a range. A *macro* — one published
+control moving several internal ones, each through its own curve and range — is the same
+shape with a different source. So `bind`'s source becomes "a signal, or a published control",
+and macros fall out with no new record and no new semantics. A bus signal arrives with a
+confidence and is blended by it; a published control is the operator's hand and its
+confidence is 1.
+
+#### Publishing decides what is *shown*, never what is *reachable*
+
+A `param` record still addresses any control in any node, published or not. That is how a Set
+file records the values its author froze, how `--param` works, and how MCP or an agent tunes
+something the console does not show.
+
+The distinction matters more than it looks. If publishing gated access, a Set's author could
+lock an operator out of their own machine — and this project's standing position is the
+opposite one everywhere it has come up: every measurement is shown and none is acted on,
+nothing is hidden, and needing a hand is the craft rather than a failure. **A surface is a
+choice about attention, not about authority.**
+
+#### It dissolves the parameter collision rather than fixing it
+
+`SetError::ParamCollision` refuses a pair of procedures that both declare a param of one
+name, because `Set::params` is keyed by name across the whole Set. Two renderers over one
+geometry will both declare `exposure` almost every time — `soft_points` and `drift_streaks`
+do — so the check as written forbids exactly what M3 is for.
+
+With an interface there are two namespaces and neither collides. **Internally** a control is
+addressed by node and name, which the graph needs anyway. **Externally** it has the name the
+Set gave it — so two `exposure`s can be published as two controls, or as one control driving
+both, and which of those is right is an authoring decision rather than an error. The refusal
+does not need a fix; it needs deleting once the interface exists.
+
+#### A published range narrows, never redefines
+
+The `.kir` declares `param exposure : float [0.0, 8.0] = 1.0`. A Set may publish it over
+`[0.2, 0.8]` — *"on stage this only wants to go this far"* — and that is checkable as a
+subset. A published range outside the declared one is refused rather than clamped, because
+the declared range is the procedure's statement about where it still looks like itself.
+
+#### An empty interface publishes everything
+
+A Set with no interface declaration publishes all of it, which is exactly what happens today,
+so the feature is additive and every Set file that predates it keeps working. The first
+declaration makes the list the interface. That is one sentence of rule and it means an author
+opts in by naming what they want rather than by hiding twenty-four things.
+
+#### What the console shows that a Set did not publish
+
+The mix controls — `gain`, `opacity`, `blend`, `mask` — belong to the **edge into an L5**,
+not to the Set on the other end of it, so they are there whatever a Set publishes and even if
+it publishes nothing. Same for `residency`, `transport` and `preview`, which are about a Set
+being *played*. A Set that publishes nothing is still mixable; it just has no material
+controls of its own.
+
+And the case worth naming, because it is what the whole thing is for: a Set holding two
+pipelines merged by a nested L5 can publish that L5's crossfade as **one control**. Two
+scenes, one knob on the desk, and the twenty other numbers that made them stay in the file
+where the author left them.
+
 ### L5 — M3
 
 L5 has been the deck's mix since M2 and has never been a `kind`. Under the node model it
