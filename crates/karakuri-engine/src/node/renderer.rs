@@ -1,70 +1,13 @@
-//! Nodes, and the edges between them.
-//!
-//! **`Ln` is a node and a Set is a grouping around some** — `docs/roadmap.md`,
-//! "a Set stops owning everything". The unit that owns GPU state is the node,
-//! not the Set, which is what lets two L4 nodes read one L1 node's geometry for
-//! one simulation, and what leaves a place for an L2 node to be inserted rather
-//! than for a fixed pipeline to grow a third position.
-//!
-//! What is here today is the **L4 node** — [`Renderer`] — and the edge it reads
-//! across, [`Geometry`]. The L1 node's state is still inlined in [`crate::set`];
-//! extracting it is the next step and changes nothing about this one.
-//!
-//! # The edge is typed, and it always was
-//!
-//! [`Geometry`] is the whole of what crosses from an L1 node to whatever is
-//! downstream: an element layout, and the element and alive buffers indexed by
-//! parity. A `Renderer` is built *against* one and is not portable to another —
-//! its bind groups name those buffers and its generated `Element` struct is
-//! compiled against that layout. That is not a limitation to lift later; it is
-//! the slot interface contract, which `Set::build`'s `consumes ⊆ emit` check has
-//! been enforcing informally since M1.
+//! The L4 node: `(Geometry, Camera) -> Texture`.
 
 use karakuri_codegen::generate_l4;
-use karakuri_codegen::layout::{binding, counts, group, ElementLayout, UniformLayout};
+use karakuri_codegen::layout::{binding, counts, group, UniformLayout};
 use karakuri_ir::typed::Checked;
 
+use super::{Geometry, View};
 use crate::oit::Oit;
 use crate::set::SetError;
 use crate::uniforms::UniformScratch;
-
-/// What an L1 node offers whatever reads it — the edge, as the resources that
-/// cross it.
-///
-/// Borrowed rather than owned, and only for the duration of a build: a
-/// `Renderer` keeps bind groups, and a bind group holds its buffers alive.
-pub(crate) struct Geometry<'a> {
-    /// The `Element` struct the L1 declared. An L4 declares the same one, byte
-    /// for byte, because it reads the same physical buffer.
-    pub layout: &'a ElementLayout,
-    /// Indexed by parity: what L1 last wrote.
-    pub elements: [&'a wgpu::Buffer; 2],
-    pub alive: [&'a wgpu::Buffer; 2],
-}
-
-/// Everything the frame's uniform block needs that is not the node's own.
-///
-/// Passed in rather than reached for, because the clock belongs to the grouping
-/// — one `t` serves every node in a Set — and a node holding its own copy would
-/// be a second place for it to be.
-///
-/// **The camera is here on borrowed time.** `L4 : (Geometry, Camera) -> Texture`
-/// makes it an input *edge*, not a property of the grouping, and two renderers
-/// reading different cameras is what a Set that composites two scenes is made
-/// of. It rides in this struct because `Set` still owns one `Orbit`; when L3
-/// becomes a node it becomes an edge like `Geometry` above, and a GPU buffer
-/// rather than six numbers on the host — see `docs/ir-spec.md`, "L2 and L3".
-pub(crate) struct View<'a> {
-    pub t: f32,
-    pub beats: f32,
-    pub seed_salt: u32,
-    pub viewport: [f32; 2],
-    pub camera: &'a crate::camera::Orbit,
-    /// One value per declared param, by name. The Set resolves bindings against
-    /// its own state and hands the answer down; a node does not know what a
-    /// binding is.
-    pub param: &'a dyn Fn(&str) -> f32,
-}
 
 /// An L4 node: `(Geometry, Camera) -> Texture`.
 pub(crate) struct Renderer {
@@ -336,7 +279,7 @@ impl Renderer {
             }
         }
         for name in &self.param_names {
-            p.f32(name, (view.param)(name));
+            p.f32(name, (view.param)(name).unwrap_or(0.0));
         }
         queue.write_buffer(&self.uniforms, 0, p.finish());
     }
