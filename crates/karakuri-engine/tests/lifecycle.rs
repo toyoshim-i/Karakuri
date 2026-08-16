@@ -332,6 +332,62 @@ fn spawning_fills_toward_capacity_and_stops_there() {
     assert!(seeds.windows(2).all(|w| w[0] < w[1]), "seeds are not ascending after the clamp");
 }
 
+/// **The spawn accumulator's fractional carry, asserted as a rate rather than
+/// as a comparison between two runs.**
+///
+/// `spawn_rate * dt` is rarely a whole number of elements, so the remainder has
+/// to carry into the next substep — within a frame and across frames alike — for
+/// the long-run rate to come out right. Everything else in this file that
+/// touches spawning compares one run against another (same ticks, same frame;
+/// two frames of one step against one frame of two), and every such comparison
+/// is blind to the carry being dropped, because both sides drop it. Deleting
+/// `spawn_carry -= whole` in favour of `spawn_carry = 0.0` passed all 43 suites.
+///
+/// The sharpest case is a rate **below one element per substep**, where the
+/// absence of a carry is not an inaccuracy but a total failure: `floor(0.5)` is
+/// zero, every substep, forever, so a Set asked for thirty elements a second
+/// emits none at all and does so silently. `1.667` is the other regime, where
+/// the loss is a fifth of the material rather than all of it.
+///
+/// The tolerance is one element, which is the carry still in flight at the
+/// moment the count is read — that is what "exact in the long run" means here,
+/// and it is not slack for a rate that is merely close.
+#[test]
+fn the_spawn_rate_is_exact_over_many_substeps_because_the_fraction_carries() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    const SUBSTEPS: u32 = 60;
+
+    // Frames of two steps, so the carry is exercised both between substeps of
+    // one frame and between frames — the two places a naive reset would put it.
+    let live_after = |rate: f32| -> u32 {
+        let mut set = build(&gpu, &emitter(rate, 1000.0), 4096);
+        for _ in 0..SUBSTEPS / 2 {
+            step(&gpu, &mut set, 2);
+        }
+        set.live_count(&gpu.device, &gpu.queue)
+    };
+
+    // Half an element per substep. Without a carry this is zero, always.
+    let slow = live_after(30.0);
+    assert!(
+        slow > 0,
+        "a rate below one element per substep emitted nothing in a whole second — \
+         the fractional carry is gone, and no rate under 60/s can ever spawn"
+    );
+    assert!(
+        slow.abs_diff(30) <= 1,
+        "30 elements a second gave {slow} after one second, not 30 give or take the carry"
+    );
+
+    // Five thirds of an element per substep: the other regime, where dropping
+    // the carry truncates to one and loses two elements in five.
+    let fast = live_after(100.0);
+    assert!(
+        fast.abs_diff(100) <= 1,
+        "100 elements a second gave {fast} after one second, not 100 give or take the carry"
+    );
+}
+
 /// The birth-fraction correction exists so that a frame's worth of elements
 /// do not all start at the same phase, and it must apply exactly once: the
 /// element's *first* update runs with `dt * birth_frac`, and every update
