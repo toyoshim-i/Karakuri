@@ -18,7 +18,9 @@
 //! only in colour and size. What is under test is a compositing rule, and
 //! anything that looked good would only make a failure harder to read.
 
-use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
+use karakuri_engine::binding::{Binding, Curve};
+use karakuri_engine::{Gpu, Present, Set, SetError, Signals, VideoSource};
+use karakuri_ir::Kind;
 use karakuri_ir::typed::Checked;
 
 const W: u32 = 64;
@@ -120,6 +122,12 @@ fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
 /// A Set over [`PAIR_L1`] with `l4s` as its renderers, in draw order.
 fn build(gpu: &Gpu, l4s: &[&str]) -> Set {
     build_over(gpu, PAIR_L1, l4s)
+}
+
+fn try_build(gpu: &Gpu, l1: &str, l4s: &[&str]) -> Result<Set, SetError> {
+    let compiled: Vec<Checked> = l4s.iter().map(|s| compile(s)).collect();
+    let refs: Vec<&Checked> = compiled.iter().collect();
+    Set::build_many(&gpu.device, &gpu.queue, &compile(l1), &refs, 2, 3)
 }
 
 fn build_over(gpu: &Gpu, l1: &str, l4s: &[&str]) -> Set {
@@ -426,4 +434,226 @@ fn one_name_declared_by_two_renderers_is_two_values_each_reaching_its_own() {
             base[i]
         );
     }
+}
+
+/// **A binding's blend base comes from a node that declares the name.**
+///
+/// `Set::bind` accepts an L4 binding if *any* renderer declares the name — one
+/// binding, one value, written to every renderer that has it, which is the rule
+/// a bare `--param` follows. Resolving it read the *first* renderer's map
+/// unconditionally, so a name only the second declares missed, and the
+/// `unwrap_or(0.0)` behind that lookup turned the declared default into zero.
+///
+/// Silent, and on the render path: a signal nothing provides comes back with
+/// confidence 0.0 and step 4 of the binding path writes the param's own value
+/// unchanged — so the failure is a renderer drawing at zero rather than an
+/// error. `spread` is declared by the second renderer only, at 3.0.
+#[test]
+fn a_binding_blends_from_a_node_that_declares_the_name_not_the_first_one() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let plain = sprite("red", RED, 9.0, 1.0);
+    // The same fixture with one extra param, declared here and nowhere else.
+    let extra = sprite("green", GREEN, 17.0, 0.25).replace(
+        "  param exposure",
+        "  param spread : float [0.0, 8.0] = 3.0\n  param exposure",
+    );
+
+    let mut set = build(&gpu, &[&plain, &extra]);
+    assert!(
+        set.bind(Binding::new(
+            Kind::L4,
+            "spread",
+            "nothing_measures_this",
+            Curve::Lin,
+            [0.0, 100.0]
+        )),
+        "`spread` is declared by one of this Set's renderers"
+    );
+    set.prepare(&gpu.queue, 1, &Signals::default());
+
+    let resolved = set
+        .bindings()
+        .iter()
+        .find(|b| b.key == "spread")
+        .expect("the binding is attached")
+        .value();
+    assert_eq!(
+        resolved, 3.0,
+        "the binding blended from a map that has no `spread`, so the renderer's \
+         declared default became {resolved}"
+    );
+}
+
+/// An opaque, flat sprite under `blend weighted`. Its resolve composites `over`
+/// what is under it rather than replacing a clear, which is the whole of what a
+/// weighted node in a stack has to get right.
+fn weighted_sprite(name: &str, rgb: (f32, f32, f32), scale: f32, alpha: f32) -> String {
+    let (r, g, b) = rgb;
+    format!(
+        r#"
+proc {name} {{
+  kind  L4
+  blend weighted
+
+  consumes position
+
+  vertex {{
+    clip       = camera * vec4(position, 1.0);
+    point_size = {scale:?};
+  }}
+
+  fragment {{
+    color = vec4({r:?}, {g:?}, {b:?}, {alpha:?});
+  }}
+}}
+"#
+    )
+}
+
+/// **A weighted node in a stack composites over what is under it, and order is
+/// what decides which.**
+///
+/// Under `additive` order is invisible, which the test above asserts. It stops
+/// being invisible the moment a weighted node is in the stack: its resolve is an
+/// `over`, so a nearly opaque weighted sprite hides what is beneath it and does
+/// not hide what is drawn after.
+///
+/// This is the half of `blend weighted` that a lone renderer cannot exercise at
+/// all. With one node the resolve writes onto the transparent black the first
+/// pass clears to, where `over` gives back exactly the source — so the `over`
+/// blend state and no blend state at all are indistinguishable, and both the
+/// state and the `first`/load flag went untested until a stack existed to put a
+/// weighted node second in.
+#[test]
+fn a_weighted_node_in_a_stack_composites_over_what_is_under_it() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let under = sprite("red", RED, 25.0, 1.0);
+    let over = weighted_sprite("veil", GREEN, 25.0, 0.94);
+
+    let red_alone = channel_sums(&draw(&gpu, &mut build(&gpu, &[&under])));
+    let veil_over_red = draw(&gpu, &mut build(&gpu, &[&under, &over]));
+    let red_over_veil = draw(&gpu, &mut build(&gpu, &[&over, &under]));
+
+    let (a, b) = (channel_sums(&veil_over_red), channel_sums(&red_over_veil));
+    assert!(red_alone[0] > 1.0, "the material under the veil drew nothing");
+
+    // Drawn second, the veil covers most of the red — and **leaves the rest**.
+    // `over` at alpha 0.94 keeps 6% of what is under it, and the lower bound is
+    // the half that matters: a resolve that cleared instead of loading would
+    // erase the red entirely and satisfy an upper bound alone. That is exactly
+    // the mutant this test was written for and did not catch until the floor
+    // was added.
+    assert!(
+        a[0] < red_alone[0] * 0.25,
+        "a weighted node drawn second did not cover what was under it: {} of {}",
+        a[0],
+        red_alone[0]
+    );
+    // Measured at 1.4%, not the 6% one fragment of `alpha = 0.94` would leave:
+    // the two sprites overlap, and two fragments give `1 - 0.06²`, so most of
+    // the red sits under two veils rather than one. The floor is well under
+    // that and well over the **zero** a clear would leave.
+    assert!(
+        a[0] > red_alone[0] * 0.005,
+        "a weighted node drawn second erased what was under it rather than \
+         compositing over it: {} of {} left",
+        a[0],
+        red_alone[0]
+    );
+    // Drawn first, it is under the red and hides nothing.
+    assert!(
+        b[0] > red_alone[0] * 0.9,
+        "a weighted node drawn first swallowed the renderer above it: {} of {}",
+        b[0],
+        red_alone[0]
+    );
+    assert!(
+        b[0] > a[0] * 2.0,
+        "swapping a weighted node with an additive one changed nothing, so the \
+         resolve is replacing rather than compositing"
+    );
+}
+
+/// **A weighted node that is first still clears**, so a stack beginning with one
+/// draws what that node alone would.
+///
+/// The other end of the same flag: `first` picks `Clear` over `Load`, and a
+/// weighted resolve that always cleared would wipe whatever ran before it —
+/// caught above — while one that never cleared would composite onto a stale
+/// frame, which nothing else here would see.
+#[test]
+fn a_weighted_node_drawn_first_clears_what_was_in_the_target() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let veil = weighted_sprite("veil", GREEN, 25.0, 0.94);
+
+    let alone = channel_sums(&draw(&gpu, &mut build(&gpu, &[&veil])));
+    // Two frames from one Set: the second must not accumulate onto the first.
+    let mut twice = build(&gpu, &[&veil]);
+    draw(&gpu, &mut twice);
+    let second = channel_sums(&draw(&gpu, &mut twice));
+
+    assert!(alone[1] > 1.0, "the veil drew nothing");
+    assert!(
+        (second[1] - alone[1]).abs() <= 0.02 * alone[1],
+        "a second frame came out at {} where the first was {} — the target was not cleared",
+        second[1],
+        alone[1]
+    );
+}
+
+/// **A stack skips the simulation only if *every* renderer is fullscreen.**
+///
+/// A fullscreen L4 consumes no attribute, so a Set holding only those has
+/// nothing reading its element buffers and the whole simulation is work for a
+/// reader that does not exist. One fullscreen node beside a per-element one does
+/// not excuse it — and `any` in place of `all` there is a defect that shows up as
+/// a frozen cloud rather than as an error.
+#[test]
+fn a_mixed_stack_still_simulates_because_one_renderer_reads_the_elements() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    // **No `vertex` block is how an L4 says it covers the frame** — see
+    // `examples/field_march.kir`. `consumes` must therefore be empty, which is
+    // exactly what makes this the node that would excuse the simulation if it
+    // were the only one.
+    let marcher = r#"
+proc wash {
+  kind  L4
+  blend additive
+
+  fragment {
+    color = vec4(0.02, 0.0, 0.04, 1.0);
+  }
+}
+"#;
+    let sprites = sprite("red", RED, 9.0, 1.0);
+
+    let mut per_element = build_over(&gpu, CREEP_L1, &[&sprites]);
+    let mut mixed = build_over(&gpu, CREEP_L1, &[marcher, &sprites]);
+    for _ in 0..4 {
+        draw(&gpu, &mut per_element);
+        draw(&gpu, &mut mixed);
+    }
+
+    assert_eq!(
+        per_element.read_elements(&gpu.device, &gpu.queue),
+        mixed.read_elements(&gpu.device, &gpu.queue),
+        "a stack with one fullscreen renderer in it stopped simulating for the other"
+    );
+}
+
+/// **A Set with nothing to draw is refused rather than built.** A `Set` is a
+/// video source, and a video source with no frame to give has no useful
+/// behaviour to fall back on — and `all(is_fullscreen)` over an empty list is
+/// vacuously true, which would silently stop the simulation as well.
+#[test]
+fn a_set_with_no_renderer_is_refused() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let Err(err) = try_build(&gpu, PAIR_L1, &[]) else {
+        panic!("a Set with no renderer was built");
+    };
+    assert!(
+        matches!(err, SetError::NoRenderer { .. }),
+        "the wrong diagnostic for an empty stack: {err}"
+    );
+    assert!(err.to_string().contains("pair"), "the message does not name the L1: {err}");
 }

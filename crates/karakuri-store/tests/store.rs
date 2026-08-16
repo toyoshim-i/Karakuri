@@ -87,7 +87,7 @@ fn set_file_round_trips() {
     let proc_hash = Hash::of(b"proc p { kind L1 }");
     let lines = vec![
         Line::new(Record::Set { id: "drift_01".into(), v: 1 }),
-        Line::new(Record::Slot { layer: Layer::L1, proc_hash }),
+        Line::new(Record::Slot { layer: Layer::L1, index: 0, proc_hash }),
         Line::new(Record::Capacity { layer: Layer::L1, value: 524288 }),
         Line::new(param(Layer::L1, "radius", 2.4)),
         Line::new(Record::Seed { stream: Layer::L1, value: 19274 }),
@@ -207,7 +207,7 @@ fn save_session_as_set_projects_and_persists() {
     let proc_hash = Hash::of(b"proc p { kind L1 }");
     let session = vec![
         Line::new(Record::Set { id: "drift_01".into(), v: 1 }),
-        Line::new(Record::Slot { layer: Layer::L1, proc_hash }),
+        Line::new(Record::Slot { layer: Layer::L1, index: 0, proc_hash }),
         Line::new(param(Layer::L1, "radius", 2.0)),
         Line::new(Record::Tick { steps: 1 }),
         Line::new(Record::Tick { steps: 1 }),

@@ -662,11 +662,12 @@ fine alone and is unreadable next to lights.
   nothing reached it, and a record for a control the operator cannot move is one more record
   nobody writes, which is the condition this closes rather than extends. **It got a record
   when it got a control**, which is the rule working rather than an exception to it
-- **Parameter values keyed by `(layer, name)`.** The record format already does it; the
-  engine holds one flat map, so an L1 and an L4 declaring the same parameter name shared a
-  value, with the L4 default silently winning. `Set::build` now refuses the collision
-  rather than resolving it, which is correct and is not the answer — a Set whose two
-  procedures both want a `hue` is not an error
+- ~~**Parameter values keyed by `(layer, name)`.**~~ **Done**, and by node rather than by
+  layer, since a Set holds several renderers. The engine held one flat map, so an L1 and an
+  L4 declaring one name shared a value; `Set::build` refused the collision, which was
+  correct and was not the answer — a Set whose two procedures both want a `hue` is not an
+  error. What is left is the *external* half: a `--param` and a `param` record still carry a
+  bare name, which reaches every node declaring it
 - ~~PLL correction of the local oscillator against external tempo~~ **Done**, and shaped by
   what it is for: tempo is stable except at a track change, so the grid is **predicted, not
   chased**. A locked grid free-runs and takes a slow trim; a single disagreeing estimate
@@ -881,9 +882,11 @@ two, and neither enum is a promise any more.
   before `blend weighted`, and the warning half landed: what bit there was a borrowed
   weight function's constant rather than this table.
 
-  What it does *not* change: a Set is still one L1 and one L4, so a fullscreen renderer is
-  paired with geometry it ignores. That L1 is dead weight the operator has to choose. A Set
-  that can hold no geometry is the graph model's.
+  What it did *not* change: a Set always has an L1, so a fullscreen renderer is paired with
+  geometry it ignores, and the operator has to choose it. Half-answered since, by the
+  renderer stack — a fullscreen node beside a per-element one reads nothing and the geometry
+  is not dead weight, because the other node reads it. A Set that can hold *no* geometry is
+  still the graph model's.
 
 - ~~**`blend weighted`.**~~ **Built.** The other half of the point-sprite monotony:
   additive is why everything glowed, and lines did not change that — a stroke glowed
@@ -937,10 +940,11 @@ being forced into it. `examples/strand_shell.kir` is kept as written for that re
 Set stops owning everything, and `Ln` becomes a node.**
 
 Reading the Adds list after the rendering front closed, three of its nine items turn out to
-be pushing on one fact rather than on three. **L2 and L3 as slots** needs a stage between
-L1 and L4, and there is nowhere to put one because a Set is a pair. **L2 stacking and
+be pushing on one fact rather than on three. **L2 and L3 as slots** needed a stage between
+L1 and L4, and there was nowhere to put one because a Set *was* a pair. **L2 stacking and
 amplification** need several such stages in a row. **Multiple L4 renderers over shared
-geometry** needs the element buffers to outlive the renderer reading them. This document
+geometry** needed the element buffers to outlive the renderer reading them — which is built,
+and is what the tenses in this paragraph are now marking. This document
 already says so in the L4-multiple bullet — *"it is the part that needs a Set to stop being
 the unit that owns everything"* — and what is new is only that it is now true of most of the
 milestone rather than of one bullet.

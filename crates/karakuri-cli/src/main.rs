@@ -242,7 +242,7 @@ const DEMO_LOOP_SECONDS: f32 = 27.0;
 /// not have and has to say so.
 const DEMO_LINES_SCRIPT: &[(f32, char)] = &[
     // Five seconds of the mix: strokes and sprites over each other.
-    (5.0, 'v'), // slot 0 alone — sprites
+    (5.0, 'v'),  // slot 0 alone — sprites *and* strokes, from one simulation
     (10.0, 'v'), // slot 1 alone — strokes, the same elements
     (15.0, 'v'), // back to the mix
 ];
@@ -299,19 +299,33 @@ impl Demo {
     fn deck(self) -> Vec<(PathBuf, Vec<PathBuf>)> {
         match self {
             Demo::Transport => Vec::new(),
-            // **One slot, one simulation, two renderers.** This was two slots
-            // running `drift_shell` twice — the same cloud simulated a second
-            // time so that a second L4 could read it — because a Set was a pair
-            // and there was no other way to have two. It is the demonstration
-            // this milestone is for, so it should be the shape the milestone
-            // made possible.
-            Demo::Lines => vec![(
-                "examples/drift_shell.kir".into(),
-                vec![
-                    "examples/soft_points.kir".into(),
-                    "examples/drift_streaks.kir".into(),
-                ],
-            )],
+            // **Two slots, and it has to stay two.** A stack — one slot with
+            // both renderers over one simulation — is what several renderers
+            // over one geometry now costs, and it is the wrong shape *here*:
+            // `DEMO_LINES_SCRIPT` presses the preview key three times to reach
+            // the mix, each slot alone, and the mix again, and a preview
+            // isolates a **slot**. A one-slot deck has nothing to cycle to, so
+            // the script would show the same picture twice and the
+            // demonstration would run, look like it worked, and demonstrate
+            // nothing — which is the defect the doc above already names.
+            //
+            // Slot 0 carries the stack anyway, so what the demonstration shows
+            // is the mix, then one simulation drawn both ways, then strokes
+            // alone. `--set drift_shell.kir,soft_points.kir,drift_streaks.kir`
+            // is the plain way to ask for a stack and needs no demonstration.
+            Demo::Lines => vec![
+                (
+                    "examples/drift_shell.kir".into(),
+                    vec![
+                        "examples/soft_points.kir".into(),
+                        "examples/drift_streaks.kir".into(),
+                    ],
+                ),
+                (
+                    "examples/drift_shell.kir".into(),
+                    vec!["examples/drift_streaks.kir".into()],
+                ),
+            ],
         }
     }
 }
@@ -1585,11 +1599,18 @@ fn replay_session(args: &Args, id: &str) {
         |i, deck| {
             let frame = &stream.frames[i as usize];
             // **Procedures are gathered and applied together, after the rest.**
-            // A slot's two layers arrive as a pair, and a Set is built from
-            // both — rebuilding on the first of them would compile an L1
-            // against the L4 it is replacing, which is a composition the
-            // performance never had and may not even check.
+            // A slot's procedures arrive as a group and a Set is built from all
+            // of them — rebuilding on the first would compile an L1 against the
+            // L4 it is replacing, which is a composition the performance never
+            // had and may not even check.
+            //
+            // **A slot's renderer list is replaced, not merged.** A rebuild
+            // restates the whole stack, so the records in this frame are the
+            // whole stack; keeping what was there would leave a stale renderer
+            // behind whenever a slot went from three to one, and nothing in the
+            // vocabulary can say "one fewer" on its own.
             let mut changed: Vec<usize> = Vec::new();
+            let mut restated: Vec<usize> = Vec::new();
             for record in &frame.before {
                 if let karakuri_store::record::Record::Procedure {
                     slot,
@@ -1614,6 +1635,13 @@ fn replay_session(args: &Args, id: &str) {
                         // existed carries index 0 and lands in the same place
                         // the old code put it.
                         Layer::L4 => {
+                            // The first L4 record for this slot in this frame
+                            // starts the list over — see "replaced, not merged"
+                            // above.
+                            if !restated.contains(&slot) {
+                                restated.push(slot);
+                                playing[slot].1.clear();
+                            }
                             let at = *index as usize;
                             if playing[slot].1.len() <= at {
                                 playing[slot].1.resize(at + 1, None);
@@ -1649,11 +1677,17 @@ fn replay_session(args: &Args, id: &str) {
 
 /// Build the Set a slot's `procedure` records name.
 ///
-/// **Both layers or nothing.** A `procedure` record names one layer, and a Set
-/// is the pair — so until both have been seen there is nothing to build, and a
-/// slot whose stream only ever names one layer keeps what the head gave it.
-/// That is not a corner case: the writer emits both, but a stream from a
-/// future version might name only what changed.
+/// **Every node or nothing.** A `procedure` record names one node, and a Set is
+/// built from all of them — so until the L1 and every renderer have been seen
+/// there is nothing to build, and a slot whose stream only ever names some of
+/// them keeps what the head gave it. That is not a corner case: the writer emits
+/// the whole stack, but a stream from a future version might name only what
+/// changed.
+///
+/// A **gap** in the renderer list is refused on the same terms rather than
+/// closed up: index 2 without index 1 describes a stack with a hole in it, and
+/// silently shifting the third renderer into second place would change draw
+/// order.
 fn rebuild(
     gpu: &Gpu,
     store: &karakuri_store::store::Store,
@@ -4416,26 +4450,43 @@ mod tests {
         );
     }
 
-    /// **A demonstration brings the scene it is about**, and this one is now the
-    /// scene the milestone is about: one geometry, two renderers, one slot.
+    /// **A demonstration brings the scene it is about.** `--demo lines` cycles
+    /// the preview between the mix and each slot, and on a one-slot deck that
+    /// shows the same picture twice — the demonstration would run, look like it
+    /// worked, and demonstrate nothing.
     ///
-    /// It used to be two slots running `drift_shell` twice — the same cloud
-    /// simulated a second time so a second L4 could read it, because a Set was
-    /// a pair. The picture is the two draws over one simulation either way;
-    /// what changed is that it no longer costs the simulation twice.
+    /// **Two slots, therefore, even though a stack would fit in one.** This was
+    /// briefly rewritten to a single slot holding both renderers, on the
+    /// grounds that it is the shape the milestone made possible — which broke
+    /// it, because `DEMO_LINES_SCRIPT` presses the preview key three times and
+    /// a preview isolates a slot rather than a renderer. Slot 0 carries the
+    /// stack, which is what the milestone actually buys here: the same two
+    /// draws, over one simulation instead of two.
     #[test]
-    fn the_lines_demo_draws_one_geometry_with_two_renderers() {
+    fn the_lines_demo_supplies_its_own_two_slot_deck() {
         let args = parse(&["--demo", "lines"]).expect("should parse");
         assert_eq!(
             args.sets,
-            vec![(
-                PathBuf::from("examples/drift_shell.kir"),
-                vec![
-                    PathBuf::from("examples/soft_points.kir"),
-                    PathBuf::from("examples/drift_streaks.kir"),
-                ],
-            )],
-            "one slot, one simulation, two renderers over it"
+            vec![
+                (
+                    PathBuf::from("examples/drift_shell.kir"),
+                    vec![
+                        PathBuf::from("examples/soft_points.kir"),
+                        PathBuf::from("examples/drift_streaks.kir"),
+                    ],
+                ),
+                (
+                    PathBuf::from("examples/drift_shell.kir"),
+                    vec![PathBuf::from("examples/drift_streaks.kir")],
+                ),
+            ],
+            "the preview has to have more than one slot to cycle between"
+        );
+        assert_eq!(
+            DEMO_LINES_SCRIPT.len(),
+            args.sets.len() + 1,
+            "the script presses the preview key once per slot and once to return \
+             to the mix; a deck of a different size leaves it out of phase"
         );
     }
 

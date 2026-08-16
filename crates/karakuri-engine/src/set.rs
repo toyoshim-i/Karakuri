@@ -602,6 +602,15 @@ impl Set {
         }
     }
 
+    /// Every map in [`Set::params`] belonging to `layer`, in node order. One for
+    /// the L1; one per renderer for L4.
+    fn nodes_of(layer: Kind) -> std::ops::Range<usize> {
+        match layer {
+            Kind::L1 => 0..1,
+            Kind::L4 => 1..usize::MAX,
+        }
+    }
+
     /// **Set every declaration of `name`, and say how many there were.**
     ///
     /// Zero means nothing in this Set declares it, which is the caller's cue to
@@ -881,14 +890,28 @@ impl Set {
     /// Allocates nothing: the `Vec` is written in place, and each binding's
     /// manual value is read out of `params` — which is never written here, so
     /// a `--param` on a bound param survives the frame.
+    ///
+    /// **The blend base comes from the first node of that layer that declares
+    /// the name**, which is not the same as the first node of that layer. A
+    /// binding names a layer and [`Set::bind`] accepts it if *any* renderer
+    /// declares it, so reading `params[1]` unconditionally read a map that may
+    /// not have the key — and `unwrap_or(0.0)` then turned a renderer's
+    /// declared default into zero, on the render path, with nothing said. A
+    /// signal of confidence 0 writes the param's own value unchanged, so a
+    /// binding to a name only the *second* renderer declares collapsed it to
+    /// nothing.
+    ///
+    /// Which declaration wins when two of them have one name is
+    /// [`Set::slot_of`]'s open question and is not this: the point here is only
+    /// that it must be a declaration.
     fn resolve_bindings(&mut self, signals: &Signals) {
         for binding in &mut self.bindings {
-            // `unwrap_or` rather than an index: `Set::bind` refuses a param
-            // that is not in the map, so this cannot miss, and a panic on the
-            // render thread is not the way to find out if it ever does.
-            let manual = self.params[Self::slot_of(binding.layer)]
-                .get(&binding.key)
-                .copied()
+            let manual = Self::nodes_of(binding.layer)
+                .filter_map(|slot| self.params.get(slot))
+                .find_map(|node| node.get(&binding.key).copied())
+                // Cannot miss — `Set::bind` refuses a name no node of that
+                // layer declares — and a panic on the render thread is not the
+                // way to find out if it ever does.
                 .unwrap_or(0.0);
             binding.resolve(signals, manual);
         }

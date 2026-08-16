@@ -217,7 +217,7 @@ fn a_procedure_record_changes_what_the_rest_of_the_session_renders() {
     .expect("the flat fixture");
 
     // Both procedures into the store, which is where a `procedure` record
-    // points. The L1 is unchanged and named anyway: a Set is the pair.
+    // points. The L1 is unchanged and named anyway: a Set is built from all of them.
     let l1 = std::fs::read_to_string(root.join("examples/drift_shell.kir")).expect("L1");
     // Through the store's own API rather than by writing a file with a name
     // this test guessed: the record spells a hash one way and the filename
