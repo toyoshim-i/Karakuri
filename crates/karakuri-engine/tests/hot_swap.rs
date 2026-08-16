@@ -707,8 +707,8 @@ fn a_rebuild_can_add_a_renderer_over_the_same_geometry() {
     assert_eq!(set.capacity(), SECOND, "the candidate was not kept");
     let mut exposures: Vec<f32> = set
         .params()
-        .filter(|(_, name, _)| *name == "exposure")
-        .map(|(_, _, value)| value)
+        .filter(|(_, _, name, _)| *name == "exposure")
+        .map(|(_, _, _, value)| value)
         .collect();
     exposures.sort_by(|a, b| a.partial_cmp(b).expect("no NaN"));
     assert_eq!(
