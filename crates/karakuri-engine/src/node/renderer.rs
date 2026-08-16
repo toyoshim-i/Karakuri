@@ -4,7 +4,7 @@ use karakuri_codegen::generate_l4;
 use karakuri_codegen::layout::{binding, counts, group, UniformLayout};
 use karakuri_ir::typed::Checked;
 
-use super::{Geometry, View};
+use super::{Camera, Geometry, View};
 use crate::oit::Oit;
 use crate::uniforms::UniformScratch;
 
@@ -18,6 +18,14 @@ pub(crate) struct Renderer {
     /// Indexed by parity. This is the edge, resolved: the two bind groups name
     /// the [`Geometry`] this node was built against.
     attr_bg: [wgpu::BindGroup; 2],
+    /// The other edge, resolved the same way: the [`Camera`] this node was built
+    /// against, and the group index its shader reads it at.
+    ///
+    /// **`None` for a shader that reads no camera**, which is a real case rather
+    /// than a defensive one — an L4 whose vertex block writes `clip` without
+    /// projecting reads nothing from it, and binding a group the module does not
+    /// use is a validation error. See [`karakuri_codegen::L4Shader::camera_group`].
+    camera_bg: Option<(u32, wgpu::BindGroup)>,
     /// Present only under `blend weighted` — see [`crate::oit`].
     oit: Option<Oit>,
     /// Whether this node draws the whole frame rather than one primitive per
@@ -38,7 +46,12 @@ impl Renderer {
     /// is not something a node can know about itself. It moved to
     /// `Set::build_many`, where the count is. See
     /// [`SetError::WeightedFullscreen`].
-    pub(crate) fn build(device: &wgpu::Device, l4: &Checked, geometry: &Geometry<'_>) -> Renderer {
+    pub(crate) fn build(
+        device: &wgpu::Device,
+        l4: &Checked,
+        geometry: &Geometry<'_>,
+        camera: &Camera,
+    ) -> Renderer {
         let fullscreen = l4.topology == Some(karakuri_ir::Topology::Fullscreen);
         let weighted = l4.blend == Some(karakuri_ir::Blend::Weighted);
 
@@ -121,11 +134,23 @@ impl Renderer {
         // it consumes nothing, so it binds nothing. A layout naming a group the
         // module does not use is a validation error rather than a harmless
         // extra.
-        let groups: Vec<&wgpu::BindGroupLayout> = if fullscreen {
+        let mut groups: Vec<&wgpu::BindGroupLayout> = if fullscreen {
             vec![&uniform_bgl]
         } else {
             vec![&uniform_bgl, &attr_bgl]
         };
+        // **The generated source names the index and this asserts it**, rather
+        // than a constant in two crates that agree by convention: which group
+        // the camera lands in depends on whether the shader bound attributes
+        // below it, and that is the generator's decision.
+        if let Some(g) = shader.camera_group {
+            assert_eq!(
+                g as usize,
+                groups.len(),
+                "the camera's group index must follow the groups below it"
+            );
+            groups.push(camera.layout());
+        }
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("L4"),
             bind_group_layouts: &groups,
@@ -217,6 +242,7 @@ impl Renderer {
             scratch: UniformScratch::new(&shader.uniform_layout),
             uniform_bg,
             attr_bg,
+            camera_bg: shader.camera_group.map(|g| (g, camera.bind_group().clone())),
             oit: weighted.then(|| Oit::new(device)),
             fullscreen,
             param_names: l4.params.iter().map(|p| p.name.clone()).collect(),
@@ -240,38 +266,23 @@ impl Renderer {
     }
 
     /// This node's uniform block, from the grouping's view of the frame.
+    ///
+    /// **Nothing about the camera is packed here**, and that is the whole of
+    /// what changed when it became a node: the matrix, the ray basis and
+    /// `depth_range` used to be written from an `Orbit` the host owned, and are
+    /// now derived on the GPU into a buffer this node binds. What is left is the
+    /// clock, the salt, the canvas, and this node's own params.
     pub(crate) fn write_uniforms(&mut self, queue: &wgpu::Queue, view: &View<'_>) {
-        let aspect = view.viewport[0] / view.viewport[1];
-        let camera = view.camera.view_proj(view.t, aspect);
-        let basis = view.camera.basis(view.t, aspect);
-        let weighted = self.oit.is_some();
         let fullscreen = self.fullscreen;
         let mut p = self.scratch.pack(&self.uniform_layout);
         p.f32("t", view.t).f32("beats", view.beats).u32("seed_salt", view.seed_salt);
         // Two shapes of uniform, because the two shaders need different things:
-        // a per-element one projects points and needs the matrix and the
-        // viewport in pixels; a fullscreen one marches and needs a ray. Writing
-        // a field the layout does not declare is a panic in the packer, which
-        // is the right way round — it means the two halves cannot drift.
-        if fullscreen {
-            p.vec3("eye", basis.eye)
-                .vec3("cam_fwd", basis.forward)
-                .vec3("cam_right", basis.right)
-                .vec3("cam_up", basis.up);
-        } else {
-            p.vec2("viewport", view.viewport).mat4("camera", camera);
-            // **The same camera the matrix above came from**, which is the whole
-            // point of writing it here rather than picking a scene scale: a
-            // weighted fragment is weighed by where it sits between the planes
-            // it was projected with. Packed as `(near, 1 / (far - near))` so the
-            // shader multiplies rather than divides, and present only for the
-            // mode that declares it — the packer panics on a field the layout
-            // does not have, which is what keeps these two halves from drifting.
-            if weighted {
-                let near = view.camera.near;
-                let span = (view.camera.far - near).max(f32::MIN_POSITIVE);
-                p.vec2("depth_range", [near, 1.0 / span]);
-            }
+        // a per-element one expands sprites and strokes and needs the viewport
+        // in pixels; a fullscreen one has no primitive to size. Writing a field
+        // the layout does not declare is a panic in the packer, which is the
+        // right way round — it means the two halves cannot drift.
+        if !fullscreen {
+            p.vec2("viewport", view.viewport);
         }
         for name in &self.param_names {
             p.f32(name, (view.param)(name).unwrap_or(0.0));
@@ -353,6 +364,9 @@ impl Renderer {
     fn record(&self, pass: &mut wgpu::RenderPass<'_>, parity: usize, counts_buf: &wgpu::Buffer) {
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(group::UNIFORMS, &self.uniform_bg, &[]);
+        if let Some((at, bg)) = &self.camera_bg {
+            pass.set_bind_group(*at, bg, &[]);
+        }
         if self.fullscreen {
             // Three vertices, one instance, and no indirect read: the count
             // is a property of the shape rather than of how many elements

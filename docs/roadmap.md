@@ -815,7 +815,16 @@ weighted`. The structural front is most of the way: `Ln` is a node, a Set holds 
 syntax. Parameters, bindings, the edit history and the MCP surface all address a node rather
 than a layer.
 
-What is left is **L3 as a node**, **L5 as a `kind`** for the nested case, **what a Set
+**The camera is a node too, ahead of the procedure that will drive it.** `L4 : (Geometry,
+Camera) -> Texture` makes a camera an input *edge*, and it is one now: the six numbers go into
+a GPU buffer, a compute pass derives the `view_proj`, ray basis and `depth_range` a renderer
+reads, and every L4 binds the result. Nothing about a camera is on the host any more. That
+ordering was deliberate — an L3 that follows an element cannot be evaluated host-side without
+a per-frame readback, so the *edge* had to stop being six numbers in a uniform before the
+producer could be anything but an `Orbit`. What is left on this front is the producer: an L3
+`kind`, its `camera` block, and the compute pass that writes the state.
+
+What is left is **L3 as a `kind`**, **L5 as a `kind`** for the nested case, **what a Set
 publishes**, and **masks in the mixer**. Every one of them is specified in `docs/ir-spec.md`
 with its open questions closed — including the last one this project carried, how two merged
 geometries keep their identities apart. Nothing below is waiting on a decision.

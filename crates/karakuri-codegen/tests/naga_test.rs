@@ -961,9 +961,15 @@ fn a_weighted_fullscreen_l4_compiles_and_validates() {
 /// that one caught a generator ignoring the topology it was handed.
 ///
 /// The three things named are the three that have to move together: the second
-/// target, the varying the weight is computed from, and the uniform field that
+/// target, the varying the weight is computed from, and the camera planes that
 /// varying is measured against. A shader with any one of them missing would
 /// still compile.
+///
+/// **The planes are a read and not a declaration.** They live in the camera's
+/// bind group, which an additive shader binds too — it projects with the same
+/// camera — so what separates the two modes is `cam.depth_range` appearing in
+/// the body, not `depth_range` appearing anywhere. Asserting on the name alone
+/// would pass for both, since both emit the struct that declares it.
 #[test]
 fn each_blend_mode_emits_its_own_fragment_epilogue_and_not_the_others() {
     let layout = layout_for(&drift_shell());
@@ -973,9 +979,10 @@ fn each_blend_mode_emits_its_own_fragment_epilogue_and_not_the_others() {
     assert!(weighted.source.contains("@location(1) reveal"), "no revealage target");
     assert!(weighted.source.contains("view_depth"), "no depth to weigh by");
     assert!(
-        weighted.uniform_layout.fields.iter().any(|f| f.name == "depth_range"),
+        weighted.source.contains("cam.depth_range"),
         "no camera planes to measure the depth against"
     );
+    assert!(weighted.camera_group.is_some(), "nothing to read those planes from");
 
     // Not `@location(1)`: an additive shader has one of those already, for its
     // first varying. What it must not have is a fragment output struct.
@@ -983,8 +990,8 @@ fn each_blend_mode_emits_its_own_fragment_epilogue_and_not_the_others() {
     assert!(!additive.source.contains("reveal"), "the additive shader accumulates revealage");
     assert!(!additive.source.contains("view_depth"), "the additive shader carries a depth nothing reads");
     assert!(
-        !additive.uniform_layout.fields.iter().any(|f| f.name == "depth_range"),
-        "the additive shader's uniform grew a field nothing reads"
+        !additive.source.contains("cam.depth_range"),
+        "the additive shader weighs a fragment by its depth"
     );
 
     // The vertex stage's *placement* is blend-blind: the same six corners land

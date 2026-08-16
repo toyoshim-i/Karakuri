@@ -199,6 +199,67 @@ struct Counts {
 ";
 }
 
+/// The camera edge, in the two shapes it has on the GPU.
+///
+/// **`CameraState` is the edge and `Camera` is what an L4 reads.** The six
+/// numbers a camera *is* cross between the producer and the derivation;
+/// `view_proj`, the ray basis and `depth_range` cross between the derivation and
+/// every renderer. Both declarations are emitted verbatim into the engine's
+/// `camera.wgsl` and into every generated L4, so a producer, the derivation and
+/// a reader cannot disagree about the bytes — the same argument
+/// [`counts::WGSL`] is here for.
+///
+/// **The state is a storage buffer and the derived form is a uniform**, which
+/// is why only one of them is padded to a 16-byte multiple by hand. The state
+/// packs its three scalars into the padding after its three `vec3`s, which is
+/// the whole of why it is 48 bytes rather than 64.
+pub mod camera {
+    /// Byte size of `CameraState`.
+    pub const STATE_SIZE: u64 = 48;
+    /// Byte size of `Camera`.
+    pub const SIZE: u64 = 144;
+
+    /// What a producer writes: the host, from a `camera` record, or an L3's
+    /// compute pass. **Read-only everywhere else** — a renderer never sees it.
+    ///
+    /// **`look_at` is `target` under another name**, because `target` is a
+    /// reserved word in WGSL. Everything outside a shader — the IR, the host
+    /// struct, this document — calls it `target`; renaming it here is cheaper
+    /// than renaming it everywhere for one grammar's sake.
+    pub const STATE_WGSL: &str = "\
+struct CameraState {
+    eye: vec3<f32>,
+    fov_y: f32,
+    look_at: vec3<f32>,
+    near: f32,
+    up: vec3<f32>,
+    far: f32,
+};
+";
+
+    /// What the derivation writes and every L4 reads.
+    ///
+    /// `right` and `up` arrive **pre-scaled** by the field of view and the
+    /// aspect ratio, so a marching fragment's ray is an interpolation and a
+    /// normalize rather than a projection — see `karakuri_engine::camera::Basis`.
+    /// `depth_range` is `(near, 1 / (far - near))`, so the shader multiplies.
+    pub const WGSL: &str = "\
+struct Camera {
+    view_proj: mat4x4<f32>,
+    eye: vec3<f32>,
+    _pad0: f32,
+    fwd: vec3<f32>,
+    _pad1: f32,
+    right: vec3<f32>,
+    _pad2: f32,
+    up: vec3<f32>,
+    _pad3: f32,
+    depth_range: vec2<f32>,
+    _pad4: vec2<f32>,
+};
+";
+}
+
 /// Per-substep spawn parameters: the one piece of engine state that differs
 /// between the substeps of a single frame.
 ///
