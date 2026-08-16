@@ -113,12 +113,15 @@ Each layer composes differently, and each needs its own semantics.
   identities.** Identity is `seed`, a monotone spawn ordinal from one counter that resets at
   Set start, so two sources either share it and interleave — and the second one's `seed` no
   longer starts at zero, which breaks every structured layout — or hold one each and collide.
-  **Answered**: `docs/ir-spec.md`, "Multiple L1 sources, and `source`". Each source counts
-  from zero, an implicit `source` attribute makes identity the pair, and the hash salt moves
-  from per *layer* to per *source* so two identical grids differ in colour by default. What
-  is still open is narrower and is in that document's Open questions: whether a `source`
-  number names an input of a merge node or an entry of the Set's source list, which decides
-  what an attribute mask keeps selecting after a graph is edited.
+  **Answered and closed**: `docs/ir-spec.md`, "Multiple L1 sources, and `source`". Each
+  source counts from zero, an implicit `source` attribute makes identity the pair, and the
+  hash salt moves from per *layer* to per *source* so two identical grids differ in colour by
+  default. The part that took longest was the `source` value itself: **assigned once and
+  recorded, never derived**, because every derivation fails on a case this system has — graph
+  edits move a position, a `.kir` edit moves a content hash under `--watch`, and a declared
+  procedure name collides for the same lattice used twice. A source that something wants to
+  mask on carries a **name**, written where it is used and not in the `.kir`, on the terms
+  HTML gives an `id`; an unnamed source is simply unreferenceable. Decided, not built.
 - **L2 multiple** — chain. Order matters. Each modulator carries a weight and a mask, and
   masks are attribute-based: only elements where `seed % 3 == 0`, only inside a region,
   only where `age > 0.7`. This is the largest single source of expressive range in the

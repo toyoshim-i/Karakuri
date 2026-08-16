@@ -1196,6 +1196,14 @@ known. The total-cost decision lives there, not in the artifact.
   `{"t":"src","hash":"…","line":0,"s":"…"}` records.
 - `capacity` is optional; without it the `.kir` default applies. A value outside the range
   the `.kir` declares is rejected at Set build time.
+- **A `slot` may carry a `name`**, which is what a mask points at when a Set has more than
+  one source — `{"t":"slot","layer":"L1","index":1,"name":"veil","proc":"…"}`. Optional and
+  absent by default: an unnamed source is unreferenceable, on the terms HTML gives an `id`.
+  Unique within the file. See "Multiple L1 sources, and `source`". **Not built.**
+- **`seed` is keyed by node, not only by layer** — `{"t":"seed","stream":"L1","index":1,…}`
+  salts the second source. Absent means 0, so a file naming one source per layer reads as it
+  always did. The value is also what that source's `source` attribute carries, since the
+  discriminator and the salt are one value. **Not built.**
 - **Several `slot` records on `L4` is a stack**: one geometry with a renderer apiece, drawn
   in the order the records appear. It needed no new record to say so — a second one is a
   second renderer rather than a correction of the first. A file with one reads exactly as it
@@ -2111,7 +2119,7 @@ The resolution keeps `seed` zero-based per source and adds a fourth implicit att
 
 | Name | Type | Notes |
 |---|---|---|
-| `source` | `uint` | which L1 source produced this element. Implicit, carried, never declared |
+| `source` | `uint` | which source produced this element. Implicit, carried, never declared |
 
 - Each source counts its own `seed` from zero, so `seed % side` and every other structured
   layout works identically in every source.
@@ -2121,11 +2129,75 @@ The resolution keeps `seed` zero-based per source and adds a fourth implicit att
   arrange.
 - `source` is what downstream layers mask on. It is an ordinary attribute for that purpose.
 
+#### A `source` value is assigned and recorded, never derived
+
+**The value is not computed from anything.** It is chosen once, when a source is added to a
+Set, written into the record stream, and read back from there forever after. That is the
+same footing the randomness in this language already stands on: the hash builtins are salted
+from `{"t":"seed"}` and are *"not pure functions of their arguments across Sets; they are
+deterministic given the record stream, which is what the invariant requires"*. `source` is
+one more value of that kind, and `{"t":"seed"}` gaining a source index is most of the
+mechanism.
+
+Every derivation that looks cheaper fails on a case this system actually has:
+
+| Derived from | Fails because |
+|---|---|
+| Position among the merge node's inputs | Inserting a merge upstream silently changes what `source == 1` selects, and a mask is where most of the expressive range lives |
+| Position in the Set's source list | Better — the list is visible in the Set file — but reordering it still retargets every mask written against it |
+| The `.kir`'s content hash | Editing one character changes it, so a save under `--watch` detaches every downstream mask. That is the loop this project is built around |
+| The procedure's declared name | `proc drift_shell` is a *type* name. The same lattice twice at two scales is one name and two sources, and they collide |
+
+An assigned value fails none of them: it does not move when the graph is edited, when the
+list is reordered, when the `.kir` is rewritten, or when one procedure is used twice.
+
+**And where it came from stops mattering once it is recorded** — a clock at the moment of
+creation, a counter, a hash of anything at all. The record is the truth, so the generator is
+free. That is the whole benefit of recording rather than deriving, stated as a simplification
+rather than a constraint.
+
+#### Naming a source, on the terms HTML gives an `id`
+
+A value nobody can write is a value nobody can mask on: `source == 0x8a3f21c4` is not
+something an author or a model produces. So a source that something wants to point at
+carries a **name**, and the mask is written against the name, resolved where the Set is
+built.
+
+The analogy is exact and settles two things at once. An `id` belongs to the *element*, not
+to the tag — so the name is written where a source is **used**, in the Set, and not in the
+`.kir`, which is why two uses of one procedure are two names rather than a collision. And an
+element with no `id` is simply unreferenceable, which is fine: most sources are never masked,
+and **a name is a cost you pay when you want to point at something**.
+
+Names are unique within a Set, checked where every source is first in hand — beside the
+composition check, where `ParamCollision` used to live.
+
+**The name is an alias and the assigned value is the value.** The alternative is deriving
+the value from the name, which cannot work: it covers only the named sources, and the unnamed
+ones still need a salt, so the assigned value has to exist anyway — at which point the name
+is an alias for it. This is the same shape "What a Set publishes" already gives parameters:
+a stable internal address, and whatever the Set chose to call it on the outside.
+
+#### Two choices here are preference rather than force
+
+Stated so a later reader can tell them from the parts above, which are forced.
+
+- **The attribute carries the assigned value itself**, folded to 32 bits, rather than a
+  dense index with the salt kept beside it. One value does both jobs, and a collision breaks
+  both at once — cheap to refuse at build, since every source is in hand there. Where a
+  human reads it, display the Set-local ordinal instead.
+- **A name is written in a Set file and not on the command line.** `--set` stays one
+  comma-separated list of paths with no new syntax, so a source named on the command line is
+  simply unnamed and unaddressable. Anyone who needs to point at a source is already writing
+  a Set file.
+
 **Identity is therefore a triple**, not a pair: `source` from here, `seed` from the source
 that produced the element, and `copy` from any amplifying node above it — see "Amplification
-carries `copy`". Three `uint`s of identity per element, which neither needs a full range, so
-packing `source` and `copy` into one word is available and is an engineering choice with no
+carries `copy`". Three `uint`s of identity per element, none of which needs a full range, so
+packing `copy` alongside one of the others is available and is an engineering choice with no
 semantic consequence. Not made here because nothing yet counts sources.
+
+**Decided, not built.** Nothing assigns a `source` today because nothing merges.
 
 **The two salting rules compose, and are on different axes.** Amplification requires
 `hash1(seed)` to give every copy of one element the *same* value, which is what makes eight
@@ -2251,40 +2323,31 @@ producing eight mirrored copies costs one simulation and eight draws, not eight 
 
 ## Open questions
 
-One, and it is not the one this section carried. **How two merged geometries keep their
-identities apart** is answered above — per-source zero-based `seed`, an implicit `source`
-attribute, a per-source hash salt — and had been for as long as "Multiple L1 sources, and
-`source`" has existed. The question stayed listed because the answer was written in a new
-section rather than into the question, which is the same way a deleted check leaves its
-comments behind. What is left is a smaller thing the answer exposed rather than settled.
+**None.** Which this section has been wrong about before — it said "None" while L2, L3 and
+L5 were undecided, which was true of the questions someone had thought to write down and
+false of the specification. So the sections above now state what is *decided* as well as what
+is not, and a reader who finds no gaps here should read them rather than conclude there is
+nothing to look at.
 
-- **What a `source` number names, and how stable it is.** Two readings, and they differ the
-  moment a graph is edited rather than the moment it is built.
+The last one standing was **how two merged geometries keep their identities apart**, carried
+in `docs/roadmap.md` since before there was a compiler. It is answered above under "Multiple
+L1 sources, and `source`": per-source zero-based `seed`, an implicit `source` attribute whose
+value is **assigned and recorded rather than derived**, a per-source hash salt that is the
+same value, and a name written where a source is used for anything that wants to mask on it.
 
-  **Node-relative** — `source` is which *input of the merge node* an element came through,
-  renumbered at every merge. Local and composable, and the only reading that survives merging
-  a merge without `source` having to become a path, which a `uint` cannot be. But inserting a
-  merge upstream silently changes what `source == 1` selects downstream of it.
-
-  **Set-relative** — `source` is which entry of the Set's L1 list an element came from, one
-  flat numbering per Set. A mask means the same thing wherever it sits, the numbering is
-  visible in the Set file and on the command line, and nested merges preserve it for free.
-  The cost is that the merge node does not own the numbering: it comes from the grouping,
-  the way the renderer list already does.
-
-  It matters because `docs/roadmap.md` calls attribute masks "the largest single source of
-  expressive range in the system" — an L2 masked to `source == 1` that silently retargets is
-  a whole modulator pointed at the wrong material, and it produces a picture rather than an
-  error. Decide before L1 multiplicity is built; it is a question about what an author
-  expects a mask to mean, which is the kind this project has done better by asking than by
-  deriving.
+Two things about how it was reached are worth more than the answer. Every derivation anyone
+proposed — position among a node's inputs, position in the Set's list, the `.kir`'s content
+hash, the procedure's declared name — failed on a case this system actually has, and the
+list of those cases is in that section rather than in anyone's head. And the answer turned
+out to be a mechanism the language already had: randomness here is *"deterministic given the
+record stream"* rather than pure, so a recorded value was the native move and not an
+addition.
 
 The four that were open at v0.2 are recorded above with their decisions and their reasons.
 
-**This section said "None" while L2, L3 and L5 were undecided**, which was true of the
-questions someone had thought to write down and false of the specification. The difference
-between a question that is open and one nobody has asked is invisible from a list, so the
-sections above state what is decided as well as what is not — a reader who finds only the
-gaps cannot tell them from the parts nobody has looked at. Two of the four questions this
-section has held since were then answered by *one sentence each* of what an author expects to
-be able to do, which is the argument for asking rather than for deriving.
+The difference between a question that is open and one nobody has asked is invisible from a
+list, which is why the sections above state what is decided as well as what is not. Two of
+the questions this section has held were answered by *one sentence each* of what an author
+expects to be able to do, and the last one by an author noticing that a content hash collides
+for one procedure used twice — which is the argument for asking rather than for deriving,
+made three times now.
