@@ -992,6 +992,18 @@ What falls out with no further work: `examples/drift_shell.kir` drawn as sprites
 streaks *and* as a solid, for one simulation and three draw passes — the payoff the
 primitive-centric bet was made for, which today costs three simulations.
 
+**A hole in how the clock was tested, found on the way in.** Every test of the clock in this
+repository — `beats.rs`, `generated.rs`, `lifecycle.rs`, `priming.rs` — compares one run
+against another: same record stream, same image; primed then live, same as always live. That
+is the right shape for an invariance claim and it is blind to anything that shifts *both*
+sides equally. Shift every substep's `t` by one whole `dt` and all 43 suites stay green while
+every procedure in the system reads a clock that is a frame out.
+`beats.rs::the_instants_a_substep_reads_are_the_sets_own_clock` is the anchor that was
+missing: absolute arithmetic instead of a comparison, pinning the last substep's instant
+against `Set::time` and the sum over every substep against `dt * (1 + 2 + … + n)`, so where
+the sequence *starts* is asserted as well as where it ends. Nothing was wrong — but nothing
+was watching, which is the same thing one edit later.
+
 Three forks, **all three decided as recommended** (*「全部推奨通りで問題ないと思う」*). All
 three read differently under the node framing than they did under the hierarchy one, which is
 the reframe earning its keep.
