@@ -416,6 +416,7 @@ impl Simulation {
             layout: &self.element_layout,
             elements: [self.element_buf.prev(false), self.element_buf.prev(true)],
             alive: [self.alive_buf.prev(false), self.alive_buf.prev(true)],
+            counts: &self.counts,
         }
     }
 
