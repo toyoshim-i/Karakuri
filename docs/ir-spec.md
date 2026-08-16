@@ -1696,10 +1696,41 @@ frame therefore moves every weighted fragment's weight per frame. That is not a 
 is what tying the weight to the camera's own planes means — but it is a coupling nobody
 would predict from the layer algebra.
 
-**An L3 node has no geometry input and no GPU pass.** It reads `t`, `beats`, its own params
-and whatever is bound to them, and produces six numbers. It is therefore the first node
-whose evaluation is host-side, which is a real structural difference from L1, L2 and L4 and
-not merely a small one.
+**An L3 may read geometry, and the algebra's `L3 : () -> Camera` is wrong about that.** This
+section said the opposite for a day — "no geometry input and no GPU pass … the first node
+whose evaluation is host-side" — and what falsified it was one sentence of what an author
+expects a camera to do: *「1つ目の頂点を追いかける」*. A camera that follows an element takes
+geometry as an input, and the value it needs is in a GPU buffer.
+
+Which settles where a camera lives, because it cannot be read back. `Set::read_elements` and
+`Set::live_count` both document themselves as stalls — *"never call it on the frame path"* —
+and a GPU-to-host readback every frame is the one thing this architecture is built to avoid.
+So:
+
+**The `Camera` edge is a GPU buffer, and which producer writes it is the L3's business.** An
+L3 that reads only the clock — an orbit, a jump on the beat — is written from the host with
+a `queue.write_buffer`, exactly as the built-in orbit's uniform is written today. An L3 that
+reads geometry is written by a small compute pass. One consumer, two kinds of producer, and
+no readback either way.
+
+The decision above survives this and only changes address: **state crosses the edge, not a
+matrix**, blending of trajectories happens on that state, and a derivation step produces the
+`view_proj`, `basis` and `depth_range` an L4 reads. What moves is that the host stops knowing
+the camera — and nothing was found that needs to.
+
+**An L3 may hold state, where an L2 may not**, and the asymmetry is not an oversight. The
+four reasons L2 is stateless barely bite here: L3-multiple is a *blend* of trajectories
+rather than a chain, so stackability is not the argument; priming six numbers is instant;
+compaction is irrelevant. Only seekability bites, and it bites the same way L1's state does
+— **a Set is seekable if every node in it is**, which is why `closed_form` is written as a
+conjunction rather than read off one named layer.
+
+What makes the asymmetry worth paying for is that **a camera's craft is mostly smoothing**. A
+rigid follow is unwatchable; a damped one lags, and lag is state. The second expectation on
+record — *「ビートに合わせてランダムに移動しつつ中央を向き続ける」* — happens to be
+expressible without any, since a jump chosen by `hash(floor(beats))` is a pure function of
+the clock, and that is worth knowing: **the dynamism an author asks for first is often closed
+form, and the smoothing they ask for next is not.**
 
 #### L2 — deformation
 
@@ -1751,19 +1782,90 @@ the same colour, which is what makes eight copies read as one object, and breaki
 the deliberate `hash1(seed ^ copy)`. `copy` joins `seed` and `birth_frac` as a slot the
 engine writes and no procedure declares.
 
+#### Neither per Set nor per deck: a camera belongs to an L4
+
+The question this section asked — *a camera per Set, or one for the deck* — was the wrong
+one, and the algebra had already answered it: `L4 : (Geometry, Camera) -> Texture` makes a
+camera an **input edge of a renderer**. Nothing about a Set or a deck enters into it. Two L4s
+reading one L3 are one viewpoint drawn two ways; two L4s reading different L3s are two
+viewpoints composited, which is what makes *"a Set that blends two scenes"* a graph rather
+than a feature. Sharing is edge fan-out and needs no rule.
+
+The question was asked because `Set` owns an `Orbit` field today, and this document turned
+that implementation into a design question. Worth remembering as a shape: **an existing field
+is not a fact about the design.**
+
+An L3 is a `.kir` procedure rather than the `camera` record it is today. The expectations
+that settled it are dynamic — follow an element, jump on the beat while facing the centre —
+and a record with two numbers in it cannot carry either.
+
 #### What is *not* decided
 
-Two, and both are Toyoshima's rather than this document's — see `docs/roadmap.md`.
+**What an L3 can point at in a geometry**, and the cheap answer is not the stable one:
 
-- **A camera per Set, or one for the deck.** Today it is per Set, because `Set` owns an
-  `Orbit`, and an L3 node inside a Set keeps it that way. The alternative is a deck-level
-  camera every slot shares, so that four layers read as one space rather than as four. That
-  is a question about how a set looks from the floor, not about the type.
-- **Whether an L3 is a `.kir` procedure at all.** It is a `camera` record today, and a
-  record is enough for an orbit. A `.kir` L3 would let a camera path be *generated*, which is
-  this project's whole thesis applied to the one layer that has so far been furniture — and
-  it would mean the IR's expression language has to evaluate somewhere other than on a GPU,
-  which nothing has needed yet.
+| Addressing | Cost | Problem |
+|---|---|---|
+| Index into the live range | One buffer read | **Compaction moves it.** Not the same element twice |
+| The element with `seed == N` | A search over `capacity` | There is no seed-to-index map |
+| Centroid, bounds | One reduction pass | None, and it is what "frame the material" needs |
+
+The recommendation is to start at the reduction, because it is stable under compaction, costs
+one pass, and carries the most useful thing a camera can do with geometry — keeping material
+framed while it moves. Following one element waits for a seed-to-index map to be worth
+building. What this exposes is the price of identity being `seed`: **the stable way to name
+an element is the expensive way**, and that has been true since M1 with nothing asking for it
+until now.
+
+### L5 — M3
+
+L5 has been the deck's mix since M2 and has never been a `kind`. Under the node model it
+becomes one, and **it has two roles rather than two implementations**:
+
+- **The console.** The top-level L5 is what an operator sees and mixes on — gain, opacity,
+  blend mode and mask per input, with a surface attached to every one of them. This is what
+  L5 is *for*, and `crates/karakuri-engine/src/shaders/composite.wgsl` already is it.
+- **A merge node, nested.** The same node inside a Set, folding several L4s into one
+  `Texture`. Nothing an operator touches; it is there so that a Set can be *composed* of
+  several rendering pipelines rather than of one.
+
+One node kind, one shader, one set of per-input parameters. What differs between the two
+roles is only whether a surface is wired to it.
+
+**Which separates the mix from the deck**, and the separation is worth having because today
+they are one type. `gain`, `opacity`, `blend` and `mask` are properties of an *edge into an
+L5* and travel with it wherever it is nested. `residency`, `priming`, hot swap, budget
+governance, `transport`, `preview` and metering are properties of **a Set being played** and
+have nothing to do with mixing; they sit beside the top-level L5 in `Deck` because that is
+where a performance happens, not because they belong to L5.
+
+#### Overdraw and compositing are different operations, and the graph says which
+
+This is what the presence of an L5 decides, and it is the difference between one render
+target and several:
+
+| Shape | What happens | Cost |
+|---|---|---|
+| Several L4s straight to the Set's output | **Overdraw**, in declaration order — the first pass clears, the rest load | One target |
+| Several L4s into an L5 | **Compositing** — an L5 input is a texture, so each L4 needs its own | One target per input |
+
+The same cloud drawn as sprites *and* as strokes is the first shape and costs no memory at
+all: additive's blend state accumulates into whatever is there, and a weighted renderer's
+resolve composites `over` rather than replacing, which is the identical result on the cleared
+target it writes today. Two scenes cross-fading is the second, and it costs 7.03 MB an input
+at 1280x720 — which is what compositing costs, asked for explicitly by placing a node.
+
+An earlier draft of `docs/roadmap.md` recommended the first shape for *every* case and said
+so knowingly — *"it is also the answer that becomes wrong first: a real graph has nodes that
+consume textures, and then the combine is a node"*. It was not wrong; it was the rule for one
+of the two shapes, stated as if it were the rule for both.
+
+#### What a Set is, exactly
+
+**A named subgraph with exactly one `Texture` output.** That is the whole definition, and
+everything else follows: a Set may hold several pipelines, may branch (one L1 read by several
+L4s) and may merge (several L4s into an L5, several geometries into one node); a deck slot
+takes one texture, so a Set has one output; and "grouping" is not a hierarchy level but a
+name drawn around some nodes.
 
 ### Metadata file format — M4
 
@@ -1995,17 +2097,23 @@ producing eight mirrored copies costs one simulation and eight draws, not eight 
 
 ## Open questions
 
-Two, both about layers this document has described only as "later" and both belonging to
-the author rather than to the specification. They are stated in full under
-[L2 and L3](#l2-and-l3--m3):
+Two, and neither is the pair that stood here yesterday — both of those turned out to be
+answerable and are recorded above with their answers.
 
-- **A camera per Set, or one for the deck.**
-- **Whether an L3 is a `.kir` procedure or stays a record.**
+- **What an L3 can point at in a geometry.** Index, `seed`, or a reduction; the cheap answer
+  is not the stable one. See [L2 and L3](#l2-and-l3--m3).
+- **How two merged geometries keep their identities apart.** `seed` is one monotone counter
+  per Set, so two L1 sources either share it and interleave or hold one each and collide.
+  `docs/roadmap.md` has carried this since before there was a compiler and it becomes live
+  the moment a node has two `Geometry` inputs — which cross-source interpolation and L1-merge
+  both are.
 
 The four that were open at v0.2 are recorded above with their decisions and their reasons.
 
-**This section said "None" while L2 and L3 were undecided**, which was true of the questions
-someone had thought to write down and false of the specification. The difference between a
-question that is open and one that has not been asked is invisible from a list, so the L2 and
-L3 section above states what is decided as well as what is not — a reader who finds only the
-gaps cannot tell them from the parts nobody has looked at.
+**This section said "None" while L2, L3 and L5 were undecided**, which was true of the
+questions someone had thought to write down and false of the specification. The difference
+between a question that is open and one nobody has asked is invisible from a list, so the
+sections above state what is decided as well as what is not — a reader who finds only the
+gaps cannot tell them from the parts nobody has looked at. Two of the four questions this
+section has held since were then answered by *one sentence each* of what an author expects to
+be able to do, which is the argument for asking rather than for deriving.
