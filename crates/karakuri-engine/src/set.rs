@@ -45,7 +45,7 @@ use karakuri_ir::Kind;
 
 use crate::binding::{Binding, ParamWrite, Signals};
 use crate::camera::Orbit;
-use crate::node::{Renderer, Simulation};
+use crate::node::{Deform, Renderer, Simulation};
 use crate::video_source::VideoSource;
 
 /// Past this the simulation falls behind rather than catching up — the
@@ -190,6 +190,15 @@ pub struct Set {
     /// resolved once at build time, plus a parity and a counts buffer this
     /// module fetches every frame — the half of that edge that has no type yet.
     sim: Simulation,
+    /// **The L2 nodes, in chain order.** Each reads what the one before it
+    /// wrote and writes its own buffer, so the geometry the renderers see is
+    /// the last one's — or the simulation's, when there are none.
+    ///
+    /// They run once per frame, after every substep, rather than once per
+    /// substep: a deformation is a function of the instant the simulation
+    /// reached, and running it between substeps would deform states nothing
+    /// ever draws.
+    deforms: Vec<Deform>,
     /// **The L4 nodes, in draw order.** Each owns its pipeline, its uniform, its
     /// accumulation targets under `blend weighted`, and the bind groups naming
     /// the element buffers the node above holds — the edge, resolved.
@@ -239,7 +248,7 @@ impl Set {
         capacity: u32,
         seed_salt: u32,
     ) -> Result<Set, SetError> {
-        Set::build_many(device, queue, l1, &[l4], capacity, seed_salt)
+        Set::build_many(device, queue, l1, &[], &[l4], capacity, seed_salt)
     }
 
     /// **One geometry, several renderers over it, drawn in list order.**
@@ -263,6 +272,7 @@ impl Set {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         l1: &Checked,
+        l2s: &[&Checked],
         l4s: &[&Checked],
         capacity: u32,
         seed_salt: u32,
@@ -277,6 +287,61 @@ impl Set {
                 actual: l1.kind,
             });
         }
+        // **`consumes ⊆ available at this position`, walked down the chain.**
+        //
+        // A node reads the element struct the node above it wrote, so a consumed
+        // attribute nothing upstream produced has no field to read. Left
+        // unchecked it surfaces as a WGSL parse failure inside
+        // `create_shader_module` — an internal error where the contract calls
+        // for a diagnostic.
+        //
+        // **What is available grows as the chain runs**, which is why this is a
+        // walk rather than a comparison against `l1.emit`: an L2 may `emit` an
+        // attribute no L1 in the library produces, and everything below it can
+        // then consume that. So the L2 that adds `tint` and the L4 that draws it
+        // compose, while the same L4 over the bare L1 does not — and the error
+        // has to name the position rather than the pair.
+        //
+        // Every missing attribute of one node is reported at once, for the same
+        // reason the IR checker reports every error at once: one regeneration
+        // should fix all of them. The *first node* that fails stops the build,
+        // because everything after it would be reported against a chain that
+        // will not exist.
+        let mut available: Vec<karakuri_ir::Attr> = l1.emit.clone();
+        let check_against = |node: &Checked, available: &[karakuri_ir::Attr]| {
+            let missing: Vec<String> = node
+                .consumes
+                .iter()
+                .filter(|a| !available.contains(a))
+                .map(|a| format!("`{}`", a.name()))
+                .collect();
+            if missing.is_empty() {
+                None
+            } else {
+                Some(SetError::Composition {
+                    l1: l1.name.clone(),
+                    l4: node.name.clone(),
+                    missing: missing.join(", "),
+                })
+            }
+        };
+        for l2 in l2s {
+            if l2.kind != Kind::L2 {
+                return Err(SetError::WrongKind {
+                    slot: "L2",
+                    expected: Kind::L2,
+                    actual: l2.kind,
+                });
+            }
+            if let Some(e) = check_against(l2, &available) {
+                return Err(e);
+            }
+            for &attr in &l2.emit {
+                if !available.contains(&attr) {
+                    available.push(attr);
+                }
+            }
+        }
         for l4 in l4s {
             if l4.kind != Kind::L4 {
                 return Err(SetError::WrongKind {
@@ -285,34 +350,8 @@ impl Set {
                     actual: l4.kind,
                 });
             }
-            // Before anything is generated: an L4 reads the element struct an L1
-            // wrote, so a consumed attribute the L1 never emitted has no field to
-            // read. Left unchecked it surfaces as a WGSL parse failure inside
-            // `create_shader_module` — an internal error where the contract calls
-            // for a diagnostic. Every missing attribute is reported at once, for
-            // the same reason the IR checker reports every error at once: one
-            // regeneration should be able to fix all of them.
-            //
-            // Per renderer, and the *first* one that fails stops the build: a
-            // stack whose third node consumes `velocity` is as unbuildable as a
-            // lone node that does, and reporting the rest would be reporting
-            // them against a Set that will not exist either way.
-            let missing: Vec<&str> = l4
-                .consumes
-                .iter()
-                .filter(|a| !l1.emit.contains(a))
-                .map(|a| a.name())
-                .collect();
-            if !missing.is_empty() {
-                return Err(SetError::Composition {
-                    l1: l1.name.clone(),
-                    l4: l4.name.clone(),
-                    missing: missing
-                        .iter()
-                        .map(|a| format!("`{a}`"))
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                });
+            if let Some(e) = check_against(l4, &available) {
+                return Err(e);
             }
         }
 
@@ -352,26 +391,53 @@ impl Set {
         // node's own. Everything the simulation needs is inside it.
         let sim = Simulation::build(device, l1, capacity, seed_salt)?;
 
+        // **The L2 nodes**, each built against what reaches it. The chain is
+        // walked here rather than inside a node because the *grouping* decides
+        // the order — a node knows how it deforms and not what is above it.
+        let mut deforms: Vec<Deform> = Vec::new();
+        let mut upstream: Vec<karakuri_ir::Attr> = l1.emit.clone();
+        for l2 in l2s {
+            let node = {
+                let input = match deforms.last() {
+                    None => sim.geometry(),
+                    Some(prev) => {
+                        let from = sim.geometry();
+                        prev.geometry(from.alive, from.counts)
+                    }
+                };
+                Deform::build(device, l2, &upstream, &input, capacity)
+            };
+            upstream = node.emits().to_vec();
+            deforms.push(node);
+        }
+
         // **The L4 nodes**, generated, compiled and bound against the edge the
-        // node above offers: the element layout, and the two buffers indexed by
-        // parity. Everything about how one draws is its own — see
-        // [`crate::node::Renderer`] — including the blend-mode rule that needs
-        // both halves in hand. They all read the same edge, which is the whole
-        // point: one simulation, several ways of looking at it.
-        let renderers: Vec<Renderer> = l4s
-            .iter()
-            .map(|l4| Renderer::build(device, l4, &sim.geometry()))
-            .collect();
+        // last node in the chain offers: the element layout, and the two
+        // buffers indexed by parity. Everything about how one draws is its own
+        // — see [`crate::node::Renderer`] — including the blend-mode rule that
+        // needs both halves in hand. They all read the same edge, which is the
+        // whole point: one simulation, several ways of looking at it.
+        let renderers: Vec<Renderer> = {
+            let from = sim.geometry();
+            let geometry = match deforms.last() {
+                None => sim.geometry(),
+                Some(last) => last.geometry(from.alive, from.counts),
+            };
+            l4s.iter()
+                .map(|l4| Renderer::build(device, l4, &geometry))
+                .collect()
+        };
 
         // One map per node, in the order [`Set::slot_of`] addresses them: the
         // L1's, then each renderer's. Two nodes declaring one name now hold two
         // values, which is what a name meaning "this node's" buys.
         let declared = |p: &&karakuri_ir::Param| default_scalar(p).map(|v| (p.name.clone(), v));
-        let params = std::iter::once(l1.params.iter().filter_map(|p| declared(&p)).collect())
-            .chain(
-                l4s.iter()
-                    .map(|l4| l4.params.iter().filter_map(|p| declared(&p)).collect()),
-            )
+        let map = |node: &Checked| -> HashMap<String, f32> {
+            node.params.iter().filter_map(|p| declared(&p)).collect()
+        };
+        let params = std::iter::once(map(l1))
+            .chain(l2s.iter().map(|n| map(n)))
+            .chain(l4s.iter().map(|n| map(n)))
             .collect();
 
         let set = Set {
@@ -387,9 +453,19 @@ impl Set {
             // conjunction is written out anyway: it is the sentence that is
             // true, and a Set whose seekability came from one named layer would
             // have to be revisited by every layer added after it.
-            closed_form: l1.closed_form && l4s.iter().all(|l4| l4.closed_form),
-            reads_beats: l1.reads_beats || l4s.iter().any(|l4| l4.reads_beats),
+            // Every node, because a Set is only seekable if everything in it
+            // is — and in practice this is still the L1's, since an L2 and an L4
+            // are both vacuously closed form. The conjunction is written out
+            // anyway: it is the sentence that is true, and one that named a
+            // layer would have to be revisited by every layer added after it.
+            closed_form: l1.closed_form
+                && l2s.iter().all(|n| n.closed_form)
+                && l4s.iter().all(|n| n.closed_form),
+            reads_beats: l1.reads_beats
+                || l2s.iter().any(|n| n.reads_beats)
+                || l4s.iter().any(|n| n.reads_beats),
             sim,
+            deforms,
             renderers,
             params,
             camera: Orbit::default(),
@@ -571,22 +647,19 @@ impl Set {
         // to declare the name; an addressed one needs *that* node to, so
         // `bind(L4, index 2, "exposure")` on a Set of two renderers is refused
         // rather than attached to nothing.
-        let found = match binding.layer {
-            Kind::L1 => binding.covers(0) && declares(self.sim.param_names(), &self.params[0]),
-            // **A Set holds no L2 node yet**, so nothing declares an L2 param
-            // and a binding into one lands nowhere. Refused rather than
-            // panicked: `Kind::L2` is a legal thing for a `.kir` to declare and
-            // for a `bind` record to name, and the honest answer to "bind into a
-            // layer this Set has no node for" is `false`, which every caller
-            // already reports.
-            Kind::L2 => false,
-            Kind::L4 => self
-                .renderers
-                .iter()
-                .zip(&self.params[1..])
-                .enumerate()
-                .any(|(at, (r, map))| binding.covers(at) && declares(r.param_names(), map)),
+        let range = self.nodes_of(binding.layer);
+        let names: Vec<&[String]> = match binding.layer {
+            Kind::L1 => vec![self.sim.param_names()],
+            Kind::L2 => self.deforms.iter().map(|d| d.param_names()).collect(),
+            Kind::L4 => self.renderers.iter().map(|r| r.param_names()).collect(),
         };
+        let found = names.iter().enumerate().any(|(at, n)| {
+            binding.covers(at)
+                && self
+                    .params
+                    .get(range.start + at)
+                    .is_some_and(|map| declares(n, map))
+        });
         if !found {
             return false;
         }
@@ -602,37 +675,28 @@ impl Set {
         true
     }
 
-    /// **The node a bare layer address resolves to**: the L1, or the *first*
-    /// renderer.
+    /// **Where a layer's nodes start in [`Set::params`].**
     ///
-    /// A binding names a layer and not a node, so this is where its blend base
-    /// comes from — and the value it produces is then written to every renderer
-    /// declaring the name, exactly as [`Set::set_param`] writes every
-    /// declaration. Which renderer's manual value is the base only matters when
-    /// two of them declare one name at different values, and setting them apart
-    /// needs the address the record vocabulary still owes: `layer` plus an
-    /// `index` defaulting to 0. See `docs/roadmap.md`, "How a param is
-    /// addressed".
-    fn slot_of(layer: Kind) -> usize {
+    /// The maps are in node order — the L1, then each deformation, then each
+    /// renderer — so this depends on how long the chain is and cannot be a
+    /// constant. That is the price of one flat list, and it is the right price:
+    /// a `Vec` per layer would make "which node is this" three questions
+    /// instead of one arithmetic.
+    fn slot_of(&self, layer: Kind) -> usize {
         match layer {
             Kind::L1 => 0,
-            // Past the end of `params`, so every lookup misses and every
-            // addressed write returns `false` — see `Set::bind`. It becomes a
-            // real slot when a Set holds L2 nodes.
-            Kind::L2 => usize::MAX,
-            Kind::L4 => 1,
+            Kind::L2 => 1,
+            Kind::L4 => 1 + self.deforms.len(),
         }
     }
 
-    /// Every map in [`Set::params`] belonging to `layer`, in node order. One for
-    /// the L1; one per renderer for L4.
-    fn nodes_of(layer: Kind) -> std::ops::Range<usize> {
+    /// Every map in [`Set::params`] belonging to `layer`, in node order.
+    fn nodes_of(&self, layer: Kind) -> std::ops::Range<usize> {
+        let start = self.slot_of(layer);
         match layer {
-            Kind::L1 => 0..1,
-            // Empty: a Set holds no L2 node yet, so there is nothing of that
-            // layer to look in.
-            Kind::L2 => 0..0,
-            Kind::L4 => 1..usize::MAX,
+            Kind::L1 => start..start + 1,
+            Kind::L2 => start..start + self.deforms.len(),
+            Kind::L4 => start..self.params.len(),
         }
     }
 
@@ -666,7 +730,7 @@ impl Set {
     /// therefore cannot. `index` is which node of `layer`; the L1 is one node,
     /// so only 0 addresses it.
     pub fn set_param_at(&mut self, layer: Kind, index: u32, name: &str, value: f32) -> bool {
-        let slot = Self::slot_of(layer) + index as usize;
+        let slot = self.slot_of(layer) + index as usize;
         match self.params.get_mut(slot).and_then(|n| n.get_mut(name)) {
             Some(held) => {
                 *held = value;
@@ -704,10 +768,12 @@ impl Set {
     /// Every parameter value, addressed by the node that declares it: the
     /// layer, which node of that layer, the name, and the value.
     pub fn params(&self) -> impl Iterator<Item = (Kind, u32, &str, f32)> + '_ {
-        self.params.iter().enumerate().flat_map(|(slot, node)| {
+        let deforms = self.deforms.len();
+        self.params.iter().enumerate().flat_map(move |(slot, node)| {
             let (layer, index) = match slot {
                 0 => (Kind::L1, 0),
-                n => (Kind::L4, n as u32 - 1),
+                n if n <= deforms => (Kind::L2, n as u32 - 1),
+                n => (Kind::L4, (n - 1 - deforms) as u32),
             };
             node.iter().map(move |(k, v)| (layer, index, k.as_str(), *v))
         })
@@ -871,7 +937,7 @@ impl Set {
         }
 
         {
-            let (bindings, params) = (&self.bindings, &self.params[Self::slot_of(Kind::L1)]);
+            let (bindings, params) = (&self.bindings, &self.params[0]);
             let param = |name: &str| effective(bindings, params, Kind::L1, 0, name);
             let tick = crate::node::Tick { steps, dt: self.dt, instants, param: &param };
             self.sim.prepare(queue, &tick);
@@ -900,6 +966,7 @@ impl Set {
     /// clock, the camera and the viewport are the grouping's and are therefore
     /// the same number for all of them; `exposure` is the node's and is not.
     fn write_l4_uniforms(&mut self, queue: &wgpu::Queue) {
+        self.write_l2_uniforms(queue);
         // Read before the borrow: `time` takes `&self` and each node's packer
         // takes `&mut` its own scratch, but `param` below borrows this Set.
         let t = self.time();
@@ -910,7 +977,10 @@ impl Set {
             self.seed_salt,
             self.viewport,
         );
-        for (at, (renderer, params)) in self.renderers.iter_mut().zip(&self.params[1..]).enumerate() {
+        let first = 1 + self.deforms.len();
+        for (at, (renderer, params)) in
+            self.renderers.iter_mut().zip(&self.params[first..]).enumerate()
+        {
             let view = crate::node::View {
                 t,
                 beats,
@@ -920,6 +990,41 @@ impl Set {
                 param: &|name: &str| effective(bindings, params, Kind::L4, at, name),
             };
             renderer.write_uniforms(queue, &view);
+        }
+    }
+
+    /// The deformations' uniform blocks, from the same view the renderers get.
+    ///
+    /// **One instant for the whole chain.** An L2 runs after every substep, at
+    /// the point the simulation reached, which is the same instant a renderer
+    /// draws at — so a node in the middle of a chain and the node that draws its
+    /// output cannot disagree about when this frame is.
+    fn write_l2_uniforms(&mut self, queue: &wgpu::Queue) {
+        let t = self.time();
+        let (bindings, beats, salt, viewport, camera, dt) = (
+            &self.bindings,
+            self.last_beats,
+            self.seed_salt,
+            self.viewport,
+            &self.camera,
+            self.dt,
+        );
+        let capacity = self.sim.capacity();
+        // The slice bound is read before the loop: `self.deforms` is borrowed
+        // mutably by the iterator and `self.params` immutably by the closure,
+        // which are disjoint fields — but `self.deforms.len()` inside the same
+        // expression is not.
+        let end = 1 + self.deforms.len();
+        for (at, (node, params)) in self.deforms.iter_mut().zip(&self.params[1..end]).enumerate() {
+            let view = crate::node::View {
+                t,
+                beats,
+                seed_salt: salt,
+                viewport,
+                camera,
+                param: &|name: &str| effective(bindings, params, Kind::L2, at, name),
+            };
+            node.write_uniforms(queue, &view, dt, capacity);
         }
     }
 
@@ -966,11 +1071,24 @@ impl Set {
     /// [`Set::slot_of`]'s open question and is not this: the point here is only
     /// that it must be a declaration.
     fn resolve_bindings(&mut self, signals: &Signals) {
+        // Read before the loop: `slot_of` and `nodes_of` take `&self`, and the
+        // loop holds `self.bindings` mutably. Three small numbers rather than a
+        // borrow that cannot be had.
+        let ranges: Vec<(usize, std::ops::Range<usize>)> = [Kind::L1, Kind::L2, Kind::L4]
+            .into_iter()
+            .map(|k| (self.slot_of(k), self.nodes_of(k)))
+            .collect();
+        let params = &self.params;
         for binding in &mut self.bindings {
-            let base = Self::slot_of(binding.layer);
-            let manual = Self::nodes_of(binding.layer)
+            let (base, range) = match binding.layer {
+                Kind::L1 => ranges[0].clone(),
+                Kind::L2 => ranges[1].clone(),
+                Kind::L4 => ranges[2].clone(),
+            };
+            let manual = range
+                .clone()
                 .filter(|slot| binding.covers(slot - base))
-                .filter_map(|slot| self.params.get(slot))
+                .filter_map(|slot| params.get(slot))
                 .find_map(|node| node.get(&binding.key).copied())
                 // Cannot miss — `Set::bind` refuses a name no node of that
                 // layer declares — and a panic on the render thread is not the
@@ -1042,6 +1160,17 @@ impl Set {
             steps
         };
         self.sim.record(encoder, steps);
+        // **After every substep, once.** A deformation is a function of the
+        // instant the simulation reached; running it between substeps would
+        // deform states nothing ever draws, and cost one pass per substep to do
+        // it. It runs even at `steps == 0` — a paused frame still has to leave
+        // the chain's output holding what the renderers are about to read, and
+        // the parity has not moved, so it recomputes the same thing.
+        let parity = self.sim.parity();
+        let counts = self.sim.counts();
+        for node in &self.deforms {
+            node.record(encoder, parity, counts);
+        }
     }
 
     /// **The draw, without advancing anything.**

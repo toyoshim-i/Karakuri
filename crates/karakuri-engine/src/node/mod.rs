@@ -28,15 +28,17 @@
 //! limitation to lift later; it is the slot interface contract, which
 //! `Set::build`'s `consumes ⊆ emit` check has been enforcing informally since M1.
 //!
-//! **The per-frame half is not a type yet, and is worth naming as a debt.** Two
-//! values also cross from the L1 node to whatever draws — which parity holds
-//! what was last written, and the counts buffer the instance count lives in —
-//! and both are routed *around* [`Geometry`] by `Set::draw`, which reads them
-//! off [`Simulation`] and passes them as arguments. So a `Renderer` cannot draw
-//! from a `Geometry` alone, whatever the doc on that struct suggests. It works
-//! while there is one reader and one writer; with several renderers over one
-//! geometry it is the same two values fetched the same way N times, which is the
-//! point at which they want to travel together and be handed down once.
+//! **One value still crosses outside it: the parity.** The counts buffer used
+//! to as well, and moved in when [`Deform`] arrived and needed it at build time
+//! — it is a fixed buffer, so it belonged in the build-time half all along and
+//! was outside only because the first reader happened to want it per frame.
+//! Parity is genuinely per frame: which of two buffers holds what was last
+//! written is a fact about *this* frame, so it is an argument to `record` and
+//! `draw` rather than a field here.
+//!
+//! That leaves the edge honest: everything a reader must *name* is in this
+//! struct, and the one thing that changes between frames is passed when it
+//! changes.
 //!
 //! [`View`] and [`Tick`] are the other direction: not edges between nodes but
 //! what the *grouping* hands each node about the frame. They exist because one
@@ -44,9 +46,11 @@
 //! copy would be a second place for them to be — and two nodes in one Set could
 //! then disagree about what "this frame" was.
 
+mod deform;
 mod renderer;
 mod simulation;
 
+pub(crate) use deform::Deform;
 pub(crate) use renderer::Renderer;
 pub(crate) use simulation::Simulation;
 
@@ -66,9 +70,16 @@ pub(crate) struct Geometry<'a> {
     /// The `Element` struct the L1 declared. An L4 declares the same one, byte
     /// for byte, because it reads the same physical buffer.
     pub layout: &'a ElementLayout,
-    /// Indexed by parity: what L1 last wrote.
+    /// Indexed by parity: what the upstream node last wrote.
     pub elements: [&'a wgpu::Buffer; 2],
+    /// **The L1's, however far down a chain this edge is.** An L2 cannot
+    /// `kill()`, so liveness is settled once by the compaction that runs after
+    /// L1 and passes through every deformation untouched.
     pub alive: [&'a wgpu::Buffer; 2],
+    /// The engine's per-frame counts, which is where the live range lives —
+    /// what a reader dispatches or draws indirectly over. Not indexed by
+    /// parity: there is one of it, and the simulation rewrites it in place.
+    pub counts: &'a wgpu::Buffer,
 }
 
 /// Everything the frame's uniform block needs that is not the node's own.

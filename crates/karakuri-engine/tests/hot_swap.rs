@@ -166,6 +166,7 @@ fn request_many(l4_srcs: &[&str], capacity: u32, label: &str) -> Request {
     Request {
         id: 1,
         l1: compile(L1),
+        l2s: Vec::new(),
         l4s: l4_srcs.iter().map(|s| compile(s)).collect(),
         capacity,
         seed_salt: 19274,

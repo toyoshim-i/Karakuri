@@ -25,13 +25,19 @@
 //! compiler rather than merely plausible.
 //!
 //! **The lowering makes it true rather than the checker refusing what breaks
-//! it.** Reads and writes in a `deform` both address the output buffer, and the
-//! output buffer is rebuilt from the input every frame before the block runs —
-//! so `position = position + v` moves an element by `v` from wherever the *input*
-//! put it this frame, never from where this node left it last frame. There is no
-//! previous value to accumulate onto, so accumulation cannot be written. A
-//! zeroed slot for a newly emitted attribute is part of that: leaving it stale
-//! would be exactly the previous frame's value coming back.
+//! it, and the pass-through above is the whole of the mechanism.** Because every
+//! output slot is overwritten from the input before the block runs, there is no
+//! previous value left to accumulate onto: `position = position + v` moves an
+//! element by `v` from wherever the *input* put it this frame, never from where
+//! this node left it last frame. Zeroing a slot the input did not have is the
+//! same property for a newly emitted attribute — leaving it stale would be
+//! exactly the previous frame's value coming back.
+//!
+//! Reads addressing `dst` rather than `src` is **not** what makes this true, and
+//! it would be easy to mistake for it. After the copy the two hold the same
+//! bytes, so for an attribute that came from upstream either spelling reads the
+//! same value. `dst` is used because it is the only one that works for an
+//! attribute this node *added*, which has no field in `ElementIn` at all.
 //!
 //! # What it does not do
 //!
@@ -91,6 +97,14 @@ pub fn generate_l2(checked: &Checked, upstream: &[Attr]) -> L2Shader {
     let out_layout = layout::generate_element_layout(&emits);
 
     let mut b = UniformLayoutBuilder::new();
+    // **`t` and `beats` are here rather than in `StepArgs`.** An L1 is
+    // substepped and each substep lands on its own instant, so its clock has to
+    // be per substep. An L2 runs once, after the simulation has reached the
+    // frame's last instant — there is one `t` for it, and reading a per-substep
+    // buffer would mean choosing which substep a node that ran after all of
+    // them belongs to.
+    b.field("t", "f32");
+    b.field("beats", "f32");
     b.field("dt", "f32");
     b.field("capacity", "u32");
     b.field("seed_salt", "u32");
@@ -122,13 +136,6 @@ pub fn generate_l2(checked: &Checked, upstream: &[Attr]) -> L2Shader {
         group::UNIFORMS,
         binding::COUNTS,
     ));
-    src.push_str(layout::step_args::WGSL);
-    src.push_str(&format!(
-        "\n@group({}) @binding({}) var<uniform> step_args: StepArgs;\n\n",
-        group::STEP,
-        binding::UNIFORM,
-    ));
-
     // Two structs, because the two buffers are two shapes. `ElementIn` is
     // byte-identical to what the upstream node wrote — this is the same
     // contract `generate_l4` has with its L1, one node further along.
@@ -173,8 +180,8 @@ impl Resolver for L2Resolver {
     fn read_ambient(&self, amb: Ambient) -> String {
         match amb {
             Ambient::Capacity => "u.capacity".to_string(),
-            Ambient::T => "step_args.t".to_string(),
-            Ambient::Beats => "step_args.beats".to_string(),
+            Ambient::T => "u.t".to_string(),
+            Ambient::Beats => "u.beats".to_string(),
             // **The uniform, unscaled.** An L1 substitutes a birth-fraction
             // corrected `dt` on an element's first update, which exists so that
             // a frame's worth of new elements do not all start at one phase.

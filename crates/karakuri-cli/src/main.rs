@@ -2369,7 +2369,7 @@ fn build(
     camera: Option<karakuri_engine::camera::Orbit>,
 ) -> Set {
     let refs: Vec<&karakuri_ir::typed::Checked> = l4s.iter().collect();
-    match Set::build_many(&gpu.device, &gpu.queue, l1, &refs, capacity, seed) {
+    match Set::build_many(&gpu.device, &gpu.queue, l1, &[], &refs, capacity, seed) {
         Ok(mut set) => {
             if let Some(camera) = camera {
                 set.camera = camera;

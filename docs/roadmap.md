@@ -1152,7 +1152,27 @@ than against one being taught to.
 
 **Adds**
 
-- L2 and L3 as IR `kind`s with their own nodes. **What each one is has been written down**
+- ~~**L2 as an IR `kind` with its own node.**~~ **Built.** `kind L2`, a `deform`
+  block, a compute pass between the simulation and the renderers, and a `Set` that
+  holds a chain of them. What it cost was small because the node split had already
+  paid for it: `Geometry -> Geometry` is the edge that existed, and an L2 is a node
+  that reads one and offers another.
+
+  **Statelessness is structural rather than checked**, which is the part worth
+  keeping. Every generated `deform` opens by overwriting its output from its input,
+  so there is no previous value left to accumulate onto and a drifting modulator
+  cannot be written. That is what keeps the layer freely stackable and keeps
+  `closed_form` an L1 question however long a chain gets.
+
+  What it cannot do is `kill()`, and the diagnostic now says why in the layer's own
+  terms rather than pointing at an `element` block an L2 does not have: compaction
+  runs once, after L1, so liveness is settled before a deformation sees anything.
+
+  The composition check became a **walk** rather than a comparison. An L2 may `emit`
+  an attribute no L1 in the library produces, and everything below it can consume
+  that — so `consumes ⊆ available at this position`, and the error names the
+  position. `--set` cannot spell a chain yet; that is the next piece.
+- L3 as an IR `kind` with its own node. **What each one is has been written down**
   — `docs/ir-spec.md`, "L2 and L3" — because the node split is being built now and their
   shapes constrain it. The load-bearing decision is that **an L2 is stateless by rule**: it
   is what makes the layer freely stackable, keeps `closed_form` and priming L1 questions,

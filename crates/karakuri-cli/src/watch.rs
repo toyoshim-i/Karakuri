@@ -323,6 +323,10 @@ impl Source for Watch {
         Some(Request {
             id,
             l1,
+            // **No deformations from a watcher yet.** A watcher watches the
+            // files a slot names, and `--set` names an L1 and renderers; a
+            // chain arrives when the command line can spell one.
+            l2s: Vec::new(),
             l4s,
             capacity: self.capacity,
             seed_salt: self.seed_salt,
