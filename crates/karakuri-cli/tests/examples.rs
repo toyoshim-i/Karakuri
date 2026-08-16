@@ -118,9 +118,13 @@ fn the_pairs_the_docs_offer_compose() {
     // declares, exactly as `--set` sorts them.
     for chain in [
         // `swirl_warp.kir`'s own header offers this one.
-        ["drift_shell.kir", "swirl_warp.kir", "soft_points.kir"],
+        &["drift_shell.kir", "swirl_warp.kir", "soft_points.kir"][..],
         // `beat_jump.kir`'s does.
-        ["drift_shell.kir", "beat_jump.kir", "soft_points.kir"],
+        &["drift_shell.kir", "beat_jump.kir", "soft_points.kir"][..],
+        // `late_bloom.kir`'s does, and it is the one with two modulators in it:
+        // a chain is where an L2 being stateless stops being a claim and starts
+        // being the thing that lets the pair be written in either order.
+        &["drift_shell.kir", "swirl_warp.kir", "late_bloom.kir", "soft_points.kir"][..],
     ] {
         let compiled: Vec<karakuri_ir::typed::Checked> = chain
             .iter()

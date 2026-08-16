@@ -39,6 +39,28 @@
 //! same value. `dst` is used because it is the only one that works for an
 //! attribute this node *added*, which has no field in `ElementIn` at all.
 //!
+//! # A mask is where the deformation applies, and `weight` is how much
+//!
+//! Both are optional and both end at the same number. An L2 that declares
+//! neither is what every L2 was before they existed: applied everywhere, in
+//! full. What the two add is a blend at the very end of the entry point —
+//! `dst[i] <- mix(input, deformed, weight * strength)` — so a modulator becomes
+//! *partial* rather than becoming a different modulator.
+//!
+//! **They are separate because their audiences are.** `weight` is a declared
+//! `param`, so it goes on a fader, takes a signal binding, moves under a
+//! transition and is saved in a Set file; `strength` is an expression over the
+//! attributes reaching this node, and decides *where*. Folding the first into
+//! the second would put the operator's control inside a block and take every one
+//! of those surfaces away from it.
+//!
+//! **The mask runs before the body and reads the input**, which costs nothing to
+//! arrange: after the pass-through, `dst` holds exactly what `src` does, so a
+//! mask reading `dst[i].position` is reading what reached this node. It has to
+//! be that way round — a mask evaluated on the *deformed* element would be
+//! deciding where to apply a deformation from a position that deformation had
+//! already moved.
+//!
 //! # What it does not do
 //!
 //! **It cannot `kill()`** — refused in the checker, with its own reason. Liveness
@@ -119,8 +141,33 @@ pub fn generate_l2(checked: &Checked, upstream: &[Attr]) -> L2Shader {
         .expect("an L2 procedure must have a deform block");
     let body = {
         let mut out = String::new();
-        emit_stmts(&deform.stmts, &mut req, 2, &mut out);
+        emit_stmts(&deform.stmts, &mut req, 1, &mut out);
         out
+    };
+    // **`weight` is a declared param the lowering gives a meaning to**, on the
+    // same terms `spawn_rate` is one the engine reads: the checker refuses it as
+    // anything but a `float`, and multiplying it in here is what keeps it an
+    // ordinary param everywhere else — publishable, bindable, saved in a Set
+    // file — rather than a second mechanism beside the mask.
+    let weight = checked
+        .params
+        .iter()
+        .any(|p| p.name == "weight")
+        .then(|| format!("    strength = strength * u.{};\n", layout::mangle_param("weight")));
+    let mask = checked.block(BlockKind::Mask).map(|block| {
+        let mut out = String::new();
+        emit_stmts(&block.stmts, &mut req, 1, &mut out);
+        out
+    });
+    // A gate exists if either half does. Neither is what every L2 was before
+    // they arrived, and it lowers to the identical shader.
+    let gate = match (&mask, &weight) {
+        (None, None) => None,
+        _ => Some(format!(
+            "{}{}",
+            mask.as_deref().unwrap_or_default(),
+            weight.as_deref().unwrap_or_default()
+        )),
     };
 
     let mut src = String::new();
@@ -159,7 +206,7 @@ pub fn generate_l2(checked: &Checked, upstream: &[Attr]) -> L2Shader {
     ));
     src.push_str(&prelude::render(&req));
     src.push('\n');
-    src.push_str(&deform_entry(&in_layout, &out_layout, &body));
+    src.push_str(&deform_entry(&in_layout, &out_layout, &body, gate.as_deref()));
 
     L2Shader { source: src, uniform_layout, uniform_pad_f32, element_layout: out_layout, emits }
 }
@@ -224,7 +271,14 @@ fn emit_stmts(stmts: &[TStmt], req: &mut Requirements, indent: usize, out: &mut 
                         let wrapped = pad_to_vec4(attr.ty(), "f32", &v);
                         out.push_str(&format!("{pad}dst[i].{} = {wrapped};\n", attr.name()));
                     }
-                    Target::Output(o) => unreachable!("L2 never assigns stage output {o:?}"),
+                    // `strength` is the only one an L2 has, and it belongs to
+                    // the `mask` block — the checker refuses it in a `deform`.
+                    Target::Output(karakuri_ir::Output::Strength) => {
+                        out.push_str(&format!("{pad}strength = {v};\n"));
+                    }
+                    Target::Output(o) => {
+                        unreachable!("L2 never assigns stage output {o:?}")
+                    }
                 }
             }
             TStmt::If { cond, then, els, .. } => {
@@ -254,7 +308,12 @@ fn emit_stmts(stmts: &[TStmt], req: &mut Requirements, indent: usize, out: &mut 
     }
 }
 
-fn deform_entry(in_layout: &ElementLayout, out_layout: &ElementLayout, body: &str) -> String {
+fn deform_entry(
+    in_layout: &ElementLayout,
+    out_layout: &ElementLayout,
+    body: &str,
+    gate: Option<&str>,
+) -> String {
     let mut copy = String::new();
     for slot in &out_layout.slots {
         if in_layout.slots.iter().any(|s| s.name == slot.name) {
@@ -271,6 +330,40 @@ fn deform_entry(in_layout: &ElementLayout, out_layout: &ElementLayout, body: &st
             ));
         }
     }
+    // **The gate is computed before the body and applied after it**, over a copy
+    // of what reached this node. Two consequences, and both are the point: the
+    // mask reads the *input* — `dst` holds it, the pass-through having just run
+    // — and every slot the body wrote is blended back toward that input rather
+    // than being written or not written.
+    //
+    // Only the slots carrying an attribute are blended. `seed` is a `u32` and
+    // has no meaningful midpoint; the birth fraction is the engine's and no
+    // `deform` can write it. Both were copied and neither can have moved, so
+    // blending them would be a no-op spelled as arithmetic.
+    let (gate_decl, gate_apply) = match gate {
+        None => (String::new(), String::new()),
+        Some(mask) => {
+            let mut blend = String::new();
+            for slot in out_layout.slots.iter().filter(|s| s.attr.is_some()) {
+                blend.push_str(&format!(
+                    "    dst[i].{0} = mix(_input.{0}, dst[i].{0}, _gate);\n",
+                    slot.name
+                ));
+            }
+            (
+                format!(
+                    "    let _input = dst[i];\n\
+                     \x20   var strength = 1.0;\n\
+                     {mask}\
+                     \x20   // Clamped, because `mix` extrapolates: a strength\n\
+                     \x20   // of 2 would apply the deformation twice over, and\n\
+                     \x20   // one of -1 would apply its inverse.\n\
+                     \x20   let _gate = clamp(strength, 0.0, 1.0);\n"
+                ),
+                blend,
+            )
+        }
+    };
     format!(
         "@compute @workgroup_size({WORKGROUP_SIZE})\n\
          fn deform(@builtin(global_invocation_id) gid: vec3<u32>) {{\n\
@@ -286,6 +379,8 @@ fn deform_entry(in_layout: &ElementLayout, out_layout: &ElementLayout, body: &st
          \x20       return;\n\
          \x20   }}\n\
          {copy}\n\
-         {body}}}\n"
+         {gate_decl}\n\
+         {body}\n\
+         {gate_apply}}}\n"
     )
 }

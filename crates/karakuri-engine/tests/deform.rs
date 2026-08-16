@@ -12,6 +12,12 @@
 //!   fused, and drags `closed_form` out of the L1's hands.
 //! - **They chain**, and the second one sees the first one's work.
 //!
+//! A fourth arrived with the layer's masks: **a deformation can be partial**,
+//! in two independent ways. `weight` is a declared `param` and scales the whole
+//! modulation; a `mask` block computes a `strength` per element and decides
+//! *where*. Both end at one `mix` between what reached the node and what the
+//! body wrote.
+//!
 //! The material is a lattice with no motion of its own, so anything that moves
 //! moved because a `deform` moved it.
 
@@ -70,6 +76,26 @@ proc {name} {{
     )
 }
 
+/// **Two elements, told apart by `seed` and separated on screen.**
+///
+/// A mask needs material it can treat differently, and a measurement needs to
+/// see both halves: these sit either side of centre along `z`, which is the
+/// screen's horizontal under the pinned camera below — `x` is the view
+/// direction and would put one behind the other.
+const PAIR: &str = r#"
+proc pair {
+  kind     L1
+  topology points
+  capacity [2, 2] = 2
+
+  emit position
+
+  element {
+    position = vec3(0.0, 0.0, float(seed) * 2.0 - 1.0);
+  }
+}
+"#;
+
 /// Draws whatever reaches it, as one bright sprite per element.
 const DOTS: &str = r#"
 proc dots {
@@ -101,17 +127,21 @@ fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
 }
 
 fn build(gpu: &Gpu, l2s: &[&str]) -> Set {
+    build_over(gpu, STILL, l2s, CAPACITY)
+}
+
+fn build_over(gpu: &Gpu, l1: &str, l2s: &[&str], capacity: u32) -> Set {
     let l2: Vec<Checked> = l2s.iter().map(|s| compile(s)).collect();
     let l2_refs: Vec<&Checked> = l2.iter().collect();
     let l4 = compile(DOTS);
     let mut set = Set::build_many(
         &gpu.device,
         &gpu.queue,
-        &compile(STILL),
+        &compile(l1),
         &l2_refs,
         None,
         &[&l4],
-        CAPACITY,
+        capacity,
         7,
     )
     .expect("a chain of one L1, some L2s and one L4");
@@ -349,4 +379,192 @@ proc tinted_dots {
         .expect("`tint` is not available without the deformation that emits it");
     let message = err.to_string();
     assert!(message.contains("tint"), "the diagnostic does not name what was missing: {message}");
+}
+
+// ---------------------------------------------------------------------------
+// Partial deformation: `weight` and `mask`
+// ---------------------------------------------------------------------------
+
+/// **`weight` scales the whole modulation**, and it is an ordinary declared
+/// `param` — which is the point of it being one rather than a number inside the
+/// mask. It goes on a fader, takes a binding, moves under a transition, and is
+/// saved in a Set file, none of which an expression could.
+///
+/// Asserted as arithmetic and not as an inequality: half the weight is half the
+/// displacement, exactly, because the lowering blends between what reached the
+/// node and what the body wrote. An inequality would pass for any monotone
+/// wrong answer, and the whole point of a fader is that its middle is the
+/// middle.
+#[test]
+fn a_weight_scales_how_much_of_the_deformation_lands() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let weighted = r#"
+proc weighted {
+  kind L2
+  param weight : float [0.0, 1.0] = 1.0
+  consumes position
+  deform {
+    position = position + vec3(0.0, 1.0, 0.0);
+  }
+}
+"#;
+    let plain = centre_y(&gpu, &mut build(&gpu, &[]));
+    let full = centre_y(&gpu, &mut build(&gpu, &[weighted]));
+    let step = plain - full;
+    assert!(step > 2.0, "the deformation did not reach the frame");
+
+    let mut half = build(&gpu, &[weighted]);
+    assert!(
+        half.set_param_at(karakuri_ir::Kind::L2, 0, "weight", 0.5),
+        "the modulator declares `weight`"
+    );
+    let moved = plain - centre_y(&gpu, &mut half);
+    assert!(
+        (moved - step * 0.5).abs() < step * 0.1,
+        "half the weight moved the material {moved} texels where half of {step} was due"
+    );
+
+    // And zero is the identity, which is what makes a fader able to take a
+    // modulator out of the chain without rebuilding it.
+    let mut off = build(&gpu, &[weighted]);
+    assert!(off.set_param_at(karakuri_ir::Kind::L2, 0, "weight", 0.0));
+    assert!(
+        (centre_y(&gpu, &mut off) - plain).abs() < 0.25,
+        "a weight of zero still moved the material"
+    );
+}
+
+/// **A mask decides where.** The two elements differ only in `seed`, so a mask
+/// on `seed` deforms one and leaves the other exactly where the simulation put
+/// it — which shows as the centroid moving half as far as it does when both go.
+///
+/// **The anchor is the half**, not the direction. A mask that let both through
+/// would move it the full distance and a mask that let neither through would
+/// move it none, so an inequality against zero would pass for the first of
+/// those — which is the mask doing nothing at all.
+#[test]
+fn a_mask_applies_the_deformation_to_some_elements_and_not_others() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let both = r#"
+proc lift {
+  kind L2
+  consumes position
+  deform {
+    position = position + vec3(0.0, 1.0, 0.0);
+  }
+}
+"#;
+    // `seed` is the spawn ordinal, so element 0 gets 0 and element 1 gets 1.
+    // `step` turns that into the mask's `[0, 1]` scalar.
+    let one = r#"
+proc lift_one {
+  kind L2
+  consumes position
+  mask {
+    strength = step(0.5, float(seed));
+  }
+  deform {
+    position = position + vec3(0.0, 1.0, 0.0);
+  }
+}
+"#;
+    let plain = centre_y(&gpu, &mut build_over(&gpu, PAIR, &[], 2));
+    let all = centre_y(&gpu, &mut build_over(&gpu, PAIR, &[both], 2));
+    let masked = centre_y(&gpu, &mut build_over(&gpu, PAIR, &[one], 2));
+
+    let step = plain - all;
+    assert!(step > 2.0, "the unmasked deformation did not reach the frame");
+    assert!(
+        ((plain - masked) - step * 0.5).abs() < step * 0.15,
+        "the mask moved the centroid {} texels where half of {step} was due — it let \
+         through both elements or neither",
+        plain - masked
+    );
+}
+
+/// **A mask reads what reached the node, not what the body wrote.** Running it
+/// after the deformation would decide where to apply a deformation from a
+/// position that deformation had already moved — which for a mask written
+/// against `position` is a different set of elements every frame, and for a
+/// stationary one is the wrong set once.
+///
+/// The fixture makes the two answers differ by a whole element: the mask admits
+/// what is on the far side of the origin along `z`, and the deformation moves
+/// everything across it. Evaluated on the input, exactly one element passes;
+/// evaluated on the output, the other one does.
+#[test]
+fn a_mask_reads_the_input_rather_than_the_deformed_element() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let crossing = r#"
+proc crossing {
+  kind L2
+  consumes position
+  mask {
+    strength = step(0.0, position.z);
+  }
+  deform {
+    position = vec3(position.x, position.y + 1.0, 0.0 - position.z);
+  }
+}
+"#;
+    let px = frame(&gpu, &mut build_over(&gpu, PAIR, &[crossing], 2));
+    // The element that was at `z = +1` is the one the mask admits, and it is the
+    // one that moves — up, and across to `z = -1`. Screen-right is world `-z`
+    // under this camera, so the lifted element ends up on the right.
+    let mut lifted_on = None;
+    for (i, t) in px.chunks_exact(4).enumerate() {
+        if t[0] > 0.01 {
+            let (x, y) = (i as u32 % W, i as u32 / W);
+            // The lifted one is above the middle row; record which half it is in.
+            if y < H / 2 - 2 {
+                lifted_on = Some(x > W / 2);
+            }
+        }
+    }
+    assert_eq!(
+        lifted_on,
+        Some(true),
+        "the element that moved is not the one the mask admitted on the input"
+    );
+}
+
+/// **The gate is clamped, because `mix` extrapolates.**
+///
+/// Nothing stops a `mask` block writing a `strength` of 2, and nothing should:
+/// it is an expression over attributes and a generated one will land outside
+/// `[0, 1]` sooner or later. What must not happen is the arithmetic taking it
+/// literally — `mix(a, b, 2)` applies the deformation *twice over*, and a
+/// negative one applies its inverse. Both are a wrong picture rather than a
+/// missing one, which is the kind this suite exists to catch.
+#[test]
+fn a_strength_outside_the_unit_range_is_clamped_rather_than_extrapolated() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let lift = |strength: &str| {
+        format!(
+            r#"
+proc lift {{
+  kind L2
+  consumes position
+  mask {{ strength = {strength}; }}
+  deform {{ position = position + vec3(0.0, 1.0, 0.0); }}
+}}
+"#
+        )
+    };
+    let plain = centre_y(&gpu, &mut build(&gpu, &[]));
+    let full = centre_y(&gpu, &mut build(&gpu, &[&lift("1.0")]));
+    let over = centre_y(&gpu, &mut build(&gpu, &[&lift("2.5")]));
+    let under = centre_y(&gpu, &mut build(&gpu, &[&lift("0.0 - 1.5")]));
+
+    assert!(plain - full > 2.0, "the deformation did not reach the frame");
+    assert!(
+        (over - full).abs() < 0.25,
+        "a strength of 2.5 put the material at {over} where 1.0 gives {full} — the \
+         deformation was applied more than once"
+    );
+    assert!(
+        (under - plain).abs() < 0.25,
+        "a strength of -1.5 put the material at {under} where 0.0 gives {plain} — the \
+         deformation was applied backwards"
+    );
 }

@@ -590,6 +590,7 @@ alternatives selectable means three simulations resident.
 spawn   { ... }      // L1: initialize a newly allocated element
 element { ... }      // L1: update a live element; may call kill()
 deform  { ... }      // L2: rewrite a live element's attributes; may not kill()
+mask    { ... }      // L2: where the deformation applies. Optional
 camera  { ... }      // L3: produce this frame's camera
 vertex  { ... }      // L4: once per element
 fragment{ ... }      // L4: once per rasterised fragment
@@ -611,6 +612,63 @@ If a procedure declares no `spawn` block, all `capacity` elements are live from 
 and `element` alone drives them. This is the simplest form and a good default. Emitted
 attributes are zero-initialized before the first frame — the frame-zero `element` pass
 reads zeros, not garbage — and `seed` equals the element's initial slot index.
+
+### `weight` and the `mask` block (L2)
+
+```
+proc twist {
+  kind L2
+
+  // Read by the lowering, on the same terms `spawn_rate` is read by the
+  // engine. Optional; absent is 1.0.
+  param weight : float [0.0, 1.0] = 0.6
+
+  consumes position, age
+
+  // Optional. `strength` is required inside it, and is in [0, 1].
+  mask {
+    strength = smoothstep(0.2, 0.6, age);
+  }
+
+  deform {
+    position = position * 1.5;
+  }
+}
+```
+
+A modulator can apply **partially**, and the two ways it can are deliberately
+separate mechanisms that end at one number:
+
+```
+dst = mix(what reached this node, what `deform` wrote, clamp(weight * strength, 0, 1))
+```
+
+**`weight` is a declared `param` and `mask` is a block, because their audiences
+differ.** A `param` goes on a fader, takes a signal binding, moves under a
+transition, is published by a Set's interface and is saved in a Set file;
+`strength` is an expression over the attributes reaching this node, and decides
+*where*. Folding the operator's control into the expression would take every one
+of those surfaces away from it, and would make the common case — a weight and no
+mask — require writing a block.
+
+**`strength` is a scalar rather than a predicate**, which is what makes it the
+same word the mixer already uses: a mask there is a fader varying across the
+*frame*, and this is one varying across the *material*. A predicate is
+expressible — `step(0.7, age)` — and a soft boundary, which any spatial mask
+wants, is not expressible the other way round.
+
+**It is clamped**, because `mix` extrapolates: a `strength` of 2 would apply the
+deformation twice over and one of -1 would apply its inverse. Both are a wrong
+picture rather than a missing one.
+
+**A mask reads `consumes` and never `emit`**, unlike the `deform` beside it. It
+runs *before* the body — a mask evaluated on the deformed element would be
+deciding where to apply a deformation from a position that deformation had
+already moved — and at that point an emitted attribute holds the zero the
+pass-through left rather than a value. It writes nothing but `strength`.
+
+An L2 with neither is what every L2 was before they existed, and lowers to the
+identical shader.
 
 ### The `camera` block (L3)
 
