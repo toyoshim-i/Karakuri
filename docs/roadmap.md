@@ -992,6 +992,21 @@ What falls out with no further work: `examples/drift_shell.kir` drawn as sprites
 streaks *and* as a solid, for one simulation and three draw passes — the payoff the
 primitive-centric bet was made for, which today costs three simulations.
 
+**Built, and reachable from the command line.** `--set L1.kir,L4.kir,L4.kir` is one
+geometry with two renderers, and there is genuinely no new syntax for it: one
+comma-separated list, read as one L1 and however many L4s. A third path used to be refused
+as a stray comma, which was right while a Set was a pair. `--demo lines` is now what it was
+always demonstrating — it was two slots running `drift_shell` twice so a second L4 could
+read it, and it is one slot with two renderers.
+
+A Set file says a stack as **several `slot` records on `L4`**, in draw order, and needed no
+new record to say it. A session stream says it as several `procedure` records carrying an
+`index` — absent when 0, so a stream written before stacks existed replays byte for byte.
+
+Two places still reach only the first renderer and say so where they do: the edit history
+and the MCP surface, both keyed by (slot, layer), which is the same missing address the
+params have. Naming a renderer is one piece of work that closes all three.
+
 **Built: several renderers over one geometry.** `Set::build_many` takes the L4s in draw
 order and they run in that order over the one attachment — the first clears, the rest load —
 so `drift_shell` drawn as sprites *and* as streaks *and* as a solid is one simulation and

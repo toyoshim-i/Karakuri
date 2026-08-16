@@ -67,7 +67,7 @@ pub const DIR: &str = "scratch";
 /// directory whose name we chose is a bad way to find that out.
 pub fn materialise(
     store_root: &Path,
-    sets: &mut [(PathBuf, PathBuf)],
+    sets: &mut [(PathBuf, Vec<PathBuf>)],
 ) -> Result<PathBuf, String> {
     let dir = store_root.join(DIR);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -79,8 +79,8 @@ pub fn materialise(
     // material, which is the one failure this whole module exists to prevent.
     let mut taken: Vec<String> = Vec::new();
 
-    for (l1, l4) in sets.iter_mut() {
-        for path in [l1, l4] {
+    for (l1, l4s) in sets.iter_mut() {
+        for path in std::iter::once(l1).chain(l4s.iter_mut()) {
             // Already the working copy — a Set loaded from the store, placed
             // here by `place` before this ran. Copying it onto itself would at
             // best be a no-op and at worst rename it out from under the deck
@@ -182,12 +182,12 @@ mod tests {
         let store = tmp.path().join("store");
         let l1 = write(&tmp.path().join("presets"), "field.kir", "original l1");
         let l4 = write(&tmp.path().join("presets"), "draw.kir", "original l4");
-        let mut sets = vec![(l1.clone(), l4.clone())];
+        let mut sets = vec![(l1.clone(), vec![l4.clone()])];
 
         let dir = materialise(&store, &mut sets).expect("materialise");
 
         assert!(sets[0].0.starts_with(&dir), "L1 still points at {:?}", sets[0].0);
-        assert!(sets[0].1.starts_with(&dir), "L4 still points at {:?}", sets[0].1);
+        assert!(sets[0].1[0].starts_with(&dir), "L4 still points at {:?}", sets[0].1[0]);
         assert_eq!(std::fs::read_to_string(&sets[0].0).expect("read"), "original l1");
 
         // And writing through the deck's path leaves the preset alone, which is
@@ -205,7 +205,7 @@ mod tests {
         let l1 = write(tmp.path(), "field.kir", "l1");
         let a = write(tmp.path(), "a.kir", "a");
         let b = write(tmp.path(), "b.kir", "b");
-        let mut sets = vec![(l1.clone(), a), (l1.clone(), b)];
+        let mut sets = vec![(l1.clone(), vec![a]), (l1.clone(), vec![b])];
 
         materialise(&store, &mut sets).expect("materialise");
 
@@ -222,7 +222,7 @@ mod tests {
         let one = write(&tmp.path().join("one"), "field.kir", "first");
         let two = write(&tmp.path().join("two"), "field.kir", "second");
         let l4 = write(tmp.path(), "draw.kir", "l4");
-        let mut sets = vec![(one, l4.clone()), (two, l4)];
+        let mut sets = vec![(one, vec![l4.clone()]), (two, vec![l4])];
 
         materialise(&store, &mut sets).expect("materialise");
 
@@ -265,7 +265,7 @@ mod tests {
         let store = tmp.path().join("store");
         let placed = place(&store, "loaded", "from the store").expect("place");
         let l4 = write(tmp.path(), "draw.kir", "l4");
-        let mut sets = vec![(placed.clone(), l4)];
+        let mut sets = vec![(placed.clone(), vec![l4])];
 
         materialise(&store, &mut sets).expect("materialise");
 
@@ -282,7 +282,7 @@ mod tests {
         let store = tmp.path().join("store");
         let missing = tmp.path().join("nope.kir");
         let l4 = write(tmp.path(), "draw.kir", "l4");
-        let mut sets = vec![(missing, l4)];
+        let mut sets = vec![(missing, vec![l4])];
 
         let err = materialise(&store, &mut sets).expect_err("the source is not there");
         assert!(err.contains("nope.kir"), "{err}");

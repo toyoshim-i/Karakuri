@@ -105,7 +105,7 @@ impl Reporter {
 /// through an `ssh -L`, where a path means nothing — and a tool that took one
 /// would be inviting a model to write anywhere on the render machine's disk.
 #[derive(Clone)]
-pub struct Slots(pub Vec<(std::path::PathBuf, std::path::PathBuf)>);
+pub struct Slots(pub Vec<(std::path::PathBuf, Vec<std::path::PathBuf>)>);
 
 impl Slots {
     fn path(&self, slot: usize, layer: &str) -> Result<&std::path::PathBuf, String> {
@@ -122,7 +122,14 @@ impl Slots {
             })?;
         match layer.to_ascii_uppercase().as_str() {
             "L1" => Ok(&pair.0),
-            "L4" => Ok(&pair.1),
+            // **The first renderer.** A slot may draw with several now, and
+            // naming one of them needs the address a param does — see
+            // `docs/roadmap.md`, "How a param is addressed". Until that exists
+            // this surface reaches the one it can name, and says so rather than
+            // picking silently.
+            "L4" => pair.1.first().ok_or_else(|| {
+                format!("slot {slot} has no L4: a Set needs at least one renderer")
+            }),
             other => Err(format!("no layer `{other}`: a slot holds L1 and L4")),
         }
     }
@@ -910,7 +917,7 @@ proc probe_l4 {
         std::fs::write(&l4, PROBE_L4).expect("l4");
         // Port 0: the operating system picks, and `serve` reports what it got —
         // which is also the fix for `--mcp 0` naming a port that is not the port.
-        let reporter = serve(0, Slots(vec![(l1, l4)]), watching).expect("serve");
+        let reporter = serve(0, Slots(vec![(l1, vec![l4])]), watching).expect("serve");
         let port = reporter.port();
         // Held for the life of the test: dropping it closes the channel.
         std::mem::forget(reporter);
@@ -1198,7 +1205,7 @@ proc probe_l4 {
         let l4 = dir.path().join("l4.kir");
         std::fs::write(&l1, PROBE_L1).expect("l1");
         std::fs::write(&l4, PROBE_L4).expect("l4");
-        let shared = Slots(vec![(l1.clone(), l4.clone()), (l1, l4)]);
+        let shared = Slots(vec![(l1.clone(), vec![l4.clone()]), (l1, vec![l4])]);
         let reporter = serve(0, shared, true).expect("serve");
         let port = reporter.port();
         std::mem::forget(reporter);
@@ -1289,8 +1296,8 @@ mod tests {
 
     fn slots() -> Slots {
         Slots(vec![
-            ("a/l1.kir".into(), "a/l4.kir".into()),
-            ("b/l1.kir".into(), "b/l4.kir".into()),
+            ("a/l1.kir".into(), vec!["a/l4.kir".into()]),
+            ("b/l1.kir".into(), vec!["b/l4.kir".into()]),
         ])
     }
 

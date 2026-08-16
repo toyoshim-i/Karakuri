@@ -25,6 +25,13 @@ pub enum Layer {
     L4,
 }
 
+/// `serde`'s `skip_serializing_if` wants a predicate by path, and `u32::is_zero`
+/// is unstable. One line so that an index of 0 — which is every record written
+/// before a slot could hold two renderers — leaves the stream exactly as it was.
+fn is_zero(n: &u32) -> bool {
+    *n == 0
+}
+
 /// A parameter value. Ranges are declared in the `.kir`; this is just the value.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -250,6 +257,17 @@ pub enum Record {
     Procedure {
         slot: u8,
         layer: Layer,
+        /// **Which node of that layer**, when a slot has more than one.
+        ///
+        /// A slot draws with one L1 and however many L4s — several renderers
+        /// over one geometry, in draw order — so naming a layer is no longer
+        /// enough to name a procedure. Zero for the L1 and for the first
+        /// renderer, which is every stream written before stacks existed:
+        /// absent means zero and zero is not written, so an old stream replays
+        /// byte for byte and a new one adds a field only where it says
+        /// something.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        index: u32,
         #[serde(rename = "proc")]
         proc_hash: Hash,
     },

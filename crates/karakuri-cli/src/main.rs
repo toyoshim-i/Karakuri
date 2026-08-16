@@ -296,19 +296,22 @@ impl Demo {
     /// a watcher handed a one-slot deck sees the script cycle a preview between
     /// the mix and the only thing in it. Overridden the moment any `--set` is
     /// given, so this supplies a scene rather than imposing one.
-    fn deck(self) -> Vec<(PathBuf, PathBuf)> {
+    fn deck(self) -> Vec<(PathBuf, Vec<PathBuf>)> {
         match self {
             Demo::Transport => Vec::new(),
-            Demo::Lines => vec![
-                (
-                    "examples/drift_shell.kir".into(),
+            // **One slot, one simulation, two renderers.** This was two slots
+            // running `drift_shell` twice — the same cloud simulated a second
+            // time so that a second L4 could read it — because a Set was a pair
+            // and there was no other way to have two. It is the demonstration
+            // this milestone is for, so it should be the shape the milestone
+            // made possible.
+            Demo::Lines => vec![(
+                "examples/drift_shell.kir".into(),
+                vec![
                     "examples/soft_points.kir".into(),
-                ),
-                (
-                    "examples/drift_shell.kir".into(),
                     "examples/drift_streaks.kir".into(),
-                ),
-            ],
+                ],
+            )],
         }
     }
 }
@@ -356,7 +359,8 @@ usage:
   karakuri-cli [options] [L1.kir L4.kir]
 
 sets — one deck slot each, composited in the order given, at most 4:
-  --set L1.kir,L4.kir   name one pair. Repeat for more slots
+  --set L1.kir,L4.kir   name one slot. Repeat for more slots. A third path
+                        onward is another renderer over the same geometry
   L1.kir L4.kir         the same thing, positionally, for one pair. Given
                         alongside --set it becomes the last slot
   (nothing)             examples/drift_shell.kir + examples/soft_points.kir
@@ -661,8 +665,11 @@ struct Args {
     /// so unlike `--bind` this flag has nothing to map onto yet; it is here
     /// because a binding to `beat` is meaningless at a tempo nobody can set.
     bpm: f32,
-    /// One (L1, L4) pair per deck slot, in composite order.
-    sets: Vec<(PathBuf, PathBuf)>,
+    /// One deck slot per entry, in composite order: the L1 that simulates, and
+    /// the renderers drawn over it in list order — see `Set::build_many`. One
+    /// renderer is the ordinary case; several is one simulation drawn several
+    /// ways, which costs a draw pass apiece and no extra memory.
+    sets: Vec<(PathBuf, Vec<PathBuf>)>,
     capacity: u32,
     /// Whether `--capacity` was *typed*. Without it a procedure's own declared
     /// default is used — see [`capacity_for`].
@@ -1035,17 +1042,29 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
             "--help" | "-h" => return Ok(ParseOutcome::Help),
             "--set" => {
                 let value = value_for("--set", &mut it)?;
-                match value.split_once(',') {
-                    // A third part (a second comma) used to be accepted
-                    // silently, taking `b,c` as one literal L4 filename — a
-                    // typo like `--set a.kir,b.kir,c.kir` would compile-fail
-                    // on a file that does not exist and blame the wrong
-                    // thing. Rejected here instead, with the same message a
-                    // missing comma gets.
-                    Some((l1, l4)) if !l1.is_empty() && !l4.is_empty() && !l4.contains(',') => {
-                        args_out.sets.push((PathBuf::from(l1), PathBuf::from(l4)))
+                // **The first is the L1 and the rest are renderers**, drawn in
+                // the order given. A third part used to be refused: it could
+                // only be a typo when a Set was a pair, and taking `b,c` as one
+                // literal filename would have blamed a missing file for a stray
+                // comma. It is now what asking for two renderers looks like, and
+                // there is no new syntax for it — one comma-separated list, read
+                // as one L1 and however many L4s.
+                let parts: Vec<&str> = value.split(',').collect();
+                match parts.split_first() {
+                    Some((l1, l4s))
+                        if !l1.is_empty() && !l4s.is_empty() && l4s.iter().all(|p| !p.is_empty()) =>
+                    {
+                        args_out.sets.push((
+                            PathBuf::from(*l1),
+                            l4s.iter().map(PathBuf::from).collect(),
+                        ))
                     }
-                    _ => return Err(format!("`--set {value}` — expected `L1.kir,L4.kir`")),
+                    _ => {
+                        return Err(format!(
+                            "`--set {value}` — expected `L1.kir,L4.kir`, or \
+                             `L1.kir,L4.kir,L4.kir` for several renderers over one geometry"
+                        ))
+                    }
                 }
             }
             "--render" => args_out.render_to = Some(PathBuf::from(value_for("--render", &mut it)?)),
@@ -1182,7 +1201,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         0 => {}
         2 => args_out
             .sets
-            .push((positional[0].clone(), positional[1].clone())),
+            .push((positional[0].clone(), vec![positional[1].clone()])),
         n => {
             return Err(format!(
                 "{n} file argument(s) — a Set is an L1 and an L4, so give two, or use --set"
@@ -1202,7 +1221,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
             Some(deck) => args_out.sets = deck,
             None => args_out.sets.push((
                 "examples/drift_shell.kir".into(),
-                "examples/soft_points.kir".into(),
+                vec!["examples/soft_points.kir".into()],
             )),
         }
     }
@@ -1410,7 +1429,9 @@ fn seed_for(slot: usize) -> u32 {
     SEED.wrapping_add((slot as u32).wrapping_mul(0x9E37_79B9))
 }
 
-type Pair = (karakuri_ir::typed::Checked, karakuri_ir::typed::Checked);
+/// One deck slot's material: the procedure that simulates, and the renderers
+/// drawn over it in order.
+type Pair = (karakuri_ir::typed::Checked, Vec<karakuri_ir::typed::Checked>);
 
 /// **Render a recorded session.** The material comes from the stream's head and
 /// every frame advances by the `tick` that was recorded, so nothing here reads
@@ -1501,7 +1522,7 @@ fn replay_session(args: &Args, id: &str) {
     let mut set = build(
         &gpu,
         &loaded.l1,
-        &loaded.l4,
+        &loaded.l4s,
         loaded.capacity.unwrap_or(args.capacity),
         &loaded.params,
         &loaded.bindings,
@@ -1532,8 +1553,12 @@ fn replay_session(args: &Args, id: &str) {
     // What each slot is playing, as the stream names it. Seeded from nothing:
     // the head already built the Sets a run started with, so the first
     // `procedure` record is the first *change*.
-    let mut playing: Vec<(Option<karakuri_store::hash::Hash>, Option<karakuri_store::hash::Hash>)> =
-        vec![(None, None); deck.slot_count()];
+    // The L1, and the renderers by index — a slot draws with one geometry and
+    // however many L4s, so the second half is a list rather than a slot.
+    let mut playing: Vec<(
+        Option<karakuri_store::hash::Hash>,
+        Vec<Option<karakuri_store::hash::Hash>>,
+    )> = vec![(None, Vec::new()); deck.slot_count()];
     // A `look` record in the stream moves this, so it is **returned** from the
     // driver each frame rather than handed to the renderer once before the run.
     // It used to be both, and the parameter is the one that won: a session where
@@ -1569,6 +1594,7 @@ fn replay_session(args: &Args, id: &str) {
                 if let karakuri_store::record::Record::Procedure {
                     slot,
                     layer,
+                    index,
                     proc_hash,
                 } = record
                 {
@@ -1582,7 +1608,18 @@ fn replay_session(args: &Args, id: &str) {
                     }
                     match layer {
                         Layer::L1 => playing[slot].0 = Some(*proc_hash),
-                        Layer::L4 => playing[slot].1 = Some(*proc_hash),
+                        // **Indexed, and the list grows to fit.** A stack's
+                        // renderers arrive as one `procedure` record each,
+                        // numbered in draw order; a stream from before stacks
+                        // existed carries index 0 and lands in the same place
+                        // the old code put it.
+                        Layer::L4 => {
+                            let at = *index as usize;
+                            if playing[slot].1.len() <= at {
+                                playing[slot].1.resize(at + 1, None);
+                            }
+                            playing[slot].1[at] = Some(*proc_hash);
+                        }
                         other => {
                             eprintln!("  a `procedure` for {other:?} was skipped");
                             continue;
@@ -1622,14 +1659,17 @@ fn rebuild(
     store: &karakuri_store::store::Store,
     playing: &(
         Option<karakuri_store::hash::Hash>,
-        Option<karakuri_store::hash::Hash>,
+        Vec<Option<karakuri_store::hash::Hash>>,
     ),
     args: &Args,
     slot: usize,
 ) -> Result<Set, String> {
-    let (Some(l1_hash), Some(l4_hash)) = playing else {
-        return Err("only one of its two layers has been named".into());
+    let (Some(l1_hash), l4_hashes) = playing else {
+        return Err("its L1 has not been named".into());
     };
+    if l4_hashes.is_empty() || l4_hashes.iter().any(Option::is_none) {
+        return Err("not every one of its renderers has been named".into());
+    }
     let source = |hash: &karakuri_store::hash::Hash| -> Result<String, String> {
         let bytes = store
             .get_artifact(hash)
@@ -1641,11 +1681,15 @@ fn rebuild(
     // build this program can refuse is a build it must refuse, and the
     // diagnostics belong on the terminal either way.
     let l1 = compile::check(&source(l1_hash)?).map_err(|report| format!("L1:\n{report}"))?;
-    let l4 = compile::check(&source(l4_hash)?).map_err(|report| format!("L4:\n{report}"))?;
+    let l4s = l4_hashes
+        .iter()
+        .flatten()
+        .map(|h| compile::check(&source(h)?).map_err(|report| format!("L4:\n{report}")))
+        .collect::<Result<Vec<_>, String>>()?;
     Ok(build(
         gpu,
         &l1,
-        &l4,
+        &l4s,
         args.capacity,
         &args.overrides,
         &args.bindings,
@@ -1818,7 +1862,7 @@ fn session_head(
             }
         };
     }
-    let Some((l1, l4)) = args.sets.first() else {
+    let Some((l1, l4s)) = args.sets.first() else {
         eprintln!("karakuri-cli: nothing to record — no Set to put at the session's head");
         std::process::exit(2);
     };
@@ -1829,7 +1873,7 @@ fn session_head(
         &material,
         setfile::Saving {
             l1_path: l1,
-            l4_path: l4,
+            l4_paths: l4s,
             capacity: args.capacity,
             params: &args.overrides,
             bindings: &args.bindings,
@@ -1854,7 +1898,7 @@ fn session_head(
 
 fn save_set(args: &Args, id: &str) {
     let store = open_store(args);
-    let Some((l1, l4)) = args.sets.first() else {
+    let Some((l1, l4s)) = args.sets.first() else {
         eprintln!("karakuri-cli: --save-set needs a `.kir` pair to save");
         std::process::exit(1);
     };
@@ -1869,7 +1913,7 @@ fn save_set(args: &Args, id: &str) {
         id,
         setfile::Saving {
             l1_path: l1,
-            l4_path: l4,
+            l4_paths: l4s,
             capacity: args.capacity,
             params: &args.overrides,
             bindings: &args.bindings,
@@ -1960,13 +2004,14 @@ fn main() {
         // the MCP surface — then treats it exactly like a `--set` pair, which
         // is what makes a saved Set editable rather than only playable.
         if let Some(loaded) = &loaded {
-            let placed = [
-                scratch::place(&root, &loaded.l1.name, &loaded.l1_src),
-                scratch::place(&root, &loaded.l4.name, &loaded.l4_src),
-            ];
+            let placed: Result<Vec<PathBuf>, String> =
+                std::iter::once((&loaded.l1.name, &loaded.l1_src))
+                    .chain(loaded.l4s.iter().map(|c| &c.name).zip(loaded.l4_srcs.iter()))
+                    .map(|(name, src)| scratch::place(&root, name, src))
+                    .collect();
             match placed {
-                [Ok(l1), Ok(l4)] => args.sets.insert(0, (l1, l4)),
-                [Err(e), _] | [_, Err(e)] => {
+                Ok(paths) => args.sets.insert(0, (paths[0].clone(), paths[1..].to_vec())),
+                Err(e) => {
                     eprintln!("karakuri-cli: {e}");
                     std::process::exit(1);
                 }
@@ -1998,10 +2043,11 @@ fn main() {
     // point: one path, so a loaded Set can be watched and rewritten.
     if let Some(loaded) = loaded.filter(|_| !editable) {
         eprintln!("  slot 0: set `{}`", loaded.id);
-        procs.push((loaded.l1, loaded.l4));
+        procs.push((loaded.l1, loaded.l4s));
     }
-    for (slot, (l1, l4)) in args.sets.iter().enumerate() {
-        eprintln!("  slot {slot}: {} + {}", l1.display(), l4.display());
+    for (slot, (l1, l4s)) in args.sets.iter().enumerate() {
+        let drawn: Vec<String> = l4s.iter().map(|p| p.display().to_string()).collect();
+        eprintln!("  slot {slot}: {} + {}", l1.display(), drawn.join(" + "));
         let load = |path: &PathBuf| match compile::load(path) {
             Ok(checked) => checked,
             Err(report) => {
@@ -2009,7 +2055,7 @@ fn main() {
                 std::process::exit(1);
             }
         };
-        procs.push((load(l1), load(l4)));
+        procs.push((load(l1), l4s.iter().map(load).collect()));
     }
 
     // Saving is a one-shot: it writes what the flags say and stops, on the same
@@ -2112,11 +2158,11 @@ fn build_deck(
     let swaps = procs
         .iter()
         .enumerate()
-        .map(|(slot, (l1, l4))| {
+        .map(|(slot, (l1, l4s))| {
             let set = build(
                 gpu,
                 l1,
-                l4,
+                l4s,
                 capacity_for(args, l1),
                 &args.overrides,
                 &args.bindings,
@@ -2226,14 +2272,15 @@ fn describe(binding: &Binding, signals: &Signals) -> String {
 fn build(
     gpu: &Gpu,
     l1: &karakuri_ir::typed::Checked,
-    l4: &karakuri_ir::typed::Checked,
+    l4s: &[karakuri_ir::typed::Checked],
     capacity: u32,
     overrides: &[(String, f32)],
     bindings: &[Binding],
     seed: u32,
     camera: Option<karakuri_engine::camera::Orbit>,
 ) -> Set {
-    match Set::build(&gpu.device, &gpu.queue, l1, l4, capacity, seed) {
+    let refs: Vec<&karakuri_ir::typed::Checked> = l4s.iter().collect();
+    match Set::build_many(&gpu.device, &gpu.queue, l1, &refs, capacity, seed) {
         Ok(mut set) => {
             if let Some(camera) = camera {
                 set.camera = camera;
@@ -2528,8 +2575,8 @@ struct Live {
     /// The procedure each slot is recorded as playing, and the one before it.
     /// The second is what a rollback restores, and the only way to name it: a
     /// rollback brings back a Set the stream never named again.
-    playing: Vec<Option<(karakuri_store::hash::Hash, karakuri_store::hash::Hash)>>,
-    previous: Vec<Option<(karakuri_store::hash::Hash, karakuri_store::hash::Hash)>>,
+    playing: Vec<Option<(karakuri_store::hash::Hash, Vec<karakuri_store::hash::Hash>)>>,
+    previous: Vec<Option<(karakuri_store::hash::Hash, Vec<karakuri_store::hash::Hash>)>>,
     /// The MCP server's half of the channel, when `--mcp` asked for one. Told
     /// what the swap machinery said, and nothing else — see [`crate::mcp`].
     mcp: Option<mcp::Reporter>,
@@ -2674,12 +2721,15 @@ impl ApplicationHandler for App {
         // it came off, which is the part that changes between machines.
         eprintln!("  {}", deck.govern());
         if self.args.watch {
-            for (slot, (l1, l4)) in self.args.sets.iter().enumerate() {
+            for (slot, (l1, l4s)) in self.args.sets.iter().enumerate() {
                 eprintln!(
                     "  watching slot {slot}: {} and {} — a save recompiles that slot in the \
                      background and swaps it when ready, budget {:.1} ms",
                     l1.display(),
-                    l4.display(),
+                    l4s.iter()
+                        .map(|p| p.display().to_string())
+                        .collect::<Vec<_>>()
+                        .join(" and "),
                     self.args.budget_ms
                 );
             }
@@ -3232,25 +3282,31 @@ impl Live {
                     // so at the time. Nothing to name.
                     return;
                 };
-                self.previous[slot] = self.playing[slot];
-                self.playing[slot] = Some((built.l1, built.l4));
-                self.playing[slot]
+                self.previous[slot] = self.playing[slot].take();
+                self.playing[slot] = Some((built.l1, built.l4s));
+                self.playing[slot].clone()
             }
             None => {
                 let restored = self.previous[slot].take();
-                self.playing[slot] = restored;
+                self.playing[slot] = restored.clone();
                 restored
             }
         };
-        let Some((l1, l4)) = pair else {
+        let Some((l1, l4s)) = pair else {
             // A rollback to the procedure the run started with, which the head
             // already names. Nothing changed that the stream does not say.
             return;
         };
-        for (layer, hash) in [(Layer::L1, l1), (Layer::L4, l4)] {
+        // One record per node: the L1, then each renderer in draw order. The
+        // index is what says which renderer, and it is 0 for the first — so a
+        // slot with one renderer writes exactly the two lines it always did.
+        let named = std::iter::once((Layer::L1, 0, l1))
+            .chain(l4s.into_iter().enumerate().map(|(i, h)| (Layer::L4, i as u32, h)));
+        for (layer, index, hash) in named {
             self.record_only(karakuri_store::record::Record::Procedure {
                 slot: slot as u8,
                 layer,
+                index,
                 proc_hash: hash,
             });
         }
@@ -4333,7 +4389,7 @@ mod tests {
         let store = karakuri_store::store::Store::open(dir.path()).expect("store");
 
         let mut args = parse(&[]).expect("parses");
-        args.sets = vec![(l1, l4)];
+        args.sets = vec![(l1, vec![l4])];
         args.store = dir.path().to_path_buf();
 
         let head = session_head(&args, &store, "a_set");
@@ -4344,7 +4400,7 @@ mod tests {
         let loaded = setfile::from_lines(&store, "a_set", &head)
             .expect("the head a recording writes is a head a replay can load");
         assert_eq!(loaded.l1.kind, karakuri_ir::Kind::L1);
-        assert_eq!(loaded.l4.kind, karakuri_ir::Kind::L4);
+        assert_eq!(loaded.l4s[0].kind, karakuri_ir::Kind::L4);
         assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
     }
 
@@ -4355,31 +4411,31 @@ mod tests {
             args.sets,
             vec![(
                 PathBuf::from("examples/drift_shell.kir"),
-                PathBuf::from("examples/soft_points.kir"),
+                vec![PathBuf::from("examples/soft_points.kir")],
             )]
         );
     }
 
-    /// **A demonstration brings the scene it is about.** `--demo lines` cycles
-    /// the preview between the mix and each slot, and on the one-slot default
-    /// deck that shows the same picture twice — the demonstration would run,
-    /// look like it worked, and demonstrate nothing.
+    /// **A demonstration brings the scene it is about**, and this one is now the
+    /// scene the milestone is about: one geometry, two renderers, one slot.
+    ///
+    /// It used to be two slots running `drift_shell` twice — the same cloud
+    /// simulated a second time so a second L4 could read it, because a Set was
+    /// a pair. The picture is the two draws over one simulation either way;
+    /// what changed is that it no longer costs the simulation twice.
     #[test]
-    fn the_lines_demo_supplies_its_own_two_slot_deck() {
+    fn the_lines_demo_draws_one_geometry_with_two_renderers() {
         let args = parse(&["--demo", "lines"]).expect("should parse");
         assert_eq!(
             args.sets,
-            vec![
-                (
-                    PathBuf::from("examples/drift_shell.kir"),
+            vec![(
+                PathBuf::from("examples/drift_shell.kir"),
+                vec![
                     PathBuf::from("examples/soft_points.kir"),
-                ),
-                (
-                    PathBuf::from("examples/drift_shell.kir"),
                     PathBuf::from("examples/drift_streaks.kir"),
-                ),
-            ],
-            "the two slots differ only in their L4, which is the whole demonstration"
+                ],
+            )],
+            "one slot, one simulation, two renderers over it"
         );
     }
 
@@ -4391,7 +4447,7 @@ mod tests {
         let args = parse(&["--demo", "lines", "a.kir", "b.kir"]).expect("should parse");
         assert_eq!(
             args.sets,
-            vec![(PathBuf::from("a.kir"), PathBuf::from("b.kir"))]
+            vec![(PathBuf::from("a.kir"), vec![PathBuf::from("b.kir")])]
         );
     }
 
@@ -4406,7 +4462,7 @@ mod tests {
             args.sets,
             vec![(
                 PathBuf::from("examples/drift_shell.kir"),
-                PathBuf::from("examples/soft_points.kir"),
+                vec![PathBuf::from("examples/soft_points.kir")],
             )]
         );
     }
@@ -4430,7 +4486,7 @@ mod tests {
         let args = parse(&["a.kir", "b.kir"]).expect("should parse");
         assert_eq!(
             args.sets,
-            vec![(PathBuf::from("a.kir"), PathBuf::from("b.kir"))]
+            vec![(PathBuf::from("a.kir"), vec![PathBuf::from("b.kir")])]
         );
     }
 
@@ -4452,8 +4508,8 @@ mod tests {
         assert_eq!(
             args.sets,
             vec![
-                (PathBuf::from("a.kir"), PathBuf::from("b.kir")),
-                (PathBuf::from("c.kir"), PathBuf::from("d.kir")),
+                (PathBuf::from("a.kir"), vec![PathBuf::from("b.kir")]),
+                (PathBuf::from("c.kir"), vec![PathBuf::from("d.kir")]),
             ]
         );
     }
@@ -4472,10 +4528,33 @@ mod tests {
         assert!(err.contains("--set a.kir"), "message: {err}");
     }
 
+    /// **A third path is a second renderer**, and there is no new syntax for it.
+    ///
+    /// This used to be an error, and the reasoning was sound while a Set was a
+    /// pair: `b.kir,c.kir` had been silently accepted as one literal L4
+    /// filename, so a stray comma got blamed on a missing file. Now a Set holds
+    /// a list, and one comma-separated list read as one L1 and however many L4s
+    /// is exactly what `docs/roadmap.md` said the command line should look like
+    /// — *"no new syntax at all"*.
     #[test]
-    fn set_with_three_paths_fails_rather_than_taking_a_comma_in_the_filename() {
-        // `b.kir,c.kir` used to be silently accepted as one literal L4 path.
-        let err = parse(&["--set", "a.kir,b.kir,c.kir"]).unwrap_err();
+    fn set_with_three_paths_is_one_geometry_and_two_renderers() {
+        let args = parse(&["--set", "a.kir,b.kir,c.kir"]).expect("should parse");
+        assert_eq!(
+            args.sets,
+            vec![(
+                PathBuf::from("a.kir"),
+                vec![PathBuf::from("b.kir"), PathBuf::from("c.kir")],
+            )],
+            "the first path is the geometry and the rest are renderers, in draw order"
+        );
+    }
+
+    /// The stray comma the rule above used to catch is still caught, because an
+    /// empty part is not a filename: `a.kir,b.kir,` names a renderer with no
+    /// name.
+    #[test]
+    fn set_with_a_trailing_comma_fails() {
+        let err = parse(&["--set", "a.kir,b.kir,"]).unwrap_err();
         assert!(err.contains("--set"), "message: {err}");
     }
 

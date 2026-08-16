@@ -142,12 +142,20 @@ fn sanitize(name: &str) -> String {
 ///
 /// Reported and never fatal, on the same terms as every other snapshot: a
 /// history that could not be written must not stop a run from starting.
-pub fn seed(shared: &Shared, sets: &[(PathBuf, PathBuf)]) {
+pub fn seed(shared: &Shared, sets: &[(PathBuf, Vec<PathBuf>)]) {
     let Ok(mut snapshots) = shared.lock() else {
         return;
     };
-    for (slot, (l1, l4)) in sets.iter().enumerate() {
-        for (layer, path) in [("L1", l1), ("L4", l4)] {
+    for (slot, (l1, l4s)) in sets.iter().enumerate() {
+        // **Only the first renderer.** The edit history is keyed by (slot,
+        // layer), so a stack of several would write every one of them under
+        // "L4" and each would overwrite the last. Naming a renderer needs the
+        // same address a param does — `docs/roadmap.md`, "How a param is
+        // addressed" — and until that exists this seeds what it can address.
+        for (layer, path) in [("L1", l1)]
+            .into_iter()
+            .chain(l4s.first().map(|p| ("L4", p)))
+        {
             let Ok(source) = std::fs::read(path) else {
                 // Unreadable here means the compile is about to fail and say so
                 // against the path the operator gave. Not this module's to
@@ -310,7 +318,7 @@ mod tests {
         std::fs::write(&l4, "proc draw_one {\n  kind L4\n}").expect("write");
 
         let shared = Snapshots::shared(tmp.path());
-        seed(&shared, &[(l1, l4)]);
+        seed(&shared, &[(l1, vec![l4])]);
 
         let names: Vec<String> = files(&tmp.path().join(DIR))
             .iter()
@@ -333,7 +341,7 @@ mod tests {
         std::fs::write(&l4, "proc draw_one {}").expect("write");
 
         let shared = Snapshots::shared(tmp.path());
-        seed(&shared, &[(l1, l4)]);
+        seed(&shared, &[(l1, vec![l4])]);
 
         let mut snapshots = shared.lock().expect("lock");
         assert!(

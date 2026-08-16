@@ -72,7 +72,10 @@ pub struct Built {
     /// one.
     pub id: u64,
     pub l1: karakuri_store::hash::Hash,
-    pub l4: karakuri_store::hash::Hash,
+    /// The renderers, in draw order — the whole stack, because a `Request`
+    /// restates the whole stack and a record of what played has to name what
+    /// was built.
+    pub l4s: Vec<karakuri_store::hash::Hash>,
 }
 
 pub struct Watch {
@@ -87,7 +90,10 @@ pub struct Watch {
     /// which of the four they are about.
     slot: usize,
     l1: PathBuf,
-    l4: PathBuf,
+    /// The renderers this slot draws with, in draw order. Watched together:
+    /// a rebuild restates the whole stack, so an edit to any one of them
+    /// recompiles all of them and the Set that lands is the one the files say.
+    l4s: Vec<PathBuf>,
     capacity: u32,
     seed_salt: u32,
     overrides: Vec<(String, f32)>,
@@ -99,7 +105,7 @@ pub struct Watch {
     /// file that does not exist or cannot be read, which compares equal to
     /// itself and so reads as "unchanged" rather than as a change every
     /// interval — a deleted file is not an edit to react to.
-    stamps: [Option<u64>; 2],
+    stamps: Vec<Option<u64>>,
     /// A change has been seen but not yet acted on — see "Debouncing" above.
     settling: bool,
     /// Where every version that compiled is kept, so an edit can be undone.
@@ -117,7 +123,7 @@ impl Watch {
     pub fn new(
         slot: usize,
         l1: PathBuf,
-        l4: PathBuf,
+        l4s: Vec<PathBuf>,
         capacity: u32,
         seed_salt: u32,
         overrides: Vec<(String, f32)>,
@@ -129,12 +135,12 @@ impl Watch {
             snapshots: None,
             slot,
             l1,
-            l4,
+            l4s,
             capacity,
             seed_salt,
             overrides,
             bindings,
-            stamps: [None, None],
+            stamps: Vec::new(),
             settling: false,
         };
         // Seeded from what is on disk right now, so that the pair the CLI
@@ -143,7 +149,7 @@ impl Watch {
         watch
     }
 
-    fn stamp(&self) -> [Option<u64>; 2] {
+    fn stamp(&self) -> Vec<Option<u64>> {
         // Not a cryptographic hash and not trying to be: this compares a file
         // against its own previous contents seconds earlier, where the only
         // adversary is an editor writing the same bytes back.
@@ -154,7 +160,9 @@ impl Watch {
                 h.finish()
             })
         };
-        [digest(&self.l1), digest(&self.l4)]
+        std::iter::once(digest(&self.l1))
+            .chain(self.l4s.iter().map(digest))
+            .collect()
     }
 }
 
@@ -209,13 +217,16 @@ impl Source for Watch {
                 return None;
             }
         };
-        let l4_src = match std::fs::read_to_string(&self.l4) {
-            Ok(src) => src,
-            Err(e) => {
-                eprintln!("{}: {e}\nslot {slot} unchanged", self.l4.display());
-                return None;
+        let mut l4_srcs = Vec::with_capacity(self.l4s.len());
+        for path in &self.l4s {
+            match std::fs::read_to_string(path) {
+                Ok(src) => l4_srcs.push(src),
+                Err(e) => {
+                    eprintln!("{}: {e}\nslot {slot} unchanged", path.display());
+                    return None;
+                }
             }
-        };
+        }
         let l1 = match compile::check(&l1_src) {
             Ok(checked) => checked,
             Err(report) => {
@@ -226,16 +237,19 @@ impl Source for Watch {
                 return None;
             }
         };
-        let l4 = match compile::check(&l4_src) {
-            Ok(checked) => checked,
-            Err(report) => {
-                eprintln!(
-                    "{}:\n{report}\nslot {slot} unchanged; its Set is still running",
-                    self.l4.display()
-                );
-                return None;
+        let mut l4s = Vec::with_capacity(l4_srcs.len());
+        for (path, src) in self.l4s.iter().zip(&l4_srcs) {
+            match compile::check(src) {
+                Ok(checked) => l4s.push(checked),
+                Err(report) => {
+                    eprintln!(
+                        "{}:\n{report}\nslot {slot} unchanged; its Set is still running",
+                        path.display()
+                    );
+                    return None;
+                }
             }
-        };
+        }
 
         // **Both compiled**, which is this feature's whole gate: a version that
         // does not compile is not a version, and one that compiled is worth
@@ -250,7 +264,16 @@ impl Source for Watch {
             // compiled — this is bookkeeping either way.
             match snapshots.lock() {
                 Ok(mut snapshots) => {
-                    for (layer, name, src) in [("L1", &l1.name, &l1_src), ("L4", &l4.name, &l4_src)] {
+                    // The first renderer only, because the history is keyed
+                    // by (slot, layer) and a stack would write every one of
+                    // them under "L4", each overwriting the last. Naming a
+                    // renderer wants the address a param does — see
+                    // `docs/roadmap.md`, "How a param is addressed".
+                    let l4_first = l4s.first().zip(l4_srcs.first());
+                    for (layer, name, src) in [("L1", &l1.name, &l1_src)]
+                        .into_iter()
+                        .chain(l4_first.map(|(c, s)| ("L4", &c.name, s)))
+                    {
                         if let Err(e) = snapshots.record(slot, layer, name, src.as_bytes()) {
                             eprintln!("slot {slot}: this version is not in the edit history: {e}");
                         }
@@ -260,7 +283,11 @@ impl Source for Watch {
             }
         }
 
-        let label = format!("{} + {}", l1.name, l4.name);
+        let label = format!(
+            "{} + {}",
+            l1.name,
+            l4s.iter().map(|c| c.name.as_str()).collect::<Vec<_>>().join(" + ")
+        );
         // **Unique across the whole run**, because that is what it is for: the
         // caller matches an outcome back to the source that produced it, and
         // labels repeat on every rebuild of the same pair.
@@ -270,18 +297,19 @@ impl Source for Watch {
         // kilobytes, written where a whole Set is about to be compiled anyway
         // — rather than on the frame that installs it.
         if let Some((store, tx)) = &self.recording {
-            match (
-                store.put_artifact(l1_src.as_bytes()),
-                store.put_artifact(l4_src.as_bytes()),
-            ) {
-                (Ok(l1_hash), Ok(l4_hash)) => {
+            let stored: Result<Vec<_>, _> = std::iter::once(l1_src.as_bytes())
+                .chain(l4_srcs.iter().map(|s| s.as_bytes()))
+                .map(|bytes| store.put_artifact(bytes))
+                .collect();
+            match stored {
+                Ok(hashes) => {
                     let _ = tx.send(Built {
                         id,
-                        l1: l1_hash,
-                        l4: l4_hash,
+                        l1: hashes[0],
+                        l4s: hashes[1..].to_vec(),
                     });
                 }
-                (Err(e), _) | (_, Err(e)) => eprintln!(
+                Err(e) => eprintln!(
                     "slot {slot}: this build is not in the session's record: {e} — \
                      a replay will show the procedure it started with"
                 ),
@@ -290,10 +318,7 @@ impl Source for Watch {
         Some(Request {
             id,
             l1,
-            // One renderer, because a watcher watches one `.kir` per layer.
-            // Several is `Set::build_many`'s to hold and `--set a,b,c`'s to
-            // ask for; the watcher grows a list when the command line does.
-            l4s: vec![l4],
+            l4s,
             capacity: self.capacity,
             seed_salt: self.seed_salt,
             params: self.overrides.clone(),
@@ -311,7 +336,7 @@ mod tests {
         Watch::new(
             0,
             dir.join("a.kir"),
-            dir.join("b.kir"),
+            vec![dir.join("b.kir")],
             4096,
             1,
             Vec::new(),
