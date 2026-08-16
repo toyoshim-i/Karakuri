@@ -1662,6 +1662,109 @@ generator emits it.** It is written down because later milestones depend on thes
 and because deciding them now keeps V1 from foreclosing them. Each carries the milestone
 it belongs to; see `docs/roadmap.md`.
 
+### L2 and L3 — M3
+
+The layer algebra has been in `docs/roadmap.md` since before there was a compiler, and
+everything about L1 and L4 was decided by building them. L2 and L3 have been "later" for
+long enough that the vagueness became load-bearing: the engine is being split so that `Ln`
+is a node, and the shape of an L2 node and an L3 node constrains that split now rather than
+when they are written. What follows is what is decided, why, and what is not.
+
+#### L3 — the camera
+
+**What crosses the edge is camera state, not a matrix**, and the reason is multiplicity.
+`docs/roadmap.md` says L3-multiple is a weighted blend of trajectories — an orbit and a
+handheld rig mixed at 0.3 — and a lerp of two view-projection matrices is not a projection
+of anything. So an L3 node produces the six numbers a camera *is*:
+
+```
+eye, target, up, fov_y, near, far
+```
+
+and everything derived stays in the engine, where `crates/karakuri-engine/src/camera.rs`
+already keeps the derived forms from drifting: `view_proj` for the raster path, `basis` for
+the marched one, and — since `blend weighted` — `depth_range`. Three derivations of one
+orbit that must agree, which is exactly the argument for deriving them in one place from
+state rather than passing any of them along an edge.
+
+Aspect ratio is **not** in that list. It belongs to the canvas, not to the camera, and
+`Orbit::basis` already takes it as an argument for that reason.
+
+**`near` and `far` stopped being decorative.** They described a frustum nothing measured
+until `blend weighted` normalised its depth weight against them. An L3 that moves `far` per
+frame therefore moves every weighted fragment's weight per frame. That is not a defect — it
+is what tying the weight to the camera's own planes means — but it is a coupling nobody
+would predict from the layer algebra.
+
+**An L3 node has no geometry input and no GPU pass.** It reads `t`, `beats`, its own params
+and whatever is bound to them, and produces six numbers. It is therefore the first node
+whose evaluation is host-side, which is a real structural difference from L1, L2 and L4 and
+not merely a small one.
+
+#### L2 — deformation
+
+**An L2 is stateless, and that is a rule rather than an observation.** It reads the
+attributes it consumes, `t`, `beats`, `seed`, and its params; it writes attributes; it keeps
+nothing between frames. Four things follow, and the fourth is why it is stated as a rule:
+
+- **It is what makes L2 freely stackable**, which is the whole justification the layer
+  algebra gives for the endomorphism. Two stateful stages in a row would each need their own
+  double buffer and their own place in the compaction ordering.
+- **`closed_form` stays decidable.** A stateless L2 is vacuously seekable, so a Set's
+  seekability is still its L1's.
+- **Priming stays an L1 question.** Warming a Set means warming what accumulates, and
+  nothing else does.
+- **It makes fusion legal later.** A stateless stage can be composed into its consumer at
+  codegen time, which is what `docs/roadmap.md`'s graph compiler means by fusing `Field`
+  chains. Left unstated, fusion would rest on a reading of the language rather than on a
+  rule — the same distinction `fullscreen`'s empty `consumes` draws.
+
+**An L2 cannot `kill()`.** It follows from statelessness but is worth stating separately,
+because what it buys is specific: liveness is decided upstream, so compaction runs once
+after L1 and nothing after an L2 has to reconsider it. An L2 that could kill would put a
+scan between every pair of stages.
+
+**An L2's output is materialised, not fused.** One derived buffer per amplifying chain,
+rebuilt every frame, single-buffered and never compacted — which is what
+[L2 amplification](#l2-amplification--m3) already says of the amplifying kind, said now of
+both. The alternative is to fuse each L2 into whatever reads it, which costs no memory and
+**pays the L2's cost once per reader** — so a heavy noise deformation read by three
+renderers costs three times. Materialising pays once regardless of how many nodes read it,
+which is the shape that survives the thing this milestone is for. Fusion is then an
+optimisation the graph compiler may apply, in the place the roadmap already puts it, rather
+than the only implementation there is.
+
+**`emit` and `consumes` are both L2 declarations**, where today the checker allows `emit` on
+L1 only and `consumes` on L4 only. An L2's `emit` widens what is available *downstream of
+it* rather than what its L1 wrote — the derived buffer is the L2's, not the L1's — so an L2
+may emit an attribute no L1 in the library produces. Composition becomes a chain check: each
+node's `consumes` must be a subset of what is available at its position.
+
+**The block is `deform`.** A new name rather than reusing `element`, because
+`BlockKind::kind()` maps a block to the layer it belongs to and the checker refuses a block
+in the wrong kind of procedure — a name that appeared in two layers would take that away.
+
+**Amplification carries `copy` as an implicit attribute.** `seed` downstream of an
+amplifying node stays the **parent's**, and the copy index is a second value beside it;
+identity is the pair. That way `hash1(seed)` still gives every mirror image of one element
+the same colour, which is what makes eight copies read as one object, and breaking that is
+the deliberate `hash1(seed ^ copy)`. `copy` joins `seed` and `birth_frac` as a slot the
+engine writes and no procedure declares.
+
+#### What is *not* decided
+
+Two, and both are Toyoshima's rather than this document's — see `docs/roadmap.md`.
+
+- **A camera per Set, or one for the deck.** Today it is per Set, because `Set` owns an
+  `Orbit`, and an L3 node inside a Set keeps it that way. The alternative is a deck-level
+  camera every slot shares, so that four layers read as one space rather than as four. That
+  is a question about how a set looks from the floor, not about the type.
+- **Whether an L3 is a `.kir` procedure at all.** It is a `camera` record today, and a
+  record is enough for an orbit. A `.kir` L3 would let a camera path be *generated*, which is
+  this project's whole thesis applied to the one layer that has so far been furniture — and
+  it would mean the IR's expression language has to evaluate somewhere other than on a GPU,
+  which nothing has needed yet.
+
 ### Metadata file format — M4
 
 Nothing writes or reads one. `karakuri-store`'s record vocabulary covers the Set file
@@ -1892,8 +1995,17 @@ producing eight mirrored copies costs one simulation and eight draws, not eight 
 
 ## Open questions
 
-None. The four that were open are recorded above with their decisions and their reasons.
+Two, both about layers this document has described only as "later" and both belonging to
+the author rather than to the specification. They are stated in full under
+[L2 and L3](#l2-and-l3--m3):
 
-What remains before implementation is not specification but measurement, and the first
-slice should produce it: the scan and compaction at full `capacity`, and the probe pass
-that stage 8 promotes on.
+- **A camera per Set, or one for the deck.**
+- **Whether an L3 is a `.kir` procedure or stays a record.**
+
+The four that were open at v0.2 are recorded above with their decisions and their reasons.
+
+**This section said "None" while L2 and L3 were undecided**, which was true of the questions
+someone had thought to write down and false of the specification. The difference between a
+question that is open and one that has not been asked is invisible from a list, so the L2 and
+L3 section above states what is decided as well as what is not — a reader who finds only the
+gaps cannot tell them from the parts nobody has looked at.
