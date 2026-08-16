@@ -992,6 +992,22 @@ What falls out with no further work: `examples/drift_shell.kir` drawn as sprites
 streaks *and* as a solid, for one simulation and three draw passes — the payoff the
 primitive-centric bet was made for, which today costs three simulations.
 
+**Built: both nodes own their state.** `crate::node` holds an L1 node and an L4 node —
+element buffers, counts, compaction, the spawn accumulator, pipelines and bind groups on one
+side; pipeline, uniform, accumulation targets and its own bind groups on the other — with
+`Geometry` the edge between them, resolved once at build time from the node that offers it
+rather than assembled by the Set out of buffers it reached into. `set.rs` went from 1557
+lines to 930, and what is left is the grouping: camera, parameter values and bindings,
+viewport, clock, and which nodes run in what order. **One node of each kind still**, so
+nothing an author can see has changed; the list is next, and it is a list because nothing in
+the Set reaches into a node any more.
+
+**The clock deliberately did not move.** `t` is the grouping's — one clock serves every node
+— so the simulation node is *handed* the instants its substeps land on rather than deriving
+them from a step counter of its own. It was the one piece of the old `Set` that was tempting
+to move along with the code that reads it, and moving it would have made two nodes in one Set
+able to disagree about what this frame was.
+
 **A hole in how the clock was tested, found on the way in.** Every test of the clock in this
 repository — `beats.rs`, `generated.rs`, `lifecycle.rs`, `priming.rs` — compares one run
 against another: same record stream, same image; primed then live, same as always live. That
