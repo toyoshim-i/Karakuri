@@ -662,7 +662,14 @@ then needs a separately maintained compact list of live slots — which costs a 
   instance and collapses a dead element's quad to nothing
 - Once per step a prefix sum over the previous step's live range gives each survivor its
   destination index. The compaction is **order preserving**: survivors keep their relative
-  order, so the live set is always a stable subsequence
+  order, so the live set is always a stable subsequence.
+
+  Three things rest on that and only two were foreseen. The blend order is stable and
+  reproduction is bit exact, which is why it was chosen; and **element zero is the oldest
+  living element**, which an L3 camera can point at for the cost of one buffer read. Spawn
+  order is age order, and a live element at index 0 has nothing alive before it, so it stays
+  there until it is the one that dies. An L1 that expects to be looked at can make that
+  element mean something — see [L2 and L3](#l2-and-l3--m3)
 - The scan result is fused into the `element` pass, which writes each survivor straight to
   its compacted index in the next buffer. Only the scan itself is an extra pass
 - The scan writes the survivor total and **nothing else**: `element` runs after it and
@@ -1799,22 +1806,52 @@ An L3 is a `.kir` procedure rather than the `camera` record it is today. The exp
 that settled it are dynamic — follow an element, jump on the beat while facing the centre —
 and a record with two numbers in it cannot carry either.
 
-#### What is *not* decided
+#### What an L3 can point at: a reduction, or element zero
 
-**What an L3 can point at in a geometry**, and the cheap answer is not the stable one:
+Two things, and the second is cheaper *and* more meaningful than this document claimed a day
+ago.
 
-| Addressing | Cost | Problem |
+| Addressing | Cost | What it is |
 |---|---|---|
-| Index into the live range | One buffer read | **Compaction moves it.** Not the same element twice |
-| The element with `seed == N` | A search over `capacity` | There is no seed-to-index map |
-| Centroid, bounds | One reduction pass | None, and it is what "frame the material" needs |
+| Centroid, bounds | One reduction pass | Where the material is and how big it is — "keep it framed" |
+| **Element zero** | One buffer read | **The oldest living element** |
+| The element with `seed == N` | A search over `capacity` | Not built: there is no seed-to-index map |
 
-The recommendation is to start at the reduction, because it is stable under compaction, costs
-one pass, and carries the most useful thing a camera can do with geometry — keeping material
-framed while it moves. Following one element waits for a seed-to-index map to be worth
-building. What this exposes is the price of identity being `seed`: **the stable way to name
-an element is the expensive way**, and that has been true since M1 with nothing asking for it
-until now.
+**The correction is about element zero, and it comes out of a decision made for another
+reason entirely.** This document said index 0 was the cheap answer and not the stable one —
+*"compaction moves it, not the same element twice"* — and that is **false**. Compaction is
+order preserving: survivors keep their relative order, so an element at index 0 that is alive
+has zero live elements before it and stays at index 0. It moves only when it dies, and what
+it moves to is the next survivor in spawn order.
+
+So index 0 is not an arbitrary slot that happens to be reachable. Spawn order is age order,
+which makes it **the oldest living element** — a thing worth pointing a camera at, and a
+thing that survives every step until it is the one that dies. Order preservation was chosen
+for stable blend order and bit-exact reproduction; this is the third thing it paid for, and
+none of the three were visible from the other two.
+
+For a procedure with no `spawn` block it is simpler still: everything is alive from frame
+zero, `seed` equals the initial slot index, and index 0 *is* `seed == 0` for as long as
+nothing kills it.
+
+**Which puts the anchor in the L1 author's hands, and that is the right place for it.** An
+L1 that expects to be looked at can make element zero mean something — never kill it, spawn
+it first and deliberately, give it the role of a leader the rest follow. An L1 that does not
+care will still offer its oldest survivor, which is a defensible answer rather than a random
+one. Nothing is declared and nothing is checked: this is a convention with a stated
+consequence, which is what the language does everywhere it can instead of adding a header
+field.
+
+Two consequences worth stating rather than discovering:
+
+- **When element zero dies the camera's subject changes**, to the next oldest. For a fountain
+  that is continuity; for a cloud where the anchor was chosen deliberately it is a jump. The
+  fix is upstream — do not kill the anchor — and stating that is better than a mechanism that
+  hides it.
+- **When the live range is empty there is no element to point at**, and the camera holds its
+  last position rather than snapping to the origin. Holding needs state, which an L3 is
+  allowed to have; snapping would put a hard cut in a set at the exact moment material ran
+  out, which is when an operator is least able to answer for it.
 
 ### L5 — M3
 
@@ -2097,11 +2134,9 @@ producing eight mirrored copies costs one simulation and eight draws, not eight 
 
 ## Open questions
 
-Two, and neither is the pair that stood here yesterday — both of those turned out to be
-answerable and are recorded above with their answers.
+One. The three that have stood here in the last two days were all answerable, and are
+recorded above with their answers.
 
-- **What an L3 can point at in a geometry.** Index, `seed`, or a reduction; the cheap answer
-  is not the stable one. See [L2 and L3](#l2-and-l3--m3).
 - **How two merged geometries keep their identities apart.** `seed` is one monotone counter
   per Set, so two L1 sources either share it and interleave or hold one each and collide.
   `docs/roadmap.md` has carried this since before there was a compiler and it becomes live
