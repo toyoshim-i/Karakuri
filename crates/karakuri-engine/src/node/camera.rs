@@ -412,9 +412,7 @@ impl Producer {
             .f32("beats", view.beats)
             .f32("dt", dt)
             .u32("seed_salt", view.seed_salt);
-        for name in &self.param_names {
-            p.f32(name, (view.param)(name).unwrap_or(0.0));
-        }
+        super::write_params(&mut p, &self.uniform_layout, &self.param_names, view.param);
         queue.write_buffer(&self.uniforms, 0, p.finish());
     }
 }
@@ -572,6 +570,88 @@ proc two {
         for (c, col) in want.view_proj(aspect).iter().enumerate() {
             for (r, v) in col.iter().enumerate() {
                 close(*v, f32_at(&bytes, (c * 4 + r) * 4), &format!("view_proj[{c}][{r}]"));
+            }
+        }
+        let range = want.depth_range();
+        close(range[0], f32_at(&bytes, 128), "depth_range.near");
+        close(range[1], f32_at(&bytes, 132), "depth_range.span");
+    }
+
+    /// **All six outputs, each to a value nothing else would produce.**
+    ///
+    /// Every other fixture in this tree writes `eye` and `target` and leaves the
+    /// rest defaulted, so `up`, `fov_y`, `near` and `far` were lowered by four
+    /// lines of `output_local` that no test reached: permuting them — `up` into
+    /// the eye's local, `near` and `far` swapped — left the whole workspace
+    /// green. A `.kir` writing `up = vec3(0, 0, 1)` would have moved the camera
+    /// instead of rolling it, and swapped planes invert `blend weighted`'s depth
+    /// normalisation, which is a wrong picture rather than a missing one.
+    ///
+    /// The values are deliberately unlike the defaults *and* unlike each other,
+    /// so a lowering that crossed two of them cannot land on a matrix that
+    /// happens to agree.
+    #[test]
+    fn every_camera_output_reaches_the_state_it_names() {
+        let Ok(gpu) = Gpu::headless() else {
+            eprintln!("no adapter; skipping");
+            return;
+        };
+        let src = r#"
+proc six {
+  kind L3
+  camera {
+    eye    = vec3(2.0, -1.0, 6.0);
+    target = vec3(0.5, 1.5, -0.5);
+    up     = vec3(0.2, 0.3, 0.9);
+    fov_y  = 0.62;
+    near   = 0.4;
+    far    = 37.0;
+  }
+}
+"#;
+        let parsed = karakuri_ir::parse(src).expect("parses");
+        let l3 = karakuri_ir::check::check(&parsed).expect("checks");
+        let aspect = 4.0 / 3.0;
+
+        let mut cam = Camera::build(&gpu.device, Some(&l3));
+        cam.write_canvas(&gpu.queue, aspect);
+        cam.prepare(
+            &gpu.queue,
+            &View { t: 0.0, beats: 0.0, seed_salt: 0, viewport: [4.0, 3.0], param: &|_| None },
+            crate::set::DT,
+            &crate::camera::Orbit::default().state(0.0),
+        );
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        cam.record(&mut encoder);
+        gpu.queue.submit([encoder.finish()]);
+        let bytes = read_buffer(&gpu.device, &gpu.queue, &cam.derived, wire::SIZE);
+
+        let want = State {
+            eye: [2.0, -1.0, 6.0],
+            target: [0.5, 1.5, -0.5],
+            up: [0.2, 0.3, 0.9],
+            fov_y: 0.62,
+            near: 0.4,
+            far: 37.0,
+        };
+        for (c, col) in want.view_proj(aspect).iter().enumerate() {
+            for (r, v) in col.iter().enumerate() {
+                close(*v, f32_at(&bytes, (c * 4 + r) * 4), &format!("view_proj[{c}][{r}]"));
+            }
+        }
+        // The projection carries `fov_y` and the planes; the basis is what
+        // carries `up`, and an `up` that never arrived would show here and not
+        // above — `view_proj` and the ray basis are two derivations of it.
+        let basis = want.basis(aspect);
+        for (at, (name, want)) in [
+            (64, ("eye", basis.eye)),
+            (80, ("fwd", basis.forward)),
+            (96, ("right", basis.right)),
+            (112, ("up", basis.up)),
+        ] {
+            let got = vec3_at(&bytes, at);
+            for i in 0..3 {
+                close(want[i], got[i], &format!("{name}[{i}]"));
             }
         }
         let range = want.depth_range();

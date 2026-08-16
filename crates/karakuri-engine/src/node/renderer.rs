@@ -22,9 +22,9 @@ pub(crate) struct Renderer {
     /// against, and the group index its shader reads it at.
     ///
     /// **`None` for a shader that reads no camera**, which is a real case rather
-    /// than a defensive one — an L4 whose vertex block writes `clip` without
-    /// projecting reads nothing from it, and binding a group the module does not
-    /// use is a validation error. See [`karakuri_codegen::L4Shader::camera_group`].
+    /// than a defensive one: an L4 whose vertex block writes `clip` without
+    /// projecting reads nothing from it. See
+    /// [`karakuri_codegen::L4Shader::camera_group`].
     camera_bg: Option<(u32, wgpu::BindGroup)>,
     /// Present only under `blend weighted` — see [`crate::oit`].
     oit: Option<Oit>,
@@ -131,9 +131,11 @@ impl Renderer {
         let attr_bg = [bind_attrs("l4attrs0", 0), bind_attrs("l4attrs1", 1)];
 
         // **No attribute group for a fullscreen shader**, which declares none:
-        // it consumes nothing, so it binds nothing. A layout naming a group the
-        // module does not use is a validation error rather than a harmless
-        // extra.
+        // it consumes nothing, so it binds nothing. wgpu would accept the extra
+        // group — a layout may name one the module does not use — so this is
+        // about the layout saying what the shader is, and about leaving the
+        // *number* free for the camera below, which does need a group index with
+        // nothing missing under it.
         let mut groups: Vec<&wgpu::BindGroupLayout> = if fullscreen {
             vec![&uniform_bgl]
         } else {
@@ -142,7 +144,9 @@ impl Renderer {
         // **The generated source names the index and this asserts it**, rather
         // than a constant in two crates that agree by convention: which group
         // the camera lands in depends on whether the shader bound attributes
-        // below it, and that is the generator's decision.
+        // below it, and that is the generator's decision. What the assertion
+        // catches is a *hole* — group 2 declared with group 1 missing — which is
+        // the shape wgpu refuses; a trailing group nothing uses it accepts.
         if let Some(g) = shader.camera_group {
             assert_eq!(
                 g as usize,
@@ -284,9 +288,7 @@ impl Renderer {
         if !fullscreen {
             p.vec2("viewport", view.viewport);
         }
-        for name in &self.param_names {
-            p.f32(name, (view.param)(name).unwrap_or(0.0));
-        }
+        super::write_params(&mut p, &self.uniform_layout, &self.param_names, view.param);
         queue.write_buffer(&self.uniforms, 0, p.finish());
     }
 

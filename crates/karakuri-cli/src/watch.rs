@@ -237,10 +237,17 @@ impl Source for Watch {
                 return None;
             }
         };
-        let mut l4s = Vec::with_capacity(l4_srcs.len());
+        // **Sorted by the `kind` each file declares**, exactly as the startup
+        // path sorts them. This used to push every file into the renderer list,
+        // which was right while a slot named an L1 and renderers and became
+        // wrong without a word when `--set` learned to spell a chain: a rebuild
+        // then handed `Set::build_many` an L2 or an L3 as a renderer, the build
+        // was rejected with "slot L4 needs a L4 procedure, got L3", and the slot
+        // kept its old Set for the rest of the run. Every save, silently.
+        let mut compiled = Vec::with_capacity(l4_srcs.len());
         for (path, src) in self.l4s.iter().zip(&l4_srcs) {
             match compile::check(src) {
-                Ok(checked) => l4s.push(checked),
+                Ok(checked) => compiled.push(checked),
                 Err(report) => {
                     eprintln!(
                         "{}:\n{report}\nslot {slot} unchanged; its Set is still running",
@@ -249,6 +256,53 @@ impl Source for Watch {
                     return None;
                 }
             }
+        }
+        // Kept alongside each procedure so the edit history and the session
+        // record can name the layer and the position it was built at, rather
+        // than filing a camera under `L4` index 2.
+        let mut addressed: Vec<(&'static str, usize, String)> = Vec::with_capacity(compiled.len());
+        let mut l2s = Vec::new();
+        let mut l3: Option<karakuri_ir::typed::Checked> = None;
+        let mut l4s = Vec::new();
+        for (path, checked) in self.l4s.iter().zip(compiled) {
+            // **A rebuild that cannot be built is `None`**, on the same terms a
+            // compile error is: the running Set keeps running, and the operator
+            // is told which file is the problem. Editing a slot into an illegal
+            // shape must not take the picture down.
+            let refuse = |what: &str| {
+                eprintln!(
+                    "{}: {what}\nslot {slot} unchanged; its Set is still running",
+                    path.display()
+                );
+            };
+            match checked.kind {
+                karakuri_ir::Kind::L2 => {
+                    addressed.push(("L2", l2s.len(), checked.name.clone()));
+                    l2s.push(checked);
+                }
+                karakuri_ir::Kind::L3 if l3.is_some() => {
+                    refuse("a second L3 — a slot looks from one camera");
+                    return None;
+                }
+                karakuri_ir::Kind::L3 => {
+                    addressed.push(("L3", 0, checked.name.clone()));
+                    l3 = Some(checked);
+                }
+                karakuri_ir::Kind::L4 => {
+                    addressed.push(("L4", l4s.len(), checked.name.clone()));
+                    l4s.push(checked);
+                }
+                karakuri_ir::Kind::L1 => {
+                    refuse("a second L1 — a slot simulates with one geometry");
+                    return None;
+                }
+            }
+        }
+        if l4s.is_empty() {
+            eprintln!(
+                "slot {slot}: nothing here draws\nslot {slot} unchanged; its Set is still running"
+            );
+            return None;
         }
 
         // **Both compiled**, which is this feature's whole gate: a version that
@@ -270,14 +324,17 @@ impl Source for Watch {
                     // drops the ones that did not change, which is what keeps
                     // the untouched renderers' chains from becoming rows of
                     // identical files.
-                    let renderers = l4s
+                    // **`addressed` and `l4_srcs` are both in the slot's file
+                    // order**, which the sort above deliberately did not
+                    // disturb: what a version is recorded under is the layer and
+                    // the position it was *built* at, and which file it came
+                    // from is how it is found again.
+                    let rest = addressed
                         .iter()
                         .zip(&l4_srcs)
-                        .enumerate()
-                        .map(|(i, (c, s))| ("L4", i, &c.name, s));
-                    for (layer, index, name, src) in [("L1", 0, &l1.name, &l1_src)]
-                        .into_iter()
-                        .chain(renderers)
+                        .map(|((layer, index, name), src)| (*layer, *index, name, src));
+                    for (layer, index, name, src) in
+                        [("L1", 0, &l1.name, &l1_src)].into_iter().chain(rest)
                     {
                         if let Err(e) = snapshots.record(slot, layer, index, name, src.as_bytes()) {
                             eprintln!("slot {slot}: this version is not in the edit history: {e}");
@@ -291,7 +348,7 @@ impl Source for Watch {
         let label = format!(
             "{} + {}",
             l1.name,
-            l4s.iter().map(|c| c.name.as_str()).collect::<Vec<_>>().join(" + ")
+            addressed.iter().map(|(.., name)| name.as_str()).collect::<Vec<_>>().join(" + ")
         );
         // **Unique across the whole run**, because that is what it is for: the
         // caller matches an outcome back to the source that produced it, and
@@ -323,14 +380,8 @@ impl Source for Watch {
         Some(Request {
             id,
             l1,
-            // **No deformations and no camera from a watcher yet.** A watcher
-            // tracks the files a slot names and rebuilds from them, and it only
-            // ever learned to sort an L1 from its renderers — so editing a
-            // `.kir` in a slot that also names an L2 or an L3 rebuilds the slot
-            // without them. `--set` builds the whole chain at startup; it is the
-            // rebuild that is behind.
-            l2s: Vec::new(),
-            l3: None,
+            l2s,
+            l3,
             l4s,
             capacity: self.capacity,
             seed_salt: self.seed_salt,

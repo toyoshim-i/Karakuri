@@ -216,9 +216,7 @@ impl Deform {
             .f32("dt", dt)
             .u32("capacity", capacity)
             .u32("seed_salt", view.seed_salt);
-        for name in &self.param_names {
-            p.f32(name, (view.param)(name).unwrap_or(0.0));
-        }
+        super::write_params(&mut p, &self.uniform_layout, &self.param_names, view.param);
         queue.write_buffer(&self.uniforms, 0, p.finish());
     }
 

@@ -788,8 +788,19 @@ impl Set {
     /// renderers' `exposure` apart — a bare name reaches every declaration and
     /// therefore cannot. `index` is which node of `layer`; the L1 is one node,
     /// so only 0 addresses it.
+    ///
+    /// **Bounded by the layer, not by the list.** `slot_of(layer) + index` is a
+    /// position in `params` and says nothing about whether that position still
+    /// belongs to `layer` — the layers are laid end to end, so an index past a
+    /// layer's last node lands on the *next* layer's first. A Set with no L3
+    /// makes that concrete: `slot_of(L3)` and `slot_of(L4)` are the same number,
+    /// and `--param L3:0:exposure=0.0` was reaching renderer 0 and blacking out
+    /// the frame. `nodes_of` is the range, and stepping into it is the only
+    /// spelling that cannot walk out the other end.
     pub fn set_param_at(&mut self, layer: Kind, index: u32, name: &str, value: f32) -> bool {
-        let slot = self.slot_of(layer) + index as usize;
+        let Some(slot) = self.nodes_of(layer).nth(index as usize) else {
+            return false;
+        };
         match self.params.get_mut(slot).and_then(|n| n.get_mut(name)) {
             Some(held) => {
                 *held = value;
@@ -1049,8 +1060,15 @@ impl Set {
         // an L3 uses the first while the orbit uses the second.
         self.camera_node.write_canvas(queue, self.viewport[0] / self.viewport[1]);
         {
-            let at = self.slot_of(Kind::L3);
-            let (bindings, params, dt) = (&self.bindings, self.params.get(at), self.dt);
+            // **`nodes_of` rather than `slot_of`**, because there may be no
+            // camera node at all: with no L3 the two layers share a slot number,
+            // so `slot_of(L3)` names the first *renderer's* parameter map. It is
+            // unread today — the built-in producer declares no params and never
+            // calls this closure — and it would become a renderer's `exposure`
+            // arriving as the orbit's `radius` the moment the built-in took one.
+            let at = self.nodes_of(Kind::L3).next();
+            let (bindings, params, dt) =
+                (&self.bindings, at.and_then(|at| self.params.get(at)), self.dt);
             let view = crate::node::View {
                 t,
                 beats: self.last_beats,
@@ -1098,12 +1116,17 @@ impl Set {
         let (bindings, beats, salt, viewport, dt) =
             (&self.bindings, self.last_beats, self.seed_salt, self.viewport, self.dt);
         let capacity = self.sim.capacity();
-        // The slice bound is read before the loop: `self.deforms` is borrowed
-        // mutably by the iterator and `self.params` immutably by the closure,
-        // which are disjoint fields — but `self.deforms.len()` inside the same
-        // expression is not.
-        let end = 1 + self.deforms.len();
-        for (at, (node, params)) in self.deforms.iter_mut().zip(&self.params[1..end]).enumerate() {
+        // The range is read before the loop: `self.deforms` is borrowed mutably
+        // by the iterator and `self.params` immutably by the closure, which are
+        // disjoint fields — but a call on `self` inside the same expression is
+        // not.
+        //
+        // **Asked, not spelled out.** This was `1..1 + self.deforms.len()`, which
+        // is the identical arithmetic the L4 pass had and that an L3 broke. It
+        // happens to be right for L2 because that layer starts at a constant —
+        // which is exactly the kind of accident that stops being one.
+        let range = self.nodes_of(Kind::L2);
+        for (at, (node, params)) in self.deforms.iter_mut().zip(&self.params[range]).enumerate() {
             let view = crate::node::View {
                 t,
                 beats,
