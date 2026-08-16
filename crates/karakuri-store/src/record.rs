@@ -129,6 +129,25 @@ pub enum Record {
     },
     Param {
         layer: Layer,
+        /// **Which node of that layer, or every node declaring `key`.**
+        ///
+        /// `Some(n)` addresses one node. **Absent is a wildcard, not node 0** —
+        /// and that is the difference from [`Record::Slot`] and
+        /// [`Record::Procedure`], where absent *is* 0 because those records
+        /// name exactly one node and always did. This one addresses a *value*,
+        /// and a bare name reaching every declaration is both what it has
+        /// always meant and the useful default: one knob moving every renderer
+        /// that has an `exposure`.
+        ///
+        /// It is also what keeps every Set file ever written reading the same
+        /// way. `layer` on this record was a placeholder that the loader
+        /// ignored — the writer put `L1` on everything and said so — so
+        /// honouring it now would silently retarget those files. The address is
+        /// `(layer, index)` present or absent as a unit, so `layer` becomes
+        /// load-bearing exactly when an `index` appears beside it, which is
+        /// only in files this build wrote.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        index: Option<u32>,
         key: String,
         value: Value,
     },
@@ -138,6 +157,10 @@ pub enum Record {
     /// "Set file format" in `docs/ir-spec.md`.
     Bind {
         layer: Layer,
+        /// Which node of that layer, or every node declaring `key` — see
+        /// [`Record::Param`], which this follows exactly.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        index: Option<u32>,
         key: String,
         signal: String,
         curve: String,
@@ -715,6 +738,7 @@ mod tests {
             rec,
             Record::Bind {
                 layer: Layer::L1,
+            index: None,
                 key: "turbulence".into(),
                 signal: "energy".into(),
                 curve: "pow2".into(),

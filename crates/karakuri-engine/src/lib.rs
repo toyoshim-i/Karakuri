@@ -44,7 +44,7 @@ pub mod transport;
 pub mod uniforms;
 pub mod video_source;
 
-pub use binding::{Binding, Curve, Signals};
+pub use binding::{Binding, Curve, ParamWrite, Signals};
 pub use camera::Orbit;
 pub use compaction::Compaction;
 pub use deck::{Blend, Deck, Frame, Mask, MaskKind, Residency};

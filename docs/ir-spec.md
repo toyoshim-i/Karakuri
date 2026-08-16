@@ -1200,6 +1200,13 @@ known. The total-cost decision lives there, not in the artifact.
   one source — `{"t":"slot","layer":"L1","index":1,"name":"veil","proc":"…"}`. Optional and
   absent by default: an unnamed source is unreferenceable, on the terms HTML gives an `id`.
   Unique within the file. See "Multiple L1 sources, and `source`". **Not built.**
+- **`param` and `bind` may carry an `index`**, which addresses one node of the layer —
+  `{"t":"param","layer":"L4","index":1,"key":"exposure","value":0.9}`. **Absent is a
+  wildcard, not node 0**: it reaches every node declaring the key, which is what a bare name
+  has always meant and is the useful default. That is also what keeps every file written
+  before the address existed reading the same way — `layer` on a `param` was a placeholder
+  the loader ignored, so it becomes load-bearing exactly when an `index` appears beside it.
+  The address is `(layer, index)` present or absent as a unit.
 - **`seed` is keyed by node, not only by layer** — `{"t":"seed","stream":"L1","index":1,…}`
   salts the second source. Absent means 0, so a file naming one source per layer reads as it
   always did. The value is also what that source's `source` attribute carries, since the

@@ -46,7 +46,7 @@ use std::path::{Path, PathBuf};
 
 use karakuri_engine::binding::{Curve, NOISE_SIGNAL};
 use karakuri_engine::camera::Orbit;
-use karakuri_engine::Binding;
+use karakuri_engine::{Binding, ParamWrite};
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
 use karakuri_signal::{NoiseConfig, NoiseKind};
@@ -84,7 +84,7 @@ pub struct Loaded {
     /// `None` when the file gave no `capacity` record, which means the `.kir`
     /// default applies — the spec's own wording.
     pub capacity: Option<u32>,
-    pub params: Vec<(String, f32)>,
+    pub params: Vec<ParamWrite>,
     pub bindings: Vec<Binding>,
     pub camera: Option<Orbit>,
     pub seed: Option<u32>,
@@ -121,6 +121,7 @@ pub struct Loaded {
 pub fn binding_from_record(record: &Record) -> Result<Binding, String> {
     let Record::Bind {
         layer,
+        index,
         key,
         signal,
         curve,
@@ -155,7 +156,12 @@ pub fn binding_from_record(record: &Record) -> Result<Binding, String> {
         ));
     }
 
-    let binding = Binding::new(kind, key.clone(), signal.clone(), curve, *range);
+    let mut binding = Binding::new(kind, key.clone(), signal.clone(), curve, *range);
+    // Absent stays absent: a binding with no `index` is the layer's, every node
+    // declaring the key — see `Binding::index`.
+    if let Some(at) = index {
+        binding = binding.at(*at);
+    }
     if signal != NOISE_SIGNAL {
         if noise.is_some() {
             return Err(bad(format!(
@@ -202,6 +208,35 @@ pub fn binding_from_record(record: &Record) -> Result<Binding, String> {
     }))
 }
 
+/// A written param's fold key: its address, then its name. `None` sorts first,
+/// which puts the Set-wide value above the narrower ones that override it.
+type ParamKey<'a> = (Option<(u8, u32)>, &'a str);
+
+/// `Layer` as a number, so an address can sort. Only the two a Set builds.
+fn layer_ordinal(layer: Kind) -> u8 {
+    match layer {
+        Kind::L1 => 0,
+        Kind::L4 => 1,
+    }
+}
+
+fn layer_from_ordinal(n: u8) -> Layer {
+    match n {
+        0 => Layer::L1,
+        _ => Layer::L4,
+    }
+}
+
+/// The engine `Kind` a record `Layer` names, or `None` for one this engine has
+/// no node for.
+fn kind_of(layer: Layer) -> Option<Kind> {
+    match layer {
+        Layer::L1 => Some(Kind::L1),
+        Layer::L4 => Some(Kind::L4),
+        _ => None,
+    }
+}
+
 /// The record a binding is. The inverse of [`binding_from_record`], and what
 /// [`save`] writes.
 pub fn record_from_binding(binding: &Binding) -> Record {
@@ -210,6 +245,7 @@ pub fn record_from_binding(binding: &Binding) -> Record {
             Kind::L1 => Layer::L1,
             Kind::L4 => Layer::L4,
         },
+        index: binding.index,
         key: binding.key.clone(),
         signal: binding.signal.clone(),
         curve: binding.curve.name().to_string(),
@@ -248,7 +284,7 @@ pub struct Saving<'a> {
     /// The renderers, in draw order. One is the ordinary case.
     pub l4_paths: &'a [PathBuf],
     pub capacity: u32,
-    pub params: &'a [(String, f32)],
+    pub params: &'a [ParamWrite],
     pub bindings: &'a [Binding],
     pub camera: &'a Orbit,
     pub seed: u32,
@@ -313,13 +349,26 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
     // Sorted, so saving the same state twice produces the same file. A
     // `HashMap`'s order is not a property anything should depend on, and a Set
     // file that differed run to run would make every diff meaningless.
-    let ordered: BTreeMap<&str, f32> = params.iter().map(|(k, v)| (k.as_str(), *v)).collect();
-    for (key, value) in ordered {
+    // Keyed by the address as well as the name, so a wildcard write and a
+    // write addressed at one node are two lines rather than one overwriting the
+    // other. `None` sorts first, which puts the Set-wide value above the
+    // narrower ones that override it — the order a reader wants.
+    let ordered: BTreeMap<ParamKey<'_>, f32> = params
+        .iter()
+        .map(|w| {
+            let at = w.at.map(|(layer, i)| (layer_ordinal(layer), i));
+            ((at, w.key.as_str()), w.value)
+        })
+        .collect();
+    for ((at, key), value) in ordered {
         lines.push(Line::new(Record::Param {
-            // The engine's map is flat, so which layer declared this name is
-            // not a thing it knows. L1 is written because that is where a
-            // reader will look first, and a loader applies it by name.
-            layer: Layer::L1,
+            // **`layer` is load-bearing exactly when `index` is beside it.** It
+            // was a placeholder before the address existed — written as `L1` on
+            // everything and ignored on read — so an unaddressed write still
+            // says `L1` and still means every node declaring the name. See
+            // `Record::Param`.
+            layer: at.map_or(Layer::L1, |(l, _)| layer_from_ordinal(l)),
+            index: at.map(|(_, i)| i),
             key: key.to_string(),
             value: Value::Scalar(value),
         }));
@@ -424,8 +473,29 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                     layer_name(*other)
                 )),
             },
-            Record::Param { key, value, .. } => match value {
-                Value::Scalar(v) => params.push((key.clone(), *v)),
+            Record::Param {
+                layer,
+                index,
+                key,
+                value,
+            } => match value {
+                // The address is `(layer, index)` present or absent as a unit,
+                // so a record with no index is a wildcard whatever its `layer`
+                // says — which is what keeps every file written before the
+                // address existed meaning what it meant.
+                Value::Scalar(v) => params.push(match index {
+                    Some(at) => match kind_of(*layer) {
+                        Some(kind) => ParamWrite::at(kind, *at, key.clone(), *v),
+                        None => {
+                            notes.push(format!(
+                                "param `{key}` on {} was skipped: this engine builds L1 and L4 only",
+                                layer_name(*layer)
+                            ));
+                            continue;
+                        }
+                    },
+                    None => ParamWrite::everywhere(key.clone(), *v),
+                }),
                 _ => notes.push(format!(
                     "param `{key}` was skipped: it is a vector and the engine holds \
                      scalar parameter values only"
@@ -626,7 +696,7 @@ proc points {
     #[test]
     fn a_saved_set_loads_back_as_what_was_saved() {
         let (_dir, store, l1, l4) = fixture();
-        let params = vec![("radius".to_string(), 3.25)];
+        let params = vec![ParamWrite::everywhere("radius", 3.25)];
         let camera = Orbit {
             radius: 11.5,
             speed: 0.42,
@@ -717,6 +787,57 @@ proc points {
         assert_eq!(loaded.l4s[0].name, "points");
     }
 
+    /// **A file written before the address existed still means what it meant.**
+    ///
+    /// `layer` on a `param` record was a placeholder: the writer put `L1` on
+    /// everything and said so in a comment, and the loader ignored it. So
+    /// honouring `layer` now would silently retarget every Set file ever
+    /// written — an `exposure` that reached the renderer would start reaching
+    /// the L1 and doing nothing.
+    ///
+    /// What stops that is the address being `(layer, index)` present or absent
+    /// **as a unit**: no `index`, no address, whatever `layer` says. This reads
+    /// a hand-written old-style file to prove it, rather than one this build
+    /// produced — a round trip through the new writer would agree with itself
+    /// however wrong both halves were.
+    #[test]
+    fn a_param_record_without_an_index_is_a_wildcard_whatever_its_layer_says() {
+        let (_dir, store, l1, l4) = fixture();
+        let hashes: Vec<String> = [&l1, &l4]
+            .iter()
+            .map(|p| {
+                let bytes = std::fs::read(p).expect("read");
+                store.put_artifact(&bytes).expect("put").to_string()
+            })
+            .collect();
+        let text = format!(
+            r#"{{"t":"set","id":"old","v":1}}
+{{"t":"slot","layer":"L1","proc":"{}"}}
+{{"t":"slot","layer":"L4","proc":"{}"}}
+{{"t":"param","layer":"L1","key":"exposure","value":0.4}}
+{{"t":"param","layer":"L4","index":1,"key":"exposure","value":0.9}}
+"#,
+            hashes[0], hashes[1]
+        );
+        // Through the file reader, so the bytes above are genuinely parsed
+        // rather than hand-built into records that could not have been written.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("old.set.ndjson");
+        std::fs::write(&path, text).expect("write");
+        let lines = karakuri_store::ndjson::read(&path).expect("an old-style file still parses");
+
+        let loaded = from_lines(&store, "old", &lines).expect("an old-style file still loads");
+        assert_eq!(
+            loaded.params,
+            vec![
+                // No index: a wildcard, even though the record says `L1`.
+                ParamWrite::everywhere("exposure", 0.4),
+                // An index: an address, and `layer` is load-bearing beside it.
+                ParamWrite::at(Kind::L4, 1, "exposure", 0.9),
+            ]
+        );
+    }
+
     /// **What could not be carried is said, not dropped.** Three shapes, and
     /// each is a real disagreement between a format keyed by layer and an
     /// engine that holds one value per Set.
@@ -735,6 +856,7 @@ proc points {
         }));
         lines.push(Line::new(Record::Param {
             layer: Layer::L1,
+            index: None,
             key: "tint".to_string(),
             value: Value::Vec3([1.0, 0.0, 0.0]),
         }));
@@ -759,6 +881,7 @@ proc points {
         let mut lines = store.read_set("s1").expect("read");
         lines.push(Line::new(Record::Bind {
             layer: Layer::L1,
+            index: None,
             key: "radius".to_string(),
             signal: "bpm".to_string(),
             curve: "lin".to_string(),
@@ -779,6 +902,7 @@ proc points {
     fn the_decoder_carries_the_diagnostics_the_flag_used_to_hold_alone() {
         let bpm = Record::Bind {
             layer: Layer::L1,
+            index: None,
             key: "radius".to_string(),
             signal: "bpm".to_string(),
             curve: "lin".to_string(),
@@ -790,6 +914,7 @@ proc points {
 
         let octaves = Record::Bind {
             layer: Layer::L1,
+            index: None,
             key: "radius".to_string(),
             signal: NOISE_SIGNAL.to_string(),
             curve: "lin".to_string(),

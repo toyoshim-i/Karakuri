@@ -341,6 +341,35 @@ pub struct Binding {
     value: f32,
 }
 
+/// A parameter value and the node it was written at.
+///
+/// What a `param` record and a `--param` carry, once the address exists. Kept
+/// beside [`Binding`] because the two answer the same question about the same
+/// name — one with a signal behind it and one with a number — and an address
+/// that meant different things in the two would be worse than no address.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParamWrite {
+    /// `None` writes **every node declaring `key`**, which is what a bare name
+    /// has always meant and is the useful default: one knob moving every
+    /// renderer that has an `exposure`. `Some((layer, index))` writes one node.
+    /// See [`Binding::index`] — present or absent as a unit, on the same terms.
+    pub at: Option<(Kind, u32)>,
+    pub key: String,
+    pub value: f32,
+}
+
+impl ParamWrite {
+    /// Every node that declares `key`.
+    pub fn everywhere(key: impl Into<String>, value: f32) -> ParamWrite {
+        ParamWrite { at: None, key: key.into(), value }
+    }
+
+    /// One node.
+    pub fn at(layer: Kind, index: u32, key: impl Into<String>, value: f32) -> ParamWrite {
+        ParamWrite { at: Some((layer, index)), key: key.into(), value }
+    }
+}
+
 impl Binding {
     pub fn new(
         layer: Kind,

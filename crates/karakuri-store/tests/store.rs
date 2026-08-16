@@ -7,7 +7,8 @@ use karakuri_store::{project, Hash, Layer, Line, Record, Store, StoreError, Valu
 use tempfile::tempdir;
 
 fn param(layer: Layer, key: &str, value: f32) -> Record {
-    Record::Param { layer, key: key.into(), value: Value::Scalar(value) }
+    Record::Param { layer,
+            index: None, key: key.into(), value: Value::Scalar(value) }
 }
 
 #[test]

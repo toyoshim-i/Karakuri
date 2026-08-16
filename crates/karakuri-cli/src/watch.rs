@@ -96,7 +96,7 @@ pub struct Watch {
     l4s: Vec<PathBuf>,
     capacity: u32,
     seed_salt: u32,
-    overrides: Vec<(String, f32)>,
+    overrides: Vec<karakuri_engine::ParamWrite>,
     /// Restated on every rebuild rather than read off the outgoing Set, for
     /// the reason `Request::bindings` gives: a request that depended on what
     /// happened to be live would not be reproducible from a record stream.
@@ -126,7 +126,7 @@ impl Watch {
         l4s: Vec<PathBuf>,
         capacity: u32,
         seed_salt: u32,
-        overrides: Vec<(String, f32)>,
+        overrides: Vec<karakuri_engine::ParamWrite>,
         bindings: Vec<Binding>,
     ) -> Watch {
         let mut watch = Watch {
