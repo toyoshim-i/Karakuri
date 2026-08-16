@@ -36,7 +36,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use karakuri_engine::binding::{Curve, CURVES, DEFAULT_BPM, NOISE_SIGNAL};
+use karakuri_engine::binding::{Curve, CONTROL_PREFIX, CURVES, DEFAULT_BPM, NOISE_SIGNAL};
 use karakuri_engine::deck::MAX_SLOTS;
 use karakuri_engine::swap::Event;
 use karakuri_engine::transport::{Sync, Transport};
@@ -721,6 +721,11 @@ struct Args {
     /// Which slots composite their renderers rather than overdrawing them —
     /// `--merge 0`, repeatable. See `karakuri_engine::set::Layering`.
     merge: Vec<usize>,
+    /// The interface every slot's Set publishes — `--publish
+    /// name=L4:0:exposure[0.2..0.8]`, repeatable. Empty means every Set
+    /// publishes everything it declares, which is what happened before an
+    /// interface existed.
+    published: Vec<karakuri_engine::set::Published>,
     /// `--mcp`. A port to serve the Model Context Protocol on, loopback only.
     /// `None` is the ordinary case and nothing in the frame path changes: this
     /// is a third control surface beside the keyboard and MIDI, and like them
@@ -1061,6 +1066,41 @@ fn layer_named(name: &str) -> Option<karakuri_ir::Kind> {
     })
 }
 
+/// `--publish name=L4:0:exposure[0.2..0.8]`.
+///
+/// **The address is the `--param` one and the range is the `--bind` one**, which
+/// is why neither half needed a grammar of its own: what a published control is,
+/// is a name in front of an address and a range behind it. The range is
+/// mandatory — publishing without one would mean "over the declared range", and
+/// spelling that as an absence would make the common narrowing case look like
+/// the exception.
+fn parse_publish(value: &str) -> Result<karakuri_engine::set::Published, String> {
+    let bad = || format!("`--publish {value}` — expected `name=L4:0:key[LOW..HIGH]`");
+    let (name, rest) = value.split_once('=').ok_or_else(bad)?;
+    if name.is_empty() {
+        return Err(bad());
+    }
+    let (layer, rest) = rest.split_once(':').ok_or_else(bad)?;
+    let layer = layer_named(layer).ok_or_else(bad)?;
+    let (index, rest) = rest.split_once(':').ok_or_else(bad)?;
+    let index: u32 = index.parse().map_err(|_| bad())?;
+    let (key, range) = rest.split_once('[').ok_or_else(bad)?;
+    let range = range.strip_suffix(']').ok_or_else(bad)?;
+    let (low, high) = range.split_once("..").ok_or_else(bad)?;
+    let low: f32 = low.parse().map_err(|_| bad())?;
+    let high: f32 = high.parse().map_err(|_| bad())?;
+    if key.is_empty() {
+        return Err(bad());
+    }
+    Ok(karakuri_engine::set::Published {
+        name: name.to_string(),
+        layer,
+        index,
+        key: key.to_string(),
+        range: [low, high],
+    })
+}
+
 fn parse_param(value: &str) -> Result<ParamWrite, String> {
     let bad = || format!("`--param {value}` — expected `name=number` or `L4:1:name=number`");
     let (addressed, rest) = match value.split_once(':') {
@@ -1107,6 +1147,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         canvas_given: false,
         watch: false,
         merge: Vec::new(),
+        published: Vec::new(),
         mcp: None,
         tempo_source: None,
         audio_in: None,
@@ -1248,6 +1289,10 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                 }
             }
             "--watch" => args_out.watch = true,
+            "--publish" => {
+                let v = value_for("--publish", &mut it)?;
+                args_out.published.push(parse_publish(&v)?);
+            }
             "--merge" => {
                 let v = value_for("--merge", &mut it)?;
                 let slot: usize = v.parse().map_err(|_| {
@@ -1649,6 +1694,12 @@ fn replay_session(args: &Args, id: &str) {
         loaded.capacity.unwrap_or(args.capacity),
         &loaded.params,
         &loaded.bindings,
+        // **A Set file does not record an interface yet**, on the same terms it
+        // records neither a chain nor a camera nor a layering: it names an L1,
+        // its renderers, their values and their bindings. Publishing nothing is
+        // publishing everything, so a replay shows the whole console — which is
+        // the safe direction, since an interface is about attention.
+        &[],
         loaded.seed.unwrap_or_else(|| seed_for(0)),
         loaded.camera,
     );
@@ -1841,6 +1892,7 @@ fn rebuild(
         args.capacity,
         &args.overrides,
         &args.bindings,
+        &[],
         seed_for(slot),
         None,
     ))
@@ -2367,6 +2419,7 @@ fn build_deck(
                 capacity_for(args, l1),
                 &args.overrides,
                 &args.bindings,
+                &args.published,
                 // A Set file's own seed when it named one, so a saved Set
                 // reproduces rather than being re-salted by the slot it lands
                 // in. It only ever applies to slot 0: `--load-set` fills that
@@ -2451,12 +2504,20 @@ fn build_deck(
 /// One binding, in a line, ending with what it will do rather than only what
 /// it says.
 fn describe(binding: &Binding, signals: &Signals) -> String {
-    let confidence = if binding.signal == NOISE_SIGNAL {
+    // **A published control is not on the bus**, and asking the bus about it
+    // gets the answer for a name nothing measures — zero, which reads as a
+    // binding that will do nothing. It is the operator's hand: confidence 1,
+    // and the Set resolves it. See `karakuri_engine::binding::CONTROL_PREFIX`.
+    let confidence = if binding.signal.starts_with(CONTROL_PREFIX) {
+        1.0
+    } else if binding.signal == NOISE_SIGNAL {
         signals.noise(&binding.noise.unwrap_or_default()).confidence
     } else {
         signals.sample(&binding.signal).confidence
     };
-    let effect = if confidence >= 1.0 {
+    let effect = if binding.signal.starts_with(CONTROL_PREFIX) {
+        "the published control decides it outright".to_string()
+    } else if confidence >= 1.0 {
         "the signal decides it outright".to_string()
     } else {
         format!(
@@ -2486,6 +2547,7 @@ fn build(
     capacity: u32,
     overrides: &[ParamWrite],
     bindings: &[Binding],
+    published: &[karakuri_engine::set::Published],
     seed: u32,
     camera: Option<karakuri_engine::camera::Orbit>,
 ) -> Set {
@@ -2509,6 +2571,15 @@ fn build(
             // After the overrides: a binding blends from the param's value, so
             // a `--param` on a bound param is the base of the blend rather
             // than a competitor for the write.
+            // **After the bindings**, because a macro is a binding whose source
+            // is a published control: attaching one before the control exists
+            // would be attaching it to a name nothing answers.
+            for control in published {
+                let name = control.name.clone();
+                if let Err(e) = set.publish(control.clone()) {
+                    eprintln!("  `{name}` is not published: {e}");
+                }
+            }
             for binding in bindings {
                 let (layer, key) = (binding.layer, binding.key.clone());
                 if !set.bind(binding.clone()) {
