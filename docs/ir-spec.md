@@ -1752,6 +1752,20 @@ matrix**, blending of trajectories happens on that state, and a derivation step 
 `view_proj`, `basis` and `depth_range` an L4 reads. What moves is that the host stops knowing
 the camera — and nothing was found that needs to.
 
+**All of that is built, and the producer is the only part that is not.** `crate::node::Camera`
+owns the state buffer, the derivation pass and the bind group every L4 reads; `Ambient::Camera`
+and `Ambient::Eye` lower to reads of that group rather than of the renderer's uniform. The
+producer is still the built-in `Orbit`, host-written — which is precisely the first of the two
+kinds above, so an L3 procedure joins as a second writer of a buffer that already exists rather
+than as a change to what a camera is.
+
+**Building the edge before the producer was the right order, and not obviously so.** The
+tempting increment is a `kind L3` that the host evaluates, leaving the uniform alone; it would
+have worked for every camera expressible today, and it would have had to be undone by the first
+one that followed an element. Deciding *where the camera lives* is what the geometry-reading
+case forces, and it forces it whether or not anything reads geometry yet — so the edge is the
+part that carries the decision, and the procedure is comparatively ordinary work on top of it.
+
 **An L3 may hold state, where an L2 may not**, and the asymmetry is not an oversight. The
 four reasons L2 is stateless barely bite here: L3-multiple is a *blend* of trajectories
 rather than a chain, so stackability is not the argument; priming six numbers is instant;

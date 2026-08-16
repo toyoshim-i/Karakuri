@@ -6,18 +6,21 @@
 //! one simulation, and what leaves a place for an L2 node to be inserted rather
 //! than for a fixed pipeline to grow a third position.
 //!
-//! Two nodes live here today:
+//! The nodes that live here:
 //!
 //! - [`Simulation`], the **L1 node**: `() -> Geometry`. It owns the element and
 //!   alive buffers, the counts, the compaction scan, the spawn accumulator, its
 //!   pipelines and every bind group naming them.
+//! - [`Deform`], the **L2 node**: `Geometry -> Geometry`.
+//! - [`Camera`], the **camera edge**: `() -> Camera`, and `Geometry -> Camera`
+//!   once an L3 can be a procedure. It owns the state buffer, the pass that
+//!   derives what a renderer reads from it, and the bind group every L4 names.
 //! - [`Renderer`], the **L4 node**: `(Geometry, Camera) -> Texture`. It owns its
 //!   pipeline, its uniform, its accumulation targets under `blend weighted`, and
-//!   the bind groups naming the geometry it reads.
+//!   the bind groups naming the geometry and the camera it reads.
 //!
-//! What is left in [`crate::set`] is the grouping: the camera, the parameter
-//! values and their bindings, the viewport, the clock, and the order the nodes
-//! run in.
+//! What is left in [`crate::set`] is the grouping: the parameter values and
+//! their bindings, the viewport, the clock, and the order the nodes run in.
 //!
 //! # The edge from L1 has two halves, and only one of them has a type
 //!
@@ -42,14 +45,21 @@
 //!
 //! [`View`] and [`Tick`] are the other direction: not edges between nodes but
 //! what the *grouping* hands each node about the frame. They exist because one
-//! clock and one camera serve every node in a Set, so a node holding its own
-//! copy would be a second place for them to be — and two nodes in one Set could
-//! then disagree about what "this frame" was.
+//! clock serves every node in a Set, so a node holding its own copy would be a
+//! second place for it to be — and two nodes in one Set could then disagree
+//! about what "this frame" was.
+//!
+//! **The camera used to ride in [`View`] and no longer does**, which is the
+//! shape of what a node split is for: it was in the grouping's hand-down because
+//! the host owned an `Orbit` and packed a matrix from it, and once it became a
+//! node with an edge of its own there was nothing left for the host to pack.
 
+mod camera;
 mod deform;
 mod renderer;
 mod simulation;
 
+pub(crate) use camera::Camera;
 pub(crate) use deform::Deform;
 pub(crate) use renderer::Renderer;
 pub(crate) use simulation::Simulation;
@@ -84,18 +94,16 @@ pub(crate) struct Geometry<'a> {
 
 /// Everything the frame's uniform block needs that is not the node's own.
 ///
-/// **The camera is here on borrowed time.** `L4 : (Geometry, Camera) -> Texture`
-/// makes it an input *edge*, not a property of the grouping, and two renderers
-/// reading different cameras is what a Set that composites two scenes is made
-/// of. It rides in this struct because `Set` still owns one `Orbit`; when L3
-/// becomes a node it becomes an edge like [`Geometry`] above, and a GPU buffer
-/// rather than six numbers on the host — see `docs/ir-spec.md`, "L2 and L3".
+/// **No camera.** `L4 : (Geometry, Camera) -> Texture` makes it an input *edge*
+/// rather than a property of the grouping, and it left this struct when it
+/// became one: a renderer names [`Camera`]'s bind group at build and reads it on
+/// the GPU, so there is nothing about it for the host to pack. What is here is
+/// what genuinely is the grouping's — one clock, one canvas, one salt.
 pub(crate) struct View<'a> {
     pub t: f32,
     pub beats: f32,
     pub seed_salt: u32,
     pub viewport: [f32; 2],
-    pub camera: &'a crate::camera::Orbit,
     /// One value per declared param, by name. The Set resolves bindings against
     /// its own state and hands the answer down; a node does not know what a
     /// binding is.

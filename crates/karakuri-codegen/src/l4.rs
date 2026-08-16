@@ -94,6 +94,18 @@ pub struct L4Shader {
     /// callers that only kept the `L4Shader` still know what buffer it
     /// expects.
     pub element_layout: ElementLayout,
+    /// The bind group index this shader reads the camera at, or `None` if it
+    /// never reads one.
+    ///
+    /// **The index is the shader's to state rather than a constant**, because
+    /// the groups below it are not always there: a per-element shader binds its
+    /// element buffers at [`group::ATTRS`] and a fullscreen one binds nothing,
+    /// so a fixed number would leave a hole in one of the two. A pipeline layout
+    /// naming a group the module does not use is a validation error, not a
+    /// harmless extra — which is also why this is an `Option`: an L4 that never
+    /// projects and never marches reads no camera, and a hand-written test
+    /// fixture writing `clip = vec4(position, 1.0)` is exactly that.
+    pub camera_group: Option<u32>,
 }
 
 enum L4Block {
@@ -103,6 +115,20 @@ enum L4Block {
 
 struct L4Resolver {
     block: L4Block,
+    /// Set when the body reads something that lives in the camera's bind group,
+    /// so the caller knows whether to declare one at all.
+    ///
+    /// A `Cell` because [`Resolver::read_ambient`] takes `&self` — a resolver
+    /// answers "how is this spelled", and the other half of the lowering's state
+    /// travels in `Requirements`, which is about the prelude rather than about
+    /// bindings.
+    camera_used: std::cell::Cell<bool>,
+}
+
+impl L4Resolver {
+    fn new(block: L4Block) -> L4Resolver {
+        L4Resolver { block, camera_used: std::cell::Cell::new(false) }
+    }
 }
 
 impl Resolver for L4Resolver {
@@ -128,16 +154,25 @@ impl Resolver for L4Resolver {
         match amb {
             Ambient::T => "u.t".to_string(),
             Ambient::Beats => "u.beats".to_string(),
-            Ambient::Camera => "u.camera".to_string(),
+            // The camera is its own bind group, written on the GPU by
+            // `karakuri_engine`'s derivation pass — not a field of `u`, because
+            // an L3 that follows an element cannot be evaluated on the host.
+            Ambient::Camera => {
+                self.camera_used.set(true);
+                "cam.view_proj".to_string()
+            }
             Ambient::PointCoord => match self.block {
                 L4Block::Fragment => "in.point_coord".to_string(),
                 L4Block::Vertex => unreachable!("point_coord is fragment-only"),
             },
-            // Bound in the fragment prologue: `eye` straight from the
-            // uniform, `ray` built there from the basis and this fragment's
-            // screen position. Fullscreen only, and the check pass refuses
-            // them anywhere else.
-            Ambient::Eye => "u.eye".to_string(),
+            // Bound in the fragment prologue: `eye` straight from the camera,
+            // `ray` built there from the basis and this fragment's screen
+            // position. Fullscreen only, and the check pass refuses them
+            // anywhere else.
+            Ambient::Eye => {
+                self.camera_used.set(true);
+                "cam.eye".to_string()
+            }
             Ambient::Ray => "ray".to_string(),
             Ambient::Seed => unreachable!("read_seed handles this"),
             Ambient::Capacity | Ambient::Dt => {
@@ -416,12 +451,12 @@ fn vs(@builtin(vertex_index) i: u32) -> VsOut {
 
 /// The ray, built once at the top of a fullscreen fragment stage.
 ///
-/// `u.cam_right` and `u.cam_up` arrive pre-scaled by the field of view and the
-/// aspect ratio — see `Orbit::basis` — so this is an interpolation and a
+/// `cam.right` and `cam.up` arrive pre-scaled by the field of view and the
+/// aspect ratio — see `camera::State::basis` — so this is an interpolation and a
 /// normalize rather than a projection. Everything about *which* projection is
 /// on the engine's side of the seam, where the camera is.
 const FULLSCREEN_RAY: &str = "    let _ndc = vec2<f32>(in.point_coord.x * 2.0 - 1.0, 1.0 - in.point_coord.y * 2.0);
-    let ray = normalize(u.cam_fwd + u.cam_right * _ndc.x + u.cam_up * _ndc.y);
+    let ray = normalize(cam.fwd + cam.right * _ndc.x + cam.up * _ndc.y);
 ";
 
 /// The quad expansion for [`Topology::Lines`]: the same six corners, laid over
@@ -555,7 +590,7 @@ const WEIGHTED_FS_EPILOGUE: &str = "    let _a = clamp(_color.a, 0.0, 1.0);
 /// that declines to project is asking for a flat picture. It gets one, with the
 /// occlusion intact and the ordering gone.
 const WEIGHTED_DEPTH: &str =
-    "    let _depth01 = clamp((in.view_depth - u.depth_range.x) * u.depth_range.y, 0.0, 1.0);\n";
+    "    let _depth01 = clamp((in.view_depth - cam.depth_range.x) * cam.depth_range.y, 0.0, 1.0);\n";
 
 fn fragment_entry(seed_used: bool, attrs_used: &[Attr], body: &str, weighted: bool) -> String {
     let mut out = String::new();
@@ -637,14 +672,6 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
     // not a value any procedure computes. Present in `points.wgsl` today
     // for the same reason.
     b.field("viewport", "vec2<f32>");
-    b.field("camera", "mat4x4<f32>");
-    // `(near, 1 / (far - near))`, and only for the mode that reads it — see
-    // [`WEIGHTED_DEPTH`]. The engine writes it from the same `Orbit` the matrix
-    // above comes from, so the plane a fragment is measured against is the plane
-    // it was projected with.
-    if weighted {
-        b.field("depth_range", "vec2<f32>");
-    }
     for p in &checked.params {
         b.param_field(p.name.clone(), wgsl_ty(p.ty));
     }
@@ -659,24 +686,33 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
 
     let mut req = Requirements::default();
 
+    let vertex = L4Resolver::new(L4Block::Vertex);
     let vertex_body = {
-        let resolver = L4Resolver { block: L4Block::Vertex };
         let mut out = String::new();
-        emit_stmts(&vertex_blk.stmts, &resolver, &mut req, 1, &mut out);
+        emit_stmts(&vertex_blk.stmts, &vertex, &mut req, 1, &mut out);
         out
     };
+    let fragment = L4Resolver::new(L4Block::Fragment);
     let fragment_body = {
-        let resolver = L4Resolver { block: L4Block::Fragment };
         let mut out = String::new();
-        emit_stmts(&fragment_blk.stmts, &resolver, &mut req, 1, &mut out);
+        emit_stmts(&fragment_blk.stmts, &fragment, &mut req, 1, &mut out);
         out
     };
+    // **`weighted` counts as reading the camera**, because [`WEIGHTED_DEPTH`]
+    // does: a fragment's weight is normalised against the planes it was
+    // projected with, and that is the same camera whether or not the procedure
+    // ever mentioned one.
+    let camera_group =
+        (vertex.camera_used.get() || fragment.camera_used.get() || weighted).then_some(CAMERA_GROUP);
 
     let mut src = String::new();
     layout::write_uniform_struct(&mut src, &uniform_layout, uniform_pad_f32);
     src.push_str("\n@group(0) @binding(0) var<uniform> u: Uniforms;\n\n");
     write_element_bindings(&mut src, elements);
     src.push('\n');
+    if let Some(g) = camera_group {
+        write_camera_binding(&mut src, g);
+    }
     src.push_str(&prelude::render(&req));
     src.push('\n');
     src.push_str(CORNER_OF);
@@ -696,9 +732,27 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
     ));
     src.push_str(&fragment_entry(seed_used, &attrs_used, &fragment_body, weighted));
 
-    L4Shader { source: src, uniform_layout, uniform_pad_f32, element_layout: elements.clone() }
+    L4Shader {
+        source: src,
+        uniform_layout,
+        uniform_pad_f32,
+        element_layout: elements.clone(),
+        camera_group,
+    }
 }
 
+/// Where a per-element shader reads the camera: after [`group::ATTRS`], which it
+/// always binds.
+const CAMERA_GROUP: u32 = 2;
+
+/// Where a fullscreen shader reads it: at [`group::ATTRS`]'s number, which that
+/// path leaves free by consuming no attribute.
+const FULLSCREEN_CAMERA_GROUP: u32 = group::ATTRS;
+
+fn write_camera_binding(out: &mut String, at: u32) {
+    out.push_str(layout::camera::WGSL);
+    out.push_str(&format!("\n@group({at}) @binding(0) var<uniform> cam: Camera;\n\n"));
+}
 
 /// The whole of a [`Topology::Fullscreen`] shader.
 ///
@@ -717,13 +771,8 @@ fn generate_fullscreen(
     b.field("t", "f32");
     b.field("beats", "f32");
     b.field("seed_salt", "u32");
-    // The ray basis. Only here, so a per-element shader's uniform does not grow
-    // four vectors it would never read — and no `viewport` or `camera`, which
-    // this path has no use for: the projection is already in the basis.
-    b.field("eye", "vec3<f32>");
-    b.field("cam_fwd", "vec3<f32>");
-    b.field("cam_right", "vec3<f32>");
-    b.field("cam_up", "vec3<f32>");
+    // No `viewport` and no camera field of any kind: the ray basis is in the
+    // camera's own bind group, and the projection is already in it.
     for p in &checked.params {
         b.param_field(p.name.clone(), wgsl_ty(p.ty));
     }
@@ -731,7 +780,7 @@ fn generate_fullscreen(
 
     let mut req = Requirements::default();
     let body = {
-        let resolver = L4Resolver { block: L4Block::Fragment };
+        let resolver = L4Resolver::new(L4Block::Fragment);
         let mut out = String::new();
         emit_stmts(&fragment_blk.stmts, &resolver, &mut req, 1, &mut out);
         out
@@ -740,6 +789,12 @@ fn generate_fullscreen(
     let mut src = String::new();
     layout::write_uniform_struct(&mut src, &uniform_layout, uniform_pad_f32);
     src.push_str("\n@group(0) @binding(0) var<uniform> u: Uniforms;\n\n");
+    // **Unconditionally, unlike the per-element path.** [`FULLSCREEN_RAY`] is
+    // emitted whether or not the procedure names `ray`, so this binding is
+    // always read — a marcher with no ray in it would be a fullscreen quad, and
+    // the one that draws a flat colour still pays for a basis it computes and
+    // discards.
+    write_camera_binding(&mut src, FULLSCREEN_CAMERA_GROUP);
     src.push_str(&prelude::render(&req));
     src.push('\n');
     src.push_str(FULLSCREEN_VS);
@@ -777,5 +832,6 @@ fn generate_fullscreen(
         uniform_layout,
         uniform_pad_f32,
         element_layout: elements.clone(),
+        camera_group: Some(FULLSCREEN_CAMERA_GROUP),
     }
 }

@@ -1,10 +1,47 @@
-//! The built-in camera.
+//! The built-in camera, and what a camera *is*.
 //!
-//! L3 is a slot in the design but not in V1, so until it exists the camera is a
-//! built-in driven by a `camera` record. Matrices are column-major with a 0..1
-//! depth range, which is what wgpu expects.
+//! [`State`] is the edge: `eye`, `target`, `up`, `fov_y`, `near`, `far` — the six
+//! numbers `docs/ir-spec.md` settles on, for the reason it gives, which is
+//! multiplicity. A lerp of two view-projection matrices is not a projection of
+//! anything, so what crosses between a camera and a renderer is state and the
+//! derived forms are produced from it.
+//!
+//! [`Orbit`] is the built-in **producer** of that state — a `camera` record, and
+//! the only one there is until an L3 procedure can be one. It has no derivations
+//! of its own beyond [`Orbit::state`]; `view_proj` and `basis` are [`State`]'s.
+//!
+//! **The derivation that reaches a renderer is not this one.** An L4 reads a GPU
+//! buffer written by `shaders/camera.wgsl`, because an L3 that follows an element
+//! cannot be evaluated on the host without a readback — see
+//! [`crate::node::Camera`]. What is here is the same arithmetic in Rust, for the
+//! overlay in [`crate::points`] and for a test to hold the shader against; that
+//! the two agree is asserted rather than assumed.
+//!
+//! Matrices are column-major with a 0..1 depth range, which is what wgpu expects.
 
 pub type Mat4 = [[f32; 4]; 4];
+
+/// The six numbers a camera is, in world space.
+///
+/// **Not a matrix, and deliberately.** Blending two trajectories — an orbit and
+/// a handheld rig mixed at 0.3, which is what `docs/roadmap.md` means by
+/// L3-multiple — is meaningful on these and meaningless on the matrices derived
+/// from them.
+///
+/// **Aspect ratio is not here.** It belongs to the canvas, not to the camera,
+/// which is why both derivations below take it as an argument.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct State {
+    pub eye: [f32; 3],
+    pub target: [f32; 3],
+    pub up: [f32; 3],
+    pub fov_y: f32,
+    /// **Not decorative.** `blend weighted` normalises a fragment's depth
+    /// against these two planes, so a camera that moves `far` moves every
+    /// weighted fragment's weight with it.
+    pub near: f32,
+    pub far: f32,
+}
 
 /// `{"t":"camera","kind":"orbit","radius":8.0,"speed":0.15}`
 #[derive(Debug, Clone, Copy)]
@@ -50,35 +87,69 @@ pub struct Basis {
 }
 
 impl Orbit {
-    /// The eye, and the ray basis at this instant. `t` is simulation time.
+    /// Where this orbit is at this instant. `t` is simulation time, never wall
+    /// clock.
     ///
-    /// Derived from the same three lines `view_proj` uses, so the marched
-    /// picture and the rasterized one are looking from the same place. A second
-    /// derivation of the orbit would be two cameras that agree until one of
-    /// them is edited.
-    pub fn basis(&self, t: f32, aspect: f32) -> Basis {
+    /// **The only thing an `Orbit` computes.** Everything a renderer reads comes
+    /// out of the [`State`] this returns, so an orbit and an L3 that produced
+    /// the same six numbers are indistinguishable downstream — which is what
+    /// makes replacing this with a procedure a change of producer rather than a
+    /// change of edge.
+    pub fn state(&self, t: f32) -> State {
         let a = t * self.speed * std::f32::consts::TAU;
-        let eye = [self.radius * a.cos(), self.height, self.radius * a.sin()];
-        let forward = normalize(sub([0.0, 0.0, 0.0], eye));
-        let right = normalize(cross(forward, [0.0, 1.0, 0.0]));
+        State {
+            eye: [self.radius * a.cos(), self.height, self.radius * a.sin()],
+            target: [0.0, 0.0, 0.0],
+            up: [0.0, 1.0, 0.0],
+            fov_y: self.fov_y,
+            near: self.near,
+            far: self.far,
+        }
+    }
+
+    /// The eye, and the ray basis at this instant. `t` is simulation time.
+    pub fn basis(&self, t: f32, aspect: f32) -> Basis {
+        self.state(t).basis(aspect)
+    }
+
+    /// `t` is simulation time, never wall clock.
+    pub fn view_proj(&self, t: f32, aspect: f32) -> Mat4 {
+        self.state(t).view_proj(aspect)
+    }
+}
+
+impl State {
+    /// The ray basis: the eye, and the three vectors a ray through a pixel is
+    /// built from.
+    ///
+    /// Derived from the same three lines [`State::view_proj`] uses, so the
+    /// marched picture and the rasterized one are looking from the same place. A
+    /// second derivation would be two cameras that agree until one of them is
+    /// edited.
+    pub fn basis(&self, aspect: f32) -> Basis {
+        let forward = normalize(sub(self.target, self.eye));
+        let right = normalize(cross(forward, self.up));
         let up = cross(right, forward);
         let half = (self.fov_y * 0.5).tan();
         Basis {
-            eye,
+            eye: self.eye,
             forward,
             right: scale(right, half * aspect),
             up: scale(up, half),
         }
     }
 
-    /// `t` is simulation time, never wall clock.
-    pub fn view_proj(&self, t: f32, aspect: f32) -> Mat4 {
-        let a = t * self.speed * std::f32::consts::TAU;
-        let eye = [self.radius * a.cos(), self.height, self.radius * a.sin()];
+    pub fn view_proj(&self, aspect: f32) -> Mat4 {
         mul(
             perspective_rh(self.fov_y, aspect, self.near, self.far),
-            look_at_rh(eye, [0.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
+            look_at_rh(self.eye, self.target, self.up),
         )
+    }
+
+    /// `(near, 1 / (far - near))`, which is what a weighted fragment is measured
+    /// against — packed so the shader multiplies rather than divides.
+    pub fn depth_range(&self) -> [f32; 2] {
+        [self.near, 1.0 / (self.far - self.near).max(f32::MIN_POSITIVE)]
     }
 }
 

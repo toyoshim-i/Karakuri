@@ -727,7 +727,7 @@ fn initial_counts(capacity: u32, has_spawn: bool) -> Vec<u8> {
 
 /// Copies `len` bytes off the GPU and blocks until they arrive. Every caller
 /// is a stall by construction — see [`Simulation::live_count`].
-fn read_buffer(device: &wgpu::Device, queue: &wgpu::Queue, buffer: &wgpu::Buffer, len: u64) -> Vec<u8> {
+pub(super) fn read_buffer(device: &wgpu::Device, queue: &wgpu::Queue, buffer: &wgpu::Buffer, len: u64) -> Vec<u8> {
     let staging = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("set readback"),
         size: len,

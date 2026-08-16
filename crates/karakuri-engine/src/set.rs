@@ -10,13 +10,20 @@
 //! uniform, its accumulation targets and the bind groups naming the buffers it
 //! reads across.
 //!
-//! What is genuinely the grouping's is what is left here: the camera, the
-//! parameter values and their bindings, the viewport, the clock, and the order
-//! the nodes run in. **One clock and one camera serve every node in a Set**, so
-//! a node holding its own copy would be a second place for them to be — which is
-//! why `t` did not leave with the simulation that advances by it. A node is
-//! handed the instants its work lands on ([`crate::node::Tick`],
-//! [`crate::node::View`]) and derives none of its own.
+//! What is genuinely the grouping's is what is left here: the parameter values
+//! and their bindings, the viewport, the clock, and the order the nodes run in.
+//! **One clock serves every node in a Set**, so a node holding its own copy
+//! would be a second place for it to be — which is why `t` did not leave with
+//! the simulation that advances by it. A node is handed the instants its work
+//! lands on ([`crate::node::Tick`], [`crate::node::View`]) and derives none of
+//! its own.
+//!
+//! **The camera was on that list and no longer is.** A Set still owns the
+//! `Orbit` that produces it, because a `camera` record and a Set file both set
+//! one from outside — but what a renderer reads is a GPU buffer owned by
+//! [`crate::node::Camera`], derived in a pass. `L4 : (Geometry, Camera) ->
+//! Texture` makes it an input edge, and it stopped being handed down the moment
+//! it became one.
 //!
 //! One node of each kind today, and a list is what several renderers over one
 //! geometry will be. **Three places still reach into a node**, and each is a
@@ -224,7 +231,16 @@ pub struct Set {
     /// keying by the node that declares the name is what the roadmap named as
     /// the fix, and the error is gone with it.
     params: Vec<HashMap<String, f32>>,
+    /// **The producer of the camera state**, and the only one there is until an
+    /// L3 can be a procedure. Public because a `camera` record and a Set file
+    /// both set it from outside; the six numbers it produces reach a renderer
+    /// through [`Set::camera_node`] and never directly.
     pub camera: Orbit,
+    /// **The camera edge.** Written from `camera` above every frame, derived on
+    /// the GPU, and read by every renderer that projects or marches — see
+    /// [`crate::node::Camera`] for why the derivation is a pass rather than host
+    /// arithmetic.
+    camera_node: crate::node::Camera,
     /// At most one per (layer, param). Resolved once per frame in
     /// [`Set::prepare`] and read back out wherever a param value is written.
     bindings: Vec<Binding>,
@@ -417,6 +433,11 @@ impl Set {
         // — see [`crate::node::Renderer`] — including the blend-mode rule that
         // needs both halves in hand. They all read the same edge, which is the
         // whole point: one simulation, several ways of looking at it.
+        // **One camera node, however many renderers.** Sharing is edge fan-out
+        // and needs no rule: two L4s reading one camera are one viewpoint drawn
+        // two ways. Two reading *different* cameras is a graph, which is what an
+        // L5 is for and not what a Set is.
+        let camera_node = crate::node::Camera::new(device);
         let renderers: Vec<Renderer> = {
             let from = sim.geometry();
             let geometry = match deforms.last() {
@@ -424,7 +445,7 @@ impl Set {
                 Some(last) => last.geometry(from.alive, from.counts),
             };
             l4s.iter()
-                .map(|l4| Renderer::build(device, l4, &geometry))
+                .map(|l4| Renderer::build(device, l4, &geometry, &camera_node))
                 .collect()
         };
 
@@ -469,9 +490,18 @@ impl Set {
             renderers,
             params,
             camera: Orbit::default(),
+            camera_node,
             bindings: Vec::new(),
         };
         set.sim.initialize(queue);
+        // **A camera before the first `prepare`.** The state buffer starts
+        // zeroed, and a camera whose eye and target coincide has no forward
+        // direction — `normalize` of it is NaN, and a NaN view matrix is a blank
+        // frame with no diagnostic. Every path that draws writes this first, so
+        // nothing depends on it; it costs 64 bytes once and removes a shape of
+        // failure that would only ever appear in a caller's test.
+        set.camera_node.write_state(queue, &set.camera.state(0.0));
+        set.camera_node.write_canvas(queue, 1.0);
         Ok(set)
     }
 
@@ -959,24 +989,28 @@ impl Set {
     ///
     /// **The Set supplies the view and the node packs it.** Which fields exist
     /// is the node's business — a marcher's uniform and a sprite renderer's are
-    /// different shapes — and which `t` and which camera they are packed from is
-    /// the grouping's, since one clock and one camera serve every node in it.
+    /// different shapes — and which `t` they are packed from is the grouping's,
+    /// since one clock serves every node in it.
     ///
     /// **One view, every renderer**, and each reads its own parameter map. The
-    /// clock, the camera and the viewport are the grouping's and are therefore
-    /// the same number for all of them; `exposure` is the node's and is not.
+    /// clock and the viewport are the grouping's and are therefore the same
+    /// number for all of them; `exposure` is the node's and is not. The camera
+    /// is neither: it is written once here, into its own edge, and read by every
+    /// renderer off the GPU.
     fn write_l4_uniforms(&mut self, queue: &wgpu::Queue) {
         self.write_l2_uniforms(queue);
         // Read before the borrow: `time` takes `&self` and each node's packer
         // takes `&mut` its own scratch, but `param` below borrows this Set.
         let t = self.time();
-        let (bindings, camera, beats, salt, viewport) = (
-            &self.bindings,
-            &self.camera,
-            self.last_beats,
-            self.seed_salt,
-            self.viewport,
-        );
+        // **The camera's edge, not a renderer's field.** The state goes in here
+        // rather than into each uniform because there is one camera and several
+        // readers; the aspect ratio goes with it because a renderer no longer
+        // knows what projection it is drawing under. Both are writes rather than
+        // passes — the derivation is recorded in [`Set::draw`].
+        self.camera_node.write_state(queue, &self.camera.state(t));
+        self.camera_node.write_canvas(queue, self.viewport[0] / self.viewport[1]);
+        let (bindings, beats, salt, viewport) =
+            (&self.bindings, self.last_beats, self.seed_salt, self.viewport);
         let first = 1 + self.deforms.len();
         for (at, (renderer, params)) in
             self.renderers.iter_mut().zip(&self.params[first..]).enumerate()
@@ -986,7 +1020,6 @@ impl Set {
                 beats,
                 seed_salt: salt,
                 viewport,
-                camera,
                 param: &|name: &str| effective(bindings, params, Kind::L4, at, name),
             };
             renderer.write_uniforms(queue, &view);
@@ -1001,14 +1034,8 @@ impl Set {
     /// output cannot disagree about when this frame is.
     fn write_l2_uniforms(&mut self, queue: &wgpu::Queue) {
         let t = self.time();
-        let (bindings, beats, salt, viewport, camera, dt) = (
-            &self.bindings,
-            self.last_beats,
-            self.seed_salt,
-            self.viewport,
-            &self.camera,
-            self.dt,
-        );
+        let (bindings, beats, salt, viewport, dt) =
+            (&self.bindings, self.last_beats, self.seed_salt, self.viewport, self.dt);
         let capacity = self.sim.capacity();
         // The slice bound is read before the loop: `self.deforms` is borrowed
         // mutably by the iterator and `self.params` immutably by the closure,
@@ -1021,7 +1048,6 @@ impl Set {
                 beats,
                 seed_salt: salt,
                 viewport,
-                camera,
                 param: &|name: &str| effective(bindings, params, Kind::L2, at, name),
             };
             node.write_uniforms(queue, &view, dt, capacity);
@@ -1192,6 +1218,11 @@ impl Set {
     /// first clearing it and the rest loading what is there — see
     /// [`Set::build_many`] for why that is overdraw and not compositing.
     pub fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
+        // **Ahead of every renderer, and here rather than in [`Set::step`].**
+        // The camera is an input edge of an L4, so it has to be current wherever
+        // an L4 runs — and a preview draws a slot that nothing stepped. One pass
+        // for the whole Set, because one camera serves every node in it.
+        self.camera_node.record(encoder);
         let (parity, counts) = (self.sim.parity(), self.sim.counts());
         for (i, renderer) in self.renderers.iter().enumerate() {
             renderer.draw(encoder, target, parity, counts, i == 0);
