@@ -1018,17 +1018,32 @@ them from a step counter of its own. It was the one piece of the old `Set` that 
 to move along with the code that reads it, and moving it would have made two nodes in one Set
 able to disagree about what this frame was.
 
-**A hole in how the clock was tested, found on the way in.** Every test of the clock in this
-repository — `beats.rs`, `generated.rs`, `lifecycle.rs`, `priming.rs` — compares one run
-against another: same record stream, same image; primed then live, same as always live. That
-is the right shape for an invariance claim and it is blind to anything that shifts *both*
-sides equally. Shift every substep's `t` by one whole `dt` and all 43 suites stay green while
-every procedure in the system reads a clock that is a frame out.
-`beats.rs::the_instants_a_substep_reads_are_the_sets_own_clock` is the anchor that was
-missing: absolute arithmetic instead of a comparison, pinning the last substep's instant
-against `Set::time` and the sum over every substep against `dt * (1 + 2 + … + n)`, so where
-the sequence *starts* is asserted as well as where it ends. Nothing was wrong — but nothing
-was watching, which is the same thing one edit later.
+**Two holes in the tests, both the same shape, and the shape is the finding.** Neither was a
+defect in the code — both were things nothing was watching, which is the same thing one edit
+later. They were found by injecting defects into the seams the split moved and noting which
+injections *passed*.
+
+This repository tests almost everything by **comparing one run against another**: same record
+stream, same image; primed then live, same as always live; two frames of one step, same as
+one frame of two. That is the right shape for an invariance claim, and it is structurally
+blind to anything that moves *both* sides equally. Two such defects passed all 43 suites:
+
+- **Shift every substep's `t` by one whole `dt`** — every procedure in the system reads a
+  clock a frame out, and every comparison shifts with it. Closed by
+  `beats.rs::the_instants_a_substep_reads_are_the_sets_own_clock`: absolute arithmetic instead
+  of a comparison, pinning the last substep's instant against `Set::time` and the sum over
+  every substep against `dt * (1 + 2 + … + n)`, so where the sequence *starts* is asserted as
+  well as where it ends.
+- **Drop the spawn accumulator's fractional carry** — the mechanism a nineteen-line comment
+  and the ir-spec's "Spawn timing" both rest on. Existing rates that do not divide evenly by
+  60 did not help, because both sides of every comparison truncated identically. Closed by
+  `lifecycle.rs::the_spawn_rate_is_exact_over_many_substeps_because_the_fraction_carries`,
+  which asserts a *rate* — and does it at half an element per substep, where losing the carry
+  is not an inaccuracy but a silent total failure: `floor(0.5)` is zero forever, so no rate
+  under 60/s would ever spawn anything.
+
+The rule this leaves: **a comparison test needs an anchor beside it.** Invariance says the
+system agrees with itself; only arithmetic says it agrees with what it was asked for.
 
 Three forks, **all three decided as recommended** (*「全部推奨通りで問題ないと思う」*). All
 three read differently under the node framing than they did under the hierarchy one, which is
