@@ -2121,6 +2121,20 @@ The resolution keeps `seed` zero-based per source and adds a fourth implicit att
   arrange.
 - `source` is what downstream layers mask on. It is an ordinary attribute for that purpose.
 
+**Identity is therefore a triple**, not a pair: `source` from here, `seed` from the source
+that produced the element, and `copy` from any amplifying node above it — see "Amplification
+carries `copy`". Three `uint`s of identity per element, which neither needs a full range, so
+packing `source` and `copy` into one word is available and is an engineering choice with no
+semantic consequence. Not made here because nothing yet counts sources.
+
+**The two salting rules compose, and are on different axes.** Amplification requires
+`hash1(seed)` to give every copy of one element the *same* value, which is what makes eight
+mirror images read as one object. Merging requires it to give *different* values in different
+sources, so that two identical grids differ in colour without being arranged to. Both hold at
+once: the salt varies with `source` and is constant across `copy`. A procedure that wants the
+other behaviour on either axis writes it — `hash1(seed ^ copy)` breaks copies apart, and
+nothing breaks sources together because nothing should.
+
 **Downstream treats sources differently by writing attributes, not by branching on
 `source` in L4.** An L2 modulator masked to `source == 0` writes `tint`, and L4 renders
 `tint` without learning that there was more than one source — so an L4 written against one
@@ -2237,14 +2251,33 @@ producing eight mirrored copies costs one simulation and eight draws, not eight 
 
 ## Open questions
 
-One. The three that have stood here in the last two days were all answerable, and are
-recorded above with their answers.
+One, and it is not the one this section carried. **How two merged geometries keep their
+identities apart** is answered above — per-source zero-based `seed`, an implicit `source`
+attribute, a per-source hash salt — and had been for as long as "Multiple L1 sources, and
+`source`" has existed. The question stayed listed because the answer was written in a new
+section rather than into the question, which is the same way a deleted check leaves its
+comments behind. What is left is a smaller thing the answer exposed rather than settled.
 
-- **How two merged geometries keep their identities apart.** `seed` is one monotone counter
-  per Set, so two L1 sources either share it and interleave or hold one each and collide.
-  `docs/roadmap.md` has carried this since before there was a compiler and it becomes live
-  the moment a node has two `Geometry` inputs — which cross-source interpolation and L1-merge
-  both are.
+- **What a `source` number names, and how stable it is.** Two readings, and they differ the
+  moment a graph is edited rather than the moment it is built.
+
+  **Node-relative** — `source` is which *input of the merge node* an element came through,
+  renumbered at every merge. Local and composable, and the only reading that survives merging
+  a merge without `source` having to become a path, which a `uint` cannot be. But inserting a
+  merge upstream silently changes what `source == 1` selects downstream of it.
+
+  **Set-relative** — `source` is which entry of the Set's L1 list an element came from, one
+  flat numbering per Set. A mask means the same thing wherever it sits, the numbering is
+  visible in the Set file and on the command line, and nested merges preserve it for free.
+  The cost is that the merge node does not own the numbering: it comes from the grouping,
+  the way the renderer list already does.
+
+  It matters because `docs/roadmap.md` calls attribute masks "the largest single source of
+  expressive range in the system" — an L2 masked to `source == 1` that silently retargets is
+  a whole modulator pointed at the wrong material, and it produces a picture rather than an
+  error. Decide before L1 multiplicity is built; it is a question about what an author
+  expects a mask to mean, which is the kind this project has done better by asking than by
+  deriving.
 
 The four that were open at v0.2 are recorded above with their decisions and their reasons.
 
