@@ -816,11 +816,16 @@ fine alone and is unreadable next to lights.
 
 **Goal:** the combinatorial range that makes the library worth having.
 
-**Where it stands.** The rendering front is closed — `lines`, a fullscreen L4, `blend
-weighted`. The structural front is most of the way: `Ln` is a node, a Set holds a **chain**
-(one L1, a list of L2s, one optional L3, a list of L4s) and `--set L1.kir,L2.kir,L3.kir,L4.kir`
-reaches it with no new syntax — files are sorted by the `kind` each declares. Parameters,
-bindings, the edit history and the MCP surface all address a node rather than a layer.
+**Where it stands: done.** Every item this milestone named is built. What is *not* built is
+what it deferred rather than left unfinished — **L1 multiple** (decided, unbuilt) and **L2
+amplification** — and both are named as such below.
+
+The rendering front is closed — `lines`, a fullscreen L4, `blend
+weighted`. The structural front is closed too: `Ln` is a node, a Set holds a **chain**
+(one L1, a list of L2s, one optional L3, a list of L4s, and optionally an L5 folding the
+renderers) and `--set L1.kir,L2.kir,L3.kir,L4.kir` reaches it with no new syntax — files are
+sorted by the `kind` each declares. Parameters, bindings, the edit history and the MCP surface
+all address a node rather than a layer, and a Set can now say which of those a console sees.
 
 **L3 is built, edge first.** `L4 : (Geometry, Camera) -> Texture` makes a camera an input
 *edge*, and it is one: the six numbers a camera *is* go into a GPU buffer, a compute pass

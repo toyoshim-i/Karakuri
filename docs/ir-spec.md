@@ -2034,6 +2034,12 @@ what names, and over what part of their declared range.** This is the node-group
 whole node model came from — a group promotes selected inputs and hides the rest — applied to
 the one place it matters most, which is the mixing desk.
 
+**Built.** `karakuri_engine::set::Published` is one control — a name, an address, and a range;
+`Set::publish` refuses a range that is not a subset of the declared one, a control nothing
+declares, and a name already taken. `--publish name=L4:0:exposure[0.2..0.8]` is the command
+line, whose address is `--param`'s and whose range is `--bind`'s. It is not in a Set file yet,
+on the same terms a chain, a camera and a layering are not.
+
 #### Three states, and the third is not a new mechanism
 
 - **Published.** It appears on the console under a name the Set chose.
@@ -2049,6 +2055,12 @@ shape with a different source. So `bind`'s source becomes "a signal, or a publis
 and macros fall out with no new record and no new semantics. A bus signal arrives with a
 confidence and is blended by it; a published control is the operator's hand and its
 confidence is 1.
+
+**Built, and it did fall out.** A `signal` of `control:<name>` names a published control;
+nothing else changed, and no state was added — a published control's value *is* the param it
+points at. It is resolved by the Set rather than by the signal bus, which is not an
+implementation convenience: a published control belongs to its Set, so four Sets publishing
+`twist` are four controls, where a signal name is one thing across the whole session.
 
 #### Publishing decides what is *shown*, never what is *reachable*
 
@@ -2076,11 +2088,11 @@ Internally a control is node-and-name. Externally it has the name the Set gave i
 `exposure`s can be published as two controls, or as one control driving both, and which of
 those is right is an authoring decision rather than an error.
 
-**Until an interface exists, a bare name means every node that declares it.** A `--param
-exposure=2.0` moves both renderers, which is the useful default for one knob and is exactly
-the "one control driving both" case. Setting two nodes' `exposure` *apart* needs the address
-in the record vocabulary — `layer` plus an `index` defaulting to 0, which keeps every
-existing session stream replaying unchanged — and that is unbuilt.
+**A bare name still means every node that declares it**, which is the useful default for one
+knob and is exactly the "one control driving both" case: `--param exposure=2.0` moves both
+renderers. Setting two nodes' `exposure` *apart* is the address in the record vocabulary —
+`layer` plus an `index` defaulting to 0, which keeps every existing session stream replaying
+unchanged — and that is built, as is the interface that gives the two of them separate names.
 
 #### A published range narrows, never redefines
 
