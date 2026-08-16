@@ -1186,7 +1186,11 @@ than against one being taught to.
   index and the paired read is a direct one
 - Slot interface contracts, attribute declarations, automatic adapters
 - L2 stacking with weights and attribute-based masks
-- Multiple L4 renderers over shared geometry
+- ~~Multiple L4 renderers over shared geometry~~ **Built**, and it cost almost nothing once
+  `Ln` was a node: `Set::build_many` takes the L4s in draw order, they run in that order over
+  one attachment (first clears, rest load), and no renderer changed to be in a list.
+  `--set L1.kir,L4.kir,L4.kir` reaches it. What it *did* cost was the parameter model — every
+  L4 in `examples/` declares `exposure`, so the collision refusal had to go first
 - The `Field` type — a spatial function represented as code rather than data
 - Graph compiler. Node graph as authoring representation, render graph as execution
   representation, with fusion of `Field` chains into single shaders
