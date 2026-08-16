@@ -25,6 +25,7 @@
 //! module's doc comment.
 
 pub mod l1;
+pub mod l2;
 pub mod l4;
 pub mod layout;
 mod lower;
@@ -32,6 +33,7 @@ mod prelude;
 mod ty;
 
 pub use l1::{generate_l1, L1Shader};
+pub use l2::{generate_l2, L2Shader};
 pub use l4::{generate_l4, L4Shader};
 
 use karakuri_ir::typed::Checked;
@@ -59,6 +61,11 @@ pub enum Shader {
 pub fn generate(checked: &Checked, elements: Option<&ElementLayout>) -> Shader {
     match checked.kind {
         Kind::L1 => Shader::L1(generate_l1(checked)),
+        // **Not reachable through this entry point.** An L2 is generated
+        // against the attributes available *where it sits* in a chain, which is
+        // a list rather than one upstream layout — `Set::build` has it and this
+        // signature does not. Call `generate_l2` directly.
+        Kind::L2 => panic!("an L2 is generated against its position in a chain: call generate_l2"),
         Kind::L4 => {
             let elements = elements.expect("an L4 procedure needs its paired L1's ElementLayout");
             Shader::L4(generate_l4(checked, elements))

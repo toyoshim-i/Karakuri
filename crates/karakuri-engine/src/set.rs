@@ -573,6 +573,13 @@ impl Set {
         // rather than attached to nothing.
         let found = match binding.layer {
             Kind::L1 => binding.covers(0) && declares(self.sim.param_names(), &self.params[0]),
+            // **A Set holds no L2 node yet**, so nothing declares an L2 param
+            // and a binding into one lands nowhere. Refused rather than
+            // panicked: `Kind::L2` is a legal thing for a `.kir` to declare and
+            // for a `bind` record to name, and the honest answer to "bind into a
+            // layer this Set has no node for" is `false`, which every caller
+            // already reports.
+            Kind::L2 => false,
             Kind::L4 => self
                 .renderers
                 .iter()
@@ -609,6 +616,10 @@ impl Set {
     fn slot_of(layer: Kind) -> usize {
         match layer {
             Kind::L1 => 0,
+            // Past the end of `params`, so every lookup misses and every
+            // addressed write returns `false` — see `Set::bind`. It becomes a
+            // real slot when a Set holds L2 nodes.
+            Kind::L2 => usize::MAX,
             Kind::L4 => 1,
         }
     }
@@ -618,6 +629,9 @@ impl Set {
     fn nodes_of(layer: Kind) -> std::ops::Range<usize> {
         match layer {
             Kind::L1 => 0..1,
+            // Empty: a Set holds no L2 node yet, so there is nothing of that
+            // layer to look in.
+            Kind::L2 => 0..0,
             Kind::L4 => 1..usize::MAX,
         }
     }

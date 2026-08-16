@@ -1005,6 +1005,7 @@ fn parse_bind(value: &str) -> Result<Binding, String> {
     let record = Record::Bind {
         layer: match layer {
             karakuri_ir::Kind::L1 => Layer::L1,
+            karakuri_ir::Kind::L2 => Layer::L2,
             karakuri_ir::Kind::L4 => Layer::L4,
         },
         index,

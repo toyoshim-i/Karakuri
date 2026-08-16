@@ -1268,3 +1268,183 @@ proc sprites {
 "#;
     assert_eq!(check_ok(src).topology, Some(Topology::Points));
 }
+
+// ---------------------------------------------------------------------------
+// L2 — geometry modulation
+// ---------------------------------------------------------------------------
+
+/// A modulator that wobbles what reaches it and tints it. Reads `position` from
+/// upstream, writes it back, and **widens the element** by emitting a `color`
+/// nothing before it produced.
+const WOBBLE: &str = r#"
+proc wobble {
+  kind L2
+
+  param amount : float [0.0, 4.0] = 0.6
+  param rate   : float [0.1, 8.0] = 1.5
+
+  consumes position
+  emit tint
+
+  deform {
+    let phase = t * rate + hash1(seed) * 6.2831853;
+    position = position + vec3(sin(phase), cos(phase), 0.0) * amount;
+    tint     = vec3(hash1(seed + 3u), 0.4, 0.9);
+  }
+}
+"#;
+
+/// **A `deform` is the whole of what an L2 is**, and the resolved shape says
+/// which layer it belongs to without any of the L1 or L4 header state.
+#[test]
+fn an_l2_checks_clean_and_carries_neither_topology_nor_blend() {
+    let checked = check_ok(WOBBLE);
+    assert_eq!(checked.kind, Kind::L2);
+    assert_eq!(checked.blocks.len(), 1);
+    assert_eq!(checked.blocks[0].kind, BlockKind::Deform);
+    // A deformation moves elements about and does not turn a cloud into
+    // strands, so what the geometry reads as stays the L1's declaration.
+    assert_eq!(checked.topology, None);
+    assert_eq!(checked.blend, None);
+    assert!(checked.capacity.is_none());
+    assert_eq!(checked.emit, vec![Attr::Tint]);
+    assert_eq!(checked.consumes, vec![Attr::Position]);
+}
+
+/// **Vacuously closed form, and that is the decision the layer rests on.**
+///
+/// An L2 is stateless by rule, so it can never be the reason a Set has to be
+/// run forward to reach an instant — which keeps `closed_form` and priming
+/// questions the L1 alone answers, however long a chain gets. A `deform` that
+/// reported `false` here would drag every Set it appeared in into needing a
+/// warm-up.
+#[test]
+fn an_l2_is_closed_form_whatever_it_writes() {
+    assert!(check_ok(WOBBLE).closed_form);
+}
+
+/// **A `deform` may read what it emits**, which is not the same permission an
+/// `element` block has even though it looks like it. There the two lists are one
+/// buffer; here `consumes` is the input edge and `emit` is the output one, and
+/// an L2 that adds an attribute has to be able to read the field it is writing.
+#[test]
+fn a_deform_reads_both_what_it_consumes_and_what_it_emits() {
+    let src = r#"
+proc widen {
+  kind L2
+  consumes position
+  emit tint
+  deform {
+    tint     = vec3(0.5, 0.5, 0.5);
+    tint     = tint * 2.0;
+    position = position * 1.5;
+  }
+}
+"#;
+    check_ok(src);
+}
+
+/// And nothing else: an attribute in neither list is not in scope, and the hint
+/// names both lists because either could be the one that was meant.
+#[test]
+fn a_deform_cannot_read_an_attribute_it_neither_consumes_nor_emits() {
+    let src = r#"
+proc peek {
+  kind L2
+  consumes position
+  deform {
+    position = position + velocity * 0.1;
+  }
+}
+"#;
+    let errs = check_err(src);
+    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    assert!(rendered.contains("velocity"), "{rendered}");
+    assert!(rendered.contains("consumes"), "the hint does not offer `consumes`: {rendered}");
+}
+
+/// **`kill()` is refused, and the reason is structural rather than a
+/// restriction.** Compaction runs once, after L1, and nothing downstream of a
+/// deformation reconsiders liveness — so an L2 removing an element would remove
+/// it from a range already decided. The hint has to say that rather than
+/// offering the `element` block an L2 does not have.
+#[test]
+fn a_deform_cannot_kill_and_is_told_why_in_its_own_terms() {
+    let src = r#"
+proc cull {
+  kind L2
+  consumes position, age
+  deform {
+    if age > 1.0 { kill(); }
+    position = position;
+  }
+}
+"#;
+    let errs = check_err(src);
+    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    assert!(rendered.contains("kill()"), "{rendered}");
+    assert!(
+        rendered.contains("compaction") || rendered.contains("Fade it out"),
+        "the hint sends an L2 author to the `element` block it does not have: {rendered}"
+    );
+}
+
+/// The three header fields that belong to the other layers are each refused
+/// with the reason they belong there, rather than as one "unexpected field".
+#[test]
+fn an_l2_refuses_capacity_topology_and_blend() {
+    for (field, decl) in [
+        ("capacity", "capacity [1, 8] = 4"),
+        ("topology", "topology points"),
+        ("blend", "blend additive"),
+    ] {
+        let src = format!(
+            r#"
+proc bad {{
+  kind L2
+  {decl}
+  consumes position
+  deform {{ position = position; }}
+}}
+"#
+        );
+        let errs = check_err(&src);
+        let rendered = errs.iter().map(|e| e.render(&src)).collect::<Vec<_>>().join("\n");
+        assert!(rendered.contains(field), "`{field}` was not named: {rendered}");
+    }
+}
+
+/// An L2 with no `deform` has nothing to do, and the diagnostic says so at the
+/// procedure rather than leaving an author to infer it from a later stage.
+#[test]
+fn an_l2_without_a_deform_block_is_refused() {
+    let src = r#"
+proc empty {
+  kind L2
+  consumes position
+}
+"#;
+    let errs = check_err(src);
+    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    assert!(rendered.contains("deform"), "{rendered}");
+}
+
+/// **`consumes` is not checked against `emit` on an L2**, unlike an L1 where
+/// consuming something unemitted is a contradiction inside one file. What an L2
+/// may read depends on its position in a chain, which no single procedure can
+/// know — that is the Set's check, against the whole chain.
+#[test]
+fn an_l2_may_consume_what_it_does_not_emit() {
+    let src = r#"
+proc pass {
+  kind L2
+  consumes position, velocity
+  deform {
+    position = position + velocity * 0.01;
+  }
+}
+"#;
+    let checked = check_ok(src);
+    assert!(checked.emit.is_empty());
+    assert_eq!(checked.consumes, vec![Attr::Position, Attr::Velocity]);
+}

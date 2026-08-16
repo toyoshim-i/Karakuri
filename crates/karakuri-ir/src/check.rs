@@ -176,6 +176,11 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
             // `check_header`, so this never overwrites something a file said.
             topology: match proc.kind {
                 Kind::L1 => proc.topology,
+                // An L2 draws nothing, so it reads as nothing. What the
+                // geometry is *meant to read as* stays the L1's declaration all
+                // the way down a chain — a deformation moves elements about and
+                // does not turn a cloud into strands.
+                Kind::L2 => None,
                 Kind::L4 => Some(drawn_topology(&blocks)),
             },
             capacity: proc.capacity,
@@ -216,6 +221,7 @@ fn drawn_topology(blocks: &[TBlock]) -> Topology {
 fn kind_name(kind: Kind) -> &'static str {
     match kind {
         Kind::L1 => "L1",
+        Kind::L2 => "L2",
         Kind::L4 => "L4",
     }
 }
@@ -308,6 +314,52 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     ),
                     Some(_) => {}
                 }
+            }
+        }
+        // **An L2 is stateless by rule, and this is the rule.**
+        //
+        // It is the decision the whole layer rests on — `docs/ir-spec.md`, "L2
+        // and L3". A stateless modulator is freely stackable, keeps
+        // `closed_form` and priming questions the L1 alone answers, and is
+        // legal for a graph compiler to fuse rather than merely plausible to.
+        // A stateful one would make every one of those a question about the
+        // chain, and there would be no way back.
+        //
+        // Stateless has a precise meaning here and each half is checked below:
+        // a `deform` may not read back what it wrote *from the previous frame*
+        // — there is no previous frame, since its output is rebuilt each time —
+        // and it may not `kill()`.
+        Kind::L2 => {
+            if let Some(cap) = &proc.capacity {
+                errors.push(
+                    IrError::contract(cap.span, "`capacity` is L1 only")
+                        .with_hint(
+                            "remove `capacity`: an L2 gets as many elements as reach it, and \
+                             how many that is belongs to the L1 that made them",
+                        ),
+                );
+            }
+            if proc.topology.is_some() {
+                errors.push(
+                    IrError::contract(proc.span, "`topology` is L1's")
+                        .with_hint(
+                            "remove `topology`: a deformation moves elements about and does \
+                             not turn a cloud into strands, so what the geometry reads as \
+                             stays what the L1 declared",
+                        ),
+                );
+            }
+            if proc.blend.is_some() {
+                errors.push(
+                    IrError::contract(proc.span, "`blend` is L4 only")
+                        .with_hint("remove `blend`: an L2 rewrites geometry and draws nothing"),
+                );
+            }
+            if !proc.blocks.iter().any(|b| b.kind == BlockKind::Deform) {
+                errors.push(
+                    IrError::contract(proc.span, "L2 procedures require a `deform` block")
+                        .with_hint("add `deform { … }`: it is the whole of what an L2 does"),
+                );
             }
         }
         Kind::L4 => {
@@ -517,6 +569,11 @@ fn check_consumes_emitted(
     consumes: &[(Attr, Span)],
     errors: &mut Vec<IrError>,
 ) {
+    // **L1 only.** An L1 is the whole of what is available to it, so consuming
+    // something it does not emit is a contradiction inside one file. An L2 and
+    // an L4 read what is available *at their position* in a chain, which no
+    // single procedure can know — that is `Set::build`'s check, against the
+    // pair or the chain.
     if kind != Kind::L1 {
         return;
     }
@@ -615,7 +672,13 @@ fn is_closed_form(kind: Kind, emit: &HashSet<Attr>, blocks: &[TBlock]) -> bool {
     // meaning there and no buffer behind it — and without this line such a
     // procedure reads its own `emit` list in `vertex`, is called accumulating,
     // and drags a Set that needs no priming into needing it.
-    if kind == Kind::L4 {
+    // **Vacuously true for the stateless layers.** An L4 draws what it is given
+    // and an L2 is stateless by rule — `docs/ir-spec.md`, "L2 and L3" — so
+    // neither can be the reason a Set has to be run forward to reach an instant.
+    // That rule is what keeps `closed_form` an L1 question however long a chain
+    // gets, and it is enforced below rather than assumed: a `deform` that
+    // accumulated would be refused by `check_header`.
+    if kind == Kind::L4 || kind == Kind::L2 {
         return true;
     }
     if blocks.iter().any(|b| b.kind == BlockKind::Spawn) {
@@ -759,6 +822,12 @@ fn required_keys(block: BlockKind, emit: &HashSet<Attr>, draws_lines: bool) -> V
             keys
         }
         BlockKind::Fragment => vec![CovKey::Output(Output::Color)],
+        // **Nothing is required of a `deform`.** An L2 rewrites some of what
+        // reaches it and passes the rest through untouched — that is what makes
+        // a modulator a modulator rather than a second generator, and requiring
+        // it to assign everything it emits would make every one of them restate
+        // the whole element.
+        BlockKind::Deform => Vec::new(),
     }
 }
 
@@ -995,8 +1064,19 @@ impl<'a> Checker<'a> {
             return TargetRes::Invalid;
         }
         if let Some(attr) = Attr::from_name(name) {
-            let available = matches!(self.block, Some(BlockKind::Spawn) | Some(BlockKind::Element))
-                && self.emit.contains(&attr);
+            let available = match self.block {
+                Some(BlockKind::Spawn) | Some(BlockKind::Element) => self.emit.contains(&attr),
+                // **A `deform` writes what it consumes as well as what it
+                // emits**, and rewriting is the more common of the two:
+                // `position = position + …` is what a modulator is for. An L1
+                // has one buffer and one list; an L2 has an input edge and an
+                // output one, and it may write anything that reaches the output
+                // — which is everything it was given, plus everything it adds.
+                Some(BlockKind::Deform) => {
+                    self.emit.contains(&attr) || self.consumes.contains(&attr)
+                }
+                Some(BlockKind::Vertex) | Some(BlockKind::Fragment) | None => false,
+            };
             if !available {
                 let hint = match self.block {
                     Some(BlockKind::Vertex) | Some(BlockKind::Fragment) => {
@@ -1004,6 +1084,10 @@ impl<'a> Checker<'a> {
                          output instead"
                             .to_string()
                     }
+                    Some(BlockKind::Deform) => format!(
+                        "add `{name}` to `consumes` to rewrite what reaches this node, or to \
+                         `emit` to add it to what leaves"
+                    ),
                     _ => format!("add `{name}` to `emit` to make it writable here"),
                 };
                 self.err_hint(
@@ -1210,11 +1294,22 @@ impl<'a> Checker<'a> {
 
     fn check_kill(&mut self, span: Span) -> Option<TStmt> {
         if !(self.kind == Kind::L1 && self.block == Some(BlockKind::Element)) {
+            // **An L2 gets its own reason**, because "move it into the `element`
+            // block" names a block an L2 does not have and would send an author
+            // looking for one. The rule there is structural: compaction runs
+            // once, after L1, and nothing downstream of a deformation
+            // reconsiders liveness — so a `kill()` here would remove an element
+            // from a buffer whose live range had already been decided.
+            let hint = if self.kind == Kind::L2 {
+                "an L2 rewrites elements and never removes them: compaction runs once, after                  L1, so liveness is settled before a `deform` sees anything. Fade it out                  instead — write `size` or `color`'s alpha — or kill it in the L1"
+            } else {
+                "remove it, or move this logic into the `element` block"
+            };
             self.err_hint(
                 Stage::Contract,
                 span,
                 "`kill()` is only legal in an L1 `element` block",
-                "remove it, or move this logic into the `element` block",
+                hint,
             );
         }
         Some(TStmt::Kill { span })
@@ -1261,6 +1356,16 @@ impl<'a> Checker<'a> {
                 Some(BlockKind::Spawn) | Some(BlockKind::Element) => {
                     self.emit.contains(&attr) || self.consumes.contains(&attr)
                 }
+                // **Both lists, and they mean different things here.** A
+                // `deform` reads what it `consumes` from upstream and reads
+                // back what it `emit`s, because an L2 that widens the element —
+                // adding a `tint` nothing produced — has to be able to read the
+                // field it is writing. Same shape as an `element` block, for a
+                // different reason: there the two lists are one buffer, here
+                // they are the input edge and the output one.
+                Some(BlockKind::Deform) => {
+                    self.emit.contains(&attr) || self.consumes.contains(&attr)
+                }
                 Some(BlockKind::Vertex) | Some(BlockKind::Fragment) => self.consumes.contains(&attr),
                 None => false,
             };
@@ -1274,6 +1379,10 @@ impl<'a> Checker<'a> {
                 Some(BlockKind::Spawn) | Some(BlockKind::Element) => {
                     format!("add `{name}` to `emit` to read it here")
                 }
+                Some(BlockKind::Deform) => format!(
+                    "add `{name}` to `consumes` to read what reaches this node, or to \
+                     `emit` to add it to what leaves"
+                ),
                 None => "attributes are not available in a header expression".to_string(),
             };
             self.err_hint(
