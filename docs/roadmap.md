@@ -992,21 +992,24 @@ What falls out with no further work: `examples/drift_shell.kir` drawn as sprites
 streaks *and* as a solid, for one simulation and three draw passes — the payoff the
 primitive-centric bet was made for, which today costs three simulations.
 
-Three forks, with a recommendation on each. All three read differently under the node
-framing than they did under the hierarchy one, which is the reframe earning its keep.
+Three forks, **all three decided as recommended** (*「全部推奨通りで問題ないと思う」*). All
+three read differently under the node framing than they did under the hierarchy one, which is
+the reframe earning its keep.
 
-**How several `Texture` nodes reach the Set's one output.** Recommendation: **their passes
-run in order over the one attachment — the first clears and the rest load.** Then order
+**How several `Texture` nodes reach the Set's one output.** **Their passes run in order over
+the one attachment — the first clears and the rest load.** Then order
 among renderer nodes is the same kind of order slot order is in the mix, and each blend mode
 already knows how to meet what is under it: `additive`'s blend state accumulates into
 whatever is there, and a weighted node's resolve composites `over` instead of replacing,
 which is the identical result on the cleared target it writes today. The alternative — a
 texture per node and an implicit combining node — is L5 rebuilt inside a Set, at a render
-target apiece. It is also the answer that becomes wrong first, and knowingly: a real graph
-has nodes that consume textures, and then the combine *is* a node. Until one exists, an
-implicit one is a node nobody can see or edit.
+target apiece. It was also written as the answer that becomes wrong first — *"a real graph has nodes
+that consume textures, and then the combine is a node"* — and that turned out to be true the
+same day rather than later. It is **the rule for one of two shapes**: several L4s straight to
+the output is overdraw and costs one target, several L4s into an L5 is compositing and costs
+a target apiece. See `docs/ir-spec.md`, "Overdraw and compositing are different operations".
 
-**What a Set file and a command line look like.** Recommendation: **no new syntax at all.**
+**What a Set file and a command line look like.** **No new syntax at all.**
 `--set drift_shell.kir,soft_points.kir,drift_streaks.kir` already parses; every file declares
 its own `kind`, so the loader can require exactly one L1 and read list order as order within
 a kind. The edges are *inferred* while the graph is a star — every L4 reads the only L1 —
@@ -1017,7 +1020,8 @@ the notation with it.
 
 **How a param is addressed.** Under the hierarchy framing this was "layer and position";
 under nodes it is simply **the node**, which is the same key with a name that will still be
-right after the graph exists. It is forced rather than chosen, and it pays a debt already
+right after the graph exists. Superseded in part by what a Set publishes, below: the node and
+the name is the *internal* address, and the console sees whatever the Set called it. It is forced rather than chosen, and it pays a debt already
 recorded in `SetError::ParamCollision`: `Set::params` is keyed by name alone across the whole
 Set, so two procedures declaring `exposure` are refused. Two renderers over one geometry will
 *both* declare `exposure` almost every time — `soft_points` and `drift_streaks` do — so the
