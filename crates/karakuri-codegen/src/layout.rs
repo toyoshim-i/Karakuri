@@ -363,7 +363,15 @@ pub fn generate_element_layout(emit: &[Attr]) -> ElementLayout {
 /// from `consumes` is that this text has to be byte-identical between the
 /// two, since they address the same physical buffer.
 pub fn write_element_struct(out: &mut String, layout: &ElementLayout) {
-    out.push_str("struct Element {\n");
+    write_element_struct_named(out, "Element", layout);
+}
+
+/// The same, under a chosen name. An L2 addresses **two** element buffers of
+/// different shapes — what reached it and what it writes — so it needs two
+/// structs in one module, and neither can be called `Element` without the other
+/// being called something else. See [`crate::l2`].
+pub fn write_element_struct_named(out: &mut String, name: &str, layout: &ElementLayout) {
+    out.push_str(&format!("struct {name} {{\n"));
     for s in &layout.slots {
         out.push_str(&format!("    {}: {},\n", s.name, s.elem_ty.wgsl_name()));
     }

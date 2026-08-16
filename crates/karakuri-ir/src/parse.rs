@@ -49,9 +49,9 @@ pub fn parse(src: &str) -> IrResult<Proc> {
 
 /// Header/block keywords. Declaration recovery scans forward to the next one
 /// of these (or `}`), so one bad declaration does not eat the rest of the file.
-const DECL_KEYWORDS: [&str; 11] = [
+const DECL_KEYWORDS: [&str; 12] = [
     "kind", "topology", "capacity", "param", "emit", "consumes", "blend", "spawn", "element",
-    "vertex", "fragment",
+    "deform", "vertex", "fragment",
 ];
 
 struct Parser {
@@ -360,6 +360,7 @@ impl Parser {
                     }
                     "spawn" => blocks.push(self.parse_block(BlockKind::Spawn)),
                     "element" => blocks.push(self.parse_block(BlockKind::Element)),
+                    "deform" => blocks.push(self.parse_block(BlockKind::Deform)),
                     "vertex" => blocks.push(self.parse_block(BlockKind::Vertex)),
                     "fragment" => blocks.push(self.parse_block(BlockKind::Fragment)),
                     _ => {
@@ -434,15 +435,17 @@ impl Parser {
     /// at the end of `parse_proc`.
     fn parse_kind(&mut self) -> Kind {
         self.advance(); // "kind"
-        match self.expect_ident("`L1` or `L4`") {
+        match self.expect_ident("`L1`, `L2` or `L4`") {
             Some((name, span)) => match name.as_str() {
                 "L1" => Kind::L1,
+                "L2" => Kind::L2,
                 "L4" => Kind::L4,
                 _ => {
                     self.error_with_hint(
                         span,
                         format!("unknown kind `{name}`"),
-                        "v0.2 defines `L1` and `L4` only",
+                        "this compiler builds `L1` (geometry), `L2` (geometry modulation) \
+                         and `L4` (rendering). `L3` is a camera and is not a procedure yet",
                     );
                     Kind::L1
                 }

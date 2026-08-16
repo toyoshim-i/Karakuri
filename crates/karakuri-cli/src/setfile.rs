@@ -216,13 +216,15 @@ type ParamKey<'a> = (Option<(u8, u32)>, &'a str);
 fn layer_ordinal(layer: Kind) -> u8 {
     match layer {
         Kind::L1 => 0,
-        Kind::L4 => 1,
+        Kind::L2 => 1,
+        Kind::L4 => 2,
     }
 }
 
 fn layer_from_ordinal(n: u8) -> Layer {
     match n {
         0 => Layer::L1,
+        1 => Layer::L2,
         _ => Layer::L4,
     }
 }
@@ -232,6 +234,7 @@ fn layer_from_ordinal(n: u8) -> Layer {
 fn kind_of(layer: Layer) -> Option<Kind> {
     match layer {
         Layer::L1 => Some(Kind::L1),
+        Layer::L2 => Some(Kind::L2),
         Layer::L4 => Some(Kind::L4),
         _ => None,
     }
@@ -243,6 +246,7 @@ pub fn record_from_binding(binding: &Binding) -> Record {
     Record::Bind {
         layer: match binding.layer {
             Kind::L1 => Layer::L1,
+            Kind::L2 => Layer::L2,
             Kind::L4 => Layer::L4,
         },
         index: binding.index,

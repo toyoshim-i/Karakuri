@@ -13,6 +13,9 @@ use crate::span::Span;
 pub enum Kind {
     /// Geometry generation. Stateful, compute.
     L1,
+    /// Geometry modulation: `Geometry -> Geometry`. **Stateless by rule**,
+    /// compute. See `docs/ir-spec.md`, "L2 and L3".
+    L2,
     /// Rendering. Stateless, a render pipeline.
     L4,
 }
@@ -474,6 +477,9 @@ pub enum BlockKind {
     Spawn,
     /// L1: update a live element. May call `kill()`.
     Element,
+    /// L2: rewrite a live element's attributes. **May not `kill()`** — see
+    /// [`Kind::L2`].
+    Deform,
     /// L4: once per element.
     Vertex,
     /// L4: once per rasterised fragment.
@@ -485,6 +491,7 @@ impl BlockKind {
         match self {
             BlockKind::Spawn => "spawn",
             BlockKind::Element => "element",
+            BlockKind::Deform => "deform",
             BlockKind::Vertex => "vertex",
             BlockKind::Fragment => "fragment",
         }
@@ -494,6 +501,7 @@ impl BlockKind {
         Some(match s {
             "spawn" => BlockKind::Spawn,
             "element" => BlockKind::Element,
+            "deform" => BlockKind::Deform,
             "vertex" => BlockKind::Vertex,
             "fragment" => BlockKind::Fragment,
             _ => return None,
@@ -503,6 +511,7 @@ impl BlockKind {
     pub fn kind(self) -> Kind {
         match self {
             BlockKind::Spawn | BlockKind::Element => Kind::L1,
+            BlockKind::Deform => Kind::L2,
             BlockKind::Vertex | BlockKind::Fragment => Kind::L4,
         }
     }
