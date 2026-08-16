@@ -297,9 +297,9 @@ fn a_lone_sprite_resolves_to_what_additive_accumulates_at_every_opacity() {
 
     for alpha in [0.5, 0.05, 0.005, 0.003, 0.002] {
         let mut additive = build(&gpu, &sprite_l4("additive"));
-        additive.params.insert("alpha".to_string(), alpha);
+        assert_eq!(additive.set_param("alpha", alpha), 1, "the param must be declared for the write to mean anything");
         let mut weighted = build(&gpu, &sprite_l4("weighted"));
-        weighted.params.insert("alpha".to_string(), alpha);
+        assert_eq!(weighted.set_param("alpha", alpha), 1, "the param must be declared for the write to mean anything");
         let a = draw(&gpu, &mut additive);
         let w = draw(&gpu, &mut weighted);
 
@@ -359,9 +359,9 @@ fn an_alpha_above_one_is_clamped_under_weighted_and_not_under_additive() {
     let gpu = Gpu::headless().expect("no GPU available");
 
     let mut bright = build(&gpu, &sprite_l4("additive"));
-    bright.params.insert("alpha".to_string(), 2.0);
+    assert_eq!(bright.set_param("alpha", 2.0), 1, "the param must be declared for the write to mean anything");
     let mut normal = build(&gpu, &sprite_l4("additive"));
-    normal.params.insert("alpha".to_string(), 1.0);
+    assert_eq!(normal.set_param("alpha", 1.0), 1, "the param must be declared for the write to mean anything");
     let bright = brightest(&draw(&gpu, &mut bright));
     let normal = brightest(&draw(&gpu, &mut normal));
     assert!(
@@ -370,9 +370,9 @@ fn an_alpha_above_one_is_clamped_under_weighted_and_not_under_additive() {
     );
 
     let mut over = build(&gpu, &sprite_l4("weighted"));
-    over.params.insert("alpha".to_string(), 2.0);
+    assert_eq!(over.set_param("alpha", 2.0), 1, "the param must be declared for the write to mean anything");
     let mut unit = build(&gpu, &sprite_l4("weighted"));
-    unit.params.insert("alpha".to_string(), 1.0);
+    assert_eq!(unit.set_param("alpha", 1.0), 1, "the param must be declared for the write to mean anything");
     let over = draw(&gpu, &mut over);
     let unit = draw(&gpu, &mut unit);
 

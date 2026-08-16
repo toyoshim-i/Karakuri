@@ -1074,12 +1074,19 @@ the notation with it.
 **How a param is addressed.** Under the hierarchy framing this was "layer and position";
 under nodes it is simply **the node**, which is the same key with a name that will still be
 right after the graph exists. Superseded in part by what a Set publishes, below: the node and
-the name is the *internal* address, and the console sees whatever the Set called it. It is forced rather than chosen, and it pays a debt already
-recorded in `SetError::ParamCollision`: `Set::params` is keyed by name alone across the whole
-Set, so two procedures declaring `exposure` are refused. Two renderers over one geometry will
-*both* declare `exposure` almost every time — `soft_points` and `drift_streaks` do — so the
-collision check as written forbids the feature. The record format already keys by layer; an
-index defaulting to 0 keeps every existing session stream replaying unchanged.
+the name is the *internal* address, and the console sees whatever the Set called it. It is
+forced rather than chosen, and it paid a debt recorded in `SetError::ParamCollision`:
+`Set::params` was keyed by name alone across the whole Set, so two procedures declaring
+`exposure` were refused — and every L4 in `examples/` declares `exposure`, so the check
+forbade the feature it was guarding.
+
+**Built: the engine keys parameter values by node and the error is deleted.** What is *not*
+built is the external half. A `--param` and a `param` record still carry a bare name, which
+now means **every node that declares it** — one knob moving both renderers, which is the
+useful default and the "one control driving both" case an interface would offer. Setting two
+renderers' `exposure` apart needs the address in the record vocabulary: `layer` plus an
+`index` defaulting to 0, which keeps every existing session stream replaying unchanged. Worth
+doing when something wants them apart, and not before.
 
 What this is *not*: L2. The split makes the space a stage goes into; putting one there is
 the next thing after, and it should be built against a Set that already holds a list rather
@@ -1121,9 +1128,10 @@ than against one being taught to.
   this project's standing position everywhere else it has come up. Driving a control from
   something other than a knob is not a third mechanism: `bind` already maps a source through a
   curve and a range, so its source becomes "a signal, or a published control" and macros fall
-  out of it. And it **dissolves `SetError::ParamCollision`** rather than fixing it — two
-  renderers both declaring `exposure` become two published controls or one driving both, which
-  is an authoring decision rather than an error
+  out of it. `SetError::ParamCollision` is already gone — the engine keys values by node —
+  so what an interface adds here is the *external* name: two renderers both declaring
+  `exposure` become two published controls or one driving both, which is an authoring
+  decision rather than an error
 - **L5 becomes a `kind`, with two roles and one implementation.** The console an operator
   mixes on is the top-level one; the same node nested inside a Set folds several L4s into one
   texture. What differs is only whether a surface is wired to it — which finally separates

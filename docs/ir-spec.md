@@ -1855,8 +1855,9 @@ Two consequences worth stating rather than discovering:
 
 ### What a Set publishes — M3
 
-A Set publishes every `param` every procedure in it declares, flat, keyed by name. With one
-L1 and one L4 that is about nine controls and the flatness is invisible. With the graph M3
+A Set publishes every `param` every procedure in it declares, addressed by the node that
+declares it. With one L1 and one L4 that is about nine controls and the addressing is
+invisible — a bare name still reaches them, because it reaches every node that declares it. With the graph M3
 introduces — several pipelines, L2s, an L3, a nested L5 — it is twenty-five, most of which
 are **authoring decisions the Set's author already made** rather than anything an operator
 wants under their hands at two in the morning.
@@ -1894,18 +1895,25 @@ opposite one everywhere it has come up: every measurement is shown and none is a
 nothing is hidden, and needing a hand is the craft rather than a failure. **A surface is a
 choice about attention, not about authority.**
 
-#### It dissolves the parameter collision rather than fixing it
+#### The parameter collision is gone, and an interface still decides what is shown
 
-`SetError::ParamCollision` refuses a pair of procedures that both declare a param of one
-name, because `Set::params` is keyed by name across the whole Set. Two renderers over one
-geometry will both declare `exposure` almost every time — `soft_points` and `drift_streaks`
-do — so the check as written forbids exactly what M3 is for.
+`SetError::ParamCollision` used to refuse a pair of procedures that both declare a param of
+one name, because `Set::params` was one flat map keyed by name across the whole Set. Two
+renderers over one geometry declare `exposure` almost every time — every L4 in `examples/`
+does — so the check as written forbade exactly what M3 is for. **The engine now keys values
+by the node that declares them and the error is deleted**, which is the internal half of the
+address the graph needs anyway.
 
-With an interface there are two namespaces and neither collides. **Internally** a control is
-addressed by node and name, which the graph needs anyway. **Externally** it has the name the
-Set gave it — so two `exposure`s can be published as two controls, or as one control driving
-both, and which of those is right is an authoring decision rather than an error. The refusal
-does not need a fix; it needs deleting once the interface exists.
+What that leaves for an interface is the external half, and it is the interesting one.
+Internally a control is node-and-name. Externally it has the name the Set gave it — so two
+`exposure`s can be published as two controls, or as one control driving both, and which of
+those is right is an authoring decision rather than an error.
+
+**Until an interface exists, a bare name means every node that declares it.** A `--param
+exposure=2.0` moves both renderers, which is the useful default for one knob and is exactly
+the "one control driving both" case. Setting two nodes' `exposure` *apart* needs the address
+in the record vocabulary — `layer` plus an `index` defaulting to 0, which keeps every
+existing session stream replaying unchanged — and that is unbuilt.
 
 #### A published range narrows, never redefines
 

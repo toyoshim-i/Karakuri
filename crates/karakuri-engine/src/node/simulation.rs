@@ -26,12 +26,12 @@ const ALIVE_STRIDE: u64 = 4;
 /// here while the uniform took the bound one would be the same param meaning two
 /// things in one frame.
 ///
-/// The grouping resolves that name against the L1 layer for the *binding* and
-/// against one map shared with L4 for the manual value — so what stops an L4's
-/// `spawn_rate` from feeding this accumulator is `SetError::ParamCollision`
-/// refusing the pair, not the lookup. Keying values by layer is the fix that
-/// error is waiting on; until then this is one more thing that would quietly
-/// come right with it.
+/// **Resolved against this node's own map**, which it was not always: the
+/// grouping used to hold one flat map across every layer, so an L4 that
+/// declared a `spawn_rate` would have fed this accumulator. What stopped it was
+/// `SetError::ParamCollision` refusing the pair rather than the lookup being
+/// right. Values are keyed by node now, that error is gone, and the name means
+/// this node's `spawn_rate` and nothing else.
 const SPAWN_RATE: &str = "spawn_rate";
 
 /// One direction's pair of storage buffers (element or alive).

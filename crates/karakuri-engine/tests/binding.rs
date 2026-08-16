@@ -212,7 +212,7 @@ fn value_of(deck: &Deck, slot: usize, key: &str) -> f32 {
 fn a_beat_binding_moves_a_param_in_time_with_the_deck_oscillator() {
     let gpu = Gpu::headless().expect("no GPU");
     let mut set = build(&gpu);
-    set.params.insert("radius".to_string(), 2.5);
+    assert_eq!(set.set_param("radius", 2.5), 1, "the param must be declared for the write to mean anything");
     assert!(
         set.bind(Binding::new(
             Kind::L1,
@@ -282,15 +282,15 @@ fn a_bound_param_reaches_the_shader_by_the_same_path_a_param_override_takes() {
     const RATE: f32 = 20_000.0;
     let bound_to = |key: &str, layer, value: f32, manual: f32| {
         let mut set = build(&gpu);
-        set.params.insert("spawn_rate".to_string(), RATE);
-        set.params.insert(key.to_string(), manual);
+        assert_eq!(set.set_param("spawn_rate", RATE), 1, "the param must be declared for the write to mean anything");
+        assert_eq!(set.set_param(key, manual), 1, "the param must be declared for the write to mean anything");
         assert!(set.bind(Binding::new(layer, key, "beat", Curve::Lin, [value, value])));
         set
     };
     let set_to = |key: &str, value: f32| {
         let mut set = build(&gpu);
-        set.params.insert("spawn_rate".to_string(), RATE);
-        set.params.insert(key.to_string(), value);
+        assert_eq!(set.set_param("spawn_rate", RATE), 1, "the param must be declared for the write to mean anything");
+        assert_eq!(set.set_param(key, value), 1, "the param must be declared for the write to mean anything");
         set
     };
     let render_of = |set: Set| {
@@ -332,7 +332,7 @@ fn a_binding_reaches_the_spawn_accumulator_and_not_only_the_uniform() {
 
     // Nothing spawns at all without the binding: `spawn_rate` is zero by hand.
     let mut unbound = build(&gpu);
-    unbound.params.insert("spawn_rate".to_string(), 0.0);
+    assert_eq!(unbound.set_param("spawn_rate", 0.0), 1, "the param must be declared for the write to mean anything");
     let (mut deck, present) = deck_of(&gpu, vec![unbound], 5);
     for _ in 0..30 {
         frame(&gpu, &mut deck, &present, 1);
@@ -347,7 +347,7 @@ fn a_binding_reaches_the_spawn_accumulator_and_not_only_the_uniform() {
     // constant rate: the range's two ends are equal, so the count depends on
     // the binding being read rather than on the phase it was read at.
     let mut bound = build(&gpu);
-    bound.params.insert("spawn_rate".to_string(), 0.0);
+    assert_eq!(bound.set_param("spawn_rate", 0.0), 1, "the param must be declared for the write to mean anything");
     assert!(bound.bind(Binding::new(
         Kind::L1,
         "spawn_rate",
@@ -375,7 +375,7 @@ fn a_manual_value_is_kept_and_blended_from_rather_than_overwritten() {
     let gpu = Gpu::headless().expect("no GPU");
     let mut set = build(&gpu);
     // What `--param radius=7.0` does.
-    set.params.insert("radius".to_string(), 7.0);
+    assert_eq!(set.set_param("radius", 7.0), 1, "the param must be declared for the write to mean anything");
     // An *invented* signal, so the manual value keeps 90% of the weight and
     // its survival is observable in the written value rather than only in the
     // map it came from.
@@ -392,7 +392,7 @@ fn a_manual_value_is_kept_and_blended_from_rather_than_overwritten() {
         frame(&gpu, &mut deck, &present, 1);
     }
 
-    let manual = deck.slot(0).set().params["radius"];
+    let manual = deck.slot(0).set().param("radius").expect("declared");
     assert_eq!(manual, 7.0, "the binding overwrote the manual value");
 
     let energy = deck.signals().sample("energy");
@@ -413,7 +413,7 @@ fn a_manual_value_is_kept_and_blended_from_rather_than_overwritten() {
 fn a_signal_with_no_provider_leaves_the_param_where_it_was_put() {
     let gpu = Gpu::headless().expect("no GPU");
     let mut set = build(&gpu);
-    set.params.insert("radius".to_string(), 3.25);
+    assert_eq!(set.set_param("radius", 3.25), 1, "the param must be declared for the write to mean anything");
     assert!(set.bind(Binding::new(
         Kind::L1,
         "radius",
@@ -431,7 +431,7 @@ fn a_signal_with_no_provider_leaves_the_param_where_it_was_put() {
             "a signal with no provider moved a param"
         );
     }
-    assert_eq!(deck.slot(0).set().params["radius"], 3.25);
+    assert_eq!(deck.slot(0).set().param("radius").expect("declared"), 3.25);
 }
 
 /// The same tick sequence and the same seed reproduce every bound value bit
@@ -489,7 +489,7 @@ fn every_live_slot_reads_the_same_session_phase() {
     let sets: Vec<Set> = (0..2)
         .map(|_| {
             let mut set = build(&gpu);
-            set.params.insert("radius".to_string(), 2.0);
+            assert_eq!(set.set_param("radius", 2.0), 1, "the param must be declared for the write to mean anything");
             assert!(set.bind(Binding::new(
                 Kind::L1,
                 "radius",
@@ -548,7 +548,7 @@ fn the_session_clock_advances_by_the_same_clamped_steps_the_slots_do() {
 
     let bound = |gpu: &Gpu| {
         let mut set = build(gpu);
-        set.params.insert("radius".to_string(), 2.0);
+        assert_eq!(set.set_param("radius", 2.0), 1, "the param must be declared for the write to mean anything");
         assert!(set.bind(Binding::new(
             Kind::L1,
             "radius",
@@ -588,21 +588,31 @@ fn the_session_clock_advances_by_the_same_clamped_steps_the_slots_do() {
     }
 }
 
-/// **`Binding::layer` is only as real as the map it indexes.** `Record::Bind`
-/// carries a layer, and `Set::bind` keys on it — but `Set::params` is one flat
-/// `name -> value` map across both procedures, built by chaining L1's params
-/// and L4's into one collection. So a name both layers declare is one value,
-/// the second declaration's default silently overwrites the first's, and a
-/// binding on either one blends from a base the *other* procedure declared.
+/// **`Binding::layer` is only as real as the map it indexes**, and now the map
+/// is indexed by it.
 ///
-/// A binding cannot fix that from where it sits, so the collision has to stop
-/// at the build: a Set whose two procedures disagree about what `radius` is
-/// worth is a Set with no answer to give, and one severity means saying so
-/// rather than picking one.
+/// `Set::params` used to be one flat `name -> value` map across both
+/// procedures, built by chaining L1's params and L4's into one collection. A
+/// name both layers declared was therefore one value: the second declaration's
+/// default silently overwrote the first's, and a binding on either one blended
+/// from a base the *other* procedure declared. A binding could not fix that from
+/// where it sits, so the collision was refused at build time — which was the
+/// right call while the map was flat, and which also forbade several renderers
+/// over one geometry, since every L4 in `examples/` declares `exposure`.
+///
+/// There is a map per node now, so this asserts what the refusal was standing
+/// in for. `sparks` declares `radius = 2.5` and `soft_points` declares
+/// `radius = 7.5`, and the pair has to keep both.
+///
+/// **The bindings are what make it a real claim rather than a bookkeeping one.**
+/// Both are attached to a signal nothing provides, which comes back with
+/// confidence 0.0, and step 4 of the binding path then writes the param's own
+/// value unchanged — so each binding resolves to exactly the default of the node
+/// it names. One shared map would give both the same number.
 #[test]
-fn a_param_name_both_layers_declare_is_refused_rather_than_silently_shared() {
+fn a_param_name_two_nodes_declare_is_two_values_one_per_node() {
     let gpu = Gpu::headless().expect("no GPU");
-    let err = Set::build(
+    let mut set = Set::build(
         &gpu.device,
         &gpu.queue,
         &compile(L1),
@@ -610,12 +620,67 @@ fn a_param_name_both_layers_declare_is_refused_rather_than_silently_shared() {
         CAPACITY,
         SEED,
     )
-    .err()
-    .expect("a param name declared by both layers has no single value to take");
-    let message = err.to_string();
-    assert!(
-        message.contains("radius"),
-        "the diagnostic does not name the param that collided: {message}"
+    .expect("two nodes may each declare a `radius`");
+
+    let mut declared: Vec<(Kind, f32)> = set
+        .params()
+        .filter(|(_, name, _)| *name == "radius")
+        .map(|(layer, _, value)| (layer, value))
+        .collect();
+    declared.sort_by_key(|(layer, _)| format!("{layer:?}"));
+    assert_eq!(
+        declared,
+        vec![(Kind::L1, 2.5), (Kind::L4, 7.5)],
+        "the two declarations of `radius` did not survive as two values"
+    );
+
+    // A name with no address is every node that declares it — one knob, both
+    // layers — which is what a `--param` and a `param` record ask for.
+    assert_eq!(set.set_param("radius", 4.0), 2, "a bare name must move both");
+    assert_eq!(set.set_param("point_scale", 9.0), 1, "only the L4 declares it");
+    assert_eq!(set.set_param("nothing_declares_this", 1.0), 0);
+
+    // Back to two distinct values by rebuilding, since a bare name cannot set
+    // them apart — which is the addressed write the record vocabulary still
+    // owes, and deliberately not this commit's business.
+    let mut set = Set::build(
+        &gpu.device,
+        &gpu.queue,
+        &compile(L1),
+        &compile(L4_CLASHING),
+        CAPACITY,
+        SEED,
+    )
+    .expect("two nodes may each declare a `radius`");
+    for layer in [Kind::L1, Kind::L4] {
+        assert!(
+            set.bind(Binding::new(
+                layer,
+                "radius",
+                "nothing_measures_this",
+                Curve::Lin,
+                [0.0, 100.0]
+            )),
+            "`radius` is declared on {layer:?}"
+        );
+    }
+
+    let (mut deck, present) = deck_of(&gpu, vec![set], 1);
+    frame(&gpu, &mut deck, &present, 1);
+
+    let resolved = |layer: Kind| -> f32 {
+        deck.slot(0)
+            .set()
+            .bindings()
+            .iter()
+            .find(|b| b.layer == layer)
+            .expect("both layers are bound")
+            .value()
+    };
+    assert_eq!(
+        (resolved(Kind::L1), resolved(Kind::L4)),
+        (2.5, 7.5),
+        "a binding blended from the other node's declaration of `radius`"
     );
 }
 
