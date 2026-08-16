@@ -1,0 +1,71 @@
+// The first L3 in this library: a camera that jumps on the beat and keeps
+// facing the middle.
+//
+// **This is the expectation that decided the layer's shape.** Asked what a
+// camera should do, the two answers on record were "follow the first vertex"
+// and 「ビートに合わせてランダムに移動しつつ中央を向き続ける」 — jump on the
+// beat, at random, while continuing to look at the centre. The first takes
+// geometry as an input and is why the camera edge is a GPU buffer; this one is
+// the half that can be written today, and it is worth noticing that it needs no
+// state at all. A jump chosen by hashing the beat number is a *pure function of
+// the clock*, so this camera is seekable: scrub the transport and it is exactly
+// where it would have been.
+//
+// **What it is not is smooth.** Every jump is a hard cut, which is the honest
+// thing for a camera driven by a grid to be — cutting on the beat is a real
+// technique and a damped version of it would be neither a cut nor a move. A
+// damped follow wants state, which an L3 is allowed to hold and this compiler
+// does not implement yet.
+//
+// Use it in place of the built-in orbit:
+//
+//     --set drift_shell.kir,beat_jump.kir,soft_points.kir
+//
+// The camera is a node like any other, so its params are addressed like any
+// other node's: `--param L3:0:radius=14.0` — a Set holds one camera, and the
+// index is written anyway so that an address is always `layer:index:`.
+proc beat_jump {
+  kind L3
+
+  // How far out the camera sits. The whole scene scales against this, so it is
+  // the first thing to reach for when material arrives too big or too small.
+  param radius : float [2.0, 30.0]  = 9.0
+  // Eye height at rest. Each jump moves up or down from here by up to half of
+  // it, so a value near zero keeps the camera level with the origin.
+  param lift   : float [-6.0, 12.0] = 2.5
+  // Beats between jumps. Four holds the camera for a bar; a quarter is a jump
+  // every sixteenth and is more of a strobe than a move.
+  param every  : float [0.25, 8.0]  = 1.0
+  // A slow turn on top of the jumps, so a long hold is not a still frame.
+  // Zero holds it perfectly still between cuts.
+  param drift  : float [0.0, 1.0]   = 0.25
+
+  camera {
+    // **Which jump this is.** `beats` is the session's tempo grid, so this
+    // changes exactly on the beat and holds constant between — which is what
+    // makes the cut land with the music rather than near it. Clamped at zero
+    // because `uint` of a negative number is not a jump index, and a transport
+    // scrubbed behind the start would ask for one.
+    let step = uint(max(floor(beats / every), 0.0));
+
+    // Two draws from the one step, so the angle and the height change together
+    // on the beat and are uncorrelated with each other. The offset is what
+    // makes the second draw independent of the first — `hash1(n)` and
+    // `hash1(n + k)` are unrelated sequences, which is the whole use of a hash
+    // here.
+    let a = hash1(step) * 6.2831853;
+    let h = hash1(step + 8191u) - 0.5;
+
+    // The drift is on `t` rather than on `beats`, deliberately: a turn that
+    // sped up and slowed down with the tempo would fight the cuts for
+    // attention, where a constant one reads as the room rather than as an
+    // effect.
+    let creep = t * drift * 0.35;
+
+    eye    = vec3(cos(a + creep) * radius, lift + h * lift, sin(a + creep) * radius);
+    // **Always the centre**, which is the half of the expectation that makes
+    // the jumps read as one camera moving rather than as a cut to a different
+    // scene.
+    target = vec3(0.0, 0.0, 0.0);
+  }
+}

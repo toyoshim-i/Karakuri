@@ -323,10 +323,14 @@ impl Source for Watch {
         Some(Request {
             id,
             l1,
-            // **No deformations from a watcher yet.** A watcher watches the
-            // files a slot names, and `--set` names an L1 and renderers; a
-            // chain arrives when the command line can spell one.
+            // **No deformations and no camera from a watcher yet.** A watcher
+            // tracks the files a slot names and rebuilds from them, and it only
+            // ever learned to sort an L1 from its renderers — so editing a
+            // `.kir` in a slot that also names an L2 or an L3 rebuilds the slot
+            // without them. `--set` builds the whole chain at startup; it is the
+            // rebuild that is behind.
             l2s: Vec::new(),
+            l3: None,
             l4s,
             capacity: self.capacity,
             seed_salt: self.seed_salt,

@@ -280,7 +280,9 @@ sheet, and one that picks the wrong exposure renders a white blob, and **the com
 nothing to say about either**. These are the only numbers in this document that exist
 solely so that something writing a procedure can aim.
 
-Until L3 exists the camera is a built-in orbit:
+A Set with no L3 in it is watched from a built-in orbit, and **that is what a procedure should
+be written against** — an L1 cannot know which camera it will be paired with, and the orbit is
+the one it gets by default:
 
 | | |
 |---|---|
@@ -1817,12 +1819,13 @@ matrix**, blending of trajectories happens on that state, and a derivation step 
 `view_proj`, `basis` and `depth_range` an L4 reads. What moves is that the host stops knowing
 the camera — and nothing was found that needs to.
 
-**All of that is built, and the producer is the only part that is not.** `crate::node::Camera`
-owns the state buffer, the derivation pass and the bind group every L4 reads; `Ambient::Camera`
-and `Ambient::Eye` lower to reads of that group rather than of the renderer's uniform. The
-producer is still the built-in `Orbit`, host-written — which is precisely the first of the two
-kinds above, so an L3 procedure joins as a second writer of a buffer that already exists rather
-than as a change to what a camera is.
+**All of that is built, and so is the first kind of producer.** `crate::node::Camera` owns the
+state buffer, the derivation pass and the bind group every L4 reads; `Ambient::Camera` and
+`Ambient::Eye` lower to reads of that group rather than of the renderer's uniform. A Set's
+camera is either the built-in `Orbit`, host-written, or a `kind L3` procedure whose `camera`
+block is lowered to a compute pass writing the same buffer — one consumer, two producers, and
+nothing downstream can tell which ran. What is not built is the second kind: a camera that
+reads geometry, which needs the addressing below.
 
 **Building the edge before the producer was the right order, and not obviously so.** The
 tempting increment is a `kind L3` that the host evaluates, leaving the uniform alone; it would

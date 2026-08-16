@@ -1128,5 +1128,5 @@ fn a_camera_shader_dispatches_one_invocation_over_nothing() {
 fn a_camera_uniform_carries_the_clock_and_its_params() {
     let shader = karakuri_codegen::generate_l3(&sweep());
     let names: Vec<&str> = shader.uniform_layout.fields.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(names, vec!["t", "beats", "dt", "radius", "speed"]);
+    assert_eq!(names, vec!["t", "beats", "dt", "seed_salt", "radius", "speed"]);
 }

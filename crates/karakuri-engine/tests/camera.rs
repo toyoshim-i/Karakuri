@@ -83,7 +83,7 @@ fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
 fn build(gpu: &Gpu, w: u32, h: u32, camera: Orbit) -> Set {
     let l4 = compile(DOT);
     let mut set =
-        Set::build_many(&gpu.device, &gpu.queue, &compile(MARK), &[], &[&l4], 1, 7)
+        Set::build_many(&gpu.device, &gpu.queue, &compile(MARK), &[], None, &[&l4], 1, 7)
             .expect("one L1 and one L4");
     set.resize(&gpu.device, w, h);
     set.camera = camera;
@@ -250,5 +250,183 @@ fn the_canvas_shape_reaches_the_projection() {
         "at aspect 2 the material sits {wide} texels from the centre and at aspect 1 \
          it sits {square}, where twice {wide} was due — the canvas did not reach the \
          projection"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// L3 — a camera that is a procedure
+// ---------------------------------------------------------------------------
+
+/// A camera on the clock alone, parameterised so a test can move it. Writes two
+/// of the six outputs and leaves the other four to their defaults, which is what
+/// the simplest camera anyone writes looks like.
+fn sweep(dist: f32) -> String {
+    format!(
+        r#"
+proc sweep {{
+  kind L3
+  param dist : float [1.0, 40.0] = {dist:?}
+  camera {{
+    eye    = vec3(dist, 0.0, 0.0);
+    target = vec3(0.0, 0.0, 0.0);
+  }}
+}}
+"#
+    )
+}
+
+/// **Sized by its own param**, so a picture that changes when the param does
+/// proves three things at once: the L3's pass ran, its uniform reached it, and
+/// the state it wrote was what the derivation read.
+const GAIN_DOT: &str = r#"
+proc gain_dot {
+  kind  L4
+  blend additive
+
+  param gain : float [0.0, 4.0] = 1.0
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 3.0;
+  }
+
+  fragment {
+    color = vec4(gain, gain, gain, 1.0);
+  }
+}
+"#;
+
+fn with_camera(gpu: &Gpu, l3: Option<&str>, l4: &str, w: u32, h: u32) -> Set {
+    let l3 = l3.map(compile);
+    let l4 = compile(l4);
+    let mut set = Set::build_many(
+        &gpu.device,
+        &gpu.queue,
+        &compile(MARK),
+        &[],
+        l3.as_ref(),
+        &[&l4],
+        1,
+        7,
+    )
+    .expect("one L1, an optional camera, and one L4");
+    set.resize(&gpu.device, w, h);
+    set.camera = pinned();
+    set
+}
+
+/// **A camera procedure produces the view**, and its params reach it. The whole
+/// path is on the GPU — a uniform write, a compute pass writing six numbers, a
+/// second deriving a matrix, and a bind group — so moving the eye and watching
+/// the material move is the only end-to-end proof there is.
+#[test]
+fn a_camera_procedure_produces_the_view() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    const W: u32 = 96;
+    const H: u32 = 96;
+
+    let offset = |dist: f32| {
+        let mut set = with_camera(&gpu, Some(&sweep(dist)), GAIN_DOT, W, H);
+        centroid(&gpu, &mut set, W, H).0 - W as f32 / 2.0
+    };
+    let far = offset(5.0);
+    let near = offset(3.0);
+
+    assert!(far.abs() > 4.0, "the material is on the centre column; nothing to measure");
+    assert!(
+        near.abs() > far.abs() * 1.3,
+        "closing the camera's own `dist` from 5 to 3 moved the material from {far} texels off \
+         centre to {near} — the procedure did not reach the frame"
+    );
+}
+
+/// **And it can be addressed after the build**, like any other node's params.
+#[test]
+fn a_cameras_parameters_are_addressed_as_a_nodes() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    const W: u32 = 96;
+    const H: u32 = 96;
+    let mut set = with_camera(&gpu, Some(&sweep(5.0)), GAIN_DOT, W, H);
+
+    let declared: Vec<(u32, &str, f32)> = set
+        .params()
+        .filter(|(layer, ..)| *layer == karakuri_ir::Kind::L3)
+        .map(|(_, index, name, value)| (index, name, value))
+        .collect();
+    assert_eq!(
+        declared,
+        vec![(0, "dist", 5.0)],
+        "the camera's params are not reported as the camera's"
+    );
+
+    let far = centroid(&gpu, &mut set, W, H).0 - W as f32 / 2.0;
+    assert!(set.set_param_at(karakuri_ir::Kind::L3, 0, "dist", 3.0), "the camera declares `dist`");
+    let near = centroid(&gpu, &mut set, W, H).0 - W as f32 / 2.0;
+    assert!(
+        near.abs() > far.abs() * 1.3,
+        "writing the camera's `dist` left the material at {near}, against {far}"
+    );
+}
+
+/// **A camera between the deformations and the renderers does not shift what a
+/// renderer reads.** This is a regression: the L4 uniform pass spelled out its
+/// own slot arithmetic instead of asking [`Set::slot_of`], so inserting an L3
+/// gave every renderer the node before it — and `soft_points` drew a black
+/// frame, because its `exposure` resolved against the camera's parameter map
+/// and came back missing.
+///
+/// The reading is a brightness rather than a position, on purpose: a shifted map
+/// leaves a declared param with no value, which the uniform path writes as
+/// `0.0`. A renderer whose colour *is* its param then goes black — which is
+/// exactly what happened, and is the one symptom a picture can show.
+#[test]
+fn a_camera_does_not_shift_the_parameters_a_renderer_reads() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    const W: u32 = 64;
+    const H: u32 = 64;
+
+    let peak = |l3: Option<&str>| {
+        let mut set = with_camera(&gpu, l3, GAIN_DOT, W, H);
+        frame(&gpu, &mut set, W, H)
+            .chunks_exact(4)
+            .map(|t| t[0])
+            .fold(0.0f32, f32::max)
+    };
+    // The same camera either way, so the only difference between the two Sets
+    // is whether a node sits between the geometry and the renderer.
+    let built_in = peak(None);
+    let procedure = peak(Some(&sweep(5.0)));
+
+    assert!(built_in > 0.5, "the renderer's own default never reached the frame: {built_in}");
+    assert!(
+        (procedure - built_in).abs() < 0.01,
+        "with a camera procedure the renderer drew at {procedure}, and without one at \
+         {built_in} — a node was inserted and the renderer read the map beside its own"
+    );
+}
+
+/// **The built-in orbit is not a second producer.** A Set whose camera is a
+/// procedure has the `camera` field still on it — a `camera` record and a Set
+/// file both set one — and it must reach nothing, because two producers writing
+/// one edge would resolve by whichever ran last.
+#[test]
+fn an_orbit_assigned_beside_a_camera_procedure_reaches_nothing() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    const W: u32 = 96;
+    const H: u32 = 96;
+
+    let mut set = with_camera(&gpu, Some(&sweep(5.0)), GAIN_DOT, W, H);
+    let before = centroid(&gpu, &mut set, W, H);
+    // A camera nowhere near the procedure's, and pointed from above rather than
+    // level, so anything of it that leaked would move the material a long way.
+    set.camera = Orbit { radius: 20.0, height: 18.0, speed: 0.0, ..Default::default() };
+    let after = centroid(&gpu, &mut set, W, H);
+
+    assert!(
+        (before.0 - after.0).abs() < 0.5 && (before.1 - after.1).abs() < 0.5,
+        "assigning an orbit moved the material from {before:?} to {after:?} — the built-in \
+         reached a Set whose camera is a procedure"
     );
 }

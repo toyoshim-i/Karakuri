@@ -908,14 +908,11 @@ fn parse_bind(value: &str) -> Result<Binding, String> {
         };
         match name.trim() {
             "layer" => {
-                layer = Some(match v {
-                    "L1" => karakuri_ir::Kind::L1,
-                    "L4" => karakuri_ir::Kind::L4,
-                    // L2 and L3 are in the record's `Layer` and are M3's; a
-                    // Set has no slot for one, so binding into it would
-                    // silently do nothing.
-                    _ => return Err(bad(&format!("`layer={v}` — expected L1 or L4"))),
-                })
+                layer = Some(
+                    layer_named(v).ok_or_else(|| {
+                        bad(&format!("`layer={v}` — expected L1, L2, L3 or L4"))
+                    })?,
+                )
             }
             "index" => {
                 index = Some(v.parse::<u32>().map_err(|_| {
@@ -1046,15 +1043,33 @@ const NOISE_KINDS: [&str; 4] = ["white", "value", "perlin", "fbm"];
 /// other flag here is: silence looks exactly like a parameter that was applied
 /// and had no visible effect. A name that no procedure declares is still only a
 /// warning at build time — that one is a question about the `.kir`.
+/// A layer name as an operator writes it. **One reader, so `--param` and
+/// `--bind` cannot disagree about which layers a Set has** — they did, and the
+/// disagreement was silent: `--param L2:…` was refused as a malformed address
+/// while `--bind layer=L2` was refused with a sentence saying L2 did not exist
+/// yet, both long after it did.
+fn layer_named(name: &str) -> Option<karakuri_ir::Kind> {
+    Some(match name {
+        "L1" => karakuri_ir::Kind::L1,
+        "L2" => karakuri_ir::Kind::L2,
+        "L3" => karakuri_ir::Kind::L3,
+        "L4" => karakuri_ir::Kind::L4,
+        _ => return None,
+    })
+}
+
 fn parse_param(value: &str) -> Result<ParamWrite, String> {
     let bad = || format!("`--param {value}` — expected `name=number` or `L4:1:name=number`");
     let (addressed, rest) = match value.split_once(':') {
         Some((layer, rest)) => {
-            let kind = match layer {
-                "L1" => karakuri_ir::Kind::L1,
-                "L4" => karakuri_ir::Kind::L4,
-                _ => return Err(bad()),
-            };
+            let kind = layer_named(layer).ok_or_else(bad)?;
+            // **The index is required, even where a layer can hold only one
+            // node.** `L3:0:radius` for a camera a Set has exactly one of is
+            // two characters of ceremony, and the rule it keeps is worth more:
+            // the address is `layer:index:` present or absent as a *unit*, so
+            // there is exactly one wildcard spelling — a bare name. Making the
+            // index optional would give `L4:exposure` a third meaning, sitting
+            // between "every renderer" and "renderer 0".
             let (index, rest) = rest.split_once(':').ok_or_else(bad)?;
             let index: u32 = index.parse().map_err(|_| bad())?;
             (Some((kind, index)), rest)
@@ -1512,6 +1527,8 @@ fn seed_for(slot: usize) -> u32 {
 struct Material {
     l1: karakuri_ir::typed::Checked,
     l2s: Vec<karakuri_ir::typed::Checked>,
+    /// The camera, or `None` for the built-in orbit. At most one per slot.
+    l3: Option<karakuri_ir::typed::Checked>,
     l4s: Vec<karakuri_ir::typed::Checked>,
 }
 
@@ -1604,7 +1621,12 @@ fn replay_session(args: &Args, id: &str) {
     let mut set = build(
         &gpu,
         &loaded.l1,
+        // **A Set file carries neither a chain nor a camera yet.** It records
+        // an L1 and its renderers, so a replay of one draws them from the
+        // built-in orbit — the same gap L2 has, and the same fix will close
+        // both. `--set` is where a chain and a camera are spelled today.
         &[],
+        None,
         &loaded.l4s,
         loaded.capacity.unwrap_or(args.capacity),
         &loaded.params,
@@ -1792,7 +1814,10 @@ fn rebuild(
     Ok(build(
         gpu,
         &l1,
+        // Artifacts recorded by a session, which stores an L1 and its
+        // renderers — see the note at the other `build` call site.
         &[],
+        None,
         &l4s,
         args.capacity,
         &args.overrides,
@@ -2147,7 +2172,7 @@ fn main() {
     // point: one path, so a loaded Set can be watched and rewritten.
     if let Some(loaded) = loaded.filter(|_| !editable) {
         eprintln!("  slot 0: set `{}`", loaded.id);
-        procs.push(Material { l1: loaded.l1, l2s: Vec::new(), l4s: loaded.l4s });
+        procs.push(Material { l1: loaded.l1, l2s: Vec::new(), l3: None, l4s: loaded.l4s });
     }
     for (slot, (l1, rest)) in args.sets.iter().enumerate() {
         let named: Vec<String> = rest.iter().map(|p| p.display().to_string()).collect();
@@ -2164,25 +2189,26 @@ fn main() {
         // simulates with one geometry, and a run that quietly dropped the
         // second would be playing something nobody asked for.
         let mut l2s = Vec::new();
+        let mut l3: Option<karakuri_ir::typed::Checked> = None;
         let mut l4s = Vec::new();
         for (path, checked) in rest.iter().zip(rest.iter().map(load)) {
             match checked.kind {
                 karakuri_ir::Kind::L2 => l2s.push(checked),
                 karakuri_ir::Kind::L4 => l4s.push(checked),
-                // **Parsed, checked, lowered — and not yet buildable.** The IR
-                // knows what an L3 is and `karakuri-codegen` emits its shader;
-                // what does not exist is a node in a Set to bind it to. Said
-                // plainly rather than ignored: a slot that quietly dropped the
-                // camera would draw from the built-in orbit and look like the
-                // procedure had no effect.
-                karakuri_ir::Kind::L3 => {
+                // **One camera per slot**, refused rather than last-one-wins for
+                // the same reason a second L1 is: a Set is a grouping around one
+                // viewpoint, and a run that quietly dropped one of two would be
+                // playing something nobody asked for. Two viewpoints composited
+                // is a graph, which is what an L5 is for.
+                karakuri_ir::Kind::L3 if l3.is_some() => {
                     eprintln!(
-                        "slot {slot}: {} is an L3, and a Set cannot hold one yet — the camera \
-                         is still the built-in orbit. See `docs/roadmap.md`, M3",
+                        "slot {slot}: {} is a second L3 — a slot looks from one camera, and \
+                         compositing two viewpoints is what an L5 is for",
                         path.display()
                     );
                     std::process::exit(1);
                 }
+                karakuri_ir::Kind::L3 => l3 = Some(checked),
                 karakuri_ir::Kind::L1 => {
                     eprintln!(
                         "slot {slot}: {} is an L1 and so is {} — a slot simulates with one \
@@ -2202,7 +2228,7 @@ fn main() {
             );
             std::process::exit(1);
         }
-        procs.push(Material { l1: load(l1), l2s, l4s });
+        procs.push(Material { l1: load(l1), l2s, l3, l4s });
     }
 
     // Saving is a one-shot: it writes what the flags say and stops, on the same
@@ -2306,11 +2332,13 @@ fn build_deck(
         .iter()
         .enumerate()
         .map(|(slot, material)| {
-            let (l1, l2s, l4s) = (&material.l1, &material.l2s, &material.l4s);
+            let (l1, l2s, l3, l4s) =
+                (&material.l1, &material.l2s, material.l3.as_ref(), &material.l4s);
             let set = build(
                 gpu,
                 l1,
                 l2s,
+                l3,
                 l4s,
                 capacity_for(args, l1),
                 &args.overrides,
@@ -2422,6 +2450,7 @@ fn build(
     gpu: &Gpu,
     l1: &karakuri_ir::typed::Checked,
     l2s: &[karakuri_ir::typed::Checked],
+    l3: Option<&karakuri_ir::typed::Checked>,
     l4s: &[karakuri_ir::typed::Checked],
     capacity: u32,
     overrides: &[ParamWrite],
@@ -2431,9 +2460,13 @@ fn build(
 ) -> Set {
     let deform: Vec<&karakuri_ir::typed::Checked> = l2s.iter().collect();
     let draw: Vec<&karakuri_ir::typed::Checked> = l4s.iter().collect();
-    match Set::build_many(&gpu.device, &gpu.queue, l1, &deform, &draw, capacity, seed) {
+    match Set::build_many(&gpu.device, &gpu.queue, l1, &deform, l3, &draw, capacity, seed) {
         Ok(mut set) => {
-            if let Some(camera) = camera {
+            // **The `camera` record, and only when nothing else produces one.**
+            // An L3 writes the camera state every frame, so an orbit assigned
+            // here would be overwritten before the first draw — silently, which
+            // is the wrong way for two producers to meet.
+            if let Some(camera) = camera.filter(|_| l3.is_none()) {
                 set.camera = camera;
             }
             for write in overrides {
@@ -4988,7 +5021,6 @@ mod tests {
             ("layer=L4,signal=beat,range=0..1", "no `key=`"),
             ("layer=L4,key=hue,range=0..1", "no `signal=`"),
             ("layer=L4,key=hue,signal=beat", "no `range="),
-            ("layer=L2,key=hue,signal=beat,range=0..1", "expected L1 or L4"),
             (
                 "layer=L4,key=hue,signal=beat,curve=expo,range=0..1",
                 "expected lin, pow2, sqrt, smooth",
