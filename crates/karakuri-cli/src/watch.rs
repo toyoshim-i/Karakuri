@@ -290,7 +290,10 @@ impl Source for Watch {
         Some(Request {
             id,
             l1,
-            l4,
+            // One renderer, because a watcher watches one `.kir` per layer.
+            // Several is `Set::build_many`'s to hold and `--set a,b,c`'s to
+            // ask for; the watcher grows a list when the command line does.
+            l4s: vec![l4],
             capacity: self.capacity,
             seed_salt: self.seed_salt,
             params: self.overrides.clone(),

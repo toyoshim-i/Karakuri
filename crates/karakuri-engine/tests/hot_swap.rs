@@ -134,11 +134,39 @@ fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
         .join("\n")
 }
 
+/// A second renderer over the same geometry: bigger sprites, its own
+/// `exposure`. Declaring that name twice in one Set is the thing a flat
+/// parameter map could not hold.
+const L4_WIDE: &str = r#"
+proc wide_points {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  param exposure : float [0.0, 8.0] = 0.5
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 11.0;
+  }
+
+  fragment {
+    let d = length(point_coord * 2.0 - 1.0);
+    color = vec4(vec3(0.2, 0.9, 1.0) * exposure, max(0.0, 1.0 - d));
+  }
+}
+"#;
+
 fn request(l4_src: &str, capacity: u32, label: &str) -> Request {
+    request_many(&[l4_src], capacity, label)
+}
+
+fn request_many(l4_srcs: &[&str], capacity: u32, label: &str) -> Request {
     Request {
         id: 1,
         l1: compile(L1),
-        l4: compile(l4_src),
+        l4s: l4_srcs.iter().map(|s| compile(s)).collect(),
         capacity,
         seed_salt: 19274,
         params: Vec::new(),
@@ -649,6 +677,44 @@ fn a_candidate_that_holds_the_budget_is_kept() {
     assert!(
         seen.iter().any(|s| s.contains("held the budget")),
         "no acceptance message: {seen:?}"
+    );
+}
+
+/// **A rebuild can change how many renderers a Set has**, not only which ones.
+///
+/// A `Request` restates the whole stack rather than naming the node that
+/// changed, for the same reason it restates the params and the bindings: a
+/// request that depended on what happens to be live would not be reproducible
+/// from a record stream. So going from one renderer to two is an ordinary
+/// rebuild and needs nothing the swap path did not already have.
+///
+/// Both renderers declare `exposure`, at different defaults. That pair is
+/// exactly what `SetError::ParamCollision` used to refuse, so this also pins
+/// that a *swapped-in* Set gets the per-node parameter maps and not a flat one.
+#[test]
+fn a_rebuild_can_add_a_renderer_over_the_same_geometry() {
+    let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
+
+    for _ in 0..5 {
+        h.frame();
+    }
+    tx.send(request_many(&[L4, L4_WIDE], SECOND, "two renderers"))
+        .expect("worker alive");
+    h.frames_until(is_swapped, "the swap");
+    h.frames_until(|e| matches!(e, Event::Accepted { .. }), "the verdict");
+
+    let set = h.swap.set();
+    assert_eq!(set.capacity(), SECOND, "the candidate was not kept");
+    let mut exposures: Vec<f32> = set
+        .params()
+        .filter(|(_, name, _)| *name == "exposure")
+        .map(|(_, _, value)| value)
+        .collect();
+    exposures.sort_by(|a, b| a.partial_cmp(b).expect("no NaN"));
+    assert_eq!(
+        exposures,
+        vec![0.5, 1.0],
+        "the swapped-in Set does not hold both renderers' `exposure`"
     );
 }
 

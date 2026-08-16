@@ -241,7 +241,11 @@ pub struct Request {
     /// thread between them.
     pub id: u64,
     pub l1: Checked,
-    pub l4: Checked,
+    /// The renderers, in draw order — see [`Set::build_many`]. A rebuild names
+    /// every one of them rather than the one that changed, for the reason the
+    /// params below are restated: a request that depended on what happens to be
+    /// live is not reproducible from a record stream.
+    pub l4s: Vec<Checked>,
     pub capacity: u32,
     pub seed_salt: u32,
     /// Applied to the new Set once it is built. Parameter values are the one
@@ -1037,11 +1041,11 @@ fn run_worker(
         // panic, so this is reachable from any generated WGSL naga refuses:
         // a compiler bug, but one that must not be an unexplained silence.
         let build = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            Set::build(
+            Set::build_many(
                 &device,
                 &queue,
                 &request.l1,
-                &request.l4,
+                &request.l4s.iter().collect::<Vec<_>>(),
                 request.capacity,
                 request.seed_salt,
             )
