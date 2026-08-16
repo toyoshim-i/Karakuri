@@ -108,12 +108,17 @@ any L2 in the library sit on almost any L1.
 
 Each layer composes differently, and each needs its own semantics.
 
-- **L1 multiple** — merge. Several geometry sources in one Set, which raises a question
-  with no answer yet: **how two sources avoid colliding identities.** Identity is `seed`, a
-  monotone spawn ordinal from a counter that is engine state and resets at Set start — one
-  counter, described in the singular. Two sources either share it and interleave, or hold
-  one each and collide immediately. The `{"t":"seed"}` record salts per *layer*, not per
-  source, so it does not settle this either. Decide before L1 multiplicity is built.
+- **L1 multiple** — merge. Several geometry sources in one Set, which raised the question
+  this document carried from before there was a compiler: **how two sources avoid colliding
+  identities.** Identity is `seed`, a monotone spawn ordinal from one counter that resets at
+  Set start, so two sources either share it and interleave — and the second one's `seed` no
+  longer starts at zero, which breaks every structured layout — or hold one each and collide.
+  **Answered**: `docs/ir-spec.md`, "Multiple L1 sources, and `source`". Each source counts
+  from zero, an implicit `source` attribute makes identity the pair, and the hash salt moves
+  from per *layer* to per *source* so two identical grids differ in colour by default. What
+  is still open is narrower and is in that document's Open questions: whether a `source`
+  number names an input of a merge node or an entry of the Set's source list, which decides
+  what an attribute mask keeps selecting after a graph is edited.
 - **L2 multiple** — chain. Order matters. Each modulator carries a weight and a mask, and
   masks are attribute-based: only elements where `seed % 3 == 0`, only inside a region,
   only where `age > 0.7`. This is the largest single source of expressive range in the
