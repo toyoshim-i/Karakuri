@@ -933,6 +933,70 @@ reads as strokes. It cost roughly twice the elements and a technique nobody find
 being forced into it. `examples/strand_shell.kir` is kept as written for that reason, beside
 `examples/drift_streaks.kir`, which gets the same look out of one assignment.
 
+**Next, and it is not on the list below because it is underneath three things that are: a
+Set stops owning everything.**
+
+Reading the Adds list after the rendering front closed, three of its nine items turn out to
+be pushing on one fact rather than on three. **L2 and L3 as slots** needs a stage between
+L1 and L4, and there is nowhere to put one because a Set is a pair. **L2 stacking and
+amplification** need several such stages in a row. **Multiple L4 renderers over shared
+geometry** needs the element buffers to outlive the renderer reading them. This document
+already says so in the L4-multiple bullet — *"it is the part that needs a Set to stop being
+the unit that owns everything"* — and what is new is only that it is now true of most of the
+milestone rather than of one bullet.
+
+**A fourth reason arrived from somewhere else, and it is the one an operator would name
+first.** A swap transfers no state: `swap.rs` says so plainly, and it is correct for what it
+was written for. The consequence nobody wrote down is that **editing an L4 restarts the
+simulation** — change one number in a renderer under `--watch` and the cloud goes back to
+`t = 0`, because the unit that was rebuilt was the pair. M2's priming answers "warm a Set
+before showing it"; it does not answer "this Set did not need to be rebuilt at all". The
+split turns the rule into one sentence: **a swap costs what it invalidates.** A renderer
+edit costs a pipeline; a geometry edit costs the simulation.
+
+The shape is three types where there is one. **Geometry** owns what L1 produces — the
+element and alive buffers, the counts, the compaction scan, the spawn accumulator, `t`, and
+the L1 pipelines. **Renderer** owns what an L4 needs — the render pipeline, its uniform, the
+OIT targets, and the attribute bind groups. **Set** owns one Geometry, one or more Renderers
+bound to it, the camera, and the parameter values. A Renderer is not portable between
+Geometries and is not meant to be: its bind groups name specific buffers and its `Element`
+struct is compiled against a specific layout, which is the slot interface contract that
+`Set::build`'s composition check already enforces informally.
+
+What falls out with no further work: `examples/drift_shell.kir` drawn as sprites *and* as
+streaks *and* as a solid, for one simulation and three draw passes — which is the payoff the
+primitive-centric bet was made for, and which today costs three simulations.
+
+Three forks, with a recommendation on each.
+
+**How several renderers over one geometry combine.** Recommendation: **sequential passes
+into the one slot target, in declaration order — the first clears and the rest load.** Then
+renderer order inside a Set is the same kind of order slot order is in the mix, and each
+blend mode already knows how to meet what is under it: `additive`'s blend state accumulates
+into whatever is there, and a weighted renderer's resolve composites `over` instead of
+replacing, which is the identical result on the cleared target it writes today. The
+alternative — one target per renderer, folded by a second mixer — is L5 rebuilt inside a
+Set, at a render target per renderer.
+
+**What a Set file and a command line look like.** Recommendation: **no new syntax at all.**
+`--set drift_shell.kir,soft_points.kir,drift_streaks.kir` already parses; every file
+declares its own `kind`, so the loader can require exactly one L1 and read list order as
+order within a layer. Adding a `--renderer` flag or a Set-file section would be a second
+place to say what the files already say — the same argument `clip_b` and the missing
+`vertex` block settled twice.
+
+**How a param is addressed when a Set has two renderers.** This one is forced rather than
+chosen, and it pays a debt already recorded in `SetError::ParamCollision`: `Set::params` is
+keyed by name alone across the whole Set, which is why two procedures declaring `exposure`
+are refused. Two renderers over one geometry will *both* declare `exposure` almost every
+time — `soft_points` and `drift_streaks` do — so the collision check as written forbids the
+feature. Recommendation: **key by layer and position, as the record format already keys by
+layer**, with an index defaulting to 0 so every existing session stream replays unchanged.
+
+What this is *not*: L2. The split makes the space a stage goes into; putting one there is
+the next thing after, and it should be built against a Set that already holds a list rather
+than against one being taught to.
+
 **Adds**
 
 - L2 and L3 as IR `kind`s with their own slots
