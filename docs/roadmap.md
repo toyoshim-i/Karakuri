@@ -934,7 +934,7 @@ being forced into it. `examples/strand_shell.kir` is kept as written for that re
 `examples/drift_streaks.kir`, which gets the same look out of one assignment.
 
 **Next, and it is not on the list below because it is underneath three things that are: a
-Set stops owning everything.**
+Set stops owning everything, and `Ln` becomes a node.**
 
 Reading the Adds list after the rendering front closed, three of its nine items turn out to
 be pushing on one fact rather than on three. **L2 and L3 as slots** needs a stage between
@@ -945,53 +945,84 @@ already says so in the L4-multiple bullet — *"it is the part that needs a Set 
 the unit that owns everything"* — and what is new is only that it is now true of most of the
 milestone rather than of one bullet.
 
-**A fourth reason arrived from somewhere else, and it is the one an operator would name
-first.** A swap transfers no state: `swap.rs` says so plainly, and it is correct for what it
-was written for. The consequence nobody wrote down is that **editing an L4 restarts the
-simulation** — change one number in a renderer under `--watch` and the cloud goes back to
-`t = 0`, because the unit that was rebuilt was the pair. M2's priming answers "warm a Set
-before showing it"; it does not answer "this Set did not need to be rebuilt at all". The
-split turns the rule into one sentence: **a swap costs what it invalidates.** A renderer
-edit costs a pipeline; a geometry edit costs the simulation.
+**The shape is nodes, and that came from Toyoshima rather than from this document.** My
+first draft split a Set into a Geometry and a list of Renderers — a two-level hierarchy with
+a star baked into it. The correction: *「ノード系ツールであるようにLnがノード、Setと読んでいる
+のはノードグラフのグループ化みたいな緩い意味になるかもね」*. `Ln` is a node; a Set is a
+grouping drawn around some nodes. That is not a different implementation of the same idea, it
+is a different idea, and the Adds list already ends at it — **"node graph as authoring
+representation, render graph as execution representation"**. A fixed one-geometry-many-
+renderers type is a shape the graph compiler would have to demolish.
 
-The shape is three types where there is one. **Geometry** owns what L1 produces — the
-element and alive buffers, the counts, the compaction scan, the spawn accumulator, `t`, and
-the L1 pipelines. **Renderer** owns what an L4 needs — the render pipeline, its uniform, the
-OIT targets, and the attribute bind groups. **Set** owns one Geometry, one or more Renderers
-bound to it, the camera, and the parameter values. A Renderer is not portable between
-Geometries and is not meant to be: its bind groups name specific buffers and its `Element`
-struct is compiled against a specific layout, which is the slot interface contract that
-`Set::build`'s composition check already enforces informally.
+So: **the unit that owns GPU state is the node**, not the Set. An L1 node owns element
+buffers and produces `Geometry`. An L2 node takes `Geometry` and produces `Geometry`. An L4
+node takes `Geometry` and `Camera` and produces `Texture`. A Set is a list of nodes, the
+edges between them, and one output; evaluation is dependency order, which for every shape
+that exists today is list order with a check.
+
+What this buys, stated as what stops being a special case. "Multiple L4 renderers over
+shared geometry" is no longer a feature — it is two L4 nodes with an edge from the same L1,
+and there is nothing to add for it beyond the edge existing. "L2 as a slot" is a node kind
+and an insertion, not a third position in a fixed pipeline. And the render graph the graph
+compiler is supposed to target exists in miniature from the start, rather than being what it
+has to replace.
+
+What it does not buy, and this is worth saying so nobody reads more into it: **today's graph
+is a star with two node kinds in it.** There is no authoring representation, no fan-in, no
+`Field` chain to fuse. Building a general graph runtime now would be one shape's worth of
+machinery pretending to be a system. What is being built is the *ownership* — a node holds
+its own buffers, pipelines and uniforms, and names its inputs — which is the part L2 and
+multi-L4 both need and the part a graph compiler cannot be bolted onto later.
+
+A Renderer node is not portable between Geometry nodes and is not meant to be: its bind
+groups name specific buffers and its `Element` struct is compiled against a specific layout.
+That edge is typed, in other words, and `Set::build`'s composition check is already the type
+check for it — informally, and against a pair rather than against an edge.
+
+**A fourth reason, from somewhere else, and the one an operator would name first.** A swap
+transfers no state: `swap.rs` says so plainly, and it is correct for what it was written
+for. The consequence nobody wrote down is that **editing an L4 restarts the simulation** —
+change one number in a renderer under `--watch` and the cloud goes back to `t = 0`, because
+the unit rebuilt was the pair. M2's priming answers "warm a Set before showing it"; it does
+not answer "this node did not need rebuilding at all". Per node, the rule is one sentence:
+**a swap costs what it invalidates.** Editing a renderer costs a pipeline. Editing geometry
+costs the simulation, and every node downstream of it.
 
 What falls out with no further work: `examples/drift_shell.kir` drawn as sprites *and* as
-streaks *and* as a solid, for one simulation and three draw passes — which is the payoff the
-primitive-centric bet was made for, and which today costs three simulations.
+streaks *and* as a solid, for one simulation and three draw passes — the payoff the
+primitive-centric bet was made for, which today costs three simulations.
 
-Three forks, with a recommendation on each.
+Three forks, with a recommendation on each. All three read differently under the node
+framing than they did under the hierarchy one, which is the reframe earning its keep.
 
-**How several renderers over one geometry combine.** Recommendation: **sequential passes
-into the one slot target, in declaration order — the first clears and the rest load.** Then
-renderer order inside a Set is the same kind of order slot order is in the mix, and each
-blend mode already knows how to meet what is under it: `additive`'s blend state accumulates
-into whatever is there, and a weighted renderer's resolve composites `over` instead of
-replacing, which is the identical result on the cleared target it writes today. The
-alternative — one target per renderer, folded by a second mixer — is L5 rebuilt inside a
-Set, at a render target per renderer.
+**How several `Texture` nodes reach the Set's one output.** Recommendation: **their passes
+run in order over the one attachment — the first clears and the rest load.** Then order
+among renderer nodes is the same kind of order slot order is in the mix, and each blend mode
+already knows how to meet what is under it: `additive`'s blend state accumulates into
+whatever is there, and a weighted node's resolve composites `over` instead of replacing,
+which is the identical result on the cleared target it writes today. The alternative — a
+texture per node and an implicit combining node — is L5 rebuilt inside a Set, at a render
+target apiece. It is also the answer that becomes wrong first, and knowingly: a real graph
+has nodes that consume textures, and then the combine *is* a node. Until one exists, an
+implicit one is a node nobody can see or edit.
 
 **What a Set file and a command line look like.** Recommendation: **no new syntax at all.**
-`--set drift_shell.kir,soft_points.kir,drift_streaks.kir` already parses; every file
-declares its own `kind`, so the loader can require exactly one L1 and read list order as
-order within a layer. Adding a `--renderer` flag or a Set-file section would be a second
-place to say what the files already say — the same argument `clip_b` and the missing
-`vertex` block settled twice.
+`--set drift_shell.kir,soft_points.kir,drift_streaks.kir` already parses; every file declares
+its own `kind`, so the loader can require exactly one L1 and read list order as order within
+a kind. The edges are *inferred* while the graph is a star — every L4 reads the only L1 —
+and the moment that stops being true they have to be spelled. Inferring them now is not a
+shortcut being taken; it is that there is exactly one edge set consistent with the nodes, so
+writing them down would be a second place for the same fact. When fan-in arrives it brings
+the notation with it.
 
-**How a param is addressed when a Set has two renderers.** This one is forced rather than
-chosen, and it pays a debt already recorded in `SetError::ParamCollision`: `Set::params` is
-keyed by name alone across the whole Set, which is why two procedures declaring `exposure`
-are refused. Two renderers over one geometry will *both* declare `exposure` almost every
-time — `soft_points` and `drift_streaks` do — so the collision check as written forbids the
-feature. Recommendation: **key by layer and position, as the record format already keys by
-layer**, with an index defaulting to 0 so every existing session stream replays unchanged.
+**How a param is addressed.** Under the hierarchy framing this was "layer and position";
+under nodes it is simply **the node**, which is the same key with a name that will still be
+right after the graph exists. It is forced rather than chosen, and it pays a debt already
+recorded in `SetError::ParamCollision`: `Set::params` is keyed by name alone across the whole
+Set, so two procedures declaring `exposure` are refused. Two renderers over one geometry will
+*both* declare `exposure` almost every time — `soft_points` and `drift_streaks` do — so the
+collision check as written forbids the feature. The record format already keys by layer; an
+index defaulting to 0 keeps every existing session stream replaying unchanged.
 
 What this is *not*: L2. The split makes the space a stage goes into; putting one there is
 the next thing after, and it should be built against a Set that already holds a list rather
