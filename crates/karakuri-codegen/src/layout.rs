@@ -300,7 +300,7 @@ pub struct ElementSlot {
 /// element buffer as `capacity * stride`, and [`ElementLayout::offset_of`]
 /// is how it finds where a given slot's bytes land when it needs to write
 /// one directly (initializing `seed` and `birth_frac` for a spawn-less
-/// procedure — see `karakuri-engine::set::Set::initialize`).
+/// procedure — see `karakuri-engine`'s `node::Simulation::initialize`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ElementLayout {
     /// `seed`, then `birth_frac`, then `emit` in declaration order — see

@@ -498,8 +498,15 @@ impl Simulation {
             0.0
         };
 
+        // Clamped again, as [`Simulation::record`] clamps again. `Tick` says
+        // its `steps` arrives clamped and the Set does clamp it — but both of
+        // these index `MAX_STEPS`-long arrays, and now that the caller is a
+        // different type from the callee, "the caller promised" is a comment
+        // rather than a compiler's business. Two methods on one struct with two
+        // policies for one precondition is how the unguarded one gets found.
+        let steps = tick.steps.min(MAX_STEPS);
         let mut bytes = [0u8; MAX_STEPS as usize * step_args::STRIDE as usize];
-        for step in 0..usize::from(tick.steps) {
+        for step in 0..usize::from(steps) {
             self.spawn_carry += rate * tick.dt;
             let whole = self.spawn_carry.floor();
             self.spawn_carry -= whole;

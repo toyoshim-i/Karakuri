@@ -310,9 +310,10 @@ fn beats_and_t_name_the_same_instant() {
 /// `priming.rs` — compares one run against another. That is the right shape for
 /// invariance claims and it is blind to one whole class of defect: shift *every*
 /// substep's `t` by a whole `dt` and both sides of every comparison shift with
-/// it, so twenty-odd suites stay green while the clock a procedure reads is off
-/// by a frame. Found exactly that way, by injecting the shift into
-/// `Set::prepare_on` and watching nothing fail.
+/// it, so all 43 suites stay green while the clock a procedure reads is off by a
+/// frame. Found exactly that way, by injecting the shift into whichever function
+/// derives the per-substep instant — `Set::write_step_args` when this was
+/// written, `Set::prepare_on` since the node split — and watching nothing fail.
 ///
 /// So this asserts against arithmetic instead. `position.x` is written outright,
 /// so it holds the **last** substep's instant and must equal [`Set::time`].
@@ -320,6 +321,14 @@ fn beats_and_t_name_the_same_instant() {
 /// zero** and must equal `dt * (1 + 2 + ... + n)` — which pins where the
 /// sequence starts as well as where it ends, and pins it across a frame of four
 /// steps as well as a frame of one.
+///
+/// The two halves are not redundant *arithmetically*: a defect giving every
+/// substep the frame's final instant leaves `position.x` correct and moves `age`
+/// from `66·dt` to `76·dt`. They are partly redundant in *practice*, because
+/// freezing the instant freezes `beats` with it and
+/// `an_accumulating_procedure_reading_beats_is_substep_invariant` catches that
+/// too — which is worth knowing rather than worth removing: that test would stop
+/// covering it the moment `beats` stopped being derived from this `t`.
 #[test]
 fn the_instants_a_substep_reads_are_the_sets_own_clock() {
     let gpu = Gpu::headless().expect("no GPU available");

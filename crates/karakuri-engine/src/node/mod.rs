@@ -19,15 +19,24 @@
 //! values and their bindings, the viewport, the clock, and the order the nodes
 //! run in.
 //!
-//! # The edges are typed, and one of them always was
+//! # The edge from L1 has two halves, and only one of them has a type
 //!
-//! [`Geometry`] is the whole of what crosses from an L1 node to whatever is
-//! downstream: an element layout, and the element and alive buffers indexed by
-//! parity. A `Renderer` is built *against* one and is not portable to another —
-//! its bind groups name those buffers and its generated `Element` struct is
-//! compiled against that layout. That is not a limitation to lift later; it is
-//! the slot interface contract, which `Set::build`'s `consumes ⊆ emit` check has
-//! been enforcing informally since M1.
+//! [`Geometry`] is the **build-time half**: an element layout, and the element
+//! and alive buffers indexed by parity. A `Renderer` is built *against* one and
+//! is not portable to another — its bind groups name those buffers and its
+//! generated `Element` struct is compiled against that layout. That is not a
+//! limitation to lift later; it is the slot interface contract, which
+//! `Set::build`'s `consumes ⊆ emit` check has been enforcing informally since M1.
+//!
+//! **The per-frame half is not a type yet, and is worth naming as a debt.** Two
+//! values also cross from the L1 node to whatever draws — which parity holds
+//! what was last written, and the counts buffer the instance count lives in —
+//! and both are routed *around* [`Geometry`] by `Set::draw`, which reads them
+//! off [`Simulation`] and passes them as arguments. So a `Renderer` cannot draw
+//! from a `Geometry` alone, whatever the doc on that struct suggests. It works
+//! while there is one reader and one writer; with several renderers over one
+//! geometry it is the same two values fetched the same way N times, which is the
+//! point at which they want to travel together and be handed down once.
 //!
 //! [`View`] and [`Tick`] are the other direction: not edges between nodes but
 //! what the *grouping* hands each node about the frame. They exist because one
@@ -45,8 +54,11 @@ use karakuri_codegen::layout::ElementLayout;
 
 use crate::set::MAX_STEPS;
 
-/// What an L1 node offers whatever reads it — the edge, as the resources that
-/// cross it.
+/// What an L1 node offers whatever reads it, as of build time: the resources a
+/// reader has to name in a bind group.
+///
+/// **Not the whole edge** — the parity and the counts buffer cross every frame
+/// and are not here; see the module doc.
 ///
 /// Borrowed rather than owned, and only for the duration of a build: a
 /// `Renderer` keeps bind groups, and a bind group holds its buffers alive.
@@ -77,11 +89,18 @@ pub(crate) struct View<'a> {
     /// its own state and hands the answer down; a node does not know what a
     /// binding is.
     ///
-    /// **`None` rather than a panic** for a declared name with no scalar value —
-    /// a vector param, which nothing drives yet. This is called on the render
-    /// thread, and a panic there is not the way to find out that a `.kir`
-    /// declared something the uniform path cannot write; see
-    /// `Set::resolve_bindings`, which already says so about the same map.
+    /// **`None` rather than a panic** for a declared name the Set has no scalar
+    /// value under. This is called on the render thread, and a panic there is
+    /// not the way to find out that a `.kir` declared something the uniform path
+    /// cannot write; see `Set::resolve_bindings`, which already says so about the
+    /// same map.
+    ///
+    /// It is not only vector params that land here. `Set::default_scalar` reads
+    /// a *literal* float out of the declaration, so any `float` param whose
+    /// default is an expression — `-0.35`, which parses as a negation of a
+    /// literal — misses too. That is a defect of `default_scalar` rather than of
+    /// this signature, and `0.0` is the wrong answer for it either way; it is
+    /// merely a quieter wrong answer than the panic it replaced.
     pub param: &'a dyn Fn(&str) -> Option<f32>,
 }
 
