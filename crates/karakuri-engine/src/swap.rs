@@ -244,6 +244,10 @@ pub struct Request {
     /// The deformations, in chain order — each reads what the one before wrote.
     /// Empty for a Set that draws its geometry as the L1 made it.
     pub l2s: Vec<Checked>,
+    /// The camera, or `None` to leave it the built-in orbit. At most one: a Set
+    /// is a grouping around one viewpoint, and two viewpoints composited is a
+    /// graph rather than a Set.
+    pub l3: Option<Checked>,
     /// The renderers, in draw order — see [`Set::build_many`]. A rebuild names
     /// every one of them rather than the one that changed, for the reason the
     /// params below are restated: a request that depended on what happens to be
@@ -1049,6 +1053,7 @@ fn run_worker(
                 &queue,
                 &request.l1,
                 &request.l2s.iter().collect::<Vec<_>>(),
+                request.l3.as_ref(),
                 &request.l4s.iter().collect::<Vec<_>>(),
                 request.capacity,
                 request.seed_salt,

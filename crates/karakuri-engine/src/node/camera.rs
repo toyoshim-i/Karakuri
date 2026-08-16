@@ -25,11 +25,17 @@
 //! The derivation is where the aspect ratio enters, since it belongs to the
 //! canvas rather than to the camera.
 
-use karakuri_codegen::layout::camera as wire;
+use karakuri_codegen::generate_l3;
+use karakuri_codegen::layout::{binding, camera as wire, group, UniformLayout};
+use karakuri_ir::typed::Checked;
 
 use crate::camera::State;
+use crate::uniforms::UniformScratch;
 
-/// The camera node: a state buffer, its derived form, and the pass between.
+use super::View;
+
+/// The camera node: a producer, a state buffer, its derived form, and the pass
+/// between.
 pub(crate) struct Camera {
     /// `CameraState`. Storage rather than uniform because the other producer is
     /// a compute pass, and `COPY_DST` because this one is the host.
@@ -51,10 +57,30 @@ pub(crate) struct Camera {
     /// group below.
     read_bgl: wgpu::BindGroupLayout,
     read_bg: wgpu::BindGroup,
+    /// **The producer, when it is a procedure.** `None` is the built-in orbit,
+    /// which the host writes straight into `state`. Everything downstream of
+    /// that buffer is identical either way, which is the whole reason the edge
+    /// was built before this was.
+    proc: Option<Producer>,
+}
+
+/// An L3, compiled: the pass that writes [`Camera::state`].
+struct Producer {
+    pipeline: wgpu::ComputePipeline,
+    uniforms: wgpu::Buffer,
+    uniform_layout: UniformLayout,
+    scratch: UniformScratch,
+    uniform_bg: wgpu::BindGroup,
+    state_bg: wgpu::BindGroup,
+    param_names: Vec<String>,
 }
 
 impl Camera {
-    pub(crate) fn new(device: &wgpu::Device) -> Camera {
+    /// **`l3` is the producer, and `None` means the built-in orbit.** The
+    /// buffers, the derivation and the bind group every renderer names are the
+    /// same in both cases — a procedure joins as a second writer of an edge that
+    /// already exists.
+    pub(crate) fn build(device: &wgpu::Device, l3: Option<&Checked>) -> Camera {
         let state = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("camera state"),
             size: wire::STATE_SIZE,
@@ -159,7 +185,25 @@ impl Camera {
             entries: &[wgpu::BindGroupEntry { binding: 0, resource: derived.as_entire_binding() }],
         });
 
-        Camera { state, derived, canvas, derive, derive_bg, read_bgl, read_bg }
+        let proc = l3.map(|l3| Producer::build(device, l3, &state));
+        Camera { state, derived, canvas, derive, derive_bg, read_bgl, read_bg, proc }
+    }
+
+    /// The params this node declares, or nothing when the camera is the
+    /// built-in — which declares none, because it is not a procedure.
+    pub(crate) fn param_names(&self) -> &[String] {
+        match &self.proc {
+            Some(p) => &p.param_names,
+            None => &[],
+        }
+    }
+
+    /// **How many nodes this is**, for [`crate::set::Set::slot_of`]: one when a
+    /// procedure produces the camera, none when the built-in does. The built-in
+    /// is a field on the Set rather than a node, and a Set with no L3 has no L3
+    /// parameter map to address.
+    pub(crate) fn node_count(&self) -> usize {
+        usize::from(self.proc.is_some())
     }
 
     /// What a renderer's pipeline layout names.
@@ -172,6 +216,35 @@ impl Camera {
     /// Set disagreeing about where the frame is being watched from.
     pub(crate) fn bind_group(&self) -> &wgpu::BindGroup {
         &self.read_bg
+    }
+
+    /// **This frame's producer state, whichever producer it is.**
+    ///
+    /// One call site and one place the choice is made: a procedure gets its
+    /// uniform block written and runs as a pass in [`Camera::record`]; the
+    /// built-in has its six numbers written straight into the edge here, and
+    /// `fallback` is where they come from.
+    pub(crate) fn prepare(
+        &mut self,
+        queue: &wgpu::Queue,
+        view: &View<'_>,
+        dt: f32,
+        fallback: &State,
+    ) {
+        // **`None` and not `_`, although the two behave identically.** A
+        // `queue.write_buffer` lands before every command in the submission it
+        // precedes, so a Set that wrote the built-in's six numbers here *and*
+        // ran an L3 pass would come out with the L3's — the wrong version is
+        // invisible, which is the reason to be exact rather than a reason not to
+        // bother. There is one producer per camera; that is the sentence, and
+        // leaning on submission ordering to make a second one harmless is how it
+        // stops being true the first time anything reads the state before the
+        // pass that overwrites it. A defect injection made this survive, and it
+        // survived because it changes nothing today.
+        match &mut self.proc {
+            Some(p) => p.write_uniforms(queue, view, dt),
+            None => self.write_state(queue, fallback),
+        }
     }
 
     /// The host producer: six numbers straight into the edge.
@@ -212,10 +285,27 @@ impl Camera {
 
     /// Derive, ahead of anything that reads a camera this frame.
     ///
-    /// **One dispatch of one invocation.** Recorded per frame rather than
-    /// cached, because the state moves every frame and there is no cheaper test
-    /// for "did it" than doing it.
+    /// **One dispatch of one invocation, twice over when an L3 produces it.**
+    /// Recorded per frame rather than cached, because the state moves every
+    /// frame and there is no cheaper test for "did it" than doing it.
+    ///
+    /// The two passes are separate rather than one shader for a reason that
+    /// outlives the built-in: the derivation is the *engine's* — its projection
+    /// convention, its 0..1 depth range, its pre-scaled ray basis — and folding
+    /// it into every generated L3 would restate all of that once per procedure.
+    /// Which is the same argument `camera.rs` makes for deriving rather than
+    /// passing, one layer out.
     pub(crate) fn record(&self, encoder: &mut wgpu::CommandEncoder) {
+        if let Some(p) = &self.proc {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("camera"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&p.pipeline);
+            pass.set_bind_group(group::UNIFORMS, &p.uniform_bg, &[]);
+            pass.set_bind_group(group::STATE, &p.state_bg, &[]);
+            pass.dispatch_workgroups(1, 1, 1);
+        }
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("camera derive"),
             timestamp_writes: None,
@@ -223,6 +313,109 @@ impl Camera {
         pass.set_pipeline(&self.derive);
         pass.set_bind_group(0, &self.derive_bg, &[]);
         pass.dispatch_workgroups(1, 1, 1);
+    }
+}
+
+impl Producer {
+    fn build(device: &wgpu::Device, l3: &Checked, state: &wgpu::Buffer) -> Producer {
+        let shader = generate_l3(l3);
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(&format!("{} (L3)", l3.name)),
+            source: wgpu::ShaderSource::Wgsl(shader.source.as_str().into()),
+        });
+        let uniforms = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(&format!("{} uniforms", l3.name)),
+            size: u64::from(shader.uniform_layout.total_size),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let uniform_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("L3 uniforms"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: binding::UNIFORM,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let state_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("L3 state"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: binding::UNIFORM,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    // **Read-write although nothing reads it**, because an L3 is
+                    // allowed to hold state and the buffer it would read is this
+                    // one. Declaring it read-only now would make damping a
+                    // change to the binding layout rather than to a body.
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let uniform_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("L3 uniforms"),
+            layout: &uniform_bgl,
+            entries: &[wgpu::BindGroupEntry {
+                binding: binding::UNIFORM,
+                resource: uniforms.as_entire_binding(),
+            }],
+        });
+        let state_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("L3 state"),
+            layout: &state_bgl,
+            entries: &[wgpu::BindGroupEntry {
+                binding: binding::UNIFORM,
+                resource: state.as_entire_binding(),
+            }],
+        });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("L3"),
+            bind_group_layouts: &[&uniform_bgl, &state_bgl],
+            push_constant_ranges: &[],
+        });
+        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some(&l3.name),
+            layout: Some(&pipeline_layout),
+            module: &module,
+            entry_point: Some(karakuri_codegen::l3::ENTRY),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
+        Producer {
+            pipeline,
+            uniforms,
+            uniform_layout: shader.uniform_layout.clone(),
+            scratch: UniformScratch::new(&shader.uniform_layout),
+            uniform_bg,
+            state_bg,
+            param_names: l3.params.iter().map(|p| p.name.clone()).collect(),
+        }
+    }
+
+    /// **Reuses [`View`], and reads three of its fields.** A camera runs once a
+    /// frame at the instant the simulation reached — the same instant a
+    /// deformation and a renderer work at — so it wants the same clock. The
+    /// viewport is not one of the three: an aspect ratio belongs to the canvas
+    /// and reaches the derivation, not the camera.
+    fn write_uniforms(&mut self, queue: &wgpu::Queue, view: &View<'_>, dt: f32) {
+        let mut p = self.scratch.pack(&self.uniform_layout);
+        p.f32("t", view.t)
+            .f32("beats", view.beats)
+            .f32("dt", dt)
+            .u32("seed_salt", view.seed_salt);
+        for name in &self.param_names {
+            p.f32(name, (view.param)(name).unwrap_or(0.0));
+        }
+        queue.write_buffer(&self.uniforms, 0, p.finish());
     }
 }
 
@@ -282,7 +475,7 @@ mod tests {
         };
         let aspect = 16.0 / 9.0;
 
-        let cam = Camera::new(&gpu.device);
+        let cam = Camera::build(&gpu.device, None);
         cam.write_state(&gpu.queue, &state);
         cam.write_canvas(&gpu.queue, aspect);
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
@@ -316,6 +509,76 @@ mod tests {
         close(range[1], f32_at(&bytes, 132), "depth_range.span");
     }
 
+    /// **A camera procedure's defaults are the built-in's**, which is the claim
+    /// `karakuri_codegen::l3` makes and cannot check: the four values it writes
+    /// before an author's block runs are literals in a WGSL string, and
+    /// `Orbit::default` is a Rust struct. Here both exist.
+    ///
+    /// What it buys is that swapping the built-in orbit for the simplest L3
+    /// anyone would write — two lines, `eye` and `target` — changes where the
+    /// camera is and nothing else. A different field of view underneath would
+    /// read as the procedure having done something it did not.
+    #[test]
+    fn a_camera_procedure_that_writes_two_outputs_matches_the_built_in_in_the_other_four() {
+        let Ok(gpu) = Gpu::headless() else {
+            eprintln!("no adapter; skipping");
+            return;
+        };
+        let src = r#"
+proc two {
+  kind L3
+  camera {
+    eye    = vec3(3.0, 2.0, 7.0);
+    target = vec3(-1.0, 0.5, 0.0);
+  }
+}
+"#;
+        let parsed = karakuri_ir::parse(src).expect("parses");
+        let l3 = karakuri_ir::check::check(&parsed).expect("checks");
+        let aspect = 16.0 / 9.0;
+
+        let mut cam = Camera::build(&gpu.device, Some(&l3));
+        cam.write_canvas(&gpu.queue, aspect);
+        cam.prepare(
+            &gpu.queue,
+            &View {
+                t: 0.0,
+                beats: 0.0,
+                seed_salt: 0,
+                viewport: [16.0, 9.0],
+                param: &|_| None,
+            },
+            crate::set::DT,
+            // Unread: this node has a procedure, so the built-in is not its
+            // producer. Passed as what it would have been.
+            &crate::camera::Orbit::default().state(0.0),
+        );
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        cam.record(&mut encoder);
+        gpu.queue.submit([encoder.finish()]);
+        let bytes = read_buffer(&gpu.device, &gpu.queue, &cam.derived, wire::SIZE);
+
+        // The same eye and target the procedure writes, and every other field
+        // from the struct that documents the built-in's answers.
+        let orbit = crate::camera::Orbit::default();
+        let want = State {
+            eye: [3.0, 2.0, 7.0],
+            target: [-1.0, 0.5, 0.0],
+            up: [0.0, 1.0, 0.0],
+            fov_y: orbit.fov_y,
+            near: orbit.near,
+            far: orbit.far,
+        };
+        for (c, col) in want.view_proj(aspect).iter().enumerate() {
+            for (r, v) in col.iter().enumerate() {
+                close(*v, f32_at(&bytes, (c * 4 + r) * 4), &format!("view_proj[{c}][{r}]"));
+            }
+        }
+        let range = want.depth_range();
+        close(range[0], f32_at(&bytes, 128), "depth_range.near");
+        close(range[1], f32_at(&bytes, 132), "depth_range.span");
+    }
+
     /// **The aspect ratio is the canvas's and not the camera's**, which is only
     /// visible as the two places it reaches: the horizontal scale of the
     /// projection, and the pre-scaled `right` a marching ray is built from.
@@ -334,7 +597,7 @@ mod tests {
             near: 0.1,
             far: 50.0,
         };
-        let cam = Camera::new(&gpu.device);
+        let cam = Camera::build(&gpu.device, None);
         let derive = |aspect: f32| {
             cam.write_state(&gpu.queue, &state);
             cam.write_canvas(&gpu.queue, aspect);

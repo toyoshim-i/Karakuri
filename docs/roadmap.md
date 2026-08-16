@@ -811,23 +811,33 @@ fine alone and is unreadable next to lights.
 
 **Where it stands.** The rendering front is closed — `lines`, a fullscreen L4, `blend
 weighted`. The structural front is most of the way: `Ln` is a node, a Set holds a **chain**
-(one L1, a list of L2s, a list of L4s) and `--set L1.kir,L2.kir,L4.kir` reaches it with no new
-syntax. Parameters, bindings, the edit history and the MCP surface all address a node rather
-than a layer.
+(one L1, a list of L2s, one optional L3, a list of L4s) and `--set L1.kir,L2.kir,L3.kir,L4.kir`
+reaches it with no new syntax — files are sorted by the `kind` each declares. Parameters,
+bindings, the edit history and the MCP surface all address a node rather than a layer.
 
-**The camera is a node too, ahead of the procedure that will drive it.** `L4 : (Geometry,
-Camera) -> Texture` makes a camera an input *edge*, and it is one now: the six numbers go into
-a GPU buffer, a compute pass derives the `view_proj`, ray basis and `depth_range` a renderer
-reads, and every L4 binds the result. Nothing about a camera is on the host any more. That
-ordering was deliberate — an L3 that follows an element cannot be evaluated host-side without
-a per-frame readback, so the *edge* had to stop being six numbers in a uniform before the
-producer could be anything but an `Orbit`. What is left on this front is the producer: an L3
-`kind`, its `camera` block, and the compute pass that writes the state.
+**L3 is built, edge first.** `L4 : (Geometry, Camera) -> Texture` makes a camera an input
+*edge*, and it is one: the six numbers a camera *is* go into a GPU buffer, a compute pass
+derives the `view_proj`, ray basis and `depth_range` a renderer reads, and every L4 binds the
+result. Nothing about a camera is on the host any more. The producer is either the built-in
+orbit, host-written, or a `.kir` with a `camera` block, which is a second compute pass writing
+the same buffer.
 
-What is left is **L3 as a `kind`**, **L5 as a `kind`** for the nested case, **what a Set
-publishes**, and **masks in the mixer**. Every one of them is specified in `docs/ir-spec.md`
-with its open questions closed — including the last one this project carried, how two merged
-geometries keep their identities apart. Nothing below is waiting on a decision.
+**Building the edge before the producer was the load-bearing decision.** The tempting
+increment is a `kind L3` the host evaluates, leaving the L4 uniform alone; it works for every
+camera expressible today and has to be undone by the first one that follows an element, since
+that reads a buffer and reading it back is the one thing this architecture is built to avoid.
+Deciding *where the camera lives* is what the geometry-reading case forces, and it forces it
+whether or not anything reads geometry yet.
+
+What is left on this front is what an L3 can point at — a reduction, or element zero — which
+is addressing the language does not have; and state, which the layer is allowed to hold and
+which is what damping a follow needs. `examples/beat_jump.kir` is the half that needs neither:
+a cut chosen by hashing the beat number is a pure function of the clock, so it is seekable.
+
+What is left is **L5 as a `kind`** for the nested case, **what a Set publishes**, and **masks
+in the mixer**. Every one of them is specified in `docs/ir-spec.md` with its open questions
+closed — including the last one this project carried, how two merged geometries keep their
+identities apart. Nothing below is waiting on a decision.
 
 **First, and before any of the list below: more than one way to draw.**
 

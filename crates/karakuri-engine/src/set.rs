@@ -264,7 +264,7 @@ impl Set {
         capacity: u32,
         seed_salt: u32,
     ) -> Result<Set, SetError> {
-        Set::build_many(device, queue, l1, &[], &[l4], capacity, seed_salt)
+        Set::build_many(device, queue, l1, &[], None, &[l4], capacity, seed_salt)
     }
 
     /// **One geometry, several renderers over it, drawn in list order.**
@@ -284,11 +284,17 @@ impl Set {
     ///
     /// `l4s` must not be empty. A Set is a video source and a video source with
     /// nothing to draw has no frame to give.
+    // Eight, where clippy's line is seven. Four of them are the chain — an L1, a
+    // list of L2s, an optional L3, a list of L4s — and grouping them into a
+    // struct would be a second spelling of "the nodes of a Set", which is what
+    // the Set being returned already is.
+    #[allow(clippy::too_many_arguments)]
     pub fn build_many(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         l1: &Checked,
         l2s: &[&Checked],
+        l3: Option<&Checked>,
         l4s: &[&Checked],
         capacity: u32,
         seed_salt: u32,
@@ -437,7 +443,12 @@ impl Set {
         // and needs no rule: two L4s reading one camera are one viewpoint drawn
         // two ways. Two reading *different* cameras is a graph, which is what an
         // L5 is for and not what a Set is.
-        let camera_node = crate::node::Camera::new(device);
+        if let Some(l3) = l3 {
+            if l3.kind != Kind::L3 {
+                return Err(SetError::WrongKind { slot: "L3", expected: Kind::L3, actual: l3.kind });
+            }
+        }
+        let camera_node = crate::node::Camera::build(device, l3);
         let renderers: Vec<Renderer> = {
             let from = sim.geometry();
             let geometry = match deforms.last() {
@@ -458,6 +469,7 @@ impl Set {
         };
         let params = std::iter::once(map(l1))
             .chain(l2s.iter().map(|n| map(n)))
+            .chain(l3.map(map))
             .chain(l4s.iter().map(|n| map(n)))
             .collect();
 
@@ -481,9 +493,11 @@ impl Set {
             // layer would have to be revisited by every layer added after it.
             closed_form: l1.closed_form
                 && l2s.iter().all(|n| n.closed_form)
+                && l3.is_none_or(|n| n.closed_form)
                 && l4s.iter().all(|n| n.closed_form),
             reads_beats: l1.reads_beats
                 || l2s.iter().any(|n| n.reads_beats)
+                || l3.is_some_and(|n| n.reads_beats)
                 || l4s.iter().any(|n| n.reads_beats),
             sim,
             deforms,
@@ -681,7 +695,10 @@ impl Set {
         let names: Vec<&[String]> = match binding.layer {
             Kind::L1 => vec![self.sim.param_names()],
             Kind::L2 => self.deforms.iter().map(|d| d.param_names()).collect(),
-            Kind::L3 => Vec::new(),
+            Kind::L3 => match self.camera_node.node_count() {
+                0 => Vec::new(),
+                _ => vec![self.camera_node.param_names()],
+            },
             Kind::L4 => self.renderers.iter().map(|r| r.param_names()).collect(),
         };
         let found = names.iter().enumerate().any(|(at, n)| {
@@ -718,14 +735,14 @@ impl Set {
             Kind::L1 => 0,
             Kind::L2 => 1,
             // **An L3's place is between the deformations and the renderers**,
-            // and a Set holds none yet: `karakuri_codegen::generate_l3` lowers
-            // one and nothing builds a node from it. Stated rather than left to
-            // a panic, so that `nodes_of` can hand back an empty range — a
-            // `--param L3:…` then reaches no node and is reported as reaching
-            // none, which is the answer a name no procedure declares already
-            // gets. It shares a number with `L4` for exactly as long as that
-            // range is empty.
-            Kind::L3 | Kind::L4 => 1 + self.deforms.len(),
+            // and there is at most one — a Set is a grouping around one
+            // viewpoint. A Set whose camera is the built-in has none at all, so
+            // this and `L4` name the same slot and `nodes_of` hands back an
+            // empty range: a `--param L3:…` then reaches no node and is reported
+            // as reaching none, which is the answer a name no procedure declares
+            // already gets.
+            Kind::L3 => 1 + self.deforms.len(),
+            Kind::L4 => 1 + self.deforms.len() + self.camera_node.node_count(),
         }
     }
 
@@ -735,7 +752,9 @@ impl Set {
         match layer {
             Kind::L1 => start..start + 1,
             Kind::L2 => start..start + self.deforms.len(),
-            Kind::L3 => start..start,
+            // Zero or one: the built-in camera is a field on this struct rather
+            // than a node, and has no parameter map to address.
+            Kind::L3 => start..start + self.camera_node.node_count(),
             Kind::L4 => start..self.params.len(),
         }
     }
@@ -808,14 +827,21 @@ impl Set {
     /// Every parameter value, addressed by the node that declares it: the
     /// layer, which node of that layer, the name, and the value.
     pub fn params(&self) -> impl Iterator<Item = (Kind, u32, &str, f32)> + '_ {
-        let deforms = self.deforms.len();
-        self.params.iter().enumerate().flat_map(move |(slot, node)| {
-            let (layer, index) = match slot {
-                0 => (Kind::L1, 0),
-                n if n <= deforms => (Kind::L2, n as u32 - 1),
-                n => (Kind::L4, (n - 1 - deforms) as u32),
-            };
-            node.iter().map(move |(k, v)| (layer, index, k.as_str(), *v))
+        // **Addressed through [`Set::nodes_of`]**, for the reason the same
+        // arithmetic spelled out by hand went wrong twice: it is one fact —
+        // where a layer's nodes are — and a copy of it is a copy that can be
+        // right about `L2` and wrong about `L3`. This one was, and reported
+        // every camera parameter as a renderer's.
+        let addressed: Vec<(Kind, u32, usize)> = [Kind::L1, Kind::L2, Kind::L3, Kind::L4]
+            .into_iter()
+            .flat_map(|layer| {
+                self.nodes_of(layer)
+                    .enumerate()
+                    .map(move |(index, slot)| (layer, index as u32, slot))
+            })
+            .collect();
+        addressed.into_iter().flat_map(move |(layer, index, slot)| {
+            self.params[slot].iter().map(move |(k, v)| (layer, index, k.as_str(), *v))
         })
     }
 
@@ -1012,16 +1038,41 @@ impl Set {
         // Read before the borrow: `time` takes `&self` and each node's packer
         // takes `&mut` its own scratch, but `param` below borrows this Set.
         let t = self.time();
-        // **The camera's edge, not a renderer's field.** The state goes in here
+        // **The camera's edge, not a renderer's field.** This goes in here
         // rather than into each uniform because there is one camera and several
         // readers; the aspect ratio goes with it because a renderer no longer
         // knows what projection it is drawing under. Both are writes rather than
         // passes — the derivation is recorded in [`Set::draw`].
-        self.camera_node.write_state(queue, &self.camera.state(t));
+        //
+        // Which producer gets written is the node's decision and not this
+        // one's: a Set hands down the frame and the built-in's six numbers, and
+        // an L3 uses the first while the orbit uses the second.
         self.camera_node.write_canvas(queue, self.viewport[0] / self.viewport[1]);
+        {
+            let at = self.slot_of(Kind::L3);
+            let (bindings, params, dt) = (&self.bindings, self.params.get(at), self.dt);
+            let view = crate::node::View {
+                t,
+                beats: self.last_beats,
+                seed_salt: self.seed_salt,
+                viewport: self.viewport,
+                param: &|name: &str| {
+                    params.and_then(|p| effective(bindings, p, Kind::L3, 0, name))
+                },
+            };
+            let fallback = self.camera.state(t);
+            self.camera_node.prepare(queue, &view, dt, &fallback);
+        }
         let (bindings, beats, salt, viewport) =
             (&self.bindings, self.last_beats, self.seed_salt, self.viewport);
-        let first = 1 + self.deforms.len();
+        // **Asked rather than re-derived.** This line spelled out `1 +
+        // deforms.len()` and was right until an L3 landed between the
+        // deformations and the renderers — after which every renderer read the
+        // node before it, and `soft_points` drew a black frame because its
+        // `exposure` resolved against the camera's parameter map. `slot_of` is
+        // the one answer to "where does this layer start"; a second copy of it
+        // is a second thing to remember to change.
+        let first = self.slot_of(Kind::L4);
         for (at, (renderer, params)) in
             self.renderers.iter_mut().zip(&self.params[first..]).enumerate()
         {

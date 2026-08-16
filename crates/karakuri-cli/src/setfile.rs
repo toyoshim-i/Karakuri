@@ -134,16 +134,7 @@ pub fn binding_from_record(record: &Record) -> Result<Binding, String> {
 
     let bad = |what: String| format!("bind {}={key}: {what}", layer_name(*layer));
 
-    let kind = match layer {
-        Layer::L1 => Kind::L1,
-        Layer::L4 => Kind::L4,
-        other => {
-            return Err(bad(format!(
-                "layer {} — this engine builds L1 and L4 only",
-                layer_name(*other)
-            )))
-        }
-    };
+    let kind = kind_of(*layer);
     let curve = Curve::parse(curve)
         .ok_or_else(|| bad(format!("curve `{curve}` — expected lin, pow2, sqrt or smooth")))?;
 
@@ -232,14 +223,19 @@ fn layer_from_ordinal(n: u8) -> Layer {
     }
 }
 
-/// The engine `Kind` a record `Layer` names, or `None` for one this engine has
-/// no node for.
-fn kind_of(layer: Layer) -> Option<Kind> {
+/// The engine `Kind` a record `Layer` names.
+///
+/// **Total, now that every layer a record can name is a node a Set can hold.**
+/// It returned an `Option` while L2 and L3 were record-only, and the three
+/// callers that unwrapped it each carried a "this engine builds L1 and L4 only"
+/// message. Those messages were true when they were written and became wrong
+/// silently, which is what a total function here prevents happening again.
+fn kind_of(layer: Layer) -> Kind {
     match layer {
-        Layer::L1 => Some(Kind::L1),
-        Layer::L2 => Some(Kind::L2),
-        Layer::L3 => Some(Kind::L3),
-        Layer::L4 => Some(Kind::L4),
+        Layer::L1 => Kind::L1,
+        Layer::L2 => Kind::L2,
+        Layer::L3 => Kind::L3,
+        Layer::L4 => Kind::L4,
     }
 }
 
@@ -466,8 +462,12 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                     }
                     l4_slots[at] = Some(*proc_hash);
                 }
+                // **A Set file records an L1 and its renderers**, and a chain and
+                // a camera are spelled on the command line. Not a statement
+                // about what a Set can hold — it holds both — but about what
+                // this format has a slot for.
                 other => notes.push(format!(
-                    "slot {} was skipped: this engine builds L1 and L4 only",
+                    "slot {} was skipped: a Set file records an L1 and its renderers",
                     layer_name(*other)
                 )),
             },
@@ -492,16 +492,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                 // says — which is what keeps every file written before the
                 // address existed meaning what it meant.
                 Value::Scalar(v) => params.push(match index {
-                    Some(at) => match kind_of(*layer) {
-                        Some(kind) => ParamWrite::at(kind, *at, key.clone(), *v),
-                        None => {
-                            notes.push(format!(
-                                "param `{key}` on {} was skipped: this engine builds L1 and L4 only",
-                                layer_name(*layer)
-                            ));
-                            continue;
-                        }
-                    },
+                    Some(at) => ParamWrite::at(kind_of(*layer), *at, key.clone(), *v),
                     None => ParamWrite::everywhere(key.clone(), *v),
                 }),
                 _ => notes.push(format!(

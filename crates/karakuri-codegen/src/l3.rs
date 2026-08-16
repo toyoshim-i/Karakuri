@@ -69,6 +69,12 @@ pub fn generate_l3(checked: &Checked) -> L3Shader {
     // bytes in a buffer written once a frame, and leaving it out would make
     // adding state a change to the wire format rather than to the body.
     b.field("dt", "f32");
+    // **Because the prelude's hashes read it**, and a camera that cuts on the
+    // beat is the first thing anyone writes here — `hash1(floor(beats))` is how
+    // a cut is chosen without state. Salting it means two Sets running one
+    // camera procedure cut to different places, which is the same argument the
+    // salt makes for geometry: an instance of a procedure is not the procedure.
+    b.field("seed_salt", "u32");
     for p in &checked.params {
         b.param_field(p.name.clone(), wgsl_ty(p.ty));
     }
