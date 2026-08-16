@@ -1689,3 +1689,150 @@ proc march {
     let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
     assert!(rendered.contains("eye"), "{rendered}");
 }
+
+/// **A stage output is reserved in the layer that owns it, and nowhere else.**
+///
+/// `Output` went from four names to ten when the camera arrived, and a global
+/// reservation would have taken `up`, `target`, `near`, `far` and `fov_y` out of
+/// every layer's vocabulary at once — `let near = length(position)` in a
+/// marcher and `let up = vec3(0.0, 1.0, 0.0)` in an L1 were both legal and
+/// neither shadows anything reachable there. The diagnostic was worse than the
+/// refusal: it named a `camera` block the procedure does not have.
+#[test]
+fn a_camera_output_is_not_reserved_in_the_layers_that_have_no_camera() {
+    check_ok(
+        r#"
+proc grounded {
+  kind     L1
+  topology points
+  capacity [1, 1] = 1
+  param far : float [1.0, 90.0] = 40.0
+  emit position
+  element {
+    let up   = vec3(0.0, 1.0, 0.0);
+    let near = 0.5;
+    position = up * near * far;
+  }
+}
+"#,
+    );
+    check_ok(
+        r#"
+proc marcher {
+  kind  L4
+  blend additive
+  param target : float [0.0, 4.0] = 1.0
+  fragment {
+    let near = length(ray);
+    color    = vec4(near, target, 0.0, 1.0);
+  }
+}
+"#,
+    );
+}
+
+/// And it **is** reserved where it exists, which is the other half: a `camera`
+/// block's `far` is a stage output, so a local of that name would shadow the
+/// thing the block is there to write.
+#[test]
+fn a_camera_output_is_reserved_inside_a_camera_block() {
+    for decl in ["param far : float [1.0, 90.0] = 40.0", ""] {
+        let src = format!(
+            r#"
+proc shadowed {{
+  kind L3
+  {decl}
+  camera {{
+    let far = 40.0;
+    eye     = vec3(0.0, 0.0, far);
+    target  = vec3(0.0, 0.0, 0.0);
+  }}
+}}
+"#
+        );
+        let errs = check_err(&src);
+        let rendered = errs.iter().map(|e| e.render(&src)).collect::<Vec<_>>().join("\n");
+        assert!(rendered.contains("far"), "{rendered}");
+        assert!(rendered.contains("shadows"), "{rendered}");
+    }
+}
+
+/// **`eye` stays refused everywhere**, and as an *ambient* rather than an
+/// output: a marching fragment reads it, so it genuinely is in scope in an L4
+/// and a local of that name would shadow a value the procedure can use.
+#[test]
+fn the_eye_is_reserved_in_every_layer_because_a_marcher_reads_it() {
+    let src = r#"
+proc grounded {
+  kind     L1
+  topology points
+  capacity [1, 1] = 1
+  emit position
+  element {
+    let eye  = vec3(0.0, 0.0, 5.0);
+    position = eye;
+  }
+}
+"#;
+    let errs = check_err(src);
+    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    assert!(rendered.contains("ambient"), "{rendered}");
+}
+
+/// **`eye` and `ray` belong to a marcher and to nothing else**, and reading
+/// either in a per-element L4 used to check clean and then panic.
+///
+/// The lowering defines both in the ray prologue a fullscreen fragment stage
+/// opens with. A procedure with a `vertex` block gets no prologue, so `ray`
+/// lowered to a bare identifier nothing declared: `generate_l4` produced WGSL
+/// naga refuses, and wgpu's uncaptured-error handler took down whichever thread
+/// built it — a `SetError::Panicked` on the swap worker, and the process at
+/// startup.
+///
+/// The diagnostic has to name the `vertex` block rather than the fragment one,
+/// because what is wrong is that the procedure has a vertex stage at all.
+#[test]
+fn a_per_element_renderer_cannot_read_a_marchers_ray() {
+    for name in ["ray", "eye"] {
+        let src = format!(
+            r#"
+proc confused {{
+  kind  L4
+  blend additive
+  consumes position
+  vertex {{
+    clip       = camera * vec4(position, 1.0);
+    point_size = 4.0;
+  }}
+  fragment {{
+    color = vec4({name}, 1.0);
+  }}
+}}
+"#
+        );
+        let errs = check_err(&src);
+        let rendered = errs.iter().map(|e| e.render(&src)).collect::<Vec<_>>().join("\n");
+        assert!(rendered.contains(name), "{rendered}");
+        assert!(
+            rendered.contains("vertex"),
+            "the diagnostic does not say what makes this procedure per-element: {rendered}"
+        );
+    }
+}
+
+/// And a marcher still reads both, which is the half that must not regress.
+#[test]
+fn a_marcher_reads_the_eye_and_the_ray() {
+    check_ok(
+        r#"
+proc march {
+  kind  L4
+  blend additive
+  fragment {
+    let d = length(eye) + length(ray);
+    color = vec4(d, d, d, 1.0);
+  }
+}
+"#,
+    );
+}

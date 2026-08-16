@@ -430,3 +430,87 @@ fn an_orbit_assigned_beside_a_camera_procedure_reaches_nothing() {
          reached a Set whose camera is a procedure"
     );
 }
+
+/// **An address past a layer's last node reaches nothing**, rather than the
+/// first node of the layer after it.
+///
+/// The parameter maps are laid end to end in node order, so `slot_of(layer) +
+/// index` is a position and says nothing about whose it is. A Set with no
+/// camera makes that concrete: with nothing between the deformations and the
+/// renderers, `L3` and `L4` start at the same slot, and `--param
+/// L3:0:exposure=0.0` reached renderer 0 and blacked out the frame — silently,
+/// because the caller only reports an address that reached *zero* nodes.
+///
+/// Two addresses, and the second is the same defect without an L3 in it:
+/// `L4:1:` on a Set of one renderer. That one is safe today only because the
+/// renderers are last and their range runs to the end of the list, which is a
+/// property of the ordering rather than of the check.
+#[test]
+fn an_address_past_a_layers_last_node_reaches_nothing() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let mut set = with_camera(&gpu, None, GAIN_DOT, 64, 64);
+
+    assert_eq!(set.param("gain"), Some(1.0), "the renderer's declared default");
+    assert!(
+        !set.set_param_at(karakuri_ir::Kind::L3, 0, "gain", 0.0),
+        "a Set with no camera has no L3 node to address"
+    );
+    assert_eq!(set.param("gain"), Some(1.0), "the L3 address reached the renderer");
+    assert!(
+        !set.set_param_at(karakuri_ir::Kind::L4, 1, "gain", 0.0),
+        "this Set draws with one renderer, so index 1 addresses nothing"
+    );
+    assert_eq!(set.param("gain"), Some(1.0), "an out-of-range renderer address wrote anyway");
+    // And the address that does exist still works, so the bound is a bound and
+    // not a refusal.
+    assert!(set.set_param_at(karakuri_ir::Kind::L4, 0, "gain", 0.25));
+    assert_eq!(set.param("gain"), Some(0.25));
+}
+
+/// **A vector param is declared and not driven, and used to panic the render
+/// thread for it.**
+///
+/// The language allows `param centre : vec3 …`; the engine has never driven one
+/// — `Set::default_scalar` reads a scalar out of a declaration and skips
+/// anything else, so a vector param never enters a node's value map. Every
+/// node's uniform path nonetheless wrote *every* declared name as an `f32`, and
+/// the packer panics on a field its layout says is a `vec3<f32>`. So a `.kir`
+/// that parses, checks and costs took the render thread down on the first
+/// `prepare` — not the swap worker, so not caught as `SetError::Panicked`.
+///
+/// Building and preparing is the whole test: the panic was unconditional.
+#[test]
+fn a_vector_param_is_left_undriven_rather_than_packed_as_a_scalar() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let mixed = r#"
+proc mixed {
+  kind  L4
+  blend additive
+
+  param centre : vec3  [0.0, 1.0] = vec3(0.5, 0.5, 0.5)
+  param gain   : float [0.0, 4.0] = 1.0
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 3.0;
+  }
+
+  fragment {
+    color = vec4(gain, gain, gain, 1.0);
+  }
+}
+"#;
+    let mut set = with_camera(&gpu, Some(&sweep(5.0)), mixed, 64, 64);
+    let peak = frame(&gpu, &mut set, 64, 64)
+        .chunks_exact(4)
+        .map(|t| t[0])
+        .fold(0.0f32, f32::max);
+
+    // And the scalar beside it still arrives, so the filter is a filter rather
+    // than a node that gave up on its params.
+    assert!(peak > 0.5, "the scalar param never reached the frame: {peak}");
+    assert_eq!(set.param("gain"), Some(1.0));
+    assert_eq!(set.param("centre"), None, "a vector param has no scalar value to hold");
+}

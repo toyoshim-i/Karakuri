@@ -111,4 +111,43 @@ fn the_pairs_the_docs_offer_compose() {
         karakuri_engine::Set::build(&gpu.device, &gpu.queue, &a, &b, capacity, 0)
             .unwrap_or_else(|e| panic!("{l1} + {l4} does not build: {e}"));
     }
+
+    // **And the chains**, which a pair list cannot express and which the
+    // examples' own comments give as command lines. Each is one L1, the middle
+    // files in the order written, and one renderer — sorted by the `kind` each
+    // declares, exactly as `--set` sorts them.
+    for chain in [
+        // `swirl_warp.kir`'s own header offers this one.
+        ["drift_shell.kir", "swirl_warp.kir", "soft_points.kir"],
+        // `beat_jump.kir`'s does.
+        ["drift_shell.kir", "beat_jump.kir", "soft_points.kir"],
+    ] {
+        let compiled: Vec<karakuri_ir::typed::Checked> = chain
+            .iter()
+            .map(|file| {
+                let src = std::fs::read_to_string(examples().join(file)).expect("read");
+                let parsed = karakuri_ir::parse(&src).expect("parses");
+                let checked = karakuri_ir::check::check(&parsed).expect("checks");
+                karakuri_ir::cost::estimate(&checked).expect("costs");
+                checked
+            })
+            .collect();
+        let by = |kind| compiled.iter().filter(move |c| c.kind == kind);
+        let l1 = by(karakuri_ir::Kind::L1).next().expect("a chain starts with an L1");
+        let l2s: Vec<&karakuri_ir::typed::Checked> = by(karakuri_ir::Kind::L2).collect();
+        let l3 = by(karakuri_ir::Kind::L3).next();
+        let l4s: Vec<&karakuri_ir::typed::Checked> = by(karakuri_ir::Kind::L4).collect();
+        let capacity = l1.capacity.expect("an L1 declares a capacity").default;
+        karakuri_engine::Set::build_many(
+            &gpu.device,
+            &gpu.queue,
+            l1,
+            &l2s,
+            l3,
+            &l4s,
+            capacity,
+            0,
+        )
+        .unwrap_or_else(|e| panic!("{} does not build: {e}", chain.join(" + ")));
+    }
 }

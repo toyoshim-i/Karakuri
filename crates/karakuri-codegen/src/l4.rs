@@ -100,11 +100,14 @@ pub struct L4Shader {
     /// **The index is the shader's to state rather than a constant**, because
     /// the groups below it are not always there: a per-element shader binds its
     /// element buffers at [`group::ATTRS`] and a fullscreen one binds nothing,
-    /// so a fixed number would leave a hole in one of the two. A pipeline layout
-    /// naming a group the module does not use is a validation error, not a
-    /// harmless extra — which is also why this is an `Option`: an L4 that never
-    /// projects and never marches reads no camera, and a hand-written test
-    /// fixture writing `clip = vec4(position, 1.0)` is exactly that.
+    /// so a fixed number would leave a *hole* in one of the two — group 2 bound
+    /// with group 1 empty. That is the reason, and it is the only one: wgpu
+    /// accepts a pipeline layout naming a group the module does not use, so an
+    /// unconditional trailing camera group would have been legal and merely
+    /// untidy. `None` is therefore about saying what is true rather than about
+    /// avoiding a rejection — an L4 that never projects and never marches reads
+    /// no camera, and a hand-written test fixture writing `clip =
+    /// vec4(position, 1.0)` is exactly that.
     pub camera_group: Option<u32>,
 }
 

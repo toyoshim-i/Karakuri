@@ -461,9 +461,7 @@ impl Simulation {
             p.f32("dt", tick.dt)
                 .u32("capacity", self.capacity)
                 .u32("seed_salt", self.seed_salt);
-            for name in &self.param_names {
-                p.f32(name, (tick.param)(name).unwrap_or(0.0));
-            }
+            super::write_params(&mut p, &self.uniform_layout, &self.param_names, tick.param);
             queue.write_buffer(&self.uniforms, 0, p.finish());
         }
         self.write_step_args(queue, tick);

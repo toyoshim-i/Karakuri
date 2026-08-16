@@ -123,6 +123,11 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
     let (consumes_set, consumes_vec) = dedup_attrs(&proc.consumes, "consumes", &mut errors);
     check_consumes_emitted(proc.kind, &emit_set, &consumes_vec, &mut errors);
 
+    // **What makes an L4 a marcher**, and the one procedure-wide fact a block
+    // checker needs: `eye` and `ray` are defined by the ray prologue a
+    // fullscreen fragment stage opens with, and by nothing else.
+    let fullscreen =
+        proc.kind == Kind::L4 && proc.blocks.iter().all(|b| b.kind != BlockKind::Vertex);
     let mut blocks = Vec::with_capacity(proc.blocks.len());
     for block in &proc.blocks {
         // A block is always checked under its own natural kind, even if it
@@ -132,7 +137,14 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
         // instead of cascading a second, confusing error out of the
         // mismatch.
         let block_kind_owner = block.kind.kind();
-        let mut checker = Checker::new(block_kind_owner, Some(block.kind), &params, &emit_set, &consumes_set);
+        let mut checker = Checker::new(
+            block_kind_owner,
+            Some(block.kind),
+            fullscreen,
+            &params,
+            &emit_set,
+            &consumes_set,
+        );
         let stmts = checker.check_stmts(&block.stmts);
         errors.append(&mut checker.errors);
 
@@ -514,9 +526,25 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
     }
 }
 
+/// Whether `name` is a stage output **this kind of procedure can write**.
+///
+/// **Scoped to the layer, not global.** `Output` grew from four names to ten
+/// when the camera arrived, and a global reservation would have made `up`,
+/// `target`, `near`, `far` and `fov_y` illegal as params and locals in *every*
+/// layer — `let near = length(position)` in a marcher, `let up` in an L1, both
+/// previously legal and neither shadowing anything reachable there. A name is
+/// only ambiguous where the thing it names exists, and the diagnostic for the
+/// global version named a block the procedure did not have.
+///
+/// `eye` stays refused everywhere, but as an *ambient* rather than an output —
+/// a marching fragment reads it, so it genuinely is in scope in an L4.
+fn shadows_output(name: &str, kind: Kind) -> bool {
+    Output::from_name(name).is_some_and(|o| o.block().kind() == kind)
+}
+
 /// Attributes, ambients, and stage outputs are a closed, reserved vocabulary
 /// that no param or local may take on — see the module docs on shadowing.
-fn check_reserved(name: &str, span: Span, kind_of_decl: &str, errors: &mut Vec<IrError>) {
+fn check_reserved(name: &str, span: Span, kind: Kind, kind_of_decl: &str, errors: &mut Vec<IrError>) {
     if name == "id" {
         errors.push(
             IrError::contract(span, format!("`id` is reserved and cannot be used as a {kind_of_decl} name"))
@@ -529,7 +557,7 @@ fn check_reserved(name: &str, span: Span, kind_of_decl: &str, errors: &mut Vec<I
         );
     } else if Ambient::from_name(name).is_some() {
         errors.push(IrError::contract(span, format!("`{name}` shadows an ambient value")));
-    } else if Output::from_name(name).is_some() {
+    } else if shadows_output(name, kind) {
         errors.push(IrError::contract(span, format!("`{name}` shadows a stage output name")));
     }
 }
@@ -552,7 +580,7 @@ fn check_params(proc: &Proc, errors: &mut Vec<IrError>) -> HashMap<String, Ty> {
                 ),
             );
         }
-        check_reserved(&p.name, p.span, "param", errors);
+        check_reserved(&p.name, p.span, proc.kind, "param", errors);
         if map.contains_key(&p.name) {
             errors.push(IrError::contract(
                 p.span,
@@ -564,7 +592,8 @@ fn check_params(proc: &Proc, errors: &mut Vec<IrError>) -> HashMap<String, Ty> {
         // params, no attributes, no ambients. A default is meant to be a
         // constant-ish value (a literal or a constructor of literals), not
         // an expression referencing the rest of the procedure.
-        let mut checker = Checker::new(proc.kind, None, &empty_params, &empty_attrs, &empty_attrs);
+        let mut checker =
+            Checker::new(proc.kind, None, false, &empty_params, &empty_attrs, &empty_attrs);
         if let Some(v) = checker.check_expr(&p.default) {
             if v.ty != p.ty {
                 errors.push(IrError::ty(
@@ -995,6 +1024,14 @@ impl Scope {
 struct Checker<'a> {
     kind: Kind,
     block: Option<BlockKind>,
+    /// Whether this procedure draws the whole frame — an L4 with no `vertex`
+    /// block, which is the only way to say so.
+    ///
+    /// **Not derivable from `kind` and `block`**, which is why it is carried
+    /// here rather than folded into [`Ambient::available_in`]: it is a fact
+    /// about the procedure, and a block checker otherwise sees only its own
+    /// block. `eye` and `ray` need it — see [`Checker::marching_only`].
+    fullscreen: bool,
     params: &'a HashMap<String, Ty>,
     emit: &'a HashSet<Attr>,
     consumes: &'a HashSet<Attr>,
@@ -1014,6 +1051,7 @@ impl<'a> Checker<'a> {
     fn new(
         kind: Kind,
         block: Option<BlockKind>,
+        fullscreen: bool,
         params: &'a HashMap<String, Ty>,
         emit: &'a HashSet<Attr>,
         consumes: &'a HashSet<Attr>,
@@ -1021,12 +1059,28 @@ impl<'a> Checker<'a> {
         Checker {
             kind,
             block,
+            fullscreen,
             params,
             emit,
             consumes,
             scope: Scope::new(),
             errors: Vec::new(),
         }
+    }
+
+    /// **`eye` and `ray` exist only where the lowering defines them**, which is
+    /// the ray prologue a fullscreen fragment stage opens with. A per-element
+    /// L4 has a `vertex` block, gets no prologue, and reading either there
+    /// lowered to a bare identifier nothing declared — so the `.kir` checked
+    /// clean, `generate_l4` produced WGSL naga refuses, and wgpu's uncaptured
+    /// error handler panicked the thread that built it. On the swap worker that
+    /// is a `SetError::Panicked`; at startup it takes the process down.
+    ///
+    /// A rule about the *procedure* rather than the block, which is why it is
+    /// not in [`Ambient::available_in`]: what makes an L4 a marcher is the
+    /// absence of a `vertex` block, and a block does not know its siblings.
+    fn marching_only(&self, amb: Ambient) -> bool {
+        !matches!(amb, Ambient::Eye | Ambient::Ray) || self.fullscreen
     }
 
     fn err(&mut self, stage: Stage, span: Span, msg: impl Into<String>) {
@@ -1113,7 +1167,7 @@ impl<'a> Checker<'a> {
             self.err(Stage::Contract, span, format!("`{name}` shadows an ambient value"));
             return;
         }
-        if Output::from_name(name).is_some() {
+        if shadows_output(name, self.kind) {
             self.err(Stage::Contract, span, format!("`{name}` shadows a stage output name"));
             return;
         }
@@ -1490,11 +1544,27 @@ impl<'a> Checker<'a> {
         }
         if let Some(ambient) = Ambient::from_name(name) {
             let available = match self.block {
-                Some(block) => ambient.available_in(self.kind, block),
+                Some(block) => {
+                    ambient.available_in(self.kind, block) && self.marching_only(ambient)
+                }
                 None => false,
             };
             if available {
                 return Some(TExpr::new(ambient.ty(), span, TExprKind::Ambient(ambient)));
+            }
+            // A marcher's values get their own sentence, because "not available
+            // in this block" would send an author looking at the block when what
+            // is wrong is that the procedure has a `vertex` block at all.
+            if matches!(ambient, Ambient::Eye | Ambient::Ray) && self.kind == Kind::L4 {
+                self.err_hint(
+                    Stage::Contract,
+                    span,
+                    format!("`{name}` is only available to a procedure that draws the whole frame"),
+                    "a `vertex` block is what makes an L4 per-element, and a ray through a \
+                     fragment is not something a sprite has. Remove the `vertex` block to \
+                     march, or read the attributes this procedure `consumes` instead",
+                );
+                return None;
             }
             self.err(
                 Stage::Contract,
