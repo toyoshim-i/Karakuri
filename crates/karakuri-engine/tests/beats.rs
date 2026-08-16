@@ -52,6 +52,30 @@ proc beat_ring {
 }
 "#;
 
+/// Neither a ring nor anything to look at: two readings of the clock, in the
+/// two shapes that pin different things. `position.x` is written outright, so it
+/// keeps only the last substep's instant; `age` accumulates, so it keeps the sum
+/// over every substep that has ever run. See
+/// `the_instants_a_substep_reads_are_the_sets_own_clock`.
+///
+/// No `spawn` block and no `kill()`, so every slot is live from frame zero and
+/// stays in it — the values can be read back by index with no compaction between
+/// this and them.
+const CLOCK_PROBE: &str = r#"
+proc clock_probe {
+  kind     L1
+  topology points
+  capacity [1024, 262144] = 1024
+
+  emit position, age
+
+  element {
+    position = vec3(t, 0.0, 0.0);
+    age      = age + t;
+  }
+}
+"#;
+
 /// The same ring driven by `t` instead. At 60 bpm one beat is one second, so
 /// the grid and the clock are the same number and these two must draw the same
 /// frame — see `beats_and_t_name_the_same_instant`.
@@ -277,6 +301,74 @@ fn beats_and_t_name_the_same_instant() {
         on_beats, on_t,
         "at 60 bpm `beats` and `t` are the same number and did not draw the same frame"
     );
+}
+
+/// **The anchor: the instants a substep actually reads are the Set's own
+/// clock**, as absolute numbers rather than as a comparison between two runs.
+///
+/// Every other test in this file — and in `generated.rs`, `lifecycle.rs` and
+/// `priming.rs` — compares one run against another. That is the right shape for
+/// invariance claims and it is blind to one whole class of defect: shift *every*
+/// substep's `t` by a whole `dt` and both sides of every comparison shift with
+/// it, so twenty-odd suites stay green while the clock a procedure reads is off
+/// by a frame. Found exactly that way, by injecting the shift into
+/// `Set::prepare_on` and watching nothing fail.
+///
+/// So this asserts against arithmetic instead. `position.x` is written outright,
+/// so it holds the **last** substep's instant and must equal [`Set::time`].
+/// `age` accumulates `t`, so it holds the **sum over every substep since frame
+/// zero** and must equal `dt * (1 + 2 + ... + n)` — which pins where the
+/// sequence starts as well as where it ends, and pins it across a frame of four
+/// steps as well as a frame of one.
+#[test]
+fn the_instants_a_substep_reads_are_the_sets_own_clock() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    // Deliberately uneven, and deliberately not starting at 1: a frame of four
+    // has to land on four consecutive instants, and the frame after it has to
+    // resume from the next one rather than from wherever it likes.
+    const FRAMES: [u8; 5] = [1, 4, 2, 1, 3];
+
+    let mut set = build(&gpu, CLOCK_PROBE);
+    let mut signals = Signals::new(120.0, u64::from(SEED));
+    // The same arithmetic the engine does, in the same order and the same
+    // precision: `t_at(n)` is `n as f32 * dt`, and the accumulator is a running
+    // f32 sum in substep order. A reference computed in f64 would differ in the
+    // last bits and the test would need a tolerance wide enough to hide a real
+    // defect.
+    let (mut n, mut expected_age) = (0u64, 0.0f32);
+    for steps in FRAMES {
+        let _ = frame(&gpu, &mut set, &mut signals, steps);
+        for _ in 0..steps {
+            n += 1;
+            expected_age += n as f32 * DT;
+        }
+    }
+
+    let bytes = set.read_elements(&gpu.device, &gpu.queue);
+    let layout = set.element_layout();
+    let stride = layout.stride as usize;
+    let at = |off: u32, i: usize| -> f32 {
+        let a = i * stride + off as usize;
+        f32::from_le_bytes(bytes[a..a + 4].try_into().expect("four bytes"))
+    };
+    let (pos, age) = (layout.offset_of("position"), layout.offset_of("age"));
+
+    let last = n as f32 * DT;
+    assert_eq!(set.time(), last, "the Set's own clock is not `steps * dt`");
+    for i in 0..CAPACITY as usize {
+        assert_eq!(
+            at(pos, i),
+            last,
+            "element {i} read {} as the last substep's instant, not {last}",
+            at(pos, i)
+        );
+        assert_eq!(
+            at(age, i),
+            expected_age,
+            "element {i} accumulated {} over the substeps, not {expected_age}",
+            at(age, i)
+        );
+    }
 }
 
 /// **Per substep, like `t`.**
