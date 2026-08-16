@@ -28,8 +28,11 @@ pub mod deck;
 pub mod governor;
 pub mod gpu;
 pub mod meter;
+/// Private: the node types a Set is a grouping of. Nothing outside chooses
+/// them — a `.kir`'s `kind` does — and the graph they form is [`set`]'s.
+mod node;
 /// Private: `blend weighted` is declared in a `.kir` and everything about how
-/// it is run belongs to [`set`]. Nothing outside chooses these targets.
+/// it is run belongs to [`node`]. Nothing outside chooses these targets.
 mod oit;
 pub mod points;
 pub mod present;

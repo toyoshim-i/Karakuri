@@ -1,10 +1,23 @@
-//! The Set: filled slots forming one video source, and the unit of both
+//! The Set: a grouping of nodes forming one video source, and the unit of both
 //! compilation and lifecycle.
 //!
-//! A Set owns the buffers, bind groups, and pipelines that a pair of generated
-//! shaders needs, and it is what a structural change forks. Nothing here
-//! mutates a live Set in place; parameter values are the one exception, and
-//! they are uniform writes.
+//! **A Set no longer owns everything, and this module is halfway through
+//! saying so.** `Ln` is a node — `docs/roadmap.md`, "a Set stops owning
+//! everything" — and the unit that owns GPU state is the node rather than the
+//! grouping. The L4 node has moved out to [`crate::node`], which owns its
+//! pipeline, its uniform, its accumulation targets and the bind groups naming
+//! the buffers it reads across. What is still inlined here is the **L1 node**:
+//! the element and alive buffers, the counts, the compaction scan, the spawn
+//! accumulator and `t`. Extracting it is the next step and changes nothing
+//! about the first.
+//!
+//! What remains genuinely the grouping's, and will after both nodes are out:
+//! the camera, the parameter values and their bindings, the viewport, and the
+//! order the nodes run in. One clock and one camera serve every node in a Set,
+//! so a node holding its own copy would be a second place for them to be.
+//!
+//! Nothing here mutates a live Set in place; parameter values are the one
+//! exception, and they are uniform writes.
 //!
 //! What runs here is generated, not written. `Set::build` takes two checked
 //! procedures, asks `karakuri-codegen` for WGSL, and creates pipelines against
@@ -16,7 +29,7 @@ use std::collections::HashMap;
 use karakuri_codegen::layout::{
     binding, counts, group, step_args, ElementLayout, UniformLayout, VERTICES_PER_ELEMENT, WORKGROUP_SIZE,
 };
-use karakuri_codegen::{generate_l1, generate_l4};
+use karakuri_codegen::generate_l1;
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
 
@@ -218,15 +231,6 @@ pub struct Set {
     viewport: [f32; 2],
     parity: bool,
     has_spawn: bool,
-    /// Whether the L4 draws the whole frame rather than one primitive per
-    /// element — see `Topology::Fullscreen`.
-    ///
-    /// **It gates the compute passes as well as the draw.** A fullscreen
-    /// procedure consumes nothing, which the check pass enforces rather than
-    /// merely expects, so the element buffers have no reader and stepping them
-    /// is work for nobody. That is the difference between an optimisation and a
-    /// consequence of what the pair means.
-    fullscreen: bool,
     /// Both procedures are a pure function of `seed`, `t`, and their params —
     /// see [`Set::is_closed_form`]. Decided by the check pass and carried here
     /// rather than re-derived; the engine never looks at IR.
@@ -240,15 +244,12 @@ pub struct Set {
     alive_buf: Pair,
 
     l1_uniform_layout: UniformLayout,
-    l4_uniform_layout: UniformLayout,
-    /// Host-side staging for the two uniform writes `prepare` makes every
-    /// frame, sized once here against the layouts above. `prepare` runs on
-    /// the render thread and the render thread does not allocate — see the
-    /// module doc on `crate::uniforms`.
+    /// Host-side staging for the uniform write `prepare` makes every frame,
+    /// sized once here against the layout above. `prepare` runs on the render
+    /// thread and the render thread does not allocate — see the module doc on
+    /// `crate::uniforms`. The L4 node keeps its own; see [`crate::node`].
     l1_scratch: UniformScratch,
-    l4_scratch: UniformScratch,
     l1_uniforms: wgpu::Buffer,
-    l4_uniforms: wgpu::Buffer,
     /// Engine counts plus the indirect arguments derived from them. The only
     /// place the live range is known — see `karakuri_codegen::layout::counts`.
     counts: wgpu::Buffer,
@@ -262,22 +263,19 @@ pub struct Set {
     element: wgpu::ComputePipeline,
     /// Present only when the procedure declares a `spawn` block.
     spawn: Option<wgpu::ComputePipeline>,
-    render: wgpu::RenderPipeline,
-    /// Present only under `blend weighted`: the two accumulation targets the
-    /// render pipeline above writes to, and the pass that folds them into the
-    /// caller's one. `None` is `blend additive`, which draws straight into it.
-    ///
-    /// It is what makes [`Set::resize`] need a device — see the note there.
-    oit: Option<crate::oit::Oit>,
+    /// **The L4 node.** It owns its pipeline, its uniform, its accumulation
+    /// targets under `blend weighted`, and the bind groups naming the element
+    /// buffers above — the edge, resolved. One today; a list is what several
+    /// renderers over one geometry will be, and nothing here changes shape for
+    /// that. See [`crate::node`].
+    renderer: crate::node::Renderer,
 
     l1_uniform_bg: wgpu::BindGroup,
-    l4_uniform_bg: wgpu::BindGroup,
     /// One per substep, binding `step_args` at that substep's offset.
     step_bg: Vec<wgpu::BindGroup>,
     /// Indexed by parity: [false, true].
     prev_bg: [wgpu::BindGroup; 2],
     next_bg: [wgpu::BindGroup; 2],
-    l4_attr_bg: [wgpu::BindGroup; 2],
 
     /// **Manual** parameter values: the `.kir` defaults, as moved by a `param`
     /// record or a `--param` override. A binding never writes here — it blends
@@ -286,7 +284,6 @@ pub struct Set {
     pub params: HashMap<String, f32>,
     pub camera: Orbit,
     l1_param_names: Vec<String>,
-    l4_param_names: Vec<String>,
     /// At most one per (layer, param). Resolved once per frame in
     /// [`Set::prepare`] and read back out wherever a param value is written.
     bindings: Vec<Binding>,
@@ -391,25 +388,10 @@ impl Set {
             });
         }
 
-        // Both decided before anything is generated, because between them they
-        // choose the shape of the render pipeline as well as of the shader — see
-        // `Set::fullscreen` and `Set::oit`.
-        let fullscreen = l4.topology == Some(karakuri_ir::Topology::Fullscreen);
-        let weighted = l4.blend == Some(karakuri_ir::Blend::Weighted);
-        if weighted && fullscreen {
-            return Err(SetError::WeightedFullscreen { l4: l4.name.clone() });
-        }
-
         let l1_shader = generate_l1(l1);
-        let l4_shader = generate_l4(l4, &l1_shader.element_layout);
-
         let l1_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(&format!("{} (L1)", l1.name)),
             source: wgpu::ShaderSource::Wgsl(l1_shader.source.as_str().into()),
-        });
-        let l4_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some(&format!("{} (L4)", l4.name)),
-            source: wgpu::ShaderSource::Wgsl(l4_shader.source.as_str().into()),
         });
 
         // -- buffers ------------------------------------------------------
@@ -457,29 +439,8 @@ impl Set {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let l4_uniforms = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("L4 uniforms"),
-            size: u64::from(l4_shader.uniform_layout.total_size),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
 
         // -- bind group layouts -------------------------------------------
-        let uniform_bgl = |label| {
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some(label),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            })
-        };
         let storage_entry = |binding_num: u32, read_only: bool, vis: wgpu::ShaderStages| wgpu::BindGroupLayoutEntry {
             binding: binding_num,
             visibility: vis,
@@ -544,16 +505,8 @@ impl Set {
                 count: None,
             }],
         });
-        let l4_uniform_bgl = uniform_bgl("L4 uniforms");
         let prev_bgl = element_and_alive_bgl("prev", true);
         let next_bgl = element_and_alive_bgl("next", false);
-        let l4_attr_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("attrs"),
-            entries: &[
-                storage_entry(binding::ELEMENT, true, wgpu::ShaderStages::VERTEX_FRAGMENT),
-                storage_entry(binding::ALIVE, true, wgpu::ShaderStages::VERTEX_FRAGMENT),
-            ],
-        });
 
         // -- compaction ----------------------------------------------------
         // Built before the bind groups because `element`'s uniform group
@@ -571,16 +524,6 @@ impl Set {
         });
 
         // -- bind groups ---------------------------------------------------
-        let bind_uniform = |label, bgl: &wgpu::BindGroupLayout, buf: &wgpu::Buffer| {
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some(label),
-                layout: bgl,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: binding::UNIFORM,
-                    resource: buf.as_entire_binding(),
-                }],
-            })
-        };
         let mut l1_uniform_entries = vec![
             wgpu::BindGroupEntry {
                 binding: binding::UNIFORM,
@@ -602,7 +545,6 @@ impl Set {
             layout: &l1_uniform_bgl,
             entries: &l1_uniform_entries,
         });
-        let l4_uniform_bg = bind_uniform("L4 uniforms", &l4_uniform_bgl, &l4_uniforms);
 
         // One bind group per substep rather than one dynamic offset: the
         // offsets are known at build time, they never change, and a
@@ -650,26 +592,6 @@ impl Set {
             bind_pair("next0", &next_bgl, false, true),
             bind_pair("next1", &next_bgl, true, true),
         ];
-        // L4 reads what L1 last wrote. The frame's compute pass writes "next",
-        // then parity flips, so L4 binds the same physical element buffer
-        // that is "prev" under the flipped parity.
-        let bind_l4_attrs = |label: &str, parity: bool| {
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some(label),
-                layout: &l4_attr_bgl,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: binding::ELEMENT,
-                        resource: element_buf.prev(parity).as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: binding::ALIVE,
-                        resource: alive_buf.prev(parity).as_entire_binding(),
-                    },
-                ],
-            })
-        };
-        let l4_attr_bg = [bind_l4_attrs("l4attrs0", false), bind_l4_attrs("l4attrs1", true)];
 
         // -- pipelines ------------------------------------------------------
         // One layout for both entry points: `element` reaches group STEP too,
@@ -694,98 +616,20 @@ impl Set {
         let element = compute("element", &compute_pl);
         let spawn = l1_shader.has_spawn.then(|| compute("spawn", &compute_pl));
 
-        // **No attribute group for a fullscreen shader**, which declares none:
-        // it consumes nothing, so it binds nothing. A layout naming a group the
-        // module does not use is a validation error rather than a harmless
-        // extra.
-        let render_groups: Vec<&wgpu::BindGroupLayout> = if fullscreen {
-            vec![&l4_uniform_bgl]
-        } else {
-            vec![&l4_uniform_bgl, &l4_attr_bgl]
-        };
-        let render_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("L4"),
-            bind_group_layouts: &render_groups,
-            push_constant_ranges: &[],
-        });
-        // **What the fragment stage writes to, which the blend mode chooses.**
-        // The generated shader returns one `vec4` or a two-field struct — see
-        // `karakuri_codegen`'s `WEIGHTED_FS_OUT` — and a pipeline whose targets
-        // did not match would be a validation error rather than a wrong picture.
-        let weighted_targets = crate::oit::colour_targets();
-        let additive_target = [Some(wgpu::ColorTargetState {
-            // Always the linear HDR format, never the surface's. A
-            // `VideoSource` renders into the HDR target and the present
-            // pass is the one place that encodes to sRGB; taking this
-            // as a parameter would let a caller quietly break "the
-            // pipeline is linear and HDR end to end".
-            format: crate::present::Present::HDR_FORMAT,
-            // `blend additive`, no depth write.
-            //
-            // **Colour adds; alpha accumulates coverage.** The two
-            // components answer different questions and this is the
-            // only pairing that answers both: colour is emissive and
-            // sums past what any coverage would allow, which is what
-            // `blend additive` is for, while alpha comes out as
-            // `1 - prod(1 - a_i)` — the probability that *something*
-            // drew at this texel, and order-independent because
-            // `a_s + a_d(1 - a_s)` is symmetric in the two.
-            //
-            // **Not bounded at 1, and the mix does not assume it is.**
-            // Nothing clamps what a fragment block assigns to alpha —
-            // the IR calls it straight alpha and says values above 1.0
-            // are expected — so this accumulates whatever the material
-            // wrote. `composite.wgsl` saturates on the way in rather
-            // than L4 clamping on the way out, because clamping here
-            // would change the colour too: additive blending
-            // multiplies colour by this same alpha.
-            //
-            // Nothing in this pass reads it back. It exists for L5:
-            // `Blend::Over` needs to know what a layer covers, and
-            // before this the channel was written by nothing and held
-            // the clear value forever. Colour is premultiplied by
-            // coverage on the way out, which is what makes the mix's
-            // `over` a multiply-add rather than a divide by an alpha
-            // that is allowed to be zero.
-            blend: Some(wgpu::BlendState {
-                color: wgpu::BlendComponent {
-                    src_factor: wgpu::BlendFactor::SrcAlpha,
-                    dst_factor: wgpu::BlendFactor::One,
-                    operation: wgpu::BlendOperation::Add,
-                },
-                alpha: wgpu::BlendComponent {
-                    src_factor: wgpu::BlendFactor::One,
-                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                    operation: wgpu::BlendOperation::Add,
-                },
-            }),
-            write_mask: wgpu::ColorWrites::ALL,
-        })];
-        let render = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(&l4.name),
-            layout: Some(&render_layout),
-            vertex: wgpu::VertexState {
-                module: &l4_module,
-                entry_point: Some("vs"),
-                compilation_options: Default::default(),
-                buffers: &[],
+        // **The L4 node**, generated, compiled and bound against the edge this
+        // Set's L1 half offers: the element layout, and the two buffers indexed
+        // by parity. Everything about how it draws is its own — see
+        // [`crate::node::Renderer`] — including the blend-mode rule that needs
+        // both halves in hand.
+        let renderer = crate::node::Renderer::build(
+            device,
+            l4,
+            &crate::node::Geometry {
+                layout: &l1_shader.element_layout,
+                elements: [element_buf.prev(false), element_buf.prev(true)],
+                alive: [alive_buf.prev(false), alive_buf.prev(true)],
             },
-            fragment: Some(wgpu::FragmentState {
-                module: &l4_module,
-                entry_point: Some("fs"),
-                compilation_options: Default::default(),
-                targets: if weighted { &weighted_targets } else { &additive_target },
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview: None,
-            cache: None,
-        });
+        )?;
 
         let params = l1
             .params
@@ -806,11 +650,6 @@ impl Set {
             viewport: [1.0, 1.0],
             parity: false,
             has_spawn: l1_shader.has_spawn,
-            // **What this decides is not only how to draw**: a fullscreen L4
-            // consumes nothing — the check pass refuses one that says
-            // otherwise — so nothing reads the element buffers and the L1's
-            // passes are skipped entirely. See `Set::step`.
-            fullscreen,
             // Both, because a Set is only seekable if everything in it is. L4
             // is stateless and its flag is vacuously true, so in practice this
             // is the L1's — but writing the conjunction is what keeps it
@@ -821,28 +660,21 @@ impl Set {
             element_buf,
             alive_buf,
             l1_scratch: UniformScratch::new(&l1_shader.uniform_layout),
-            l4_scratch: UniformScratch::new(&l4_shader.uniform_layout),
             l1_uniform_layout: l1_shader.uniform_layout.clone(),
-            l4_uniform_layout: l4_shader.uniform_layout.clone(),
             l1_uniforms,
-            l4_uniforms,
             counts: counts_buf,
             step_args: step_args_buf,
             compaction,
             element,
             spawn,
-            render,
-            oit: weighted.then(|| crate::oit::Oit::new(device)),
+            renderer,
             l1_uniform_bg,
-            l4_uniform_bg,
             step_bg,
             prev_bg,
             next_bg,
-            l4_attr_bg,
             params,
             camera: Orbit::default(),
             l1_param_names: l1.params.iter().map(|p| p.name.clone()).collect(),
-            l4_param_names: l4.params.iter().map(|p| p.name.clone()).collect(),
             bindings: Vec::new(),
         };
         set.initialize(device, queue);
@@ -875,9 +707,7 @@ impl Set {
     /// Never from the render thread mid-frame, on those same terms.
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         self.viewport = [width.max(1) as f32, height.max(1) as f32];
-        if let Some(oit) = &mut self.oit {
-            oit.resize(device, width, height);
-        }
+        self.renderer.resize(device, width, height);
     }
 
     /// What [`Set::resize`] last set, as it was clamped. The camera's aspect
@@ -1027,7 +857,7 @@ impl Set {
     pub fn bind(&mut self, binding: Binding) -> bool {
         let declared = match binding.layer {
             Kind::L1 => &self.l1_param_names,
-            Kind::L4 => &self.l4_param_names,
+            Kind::L4 => self.renderer.param_names(),
         };
         // Both checks: `params` holds only the scalar params — a vector one is
         // declared but has no value here — and a binding produces one float.
@@ -1202,52 +1032,30 @@ impl Set {
         self.write_l4_uniforms(queue);
     }
 
-    /// The L4 uniform block, from state this does not change.
+    /// The L4 node's uniform block, from state this does not change.
     ///
     /// Split out of [`Set::prepare_on`] because a preview needs it without the
-    /// rest: an audition draws a slot nothing prepared, and every field here
+    /// rest: an audition draws a slot nothing prepared, and every field there
     /// but the viewport is already what it should be.
+    ///
+    /// **The Set supplies the view and the node packs it.** Which fields exist
+    /// is the node's business — a marcher's uniform and a sprite renderer's are
+    /// different shapes — and which `t` and which camera they are packed from is
+    /// the grouping's, since one clock and one camera serve every node in it.
     fn write_l4_uniforms(&mut self, queue: &wgpu::Queue) {
-        // Read before the packer borrows the scratch: `time` and `view_proj`
-        // take `&self`, and the packer holds a `&mut` to one of its fields.
+        // Read before the borrow: `time` takes `&self` and the node's packer
+        // takes `&mut` its own scratch, but `param` below borrows this Set.
         let t = self.time();
-        let beats = self.last_beats;
-        let aspect = self.viewport[0] / self.viewport[1];
-        let camera = self.camera.view_proj(t, aspect);
-        let basis = self.camera.basis(t, aspect);
         let (bindings, params) = (&self.bindings, &self.params);
-        let fullscreen = self.fullscreen;
-        let mut p = self.l4_scratch.pack(&self.l4_uniform_layout);
-        p.f32("t", t).f32("beats", beats).u32("seed_salt", self.seed_salt);
-        // Two shapes of uniform, because the two shaders need different things:
-        // a per-element one projects points and needs the matrix and the
-        // viewport in pixels; a fullscreen one marches and needs a ray. Writing
-        // a field the layout does not declare is a panic in the packer, which
-        // is the right way round — it means the two halves cannot drift.
-        if fullscreen {
-            p.vec3("eye", basis.eye)
-                .vec3("cam_fwd", basis.forward)
-                .vec3("cam_right", basis.right)
-                .vec3("cam_up", basis.up);
-        } else {
-            p.vec2("viewport", self.viewport).mat4("camera", camera);
-            // **The same camera the matrix above came from**, which is the whole
-            // point of writing it here rather than picking a scene scale: a
-            // weighted fragment is weighed by where it sits between the planes
-            // it was projected with. Packed as `(near, 1 / (far - near))` so the
-            // shader multiplies rather than divides, and present only for the
-            // mode that declares it — the packer panics on a field the layout
-            // does not have, which is what keeps these two halves from drifting.
-            if self.oit.is_some() {
-                let near = self.camera.near;
-                let span = (self.camera.far - near).max(f32::MIN_POSITIVE);
-                p.vec2("depth_range", [near, 1.0 / span]);
-            }
-        }
-        for name in &self.l4_param_names {
-            p.f32(name, effective(bindings, params, Kind::L4, name));
-        }
-        queue.write_buffer(&self.l4_uniforms, 0, p.finish());
+        let view = crate::node::View {
+            t,
+            beats: self.last_beats,
+            seed_salt: self.seed_salt,
+            viewport: self.viewport,
+            camera: &self.camera,
+            param: &|name: &str| effective(bindings, params, Kind::L4, name),
+        };
+        self.renderer.write_uniforms(queue, &view);
     }
 
     /// **Rewrite the L4 uniforms against the current viewport**, without
@@ -1461,7 +1269,7 @@ impl Set {
         // consumes no attribute — the check pass refuses one that claims to —
         // so the whole simulation is work for a reader that does not exist.
         // `t` still advances below, because a marcher reads it.
-        let steps = if self.fullscreen { 0 } else { steps.min(MAX_STEPS) };
+        let steps = if self.renderer.is_fullscreen() { 0 } else { steps.min(MAX_STEPS) };
         for step in 0..usize::from(steps) {
             let parity = self.parity;
             if let Some(compaction) = &self.compaction {
@@ -1523,75 +1331,14 @@ impl Set {
     /// Nothing here touches `t`, `steps_taken` or `parity`. That is what lets
     /// an operator look at an `Allocated` slot without the act of looking
     /// moving it — see [`Deck::set_preview`](crate::deck::Deck::set_preview).
-    /// **Two shapes of draw, and the geometry is the same in both.** Under
-    /// `blend additive` the L4 pass writes straight into `target`. Under
-    /// `weighted` it writes into two accumulation targets instead, and a second
-    /// pass resolves those into `target` — which comes out holding exactly what
-    /// the additive path would have left there, colour premultiplied by coverage
-    /// and coverage in alpha, so nothing downstream can tell which mode ran.
-    /// See [`crate::oit`].
-    pub fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
-        let render_parity = usize::from(self.parity);
-        if let Some(oit) = &self.oit {
-            {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("L4 (weighted)"),
-                    color_attachments: &oit.attachments(),
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                });
-                self.record_geometry(&mut pass, render_parity);
-            }
-            oit.resolve_into(encoder, target);
-            return;
-        }
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("L4"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: target,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    // `TRANSPARENT`, not `BLACK`: alpha in this target is
-                    // coverage, accumulated by the blend state the pipeline
-                    // carries, and it has to start at "nothing drew here".
-                    // `BLACK` is opaque black and would hand the L5 mix a slot
-                    // that covers the frame before a single sprite has run.
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-        });
-        self.record_geometry(&mut pass, render_parity);
-    }
-
-    /// The draw itself, into whatever pass the caller opened.
+    /// The frame this Set's renderer draws, into `target`.
     ///
-    /// One copy for the same reason [`Set::draw`] is one copy: the blend mode
-    /// changes what the fragments are written *into* and nothing about which
-    /// primitives run, so two transcriptions of "a triangle, or every element
-    /// indirectly" is how the two modes would come to draw different geometry.
-    fn record_geometry(&self, pass: &mut wgpu::RenderPass<'_>, render_parity: usize) {
-        pass.set_pipeline(&self.render);
-        pass.set_bind_group(group::UNIFORMS, &self.l4_uniform_bg, &[]);
-        if self.fullscreen {
-            // Three vertices, one instance, and no indirect read: the count
-            // is a property of the shape rather than of how many elements
-            // survived. See `FULLSCREEN_VS` for why it is a triangle and
-            // not a quad.
-            pass.draw(0..3, 0..1);
-            return;
-        }
-        pass.set_bind_group(group::ATTRS, &self.l4_attr_bg[render_parity], &[]);
-        // The instance count is GPU state now, so this is indirect even
-        // for a static procedure whose count the host does know — one
-        // render path rather than two, at the cost of one buffer read
-        // the command processor was going to do anyway.
-        pass.draw_indirect(&self.counts, counts::DRAW);
+    /// A pass-through to the node, and it stays one when there are several: what
+    /// a Set decides is the *order* its `Texture` nodes run in and which of them
+    /// clears, not how any of them draws.
+    pub fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
+        self.renderer
+            .draw(encoder, target, usize::from(self.parity), &self.counts);
     }
 }
 
