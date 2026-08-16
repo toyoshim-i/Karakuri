@@ -374,8 +374,10 @@ usage:
   karakuri-cli [options] [L1.kir L4.kir]
 
 sets — one deck slot each, composited in the order given, at most 4:
-  --set L1.kir,L4.kir   name one slot. Repeat for more slots. A third path
-                        onward is another renderer over the same geometry
+  --set L1.kir,L4.kir   name one slot. Repeat for more slots. Every path after
+                        the first is sorted by the `kind` it declares: an L2
+                        deforms the geometry, an L4 draws it. Order within a
+                        kind is the order given
   L1.kir L4.kir         the same thing, positionally, for one pair. Given
                         alongside --set it becomes the last slot
   (nothing)             examples/drift_shell.kir + examples/soft_points.kir
@@ -1498,9 +1500,19 @@ fn seed_for(slot: usize) -> u32 {
     SEED.wrapping_add((slot as u32).wrapping_mul(0x9E37_79B9))
 }
 
-/// One deck slot's material: the procedure that simulates, and the renderers
-/// drawn over it in order.
-type Pair = (karakuri_ir::typed::Checked, Vec<karakuri_ir::typed::Checked>);
+/// One deck slot's material, sorted into the chain a `Set` is built from: the
+/// procedure that simulates, the deformations between, and the renderers drawn
+/// over the result.
+///
+/// **The sorting happens here rather than on the command line**, because every
+/// `.kir` declares its own `kind` — so `--set` is one comma-separated list and
+/// the loader reads which is which off the files. Order *within* a kind is list
+/// order, which is chain order for L2s and draw order for L4s.
+struct Material {
+    l1: karakuri_ir::typed::Checked,
+    l2s: Vec<karakuri_ir::typed::Checked>,
+    l4s: Vec<karakuri_ir::typed::Checked>,
+}
 
 /// **Render a recorded session.** The material comes from the stream's head and
 /// every frame advances by the `tick` that was recorded, so nothing here reads
@@ -1591,6 +1603,7 @@ fn replay_session(args: &Args, id: &str) {
     let mut set = build(
         &gpu,
         &loaded.l1,
+        &[],
         &loaded.l4s,
         loaded.capacity.unwrap_or(args.capacity),
         &loaded.params,
@@ -1778,6 +1791,7 @@ fn rebuild(
     Ok(build(
         gpu,
         &l1,
+        &[],
         &l4s,
         args.capacity,
         &args.overrides,
@@ -2126,17 +2140,17 @@ fn main() {
     }
 
     eprintln!("compiling:");
-    let mut procs: Vec<Pair> = Vec::new();
+    let mut procs: Vec<Material> = Vec::new();
     // Only when it was *not* materialised into the scratch above. An editable
     // run compiles it out of `args.sets` with everything else, which is the
     // point: one path, so a loaded Set can be watched and rewritten.
     if let Some(loaded) = loaded.filter(|_| !editable) {
         eprintln!("  slot 0: set `{}`", loaded.id);
-        procs.push((loaded.l1, loaded.l4s));
+        procs.push(Material { l1: loaded.l1, l2s: Vec::new(), l4s: loaded.l4s });
     }
-    for (slot, (l1, l4s)) in args.sets.iter().enumerate() {
-        let drawn: Vec<String> = l4s.iter().map(|p| p.display().to_string()).collect();
-        eprintln!("  slot {slot}: {} + {}", l1.display(), drawn.join(" + "));
+    for (slot, (l1, rest)) in args.sets.iter().enumerate() {
+        let named: Vec<String> = rest.iter().map(|p| p.display().to_string()).collect();
+        eprintln!("  slot {slot}: {} + {}", l1.display(), named.join(" + "));
         let load = |path: &PathBuf| match compile::load(path) {
             Ok(checked) => checked,
             Err(report) => {
@@ -2144,7 +2158,36 @@ fn main() {
                 std::process::exit(1);
             }
         };
-        procs.push((load(l1), l4s.iter().map(load).collect()));
+        // **Sorted by the `kind` each file declares**, keeping list order within
+        // a kind. A second L1 is refused rather than silently ignored: a slot
+        // simulates with one geometry, and a run that quietly dropped the
+        // second would be playing something nobody asked for.
+        let mut l2s = Vec::new();
+        let mut l4s = Vec::new();
+        for (path, checked) in rest.iter().zip(rest.iter().map(load)) {
+            match checked.kind {
+                karakuri_ir::Kind::L2 => l2s.push(checked),
+                karakuri_ir::Kind::L4 => l4s.push(checked),
+                karakuri_ir::Kind::L1 => {
+                    eprintln!(
+                        "slot {slot}: {} is an L1 and so is {} — a slot simulates with one \
+                         geometry and draws it with as many renderers as it likes",
+                        path.display(),
+                        l1.display()
+                    );
+                    std::process::exit(1);
+                }
+            }
+        }
+        if l4s.is_empty() {
+            eprintln!(
+                "slot {slot}: nothing here draws — {} names no L4, and a Set with no \
+                 renderer has no frame to give",
+                l1.display()
+            );
+            std::process::exit(1);
+        }
+        procs.push(Material { l1: load(l1), l2s, l4s });
     }
 
     // Saving is a one-shot: it writes what the flags say and stops, on the same
@@ -2227,7 +2270,7 @@ fn report_live_counts(gpu: &Gpu, deck: &Deck) {
 #[allow(clippy::too_many_arguments)]
 fn build_deck(
     gpu: &Gpu,
-    procs: &[Pair],
+    procs: &[Material],
     args: &Args,
     watch: bool,
     meters: bool,
@@ -2247,10 +2290,12 @@ fn build_deck(
     let swaps = procs
         .iter()
         .enumerate()
-        .map(|(slot, (l1, l4s))| {
+        .map(|(slot, material)| {
+            let (l1, l2s, l4s) = (&material.l1, &material.l2s, &material.l4s);
             let set = build(
                 gpu,
                 l1,
+                l2s,
                 l4s,
                 capacity_for(args, l1),
                 &args.overrides,
@@ -2361,6 +2406,7 @@ fn describe(binding: &Binding, signals: &Signals) -> String {
 fn build(
     gpu: &Gpu,
     l1: &karakuri_ir::typed::Checked,
+    l2s: &[karakuri_ir::typed::Checked],
     l4s: &[karakuri_ir::typed::Checked],
     capacity: u32,
     overrides: &[ParamWrite],
@@ -2368,8 +2414,9 @@ fn build(
     seed: u32,
     camera: Option<karakuri_engine::camera::Orbit>,
 ) -> Set {
-    let refs: Vec<&karakuri_ir::typed::Checked> = l4s.iter().collect();
-    match Set::build_many(&gpu.device, &gpu.queue, l1, &[], &refs, capacity, seed) {
+    let deform: Vec<&karakuri_ir::typed::Checked> = l2s.iter().collect();
+    let draw: Vec<&karakuri_ir::typed::Checked> = l4s.iter().collect();
+    match Set::build_many(&gpu.device, &gpu.queue, l1, &deform, &draw, capacity, seed) {
         Ok(mut set) => {
             if let Some(camera) = camera {
                 set.camera = camera;
@@ -2399,7 +2446,7 @@ fn build(
 
 struct App {
     args: Args,
-    procs: Option<Vec<Pair>>,
+    procs: Option<Vec<Material>>,
     live: Option<Live>,
     /// The run's edit history, already holding what it started with. Handed to
     /// every slot's watcher when the deck is built — see [`history`].
