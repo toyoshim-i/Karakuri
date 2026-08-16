@@ -253,6 +253,11 @@ pub struct Request {
     /// params below are restated: a request that depended on what happens to be
     /// live is not reproducible from a record stream.
     pub l4s: Vec<Checked>,
+    /// Whether the renderers overdraw or composite — see
+    /// [`crate::set::Layering`]. Restated on every rebuild for the reason the
+    /// params below are: a request that depended on what happens to be live is
+    /// not reproducible from a record stream.
+    pub layering: crate::set::Layering,
     pub capacity: u32,
     pub seed_salt: u32,
     /// Applied to the new Set once it is built. Parameter values are the one
@@ -1055,6 +1060,7 @@ fn run_worker(
                 &request.l2s.iter().collect::<Vec<_>>(),
                 request.l3.as_ref(),
                 &request.l4s.iter().collect::<Vec<_>>(),
+                request.layering,
                 request.capacity,
                 request.seed_salt,
             )

@@ -94,6 +94,10 @@ pub struct Watch {
     /// a rebuild restates the whole stack, so an edit to any one of them
     /// recompiles all of them and the Set that lands is the one the files say.
     l4s: Vec<PathBuf>,
+    /// Whether this slot's renderers composite or overdraw. Restated on every
+    /// rebuild rather than read off the outgoing Set, for the reason
+    /// `Request::bindings` gives.
+    layering: karakuri_engine::set::Layering,
     capacity: u32,
     seed_salt: u32,
     overrides: Vec<karakuri_engine::ParamWrite>,
@@ -120,10 +124,16 @@ pub struct Watch {
 }
 
 impl Watch {
+    // Eight, where clippy's line is seven. Six of them are one slot's identity
+    // — its files, its layering, its capacity, its seed and the values it was
+    // started with — and a struct to carry them would be `Watch` itself,
+    // constructed one field short.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         slot: usize,
         l1: PathBuf,
         l4s: Vec<PathBuf>,
+        layering: karakuri_engine::set::Layering,
         capacity: u32,
         seed_salt: u32,
         overrides: Vec<karakuri_engine::ParamWrite>,
@@ -136,6 +146,7 @@ impl Watch {
             slot,
             l1,
             l4s,
+            layering,
             capacity,
             seed_salt,
             overrides,
@@ -383,6 +394,7 @@ impl Source for Watch {
             l2s,
             l3,
             l4s,
+            layering: self.layering,
             capacity: self.capacity,
             seed_salt: self.seed_salt,
             params: self.overrides.clone(),
@@ -401,6 +413,7 @@ mod tests {
             0,
             dir.join("a.kir"),
             vec![dir.join("b.kir")],
+            karakuri_engine::set::Layering::Overdraw,
             4096,
             1,
             Vec::new(),

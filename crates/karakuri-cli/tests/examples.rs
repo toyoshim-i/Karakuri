@@ -149,6 +149,7 @@ fn the_pairs_the_docs_offer_compose() {
             &l2s,
             l3,
             &l4s,
+            karakuri_engine::set::Layering::Overdraw,
             capacity,
             0,
         )

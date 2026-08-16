@@ -51,6 +51,7 @@ use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
 
 use crate::binding::{Binding, ParamWrite, Signals};
+use crate::mix::Input;
 use crate::camera::Orbit;
 use crate::node::{Deform, Renderer, Simulation};
 use crate::video_source::VideoSource;
@@ -67,6 +68,26 @@ pub const MAX_STEPS: u8 = 4;
 /// step would drift away from the `t` the Sets are running at, and the drift
 /// would be invisible until a beat landed in the wrong place.
 pub const DT: f32 = 1.0 / 60.0;
+
+/// **Whether the renderers overdraw or composite**, which is the one thing the
+/// presence of an L5 node decides — `docs/ir-spec.md`, "Overdraw and
+/// compositing are different operations, and the graph says which".
+///
+/// Not a dial on one operation. Overdraw runs the renderers over one
+/// attachment, the first clearing and the rest loading, so each meets what is
+/// there through its own blend state; compositing gives each a cleared target
+/// and folds them through a gain, an opacity, a blend mode and a mask per
+/// input. They agree for additive renderers and do not for weighted ones, and
+/// the second costs a frame-sized target per renderer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Layering {
+    /// One target, however many renderers. The default, and what every Set was
+    /// before an L5 could be nested.
+    #[default]
+    Overdraw,
+    /// A target per renderer, folded by an [`crate::node::Merge`].
+    Composite,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum SetError {
@@ -241,6 +262,16 @@ pub struct Set {
     /// [`crate::node::Camera`] for why the derivation is a pass rather than host
     /// arithmetic.
     camera_node: crate::node::Camera,
+    /// **The L5 node, when the Set has one.** `None` is overdraw: the renderers
+    /// run in order over the one attachment. `Some` is compositing: each gets a
+    /// cleared target of its own and this folds them — see
+    /// [`crate::node::Merge`] for why the two are different operations rather
+    /// than one with a dial.
+    merge: Option<crate::node::Merge>,
+    /// One per renderer, in draw order. Unread under [`Layering::Overdraw`] —
+    /// an edge into an L5 is meaningless without an L5 — and the whole of what
+    /// a merge knows about its inputs otherwise.
+    edges: Vec<Input>,
     /// At most one per (layer, param). Resolved once per frame in
     /// [`Set::prepare`] and read back out wherever a param value is written.
     bindings: Vec<Binding>,
@@ -264,7 +295,7 @@ impl Set {
         capacity: u32,
         seed_salt: u32,
     ) -> Result<Set, SetError> {
-        Set::build_many(device, queue, l1, &[], None, &[l4], capacity, seed_salt)
+        Set::build_many(device, queue, l1, &[], None, &[l4], Layering::Overdraw, capacity, seed_salt)
     }
 
     /// **One geometry, several renderers over it, drawn in list order.**
@@ -296,6 +327,7 @@ impl Set {
         l2s: &[&Checked],
         l3: Option<&Checked>,
         l4s: &[&Checked],
+        layering: Layering,
         capacity: u32,
         seed_salt: u32,
     ) -> Result<Set, SetError> {
@@ -439,6 +471,7 @@ impl Set {
         // — see [`crate::node::Renderer`] — including the blend-mode rule that
         // needs both halves in hand. They all read the same edge, which is the
         // whole point: one simulation, several ways of looking at it.
+        let renderer_count = l4s.len();
         // **One camera node, however many renderers.** Sharing is edge fan-out
         // and needs no rule: two L4s reading one camera are one viewpoint drawn
         // two ways. Two reading *different* cameras is a graph, which is what an
@@ -505,6 +538,15 @@ impl Set {
             params,
             camera: Orbit::default(),
             camera_node,
+            // **Built at one texel and resized before anything draws.** A Set
+            // is built before it is sized — `Set::resize` is a separate call
+            // and `viewport` starts at `[1, 1]` — so allocating at the frame
+            // size here would mean allocating at the wrong one. Every caller
+            // resizes; the one that did not would draw a one-texel mix and say
+            // so loudly.
+            merge: (layering == Layering::Composite)
+                .then(|| crate::node::Merge::build(device, renderer_count, 1, 1)),
+            edges: vec![Input::default(); renderer_count],
             bindings: Vec::new(),
         };
         set.sim.initialize(queue);
@@ -531,6 +573,9 @@ impl Set {
         self.viewport = [width.max(1) as f32, height.max(1) as f32];
         for renderer in &mut self.renderers {
             renderer.resize(device, width, height);
+        }
+        if let Some(merge) = &mut self.merge {
+            merge.resize(device, width, height);
         }
     }
 
@@ -825,6 +870,41 @@ impl Set {
         }
     }
 
+    /// **The edges into this Set's L5**, in draw order. Empty of meaning under
+    /// [`Layering::Overdraw`] — there is no L5 for an edge to go into — and
+    /// present either way, because whether a Set composites is a build decision
+    /// and a caller reading its controls should not have to branch on it.
+    pub fn inputs(&self) -> &[Input] {
+        &self.edges
+    }
+
+    /// Set one renderer's edge into the L5. `false` if there is no such
+    /// renderer.
+    ///
+    /// **Silently ineffective under `Overdraw`**, which is stated rather than
+    /// refused: a Set built to overdraw has the controls and nothing reads them,
+    /// exactly as a `param` a procedure declares and never uses is written and
+    /// never read. Refusing would make every caller ask a question it has no
+    /// reason to have an answer to.
+    pub fn set_input(&mut self, at: usize, input: Input) -> bool {
+        match self.edges.get_mut(at) {
+            Some(edge) => {
+                *edge = input;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Whether this Set composites its renderers or overdraws them.
+    pub fn layering(&self) -> Layering {
+        if self.merge.is_some() {
+            Layering::Composite
+        } else {
+            Layering::Overdraw
+        }
+    }
+
     /// What `name` currently holds, from the first node that declares it.
     ///
     /// Enough while [`Set::set_param`] writes every declaration together, so
@@ -1059,6 +1139,9 @@ impl Set {
         // one's: a Set hands down the frame and the built-in's six numbers, and
         // an L3 uses the first while the orbit uses the second.
         self.camera_node.write_canvas(queue, self.viewport[0] / self.viewport[1]);
+        if let Some(merge) = &self.merge {
+            merge.write_uniform(queue, &self.edges);
+        }
         {
             // **`nodes_of` rather than `slot_of`**, because there may be no
             // camera node at all: with no L3 the two layers share a slot number,
@@ -1312,9 +1395,22 @@ impl Set {
         // for the whole Set, because one camera serves every node in it.
         self.camera_node.record(encoder);
         let (parity, counts) = (self.sim.parity(), self.sim.counts());
+        // **The presence of an L5 is what decides overdraw from compositing**,
+        // and it decides it here, in the one place the renderers are given
+        // somewhere to draw. Under overdraw they share `target` and the first
+        // one clears it; under compositing each has a cleared target of its own
+        // — `first` is true for every one of them, because "first onto this
+        // attachment" is what it means and each of them is.
+        let Some(merge) = &self.merge else {
+            for (i, renderer) in self.renderers.iter().enumerate() {
+                renderer.draw(encoder, target, parity, counts, i == 0);
+            }
+            return;
+        };
         for (i, renderer) in self.renderers.iter().enumerate() {
-            renderer.draw(encoder, target, parity, counts, i == 0);
+            renderer.draw(encoder, merge.target(i), parity, counts, true);
         }
+        merge.record(encoder, target);
     }
 }
 
