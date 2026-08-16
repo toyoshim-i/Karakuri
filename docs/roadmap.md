@@ -1122,13 +1122,29 @@ forced rather than chosen, and it paid a debt recorded in `SetError::ParamCollis
 `exposure` were refused — and every L4 in `examples/` declares `exposure`, so the check
 forbade the feature it was guarding.
 
-**Built: the engine keys parameter values by node and the error is deleted.** What is *not*
-built is the external half. A `--param` and a `param` record still carry a bare name, which
-now means **every node that declares it** — one knob moving both renderers, which is the
-useful default and the "one control driving both" case an interface would offer. Setting two
-renderers' `exposure` apart needs the address in the record vocabulary: `layer` plus an
-`index` defaulting to 0, which keeps every existing session stream replaying unchanged. Worth
-doing when something wants them apart, and not before.
+**Built, both halves.** The engine keys parameter values by node and the error is deleted;
+`--param L4:1:exposure=2.0`, `--bind index=1`, and an `index` on the `param` and `bind`
+records reach one node from outside. A bare name still means **every node that declares
+it** — one knob moving both renderers, the useful default and the "one control driving both"
+case an interface would offer — so the address is what closes the gap a wildcard cannot, and
+neither replaces the other.
+
+**The `index` is an `Option` on these two records and a plain number on `slot` and
+`procedure`, and that is not an inconsistency.** Those name exactly one node and always did,
+so absent is 0. These address a *value*, where absent is a **wildcard** — which is both what
+a bare name has always meant and what keeps every Set file ever written reading the same way:
+`layer` on a `param` record was a placeholder the loader ignored, so honouring it now would
+have silently retargeted them. The address is `(layer, index)` present or absent as a unit,
+which makes `layer` load-bearing exactly when an `index` appears beside it.
+
+**The same address closed two more surfaces**, which is why it was worth doing first. The
+edit history was keyed by (slot, layer), so every renderer of a stack shared one chain and
+one memory of what it last wrote — two renderers recorded one snapshot per save, alternating
+between procedures neither of which had changed. And the MCP `read_procedure` /
+`write_procedure` pair handed back renderer 0 for any `L4`, so a model told to rewrite the
+strokes of a slot that draws sprites *and* strokes would have rewritten the sprites. Both
+now take an `index`, and an index past the end is refused with the range named rather than
+folded to the first.
 
 What this is *not*: L2. The split makes the space a stage goes into; putting one there is
 the next thing after, and it should be built against a Set that already holds a list rather

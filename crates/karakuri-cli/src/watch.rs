@@ -264,17 +264,22 @@ impl Source for Watch {
             // compiled — this is bookkeeping either way.
             match snapshots.lock() {
                 Ok(mut snapshots) => {
-                    // The first renderer only, because the history is keyed
-                    // by (slot, layer) and a stack would write every one of
-                    // them under "L4", each overwriting the last. Naming a
-                    // renderer wants the address a param does — see
-                    // `docs/roadmap.md`, "How a param is addressed".
-                    let l4_first = l4s.first().zip(l4_srcs.first());
-                    for (layer, name, src) in [("L1", &l1.name, &l1_src)]
+                    // Every renderer, each under its own index. A rebuild
+                    // recompiles the whole stack whichever file was saved, so
+                    // every one of them is offered — and `Snapshots::record`
+                    // drops the ones that did not change, which is what keeps
+                    // the untouched renderers' chains from becoming rows of
+                    // identical files.
+                    let renderers = l4s
+                        .iter()
+                        .zip(&l4_srcs)
+                        .enumerate()
+                        .map(|(i, (c, s))| ("L4", i, &c.name, s));
+                    for (layer, index, name, src) in [("L1", 0, &l1.name, &l1_src)]
                         .into_iter()
-                        .chain(l4_first.map(|(c, s)| ("L4", &c.name, s)))
+                        .chain(renderers)
                     {
-                        if let Err(e) = snapshots.record(slot, layer, name, src.as_bytes()) {
+                        if let Err(e) = snapshots.record(slot, layer, index, name, src.as_bytes()) {
                             eprintln!("slot {slot}: this version is not in the edit history: {e}");
                         }
                     }
