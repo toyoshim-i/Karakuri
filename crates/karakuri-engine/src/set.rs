@@ -861,24 +861,88 @@ impl VideoSource for Set {
 
 /// The scalar default of a param, for the uniform. Vector params are not yet
 /// driven from here — every param the examples declare is a float.
+///
+/// **A negation is folded, because the parser does not fold it.** `= -0.35` is
+/// `Unary { Neg, Lit }` and not a literal, so matching `Expr::Lit` alone silently
+/// dropped every negative default: the param never entered [`Set::params`], so
+/// its declared value was discarded, [`Set::bind`] refused it, and the uniform
+/// got whatever the miss produced — a panic on the render thread before
+/// `effective` returned an `Option`, and a quiet `0.0` after. A `.kir` declaring
+/// `param drift : float [-1.0, 1.0] = -0.35` is legal and none of that is the
+/// engine's to decide.
+///
+/// **Not general constant folding**, deliberately. A default is checked in an
+/// empty scope, so it is *some* constant, but the useful set is one literal with
+/// an optional sign in front of it; anything past that wants folding in
+/// `karakuri-ir` where the checker could also use it, rather than a second
+/// evaluator here that agrees with the shader by coincidence.
 fn default_scalar(p: &karakuri_ir::Param) -> Option<f32> {
-    use karakuri_ir::{Expr, Lit};
+    use karakuri_ir::{Expr, Lit, UnOp};
     match &p.default {
-        Expr::Lit {
-            value: Lit::Float(v),
-            ..
-        } => Some(*v),
+        Expr::Lit { value: Lit::Float(v), .. } => Some(*v),
+        Expr::Unary { op: UnOp::Neg, value, .. } => match value.as_ref() {
+            Expr::Lit { value: Lit::Float(v), .. } => Some(-v),
+            _ => None,
+        },
         _ => None,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    //! The one thing `Set::build` does that no node does: put the two halves
-    //! together. The byte-level checks for the L1 node's initial upload moved
-    //! with it — see `crate::node::simulation`'s tests.
+    //! The two things `Set::build` does that no node does: put the two halves
+    //! together, and read the `.kir`'s declared defaults. The byte-level checks
+    //! for the L1 node's initial upload moved with it — see
+    //! `crate::node::simulation`'s tests.
     use super::*;
     use crate::gpu::Gpu;
+
+    /// **A negative default is a value, not an absence.**
+    ///
+    /// `= -0.35` parses as a negation of a literal rather than as one, and
+    /// [`default_scalar`] matched `Expr::Lit` alone — so a legal `.kir` had its
+    /// declared default silently discarded, could not be bound, and reached the
+    /// shader as whatever the miss produced. No example declares one, which is
+    /// the only reason it was never seen; nothing in the language forbids it.
+    ///
+    /// No GPU: this is about reading a declaration, and pinning it here rather
+    /// than through a built `Set` is what keeps the failure legible.
+    #[test]
+    fn a_negative_param_default_is_read_as_its_declared_value() {
+        let src = r#"
+proc signed_defaults {
+  kind  L4
+  blend additive
+
+  param drift  : float [-1.0, 1.0] = -0.35
+  param plain  : float [ 0.0, 1.0] =  0.25
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 1.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, drift + plain);
+  }
+}
+"#;
+        let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("parse: {e:?}"));
+        let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("check: {e:?}"));
+        let of = |name: &str| {
+            default_scalar(
+                checked
+                    .params
+                    .iter()
+                    .find(|p| p.name == name)
+                    .expect("the param is declared"),
+            )
+        };
+        assert_eq!(of("drift"), Some(-0.35), "a negative default was read as an absence");
+        assert_eq!(of("plain"), Some(0.25), "a positive default stopped being read");
+    }
 
     /// End-to-end smoke test that a procedure *with* a `spawn` block builds
     /// a `Set` successfully and starts with a zero live count —
