@@ -406,8 +406,8 @@ fn one_name_declared_by_two_renderers_is_two_values_each_reaching_its_own() {
 
     let mut declared: Vec<f32> = plain
         .params()
-        .filter(|(_, name, _)| *name == "exposure")
-        .map(|(_, _, value)| value)
+        .filter(|(_, _, name, _)| *name == "exposure")
+        .map(|(_, _, _, value)| value)
         .collect();
     declared.sort_by(|x, y| x.partial_cmp(y).expect("no NaN"));
     assert_eq!(
@@ -656,4 +656,108 @@ fn a_set_with_no_renderer_is_refused() {
         "the wrong diagnostic for an empty stack: {err}"
     );
     assert!(err.to_string().contains("pair"), "the message does not name the L1: {err}");
+}
+
+/// **The addressed write is what a bare name cannot do: set two renderers'
+/// `exposure` apart.**
+///
+/// A name with no address reaches every node declaring it — one knob moving both
+/// renderers, which is the useful default and is why it is the default. It is
+/// also, by construction, unable to give them different values. That is the gap
+/// `Set::set_param_at` closes, and it is the same gap the record vocabulary has:
+/// `layer` plus an `index`.
+///
+/// Asserted in pixels rather than in the map, because the claim is about which
+/// renderer's *uniform* was written. The two own separate colour channels, so
+/// one frame carries both answers.
+#[test]
+fn an_addressed_write_reaches_one_renderer_and_leaves_the_other() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let (a, b) = pair();
+
+    let base = channel_sums(&draw(&gpu, &mut build(&gpu, &[&a, &b])));
+    let mut split = build(&gpu, &[&a, &b]);
+    assert!(
+        split.set_param_at(Kind::L4, 1, "exposure", 1.0),
+        "renderer 1 declares `exposure`"
+    );
+
+    let after = channel_sums(&draw(&gpu, &mut split));
+    // Renderer 1 went from 0.25 to 1.0 — four times. Renderer 0 was not
+    // addressed and must not have moved at all.
+    assert!(
+        (after[1] - 4.0 * base[1]).abs() <= 0.02 * 4.0 * base[1],
+        "the addressed renderer went to {} where four times {} was due",
+        after[1],
+        base[1]
+    );
+    assert!(
+        (after[0] - base[0]).abs() <= 0.02 * base[0],
+        "an addressed write reached a renderer it did not name: {} was {}",
+        after[0],
+        base[0]
+    );
+}
+
+/// **An address that names no node is refused rather than silently ignored**,
+/// on the same terms `Set::bind` refuses a param a layer does not declare.
+#[test]
+fn an_address_past_the_end_of_the_stack_is_refused() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let (a, b) = pair();
+    let mut set = build(&gpu, &[&a, &b]);
+
+    assert!(set.set_param_at(Kind::L4, 1, "exposure", 2.0));
+    assert!(!set.set_param_at(Kind::L4, 2, "exposure", 2.0), "there is no third renderer");
+    assert!(!set.set_param_at(Kind::L4, 0, "nothing_declares_this", 2.0));
+    // The L1 is one node, so only 0 addresses it — and `pair`'s L1 declares no
+    // `exposure`, which is what makes this a claim about the address rather
+    // than about the name.
+    assert!(!set.set_param_at(Kind::L1, 0, "exposure", 2.0));
+
+    // A binding is addressed on the same terms.
+    let bind_at = |i: u32| {
+        Binding::new(Kind::L4, "exposure", "nothing_measures_this", Curve::Lin, [0.0, 8.0]).at(i)
+    };
+    assert!(set.bind(bind_at(1)), "renderer 1 declares `exposure`");
+    assert!(!set.bind(bind_at(9)), "there is no tenth renderer to bind into");
+}
+
+/// **An addressed binding blends from the node it names**, which is the half of
+/// the address that only shows through the signal path.
+///
+/// Both renderers declare `exposure`, at 1.0 and 0.25. Two bindings, one per
+/// renderer, both attached to a signal nothing provides — confidence 0.0, so
+/// each writes its param's own value unchanged. They must resolve to the two
+/// different declarations. A binding that took the first declaring node's base,
+/// which is what an unaddressed one does, would give both 1.0.
+#[test]
+fn two_addressed_bindings_on_one_name_blend_from_their_own_nodes() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let (a, b) = pair();
+    let mut set = build(&gpu, &[&a, &b]);
+
+    for i in 0..2 {
+        assert!(
+            set.bind(
+                Binding::new(Kind::L4, "exposure", "nothing_measures_this", Curve::Lin, [0.0, 8.0])
+                    .at(i)
+            ),
+            "renderer {i} declares `exposure`"
+        );
+    }
+    set.prepare(&gpu.queue, 1, &Signals::default());
+
+    let resolved = |i: u32| -> f32 {
+        set.bindings()
+            .iter()
+            .find(|b| b.index == Some(i))
+            .expect("both renderers are bound")
+            .value()
+    };
+    assert_eq!(
+        (resolved(0), resolved(1)),
+        (1.0, 0.25),
+        "the two bindings blended from one node's declaration rather than their own"
+    );
 }

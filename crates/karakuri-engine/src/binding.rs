@@ -315,6 +315,17 @@ pub struct Binding {
     /// Which procedure declares the `param`. L1 and L4 params are packed into
     /// separate uniform buffers, so this is what says which one is written.
     pub layer: Kind,
+    /// **Which node of that layer**, or `None` for every node declaring the
+    /// name.
+    ///
+    /// A Set draws with one L1 and a list of renderers, so a layer alone stops
+    /// naming a node the moment there are two. `None` is not a default index —
+    /// it is a *wildcard*, and the useful one: "the Set's `exposure`", one knob
+    /// moving every renderer that has one, which is what a bare `--param` means
+    /// and what a console would offer as one published control.
+    ///
+    /// An address is `(layer, index)` and it is present or absent as a unit.
+    pub index: Option<u32>,
     pub key: String,
     pub signal: String,
     pub curve: Curve,
@@ -340,6 +351,7 @@ impl Binding {
     ) -> Binding {
         Binding {
             layer,
+            index: None,
             key: key.into(),
             signal: signal.into(),
             curve,
@@ -355,6 +367,18 @@ impl Binding {
     pub fn with_noise(mut self, noise: NoiseConfig) -> Binding {
         self.noise = Some(noise);
         self
+    }
+
+    /// Narrow this binding to one node of its layer. Without it a binding is
+    /// the layer's — see [`Binding::index`].
+    pub fn at(mut self, index: u32) -> Binding {
+        self.index = Some(index);
+        self
+    }
+
+    /// Whether this binding writes the node at `index` of its layer.
+    pub fn covers(&self, index: usize) -> bool {
+        self.index.is_none_or(|i| i as usize == index)
     }
 
     /// What this binding wrote on the last frame.

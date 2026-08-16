@@ -624,8 +624,8 @@ fn a_param_name_two_nodes_declare_is_two_values_one_per_node() {
 
     let mut declared: Vec<(Kind, f32)> = set
         .params()
-        .filter(|(_, name, _)| *name == "radius")
-        .map(|(layer, _, value)| (layer, value))
+        .filter(|(_, _, name, _)| *name == "radius")
+        .map(|(layer, _, _, value)| (layer, value))
         .collect();
     declared.sort_by_key(|(layer, _)| format!("{layer:?}"));
     assert_eq!(

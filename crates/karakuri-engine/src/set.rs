@@ -567,19 +567,30 @@ impl Set {
         let declares = |names: &[String], map: &HashMap<String, f32>| {
             names.contains(&binding.key) && map.contains_key(&binding.key)
         };
+        // **Only the nodes this binding covers.** A wildcard needs one of them
+        // to declare the name; an addressed one needs *that* node to, so
+        // `bind(L4, index 2, "exposure")` on a Set of two renderers is refused
+        // rather than attached to nothing.
         let found = match binding.layer {
-            Kind::L1 => declares(self.sim.param_names(), &self.params[0]),
+            Kind::L1 => binding.covers(0) && declares(self.sim.param_names(), &self.params[0]),
             Kind::L4 => self
                 .renderers
                 .iter()
                 .zip(&self.params[1..])
-                .any(|(r, map)| declares(r.param_names(), map)),
+                .enumerate()
+                .any(|(at, (r, map))| binding.covers(at) && declares(r.param_names(), map)),
         };
         if !found {
             return false;
         }
+        // At most one per (layer, index, param). A wildcard and an addressed
+        // binding on one name are two bindings and the addressed one wins for
+        // the node it names, because `effective` takes the first match and an
+        // addressed binding is pushed later — which is the same "the last one
+        // attached wins" rule a repeated binding already follows, applied to a
+        // narrower target.
         self.bindings
-            .retain(|b| b.layer != binding.layer || b.key != binding.key);
+            .retain(|b| b.layer != binding.layer || b.key != binding.key || b.index != binding.index);
         self.bindings.push(binding);
         true
     }
@@ -634,6 +645,24 @@ impl Set {
         written
     }
 
+    /// **Set one node's declaration of `name`.** `false` if that node does not
+    /// exist or does not declare it.
+    ///
+    /// The addressed form of [`Set::set_param`], and the one that can set two
+    /// renderers' `exposure` apart — a bare name reaches every declaration and
+    /// therefore cannot. `index` is which node of `layer`; the L1 is one node,
+    /// so only 0 addresses it.
+    pub fn set_param_at(&mut self, layer: Kind, index: u32, name: &str, value: f32) -> bool {
+        let slot = Self::slot_of(layer) + index as usize;
+        match self.params.get_mut(slot).and_then(|n| n.get_mut(name)) {
+            Some(held) => {
+                *held = value;
+                true
+            }
+            None => false,
+        }
+    }
+
     /// What `name` currently holds, from the first node that declares it.
     ///
     /// Enough while [`Set::set_param`] writes every declaration together, so
@@ -644,11 +673,15 @@ impl Set {
         self.params.iter().find_map(|node| node.get(name).copied())
     }
 
-    /// Every parameter value, addressed by the layer that declares it.
-    pub fn params(&self) -> impl Iterator<Item = (Kind, &str, f32)> + '_ {
+    /// Every parameter value, addressed by the node that declares it: the
+    /// layer, which node of that layer, the name, and the value.
+    pub fn params(&self) -> impl Iterator<Item = (Kind, u32, &str, f32)> + '_ {
         self.params.iter().enumerate().flat_map(|(slot, node)| {
-            let layer = if slot == 0 { Kind::L1 } else { Kind::L4 };
-            node.iter().map(move |(k, v)| (layer, k.as_str(), *v))
+            let (layer, index) = match slot {
+                0 => (Kind::L1, 0),
+                n => (Kind::L4, n as u32 - 1),
+            };
+            node.iter().map(move |(k, v)| (layer, index, k.as_str(), *v))
         })
     }
 
@@ -811,7 +844,7 @@ impl Set {
 
         {
             let (bindings, params) = (&self.bindings, &self.params[Self::slot_of(Kind::L1)]);
-            let param = |name: &str| effective(bindings, params, Kind::L1, name);
+            let param = |name: &str| effective(bindings, params, Kind::L1, 0, name);
             let tick = crate::node::Tick { steps, dt: self.dt, instants, param: &param };
             self.sim.prepare(queue, &tick);
         }
@@ -849,14 +882,14 @@ impl Set {
             self.seed_salt,
             self.viewport,
         );
-        for (renderer, params) in self.renderers.iter_mut().zip(&self.params[1..]) {
+        for (at, (renderer, params)) in self.renderers.iter_mut().zip(&self.params[1..]).enumerate() {
             let view = crate::node::View {
                 t,
                 beats,
                 seed_salt: salt,
                 viewport,
                 camera,
-                param: &|name: &str| effective(bindings, params, Kind::L4, name),
+                param: &|name: &str| effective(bindings, params, Kind::L4, at, name),
             };
             renderer.write_uniforms(queue, &view);
         }
@@ -906,7 +939,9 @@ impl Set {
     /// that it must be a declaration.
     fn resolve_bindings(&mut self, signals: &Signals) {
         for binding in &mut self.bindings {
+            let base = Self::slot_of(binding.layer);
             let manual = Self::nodes_of(binding.layer)
+                .filter(|slot| binding.covers(slot - base))
                 .filter_map(|slot| self.params.get(slot))
                 .find_map(|node| node.get(&binding.key).copied())
                 // Cannot miss — `Set::bind` refuses a name no node of that
@@ -929,11 +964,12 @@ fn effective(
     bindings: &[Binding],
     params: &HashMap<String, f32>,
     layer: Kind,
+    index: usize,
     name: &str,
 ) -> Option<f32> {
     match bindings
         .iter()
-        .find(|b| b.layer == layer && b.key == name)
+        .find(|b| b.layer == layer && b.key == name && b.covers(index))
     {
         Some(binding) => Some(binding.value()),
         // `params` holds only the scalar params, so a declared vector one
