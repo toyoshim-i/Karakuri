@@ -49,9 +49,9 @@ pub fn parse(src: &str) -> IrResult<Proc> {
 
 /// Header/block keywords. Declaration recovery scans forward to the next one
 /// of these (or `}`), so one bad declaration does not eat the rest of the file.
-const DECL_KEYWORDS: [&str; 13] = [
+const DECL_KEYWORDS: [&str; 14] = [
     "kind", "topology", "capacity", "param", "emit", "consumes", "blend", "spawn", "element",
-    "deform", "camera", "vertex", "fragment",
+    "deform", "mask", "camera", "vertex", "fragment",
 ];
 
 struct Parser {
@@ -361,6 +361,7 @@ impl Parser {
                     "spawn" => blocks.push(self.parse_block(BlockKind::Spawn)),
                     "element" => blocks.push(self.parse_block(BlockKind::Element)),
                     "deform" => blocks.push(self.parse_block(BlockKind::Deform)),
+                    "mask" => blocks.push(self.parse_block(BlockKind::Mask)),
                     "camera" => blocks.push(self.parse_block(BlockKind::Camera)),
                     "vertex" => blocks.push(self.parse_block(BlockKind::Vertex)),
                     "fragment" => blocks.push(self.parse_block(BlockKind::Fragment)),

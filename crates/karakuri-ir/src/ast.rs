@@ -281,6 +281,15 @@ pub enum Output {
     FovY,
     /// camera: the near plane. Defaults to 0.1.
     Near,
+    /// mask: **how much of this deformation applies to this element**, in
+    /// `[0, 1]`. **Required** in a `mask` block.
+    ///
+    /// A scalar rather than a predicate, which is what makes it the same word
+    /// the mixer already uses: `crate::deck`'s mask is a fader varying across
+    /// the frame, and this is a modulator's varying across the material. A
+    /// predicate is expressible — `step(0.7, age)` — and a soft boundary, which
+    /// a spatial mask needs, is not expressible the other way round.
+    Strength,
     /// camera: the far plane. Defaults to 100.
     ///
     /// **Not decorative.** `blend weighted` normalises a fragment's depth
@@ -290,7 +299,7 @@ pub enum Output {
 }
 
 impl Output {
-    pub const ALL: [Output; 10] = [
+    pub const ALL: [Output; 11] = [
         Output::Clip,
         Output::ClipB,
         Output::PointSize,
@@ -301,6 +310,7 @@ impl Output {
         Output::FovY,
         Output::Near,
         Output::Far,
+        Output::Strength,
     ];
 
     pub fn name(self) -> &'static str {
@@ -315,6 +325,7 @@ impl Output {
             Output::FovY => "fov_y",
             Output::Near => "near",
             Output::Far => "far",
+            Output::Strength => "strength",
         }
     }
 
@@ -325,7 +336,9 @@ impl Output {
     pub fn ty(self) -> Ty {
         match self {
             Output::Clip | Output::ClipB | Output::Color => Ty::Vec4,
-            Output::PointSize | Output::FovY | Output::Near | Output::Far => Ty::Float,
+            Output::PointSize | Output::FovY | Output::Near | Output::Far | Output::Strength => {
+                Ty::Float
+            }
             Output::Eye | Output::Target | Output::Up => Ty::Vec3,
         }
     }
@@ -340,6 +353,7 @@ impl Output {
             | Output::FovY
             | Output::Near
             | Output::Far => BlockKind::Camera,
+            Output::Strength => BlockKind::Mask,
         }
     }
 }
@@ -552,6 +566,9 @@ pub enum BlockKind {
     /// L2: rewrite a live element's attributes. **May not `kill()`** — see
     /// [`Kind::L2`].
     Deform,
+    /// L2: **where** this deformation applies, and how much. Optional; an L2
+    /// with no `mask` block applies everywhere at full strength.
+    Mask,
     /// L3: produce this frame's camera state.
     Camera,
     /// L4: once per element.
@@ -566,6 +583,7 @@ impl BlockKind {
             BlockKind::Spawn => "spawn",
             BlockKind::Element => "element",
             BlockKind::Deform => "deform",
+            BlockKind::Mask => "mask",
             BlockKind::Camera => "camera",
             BlockKind::Vertex => "vertex",
             BlockKind::Fragment => "fragment",
@@ -577,6 +595,7 @@ impl BlockKind {
             "spawn" => BlockKind::Spawn,
             "element" => BlockKind::Element,
             "deform" => BlockKind::Deform,
+            "mask" => BlockKind::Mask,
             "camera" => BlockKind::Camera,
             "vertex" => BlockKind::Vertex,
             "fragment" => BlockKind::Fragment,
@@ -587,7 +606,7 @@ impl BlockKind {
     pub fn kind(self) -> Kind {
         match self {
             BlockKind::Spawn | BlockKind::Element => Kind::L1,
-            BlockKind::Deform => Kind::L2,
+            BlockKind::Deform | BlockKind::Mask => Kind::L2,
             BlockKind::Camera => Kind::L3,
             BlockKind::Vertex | BlockKind::Fragment => Kind::L4,
         }

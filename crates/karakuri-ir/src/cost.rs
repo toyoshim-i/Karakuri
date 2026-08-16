@@ -400,7 +400,9 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
         match block.kind {
             // A `deform` runs once per live element, exactly as `element` and
             // `vertex` do — the layer differs, what it scales with does not.
-            BlockKind::Element | BlockKind::Deform | BlockKind::Vertex => {
+            // A `mask` runs once per live element beside the `deform` it
+            // gates, so it scales with exactly what that does.
+            BlockKind::Element | BlockKind::Deform | BlockKind::Mask | BlockKind::Vertex => {
                 ops_per_element = ops_per_element.saturating_add(block_cost)
             }
             BlockKind::Spawn => ops_per_spawn = ops_per_spawn.saturating_add(block_cost),

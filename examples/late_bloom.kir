@@ -1,0 +1,61 @@
+// A deformation that only reaches part of the material, which is what a mask is
+// for.
+//
+// **The same modulator is a different thing under a different mask**, and that
+// is the claim `docs/roadmap.md` makes for this layer being the largest single
+// source of expressive range in the system. The body here is three lines and
+// does one thing — push elements away from the axis. Masked on `age` it is a
+// bloom that only old material takes part in; masked on `seed` it would be a
+// third of the cloud doing something the rest does not; masked on distance it
+// would be a shell inflating from inside. One `deform`, three effects, and the
+// difference is the `mask` block.
+//
+//     --set drift_shell.kir,late_bloom.kir,soft_points.kir
+//
+// **`weight` and the mask are separate on purpose**, and using both is the
+// point of this file. `weight` is the fader — one number, on the desk, bindable
+// to a signal and moveable by a transition. `strength` is the shape — where the
+// bloom happens at all. An operator rides the first and never sees the second.
+//
+//     --param L2:0:weight=0.3
+//
+// **It stacks with `swirl_warp.kir`**, and in either order, because an L2 is
+// stateless: `--set drift_shell.kir,swirl_warp.kir,late_bloom.kir,soft_points.kir`
+// blooms what the twist produced, and swapping the two twists what bloomed.
+// Neither reads back what it wrote, so neither drifts.
+proc late_bloom {
+  kind L2
+
+  // How much of the bloom lands. The mask says where; this says how far.
+  param weight : float [0.0, 1.0]  = 1.0
+  // How far out a fully bloomed element is pushed, in world units.
+  param throw  : float [0.0, 6.0]  = 1.8
+  // The age at which the bloom starts, in seconds.
+  param onset  : float [0.0, 12.0] = 2.0
+  // How long it takes to reach full strength from there. Zero is a hard edge —
+  // every element pops the instant it crosses `onset`, which reads as a
+  // flicker rather than as a bloom.
+  param ease   : float [0.05, 8.0] = 1.6
+
+  consumes position, age
+
+  // **The mask reads what reached this node**, not what the `deform` below is
+  // about to write — which is why `age` here is the element's real age and not
+  // something the bloom moved. A `smoothstep` rather than a comparison because
+  // this is a scalar and not a predicate: a hard edge would make the whole
+  // cloud change character on one frame.
+  mask {
+    strength = smoothstep(onset, onset + ease, age);
+  }
+
+  deform {
+    // Away from the vertical axis, so the shell opens rather than scaling —
+    // scaling everything about the origin is a camera move, and the camera
+    // already does that better. `1e-4` keeps an element exactly on the axis
+    // from producing a zero-length normalize.
+    let out  = vec3(position.x, 0.0, position.z);
+    let away = out / max(length(out), 0.0001);
+
+    position = position + away * throw;
+  }
+}

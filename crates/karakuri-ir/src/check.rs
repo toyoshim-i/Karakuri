@@ -370,6 +370,24 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                         .with_hint("remove `blend`: an L2 rewrites geometry and draws nothing"),
                 );
             }
+            // **`weight` is read by the lowering**, on the same terms
+            // `spawn_rate` is read by the engine: a name the layer gives a
+            // meaning to, stated here so that a procedure declaring it as
+            // something else is refused rather than silently scaled.
+            if let Some(p) = proc.params.iter().find(|p| p.name == "weight") {
+                if p.ty != Ty::Float {
+                    errors.push(
+                        IrError::contract(
+                            p.span,
+                            format!("`weight` must be a `float`, not a `{}`", p.ty.name()),
+                        )
+                        .with_hint(
+                            "an L2's `weight` is how much of the deformation applies, and the \
+                             lowering multiplies the whole modulation by it",
+                        ),
+                    );
+                }
+            }
             if !proc.blocks.iter().any(|b| b.kind == BlockKind::Deform) {
                 errors.push(
                     IrError::contract(proc.span, "L2 procedures require a `deform` block")
@@ -921,6 +939,10 @@ fn required_keys(block: BlockKind, emit: &HashSet<Attr>, draws_lines: bool) -> V
         // it to assign everything it emits would make every one of them restate
         // the whole element.
         BlockKind::Deform => Vec::new(),
+        // **`strength` is the whole of a mask**, so it is required — a block
+        // that leaves it unassigned is one whose author meant to say something
+        // about where the deformation applies and did not.
+        BlockKind::Mask => vec![CovKey::Output(Output::Strength)],
         // **Two of the six, and the other four have defaults.** Where the
         // camera is and what it looks at are the whole of what makes one
         // camera different from another; `up`, the field of view and the two
@@ -1205,7 +1227,7 @@ impl<'a> Checker<'a> {
                     self.emit.contains(&attr) || self.consumes.contains(&attr)
                 }
                 Some(BlockKind::Vertex) | Some(BlockKind::Fragment) | Some(BlockKind::Camera)
-                | None => false,
+                | Some(BlockKind::Mask) | None => false,
             };
             if !available {
                 let hint = match self.block {
@@ -1218,6 +1240,9 @@ impl<'a> Checker<'a> {
                         "add `{name}` to `consumes` to rewrite what reaches this node, or to \
                          `emit` to add it to what leaves"
                     ),
+                    Some(BlockKind::Mask) => "a mask says where the deformation applies and \
+                         writes nothing but `strength` — rewrite the attribute in `deform`"
+                        .to_string(),
                     _ => format!("add `{name}` to `emit` to make it writable here"),
                 };
                 self.err_hint(
@@ -1510,6 +1535,14 @@ impl<'a> Checker<'a> {
                 Some(BlockKind::Deform) => {
                     self.emit.contains(&attr) || self.consumes.contains(&attr)
                 }
+                // **`consumes` only, unlike the `deform` beside it.** A mask
+                // decides where the deformation applies, which is a question
+                // about what *reaches* this node — and an `emit`ted attribute
+                // has not been written yet when the mask runs, so reading one
+                // here would read the zero the pass-through left rather than a
+                // value. Refusing it is better than a rule an author has to
+                // remember.
+                Some(BlockKind::Mask) => self.consumes.contains(&attr),
                 Some(BlockKind::Vertex) | Some(BlockKind::Fragment) => self.consumes.contains(&attr),
                 // An L3 has no element in hand — see `check_header`.
                 Some(BlockKind::Camera) | None => false,
@@ -1527,6 +1560,10 @@ impl<'a> Checker<'a> {
                 Some(BlockKind::Deform) => format!(
                     "add `{name}` to `consumes` to read what reaches this node, or to \
                      `emit` to add it to what leaves"
+                ),
+                Some(BlockKind::Mask) => format!(
+                    "add `{name}` to `consumes` — a mask reads what reaches this node, and an \
+                     `emit`ted attribute has not been written when it runs"
                 ),
                 Some(BlockKind::Camera) => "a camera reads the clock and its params, not \
                      elements — pointing one at geometry means naming a reduction or element \

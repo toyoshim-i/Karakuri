@@ -126,6 +126,13 @@ Each layer composes differently, and each needs its own semantics.
   masks are attribute-based: only elements where `seed % 3 == 0`, only inside a region,
   only where `age > 0.7`. This is the largest single source of expressive range in the
   system, because the same modulator becomes a different thing under a different mask.
+  **Built.** `weight` is a declared `param` and `mask` is a block writing a `strength` in
+  `[0, 1]`; the two multiply into one `mix` between what reached the node and what the
+  `deform` wrote. Keeping them separate is what keeps the operator's control a `param` —
+  faders, bindings, transitions and Set files all reach a `param` and none of them reaches
+  an expression. The mask is a **scalar** and not a predicate, which is the mixer's mask one
+  layer down: a predicate is expressible as one and a soft boundary is not expressible as a
+  predicate.
 - **L3 multiple** — weighted blend or cut. Blending interpolates trajectories, so an orbit
   and a handheld rig can be mixed at 0.3.
 - **L4 multiple** — overdraw on shared geometry. The same point cloud drawn as points, and
