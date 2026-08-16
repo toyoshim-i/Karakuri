@@ -92,6 +92,15 @@ pub enum SetError {
         l4: String,
         missing: String,
     },
+    /// A Set with no renderer.
+    ///
+    /// A `Set` is a [`VideoSource`], and a video source with nothing to draw has
+    /// no frame to give. Reachable only through [`Set::build_many`] with an
+    /// empty slice, which is a caller bug rather than an authoring mistake —
+    /// but it is the sort of caller bug that arrives as an empty `--set` list,
+    /// so it gets a sentence rather than a panic.
+    #[error("a Set needs at least one L4 to draw `{l1}` with")]
+    NoRenderer { l1: String },
     /// `blend weighted` on a procedure that draws the whole frame.
     ///
     /// **Refused because it is the identity, not because it is unbuilt.** A
@@ -181,12 +190,16 @@ pub struct Set {
     /// resolved once at build time, plus a parity and a counts buffer this
     /// module fetches every frame — the half of that edge that has no type yet.
     sim: Simulation,
-    /// **The L4 node.** It owns its pipeline, its uniform, its accumulation
-    /// targets under `blend weighted`, and the bind groups naming the element
-    /// buffers the node above holds — the edge, resolved. One today; a list is
-    /// what several renderers over one geometry will be, and nothing here
-    /// changes shape for that. See [`crate::node`].
-    renderer: Renderer,
+    /// **The L4 nodes, in draw order.** Each owns its pipeline, its uniform, its
+    /// accumulation targets under `blend weighted`, and the bind groups naming
+    /// the element buffers the node above holds — the edge, resolved.
+    ///
+    /// **Several of them is overdraw, not compositing.** They run in order over
+    /// the one attachment, the first clearing it and the rest loading what is
+    /// there, so a stack of five costs one target rather than five. A target
+    /// apiece is what an L5 is for. Never empty: a Set with nothing to draw is
+    /// refused at build.
+    renderers: Vec<Renderer>,
 
     /// **Manual** parameter values: the `.kir` defaults, as moved by a `param`
     /// record or a `--param` override. A binding never writes here — it blends
@@ -226,6 +239,37 @@ impl Set {
         capacity: u32,
         seed_salt: u32,
     ) -> Result<Set, SetError> {
+        Set::build_many(device, queue, l1, &[l4], capacity, seed_salt)
+    }
+
+    /// **One geometry, several renderers over it, drawn in list order.**
+    ///
+    /// The payoff the primitive-centric bet was made for: `drift_shell` drawn as
+    /// sprites *and* as streaks *and* as a solid is one simulation and three
+    /// draw passes, where it used to be three simulations. Nothing about a
+    /// renderer changes to be in a list — it was already a node owning
+    /// everything it needs and reading the geometry across a typed edge.
+    ///
+    /// **List order is draw order, and it is overdraw.** The passes run over one
+    /// attachment: the first clears it, the rest load what is there, and each
+    /// blend mode already knows how to meet what is under it. So a stack costs
+    /// one render target however long it is. Compositing — a target apiece, with
+    /// gain and opacity and a blend per layer — is what an L5 is for, and the
+    /// two are different operations rather than one with a dial.
+    ///
+    /// `l4s` must not be empty. A Set is a video source and a video source with
+    /// nothing to draw has no frame to give.
+    pub fn build_many(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        l1: &Checked,
+        l4s: &[&Checked],
+        capacity: u32,
+        seed_salt: u32,
+    ) -> Result<Set, SetError> {
+        if l4s.is_empty() {
+            return Err(SetError::NoRenderer { l1: l1.name.clone() });
+        }
         if l1.kind != Kind::L1 {
             return Err(SetError::WrongKind {
                 slot: "L1",
@@ -233,36 +277,43 @@ impl Set {
                 actual: l1.kind,
             });
         }
-        if l4.kind != Kind::L4 {
-            return Err(SetError::WrongKind {
-                slot: "L4",
-                expected: Kind::L4,
-                actual: l4.kind,
-            });
-        }
-        // Before anything is generated: an L4 reads the element struct an L1
-        // wrote, so a consumed attribute the L1 never emitted has no field to
-        // read. Left unchecked it surfaces as a WGSL parse failure inside
-        // `create_shader_module` — an internal error where the contract calls
-        // for a diagnostic. Every missing attribute is reported at once, for
-        // the same reason the IR checker reports every error at once: one
-        // regeneration should be able to fix all of them.
-        let missing: Vec<&str> = l4
-            .consumes
-            .iter()
-            .filter(|a| !l1.emit.contains(a))
-            .map(|a| a.name())
-            .collect();
-        if !missing.is_empty() {
-            return Err(SetError::Composition {
-                l1: l1.name.clone(),
-                l4: l4.name.clone(),
-                missing: missing
-                    .iter()
-                    .map(|a| format!("`{a}`"))
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            });
+        for l4 in l4s {
+            if l4.kind != Kind::L4 {
+                return Err(SetError::WrongKind {
+                    slot: "L4",
+                    expected: Kind::L4,
+                    actual: l4.kind,
+                });
+            }
+            // Before anything is generated: an L4 reads the element struct an L1
+            // wrote, so a consumed attribute the L1 never emitted has no field to
+            // read. Left unchecked it surfaces as a WGSL parse failure inside
+            // `create_shader_module` — an internal error where the contract calls
+            // for a diagnostic. Every missing attribute is reported at once, for
+            // the same reason the IR checker reports every error at once: one
+            // regeneration should be able to fix all of them.
+            //
+            // Per renderer, and the *first* one that fails stops the build: a
+            // stack whose third node consumes `velocity` is as unbuildable as a
+            // lone node that does, and reporting the rest would be reporting
+            // them against a Set that will not exist either way.
+            let missing: Vec<&str> = l4
+                .consumes
+                .iter()
+                .filter(|a| !l1.emit.contains(a))
+                .map(|a| a.name())
+                .collect();
+            if !missing.is_empty() {
+                return Err(SetError::Composition {
+                    l1: l1.name.clone(),
+                    l4: l4.name.clone(),
+                    missing: missing
+                        .iter()
+                        .map(|a| format!("`{a}`"))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                });
+            }
         }
 
         // **There is deliberately no third check, comparing the two
@@ -277,26 +328,51 @@ impl Set {
         // constrains no renderer, and requiring the two to agree would invent
         // a dependency the lowering does not have.
 
+        // **The rule that needs to know how many renderers there are.** A
+        // fullscreen L4 puts one fragment on each texel, so a weighted resolve
+        // of it alone reproduces exactly what `additive` accumulates into a
+        // cleared target — the two extra attachments and the resolve pass buy an
+        // identical picture. That stops being true the moment something else is
+        // drawing into the same target, because then the resolve composites
+        // `over` what is under it rather than replacing a clear. So it is
+        // refused for a lone renderer and allowed in a stack, and the rule is
+        // about the *count* rather than about the position: making it depend on
+        // which slot the node sits in would be a refusal an author trips over by
+        // reordering.
+        if let [only] = l4s {
+            if only.blend == Some(karakuri_ir::Blend::Weighted)
+                && only.topology == Some(karakuri_ir::Topology::Fullscreen)
+            {
+                return Err(SetError::WeightedFullscreen { l4: only.name.clone() });
+            }
+        }
+
         // **The L1 node**, generated, compiled and allocated at `capacity` —
         // which is where the range check lives, because the range is that
         // node's own. Everything the simulation needs is inside it.
         let sim = Simulation::build(device, l1, capacity, seed_salt)?;
 
-        // **The L4 node**, generated, compiled and bound against the edge the
+        // **The L4 nodes**, generated, compiled and bound against the edge the
         // node above offers: the element layout, and the two buffers indexed by
-        // parity. Everything about how it draws is its own — see
+        // parity. Everything about how one draws is its own — see
         // [`crate::node::Renderer`] — including the blend-mode rule that needs
-        // both halves in hand.
-        let renderer = Renderer::build(device, l4, &sim.geometry())?;
+        // both halves in hand. They all read the same edge, which is the whole
+        // point: one simulation, several ways of looking at it.
+        let renderers: Vec<Renderer> = l4s
+            .iter()
+            .map(|l4| Renderer::build(device, l4, &sim.geometry()))
+            .collect();
 
         // One map per node, in the order [`Set::slot_of`] addresses them: the
         // L1's, then each renderer's. Two nodes declaring one name now hold two
         // values, which is what a name meaning "this node's" buys.
         let declared = |p: &&karakuri_ir::Param| default_scalar(p).map(|v| (p.name.clone(), v));
-        let params = vec![
-            l1.params.iter().filter_map(|p| declared(&p)).collect(),
-            l4.params.iter().filter_map(|p| declared(&p)).collect(),
-        ];
+        let params = std::iter::once(l1.params.iter().filter_map(|p| declared(&p)).collect())
+            .chain(
+                l4s.iter()
+                    .map(|l4| l4.params.iter().filter_map(|p| declared(&p)).collect()),
+            )
+            .collect();
 
         let set = Set {
             seed_salt,
@@ -311,10 +387,10 @@ impl Set {
             // conjunction is written out anyway: it is the sentence that is
             // true, and a Set whose seekability came from one named layer would
             // have to be revisited by every layer added after it.
-            closed_form: l1.closed_form && l4.closed_form,
-            reads_beats: l1.reads_beats || l4.reads_beats,
+            closed_form: l1.closed_form && l4s.iter().all(|l4| l4.closed_form),
+            reads_beats: l1.reads_beats || l4s.iter().any(|l4| l4.reads_beats),
             sim,
-            renderer,
+            renderers,
             params,
             camera: Orbit::default(),
             bindings: Vec::new(),
@@ -333,7 +409,9 @@ impl Set {
     /// Never from the render thread mid-frame, on those same terms.
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         self.viewport = [width.max(1) as f32, height.max(1) as f32];
-        self.renderer.resize(device, width, height);
+        for renderer in &mut self.renderers {
+            renderer.resize(device, width, height);
+        }
     }
 
     /// What [`Set::resize`] last set, as it was clamped. The camera's aspect
@@ -479,14 +557,25 @@ impl Set {
     /// (from a Set file, from `--bind`, or from a rebuild's `Request`), and
     /// all three are off the frame path.
     pub fn bind(&mut self, binding: Binding) -> bool {
-        let slot = Self::slot_of(binding.layer);
-        let declared = match binding.layer {
-            Kind::L1 => self.sim.param_names(),
-            Kind::L4 => self.renderer.param_names(),
-        };
         // Both checks: a node's map holds only its scalar params — a vector one
         // is declared but has no value here — and a binding produces one float.
-        if !declared.contains(&binding.key) || !self.params[slot].contains_key(&binding.key) {
+        //
+        // **Any node of that layer will do.** A binding names a layer, so it
+        // means the same as a bare `--param` does: every node of that layer
+        // declaring the name. One of them declaring it is enough for the
+        // binding to have somewhere to land.
+        let declares = |names: &[String], map: &HashMap<String, f32>| {
+            names.contains(&binding.key) && map.contains_key(&binding.key)
+        };
+        let found = match binding.layer {
+            Kind::L1 => declares(self.sim.param_names(), &self.params[0]),
+            Kind::L4 => self
+                .renderers
+                .iter()
+                .zip(&self.params[1..])
+                .any(|(r, map)| declares(r.param_names(), map)),
+        };
+        if !found {
             return false;
         }
         self.bindings
@@ -495,9 +584,17 @@ impl Set {
         true
     }
 
-    /// Which map in [`Set::params`] a layer's values live in. The L1 is one
-    /// node so it is one slot; renderers follow it in order, and today there is
-    /// one of those too.
+    /// **The node a bare layer address resolves to**: the L1, or the *first*
+    /// renderer.
+    ///
+    /// A binding names a layer and not a node, so this is where its blend base
+    /// comes from — and the value it produces is then written to every renderer
+    /// declaring the name, exactly as [`Set::set_param`] writes every
+    /// declaration. Which renderer's manual value is the base only matters when
+    /// two of them declare one name at different values, and setting them apart
+    /// needs the address the record vocabulary still owes: `layer` plus an
+    /// `index` defaulting to 0. See `docs/roadmap.md`, "How a param is
+    /// addressed".
     fn slot_of(layer: Kind) -> usize {
         match layer {
             Kind::L1 => 0,
@@ -728,20 +825,32 @@ impl Set {
     /// is the node's business — a marcher's uniform and a sprite renderer's are
     /// different shapes — and which `t` and which camera they are packed from is
     /// the grouping's, since one clock and one camera serve every node in it.
+    ///
+    /// **One view, every renderer**, and each reads its own parameter map. The
+    /// clock, the camera and the viewport are the grouping's and are therefore
+    /// the same number for all of them; `exposure` is the node's and is not.
     fn write_l4_uniforms(&mut self, queue: &wgpu::Queue) {
-        // Read before the borrow: `time` takes `&self` and the node's packer
+        // Read before the borrow: `time` takes `&self` and each node's packer
         // takes `&mut` its own scratch, but `param` below borrows this Set.
         let t = self.time();
-        let (bindings, params) = (&self.bindings, &self.params[Self::slot_of(Kind::L4)]);
-        let view = crate::node::View {
-            t,
-            beats: self.last_beats,
-            seed_salt: self.seed_salt,
-            viewport: self.viewport,
-            camera: &self.camera,
-            param: &|name: &str| effective(bindings, params, Kind::L4, name),
-        };
-        self.renderer.write_uniforms(queue, &view);
+        let (bindings, camera, beats, salt, viewport) = (
+            &self.bindings,
+            &self.camera,
+            self.last_beats,
+            self.seed_salt,
+            self.viewport,
+        );
+        for (renderer, params) in self.renderers.iter_mut().zip(&self.params[1..]) {
+            let view = crate::node::View {
+                t,
+                beats,
+                seed_salt: salt,
+                viewport,
+                camera,
+                param: &|name: &str| effective(bindings, params, Kind::L4, name),
+            };
+            renderer.write_uniforms(queue, &view);
+        }
     }
 
     /// **Rewrite the L4 uniforms against the current viewport**, without
@@ -836,7 +945,15 @@ impl Set {
     /// still advances, because a marcher reads it; it advances in
     /// [`Set::prepare`], which is not this.
     pub fn step(&mut self, encoder: &mut wgpu::CommandEncoder, steps: u8) {
-        let steps = if self.renderer.is_fullscreen() { 0 } else { steps };
+        // **Every** renderer, not any: one node that reads no attribute does
+        // not excuse the simulation if another reads them all. `all` on an empty
+        // list would be vacuously true, which is why an empty list is refused at
+        // build rather than handled here.
+        let steps = if self.renderers.iter().all(|r| r.is_fullscreen()) {
+            0
+        } else {
+            steps
+        };
         self.sim.record(encoder, steps);
     }
 
@@ -854,12 +971,15 @@ impl Set {
     /// looking moving it — see
     /// [`Deck::set_preview`](crate::deck::Deck::set_preview).
     ///
-    /// A pass-through to the node, and it stays one when there are several: what
-    /// a Set decides is the *order* its `Texture` nodes run in and which of them
-    /// clears, not how any of them draws.
+    /// **What a Set decides is the order and which one clears**, not how any of
+    /// them draws. The renderers run in list order over the one attachment, the
+    /// first clearing it and the rest loading what is there — see
+    /// [`Set::build_many`] for why that is overdraw and not compositing.
     pub fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
-        self.renderer
-            .draw(encoder, target, self.sim.parity(), self.sim.counts());
+        let (parity, counts) = (self.sim.parity(), self.sim.counts());
+        for (i, renderer) in self.renderers.iter().enumerate() {
+            renderer.draw(encoder, target, parity, counts, i == 0);
+        }
     }
 }
 

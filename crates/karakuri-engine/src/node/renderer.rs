@@ -6,7 +6,6 @@ use karakuri_ir::typed::Checked;
 
 use super::{Geometry, View};
 use crate::oit::Oit;
-use crate::set::SetError;
 use crate::uniforms::UniformScratch;
 
 /// An L4 node: `(Geometry, Camera) -> Texture`.
@@ -33,19 +32,15 @@ pub(crate) struct Renderer {
 impl Renderer {
     /// Generate, compile and bind one L4 node against `geometry`.
     ///
-    /// The blend-mode rule that needs both halves in hand lives here, because
-    /// here is where both are: `blend weighted` on a procedure that draws the
-    /// whole frame is refused — see [`SetError::WeightedFullscreen`].
-    pub(crate) fn build(
-        device: &wgpu::Device,
-        l4: &Checked,
-        geometry: &Geometry<'_>,
-    ) -> Result<Renderer, SetError> {
+    /// **Infallible.** The one refusal that used to live here — `blend weighted`
+    /// on a procedure that draws the whole frame — turned out to be a rule about
+    /// the *Set*: it holds only while this node is the only one drawing, which
+    /// is not something a node can know about itself. It moved to
+    /// `Set::build_many`, where the count is. See
+    /// [`SetError::WeightedFullscreen`].
+    pub(crate) fn build(device: &wgpu::Device, l4: &Checked, geometry: &Geometry<'_>) -> Renderer {
         let fullscreen = l4.topology == Some(karakuri_ir::Topology::Fullscreen);
         let weighted = l4.blend == Some(karakuri_ir::Blend::Weighted);
-        if weighted && fullscreen {
-            return Err(SetError::WeightedFullscreen { l4: l4.name.clone() });
-        }
 
         let shader = generate_l4(l4, geometry.layout);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -215,7 +210,7 @@ impl Renderer {
             cache: None,
         });
 
-        Ok(Renderer {
+        Renderer {
             pipeline,
             uniforms,
             uniform_layout: shader.uniform_layout.clone(),
@@ -225,7 +220,7 @@ impl Renderer {
             oit: weighted.then(|| Oit::new(device)),
             fullscreen,
             param_names: l4.params.iter().map(|p| p.name.clone()).collect(),
-        })
+        }
     }
 
     pub(crate) fn is_fullscreen(&self) -> bool {
@@ -290,12 +285,22 @@ impl Renderer {
     /// resolves those into `target` — which comes out holding exactly what the
     /// additive path would have left there, colour premultiplied by coverage and
     /// coverage in alpha, so nothing downstream can tell which mode ran.
+    ///
+    /// **`first` says whether this node is the first to reach `target`.** Several
+    /// renderers over one geometry run in order over the one attachment — the
+    /// first clears it, the rest load what is there — which is what makes a
+    /// stack of them *overdraw* rather than compositing. It costs one target
+    /// however many nodes there are; a target apiece is what an L5 is for. Both
+    /// blend modes already know how to meet what is under them: `additive`'s
+    /// blend state accumulates into whatever is there, and the weighted resolve
+    /// composites `over` — see [`crate::oit`].
     pub(crate) fn draw(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
         parity: usize,
         counts_buf: &wgpu::Buffer,
+        first: bool,
     ) {
         if let Some(oit) = &self.oit {
             {
@@ -308,7 +313,7 @@ impl Renderer {
                 });
                 self.record(&mut pass, parity, counts_buf);
             }
-            oit.resolve_into(encoder, target);
+            oit.resolve_into(encoder, target, first);
             return;
         }
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -323,7 +328,11 @@ impl Renderer {
                     // carries, and it has to start at "nothing drew here".
                     // `BLACK` is opaque black and would hand the L5 mix a slot
                     // that covers the frame before a single sprite has run.
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    load: if first {
+                        wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+                    } else {
+                        wgpu::LoadOp::Load
+                    },
                     store: wgpu::StoreOp::Store,
                 },
             })],

@@ -1977,7 +1977,9 @@ target and several:
 The same cloud drawn as sprites *and* as strokes is the first shape and costs no memory at
 all: additive's blend state accumulates into whatever is there, and a weighted renderer's
 resolve composites `over` rather than replacing, which is the identical result on the cleared
-target it writes today. Two scenes cross-fading is the second, and it costs 7.03 MB an input
+target the first pass writes. **The first shape is built** — `Set::build_many` takes the
+renderers in draw order and `crates/karakuri-engine/tests/overdraw.rs` asserts the
+composition in pixels. Two scenes cross-fading is the second, and it costs 7.03 MB an input
 at 1280x720 — which is what compositing costs, asked for explicitly by placing a node.
 
 An earlier draft of `docs/roadmap.md` recommended the first shape for *every* case and said
