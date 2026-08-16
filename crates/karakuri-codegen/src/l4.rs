@@ -188,6 +188,10 @@ fn output_local(o: Output) -> &'static str {
         Output::ClipB => "_clip_b",
         Output::PointSize => "_point_size",
         Output::Color => "_color",
+        // The camera's six. Unreachable here: `Output::block()` puts them in a
+        // `camera` block and the checker refuses one in an L4, so a `Checked`
+        // L4 cannot carry an assignment to any of them.
+        other => unreachable!("{other:?} belongs to a camera block, not to an L4 stage"),
     }
 }
 

@@ -49,9 +49,9 @@ pub fn parse(src: &str) -> IrResult<Proc> {
 
 /// Header/block keywords. Declaration recovery scans forward to the next one
 /// of these (or `}`), so one bad declaration does not eat the rest of the file.
-const DECL_KEYWORDS: [&str; 12] = [
+const DECL_KEYWORDS: [&str; 13] = [
     "kind", "topology", "capacity", "param", "emit", "consumes", "blend", "spawn", "element",
-    "deform", "vertex", "fragment",
+    "deform", "camera", "vertex", "fragment",
 ];
 
 struct Parser {
@@ -361,6 +361,7 @@ impl Parser {
                     "spawn" => blocks.push(self.parse_block(BlockKind::Spawn)),
                     "element" => blocks.push(self.parse_block(BlockKind::Element)),
                     "deform" => blocks.push(self.parse_block(BlockKind::Deform)),
+                    "camera" => blocks.push(self.parse_block(BlockKind::Camera)),
                     "vertex" => blocks.push(self.parse_block(BlockKind::Vertex)),
                     "fragment" => blocks.push(self.parse_block(BlockKind::Fragment)),
                     _ => {
@@ -435,17 +436,18 @@ impl Parser {
     /// at the end of `parse_proc`.
     fn parse_kind(&mut self) -> Kind {
         self.advance(); // "kind"
-        match self.expect_ident("`L1`, `L2` or `L4`") {
+        match self.expect_ident("`L1`, `L2`, `L3` or `L4`") {
             Some((name, span)) => match name.as_str() {
                 "L1" => Kind::L1,
                 "L2" => Kind::L2,
+                "L3" => Kind::L3,
                 "L4" => Kind::L4,
                 _ => {
                     self.error_with_hint(
                         span,
                         format!("unknown kind `{name}`"),
-                        "this compiler builds `L1` (geometry), `L2` (geometry modulation) \
-                         and `L4` (rendering). `L3` is a camera and is not a procedure yet",
+                        "this compiler builds `L1` (geometry), `L2` (geometry modulation), \
+                         `L3` (the camera) and `L4` (rendering)",
                     );
                     Kind::L1
                 }

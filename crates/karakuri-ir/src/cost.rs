@@ -405,6 +405,18 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
             }
             BlockKind::Spawn => ops_per_spawn = ops_per_spawn.saturating_add(block_cost),
             BlockKind::Fragment => ops_per_fragment = ops_per_fragment.saturating_add(block_cost),
+            // **Charged to nothing, because it scales with nothing.** A
+            // `camera` block runs once per frame, in one invocation, whatever
+            // the capacity and whatever the frame size — the only block in this
+            // language of which that is true. Every ceiling here is a rate
+            // against a quantity that multiplies, so there is no ceiling this
+            // could exceed: a thousand operations once a frame is free next to
+            // one operation per element.
+            //
+            // It is still *costed* above, so `block_totals` names it in a
+            // rejection message about some other block, and a future ceiling
+            // has a number to use.
+            BlockKind::Camera => {}
         }
     }
 

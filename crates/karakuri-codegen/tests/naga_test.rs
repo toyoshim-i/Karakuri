@@ -1011,3 +1011,122 @@ fn each_blend_mode_emits_its_own_fragment_epilogue_and_not_the_others() {
     );
 }
 
+
+// ---------------------------------------------------------------------------
+// L3 — the camera
+// ---------------------------------------------------------------------------
+
+/// A sweep round the origin: `eye` from the clock and a param, `target` at the
+/// centre, and the other four left to their defaults.
+fn sweep() -> Checked {
+    let angle = bin(
+        BinOp::Mul,
+        bin(BinOp::Mul, ambient(Ambient::T, Ty::Float), param("speed", Ty::Float), Ty::Float),
+        lit_f(std::f32::consts::TAU),
+        Ty::Float,
+    );
+    let on_circle = |f: Builtin| {
+        bin(
+            BinOp::Mul,
+            call(f, vec![local("a", Ty::Float)], Ty::Float),
+            param("radius", Ty::Float),
+            Ty::Float,
+        )
+    };
+    let camera = TBlock {
+        kind: BlockKind::Camera,
+        span: span(),
+        stmts: vec![
+            let_("a", angle),
+            assign_output(
+                Output::Eye,
+                construct(
+                    Ty::Vec3,
+                    vec![on_circle(Builtin::Cos), lit_f(2.0), on_circle(Builtin::Sin)],
+                ),
+            ),
+            assign_output(Output::Target, construct(Ty::Vec3, vec![lit_f(0.0)])),
+        ],
+    };
+
+    Checked {
+        name: "sweep".to_string(),
+        kind: Kind::L3,
+        topology: None,
+        capacity: None,
+        blend: None,
+        params: vec![
+            param_decl("radius", Ty::Float, 1.0, 40.0),
+            param_decl("speed", Ty::Float, 0.0, 2.0),
+        ],
+        emit: vec![],
+        consumes: vec![],
+        blocks: vec![camera],
+        cost: None,
+        closed_form: false,
+        reads_beats: false,
+        span: span(),
+    }
+}
+
+#[test]
+fn a_camera_shader_parses_and_validates() {
+    validate(&karakuri_codegen::generate_l3(&sweep()).source);
+}
+
+/// **The four an author did not write are written anyway**, before the block
+/// runs — which is what makes them defaults rather than requirements, and what
+/// keeps the simplest camera anyone writes four lines shorter.
+///
+/// **The values are checked, not only their presence.** Zeroing them leaves a
+/// shader that still writes all six and still validates — and produces a camera
+/// with no field of view, no depth range and no up vector, which is a blank
+/// frame with no diagnostic. Defect injection found exactly that hole in an
+/// earlier version of this test.
+///
+/// The numbers are `Orbit::default`'s, so replacing the built-in camera with an
+/// L3 does not quietly change the field of view underneath the picture. That
+/// they *are* `Orbit::default`'s is checked in `karakuri-engine`, where both
+/// exist; here they are held against the values that struct documents.
+#[test]
+fn every_camera_output_is_written_whether_or_not_the_block_assigned_it() {
+    let src = karakuri_codegen::generate_l3(&sweep()).source;
+    for field in ["eye", "look_at", "up", "fov_y", "near", "far"] {
+        assert!(
+            src.contains(&format!("cam.{field}")),
+            "`{field}` never reaches the state buffer:\n{src}"
+        );
+    }
+    // And the block's own assignment lands on the local, not on the buffer, so
+    // a block that writes `eye` twice writes the buffer once.
+    assert_eq!(src.matches("cam.eye").count(), 1, "the eye is stored more than once:\n{src}");
+    assert!(src.contains("_eye ="), "the block's assignment did not reach a local:\n{src}");
+
+    // A third of pi, and 0.1 to 100 — see `karakuri_engine::camera::Orbit`'s
+    // `Default`. `up` is `+y`, which is the only one of the four that a wrong
+    // value would show as a picture rather than as no picture.
+    assert!(src.contains("_up     = vec3<f32>(0.0, 1.0, 0.0)"), "up is not +y:\n{src}");
+    assert!(src.contains("_fov_y  = 1.0471976"), "the field of view is not a third of pi:\n{src}");
+    assert!(src.contains("_near   = 0.1"), "{src}");
+    assert!(src.contains("_far    = 100.0"), "{src}");
+}
+
+/// **One invocation, and no index.** A camera block runs once a frame and
+/// produces six numbers — there is nothing to be at index `i` of, so a bounds
+/// check or an alive flag here would be a transcription of another layer's
+/// entry point rather than this one's.
+#[test]
+fn a_camera_shader_dispatches_one_invocation_over_nothing() {
+    let src = karakuri_codegen::generate_l3(&sweep()).source;
+    assert!(src.contains("@workgroup_size(1)"), "{src}");
+    assert!(!src.contains("global_invocation_id"), "a camera indexed something:\n{src}");
+    assert!(!src.contains("counts"), "a camera read a live range:\n{src}");
+}
+
+/// The uniform carries the clock and the params, and nothing per element.
+#[test]
+fn a_camera_uniform_carries_the_clock_and_its_params() {
+    let shader = karakuri_codegen::generate_l3(&sweep());
+    let names: Vec<&str> = shader.uniform_layout.fields.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(names, vec!["t", "beats", "dt", "radius", "speed"]);
+}

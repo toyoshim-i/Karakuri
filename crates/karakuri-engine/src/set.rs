@@ -681,6 +681,7 @@ impl Set {
         let names: Vec<&[String]> = match binding.layer {
             Kind::L1 => vec![self.sim.param_names()],
             Kind::L2 => self.deforms.iter().map(|d| d.param_names()).collect(),
+            Kind::L3 => Vec::new(),
             Kind::L4 => self.renderers.iter().map(|r| r.param_names()).collect(),
         };
         let found = names.iter().enumerate().any(|(at, n)| {
@@ -716,7 +717,15 @@ impl Set {
         match layer {
             Kind::L1 => 0,
             Kind::L2 => 1,
-            Kind::L4 => 1 + self.deforms.len(),
+            // **An L3's place is between the deformations and the renderers**,
+            // and a Set holds none yet: `karakuri_codegen::generate_l3` lowers
+            // one and nothing builds a node from it. Stated rather than left to
+            // a panic, so that `nodes_of` can hand back an empty range — a
+            // `--param L3:…` then reaches no node and is reported as reaching
+            // none, which is the answer a name no procedure declares already
+            // gets. It shares a number with `L4` for exactly as long as that
+            // range is empty.
+            Kind::L3 | Kind::L4 => 1 + self.deforms.len(),
         }
     }
 
@@ -726,6 +735,7 @@ impl Set {
         match layer {
             Kind::L1 => start..start + 1,
             Kind::L2 => start..start + self.deforms.len(),
+            Kind::L3 => start..start,
             Kind::L4 => start..self.params.len(),
         }
     }
@@ -1100,16 +1110,20 @@ impl Set {
         // Read before the loop: `slot_of` and `nodes_of` take `&self`, and the
         // loop holds `self.bindings` mutably. Three small numbers rather than a
         // borrow that cannot be had.
-        let ranges: Vec<(usize, std::ops::Range<usize>)> = [Kind::L1, Kind::L2, Kind::L4]
+        let ranges: Vec<(usize, std::ops::Range<usize>)> = [Kind::L1, Kind::L2, Kind::L3, Kind::L4]
             .into_iter()
             .map(|k| (self.slot_of(k), self.nodes_of(k)))
             .collect();
         let params = &self.params;
         for binding in &mut self.bindings {
+            // `L3`'s range is empty until a Set holds one — see `Set::slot_of`.
+            // A binding cannot be attached to it either, so this arm resolves
+            // nothing rather than being unreachable.
             let (base, range) = match binding.layer {
                 Kind::L1 => ranges[0].clone(),
                 Kind::L2 => ranges[1].clone(),
-                Kind::L4 => ranges[2].clone(),
+                Kind::L3 => ranges[2].clone(),
+                Kind::L4 => ranges[3].clone(),
             };
             let manual = range
                 .clone()

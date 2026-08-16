@@ -16,6 +16,14 @@ pub enum Kind {
     /// Geometry modulation: `Geometry -> Geometry`. **Stateless by rule**,
     /// compute. See `docs/ir-spec.md`, "L2 and L3".
     L2,
+    /// The camera: `() -> Camera`, and `Geometry -> Camera` once one can read
+    /// geometry. Compute, one invocation.
+    ///
+    /// **It produces state, not a matrix**, because the reason it exists at all
+    /// is multiplicity: a weighted blend of two trajectories is meaningful on
+    /// six numbers and meaningless on the matrices derived from them. See
+    /// `docs/ir-spec.md`, "L2 and L3".
+    L3,
     /// Rendering. Stateless, a render pipeline.
     L4,
 }
@@ -249,10 +257,51 @@ pub enum Output {
     PointSize,
     /// fragment: linear RGB, straight alpha.
     Color,
+
+    /// camera: where the camera is, in world space. **Required.**
+    ///
+    /// The same value a marching fragment reads as [`Ambient::Eye`] — one
+    /// concept, written here and read there, the way [`Attr::Position`] is
+    /// written by an L1 and read by an L4.
+    Eye,
+    /// camera: what it looks at, in world space. **Required.**
+    ///
+    /// A point rather than a direction, because pointing at a thing is what a
+    /// camera in this system is asked to do — follow an element, hold the
+    /// centre — and a direction would make every one of those a subtraction and
+    /// a normalize the author had to remember.
+    Target,
+    /// camera: which way is up, in world space. Defaults to `+y`.
+    Up,
+    /// camera: vertical field of view, radians. Defaults to a third of pi.
+    ///
+    /// Vertical, and there is no horizontal one: the aspect ratio belongs to
+    /// the canvas rather than to the camera, so what a frame shows sideways is
+    /// decided where the frame is.
+    FovY,
+    /// camera: the near plane. Defaults to 0.1.
+    Near,
+    /// camera: the far plane. Defaults to 100.
+    ///
+    /// **Not decorative.** `blend weighted` normalises a fragment's depth
+    /// against [`Output::Near`] and this, so a camera that moves `far` moves
+    /// every weighted fragment's weight with it.
+    Far,
 }
 
 impl Output {
-    pub const ALL: [Output; 4] = [Output::Clip, Output::ClipB, Output::PointSize, Output::Color];
+    pub const ALL: [Output; 10] = [
+        Output::Clip,
+        Output::ClipB,
+        Output::PointSize,
+        Output::Color,
+        Output::Eye,
+        Output::Target,
+        Output::Up,
+        Output::FovY,
+        Output::Near,
+        Output::Far,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -260,6 +309,12 @@ impl Output {
             Output::ClipB => "clip_b",
             Output::PointSize => "point_size",
             Output::Color => "color",
+            Output::Eye => "eye",
+            Output::Target => "target",
+            Output::Up => "up",
+            Output::FovY => "fov_y",
+            Output::Near => "near",
+            Output::Far => "far",
         }
     }
 
@@ -270,7 +325,8 @@ impl Output {
     pub fn ty(self) -> Ty {
         match self {
             Output::Clip | Output::ClipB | Output::Color => Ty::Vec4,
-            Output::PointSize => Ty::Float,
+            Output::PointSize | Output::FovY | Output::Near | Output::Far => Ty::Float,
+            Output::Eye | Output::Target | Output::Up => Ty::Vec3,
         }
     }
 
@@ -278,6 +334,12 @@ impl Output {
         match self {
             Output::Clip | Output::ClipB | Output::PointSize => BlockKind::Vertex,
             Output::Color => BlockKind::Fragment,
+            Output::Eye
+            | Output::Target
+            | Output::Up
+            | Output::FovY
+            | Output::Near
+            | Output::Far => BlockKind::Camera,
         }
     }
 }
@@ -370,8 +432,18 @@ impl Ambient {
     /// Blocks this value is readable in. `Seed` is readable everywhere.
     pub fn available_in(self, kind: Kind, block: BlockKind) -> bool {
         match self {
-            Ambient::Seed | Ambient::T | Ambient::Beats => true,
-            Ambient::Capacity | Ambient::Dt => kind == Kind::L1,
+            // **Not in a `camera` block**, which has no element to have one.
+            // An L3 runs once a frame over nothing, so `seed` there would be a
+            // per-element value in a place where there is no element — and the
+            // salt the engine mixes into it is a property of a Set's geometry.
+            Ambient::Seed => kind != Kind::L3,
+            Ambient::T | Ambient::Beats => true,
+            Ambient::Capacity => kind == Kind::L1,
+            // **An L3 gets `dt` and an L4 does not**, which is the asymmetry
+            // between a node that may hold state and one that may not: a
+            // camera's craft is mostly smoothing, and smoothing is written
+            // against a step. See `docs/ir-spec.md`, "L2 and L3".
+            Ambient::Dt => kind == Kind::L1 || kind == Kind::L3,
             Ambient::Camera => kind == Kind::L4,
             Ambient::PointCoord => block == BlockKind::Fragment,
             // Fragment-only, and not because a vertex stage could not be given
@@ -480,6 +552,8 @@ pub enum BlockKind {
     /// L2: rewrite a live element's attributes. **May not `kill()`** — see
     /// [`Kind::L2`].
     Deform,
+    /// L3: produce this frame's camera state.
+    Camera,
     /// L4: once per element.
     Vertex,
     /// L4: once per rasterised fragment.
@@ -492,6 +566,7 @@ impl BlockKind {
             BlockKind::Spawn => "spawn",
             BlockKind::Element => "element",
             BlockKind::Deform => "deform",
+            BlockKind::Camera => "camera",
             BlockKind::Vertex => "vertex",
             BlockKind::Fragment => "fragment",
         }
@@ -502,6 +577,7 @@ impl BlockKind {
             "spawn" => BlockKind::Spawn,
             "element" => BlockKind::Element,
             "deform" => BlockKind::Deform,
+            "camera" => BlockKind::Camera,
             "vertex" => BlockKind::Vertex,
             "fragment" => BlockKind::Fragment,
             _ => return None,
@@ -512,6 +588,7 @@ impl BlockKind {
         match self {
             BlockKind::Spawn | BlockKind::Element => Kind::L1,
             BlockKind::Deform => Kind::L2,
+            BlockKind::Camera => Kind::L3,
             BlockKind::Vertex | BlockKind::Fragment => Kind::L4,
         }
     }

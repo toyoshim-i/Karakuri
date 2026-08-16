@@ -123,6 +123,10 @@ pub mod group {
     /// either L1 or L4, never both, so the numbers never collide in one
     /// pipeline.
     pub const ATTRS: u32 = 1;
+    /// L3 only: the `CameraState` this procedure writes, read-write storage.
+    /// Reuses number 1 on the same terms as [`ATTRS`] — a module is one kind
+    /// of procedure, so the two can never both be bound.
+    pub const STATE: u32 = 1;
 }
 
 /// Binding numbers, per group. [`group::PREV`], [`group::NEXT`] and
