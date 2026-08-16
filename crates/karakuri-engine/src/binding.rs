@@ -454,6 +454,14 @@ impl Binding {
         self.value
     }
 
+    /// **Nothing is driving this**, so the param's own value stands. What a
+    /// binding on a published control that is not there resolves to — see
+    /// [`CONTROL_PREFIX`].
+    pub fn hold(&mut self, manual: f32) -> f32 {
+        self.value = manual;
+        self.value
+    }
+
     /// The curve and the range, without the confidence blend. Public so that
     /// "what this binding would write if the signal were certain" is a value a
     /// test can name rather than a number copied out of an implementation.

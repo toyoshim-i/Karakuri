@@ -354,9 +354,6 @@ use crate::video_source::VideoSource;
 /// layout constant", says M2 of the budget governor.
 pub const MAX_SLOTS: usize = 4;
 
-/// Bytes in the composite's uniform block: eight `vec4`s, one per slot-indexed
-/// field — gain, opacity, blend mode, live flag, and the four a mask takes. See
-/// `shaders/composite.wgsl`.
 /// A gain the mix can use: floored at zero, NaN read as zero, and deliberately
 /// open above 1.0.
 ///

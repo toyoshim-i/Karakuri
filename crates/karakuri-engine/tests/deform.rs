@@ -530,6 +530,98 @@ proc crossing {
     );
 }
 
+/// **The gate reaches every attribute the body wrote, and `weight` multiplies
+/// the mask rather than replacing it.**
+///
+/// Two holes a review found with surviving mutations, and they are the same
+/// hole seen twice: every other test here measures `position`, and every one of
+/// them uses a weight or a mask but never both. Restricting the blend to
+/// `position` passed the whole workspace, and so did `strength = weight`, which
+/// destroys the formula the layer is built on.
+///
+/// `tint` is the probe because it is not `position`: the material does not move,
+/// so what is measured is the colour of a sprite that stayed where it was.
+#[test]
+fn the_gate_reaches_every_attribute_and_weight_multiplies_the_mask() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let tinted = r#"
+proc tinted_dots {
+  kind  L4
+  blend additive
+  consumes position, tint
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 5.0;
+  }
+  fragment {
+    color = vec4(tint, 1.0);
+  }
+}
+"#;
+    // Emits `tint` and then paints it, so the gate has an attribute other than
+    // `position` to blend — and the pass-through zeroes a slot the input did
+    // not have, which is what the blend runs from.
+    let paint = |weight: &str, mask: &str| {
+        format!(
+            r#"
+proc paint {{
+  kind L2
+  {weight}
+  consumes position
+  emit tint
+  mask {{ strength = {mask}; }}
+  deform {{ tint = vec3(1.0, 1.0, 1.0); }}
+}}
+"#
+        )
+    };
+    let brightness = |src: &str| {
+        let l2 = compile(src);
+        let l4 = compile(tinted);
+        let mut set = Set::build_many(
+            &gpu.device,
+            &gpu.queue,
+            &compile(STILL),
+            &[&l2],
+            None,
+            &[&l4],
+            Layering::Overdraw,
+            CAPACITY,
+            7,
+        )
+        .expect("builds");
+        set.resize(&gpu.device, W, H);
+        set.camera = karakuri_engine::camera::Orbit {
+            radius: 5.0,
+            speed: 0.0,
+            height: 0.0,
+            ..Default::default()
+        };
+        frame(&gpu, &mut set).chunks_exact(4).map(|t| t[0]).fold(0.0f32, f32::max)
+    };
+
+    let full = brightness(&paint("", "1.0"));
+    assert!(full > 0.5, "the deformation's own attribute never reached the frame: {full}");
+
+    // The mask alone. Half the strength is half the way from the zero the
+    // pass-through left to the white the body wrote.
+    let masked = brightness(&paint("", "0.5"));
+    assert!(
+        (masked - full * 0.5).abs() < full * 0.1,
+        "a strength of 0.5 painted {masked} where half of {full} was due — the gate does not \
+         reach an attribute other than `position`"
+    );
+
+    // **Both, and they multiply.** `weight` replacing the mask would give the
+    // full 0.5 here rather than a quarter, which is the mutation that survived.
+    let both = brightness(&paint("param weight : float [0.0, 1.0] = 0.5", "0.5"));
+    assert!(
+        (both - full * 0.25).abs() < full * 0.1,
+        "weight 0.5 and strength 0.5 painted {both} where a quarter of {full} was due — \
+         `weight` replaced the mask instead of multiplying it"
+    );
+}
+
 /// **The gate is clamped, because `mix` extrapolates.**
 ///
 /// Nothing stops a `mask` block writing a `strength` of 2, and nothing should:

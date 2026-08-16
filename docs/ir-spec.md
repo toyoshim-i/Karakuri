@@ -2037,8 +2037,19 @@ the one place it matters most, which is the mixing desk.
 **Built.** `karakuri_engine::set::Published` is one control — a name, an address, and a range;
 `Set::publish` refuses a range that is not a subset of the declared one, a control nothing
 declares, and a name already taken. `--publish name=L4:0:exposure[0.2..0.8]` is the command
-line, whose address is `--param`'s and whose range is `--bind`'s. It is not in a Set file yet,
-on the same terms a chain, a camera and a layering are not.
+line, whose address is `--param`'s and whose range is `--bind`'s.
+
+**The address is optional and absent means every declaration**, exactly as it does on a
+`param` record, and that is what the default interface is made of: one control per *key*, not
+one per declaration. Per declaration would put two controls called `exposure` on a console,
+which is a shape `publish` itself refuses. A wildcard control's range is the **intersection**
+of what its nodes declare — one knob moving both must not offer a position only one of them
+said it still looks like itself at.
+
+It is not in a Set file yet, on the same terms a chain, a camera and a layering are not — but
+it **is** in a `Request`, so it survives a hot swap. Leaving it out was worse than a lost
+surface: the bindings are restated, so a `control:` binding outlived the control it named, and
+a binding whose source is gone holds its param where it found it for the rest of the run.
 
 #### Three states, and the third is not a new mechanism
 

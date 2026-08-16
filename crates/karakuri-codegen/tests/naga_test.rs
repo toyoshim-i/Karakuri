@@ -1130,3 +1130,31 @@ fn a_camera_uniform_carries_the_clock_and_its_params() {
     let names: Vec<&str> = shader.uniform_layout.fields.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(names, vec!["t", "beats", "dt", "seed_salt", "radius", "speed"]);
 }
+
+
+/// **Two blocks, one function, and a local name may appear in both.**
+///
+/// `mask` and `deform` are spliced into one WGSL entry point and a local is
+/// mangled by its name alone, so `let d` in each would be a redefinition — from
+/// a `.kir` the checker accepted, since it checks each block in its own scope.
+/// The mask's statements get a WGSL scope to make that true, and this is the
+/// test that would have caught the shader failing to compile at build time.
+///
+/// The names are not exotic: `examples/late_bloom.kir`'s `deform` declares `out`
+/// and `away`, and a mask written against the same geometry reaches for the same
+/// words.
+#[test]
+fn a_mask_and_a_deform_may_declare_the_same_local() {
+    let src = r#"
+proc collides {
+  kind L2
+  consumes position, age
+  mask   { let d = length(position); strength = d; }
+  deform { let d = age * 2.0; position = position * d; }
+}
+"#;
+    let parsed = karakuri_ir::parse(src).expect("parses");
+    let checked = karakuri_ir::check::check(&parsed).expect("checks");
+    let shader = karakuri_codegen::generate_l2(&checked, &[Attr::Position, Attr::Age]);
+    validate(&shader.source);
+}

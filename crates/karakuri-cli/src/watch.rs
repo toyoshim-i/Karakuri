@@ -101,6 +101,10 @@ pub struct Watch {
     capacity: u32,
     seed_salt: u32,
     overrides: Vec<karakuri_engine::ParamWrite>,
+    /// The interface, restated on every rebuild for the same reason the
+    /// bindings are — and the more urgent one: a `control:` binding whose
+    /// control did not survive the swap holds its param where it found it.
+    published: Vec<karakuri_engine::set::Published>,
     /// Restated on every rebuild rather than read off the outgoing Set, for
     /// the reason `Request::bindings` gives: a request that depended on what
     /// happened to be live would not be reproducible from a record stream.
@@ -137,6 +141,7 @@ impl Watch {
         capacity: u32,
         seed_salt: u32,
         overrides: Vec<karakuri_engine::ParamWrite>,
+        published: Vec<karakuri_engine::set::Published>,
         bindings: Vec<Binding>,
     ) -> Watch {
         let mut watch = Watch {
@@ -150,6 +155,7 @@ impl Watch {
             capacity,
             seed_salt,
             overrides,
+            published,
             bindings,
             stamps: Vec::new(),
             settling: false,
@@ -398,6 +404,7 @@ impl Source for Watch {
             capacity: self.capacity,
             seed_salt: self.seed_salt,
             params: self.overrides.clone(),
+            published: self.published.clone(),
             bindings: self.bindings.clone(),
             label,
         })
@@ -416,6 +423,7 @@ mod tests {
             karakuri_engine::set::Layering::Overdraw,
             4096,
             1,
+            Vec::new(),
             Vec::new(),
             Vec::new(),
         )

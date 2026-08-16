@@ -38,14 +38,18 @@ proc grid {
 
 /// Two of them, so the Set has two `exposure`s to tell apart — which is the case
 /// an interface exists for.
-fn dots(name: &str) -> String {
+///
+/// **They declare different ranges**, which is what makes the wildcard control's
+/// range a decision rather than a copy: one knob moving both cannot offer a
+/// position that only one of them said it still looks like itself at.
+fn dots(name: &str, top: f32) -> String {
     format!(
         r#"
 proc {name} {{
   kind  L4
   blend additive
 
-  param exposure : float [0.0, 8.0] = 1.0
+  param exposure : float [0.0, {top:?}] = 1.0
 
   consumes position
 
@@ -72,8 +76,8 @@ fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
 }
 
 fn build(gpu: &Gpu) -> Set {
-    let a = compile(&dots("near"));
-    let b = compile(&dots("far"));
+    let a = compile(&dots("near", 8.0));
+    let b = compile(&dots("far", 4.0));
     Set::build_many(
         &gpu.device,
         &gpu.queue,
@@ -89,7 +93,18 @@ fn build(gpu: &Gpu) -> Set {
 }
 
 fn control(name: &str, layer: Kind, index: u32, key: &str, range: [f32; 2]) -> Published {
-    Published { name: name.to_string(), layer, index, key: key.to_string(), range }
+    Published {
+        name: name.to_string(),
+        at: Some((layer, index)),
+        key: key.to_string(),
+        range,
+    }
+}
+
+/// The wildcard form: every node that declares the key, which is what the
+/// default interface is made of.
+fn every(name: &str, key: &str, range: [f32; 2]) -> Published {
+    Published { name: name.to_string(), at: None, key: key.to_string(), range }
 }
 
 // ---------------------------------------------------------------------------
@@ -103,13 +118,29 @@ fn a_set_with_no_interface_publishes_every_control_it_declares() {
     let set = build(&gpu);
     let all = set.published();
 
-    // The L1's `radius` and both renderers' `exposure`.
-    assert_eq!(all.len(), 3, "{all:#?}");
-    assert!(all.iter().any(|p| p.name == "radius" && p.layer == Kind::L1 && p.range == [0.5, 8.0]));
-    let exposures: Vec<&Published> = all.iter().filter(|p| p.key == "exposure").collect();
-    assert_eq!(exposures.len(), 2, "both renderers declare one");
-    assert_eq!(exposures[0].index, 0);
-    assert_eq!(exposures[1].index, 1);
+    // **One control per key, not per declaration.** Two renderers declare
+    // `exposure` and it is one knob moving both — which is what a bare name
+    // means everywhere else in this system, and what publishing it per
+    // declaration could not be: two controls of one name is a console that
+    // cannot address either.
+    assert_eq!(all.len(), 2, "{all:#?}");
+    // **The intersection, not the union.** `near` declares `[0, 8]` and `far`
+    // declares `[0, 4]`; one knob moving both must not offer a position only one
+    // of them said it still looks like itself at.
+    assert_eq!(
+        all,
+        vec![every("exposure", "exposure", [0.0, 4.0]), every("radius", "radius", [0.5, 8.0])]
+    );
+
+    // And it moves both, exactly as `--param exposure=` does.
+    let mut set = set;
+    assert!(set.set_published("exposure", 4.0));
+    let held: Vec<f32> = set
+        .params()
+        .filter(|(_, _, key, _)| *key == "exposure")
+        .map(|(_, _, _, v)| v)
+        .collect();
+    assert_eq!(held, vec![4.0, 4.0], "one knob did not move both renderers");
 }
 
 /// **The first declaration makes the list the interface.** One sentence of rule,
@@ -144,8 +175,8 @@ fn a_published_range_must_be_inside_the_declared_one() {
     assert!(err.to_string().contains("narrows"), "{err}");
 
     // And nothing was published, so a refusal leaves the Set as it was rather
-    // than half-configured.
-    assert_eq!(set.published().len(), 3);
+    // than half-configured: the default interface, one control per key.
+    assert_eq!(set.published().len(), 2);
 
     set.publish(control("size", Kind::L1, 0, "radius", [0.5, 8.0]))
         .expect("the declared range itself is a subset of itself");
@@ -171,6 +202,13 @@ fn publishing_refuses_a_control_that_is_not_there_and_a_name_that_is() {
     assert!(matches!(err, PublishError::NoSuchControl { .. }), "{err:?}");
 
     set.publish(control("level", Kind::L4, 0, "exposure", [0.0, 2.0])).expect("first");
+    // And an addressed control is checked against *that* node's declaration:
+    // `far` declares `[0, 4]`, so publishing it over `[0, 8]` is refused even
+    // though its sibling would allow it.
+    let err = set
+        .publish(control("hot", Kind::L4, 1, "exposure", [0.0, 8.0]))
+        .expect_err("renderer 1 declares [0, 4]");
+    assert!(matches!(err, PublishError::RangeNotASubset { .. }), "{err:?}");
     let err = set
         .publish(control("level", Kind::L4, 1, "exposure", [0.0, 2.0]))
         .expect_err("`level` is taken");
@@ -273,4 +311,29 @@ fn one_published_control_drives_several_internal_ones_through_their_own_ranges()
     set.prepare(&gpu.queue, 1, &Signals::default());
     assert!((exposure(&set, 0) - 1.0).abs() < 1e-3, "{}", exposure(&set, 0));
     assert!((exposure(&set, 1) - 1.0).abs() < 1e-3, "{}", exposure(&set, 1));
+}
+
+/// **A binding on a control nothing publishes is refused.**
+///
+/// It used to be accepted, hold its param wherever it found it, and be reported
+/// by the terminal as deciding that param outright — the same failure the
+/// confidence display had, one step further along. A misspelt `control:` name is
+/// a mistake, and the only moment it can be caught is when the binding is
+/// attached.
+///
+/// The order it puts on a caller is the order a macro needs anyway: publish,
+/// then bind. Both the command line and the swap worker already do that, for
+/// this reason.
+#[test]
+fn a_binding_on_a_control_nothing_publishes_is_refused() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let mut set = build(&gpu);
+    set.publish(control("twist", Kind::L1, 0, "radius", [1.0, 4.0])).expect("published");
+
+    let bind = |name: &str| {
+        Binding::new(Kind::L4, "exposure", format!("control:{name}"), Curve::Lin, [0.0, 2.0])
+    };
+    assert!(!set.bind(bind("twst")), "a misspelt control was accepted");
+    assert!(set.bindings().is_empty(), "the refusal still attached it");
+    assert!(set.bind(bind("twist")), "the control that is there");
 }

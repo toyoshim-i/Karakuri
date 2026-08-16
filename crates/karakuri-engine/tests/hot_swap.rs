@@ -169,6 +169,7 @@ fn request_many(l4_srcs: &[&str], capacity: u32, label: &str) -> Request {
         l2s: Vec::new(),
         l3: None,
         layering: karakuri_engine::set::Layering::Overdraw,
+        published: Vec::new(),
         l4s: l4_srcs.iter().map(|s| compile(s)).collect(),
         capacity,
         seed_salt: 19274,
@@ -1034,4 +1035,64 @@ fn a_rewound_set_is_indistinguishable_from_one_that_was_never_stepped() {
         "neither Set drew anything, so this comparison is two black frames"
     );
     assert_eq!(a, b, "a probed-and-rewound Set renders differently from a fresh one");
+}
+
+
+/// **A swap carries the Set's interface, and a macro survives it.**
+///
+/// The bindings are restated on every rebuild for the reason `Request::bindings`
+/// gives, and the interface was not — so a `control:` binding survived a swap
+/// and the control it named did not. A source that is gone leaves its param
+/// where it was, silently, for the rest of the run: the picture would simply
+/// stop responding to a knob, with nothing said.
+///
+/// The order matters as much as the presence. Publishing happens *before* the
+/// bindings are attached, because a binding on a name nothing answers is
+/// refused — which is the diagnostic, and would fire on every rebuild if the
+/// two were the other way round.
+#[test]
+fn a_swap_carries_the_interface_a_macro_is_bound_to() {
+    let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
+    for _ in 0..5 {
+        h.frame();
+    }
+
+    let mut next = request(L4, SECOND, "with_interface");
+    next.published.push(karakuri_engine::set::Published {
+        name: "level".to_string(),
+        at: None,
+        key: "exposure".to_string(),
+        range: [0.0, 4.0],
+    });
+    next.bindings.push(
+        karakuri_engine::Binding::new(
+            karakuri_ir::Kind::L4,
+            "exposure",
+            "control:level",
+            karakuri_engine::binding::Curve::Lin,
+            [0.0, 8.0],
+        ),
+    );
+    tx.send(next).expect("worker alive");
+    h.frames_until(|e| matches!(e, Event::Swapped { .. }), "the build to land");
+
+    let set = h.swap.set();
+    assert_eq!(
+        set.published().iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+        vec!["level"],
+        "the interface did not cross the swap"
+    );
+    assert_eq!(set.bindings().len(), 1, "the binding was refused, so the order is wrong");
+
+    // And it drives. The binding resolved on the first frame after the swap,
+    // from the control at whatever the `.kir` default left it — what matters
+    // here is that it resolved from the *control* at all, which a binding
+    // holding its manual value would not have.
+    let driven = set.bindings()[0].value();
+    let expected = set.published_value("level").expect("the control holds a value") * 2.0;
+    assert!(
+        (driven - expected).abs() < 1e-3,
+        "the macro resolved to {driven}, where the control at {} maps to {expected}",
+        set.published_value("level").unwrap()
+    );
 }

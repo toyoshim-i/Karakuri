@@ -1066,24 +1066,33 @@ fn layer_named(name: &str) -> Option<karakuri_ir::Kind> {
     })
 }
 
-/// `--publish name=L4:0:exposure[0.2..0.8]`.
+/// `--publish name=L4:0:exposure[0.2..0.8]`, or `--publish level=exposure[0..2]`
+/// for every node that declares it.
 ///
 /// **The address is the `--param` one and the range is the `--bind` one**, which
 /// is why neither half needed a grammar of its own: what a published control is,
-/// is a name in front of an address and a range behind it. The range is
-/// mandatory — publishing without one would mean "over the declared range", and
-/// spelling that as an absence would make the common narrowing case look like
-/// the exception.
+/// is a name in front of an address and a range behind it — and the address is
+/// `layer:index:` present or absent as a unit, meaning the same thing it means
+/// there. The range is mandatory: publishing without one would mean "over the
+/// declared range", and spelling that as an absence would make the common
+/// narrowing case look like the exception.
 fn parse_publish(value: &str) -> Result<karakuri_engine::set::Published, String> {
-    let bad = || format!("`--publish {value}` — expected `name=L4:0:key[LOW..HIGH]`");
+    let bad = || {
+        format!("`--publish {value}` — expected `name=key[LOW..HIGH]` or `name=L4:0:key[LOW..HIGH]`")
+    };
     let (name, rest) = value.split_once('=').ok_or_else(bad)?;
     if name.is_empty() {
         return Err(bad());
     }
-    let (layer, rest) = rest.split_once(':').ok_or_else(bad)?;
-    let layer = layer_named(layer).ok_or_else(bad)?;
-    let (index, rest) = rest.split_once(':').ok_or_else(bad)?;
-    let index: u32 = index.parse().map_err(|_| bad())?;
+    let (at, rest) = match rest.split_once(':') {
+        Some((layer, tail)) => {
+            let layer = layer_named(layer).ok_or_else(bad)?;
+            let (index, tail) = tail.split_once(':').ok_or_else(bad)?;
+            let index: u32 = index.parse().map_err(|_| bad())?;
+            (Some((layer, index)), tail)
+        }
+        None => (None, rest),
+    };
     let (key, range) = rest.split_once('[').ok_or_else(bad)?;
     let range = range.strip_suffix(']').ok_or_else(bad)?;
     let (low, high) = range.split_once("..").ok_or_else(bad)?;
@@ -1094,8 +1103,7 @@ fn parse_publish(value: &str) -> Result<karakuri_engine::set::Published, String>
     }
     Ok(karakuri_engine::set::Published {
         name: name.to_string(),
-        layer,
-        index,
+        at,
         key: key.to_string(),
         range: [low, high],
     })
@@ -2456,6 +2464,7 @@ fn build_deck(
                             capacity_for(args, l1),
                             seed_for(slot),
                             args.overrides.clone(),
+                            args.published.clone(),
                             args.bindings.clone(),
                         );
                         // **Only when a session is being recorded.** Without
@@ -2571,9 +2580,10 @@ fn build(
             // After the overrides: a binding blends from the param's value, so
             // a `--param` on a bound param is the base of the blend rather
             // than a competitor for the write.
-            // **After the bindings**, because a macro is a binding whose source
-            // is a published control: attaching one before the control exists
-            // would be attaching it to a name nothing answers.
+            // **Before the bindings**, because a macro is a binding whose source
+            // is a published control: attaching one before the control existed
+            // would be attaching it to a name nothing answers, and it would hold
+            // its param where it found it for the rest of the run.
             for control in published {
                 let name = control.name.clone();
                 if let Err(e) = set.publish(control.clone()) {

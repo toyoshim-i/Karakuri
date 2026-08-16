@@ -120,6 +120,24 @@ pub enum SetError {
         l4: String,
         missing: String,
     },
+    /// More renderers than an L5 can fold.
+    ///
+    /// **Only under [`Layering::Composite`].** Overdrawing has no limit — the
+    /// renderers share one attachment and run in order, so a hundred of them
+    /// cost a hundred passes and one target. Compositing binds one texture per
+    /// input and `shaders/composite.wgsl` declares four, which is the same
+    /// number a deck holds and for the same reason: raising it is an edit
+    /// there.
+    ///
+    /// Refused rather than truncated. A Set that quietly dropped its fifth
+    /// renderer would draw a picture nobody asked for, with no error and no log
+    /// — the exact shape this pass exists to refuse.
+    #[error(
+        "`{l1}` composites {count} renderers and an L5 folds at most {max}\n\
+         hint: drop `--merge` for this slot and they overdraw instead, which has no limit — \
+         or split them across Sets, which is what a deck is"
+    )]
+    TooManyInputs { l1: String, count: usize, max: usize },
     /// A Set with no renderer.
     ///
     /// A `Set` is a [`VideoSource`], and a video source with nothing to draw has
@@ -306,8 +324,18 @@ pub struct Published {
     /// What the console shows. The Set's choice, so two nodes' `exposure` can be
     /// published as two controls under two names.
     pub name: String,
-    pub layer: Kind,
-    pub index: u32,
+    /// **Which node, or every node that declares the key.** `None` is the
+    /// wildcard, on the same terms [`ParamWrite::at`] and [`Binding::index`] are
+    /// — the address is present or absent as a unit, and absent means the same
+    /// thing everywhere: every declaration.
+    ///
+    /// It is what the *default* interface is made of. `docs/ir-spec.md` settles
+    /// that "a bare name means every node that declares it" — a `--param
+    /// exposure=2.0` moves both renderers, "which is exactly the one control
+    /// driving both case" — so a Set with no interface publishes one control per
+    /// key, not one per declaration. Publishing one per declaration would give
+    /// two of them the same name, which `publish` itself refuses.
+    pub at: Option<(Kind, u32)>,
     /// The param's own name inside the node.
     pub key: String,
     /// **Narrows, never redefines** — a subset of the declared range, refused
@@ -319,8 +347,8 @@ pub struct Published {
 /// Why a control could not be published.
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum PublishError {
-    #[error("no {layer:?} node {index} declares `{key}`")]
-    NoSuchControl { layer: Kind, index: u32, key: String },
+    #[error("nothing in this Set declares `{key}`{at}")]
+    NoSuchControl { key: String, at: String },
     #[error(
         "`{name}` publishes `{key}` over [{low}, {high}], which is outside the [{min}, {max}] \
          the procedure declares\n\
@@ -395,6 +423,13 @@ impl Set {
     ) -> Result<Set, SetError> {
         if l4s.is_empty() {
             return Err(SetError::NoRenderer { l1: l1.name.clone() });
+        }
+        if layering == Layering::Composite && l4s.len() > crate::deck::MAX_SLOTS {
+            return Err(SetError::TooManyInputs {
+                l1: l1.name.clone(),
+                count: l4s.len(),
+                max: crate::deck::MAX_SLOTS,
+            });
         }
         if l1.kind != Kind::L1 {
             return Err(SetError::WrongKind {
@@ -810,6 +845,17 @@ impl Set {
         // to declare the name; an addressed one needs *that* node to, so
         // `bind(L4, index 2, "exposure")` on a Set of two renderers is refused
         // rather than attached to nothing.
+        // **A control source is checked against the interface**, not against the
+        // params. A misspelt one used to be accepted, hold its param wherever it
+        // found it, and be reported by the terminal as deciding that param
+        // outright — the same failure the confidence display had, one step
+        // further along. The order this puts on a caller is the order a macro
+        // needs anyway: publish, then bind.
+        if let Some(name) = binding.signal.strip_prefix(CONTROL_PREFIX) {
+            if !self.published().iter().any(|p| p.name == name) {
+                return false;
+            }
+        }
         let range = self.nodes_of(binding.layer);
         let names: Vec<&[String]> = match binding.layer {
             Kind::L1 => vec![self.sim.param_names()],
@@ -951,16 +997,13 @@ impl Set {
     /// opts in by naming what they want rather than by hiding twenty-four
     /// things.
     pub fn publish(&mut self, control: Published) -> Result<(), PublishError> {
-        let declared = self
-            .nodes_of(control.layer)
-            .nth(control.index as usize)
-            .and_then(|slot| self.ranges.get(slot))
-            .and_then(|node| node.get(&control.key).copied());
-        let Some([min, max]) = declared else {
+        let Some([min, max]) = self.declared_range(control.at, &control.key) else {
             return Err(PublishError::NoSuchControl {
-                layer: control.layer,
-                index: control.index,
                 key: control.key,
+                at: match control.at {
+                    Some((layer, index)) => format!(" at {layer:?}:{index}"),
+                    None => String::new(),
+                },
             });
         };
         // **A subset, and refused rather than clamped.** Clamping would let a
@@ -986,6 +1029,32 @@ impl Set {
         Ok(())
     }
 
+    /// The declared range of a control, **narrowed to what every addressed node
+    /// allows** when the address is a wildcard.
+    ///
+    /// The intersection rather than the union: a wildcard control moves every
+    /// declaration at once, so a position outside any one of their ranges is a
+    /// position that procedure did not say it still looks like itself at.
+    fn declared_range(&self, at: Option<(Kind, u32)>, key: &str) -> Option<[f32; 2]> {
+        let mut found: Option<[f32; 2]> = None;
+        for layer in [Kind::L1, Kind::L2, Kind::L3, Kind::L4] {
+            for (index, slot) in self.nodes_of(layer).enumerate() {
+                if at.is_some_and(|(l, i)| l != layer || i != index as u32) {
+                    continue;
+                }
+                let Some([min, max]) = self.ranges.get(slot).and_then(|n| n.get(key)).copied()
+                else {
+                    continue;
+                };
+                found = Some(match found {
+                    None => [min, max],
+                    Some([lo, hi]) => [lo.max(min), hi.min(max)],
+                });
+            }
+        }
+        found
+    }
+
     /// **What a console shows**, which for a Set with no interface is
     /// everything it declares, each over its own declared range.
     ///
@@ -999,26 +1068,27 @@ impl Set {
         // would make "publishes everything" a list that a rebuild has to
         // regenerate and a Set file has to carry — and the first `publish` call
         // would then have to *remove* twenty-four entries to mean what it means.
-        let mut all = Vec::new();
-        for layer in [Kind::L1, Kind::L2, Kind::L3, Kind::L4] {
-            for (index, slot) in self.nodes_of(layer).enumerate() {
-                let Some(node) = self.ranges.get(slot) else { continue };
-                let mut keys: Vec<&String> = node.keys().collect();
-                // Declaration order is not kept in a map, and a console showing
-                // its controls in a different order each run is not a console.
-                keys.sort();
-                for key in keys {
-                    all.push(Published {
-                        name: key.clone(),
-                        layer,
-                        index: index as u32,
-                        key: key.clone(),
-                        range: node[key],
-                    });
-                }
-            }
-        }
-        all
+        //
+        // **One control per key, not per declaration**, which is the rule
+        // `docs/ir-spec.md` already states for a bare name: two renderers'
+        // `exposure` is one knob moving both. Per declaration would put two
+        // controls called `exposure` on the console, which `publish` refuses
+        // when it is asked for explicitly and which nothing could address.
+        let mut keys: Vec<&String> = self.ranges.iter().flat_map(|node| node.keys()).collect();
+        // Declaration order is not kept in a map, and a console showing its
+        // controls in a different order each run is not a console.
+        keys.sort();
+        keys.dedup();
+        keys.into_iter()
+            .filter_map(|key| {
+                Some(Published {
+                    name: key.clone(),
+                    at: None,
+                    key: key.clone(),
+                    range: self.declared_range(None, key)?,
+                })
+            })
+            .collect()
     }
 
     /// **Set a published control, in the units the console shows it in.**
@@ -1033,7 +1103,11 @@ impl Set {
             return false;
         };
         let clamped = value.clamp(control.range[0], control.range[1]);
-        self.set_param_at(control.layer, control.index, &control.key, clamped)
+        // **Through `write_param`**, which is the one entry point a `--param`
+        // and a `param` record both come through — so a wildcard control means
+        // exactly what a bare name means everywhere else, and an addressed one
+        // means exactly what an addressed `--param` does.
+        self.write_param(&ParamWrite { at: control.at, key: control.key, value: clamped }) > 0
     }
 
     /// A published control's position in `[0, 1]`, which is what a binding's
@@ -1041,26 +1115,62 @@ impl Set {
     /// a control that is not there resolves to the bottom of its own range,
     /// which is quieter than a panic on the render thread and is what every
     /// other miss in this file does.
-    fn control_position(&self, name: &str) -> f32 {
-        let Some(control) = self.published().into_iter().find(|p| p.name == name) else {
-            return 0.0;
+    fn control_position(&self, name: &str) -> Option<f32> {
+        // **Without allocating**, which `published()` cannot promise: this is
+        // called from `resolve_bindings`, which `Set::prepare` calls, and the
+        // first invariant in `README.md` is the one about not allocating on the
+        // render thread. So the interface is searched in place and the default
+        // one — where a control's name *is* a param's key — is answered without
+        // building the list it would appear in.
+        // **The key, not the name.** A control is published under a name the Set
+        // chose and lands on a param with its own — `blend` on `radius` — so
+        // reading the value back by the console's name finds nothing. It is only
+        // in the default interface that the two coincide, which is why every
+        // test of a *renamed* control is the one that catches this.
+        let (at, key, [low, high]) = match self.interface.iter().find(|p| p.name == name) {
+            Some(control) => (control.at, control.key.as_str(), control.range),
+            // Only when nothing is published: with an interface, a name that is
+            // not in it is not a control, and a param that happens to share the
+            // name is not one either.
+            None if self.interface.is_empty() => (None, name, self.declared_range(None, name)?),
+            None => return None,
         };
-        let Some(value) = self.published_value(name) else { return 0.0 };
-        let [low, high] = control.range;
+        let value = self.value_at(at, key)?;
         // A published range of zero width is one position, and it is the top of
         // it: an author who froze a control at a value did not ask for the
         // bottom of an empty interval.
         if high <= low {
-            return 1.0;
+            return Some(1.0);
         }
-        ((value - low) / (high - low)).clamp(0.0, 1.0)
+        Some(((value - low) / (high - low)).clamp(0.0, 1.0))
     }
 
     /// What a published control currently holds, in its own units.
     pub fn published_value(&self, name: &str) -> Option<f32> {
         let control = self.published().into_iter().find(|p| p.name == name)?;
-        let slot = self.nodes_of(control.layer).nth(control.index as usize)?;
-        self.params.get(slot)?.get(&control.key).copied()
+        self.value_at(control.at, &control.key)
+    }
+
+    /// What a control holds: the addressed node's value, or the first
+    /// declaration's for a wildcard.
+    ///
+    /// **The first is the only one there is**, for a wildcard: every write
+    /// through one moves every declaration together, so they cannot disagree
+    /// unless something addressed one of them behind the control's back — which
+    /// is exactly what an unpublished control still being reachable means, and
+    /// is the operator's business rather than a case to reconcile here.
+    fn value_at(&self, at: Option<(Kind, u32)>, key: &str) -> Option<f32> {
+        for layer in [Kind::L1, Kind::L2, Kind::L3, Kind::L4] {
+            for (index, slot) in self.nodes_of(layer).enumerate() {
+                if at.is_some_and(|(l, i)| l != layer || i != index as u32) {
+                    continue;
+                }
+                if let Some(v) = self.params.get(slot).and_then(|n| n.get(key)) {
+                    return Some(*v);
+                }
+            }
+        }
+        None
     }
 
     /// **The edges into this Set's L5**, in draw order. Empty of meaning under
@@ -1464,19 +1574,15 @@ impl Set {
             .into_iter()
             .map(|k| (self.slot_of(k), self.nodes_of(k)))
             .collect();
-        // **Read before the loop**, on the same terms the ranges above are: a
-        // published control's position is a value this Set holds, and reading it
-        // needs `&self` while the loop holds `self.bindings` mutably. A control
-        // driving a binding is one number per named control, so this is small
-        // and is built only for the bindings that ask.
-        let controls: HashMap<String, f32> = self
-            .bindings
-            .iter()
-            .filter_map(|b| b.signal.strip_prefix(CONTROL_PREFIX))
-            .map(|name| (name.to_string(), self.control_position(name)))
-            .collect();
+        // **The bindings move out and back rather than being borrowed**, because
+        // resolving a control-driven one needs `&self` — a published control's
+        // position is a value this Set holds — while the loop needs them
+        // mutably. A `mem::take` is a pointer swap and this is the render
+        // thread; collecting the positions into a map first was the obvious
+        // shape and allocated one `String` per control per frame.
+        let mut bindings = std::mem::take(&mut self.bindings);
         let params = &self.params;
-        for binding in &mut self.bindings {
+        for binding in &mut bindings {
             // `L3`'s range is empty until a Set holds one — see `Set::slot_of`.
             // A binding cannot be attached to it either, so this arm resolves
             // nothing rather than being unreachable.
@@ -1503,15 +1609,23 @@ impl Set {
             // the session. The confidence is 1 because this is the operator's
             // hand rather than a guess at something unobserved.
             match binding.signal.strip_prefix(CONTROL_PREFIX) {
+                // **A name nothing publishes leaves the param alone**, rather
+                // than driving it to the bottom of the binding's range. A
+                // misspelt control is a mistake, and the honest reading of a
+                // source that is not there is that nothing is driving this —
+                // which is what a manual value is for.
                 Some(name) => {
-                    let at = controls.get(name).copied().unwrap_or(0.0);
-                    binding.drive(at);
+                    match self.control_position(name) {
+                        Some(at) => binding.drive(at),
+                        None => binding.hold(manual),
+                    };
                 }
                 None => {
                     binding.resolve(signals, manual);
                 }
             }
         }
+        self.bindings = bindings;
     }
 }
 
