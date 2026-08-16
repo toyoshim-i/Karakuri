@@ -809,6 +809,17 @@ fine alone and is unreadable next to lights.
 
 **Goal:** the combinatorial range that makes the library worth having.
 
+**Where it stands.** The rendering front is closed — `lines`, a fullscreen L4, `blend
+weighted`. The structural front is most of the way: `Ln` is a node, a Set holds a **chain**
+(one L1, a list of L2s, a list of L4s) and `--set L1.kir,L2.kir,L4.kir` reaches it with no new
+syntax. Parameters, bindings, the edit history and the MCP surface all address a node rather
+than a layer.
+
+What is left is **L3 as a node**, **L5 as a `kind`** for the nested case, **what a Set
+publishes**, and **masks in the mixer**. Every one of them is specified in `docs/ir-spec.md`
+with its open questions closed — including the last one this project carried, how two merged
+geometries keep their identities apart. Nothing below is waiting on a decision.
+
 **First, and before any of the list below: more than one way to draw.**
 
 `Topology` had one value and `Blend` had one value. Every frame this project had ever
@@ -1180,16 +1191,8 @@ than against one being taught to.
   that goes over any geometry emitting `position`, which is the argument for the layer
   existing rather than folding the same maths into the L1 and needing a second `.kir` to
   have it without.
-- L3 as an IR `kind` with its own node. **What each one is has been written down**
-  — `docs/ir-spec.md`, "L2 and L3" — because the node split is being built now and their
-  shapes constrain it. The load-bearing decision is that **an L2 is stateless by rule**: it
-  is what makes the layer freely stackable, keeps `closed_form` and priming L1 questions,
-  and makes fusion legal for the graph compiler rather than merely plausible. An L2 cannot
-  `kill()` either, so compaction runs once after L1 and nothing after a deformation
-  reconsiders liveness. Its output is materialised rather than fused, which pays its cost
-  once however many nodes read it — the shape that survives several renderers over one
-  geometry, which is the other half of this milestone
-- **L3 as a node, and both questions this list held about it are answered.** A camera belongs
+- **L3 as an IR `kind` with its own node, and both questions this list held about it are
+  answered.** A camera belongs
   to an **L4**, not to a Set or a deck: `L4 : (Geometry, Camera) -> Texture` makes it an input
   edge, so two renderers on one camera is one viewpoint drawn twice and two renderers on two
   cameras is a Set that composites two scenes. And an L3 is a `.kir` procedure rather than the
