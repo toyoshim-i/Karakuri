@@ -1039,13 +1039,23 @@ than against one being taught to.
   reconsiders liveness. Its output is materialised rather than fused, which pays its cost
   once however many nodes read it — the shape that survives several renderers over one
   geometry, which is the other half of this milestone
-- **Two open questions about L3, and they are the author's.** *A camera per Set, or one for
-  the deck* — today it is per Set because `Set` owns an `Orbit`, and the alternative is four
-  slots reading as one space rather than as four, which is a question about how a set looks
-  from the floor. And *whether an L3 is a `.kir` procedure at all* — it is a `camera` record
-  today, a record is enough for an orbit, and a `.kir` L3 would apply this project's thesis
-  to the one layer that has so far been furniture, at the cost of the IR needing to evaluate
-  somewhere other than a GPU
+- **L3 as a node, and both questions this list held about it are answered.** A camera belongs
+  to an **L4**, not to a Set or a deck: `L4 : (Geometry, Camera) -> Texture` makes it an input
+  edge, so two renderers on one camera is one viewpoint drawn twice and two renderers on two
+  cameras is a Set that composites two scenes. And an L3 is a `.kir` procedure rather than the
+  `camera` record it is today, because what an author wants from one is dynamic — *follow an
+  element, jump on the beat while facing the centre* — and two numbers in a record carry
+  neither. The first of those expectations also broke a claim this project had held for a day:
+  an L3 that follows an element **reads geometry**, which is in a GPU buffer that cannot be
+  read back on the frame path, so the `Camera` edge is a GPU buffer written either by the host
+  or by a small compute pass
+- **L5 becomes a `kind`, with two roles and one implementation.** The console an operator
+  mixes on is the top-level one; the same node nested inside a Set folds several L4s into one
+  texture. What differs is only whether a surface is wired to it — which finally separates
+  the *mix* (gain, opacity, blend, mask: properties of an edge into an L5) from the *deck*
+  (residency, priming, hot swap, budget, transport, preview, meters: properties of a Set being
+  played, which have nothing to do with mixing and sit beside L5 only because that is where a
+  performance happens)
 - Multiple L1 sources, and the `source` attribute that keeps their identities apart. Per
   source `seed` counters starting at zero so structured layouts survive, and a per-source
   hash salt so randomness differs without structure differing

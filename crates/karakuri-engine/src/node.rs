@@ -44,9 +44,16 @@ pub(crate) struct Geometry<'a> {
 
 /// Everything the frame's uniform block needs that is not the node's own.
 ///
-/// Passed in rather than reached for, because these belong to the grouping —
-/// one camera and one clock serve every node in a Set — and a node that held
-/// its own copy would be a second place for them to be.
+/// Passed in rather than reached for, because the clock belongs to the grouping
+/// — one `t` serves every node in a Set — and a node holding its own copy would
+/// be a second place for it to be.
+///
+/// **The camera is here on borrowed time.** `L4 : (Geometry, Camera) -> Texture`
+/// makes it an input *edge*, not a property of the grouping, and two renderers
+/// reading different cameras is what a Set that composites two scenes is made
+/// of. It rides in this struct because `Set` still owns one `Orbit`; when L3
+/// becomes a node it becomes an edge like `Geometry` above, and a GPU buffer
+/// rather than six numbers on the host — see `docs/ir-spec.md`, "L2 and L3".
 pub(crate) struct View<'a> {
     pub t: f32,
     pub beats: f32,
