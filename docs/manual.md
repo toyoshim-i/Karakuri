@@ -189,6 +189,7 @@ run reads a microphone — so what comes back is the performance and not just th
 |---|---|
 | `--set L1.kir,L4.kir` | one deck slot. Repeat up to four times |
 | `--set L1.kir,L4.kir,L4.kir` | the same, drawn twice — one simulation, two renderers over it, in the order given |
+| `--set L1.kir,L2.kir,L4.kir` | a deformation between the two. Every path after the first is sorted by the `kind` it declares, so there is nothing new to spell: L2s deform in the order given, L4s draw in the order given |
 | `L1.kir L4.kir` | the same, positionally, for one slot |
 | `--capacity N` | elements per Set. **Without it each procedure's own declared default is used**, which is what a `.kir`'s `capacity [min, max] = N` line is for; give this and it overrides every slot |
 | `--param name=value` | a uniform write, applied to every Set — and within a Set, to every node that declares the name |
@@ -505,6 +506,17 @@ drawn two ways:
 ```
 karakuri-cli --set examples/drift_shell.kir,examples/soft_points.kir,examples/drift_streaks.kir
 ```
+
+A path in that list may also be an **L2**, which deforms the geometry between the
+simulation and the draw:
+
+```
+karakuri-cli --set examples/drift_shell.kir,examples/swirl_warp.kir,examples/soft_points.kir
+```
+
+There is nothing to spell for it. Every `.kir` declares its own `kind`, so the first path is
+the geometry and the rest are sorted by what they say they are — L2s deform in the order
+given, L4s draw in the order given.
 
 **One slot, one simulation, two renderers over it**, drawn in the order given. The passes
 run over one render target — the first clears it, the rest load what is there — so the

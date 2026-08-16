@@ -1,0 +1,51 @@
+// The first L2 in this library: a deformation that sits between the geometry
+// and whatever draws it.
+//
+// **What an L2 is for is the thing the layer above cannot do without paying
+// twice.** `drift_shell` could fold this twist into its own `element` block —
+// but then a Set that wanted the shell *without* the twist would need a second
+// `.kir`, and one that wanted the twist over a different shell would need a
+// third. Here it is one file that goes over any geometry that emits `position`,
+// and `--set drift_shell.kir,swirl_warp.kir,soft_points.kir` is how it is asked
+// for.
+//
+// **It cannot accumulate, and that is not a restriction to work around.** Each
+// frame this reads the position the geometry produced *this* frame and writes a
+// twisted one; it never reads back what it wrote. So the twist is a function of
+// `t` and of where the element is, which is what lets the same modulator sit in
+// two Sets, or twice in one, without the two interfering. A drift that built up
+// over frames would belong in the L1, where state lives and where the transport
+// can seek through it.
+//
+// The twist angle grows with height, so the shell shears rather than spins as a
+// body — a rotation applied evenly is a camera move, and the camera already
+// does that better.
+proc swirl_warp {
+  kind L2
+
+  // Radians of twist per unit of height, at full strength.
+  param twist   : float [0.0, 6.0]  = 2.2
+  // How fast the twist itself breathes. Zero holds it still.
+  param breathe : float [0.0, 4.0]  = 0.35
+  // Pushes elements out from the axis as they twist, so the shear opens up
+  // rather than only shearing.
+  param flare   : float [0.0, 1.5]  = 0.35
+
+  consumes position
+
+  deform {
+    let y     = position.y;
+    let angle = y * twist + sin(t * breathe) * 1.4;
+    let c     = cos(angle);
+    let s     = sin(angle);
+
+    // Rotate about the vertical axis by an angle that depends on height.
+    let x = position.x * c - position.z * s;
+    let z = position.x * s + position.z * c;
+
+    // And open the shear out, most where the twist is strongest.
+    let out = 1.0 + abs(y) * flare;
+
+    position = vec3(x * out, y, z * out);
+  }
+}

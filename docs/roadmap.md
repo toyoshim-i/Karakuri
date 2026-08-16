@@ -1171,7 +1171,15 @@ than against one being taught to.
   The composition check became a **walk** rather than a comparison. An L2 may `emit`
   an attribute no L1 in the library produces, and everything below it can consume
   that — so `consumes ⊆ available at this position`, and the error names the
-  position. `--set` cannot spell a chain yet; that is the next piece.
+  position.
+
+  **Reachable from the command line, with nothing new to spell.** `--set
+  L1.kir,L2.kir,L4.kir` works because every `.kir` declares its own `kind`: the first path
+  is the geometry and the rest are sorted by what they say they are, list order being chain
+  order for L2s and draw order for L4s. `examples/swirl_warp.kir` is the first one — a twist
+  that goes over any geometry emitting `position`, which is the argument for the layer
+  existing rather than folding the same maths into the L1 and needing a second `.kir` to
+  have it without.
 - L3 as an IR `kind` with its own node. **What each one is has been written down**
   — `docs/ir-spec.md`, "L2 and L3" — because the node split is being built now and their
   shapes constrain it. The load-bearing decision is that **an L2 is stateless by rule**: it
