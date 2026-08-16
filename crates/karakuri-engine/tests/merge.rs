@@ -269,3 +269,52 @@ fn the_merge_targets_follow_a_resize() {
         "after a resize and back the frame totals {again} where it totalled {small}"
     );
 }
+
+/// **An L5 folds at most as many inputs as its shader binds**, and more is
+/// refused rather than truncated.
+///
+/// `shaders/composite.wgsl` declares four textures, which is the same number a
+/// deck holds and for the same reason. A Set that quietly dropped its fifth
+/// renderer would draw a picture nobody asked for, with no error and no log —
+/// and the fifth is the one an author added last, so it is the one they are
+/// looking at.
+///
+/// **Overdrawing has no such limit**, which is the other half: the renderers
+/// share one attachment and run in order, so a hundred of them cost a hundred
+/// passes and one target. The refusal is about compositing alone.
+#[test]
+fn compositing_refuses_more_renderers_than_an_l5_can_fold() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let five: Vec<String> = (0..5)
+        .map(|i| dots(&format!("r{i}"), (0.1 * i as f32, 0.0, 0.0)))
+        .collect();
+
+    let err = {
+        let compiled: Vec<Checked> = five.iter().map(|s| compile(s)).collect();
+        let refs: Vec<&Checked> = compiled.iter().collect();
+        Set::build_many(
+            &gpu.device,
+            &gpu.queue,
+            &compile(GRID),
+            &[],
+            None,
+            &refs,
+            Layering::Composite,
+            16,
+            5,
+        )
+        .err()
+        .expect("five inputs is one more than an L5 folds")
+    };
+    let message = err.to_string();
+    assert!(message.contains('5') && message.contains('4'), "{message}");
+    assert!(
+        message.contains("overdraw"),
+        "the hint does not offer the layering that has no limit: {message}"
+    );
+
+    // And the same five overdraw without complaint.
+    let mut set = build(&gpu, &five, Layering::Overdraw);
+    let px = frame(&gpu, &mut set);
+    assert!(total(&px, 0) > 1.0, "five renderers drew nothing when overdrawing");
+}

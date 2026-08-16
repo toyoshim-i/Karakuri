@@ -354,7 +354,17 @@ fn deform_entry(
                 format!(
                     "    let _input = dst[i];\n\
                      \x20   var strength = 1.0;\n\
+                     \x20   // **The mask's locals get a scope of their own.** Two\n\
+                     \x20   // blocks are spliced into one WGSL function here, and\n\
+                     \x20   // a local is mangled by its name alone — so a `let d`\n\
+                     \x20   // in both would be a redefinition, from a `.kir` the\n\
+                     \x20   // checker accepted. It checks each block in its own\n\
+                     \x20   // scope, and this is that scope made real. `strength`\n\
+                     \x20   // is declared outside it and assigned from within,\n\
+                     \x20   // which is what a scope is for.\n\
+                     \x20   {{\n\
                      {mask}\
+                     \x20   }}\n\
                      \x20   // Clamped, because `mix` extrapolates: a strength\n\
                      \x20   // of 2 would apply the deformation twice over, and\n\
                      \x20   // one of -1 would apply its inverse.\n\

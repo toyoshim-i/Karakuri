@@ -267,6 +267,15 @@ pub struct Request {
     /// depends on what happens to be live is not reproducible from a record
     /// stream.
     pub params: Vec<crate::binding::ParamWrite>,
+    /// **The interface, restated on every rebuild** for the reason the params
+    /// and the bindings are: a request that depended on what happens to be live
+    /// is not reproducible from a record stream.
+    ///
+    /// Left out, this was worse than a lost surface. The bindings *are*
+    /// restated, so a `control:` binding survived a swap and the control it
+    /// named did not — and a binding whose source is gone leaves its param
+    /// where it was, silently, for the rest of the run.
+    pub published: Vec<crate::set::Published>,
     /// Attached to the new Set once its params are set, and **restated** here
     /// for the same reason they are: a rebuild that read its bindings out of
     /// whatever happened to be live would not be reproducible from a record
@@ -1071,6 +1080,17 @@ fn run_worker(
                     // disagree about what a bare name means.
                     if set.write_param(write) == 0 {
                         eprintln!("  no parameter named `{}`, ignoring", write.key);
+                    }
+                }
+                // **Before the bindings**, because a macro is a binding whose
+                // source is a published control: a binding attached before the
+                // control existed would be attached to a name nothing answers,
+                // and would hold its param where it found it for the rest of
+                // the run.
+                for control in request.published {
+                    let name = control.name.clone();
+                    if let Err(e) = set.publish(control) {
+                        eprintln!("  `{name}` is not published: {e}");
                     }
                 }
                 // After the params, because a binding blends from a param's
