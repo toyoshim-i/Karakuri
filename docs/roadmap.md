@@ -1048,7 +1048,12 @@ than against one being taught to.
   neither. The first of those expectations also broke a claim this project had held for a day:
   an L3 that follows an element **reads geometry**, which is in a GPU buffer that cannot be
   read back on the frame path, so the `Camera` edge is a GPU buffer written either by the host
-  or by a small compute pass
+  or by a small compute pass. **What an L3 points at is a reduction — centroid or bounds — or
+  element zero**, and the second is where order-preserving compaction paid for itself a third
+  time: a live element at index 0 has nothing alive before it, so it stays there until it
+  dies, which makes index 0 *the oldest living element* rather than an arbitrary slot. Nothing
+  is declared and nothing is checked; an L1 that expects to be looked at can make that element
+  a leader, and one that does not still offers its oldest survivor
 - **L5 becomes a `kind`, with two roles and one implementation.** The console an operator
   mixes on is the top-level one; the same node nested inside a Set folds several L4s into one
   texture. What differs is only whether a surface is wired to it — which finally separates
