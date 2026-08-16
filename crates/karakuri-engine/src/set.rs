@@ -652,8 +652,11 @@ impl Set {
             has_spawn: l1_shader.has_spawn,
             // Both, because a Set is only seekable if everything in it is. L4
             // is stateless and its flag is vacuously true, so in practice this
-            // is the L1's — but writing the conjunction is what keeps it
-            // correct when L2 arrives with state of its own.
+            // is the L1's — and it will still be when L2 arrives, since an L2 is
+            // stateless by rule (`docs/ir-spec.md`, "L2 and L3"). The
+            // conjunction is written out anyway: it is the sentence that is
+            // true, and a Set whose seekability came from one named layer would
+            // have to be revisited by every layer added after it.
             closed_form: l1.closed_form && l4.closed_form,
             reads_beats: l1.reads_beats || l4.reads_beats,
             element_layout,

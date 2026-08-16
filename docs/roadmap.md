@@ -1030,7 +1030,22 @@ than against one being taught to.
 
 **Adds**
 
-- L2 and L3 as IR `kind`s with their own slots
+- L2 and L3 as IR `kind`s with their own nodes. **What each one is has been written down**
+  — `docs/ir-spec.md`, "L2 and L3" — because the node split is being built now and their
+  shapes constrain it. The load-bearing decision is that **an L2 is stateless by rule**: it
+  is what makes the layer freely stackable, keeps `closed_form` and priming L1 questions,
+  and makes fusion legal for the graph compiler rather than merely plausible. An L2 cannot
+  `kill()` either, so compaction runs once after L1 and nothing after a deformation
+  reconsiders liveness. Its output is materialised rather than fused, which pays its cost
+  once however many nodes read it — the shape that survives several renderers over one
+  geometry, which is the other half of this milestone
+- **Two open questions about L3, and they are the author's.** *A camera per Set, or one for
+  the deck* — today it is per Set because `Set` owns an `Orbit`, and the alternative is four
+  slots reading as one space rather than as four, which is a question about how a set looks
+  from the floor. And *whether an L3 is a `.kir` procedure at all* — it is a `camera` record
+  today, a record is enough for an orbit, and a `.kir` L3 would apply this project's thesis
+  to the one layer that has so far been furniture, at the cost of the IR needing to evaluate
+  somewhere other than a GPU
 - Multiple L1 sources, and the `source` attribute that keeps their identities apart. Per
   source `seed` counters starting at zero so structured layouts survive, and a per-source
   hash salt so randomness differs without structure differing
