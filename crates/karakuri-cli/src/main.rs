@@ -372,7 +372,8 @@ options:
                         fits the canvas into itself and has no say in it.
                         Refused with --render, --seq or --replay
   --capacity N          elements per Set (default 262144)
-  --param name=value    a uniform write, applied to every Set
+  --param name=value    a uniform write, applied to every Set, and within one
+                        to every node declaring that name
   --bind FIELDS         attach a signal to a param, applied to every Set.
                         Comma-separated `field=value`, one per field of the
                         `bind` record:
@@ -2238,9 +2239,11 @@ fn build(
                 set.camera = camera;
             }
             for (name, value) in overrides {
-                match set.params.get_mut(name) {
-                    Some(slot) => *slot = *value,
-                    None => eprintln!("  no parameter named `{name}`, ignoring"),
+                // Every node that declares the name — a `--param` carries a
+                // name and no address, so "the Set's `exposure`" is what it
+                // asks for. See `Set::set_param`.
+                if set.set_param(name, *value) == 0 {
+                    eprintln!("  no parameter named `{name}`, ignoring");
                 }
             }
             // After the overrides: a binding blends from the param's value, so

@@ -405,7 +405,7 @@ fn a_swapped_in_set_carries_the_bindings_the_request_stated() {
 
     let set = h.swap.set();
     assert_eq!(set.capacity(), SECOND, "the swap did not land");
-    assert_eq!(set.params["radius"], 4.0, "the override did not survive");
+    assert_eq!(set.param("radius").expect("declared"), 4.0, "the override did not survive");
     assert_eq!(
         set.bindings().len(),
         1,

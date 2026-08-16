@@ -92,29 +92,6 @@ pub enum SetError {
         l4: String,
         missing: String,
     },
-    /// One param name declared by both procedures.
-    ///
-    /// [`Set::params`] is keyed by name alone across both layers, so two
-    /// declarations of one name are one value: the second silently takes the
-    /// first's place, a `param` record moves both at once, and a `bind` — which
-    /// *is* keyed by layer — blends from whichever declaration happened to
-    /// land last. Neither procedure can see the other's names, so this is a
-    /// coincidence rather than a mistake, and it is caught here because the
-    /// pair is the first place both are in hand. Every collision is reported at
-    /// once, for the same reason the checker reports every error at once.
-    ///
-    /// The fix on the other side is to key values by layer, the way the record
-    /// format already does; until then, refusing beats picking one.
-    #[error(
-        "`{l1}` and `{l4}` both declare a param named {keys}\n\
-         hint: parameter values are keyed by name across the whole Set, so the two \
-         declarations would be one value — rename one side"
-    )]
-    ParamCollision {
-        l1: String,
-        l4: String,
-        keys: String,
-    },
     /// `blend weighted` on a procedure that draws the whole frame.
     ///
     /// **Refused because it is the identity, not because it is unbuilt.** A
@@ -215,7 +192,16 @@ pub struct Set {
     /// record or a `--param` override. A binding never writes here — it blends
     /// *from* here — so a param that is both bound and set by hand has one
     /// answer rather than a race between two writers. See [`Set::bind`].
-    pub params: HashMap<String, f32>,
+    ///
+    /// **One map per node**, `[0]` the L1's and the rest the renderers' in
+    /// order — see [`Set::slot_of`]. It was one flat map keyed by name across
+    /// the whole Set, which made two procedures declaring `exposure` into one
+    /// value and was refused at build time by a `ParamCollision` error rather
+    /// than resolved. Every L4 in `examples/` declares `exposure`, so that
+    /// refusal is exactly what forbade several renderers over one geometry;
+    /// keying by the node that declares the name is what the roadmap named as
+    /// the fix, and the error is gone with it.
+    params: Vec<HashMap<String, f32>>,
     pub camera: Orbit,
     /// At most one per (layer, param). Resolved once per frame in
     /// [`Set::prepare`] and read back out wherever a param value is written.
@@ -279,25 +265,6 @@ impl Set {
             });
         }
 
-        // Also before anything is generated, and for the same reason: the two
-        // procedures were written without sight of each other, so a shared
-        // param name is a coincidence the pair is the first thing able to see.
-        // See `SetError::ParamCollision` for why it is refused rather than
-        // resolved.
-        let clashing: Vec<String> = l1
-            .params
-            .iter()
-            .filter(|p| l4.params.iter().any(|q| q.name == p.name))
-            .map(|p| format!("`{}`", p.name))
-            .collect();
-        if !clashing.is_empty() {
-            return Err(SetError::ParamCollision {
-                l1: l1.name.clone(),
-                l4: l4.name.clone(),
-                keys: clashing.join(", "),
-            });
-        }
-
         // **There is deliberately no third check, comparing the two
         // topologies.** An L1 declares one and an L4 now carries an inferred
         // one, so the comparison is available and looks principled — and it
@@ -322,12 +289,14 @@ impl Set {
         // both halves in hand.
         let renderer = Renderer::build(device, l4, &sim.geometry())?;
 
-        let params = l1
-            .params
-            .iter()
-            .chain(l4.params.iter())
-            .filter_map(|p| default_scalar(p).map(|v| (p.name.clone(), v)))
-            .collect();
+        // One map per node, in the order [`Set::slot_of`] addresses them: the
+        // L1's, then each renderer's. Two nodes declaring one name now hold two
+        // values, which is what a name meaning "this node's" buys.
+        let declared = |p: &&karakuri_ir::Param| default_scalar(p).map(|v| (p.name.clone(), v));
+        let params = vec![
+            l1.params.iter().filter_map(|p| declared(&p)).collect(),
+            l4.params.iter().filter_map(|p| declared(&p)).collect(),
+        ];
 
         let set = Set {
             seed_salt,
@@ -510,19 +479,71 @@ impl Set {
     /// (from a Set file, from `--bind`, or from a rebuild's `Request`), and
     /// all three are off the frame path.
     pub fn bind(&mut self, binding: Binding) -> bool {
+        let slot = Self::slot_of(binding.layer);
         let declared = match binding.layer {
             Kind::L1 => self.sim.param_names(),
             Kind::L4 => self.renderer.param_names(),
         };
-        // Both checks: `params` holds only the scalar params — a vector one is
-        // declared but has no value here — and a binding produces one float.
-        if !declared.contains(&binding.key) || !self.params.contains_key(&binding.key) {
+        // Both checks: a node's map holds only its scalar params — a vector one
+        // is declared but has no value here — and a binding produces one float.
+        if !declared.contains(&binding.key) || !self.params[slot].contains_key(&binding.key) {
             return false;
         }
         self.bindings
             .retain(|b| b.layer != binding.layer || b.key != binding.key);
         self.bindings.push(binding);
         true
+    }
+
+    /// Which map in [`Set::params`] a layer's values live in. The L1 is one
+    /// node so it is one slot; renderers follow it in order, and today there is
+    /// one of those too.
+    fn slot_of(layer: Kind) -> usize {
+        match layer {
+            Kind::L1 => 0,
+            Kind::L4 => 1,
+        }
+    }
+
+    /// **Set every declaration of `name`, and say how many there were.**
+    ///
+    /// Zero means nothing in this Set declares it, which is the caller's cue to
+    /// say so — a `--param` for a name a regenerated artifact no longer has
+    /// should not take the show down.
+    ///
+    /// A name rather than an address, because that is what a `--param` and a
+    /// `param` record carry, and because "the Set's `exposure`" is the useful
+    /// default when two nodes both have one: one knob moves both. Addressing a
+    /// single node is what the record vocabulary will need when someone wants
+    /// them apart — `docs/roadmap.md`, "How a param is addressed" — and this is
+    /// deliberately not that.
+    pub fn set_param(&mut self, name: &str, value: f32) -> usize {
+        let mut written = 0;
+        for node in &mut self.params {
+            if let Some(slot) = node.get_mut(name) {
+                *slot = value;
+                written += 1;
+            }
+        }
+        written
+    }
+
+    /// What `name` currently holds, from the first node that declares it.
+    ///
+    /// Enough while [`Set::set_param`] writes every declaration together, so
+    /// the first is the only value there is. It stops being enough the moment
+    /// an addressed write lands, which is why nothing in the engine builds on
+    /// it — it exists for tests and for a status line.
+    pub fn param(&self, name: &str) -> Option<f32> {
+        self.params.iter().find_map(|node| node.get(name).copied())
+    }
+
+    /// Every parameter value, addressed by the layer that declares it.
+    pub fn params(&self) -> impl Iterator<Item = (Kind, &str, f32)> + '_ {
+        self.params.iter().enumerate().flat_map(|(slot, node)| {
+            let layer = if slot == 0 { Kind::L1 } else { Kind::L4 };
+            node.iter().map(move |(k, v)| (layer, k.as_str(), *v))
+        })
     }
 
     /// Every bound param and what it was last written with. For a status line:
@@ -683,7 +704,7 @@ impl Set {
         }
 
         {
-            let (bindings, params) = (&self.bindings, &self.params);
+            let (bindings, params) = (&self.bindings, &self.params[Self::slot_of(Kind::L1)]);
             let param = |name: &str| effective(bindings, params, Kind::L1, name);
             let tick = crate::node::Tick { steps, dt: self.dt, instants, param: &param };
             self.sim.prepare(queue, &tick);
@@ -711,7 +732,7 @@ impl Set {
         // Read before the borrow: `time` takes `&self` and the node's packer
         // takes `&mut` its own scratch, but `param` below borrows this Set.
         let t = self.time();
-        let (bindings, params) = (&self.bindings, &self.params);
+        let (bindings, params) = (&self.bindings, &self.params[Self::slot_of(Kind::L4)]);
         let view = crate::node::View {
             t,
             beats: self.last_beats,
@@ -756,7 +777,10 @@ impl Set {
             // `unwrap_or` rather than an index: `Set::bind` refuses a param
             // that is not in the map, so this cannot miss, and a panic on the
             // render thread is not the way to find out if it ever does.
-            let manual = self.params.get(&binding.key).copied().unwrap_or(0.0);
+            let manual = self.params[Self::slot_of(binding.layer)]
+                .get(&binding.key)
+                .copied()
+                .unwrap_or(0.0);
             binding.resolve(signals, manual);
         }
     }

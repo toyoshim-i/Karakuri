@@ -173,10 +173,11 @@ fn material_exposure_sweep(gpu: &Gpu, l1: &Checked, l4: &Checked, out_dir: &Path
         let mut set = Set::build(&gpu.device, &gpu.queue, l1, l4, CAPACITY, SEED)
             .expect("spark_fountain + soft_points must build");
         set.resize(&gpu.device, WIDTH, HEIGHT);
-        *set
-            .params
-            .get_mut("exposure")
-            .expect("soft_points.kir declares `param exposure`") = material_exposure;
+        assert_eq!(
+            set.set_param("exposure", material_exposure),
+            1,
+            "soft_points.kir declares `param exposure` and spark_fountain.kir does not"
+        );
 
         let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba8UnormSrgb, WIDTH, HEIGHT);
         warm_up(gpu, &mut set, &present);

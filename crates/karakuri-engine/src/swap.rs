@@ -1047,9 +1047,11 @@ fn run_worker(
             )
             .map(|mut set| {
                 for (name, value) in request.params {
-                    match set.params.get_mut(&name) {
-                        Some(slot) => *slot = value,
-                        None => eprintln!("  no parameter named `{name}`, ignoring"),
+                    // Every node that declares the name, which is what a
+                    // `param` record carrying a name and no address means —
+                    // see [`Set::set_param`].
+                    if set.set_param(&name, value) == 0 {
+                        eprintln!("  no parameter named `{name}`, ignoring");
                     }
                 }
                 // After the params, because a binding blends from a param's
