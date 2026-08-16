@@ -63,11 +63,19 @@ use std::path::{Path, PathBuf};
 /// The subdirectory of the store this lives in.
 pub const DIR: &str = "history";
 
-/// Takes a snapshot per (slot, layer) and remembers what it last took, so an
-/// unchanged procedure is not written again.
+/// Takes a snapshot per **node** — slot, layer, and which node of that layer —
+/// and remembers what it last took, so an unchanged procedure is not written
+/// again.
+///
+/// **Per node rather than per layer**, because a slot draws with a list of
+/// renderers. Keyed by layer alone, a stack wrote every renderer under `L4` and
+/// each one's `last` overwrote the previous — so a two-renderer slot recorded
+/// one snapshot per save, alternating between two procedures that had not
+/// changed, and the chain a surface walks became unusable exactly where there
+/// was most to walk back through.
 pub struct Snapshots {
     root: PathBuf,
-    last: HashMap<(usize, &'static str), Vec<u8>>,
+    last: HashMap<(usize, &'static str, usize), Vec<u8>>,
 }
 
 /// One history for the run, shared between the launch-time seeding and every
@@ -97,10 +105,11 @@ impl Snapshots {
         &mut self,
         slot: usize,
         layer: &'static str,
+        index: usize,
         proc_name: &str,
         source: &[u8],
     ) -> Result<Option<PathBuf>, String> {
-        if self.last.get(&(slot, layer)).is_some_and(|s| s == source) {
+        if self.last.get(&(slot, layer, index)).is_some_and(|s| s == source) {
             return Ok(None);
         }
         let now = chrono::Local::now();
@@ -111,10 +120,15 @@ impl Snapshots {
         // thing for an editor that formats on write — and a name that collided
         // would overwrite the version it was supposed to be preserving.
         let stamp = now.format("%H%M%S-%3f").to_string();
-        let name = format!("{stamp}_slot{slot}_{layer}_{}.kir", sanitize(proc_name));
+        // The index is in the name only when it is not the first, so every
+        // name a one-renderer run has ever written is the name it still writes.
+        // A file is read by a person looking for what they changed, and a `_0`
+        // on every L4 of every ordinary run is noise in the way of that.
+        let at = if index == 0 { String::new() } else { format!("{index}") };
+        let name = format!("{stamp}_slot{slot}_{layer}{at}_{}.kir", sanitize(proc_name));
         let path = dir.join(name);
         std::fs::write(&path, source).map_err(|e| format!("{}: {e}", path.display()))?;
-        self.last.insert((slot, layer), source.to_vec());
+        self.last.insert((slot, layer, index), source.to_vec());
         Ok(Some(path))
     }
 }
@@ -147,14 +161,12 @@ pub fn seed(shared: &Shared, sets: &[(PathBuf, Vec<PathBuf>)]) {
         return;
     };
     for (slot, (l1, l4s)) in sets.iter().enumerate() {
-        // **Only the first renderer.** The edit history is keyed by (slot,
-        // layer), so a stack of several would write every one of them under
-        // "L4" and each would overwrite the last. Naming a renderer needs the
-        // same address a param does — `docs/roadmap.md`, "How a param is
-        // addressed" — and until that exists this seeds what it can address.
-        for (layer, path) in [("L1", l1)]
+        // Every renderer, each under its own index — the whole stack, because
+        // the history is a place an operator walks back through and a renderer
+        // missing from it cannot be walked back to.
+        for (layer, index, path) in [("L1", 0, l1)]
             .into_iter()
-            .chain(l4s.first().map(|p| ("L4", p)))
+            .chain(l4s.iter().enumerate().map(|(i, p)| ("L4", i, p)))
         {
             let Ok(source) = std::fs::read(path) else {
                 // Unreadable here means the compile is about to fail and say so
@@ -167,7 +179,7 @@ pub fn seed(shared: &Shared, sets: &[(PathBuf, Vec<PathBuf>)]) {
             // for the check pass would mean seeding after the first compile,
             // which is after the first edit could already have happened.
             let name = declared_name(&source).unwrap_or_else(|| "start".to_string());
-            if let Err(e) = snapshots.record(slot, layer, &name, &source) {
+            if let Err(e) = snapshots.record(slot, layer, index, &name, &source) {
                 eprintln!("slot {slot}: the starting {layer} is not in the edit history: {e}");
             }
         }
@@ -225,13 +237,13 @@ mod tests {
         let mut snaps = Snapshots::new(tmp.path());
 
         let written = snaps
-            .record(0, "L4", "soft_points", b"the first version")
+            .record(0, "L4", 0, "soft_points", b"the first version")
             .expect("record")
             .expect("a first version is always new");
         assert_eq!(std::fs::read(&written).expect("read"), b"the first version");
 
         let second = snaps
-            .record(0, "L4", "soft_points", b"the second version")
+            .record(0, "L4", 0, "soft_points", b"the second version")
             .expect("record")
             .expect("changed");
         assert_ne!(written, second, "the second snapshot overwrote the first");
@@ -247,9 +259,9 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let mut snaps = Snapshots::new(tmp.path());
 
-        assert!(snaps.record(0, "L1", "field", b"same").expect("record").is_some());
+        assert!(snaps.record(0, "L1", 0, "field", b"same").expect("record").is_some());
         assert!(
-            snaps.record(0, "L1", "field", b"same").expect("record").is_none(),
+            snaps.record(0, "L1", 0, "field", b"same").expect("record").is_none(),
             "an identical source was written a second time"
         );
         assert_eq!(files(tmp.path()).len(), 1);
@@ -263,16 +275,70 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let mut snaps = Snapshots::new(tmp.path());
 
-        assert!(snaps.record(0, "L1", "field", b"same").expect("record").is_some());
+        assert!(snaps.record(0, "L1", 0, "field", b"same").expect("record").is_some());
         assert!(
-            snaps.record(1, "L1", "field", b"same").expect("record").is_some(),
+            snaps.record(1, "L1", 0, "field", b"same").expect("record").is_some(),
             "slot 1's first snapshot was skipped because slot 0 had the same source"
         );
         assert!(
-            snaps.record(0, "L4", "field", b"same").expect("record").is_some(),
+            snaps.record(0, "L4", 0, "field", b"same").expect("record").is_some(),
             "the L4 chain was skipped because the L1 chain had the same source"
         );
         assert_eq!(files(tmp.path()).len(), 3);
+    }
+
+    /// **And per renderer, which is the one this was actually wrong about.**
+    ///
+    /// A slot draws with a list of L4s. Keyed by layer alone, every renderer of
+    /// a stack shared one chain and one `last`, so two renderers holding
+    /// different sources recorded one snapshot per save — each overwriting the
+    /// other's memory of what it had last written, and each then looking
+    /// changed on the next save. The chain a surface walks back through was
+    /// alternating between two procedures neither of which had been edited.
+    ///
+    /// Both halves are asserted: two renderers are two chains, and the second
+    /// renderer's own repeat is still skipped, so fixing the collision did not
+    /// cost the "unchanged is not written again" property it was hiding.
+    #[test]
+    fn each_renderer_of_a_stack_has_its_own_chain() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mut snaps = Snapshots::new(tmp.path());
+
+        assert!(snaps.record(0, "L4", 0, "sprites", b"first").expect("record").is_some());
+        assert!(
+            snaps.record(0, "L4", 1, "strokes", b"second").expect("record").is_some(),
+            "the second renderer's first snapshot was skipped as the first renderer's"
+        );
+        assert!(
+            snaps.record(0, "L4", 1, "strokes", b"second").expect("record").is_none(),
+            "the second renderer's unchanged source was written again"
+        );
+        assert!(
+            snaps.record(0, "L4", 0, "sprites", b"first").expect("record").is_none(),
+            "the first renderer looked changed because the second had written since"
+        );
+        assert_eq!(files(tmp.path()).len(), 2);
+    }
+
+    /// **A renderer's index is in the name only when it is not the first**, so
+    /// every file a one-renderer run has ever written keeps the name it had. A
+    /// history is read by a person looking for what they changed, and a `_0` on
+    /// every L4 of every ordinary run is noise in the way of that.
+    #[test]
+    fn only_a_renderer_past_the_first_carries_its_index_in_the_name() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let mut snaps = Snapshots::new(tmp.path());
+
+        let first = snaps.record(0, "L4", 0, "sprites", b"a").expect("record").expect("written");
+        let second = snaps.record(0, "L4", 1, "strokes", b"b").expect("record").expect("written");
+        let name = |p: &std::path::Path| p.file_name().expect("named").to_string_lossy().to_string();
+
+        assert!(name(&first).contains("_L4_"), "the first renderer grew an index: {}", name(&first));
+        assert!(
+            name(&second).contains("_L41_"),
+            "the second renderer is not distinguishable from the first: {}",
+            name(&second)
+        );
     }
 
     /// The name has to say which slot and which layer it came from, or a
@@ -282,7 +348,7 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let mut snaps = Snapshots::new(tmp.path());
         let path = snaps
-            .record(2, "L4", "beat_strokes", b"x")
+            .record(2, "L4", 0, "beat_strokes", b"x")
             .expect("record")
             .expect("new");
 
@@ -345,11 +411,11 @@ mod tests {
 
         let mut snapshots = shared.lock().expect("lock");
         assert!(
-            snapshots.record(0, "L1", "field_one", b"proc field_one {}").expect("record").is_none(),
+            snapshots.record(0, "L1", 0, "field_one", b"proc field_one {}").expect("record").is_none(),
             "the untouched L1 was written a second time"
         );
         assert!(
-            snapshots.record(0, "L4", "draw_one", b"proc draw_one { edited }").expect("record").is_some(),
+            snapshots.record(0, "L4", 0, "draw_one", b"proc draw_one { edited }").expect("record").is_some(),
             "the edited L4 was skipped"
         );
     }
@@ -362,7 +428,7 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let mut snaps = Snapshots::new(tmp.path());
         let path = snaps
-            .record(0, "L1", "../../etc/passwd", b"x")
+            .record(0, "L1", 0, "../../etc/passwd", b"x")
             .expect("record")
             .expect("new");
 

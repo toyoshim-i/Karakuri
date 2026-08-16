@@ -628,12 +628,11 @@ impl Set {
     /// say so — a `--param` for a name a regenerated artifact no longer has
     /// should not take the show down.
     ///
-    /// A name rather than an address, because that is what a `--param` and a
-    /// `param` record carry, and because "the Set's `exposure`" is the useful
-    /// default when two nodes both have one: one knob moves both. Addressing a
-    /// single node is what the record vocabulary will need when someone wants
-    /// them apart — `docs/roadmap.md`, "How a param is addressed" — and this is
-    /// deliberately not that.
+    /// A name rather than an address, because "the Set's `exposure`" is the
+    /// useful default when two nodes both have one: one knob moves both, which
+    /// is what a bare `--param` asks for and what a console would publish as one
+    /// control. [`Set::set_param_at`] is the addressed form, for setting them
+    /// apart; [`Set::write_param`] is the one entry point both come through.
     pub fn set_param(&mut self, name: &str, value: f32) -> usize {
         let mut written = 0;
         for node in &mut self.params {

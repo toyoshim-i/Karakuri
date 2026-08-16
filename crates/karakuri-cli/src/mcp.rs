@@ -108,7 +108,7 @@ impl Reporter {
 pub struct Slots(pub Vec<(std::path::PathBuf, Vec<std::path::PathBuf>)>);
 
 impl Slots {
-    fn path(&self, slot: usize, layer: &str) -> Result<&std::path::PathBuf, String> {
+    fn path(&self, slot: usize, layer: &str, index: usize) -> Result<&std::path::PathBuf, String> {
         let pair = self
             .0
             .get(slot)
@@ -121,14 +121,17 @@ impl Slots {
                 n => format!("no slot {slot}: this deck holds 0-{}", n - 1),
             })?;
         match layer.to_ascii_uppercase().as_str() {
-            "L1" => Ok(&pair.0),
-            // **The first renderer.** A slot may draw with several now, and
-            // naming one of them needs the address a param does — see
-            // `docs/roadmap.md`, "How a param is addressed". Until that exists
-            // this surface reaches the one it can name, and says so rather than
-            // picking silently.
-            "L4" => pair.1.first().ok_or_else(|| {
-                format!("slot {slot} has no L4: a Set needs at least one renderer")
+            // The L1 is one node, so only 0 addresses it — and saying so beats
+            // ignoring an index a caller took the trouble to write.
+            "L1" if index == 0 => Ok(&pair.0),
+            "L1" => Err(format!(
+                "slot {slot} has one L1 and `index` is {index}: a Set simulates with one \
+                 geometry and draws it with as many renderers as it likes"
+            )),
+            "L4" => pair.1.get(index).ok_or_else(|| match pair.1.len() {
+                0 => format!("slot {slot} has no L4: a Set needs at least one renderer"),
+                1 => format!("slot {slot} has one L4 and `index` is {index}"),
+                n => format!("slot {slot} draws with {n} renderers, so `index` is 0-{}", n - 1),
             }),
             other => Err(format!("no layer `{other}`: a slot holds L1 and L4")),
         }
@@ -524,6 +527,14 @@ fn tools() -> Value {
                 "properties": {
                     "slot": { "type": "integer", "description": "deck slot, from 0" },
                     "layer": { "type": "string", "enum": ["L1", "L4"] },
+                    "index": {
+                        "type": "integer",
+                        "description":
+                            "which renderer, from 0. A slot simulates with one L1 and draws \
+                             it with as many L4s as it likes — the same cloud as sprites and \
+                             as strokes is one slot with two. Omit for the first, and for L1, \
+                             which is always one.",
+                    },
                 },
                 "required": ["slot", "layer"],
             },
@@ -543,6 +554,10 @@ fn tools() -> Value {
                 "properties": {
                     "slot": { "type": "integer" },
                     "layer": { "type": "string", "enum": ["L1", "L4"] },
+                    "index": {
+                        "type": "integer",
+                        "description": "which renderer, from 0. Omit for the first.",
+                    },
                     "source": { "type": "string", "description": "the whole procedure" },
                 },
                 "required": ["slot", "layer", "source"],
@@ -584,7 +599,13 @@ fn call_tool(request: &Value, state: &mut State) -> Result<Value, String> {
     })
 }
 
-fn slot_and_layer(args: &Value) -> Result<(usize, String), String> {
+/// **`index` is optional and defaults to 0**, unlike the wildcard an absent
+/// `index` means on a `param` record. The difference is the same one that runs
+/// through the whole address: this names *a procedure to read or rewrite*, and
+/// there is no such thing as rewriting every renderer at once with one source
+/// — where a `param` addresses a *value*, and one value reaching every
+/// declaration is both meaningful and the useful default.
+fn slot_layer_index(args: &Value) -> Result<(usize, String, usize), String> {
     let slot = args
         .get("slot")
         .and_then(Value::as_u64)
@@ -593,22 +614,28 @@ fn slot_and_layer(args: &Value) -> Result<(usize, String), String> {
         .get("layer")
         .and_then(Value::as_str)
         .ok_or("`layer` is required and is \"L1\" or \"L4\"")?;
-    Ok((slot, layer.to_string()))
+    let index = match args.get("index") {
+        None => 0,
+        Some(v) => v
+            .as_u64()
+            .ok_or("`index` is a number: which renderer, from 0")? as usize,
+    };
+    Ok((slot, layer.to_string(), index))
 }
 
 fn read_procedure(args: &Value, state: &State) -> Result<String, String> {
-    let (slot, layer) = slot_and_layer(args)?;
-    let path = state.slots.path(slot, &layer)?;
+    let (slot, layer, index) = slot_layer_index(args)?;
+    let path = state.slots.path(slot, &layer, index)?;
     std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 fn write_procedure(args: &Value, state: &State) -> Result<String, String> {
-    let (slot, layer) = slot_and_layer(args)?;
+    let (slot, layer, index) = slot_layer_index(args)?;
     let source = args
         .get("source")
         .and_then(Value::as_str)
         .ok_or("`source` is required")?;
-    let path = state.slots.path(slot, &layer)?.clone();
+    let path = state.slots.path(slot, &layer, index)?.clone();
 
     // **Checked before it is written, and the diagnostics are handed back.**
     // Writing first and letting the watcher report would put the compiler's
@@ -630,12 +657,17 @@ fn write_procedure(args: &Value, state: &State) -> Result<String, String> {
     // pair as supported, and the manual's own example gives one `soft_points.kir`
     // to three slots — so naming one slot was reporting a third of what
     // happened. Anything skipped or widened is said with a count.
+    //
+    // **Every renderer of every other slot**, not just its first: a slot draws
+    // with a list now, and a file shared with the third renderer of slot 2 is
+    // shared exactly as much as one shared with its first.
     let also: Vec<String> = (0..state.slots.0.len())
         .filter(|other| *other != slot)
         .filter(|other| {
-            ["L1", "L4"]
-                .iter()
-                .any(|l| state.slots.path(*other, l).is_ok_and(|p| *p == path))
+            let renderers = state.slots.0[*other].1.len().max(1);
+            std::iter::once(("L1", 0))
+                .chain((0..renderers).map(|i| ("L4", i)))
+                .any(|(l, i)| state.slots.path(*other, l, i).is_ok_and(|p| *p == path))
         })
         .map(|other| other.to_string())
         .collect();
@@ -1422,22 +1454,60 @@ mod tests {
     /// where a path means nothing — and a tool that took one would invite a
     /// model to write anywhere on the render machine's disk.
     #[test]
-    fn a_slot_and_a_layer_resolve_and_anything_else_is_refused() {
+    fn a_slot_a_layer_and_a_renderer_resolve_and_anything_else_is_refused() {
         let slots = slots();
         assert_eq!(
-            slots.path(1, "L4").expect("slot 1 L4"),
+            slots.path(1, "L4", 0).expect("slot 1 L4"),
             &std::path::PathBuf::from("b/l4.kir")
         );
         assert_eq!(
-            slots.path(0, "l1").expect("case does not matter"),
+            slots.path(0, "l1", 0).expect("case does not matter"),
             &std::path::PathBuf::from("a/l1.kir")
         );
 
-        let past_the_end = slots.path(2, "L1").expect_err("slot 2 does not exist");
+        let past_the_end = slots.path(2, "L1", 0).expect_err("slot 2 does not exist");
         assert!(past_the_end.contains("0-1"), "{past_the_end}");
 
-        let no_such_layer = slots.path(0, "L2").expect_err("there is no L2 here");
+        let no_such_layer = slots.path(0, "L2", 0).expect_err("there is no L2 here");
         assert!(no_such_layer.contains("L1 and L4"), "{no_such_layer}");
+    }
+
+    /// **A renderer is addressed by index, and an index past the stack is
+    /// refused rather than folded to the first.**
+    ///
+    /// This surface used to hand back renderer 0 for any `L4` and say so in a
+    /// comment, which was honest and useless: a model told to rewrite the
+    /// streaks of a slot that draws sprites *and* streaks would have rewritten
+    /// the sprites. The refusal names the range, because a model that can read
+    /// the range can fix its own call — the same reason the checker's
+    /// diagnostics come back through this surface rather than going to a
+    /// terminal nobody is watching.
+    #[test]
+    fn a_renderer_is_addressed_by_index_and_a_bad_one_names_the_range() {
+        let stacked = Slots(vec![(
+            "a/l1.kir".into(),
+            vec!["a/sprites.kir".into(), "a/strokes.kir".into()],
+        )]);
+
+        assert_eq!(
+            stacked.path(0, "L4", 1).expect("the second renderer"),
+            &std::path::PathBuf::from("a/strokes.kir")
+        );
+        // Omitting it is 0, which is what every call written before stacks
+        // existed means and what a slot with one renderer always means.
+        assert_eq!(
+            stacked.path(0, "L4", 0).expect("the first renderer"),
+            &std::path::PathBuf::from("a/sprites.kir")
+        );
+
+        let past = stacked.path(0, "L4", 2).expect_err("there is no third renderer");
+        assert!(past.contains("0-1"), "the range is not named: {past}");
+
+        // The L1 is one node, so an index on it is a mistake worth saying —
+        // quietly ignoring it would let a model believe it had addressed
+        // something.
+        let l1_indexed = stacked.path(0, "L1", 1).expect_err("a Set simulates with one L1");
+        assert!(l1_indexed.contains("one L1"), "{l1_indexed}");
     }
 
     /// **A tool failure comes back as a result, not as a protocol error.**
