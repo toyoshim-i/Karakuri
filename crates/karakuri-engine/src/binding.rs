@@ -88,6 +88,22 @@ pub const DEFAULT_BPM: f32 = 120.0;
 /// without a grammar to take them apart again.
 pub const NOISE_SIGNAL: &str = "noise";
 
+/// A `signal` beginning with this names **a control the Set published** rather
+/// than anything on the bus — `signal: "control:twist"`.
+///
+/// **This is the whole of what a macro is**, and it needed no new record and no
+/// new semantics: `docs/ir-spec.md` says a macro is one published control moving
+/// several internal ones, each through its own curve and range, which is a
+/// `bind` with a different source. A bus signal arrives with a confidence and is
+/// blended by it; a published control is the operator's hand and its confidence
+/// is 1.
+///
+/// Resolved by [`crate::set::Set`] and not by the bus, because a published
+/// control is the *Set's* and the bus is the deck's — four Sets publishing
+/// `twist` are four controls, and a name shared across a session is exactly what
+/// a signal is and a control is not.
+pub const CONTROL_PREFIX: &str = "control:";
+
 /// The shape a signal is put through before it reaches `range`.
 ///
 /// Four, and four is the number of distinct shapes a monotone `[0,1] -> [0,1]`
@@ -426,6 +442,15 @@ impl Binding {
     pub fn resolve(&mut self, signals: &Signals, manual: f32) -> f32 {
         let sample = self.sample(signals);
         self.value = blend(manual, self.map(sample.value), sample.confidence);
+        self.value
+    }
+
+    /// **Driven by a published control**, whose position is `[0, 1]` and whose
+    /// confidence is 1 — it is the operator's hand and not a guess at something
+    /// unobserved, so there is nothing for a manual value to blend against. See
+    /// [`CONTROL_PREFIX`].
+    pub fn drive(&mut self, position: f32) -> f32 {
+        self.value = self.map(position);
         self.value
     }
 

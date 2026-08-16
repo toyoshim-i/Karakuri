@@ -50,7 +50,7 @@ use karakuri_codegen::layout::ElementLayout;
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
 
-use crate::binding::{Binding, ParamWrite, Signals};
+use crate::binding::{Binding, ParamWrite, Signals, CONTROL_PREFIX};
 use crate::mix::Input;
 use crate::camera::Orbit;
 use crate::node::{Deform, Renderer, Simulation};
@@ -252,6 +252,13 @@ pub struct Set {
     /// keying by the node that declares the name is what the roadmap named as
     /// the fix, and the error is gone with it.
     params: Vec<HashMap<String, f32>>,
+    /// The declared `[min, max]` of every param, in the same node order as
+    /// [`Set::params`]. **Kept because an interface needs it**: a published
+    /// range is checked as a subset of the declared one, and a Set with no
+    /// interface publishes every control over the range its procedure declared.
+    /// Nothing else in the engine reads it — the ranges are the console's and
+    /// the agent's, and no uniform write is clamped by them.
+    ranges: Vec<HashMap<String, [f32; 2]>>,
     /// **The producer of the camera state**, and the only one there is until an
     /// L3 can be a procedure. Public because a `camera` record and a Set file
     /// both set it from outside; the six numbers it produces reach a renderer
@@ -275,6 +282,61 @@ pub struct Set {
     /// At most one per (layer, param). Resolved once per frame in
     /// [`Set::prepare`] and read back out wherever a param value is written.
     bindings: Vec<Binding>,
+    /// **The Set's interface**: which of its internal controls appear on a
+    /// console, under what name, and over what part of their declared range.
+    ///
+    /// **Empty publishes everything**, which is what [`Set::published`] does
+    /// with it — so the feature is additive, every Set that predates it keeps
+    /// working, and an author opts in by naming what they want rather than by
+    /// hiding twenty-four things. See `docs/ir-spec.md`, "What a Set publishes".
+    interface: Vec<Published>,
+}
+
+/// One control on the console, and where it lands inside the Set.
+///
+/// **Publishing decides what is *shown*, never what is *reachable*.** A `param`
+/// record still addresses any control in any node, published or not — that is
+/// how a Set file records the values its author froze, how `--param` works, and
+/// how an agent tunes something the console does not show. If publishing gated
+/// access a Set's author could lock an operator out of their own machine, and
+/// this project's standing position is the opposite one everywhere it has come
+/// up: **a surface is a choice about attention, not about authority.**
+#[derive(Debug, Clone, PartialEq)]
+pub struct Published {
+    /// What the console shows. The Set's choice, so two nodes' `exposure` can be
+    /// published as two controls under two names.
+    pub name: String,
+    pub layer: Kind,
+    pub index: u32,
+    /// The param's own name inside the node.
+    pub key: String,
+    /// **Narrows, never redefines** — a subset of the declared range, refused
+    /// rather than clamped if it is not. The declared range is the procedure's
+    /// statement about where it still looks like itself.
+    pub range: [f32; 2],
+}
+
+/// Why a control could not be published.
+#[derive(Debug, thiserror::Error, PartialEq)]
+pub enum PublishError {
+    #[error("no {layer:?} node {index} declares `{key}`")]
+    NoSuchControl { layer: Kind, index: u32, key: String },
+    #[error(
+        "`{name}` publishes `{key}` over [{low}, {high}], which is outside the [{min}, {max}] \
+         the procedure declares\n\
+         hint: a published range narrows and never redefines — the declared range is the \
+         procedure's statement about where it still looks like itself"
+    )]
+    RangeNotASubset {
+        name: String,
+        key: String,
+        low: f32,
+        high: f32,
+        min: f32,
+        max: f32,
+    },
+    #[error("`{0}` is published twice; a console shows one control per name")]
+    DuplicateName(String),
 }
 
 impl Set {
@@ -505,6 +567,16 @@ impl Set {
             .chain(l3.map(map))
             .chain(l4s.iter().map(|n| map(n)))
             .collect();
+        // The same walk, so a node's values and its ranges cannot end up at
+        // different indices — the defect this file has already paid for twice.
+        let declared = |node: &Checked| -> HashMap<String, [f32; 2]> {
+            node.params.iter().map(|p| (p.name.clone(), [p.min, p.max])).collect()
+        };
+        let ranges = std::iter::once(declared(l1))
+            .chain(l2s.iter().map(|n| declared(n)))
+            .chain(l3.map(declared))
+            .chain(l4s.iter().map(|n| declared(n)))
+            .collect();
 
         let set = Set {
             seed_salt,
@@ -536,6 +608,7 @@ impl Set {
             deforms,
             renderers,
             params,
+            ranges,
             camera: Orbit::default(),
             camera_node,
             // **Built at one texel and resized before anything draws.** A Set
@@ -548,6 +621,7 @@ impl Set {
                 .then(|| crate::node::Merge::build(device, renderer_count, 1, 1)),
             edges: vec![Input::default(); renderer_count],
             bindings: Vec::new(),
+            interface: Vec::new(),
         };
         set.sim.initialize(queue);
         // **A camera before the first `prepare`.** The state buffer starts
@@ -868,6 +942,125 @@ impl Set {
                 usize::from(self.set_param_at(layer, index, &write.key, write.value))
             }
         }
+    }
+
+    /// **Add one control to this Set's interface.**
+    ///
+    /// The first call makes the list *be* the interface — before it, a Set
+    /// publishes everything. That is one sentence of rule and it means an author
+    /// opts in by naming what they want rather than by hiding twenty-four
+    /// things.
+    pub fn publish(&mut self, control: Published) -> Result<(), PublishError> {
+        let declared = self
+            .nodes_of(control.layer)
+            .nth(control.index as usize)
+            .and_then(|slot| self.ranges.get(slot))
+            .and_then(|node| node.get(&control.key).copied());
+        let Some([min, max]) = declared else {
+            return Err(PublishError::NoSuchControl {
+                layer: control.layer,
+                index: control.index,
+                key: control.key,
+            });
+        };
+        // **A subset, and refused rather than clamped.** Clamping would let a
+        // Set file say one thing and the console show another; the declared
+        // range is the procedure's statement about where it still looks like
+        // itself, so publishing outside it is a claim the procedure did not
+        // make.
+        let [low, high] = control.range;
+        if low < min || high > max || low > high {
+            return Err(PublishError::RangeNotASubset {
+                name: control.name,
+                key: control.key,
+                low,
+                high,
+                min,
+                max,
+            });
+        }
+        if self.interface.iter().any(|p| p.name == control.name) {
+            return Err(PublishError::DuplicateName(control.name));
+        }
+        self.interface.push(control);
+        Ok(())
+    }
+
+    /// **What a console shows**, which for a Set with no interface is
+    /// everything it declares, each over its own declared range.
+    ///
+    /// Allocates, so not the frame path. A console reads this when a Set lands,
+    /// not per frame.
+    pub fn published(&self) -> Vec<Published> {
+        if !self.interface.is_empty() {
+            return self.interface.clone();
+        }
+        // **The default interface, computed rather than stored.** Storing it
+        // would make "publishes everything" a list that a rebuild has to
+        // regenerate and a Set file has to carry — and the first `publish` call
+        // would then have to *remove* twenty-four entries to mean what it means.
+        let mut all = Vec::new();
+        for layer in [Kind::L1, Kind::L2, Kind::L3, Kind::L4] {
+            for (index, slot) in self.nodes_of(layer).enumerate() {
+                let Some(node) = self.ranges.get(slot) else { continue };
+                let mut keys: Vec<&String> = node.keys().collect();
+                // Declaration order is not kept in a map, and a console showing
+                // its controls in a different order each run is not a console.
+                keys.sort();
+                for key in keys {
+                    all.push(Published {
+                        name: key.clone(),
+                        layer,
+                        index: index as u32,
+                        key: key.clone(),
+                        range: node[key],
+                    });
+                }
+            }
+        }
+        all
+    }
+
+    /// **Set a published control, in the units the console shows it in.**
+    /// `false` if nothing publishes that name.
+    ///
+    /// The value is clamped to the *published* range, which is the one place
+    /// narrowing bites: a console cannot ask for more than a Set offered. An
+    /// agent that wants the whole declared range writes the param by address
+    /// instead — see [`Published`] on why that is deliberate.
+    pub fn set_published(&mut self, name: &str, value: f32) -> bool {
+        let Some(control) = self.published().into_iter().find(|p| p.name == name) else {
+            return false;
+        };
+        let clamped = value.clamp(control.range[0], control.range[1]);
+        self.set_param_at(control.layer, control.index, &control.key, clamped)
+    }
+
+    /// A published control's position in `[0, 1]`, which is what a binding's
+    /// curve and range expect. `0.0` for a name nothing publishes — a binding on
+    /// a control that is not there resolves to the bottom of its own range,
+    /// which is quieter than a panic on the render thread and is what every
+    /// other miss in this file does.
+    fn control_position(&self, name: &str) -> f32 {
+        let Some(control) = self.published().into_iter().find(|p| p.name == name) else {
+            return 0.0;
+        };
+        let Some(value) = self.published_value(name) else { return 0.0 };
+        let [low, high] = control.range;
+        // A published range of zero width is one position, and it is the top of
+        // it: an author who froze a control at a value did not ask for the
+        // bottom of an empty interval.
+        if high <= low {
+            return 1.0;
+        }
+        ((value - low) / (high - low)).clamp(0.0, 1.0)
+    }
+
+    /// What a published control currently holds, in its own units.
+    pub fn published_value(&self, name: &str) -> Option<f32> {
+        let control = self.published().into_iter().find(|p| p.name == name)?;
+        let slot = self.nodes_of(control.layer).nth(control.index as usize)?;
+        self.params.get(slot)?.get(&control.key).copied()
     }
 
     /// **The edges into this Set's L5**, in draw order. Empty of meaning under
@@ -1271,6 +1464,17 @@ impl Set {
             .into_iter()
             .map(|k| (self.slot_of(k), self.nodes_of(k)))
             .collect();
+        // **Read before the loop**, on the same terms the ranges above are: a
+        // published control's position is a value this Set holds, and reading it
+        // needs `&self` while the loop holds `self.bindings` mutably. A control
+        // driving a binding is one number per named control, so this is small
+        // and is built only for the bindings that ask.
+        let controls: HashMap<String, f32> = self
+            .bindings
+            .iter()
+            .filter_map(|b| b.signal.strip_prefix(CONTROL_PREFIX))
+            .map(|name| (name.to_string(), self.control_position(name)))
+            .collect();
         let params = &self.params;
         for binding in &mut self.bindings {
             // `L3`'s range is empty until a Set holds one — see `Set::slot_of`.
@@ -1291,7 +1495,22 @@ impl Set {
                 // layer declares — and a panic on the render thread is not the
                 // way to find out if it ever does.
                 .unwrap_or(0.0);
-            binding.resolve(signals, manual);
+            // **A macro is a binding whose source is a published control**, and
+            // it needed no new record and no new semantics — `docs/ir-spec.md`,
+            // "What a Set publishes". Resolved here rather than on the bus
+            // because a published control is the *Set's*: four Sets publishing
+            // `twist` are four controls, where a signal name is one thing across
+            // the session. The confidence is 1 because this is the operator's
+            // hand rather than a guess at something unobserved.
+            match binding.signal.strip_prefix(CONTROL_PREFIX) {
+                Some(name) => {
+                    let at = controls.get(name).copied().unwrap_or(0.0);
+                    binding.drive(at);
+                }
+                None => {
+                    binding.resolve(signals, manual);
+                }
+            }
         }
     }
 }
