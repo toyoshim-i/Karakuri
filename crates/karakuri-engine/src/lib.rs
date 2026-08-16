@@ -28,6 +28,7 @@ pub mod deck;
 pub mod governor;
 pub mod gpu;
 pub mod meter;
+pub mod mix;
 /// Private: the node types a Set is a grouping of. Nothing outside chooses
 /// them — a `.kir`'s `kind` does — and the graph they form is [`set`]'s.
 mod node;

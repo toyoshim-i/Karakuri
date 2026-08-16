@@ -841,9 +841,16 @@ is addressing the language does not have; and state, which the layer is allowed 
 which is what damping a follow needs. `examples/beat_jump.kir` is the half that needs neither:
 a cut chosen by hashing the beat number is a pure function of the clock, so it is seekable.
 
-What is left is **L5 as a `kind`** for the nested case, **what a Set publishes**, and **masks
-in the mixer**. Every one of them is specified in `docs/ir-spec.md` with its open questions
-closed — including the last one this project carried, how two merged geometries keep their
+**L5 is a node kind, and that is two words this project had been using as one.** A `.kir`'s
+`kind` says what a procedure lowers to; an L5 has no code to lower, since the compositing is
+fixed. So there is no `kind L5` file and there should not be — `crate::node::Merge` is the
+node, `crate::mix` is the shader and the per-input controls both roles share, and `--merge
+<slot>` is how a Set asks for one. What is still ahead of it is the motivating case: "two
+pipelines merged by a nested L5, published as one control" needs **L1 multiple**, which is
+decided and unbuilt, so what a merge composites today is several renderers over one geometry.
+
+What is left is **what a Set publishes**. It is specified in `docs/ir-spec.md` with its open
+questions closed — including the last one this project carried, how two merged geometries keep their
 identities apart. Nothing below is waiting on a decision.
 
 **First, and before any of the list below: more than one way to draw.**

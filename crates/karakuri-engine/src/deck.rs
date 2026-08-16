@@ -336,6 +336,7 @@
 use crate::binding::Signals;
 use crate::governor::{Governor, Report, SlotState};
 use crate::meter::{Level, Meters};
+use crate::mix::{Composite, Input};
 use crate::present::Present;
 use crate::probe::Probe;
 use crate::set::{DT, MAX_STEPS};
@@ -356,8 +357,6 @@ pub const MAX_SLOTS: usize = 4;
 /// Bytes in the composite's uniform block: eight `vec4`s, one per slot-indexed
 /// field — gain, opacity, blend mode, live flag, and the four a mask takes. See
 /// `shaders/composite.wgsl`.
-const MIX_UNIFORM_SIZE: u64 = 128;
-
 /// A gain the mix can use: floored at zero, NaN read as zero, and deliberately
 /// open above 1.0.
 ///
@@ -460,7 +459,7 @@ impl MaskKind {
 
     /// What the shader switches on. The numbers are the wire format between
     /// `deck.rs` and `composite.wgsl` and nothing else.
-    fn index(self) -> u32 {
+    pub(crate) fn index(self) -> u32 {
         match self {
             MaskKind::None => 0,
             MaskKind::Linear => 1,
@@ -523,7 +522,7 @@ impl Mask {
     /// reveals nothing anywhere, exactly, so the layer can be skipped — which
     /// is the same NaN escape a fader at zero is, arriving through a different
     /// control.
-    fn hides_everything(self) -> bool {
+    pub(crate) fn hides_everything(self) -> bool {
         self.kind != MaskKind::None && self.position == 0.0
     }
 }
@@ -613,7 +612,7 @@ impl Blend {
     /// What the shader switches on. The numbers are the wire format between
     /// `deck.rs` and `composite.wgsl` and nothing else — a record carries the
     /// name, not this.
-    fn index(self) -> u32 {
+    pub(crate) fn index(self) -> u32 {
         match self {
             Blend::Add => 0,
             Blend::Over => 1,
@@ -640,7 +639,7 @@ impl Blend {
     /// and a black card covers. That asymmetry is real rather than an
     /// oversight, so it is stated here and in the key that moves the fader:
     /// pull `opacity`, not `gain`, to get out of trouble.
-    fn silent_at(self, gain: f32, opacity: f32) -> bool {
+    pub(crate) fn silent_at(self, gain: f32, opacity: f32) -> bool {
         opacity == 0.0 || (gain == 0.0 && self != Blend::Over)
     }
 }
@@ -722,6 +721,22 @@ struct Slot {
     transport: Transport,
     target: wgpu::Texture,
     view: wgpu::TextureView,
+}
+
+impl Slot {
+    /// **This slot's edge into the mix**, without the half that is about being
+    /// played. `live` is left true and overwritten by the caller, because
+    /// whether a slot contributes is a residency question and residency is not
+    /// the mix's — see [`crate::mix`].
+    fn edge(&self) -> Input {
+        Input {
+            gain: self.gain,
+            opacity: self.opacity,
+            blend: self.blend,
+            mask: self.mask,
+            live: true,
+        }
+    }
 }
 
 /// Several Sets resident, one to four of them composited into one HDR target.
@@ -1845,9 +1860,34 @@ impl Frame<'_> {
             }
         }
 
-        self.deck
-            .composite
-            .record(self.queue, encoder, target, &self.deck.slots, preview);
+        // **The deck maps its slots onto edges, and that is the whole of the
+        // separation.** Residency, priming and the audition are properties of a
+        // Set being *played*; `gain`, `opacity`, `blend` and `mask` are
+        // properties of an edge into an L5 and travel with it wherever it is
+        // nested. `crate::mix` knows only the second list — see
+        // `docs/ir-spec.md`, "L5".
+        let mut edges: Vec<Input> = Vec::with_capacity(self.deck.slots.len());
+        for (i, slot) in self.deck.slots.iter().enumerate() {
+            // **An audition is the mix with one term in it, at unity.** Not a
+            // second pass and not a copy: `0.0 + 1.0 * src` is `src` exactly,
+            // so what lands in the target is the previewed slot's own texels
+            // and everything downstream — the tone mapper, the present pass, a
+            // readback — is looking at the material rather than at a rendering
+            // of it. The operator's faders are deliberately *not* applied: what
+            // is being judged is the level the material arrives at, which is
+            // the input to setting a fader and not the output of having set
+            // one. That is the same ordering `meter.rs` measures in.
+            //
+            // The mask goes with the faders: an audition shows the material,
+            // and a shape is a thing done *to* the material.
+            edges.push(match preview {
+                Some(shown) if shown == i => Input::unity(),
+                Some(_) => Input { live: false, ..slot.edge() },
+                None => Input { live: slot.effective == Residency::Live, ..slot.edge() },
+            });
+        }
+        self.deck.composite.write_uniform(self.queue, &edges);
+        self.deck.composite.record(encoder, target);
     }
 
     /// The frame's encoder, for whatever else the caller records into this
@@ -1923,232 +1963,3 @@ fn make_slot_target(
     (texture, view)
 }
 
-/// The mix pass: one fullscreen triangle folding up to four slot targets.
-struct Composite {
-    pipeline: wgpu::RenderPipeline,
-    layout: wgpu::BindGroupLayout,
-    uniform: wgpu::Buffer,
-    bind_group: wgpu::BindGroup,
-}
-
-impl Composite {
-    fn new(device: &wgpu::Device, views: &[&wgpu::TextureView]) -> Composite {
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("composite"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/composite.wgsl").into()),
-        });
-
-        let mut entries = vec![wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
-        }];
-        for slot in 0..MAX_SLOTS {
-            entries.push(wgpu::BindGroupLayoutEntry {
-                binding: 1 + slot as u32,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    // Not filterable, because the mix does not sample: it
-                    // loads the texel under the fragment. No sampler is bound
-                    // here at all, which is what keeps a deck of one exact.
-                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            });
-        }
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("composite"),
-            entries: &entries,
-        });
-
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("composite"),
-            bind_group_layouts: &[&layout],
-            push_constant_ranges: &[],
-        });
-
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("composite"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    // Linear HDR out. The mix is folded in the shader, in slot
-                    // order, so there is no blend state here: hardware
-                    // blending would put the order in the hands of whatever
-                    // sequence the passes happened to be recorded in — and
-                    // `over` makes that order visible in the picture rather
-                    // than only in the last bits.
-                    format: Present::HDR_FORMAT,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview: None,
-            cache: None,
-        });
-
-        let uniform = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("composite mix"),
-            size: MIX_UNIFORM_SIZE,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let bind_group = Composite::bind(device, &layout, &uniform, views);
-        Composite {
-            pipeline,
-            layout,
-            uniform,
-            bind_group,
-        }
-    }
-
-    /// The shader binds [`MAX_SLOTS`] textures whatever the deck's size is, so
-    /// a deck of fewer slots fills the spare bindings with slot 0's view. The
-    /// live flag for those is zero and the shader skips them, so nothing is
-    /// read through them; binding a view twice is cheaper and simpler than a
-    /// second pipeline per deck size, and far simpler than allocating four
-    /// targets for a deck of one.
-    fn bind(
-        device: &wgpu::Device,
-        layout: &wgpu::BindGroupLayout,
-        uniform: &wgpu::Buffer,
-        views: &[&wgpu::TextureView],
-    ) -> wgpu::BindGroup {
-        let mut entries = vec![wgpu::BindGroupEntry {
-            binding: 0,
-            resource: uniform.as_entire_binding(),
-        }];
-        for slot in 0..MAX_SLOTS {
-            entries.push(wgpu::BindGroupEntry {
-                binding: 1 + slot as u32,
-                resource: wgpu::BindingResource::TextureView(views[slot.min(views.len() - 1)]),
-            });
-        }
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("composite"),
-            layout,
-            entries: &entries,
-        })
-    }
-
-    fn rebind(&mut self, device: &wgpu::Device, views: &[&wgpu::TextureView]) {
-        self.bind_group = Composite::bind(device, &self.layout, &self.uniform, views);
-    }
-
-    /// Write this frame's weights and record the mix.
-    ///
-    /// The uniform write is a fixed 64 bytes off the stack — the render thread
-    /// does not allocate, and this is the render thread.
-    fn record(
-        &self,
-        queue: &wgpu::Queue,
-        encoder: &mut wgpu::CommandEncoder,
-        target: &wgpu::TextureView,
-        slots: &[Slot],
-        preview: Option<usize>,
-    ) {
-        let mut bytes = [0u8; MIX_UNIFORM_SIZE as usize];
-        for (i, slot) in slots.iter().enumerate() {
-            // Gain and opacity travel apart now — the blend mode decides what
-            // each one multiplies, and only `add` multiplies them together.
-            // The blend mode is the shader's index rather than its name; the
-            // name is what a record carries.
-            //
-            // A slot at silence is *skipped*, not blended at zero, on exactly
-            // the terms an off-air slot is: `0.0 * x` is only zero for finite
-            // `x`, and a slot's own target may hold an infinity or a NaN — a
-            // generated L4 that divides by zero or takes a root of a negative
-            // is a compiling procedure, not a broken build. Blending that at
-            // zero puts a NaN in every channel of the mix, so a fader pulled to
-            // silence would take the whole deck down with it. Which settings
-            // count as silence is the mode's answer: see [`Blend::silent_at`].
-            let live = u32::from(
-                slot.effective == Residency::Live
-                    && !slot.blend.silent_at(slot.gain, slot.opacity)
-                    // A shape revealing nothing is silence too, and exactly:
-                    // the shader's `position` of 0 is 0 everywhere for any
-                    // softness. Skipping rather than multiplying is the same
-                    // NaN escape a fader at zero is, reached through a
-                    // different control.
-                    && !slot.mask.hides_everything(),
-            );
-            // **An audition is the mix with one term in it, at unity.** Not a
-            // second pass and not a copy: `0.0 + 1.0 * src` is `src` exactly,
-            // so what lands in the target is the previewed slot's own texels
-            // and everything downstream — the tone mapper, the present pass, a
-            // readback — is looking at the material rather than at a rendering
-            // of it. The operator's faders are deliberately *not* applied: what
-            // is being judged is the level the material arrives at, which is
-            // the input to setting a fader and not the output of having set
-            // one. That is the same ordering `meter.rs` measures in.
-            let (gain, opacity, blend, mask, live) = match preview {
-                // The mask goes with the faders: an audition shows the
-                // material, and a shape is a thing done *to* the material.
-                Some(shown) if shown == i => (1.0, 1.0, Blend::Add, Mask::default(), 1),
-                Some(_) => (slot.gain, slot.opacity, slot.blend, slot.mask, 0),
-                None => (slot.gain, slot.opacity, slot.blend, slot.mask, live),
-            };
-            let fields = [
-                gain.to_le_bytes(),
-                opacity.to_le_bytes(),
-                blend.index().to_le_bytes(),
-                live.to_le_bytes(),
-                mask.kind().index().to_le_bytes(),
-                mask.angle().to_le_bytes(),
-                mask.position().to_le_bytes(),
-                mask.softness().to_le_bytes(),
-            ];
-            for (field, value) in fields.iter().enumerate() {
-                let at = field * 16 + i * 4;
-                bytes[at..at + 4].copy_from_slice(value);
-            }
-        }
-        queue.write_buffer(&self.uniform, 0, &bytes);
-
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("composite"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: target,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    // The triangle covers the whole target, so this only
-                    // matters for a deck with nothing Live in it — which mixes
-                    // to black, and should say so rather than showing whatever
-                    // was there last frame. `TRANSPARENT` rather than `BLACK`
-                    // because the alpha channel is coverage: an empty deck
-                    // covers nothing, and `BLACK` would claim it covered
-                    // everything opaquely.
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-        });
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &self.bind_group, &[]);
-        pass.draw(0..3, 0..1);
-    }
-}

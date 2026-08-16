@@ -718,6 +718,9 @@ struct Args {
     /// default: a run that is not being edited should not carry a worker
     /// thread per slot and a watchdog it will never use.
     watch: bool,
+    /// Which slots composite their renderers rather than overdrawing them —
+    /// `--merge 0`, repeatable. See `karakuri_engine::set::Layering`.
+    merge: Vec<usize>,
     /// `--mcp`. A port to serve the Model Context Protocol on, loopback only.
     /// `None` is the ordinary case and nothing in the frame path changes: this
     /// is a third control surface beside the keyboard and MIDI, and like them
@@ -1103,6 +1106,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         canvas: (1920, 1080),
         canvas_given: false,
         watch: false,
+        merge: Vec::new(),
         mcp: None,
         tempo_source: None,
         audio_in: None,
@@ -1244,6 +1248,15 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                 }
             }
             "--watch" => args_out.watch = true,
+            "--merge" => {
+                let v = value_for("--merge", &mut it)?;
+                let slot: usize = v.parse().map_err(|_| {
+                    format!("`--merge {v}` — expected a slot number, 0 for the first")
+                })?;
+                if !args_out.merge.contains(&slot) {
+                    args_out.merge.push(slot);
+                }
+            }
             "--demo" => {
                 let name = value_for("--demo", &mut it)?;
                 args_out.demo = Some(Demo::from_name(&name).ok_or_else(|| {
@@ -1628,6 +1641,11 @@ fn replay_session(args: &Args, id: &str) {
         &[],
         None,
         &loaded.l4s,
+        // **A Set file does not record a layering**, on the same terms it
+        // records neither a chain nor a camera: it names an L1 and its
+        // renderers. Overdraw is what every Set was before an L5 could be
+        // nested, so it is what a file that cannot say reads as.
+        karakuri_engine::set::Layering::Overdraw,
         loaded.capacity.unwrap_or(args.capacity),
         &loaded.params,
         &loaded.bindings,
@@ -1819,6 +1837,7 @@ fn rebuild(
         &[],
         None,
         &l4s,
+        karakuri_engine::set::Layering::Overdraw,
         args.capacity,
         &args.overrides,
         &args.bindings,
@@ -2340,6 +2359,11 @@ fn build_deck(
                 l2s,
                 l3,
                 l4s,
+                if args.merge.contains(&slot) {
+                    karakuri_engine::set::Layering::Composite
+                } else {
+                    karakuri_engine::set::Layering::Overdraw
+                },
                 capacity_for(args, l1),
                 &args.overrides,
                 &args.bindings,
@@ -2366,10 +2390,16 @@ fn build_deck(
                     set,
                     args.budget_ms,
                     {
+                        let layering = if args.merge.contains(&slot) {
+                            karakuri_engine::set::Layering::Composite
+                        } else {
+                            karakuri_engine::set::Layering::Overdraw
+                        };
                         let watcher = watch::Watch::new(
                             slot,
                             args.sets[slot].0.clone(),
                             args.sets[slot].1.clone(),
+                            layering,
                             capacity_for(args, l1),
                             seed_for(slot),
                             args.overrides.clone(),
@@ -2452,6 +2482,7 @@ fn build(
     l2s: &[karakuri_ir::typed::Checked],
     l3: Option<&karakuri_ir::typed::Checked>,
     l4s: &[karakuri_ir::typed::Checked],
+    layering: karakuri_engine::set::Layering,
     capacity: u32,
     overrides: &[ParamWrite],
     bindings: &[Binding],
@@ -2460,7 +2491,8 @@ fn build(
 ) -> Set {
     let deform: Vec<&karakuri_ir::typed::Checked> = l2s.iter().collect();
     let draw: Vec<&karakuri_ir::typed::Checked> = l4s.iter().collect();
-    match Set::build_many(&gpu.device, &gpu.queue, l1, &deform, l3, &draw, capacity, seed) {
+    match Set::build_many(&gpu.device, &gpu.queue, l1, &deform, l3, &draw, layering, capacity, seed)
+    {
         Ok(mut set) => {
             // **The `camera` record, and only when nothing else produces one.**
             // An L3 writes the camera state every frame, so an orbit assigned

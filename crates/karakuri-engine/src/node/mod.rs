@@ -18,6 +18,10 @@
 //! - [`Renderer`], the **L4 node**: `(Geometry, Camera) -> Texture`. It owns its
 //!   pipeline, its uniform, its accumulation targets under `blend weighted`, and
 //!   the bind groups naming the geometry and the camera it reads.
+//! - [`Merge`], the **L5 node**: `[Texture] -> Texture`. Optional, and placing
+//!   it is what turns several renderers from overdraw into compositing. It owns
+//!   a target per input and the mix that folds them — the same mix the deck
+//!   rides, since an L5 is one node kind with two roles.
 //!
 //! What is left in [`crate::set`] is the grouping: the parameter values and
 //! their bindings, the viewport, the clock, and the order the nodes run in.
@@ -56,11 +60,13 @@
 
 mod camera;
 mod deform;
+mod merge;
 mod renderer;
 mod simulation;
 
 pub(crate) use camera::Camera;
 pub(crate) use deform::Deform;
+pub(crate) use merge::Merge;
 pub(crate) use renderer::Renderer;
 pub(crate) use simulation::Simulation;
 

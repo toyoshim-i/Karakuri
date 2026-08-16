@@ -2124,6 +2124,19 @@ becomes one, and **it has two roles rather than two implementations**:
 One node kind, one shader, one set of per-input parameters. What differs between the two
 roles is only whether a surface is wired to it.
 
+**Built, and as a node kind rather than a `kind` line.** Those are two different words and
+this document used one while meaning the other. A `.kir`'s `kind` says what a *procedure*
+lowers to; L1 through L4 each have a block of code behind them and the two senses coincide.
+An L5 has no code to lower — the compositing is fixed, `shaders/composite.wgsl` — so there is
+nothing for a `kind L5` file to contain. What "under the node model it becomes one" asks for
+is `crate::node::Merge`, and that is what exists: `crate::mix` holds the shader, the uniform
+and the per-input controls, `Deck` mixes on it with a surface wired to every input, and a Set
+folds its renderers with it and no surface at all.
+
+A Set says which it wants with `karakuri_engine::set::Layering`, reached from the command
+line as `--merge <slot>`. It is not in a Set file, on the same terms a chain and a camera are
+not: that format records an L1 and its renderers.
+
 **Which separates the mix from the deck**, and the separation is worth having because today
 they are one type. `gain`, `opacity`, `blend` and `mask` are properties of an *edge into an
 L5* and travel with it wherever it is nested. `residency`, `priming`, hot swap, budget
@@ -2140,6 +2153,14 @@ target and several:
 |---|---|---|
 | Several L4s straight to the Set's output | **Overdraw**, in declaration order — the first pass clears, the rest load | One target |
 | Several L4s into an L5 | **Compositing** — an L5 input is a texture, so each L4 needs its own | One target per input |
+
+**They do not agree, and that is the reason the node is asked for rather than inferred.** For
+renderers under `blend additive` they nearly do — addition is addition and the fold order is
+the draw order either way, which `crates/karakuri-engine/tests/merge.rs` asserts in pixels.
+Under `blend weighted` they do not: a weighted renderer resolves `over` onto whatever its
+target holds, so overdraw composites it against the picture so far while an L5 composites it
+against a clear and then folds the result. Neither is wrong, and the memory is the smaller
+half of the difference.
 
 The same cloud drawn as sprites *and* as strokes is the first shape and costs no memory at
 all: additive's blend state accumulates into whatever is there, and a weighted renderer's

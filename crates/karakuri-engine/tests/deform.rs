@@ -21,6 +21,7 @@
 //! The material is a lattice with no motion of its own, so anything that moves
 //! moved because a `deform` moved it.
 
+use karakuri_engine::set::Layering;
 use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
 use karakuri_ir::typed::Checked;
 
@@ -141,6 +142,7 @@ fn build_over(gpu: &Gpu, l1: &str, l2s: &[&str], capacity: u32) -> Set {
         &l2_refs,
         None,
         &[&l4],
+        Layering::Overdraw,
         capacity,
         7,
     )
@@ -369,12 +371,12 @@ proc tinted_dots {
     let l4 = compile(tinted);
     let l1 = compile(STILL);
 
-    Set::build_many(&gpu.device, &gpu.queue, &l1, &[&l2], None, &[&l4], CAPACITY, 7)
+    Set::build_many(&gpu.device, &gpu.queue, &l1, &[&l2], None, &[&l4], Layering::Overdraw, CAPACITY, 7)
         .expect("the renderer consumes what the deformation emits");
 
     // The same renderer without the deformation has nowhere to read `tint`
     // from, and the error has to name it.
-    let err = Set::build_many(&gpu.device, &gpu.queue, &l1, &[], None, &[&l4], CAPACITY, 7)
+    let err = Set::build_many(&gpu.device, &gpu.queue, &l1, &[], None, &[&l4], Layering::Overdraw, CAPACITY, 7)
         .err()
         .expect("`tint` is not available without the deformation that emits it");
     let message = err.to_string();
