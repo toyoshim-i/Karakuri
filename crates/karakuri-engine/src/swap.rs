@@ -254,7 +254,7 @@ pub struct Request {
     /// here rather than read out of the outgoing Set, because a request that
     /// depends on what happens to be live is not reproducible from a record
     /// stream.
-    pub params: Vec<(String, f32)>,
+    pub params: Vec<crate::binding::ParamWrite>,
     /// Attached to the new Set once its params are set, and **restated** here
     /// for the same reason they are: a rebuild that read its bindings out of
     /// whatever happened to be live would not be reproducible from a record
@@ -1050,12 +1050,12 @@ fn run_worker(
                 request.seed_salt,
             )
             .map(|mut set| {
-                for (name, value) in request.params {
-                    // Every node that declares the name, which is what a
-                    // `param` record carrying a name and no address means —
-                    // see [`Set::set_param`].
-                    if set.set_param(&name, value) == 0 {
-                        eprintln!("  no parameter named `{name}`, ignoring");
+                for write in &request.params {
+                    // Addressed or not — `Set::write_param` is the one place
+                    // that decides, so this path and the command line's cannot
+                    // disagree about what a bare name means.
+                    if set.write_param(write) == 0 {
+                        eprintln!("  no parameter named `{}`, ignoring", write.key);
                     }
                 }
                 // After the params, because a binding blends from a param's

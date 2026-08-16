@@ -41,7 +41,8 @@ use karakuri_engine::deck::MAX_SLOTS;
 use karakuri_engine::swap::Event;
 use karakuri_engine::transport::{Sync, Transport};
 use karakuri_engine::{
-    Binding, Blend, Deck, Gpu, HotSwap, Mask, MaskKind, Present, Residency, Set, Signals,
+    Binding, Blend, Deck, Gpu, HotSwap, Mask, MaskKind, ParamWrite, Present, Residency, Set,
+    Signals,
     TonemapOp, DEFAULT_BUDGET_MS,
 };
 use karakuri_midi::Action;
@@ -392,10 +393,15 @@ options:
   --capacity N          elements per Set (default 262144)
   --param name=value    a uniform write, applied to every Set, and within one
                         to every node declaring that name
+  --param L4:1:name=value
+                        the same, addressed at one node — which is how two
+                        renderers over one geometry get different values
   --bind FIELDS         attach a signal to a param, applied to every Set.
                         Comma-separated `field=value`, one per field of the
                         `bind` record:
                           layer=L1 key=turbulence signal=energy
+                          index=1 (optional; without it, every node of
+                            that layer declaring the key)
                           curve=lin|pow2|sqrt|smooth  range=LOW..HIGH
                           noise.kind=white|value|perlin|fbm
                           noise.rate=N  noise.stream=N
@@ -661,7 +667,7 @@ struct Args {
     /// `--param name=value`, applied after each Set is built, to every Set. A
     /// parameter change is a uniform write, not a structural change, which is
     /// why it needs no fork and no recompilation.
-    overrides: Vec<(String, f32)>,
+    overrides: Vec<ParamWrite>,
     /// `--bind`, applied to every Set on the same terms as `overrides`.
     ///
     /// **This flag is a stand-in for a Set file and is shaped so it can be
@@ -867,6 +873,11 @@ fn parse_bind(value: &str) -> Result<Binding, String> {
     let bad = |what: &str| format!("`--bind {value}` — {what}");
 
     let mut layer = None;
+    // **Absent is a wildcard, not zero.** A binding with no `index` is the
+    // layer's — every node declaring the key — which is what `--bind` has
+    // always meant and what one published control would drive. See
+    // `Binding::index`.
+    let mut index: Option<u32> = None;
     let mut key = None;
     let mut signal = None;
     let mut curve = Curve::Lin;
@@ -903,6 +914,11 @@ fn parse_bind(value: &str) -> Result<Binding, String> {
                     // silently do nothing.
                     _ => return Err(bad(&format!("`layer={v}` — expected L1 or L4"))),
                 })
+            }
+            "index" => {
+                index = Some(v.parse::<u32>().map_err(|_| {
+                    bad(&format!("`index={v}` — expected a node number, 0 for the first"))
+                })?)
             }
             "key" => key = Some(v.to_string()),
             "signal" => signal = Some(v.to_string()),
@@ -991,6 +1007,7 @@ fn parse_bind(value: &str) -> Result<Binding, String> {
             karakuri_ir::Kind::L1 => Layer::L1,
             karakuri_ir::Kind::L4 => Layer::L4,
         },
+        index,
         key,
         signal,
         curve: curve.name().to_string(),
@@ -1008,6 +1025,49 @@ fn parse_bind(value: &str) -> Result<Binding, String> {
 /// The `noise.kind` names, in the order the spec lists them. One list, so the
 /// check and the message cannot drift apart.
 const NOISE_KINDS: [&str; 4] = ["white", "value", "perlin", "fbm"];
+
+/// `--param [L4:N:]name=value`.
+///
+/// **The address is optional and is `layer:index:` when it is there.** A bare
+/// name is a wildcard — every node declaring it, "the Set's `exposure`", one
+/// knob moving both renderers — which is what this flag has always meant and is
+/// the useful default. The prefix is what sets two renderers apart, and it is
+/// present or absent as a unit for the reason `ParamWrite::at` gives: a layer
+/// alone stopped naming a node when a Set gained a list of them, so a
+/// half-address would be a wish rather than an address.
+///
+/// `:` cannot occur in a param name — identifiers are alphanumerics and
+/// underscores — so splitting on it is unambiguous and needs no quoting. A
+/// malformed override is refused rather than dropped, on the same terms every
+/// other flag here is: silence looks exactly like a parameter that was applied
+/// and had no visible effect. A name that no procedure declares is still only a
+/// warning at build time — that one is a question about the `.kir`.
+fn parse_param(value: &str) -> Result<ParamWrite, String> {
+    let bad = || format!("`--param {value}` — expected `name=number` or `L4:1:name=number`");
+    let (addressed, rest) = match value.split_once(':') {
+        Some((layer, rest)) => {
+            let kind = match layer {
+                "L1" => karakuri_ir::Kind::L1,
+                "L4" => karakuri_ir::Kind::L4,
+                _ => return Err(bad()),
+            };
+            let (index, rest) = rest.split_once(':').ok_or_else(bad)?;
+            let index: u32 = index.parse().map_err(|_| bad())?;
+            (Some((kind, index)), rest)
+        }
+        None => (None, value),
+    };
+    let (key, number) = rest.split_once('=').ok_or_else(bad)?;
+    let number: f32 = number.parse().map_err(|_| bad())?;
+    if key.is_empty() {
+        return Err(bad());
+    }
+    Ok(ParamWrite {
+        at: addressed,
+        key: key.to_string(),
+        value: number,
+    })
+}
 
 fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, String> {
     let mut args_out = Args {
@@ -1090,13 +1150,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                 // only a warning at build time — that one is a question about
                 // the `.kir`, not about the command line.
                 let value = value_for("--param", &mut it)?;
-                match value
-                    .split_once('=')
-                    .and_then(|(k, v)| v.parse().ok().map(|v| (k.to_string(), v)))
-                {
-                    Some(kv) => args_out.overrides.push(kv),
-                    None => return Err(format!("`--param {value}` — expected `name=number`")),
-                }
+                args_out.overrides.push(parse_param(&value)?);
             }
             "--bind" => {
                 let value = value_for("--bind", &mut it)?;
@@ -2308,7 +2362,7 @@ fn build(
     l1: &karakuri_ir::typed::Checked,
     l4s: &[karakuri_ir::typed::Checked],
     capacity: u32,
-    overrides: &[(String, f32)],
+    overrides: &[ParamWrite],
     bindings: &[Binding],
     seed: u32,
     camera: Option<karakuri_engine::camera::Orbit>,
@@ -2319,12 +2373,9 @@ fn build(
             if let Some(camera) = camera {
                 set.camera = camera;
             }
-            for (name, value) in overrides {
-                // Every node that declares the name — a `--param` carries a
-                // name and no address, so "the Set's `exposure`" is what it
-                // asks for. See `Set::set_param`.
-                if set.set_param(name, *value) == 0 {
-                    eprintln!("  no parameter named `{name}`, ignoring");
+            for write in overrides {
+                if set.write_param(write) == 0 {
+                    eprintln!("  no parameter named `{}`, ignoring", write.key);
                 }
             }
             // After the overrides: a binding blends from the param's value, so
@@ -4577,6 +4628,63 @@ mod tests {
     fn set_with_one_path_and_no_comma_fails() {
         let err = parse(&["--set", "a.kir"]).unwrap_err();
         assert!(err.contains("--set a.kir"), "message: {err}");
+    }
+
+    /// **A bare `--param` is a wildcard and stays one.** Every node declaring
+    /// the name — "the Set's `exposure`", one knob moving both renderers —
+    /// which is what this flag has always meant, so the address arriving must
+    /// not quietly turn it into "node 0".
+    #[test]
+    fn a_param_with_no_address_reaches_every_node_declaring_it() {
+        let args = parse(&["--param", "exposure=2.5"]).expect("should parse");
+        assert_eq!(
+            args.overrides,
+            vec![ParamWrite::everywhere("exposure", 2.5)],
+            "a bare name must stay unaddressed"
+        );
+    }
+
+    /// And the prefix is what sets two renderers apart, which a bare name
+    /// cannot do by construction.
+    #[test]
+    fn a_param_can_address_one_renderer() {
+        let args = parse(&["--param", "L4:1:exposure=2.5", "--param", "L1:0:radius=3.0"])
+            .expect("should parse");
+        assert_eq!(
+            args.overrides,
+            vec![
+                ParamWrite::at(karakuri_ir::Kind::L4, 1, "exposure", 2.5),
+                ParamWrite::at(karakuri_ir::Kind::L1, 0, "radius", 3.0),
+            ]
+        );
+    }
+
+    /// A half-address is refused rather than read as a name with a colon in it.
+    /// The address is `layer:index:` present or absent as a unit, and a param
+    /// name cannot contain a colon, so there is nothing else `L4:exposure` can
+    /// be trying to say.
+    #[test]
+    fn a_half_written_param_address_fails() {
+        for bad in ["L4:exposure=2.5", "L4:x:exposure=2.5", "L9:0:exposure=2.5", ":0:e=1", "=2.5"] {
+            let err = parse(&["--param", bad]).unwrap_err();
+            assert!(err.contains("--param"), "`{bad}` was accepted or misreported: {err}");
+        }
+    }
+
+    /// `--bind` needed no new grammar at all: its fields are the record's, so
+    /// the address is one more field. Absent is a wildcard there too.
+    #[test]
+    fn a_bind_can_address_one_renderer_and_defaults_to_all_of_them() {
+        let all = parse(&["--bind", "layer=L4,key=exposure,signal=beat,range=0..1"])
+            .expect("should parse");
+        assert_eq!(all.bindings[0].index, None, "a bind with no index is the layer's");
+
+        let one = parse(&["--bind", "layer=L4,index=2,key=exposure,signal=beat,range=0..1"])
+            .expect("should parse");
+        assert_eq!(one.bindings[0].index, Some(2));
+
+        let err = parse(&["--bind", "layer=L4,index=x,key=e,signal=beat,range=0..1"]).unwrap_err();
+        assert!(err.contains("index"), "a bad index is not named: {err}");
     }
 
     /// **A third path is a second renderer**, and there is no new syntax for it.

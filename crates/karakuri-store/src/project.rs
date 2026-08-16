@@ -31,8 +31,8 @@ enum Key {
     Set,
     Slot(Layer, u32),
     Capacity(Layer),
-    Param(Layer, String),
-    Bind(Layer, String),
+    Param(Layer, Option<u32>, String),
+    Bind(Layer, Option<u32>, String),
     Camera,
     Seed(Layer),
     Src(Hash, u32),
@@ -68,8 +68,12 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         Record::Set { .. } => Some(Key::Set),
         Record::Slot { layer, index, .. } => Some(Key::Slot(*layer, *index)),
         Record::Capacity { layer, .. } => Some(Key::Capacity(*layer)),
-        Record::Param { layer, key, .. } => Some(Key::Param(*layer, key.clone())),
-        Record::Bind { layer, key, .. } => Some(Key::Bind(*layer, key.clone())),
+        // Folded by the **address**, so a wildcard write and a write addressed
+        // at one node are two facts rather than one overwriting the other —
+        // which is what they are: "the Set's exposure" and "renderer 1's
+        // exposure" can both be true, and the engine resolves the overlap.
+        Record::Param { layer, index, key, .. } => Some(Key::Param(*layer, *index, key.clone())),
+        Record::Bind { layer, index, key, .. } => Some(Key::Bind(*layer, *index, key.clone())),
         Record::Camera { .. } => Some(Key::Camera),
         Record::Seed { stream, .. } => Some(Key::Seed(*stream)),
         Record::Src { hash, line, .. } => Some(Key::Src(*hash, *line)),
@@ -216,12 +220,14 @@ mod tests {
         let session = vec![
             line(Record::Param {
                 layer: Layer::L1,
+            index: None,
                 key: "radius".into(),
                 value: Value::Scalar(2.0),
             }),
             line(Record::Tick { steps: 1 }),
             line(Record::Param {
                 layer: Layer::L1,
+            index: None,
                 key: "radius".into(),
                 value: Value::Scalar(2.6),
             }),
@@ -231,16 +237,20 @@ mod tests {
         assert_eq!(set.len(), 1);
         assert_eq!(
             set[0].record(),
-            &Record::Param { layer: Layer::L1, key: "radius".into(), value: Value::Scalar(2.6) }
+            &Record::Param { layer: Layer::L1,
+            index: None, key: "radius".into(), value: Value::Scalar(2.6) }
         );
     }
 
     #[test]
     fn distinct_keys_stay_distinct() {
         let session = vec![
-            line(Record::Param { layer: Layer::L1, key: "radius".into(), value: Value::Scalar(2.0) }),
-            line(Record::Param { layer: Layer::L4, key: "radius".into(), value: Value::Scalar(0.5) }),
-            line(Record::Param { layer: Layer::L1, key: "turbulence".into(), value: Value::Scalar(0.8) }),
+            line(Record::Param { layer: Layer::L1,
+            index: None, key: "radius".into(), value: Value::Scalar(2.0) }),
+            line(Record::Param { layer: Layer::L4,
+            index: None, key: "radius".into(), value: Value::Scalar(0.5) }),
+            line(Record::Param { layer: Layer::L1,
+            index: None, key: "turbulence".into(), value: Value::Scalar(0.8) }),
         ];
         let set = project(&session);
         assert_eq!(set.len(), 3);
@@ -250,7 +260,8 @@ mod tests {
     fn first_occurrence_position_is_kept_on_update() {
         let session = vec![
             line(Record::Capacity { layer: Layer::L1, value: 65536 }),
-            line(Record::Param { layer: Layer::L1, key: "radius".into(), value: Value::Scalar(2.0) }),
+            line(Record::Param { layer: Layer::L1,
+            index: None, key: "radius".into(), value: Value::Scalar(2.0) }),
             line(Record::Capacity { layer: Layer::L1, value: 524288 }),
         ];
         let set = project(&session);
@@ -259,7 +270,8 @@ mod tests {
         assert_eq!(set[0].record(), &Record::Capacity { layer: Layer::L1, value: 524288 });
         assert_eq!(
             set[1].record(),
-            &Record::Param { layer: Layer::L1, key: "radius".into(), value: Value::Scalar(2.0) }
+            &Record::Param { layer: Layer::L1,
+            index: None, key: "radius".into(), value: Value::Scalar(2.0) }
         );
     }
 

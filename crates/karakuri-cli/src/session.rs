@@ -416,6 +416,7 @@ mod tests {
         let param = |v: f32| {
             Line::new(Record::Param {
                 layer: Layer::L1,
+                index: None,
                 key: "radius".into(),
                 value: Value::Scalar(v),
             })

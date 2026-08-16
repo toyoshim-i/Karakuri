@@ -43,7 +43,7 @@ use karakuri_codegen::layout::ElementLayout;
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
 
-use crate::binding::{Binding, Signals};
+use crate::binding::{Binding, ParamWrite, Signals};
 use crate::camera::Orbit;
 use crate::node::{Renderer, Simulation};
 use crate::video_source::VideoSource;
@@ -660,6 +660,21 @@ impl Set {
                 true
             }
             None => false,
+        }
+    }
+
+    /// Apply one [`ParamWrite`], addressed or not. Returns how many nodes it
+    /// reached; zero is the caller's cue to say so.
+    ///
+    /// The one entry point a `param` record and a `--param` both come through,
+    /// so the wildcard and the address cannot come to mean different things on
+    /// the two paths.
+    pub fn write_param(&mut self, write: &ParamWrite) -> usize {
+        match write.at {
+            None => self.set_param(&write.key, write.value),
+            Some((layer, index)) => {
+                usize::from(self.set_param_at(layer, index, &write.key, write.value))
+            }
         }
     }
 

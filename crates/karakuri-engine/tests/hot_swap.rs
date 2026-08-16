@@ -420,7 +420,7 @@ fn a_swapped_in_set_carries_the_bindings_the_request_stated() {
     let mut req = request(L4, SECOND, "bound");
     // The param moved by hand *and* bound, since the two travel together and
     // the binding has to be applied after the override to blend from it.
-    req.params = vec![("radius".to_string(), 4.0)];
+    req.params = vec![karakuri_engine::ParamWrite::everywhere("radius", 4.0)];
     req.bindings = vec![Binding::new(
         karakuri_ir::Kind::L1,
         "radius",
