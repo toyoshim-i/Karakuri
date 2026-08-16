@@ -42,7 +42,7 @@
 //! param name is the same disagreement seen from the other side.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use karakuri_engine::binding::{Curve, NOISE_SIGNAL};
 use karakuri_engine::camera::Orbit;
@@ -68,7 +68,10 @@ pub const DEFAULT_OCTAVES: u32 = 4;
 pub struct Loaded {
     pub id: String,
     pub l1: Checked,
-    pub l4: Checked,
+    /// The renderers, in the order their `slot` records appeared — which is
+    /// draw order. **Several `slot` records on L4 is how a file says a stack**;
+    /// the format already allowed it and nothing new had to be added.
+    pub l4s: Vec<Checked>,
     /// The two procedures as text.
     ///
     /// **Carried because a Set file has no `.kir` on disk and an editable run
@@ -77,7 +80,7 @@ pub struct Loaded {
     /// existed there was nowhere to put them and `--mcp` with `--load-set` was
     /// refused for exactly that reason. See `scratch::place`.
     pub l1_src: String,
-    pub l4_src: String,
+    pub l4_srcs: Vec<String>,
     /// `None` when the file gave no `capacity` record, which means the `.kir`
     /// default applies — the spec's own wording.
     pub capacity: Option<u32>,
@@ -242,7 +245,8 @@ fn layer_name(layer: Layer) -> &'static str {
 /// order they are written.
 pub struct Saving<'a> {
     pub l1_path: &'a Path,
-    pub l4_path: &'a Path,
+    /// The renderers, in draw order. One is the ordinary case.
+    pub l4_paths: &'a [PathBuf],
     pub capacity: u32,
     pub params: &'a [(String, f32)],
     pub bindings: &'a [Binding],
@@ -259,7 +263,7 @@ pub struct Saving<'a> {
 pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
     let Saving {
         l1_path,
-        l4_path,
+        l4_paths,
         capacity,
         params,
         bindings,
@@ -273,7 +277,7 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
             .map_err(|e| format!("{}: {e}", path.display()))
     };
     let l1_hash = put(l1_path)?;
-    let l4_hash = put(l4_path)?;
+    let l4_hashes = l4_paths.iter().map(|p| put(p)).collect::<Result<Vec<_>, _>>()?;
 
     let mut lines = vec![
         Line::new(Record::Set {
@@ -284,10 +288,6 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
             layer: Layer::L1,
             proc_hash: l1_hash,
         }),
-        Line::new(Record::Slot {
-            layer: Layer::L4,
-            proc_hash: l4_hash,
-        }),
         // On L1, because that is the layer whose element buffers it sizes. The
         // format keys capacity by layer and the engine holds one per Set; see
         // the module doc.
@@ -296,6 +296,18 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
             value: capacity,
         }),
     ];
+    // **One `slot` record per renderer, in draw order.** Several on L4 is how
+    // the format says a stack, and it needed no new record to say it — a file
+    // with one reads exactly as it always did.
+    for proc_hash in l4_hashes {
+        lines.insert(
+            lines.len() - 1,
+            Line::new(Record::Slot {
+                layer: Layer::L4,
+                proc_hash,
+            }),
+        );
+    }
     // Sorted, so saving the same state twice produces the same file. A
     // `HashMap`'s order is not a property anything should depend on, and a Set
     // file that differed run to run would make every diff meaningless.
@@ -347,6 +359,8 @@ pub fn load(store: &Store, id: &str) -> Result<Loaded, String> {
 pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, String> {
     let mut notes = Vec::new();
     let mut slots: BTreeMap<&str, Hash> = BTreeMap::new();
+    // The renderers, in the order their records appeared.
+    let mut l4_slots: Vec<Hash> = Vec::new();
     let mut inlined: BTreeMap<Hash, BTreeMap<u32, String>> = BTreeMap::new();
     let mut capacity = None;
     let mut params = Vec::new();
@@ -370,9 +384,11 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                 Layer::L1 => {
                     slots.insert("L1", *proc_hash);
                 }
-                Layer::L4 => {
-                    slots.insert("L4", *proc_hash);
-                }
+                // **Appended, not replaced.** A second L4 `slot` record is a
+                // second renderer over the same geometry rather than a
+                // correction of the first, which is what makes a stack
+                // expressible in the format as it stands.
+                Layer::L4 => l4_slots.push(*proc_hash),
                 other => notes.push(format!(
                     "slot {} was skipped: this engine builds L1 and L4 only",
                     layer_name(*other)
@@ -450,10 +466,8 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         }
     }
 
-    let source = |layer: &str| -> Result<String, String> {
-        let hash = slots
-            .get(layer)
-            .ok_or_else(|| format!("set `{file_id}` has no {layer} slot"))?;
+    let source_of = |layer: &str, hash: Option<&Hash>| -> Result<String, String> {
+        let hash = hash.ok_or_else(|| format!("set `{file_id}` has no {layer} slot"))?;
         if let Some(lines) = inlined.get(hash) {
             // Bundled: the file carries its own source, so it reads on a
             // machine whose store has never seen this artifact.
@@ -470,17 +484,26 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         String::from_utf8(bytes).map_err(|e| format!("set `{file_id}`: {layer} is not UTF-8: {e}"))
     };
 
-    let l1_src = source("L1")?;
-    let l4_src = source("L4")?;
+    let l1_src = source_of("L1", slots.get("L1"))?;
+    if l4_slots.is_empty() {
+        return Err(format!("set `{file_id}` has no L4 slot"));
+    }
+    let l4_srcs = l4_slots
+        .iter()
+        .map(|h| source_of("L4", Some(h)))
+        .collect::<Result<Vec<_>, _>>()?;
     let l1 = crate::compile::check(&l1_src)?;
-    let l4 = crate::compile::check(&l4_src)?;
+    let l4s = l4_srcs
+        .iter()
+        .map(|src| crate::compile::check(src))
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(Loaded {
         id: file_id,
         l1,
-        l4,
+        l4s,
         l1_src,
-        l4_src,
+        l4_srcs,
         capacity,
         params,
         bindings,
@@ -550,12 +573,12 @@ proc points {
 
     fn plain<'a>(
         l1: &'a std::path::Path,
-        l4: &'a std::path::Path,
+        l4: &'a [PathBuf],
         bindings: &'a [Binding],
     ) -> Saving<'a> {
         Saving {
             l1_path: l1,
-            l4_path: l4,
+            l4_paths: l4,
             capacity: 4096,
             params: &[],
             bindings,
@@ -585,7 +608,7 @@ proc points {
             "s1",
             Saving {
                 l1_path: &l1,
-                l4_path: &l4,
+                l4_paths: std::slice::from_ref(&l4),
                 capacity: 65_536,
                 params: &params,
                 bindings: &[a_binding()],
@@ -619,7 +642,7 @@ proc points {
     #[test]
     fn a_set_whose_artifacts_are_missing_says_which_and_why() {
         let (_dir, store, l1, l4) = fixture();
-        save(&store, "s1", plain(&l1, &l4, &[])).expect("save");
+        save(&store, "s1", plain(&l1, std::slice::from_ref(&l4), &[])).expect("save");
         let lines = store.read_set("s1").expect("read");
 
         // A second store that has the file but not the artifacts — a Set file
@@ -637,7 +660,7 @@ proc points {
     #[test]
     fn inlined_source_loads_without_a_store_that_knows_the_artifact() {
         let (_dir, store, l1, l4) = fixture();
-        save(&store, "s1", plain(&l1, &l4, &[])).expect("save");
+        save(&store, "s1", plain(&l1, std::slice::from_ref(&l4), &[])).expect("save");
         let mut lines = store.read_set("s1").expect("read");
         // Bundle it: every slot's source inlined, line by line, as `src`.
         let mut bundled = Vec::new();
@@ -662,7 +685,7 @@ proc points {
         let bare = Store::open(elsewhere.path()).expect("store");
         let loaded = from_lines(&bare, "s1", &lines).expect("the file carries its own source");
         assert_eq!(loaded.l1.name, "ring");
-        assert_eq!(loaded.l4.name, "points");
+        assert_eq!(loaded.l4s[0].name, "points");
     }
 
     /// **What could not be carried is said, not dropped.** Three shapes, and
@@ -671,7 +694,7 @@ proc points {
     #[test]
     fn what_the_engine_cannot_carry_is_reported_rather_than_dropped() {
         let (_dir, store, l1, l4) = fixture();
-        save(&store, "s1", plain(&l1, &l4, &[])).expect("save");
+        save(&store, "s1", plain(&l1, std::slice::from_ref(&l4), &[])).expect("save");
         let mut lines = store.read_set("s1").expect("read");
         lines.push(Line::new(Record::Seed {
             stream: Layer::L4,
@@ -703,7 +726,7 @@ proc points {
     #[test]
     fn an_unusable_binding_is_named_and_the_rest_of_the_set_still_loads() {
         let (_dir, store, l1, l4) = fixture();
-        save(&store, "s1", plain(&l1, &l4, &[a_binding()])).expect("save");
+        save(&store, "s1", plain(&l1, std::slice::from_ref(&l4), &[a_binding()])).expect("save");
         let mut lines = store.read_set("s1").expect("read");
         lines.push(Line::new(Record::Bind {
             layer: Layer::L1,

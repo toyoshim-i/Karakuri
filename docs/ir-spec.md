@@ -1182,6 +1182,7 @@ known. The total-cost decision lives there, not in the artifact.
 {"t":"set","id":"drift_01","v":1}
 {"t":"slot","layer":"L1","proc":"sha256:a3f2c1…"}
 {"t":"slot","layer":"L4","proc":"sha256:9c1b04…"}
+{"t":"slot","layer":"L4","proc":"sha256:5e7d20…"}
 {"t":"capacity","layer":"L1","value":524288}
 {"t":"param","layer":"L1","key":"radius","value":2.4}
 {"t":"param","layer":"L4","key":"hue","value":0.58}
@@ -1194,13 +1195,17 @@ known. The total-cost decision lives there, not in the artifact.
   `{"t":"src","hash":"…","line":0,"s":"…"}` records.
 - `capacity` is optional; without it the `.kir` default applies. A value outside the range
   the `.kir` declares is rejected at Set build time.
-- `param` and `bind` are keyed by `layer` in the record, but the engine holds one value per
-  **name** across the whole Set. Two procedures that happen to declare the same param name
-  would therefore be one value, with the second declaration's default quietly taking the
-  first's place — so a pair that collides is **rejected at Set build time**, naming every
-  colliding param at once. Keying values by layer, the way these records already do, is
-  what would let the collision through harmlessly; until then a rejection the generator can
-  act on beats a value nobody chose.
+- **Several `slot` records on `L4` is a stack**: one geometry with a renderer apiece, drawn
+  in the order the records appear. It needed no new record to say so — a second one is a
+  second renderer rather than a correction of the first. A file with one reads exactly as it
+  always did.
+- `param` and `bind` are keyed by `layer` in the record, and the engine holds one value per
+  **node**. A name two procedures both declare is two values, each reaching the node that
+  declared it — which it had to become, since every L4 in `examples/` declares `exposure`
+  and a Set holding two renderers would otherwise have had one. A `param` record carrying a
+  bare name reaches **every node that declares it**, which is the useful default: one knob,
+  both renderers. Setting two of them *apart* needs an address these records do not yet
+  carry — `layer` plus an `index` defaulting to 0, the way `procedure` already does it.
 - Unknown `t` values are ignored, for forward compatibility.
 - **`gain`, `opacity`, `blend`, `mask`, `transition`, `preview`, `residency`, `look`,
   `canvas`, `procedure` and `transport` are not in this list and must never be.** They are the session's
@@ -1609,6 +1614,7 @@ it: a replay sizes everything it allocates from the first, before any frame exis
 ```ndjson
 {"t":"procedure","slot":0,"layer":"L1","proc":"sha256:9da973…"}
 {"t":"procedure","slot":0,"layer":"L4","proc":"sha256:486779…"}
+{"t":"procedure","slot":0,"layer":"L4","index":1,"proc":"sha256:5e7d20…"}
 ```
 
 Written when a hot swap lands and when one is rolled back — the two moments the material
@@ -1624,9 +1630,14 @@ time. That is a fact about a performance.
 
 `proc` is a content address and the source lives in the store, on the same terms `slot`
 uses — so a rewrite costs one line here and a few kilobytes once, however many times the
-same procedure comes back. **A slot's two layers are written as a pair** even when only one
-changed, because a Set is built from both and a reader that rebuilt on the first would
-compile an L1 against the L4 it is replacing.
+same procedure comes back. **Every one of a slot's procedures is written together** even
+when only one changed, because a Set is built from all of them and a reader that rebuilt on
+the first would compile an L1 against the L4 it is replacing.
+
+`index` says **which node of that layer**, since a slot draws with one L1 and however many
+L4s. It is 0 for the L1 and for the first renderer, and **absent when it is 0** — so a
+stream written before stacks existed replays byte for byte, and a new one carries the field
+only where it says something.
 
 **One thing it cannot carry.** A rollback restores the outgoing Set at the `t` it was parked
 at; a reader meeting these records builds afresh, so `t` restarts there. A swap *in* is
