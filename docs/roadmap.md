@@ -997,10 +997,20 @@ element buffers, counts, compaction, the spawn accumulator, pipelines and bind g
 side; pipeline, uniform, accumulation targets and its own bind groups on the other — with
 `Geometry` the edge between them, resolved once at build time from the node that offers it
 rather than assembled by the Set out of buffers it reached into. `set.rs` went from 1557
-lines to 930, and what is left is the grouping: camera, parameter values and bindings,
+lines to 927, and what is left is the grouping: camera, parameter values and bindings,
 viewport, clock, and which nodes run in what order. **One node of each kind still**, so
-nothing an author can see has changed; the list is next, and it is a list because nothing in
-the Set reaches into a node any more.
+nothing an author can see has changed.
+
+**Three places still reach into a node, and naming them is naming what the list changes.**
+`Set::draw` reads the simulation's parity and counts buffer; `Set::step` asks the renderer
+whether it is fullscreen before running a simulation nothing would read; `Set::bind` asks
+both which params they declare. Only the first two are shape: with several renderers the
+fullscreen skip becomes a question about *every* renderer, and parity-and-counts stops
+wanting to be fetched once per reader. Which is the finding worth carrying: **`Geometry` is
+only the build-time half of the edge from L1.** The per-frame half — which parity holds what
+was last written, and where the instance count lives — is routed around it as two arguments,
+so a `Renderer` cannot draw from a `Geometry` alone. Fine for one reader; the point at which
+it wants a type is the same commit that makes the list.
 
 **The clock deliberately did not move.** `t` is the grouping's — one clock serves every node
 — so the simulation node is *handed* the instants its substeps land on rather than deriving

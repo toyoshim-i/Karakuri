@@ -46,7 +46,7 @@
 // covers, so gain does not silence it and only `opacity` does.
 //
 // **Alpha is coverage**, `1 - prod(1 - a_i)` over the sprites that drew there,
-// written by the L4 pass (see `set.rs` for the blend state that accumulates
+// written by the L4 pass (see `node/renderer.rs` for the blend state that accumulates
 // it) and composed here the same way whatever the colour mode is: coverage is
 // "there is material at this texel", and that is an `over` question even when
 // the colour is being added. So the one formula above holds for colour;

@@ -131,8 +131,8 @@ impl Points {
                     // generated L4, and this is the hand-written stand-in that
                     // predates them.
                     // Alpha accumulates coverage for the L5 mix rather than
-                    // being discarded — the argument is in `set.rs`, on the
-                    // generated L4 pipeline this one shadows.
+                    // being discarded — the argument is in `node::Renderer`,
+                    // on the generated L4 pipeline this one shadows.
                     blend: Some(wgpu::BlendState {
                         color: wgpu::BlendComponent {
                             src_factor: wgpu::BlendFactor::SrcAlpha,
@@ -218,7 +218,7 @@ impl VideoSource for Points {
                 resolve_target: None,
                 ops: wgpu::Operations {
                     // `TRANSPARENT`: alpha is coverage and starts at nothing.
-                    // See `set.rs`'s L4 pass.
+                    // See `node::Renderer::draw`'s L4 pass.
                     load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                     store: wgpu::StoreOp::Store,
                 },

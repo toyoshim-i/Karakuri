@@ -51,8 +51,9 @@ const SEED_B: u32 = 88888;
 /// as not closed form, which is what makes it a legitimate thing to prime;
 /// `tests/governor.rs` asserts the other side.
 ///
-/// Cold, every element sits at the origin — `Set::initialize` zeroes every
-/// attribute — so the frame is one blob. After thirty steps they are on a
+/// Cold, every element sits at the origin — a Set comes up with every
+/// attribute zeroed for a procedure with no `spawn` block, bar the `seed` and
+/// `birth_frac` the engine seeds — so the frame is one blob. After thirty steps they are on a
 /// sphere of radius `30 * dt * 4`, about two units.
 const CREEP: &str = r#"
 proc creep {

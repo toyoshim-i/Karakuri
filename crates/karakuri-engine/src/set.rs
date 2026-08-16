@@ -18,17 +18,24 @@
 //! handed the instants its work lands on ([`crate::node::Tick`],
 //! [`crate::node::View`]) and derives none of its own.
 //!
-//! One node of each kind today. A list is what several renderers over one
-//! geometry will be, and nothing in this module changes shape for that: what a
-//! Set decides is which nodes run and in what order, not how any of them works.
+//! One node of each kind today, and a list is what several renderers over one
+//! geometry will be. **Three places still reach into a node**, and each is a
+//! decision about a *pair* rather than about either: [`Set::draw`] reads the
+//! simulation's parity and counts (the per-frame half of the edge — see
+//! [`crate::node`]), [`Set::step`] asks the renderer whether it is fullscreen
+//! before running a simulation nothing would read, and [`Set::bind`] asks both
+//! which params they declare. The first two are what a list changes: the
+//! fullscreen skip becomes a question about *every* renderer, and the per-frame
+//! edge stops wanting to be fetched once per reader.
 //!
 //! Nothing here mutates a live Set in place; parameter values are the one
 //! exception, and they are uniform writes.
 //!
-//! What runs here is generated, not written. `Set::build` takes two checked
-//! procedures, asks `karakuri-codegen` for WGSL, and creates pipelines against
-//! the binding layout that crate publishes — the engine never reads the
-//! generated text to find out where anything is bound.
+//! **Nothing here is generated and nothing here creates a pipeline.** Both moved
+//! out with the nodes; this module no longer calls `karakuri-codegen` at all
+//! beyond naming an [`ElementLayout`] in a signature. What it still owns is the
+//! two refusals that need both procedures in hand — a consumed attribute the L1
+//! never emitted, and a param name declared on both sides.
 
 use std::collections::HashMap;
 
@@ -193,8 +200,9 @@ pub struct Set {
 
     /// **The L1 node.** Every buffer, pipeline and bind group the simulation
     /// needs, and the spawn accumulator that decides what it creates. What
-    /// crosses from it to the renderer below is a [`Geometry`](crate::node)
-    /// edge, resolved once at build time.
+    /// crosses from it to the renderer below is a [`Geometry`](crate::node::Geometry)
+    /// resolved once at build time, plus a parity and a counts buffer this
+    /// module fetches every frame — the half of that edge that has no type yet.
     sim: Simulation,
     /// **The L4 node.** It owns its pipeline, its uniform, its accumulation
     /// targets under `blend weighted`, and the bind groups naming the element
@@ -378,10 +386,16 @@ impl Set {
     }
 
     /// How many elements the L1 node's current buffer holds — the draw's
-    /// instance count, and the range the next step will scan.
+    /// instance count, and the range the next step will scan. Not quite the
+    /// alive count: an element killed during the step that just ran still
+    /// occupies its slot until the next step's scan reclaims it.
     ///
-    /// **A stall**, and the whole argument for why it is one anyway is on
-    /// `Simulation::live_count`. Never on the frame path.
+    /// **This is a stall.** It copies four bytes off the GPU and blocks until
+    /// the queue drains to read them, which is exactly what indirect dispatch
+    /// exists to avoid. It is here for tests and for a status line printed once
+    /// at the end of a run; **never call it on the frame path.** The alternative
+    /// — tracking an estimate host-side — would be worse: a number that is
+    /// usually right is harder to distrust than one that is honestly expensive.
     pub fn live_count(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> u32 {
         self.sim.live_count(device, queue)
     }
