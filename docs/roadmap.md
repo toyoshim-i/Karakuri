@@ -816,9 +816,20 @@ fine alone and is unreadable next to lights.
 
 **Goal:** the combinatorial range that makes the library worth having.
 
-**Where it stands: done.** Every item this milestone named is built. What is *not* built is
-what it deferred rather than left unfinished — **L1 multiple** (decided, unbuilt) and **L2
-amplification** — and both are named as such below.
+**Where it stands.** The **layer model is complete**: every `Ln` in the algebra is a node with
+a `kind` behind it, and a Set holds a chain of them. That is the half of this milestone that
+makes the library worth having, and it is done.
+
+**Six items from the Adds list below are not**, and they divide cleanly. Three are one
+dependency: **multiple L1 sources** (decided in full, unbuilt), **cross-source interpolation**
+which needs them, and the nested L5's motivating case — "two pipelines, one knob" — which is
+two sources. Three are their own work: **L2 amplification**, **slot interface contracts and
+the attribute derivation that comes with them**, and the **`Field` type** with the **graph
+compiler** that fuses it.
+
+An earlier revision of this paragraph said every item was built. It was written from the list
+of things that had just landed rather than from the list this section actually names, which
+is the kind of claim a milestone summary exists to prevent rather than to make.
 
 The rendering front is closed — `lines`, a fullscreen L4, `blend
 weighted`. The structural front is closed too: `Ln` is a node, a Set holds a **chain**
@@ -1229,8 +1240,8 @@ than against one being taught to.
   that goes over any geometry emitting `position`, which is the argument for the layer
   existing rather than folding the same maths into the L1 and needing a second `.kir` to
   have it without.
-- **L3 as an IR `kind` with its own node, and both questions this list held about it are
-  answered.** A camera belongs
+- ~~**L3 as an IR `kind` with its own node.**~~ **Built**, and both questions this list held
+  about it are answered. A camera belongs
   to an **L4**, not to a Set or a deck: `L4 : (Geometry, Camera) -> Texture` makes it an input
   edge, so two renderers on one camera is one viewpoint drawn twice and two renderers on two
   cameras is a Set that composites two scenes. And an L3 is a `.kir` procedure rather than the
@@ -1245,8 +1256,8 @@ than against one being taught to.
   dies, which makes index 0 *the oldest living element* rather than an arbitrary slot. Nothing
   is declared and nothing is checked; an L1 that expects to be looked at can make that element
   a leader, and one that does not still offers its oldest survivor
-- **A Set declares what it publishes**, which is the other half of the console being a real
-  layer. Today every `param` of every procedure reaches the desk, flat and by name — nine
+- ~~**A Set declares what it publishes.**~~ **Built**, and it is the other half of the console
+  being a real layer. Today every `param` of every procedure reaches the desk, flat and by name — nine
   controls for a pair, twenty-five for a graph, most of them authoring decisions the author
   already made. So a Set names which of its controls appear, under what name, over what part
   of their declared range; the rest keep the values they were left at. **Publishing decides
@@ -1259,7 +1270,10 @@ than against one being taught to.
   so what an interface adds here is the *external* name: two renderers both declaring
   `exposure` become two published controls or one driving both, which is an authoring
   decision rather than an error
-- **L5 becomes a `kind`, with two roles and one implementation.** The console an operator
+- ~~**L5 becomes a `kind`, with two roles and one implementation.**~~ **Built — as a *node*
+  kind, which is the distinction this bullet was eliding.** A `.kir`'s `kind` says what a
+  procedure lowers to and an L5 has no code to lower, so there is no `kind L5` file:
+  `crate::node::Merge` is the node and `--merge <slot>` asks for one. The console an operator
   mixes on is the top-level one; the same node nested inside a Set folds several L4s into one
   texture. What differs is only whether a surface is wired to it — which finally separates
   the *mix* (gain, opacity, blend, mask: properties of an edge into an L5) from the *deck*
@@ -1277,8 +1291,14 @@ than against one being taught to.
   argument for drawing one point cloud several ways
 - Cross-source interpolation, restricted at first to static sources where `seed` is the slot
   index and the paired read is a direct one
-- Slot interface contracts, attribute declarations, automatic adapters
-- L2 stacking with weights and attribute-based masks
+- **Slot interface contracts, attribute declarations, automatic adapters** — and the
+  attribute derivation that waits on them: `velocity` from `position`, `age` from spawn time.
+  Today an unmet `consumes` is an unconditional error and the check pass names those two
+  specially so a reader is not left wondering. Not built
+- ~~L2 stacking with weights and attribute-based masks~~ — **built.** `weight` is a declared
+  `param` and `mask` is a block writing a `strength` in `[0, 1]`; keeping them separate is
+  what keeps the operator's control a `param`, since faders, bindings, transitions and a
+  published interface all reach a `param` and none of them reaches an expression
 - ~~Multiple L4 renderers over shared geometry~~ **Built**, and it cost almost nothing once
   `Ln` was a node: `Set::build_many` takes the L4s in draw order, they run in that order over
   one attachment (first clears, rest load), and no renderer changed to be in a list.
