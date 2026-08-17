@@ -622,6 +622,83 @@ proc paint {{
     );
 }
 
+/// **A slot the input did not have is zeroed, not left as it was** — which is
+/// the statelessness claim applied to an attribute the L2 *added*, and the one
+/// half of it nothing was watching.
+///
+/// An L2 owns one element buffer and rewrites it every frame, so whatever a
+/// newly emitted slot holds before the body runs is **this node's own output
+/// from the previous frame**. That is exactly the accumulation the layer is not
+/// allowed to have, and it hides from every test that writes the attribute in
+/// full: a stale value overwritten completely is a stale value nobody can see.
+///
+/// A *partial* write is what makes it visible. At half strength the gate lands
+/// the tint half way from what the slot held to what the body wrote — from zero
+/// that is 0.5 every frame, and from last frame's 0.5 it is 0.75, then 0.875,
+/// walking to white. Twenty frames is plenty.
+#[test]
+fn an_attribute_a_deformation_adds_starts_from_zero_every_frame() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let tinted = r#"
+proc tinted_dots {
+  kind  L4
+  blend additive
+  consumes position, tint
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 5.0;
+  }
+  fragment {
+    color = vec4(tint, 1.0);
+  }
+}
+"#;
+    let half = r#"
+proc half_paint {
+  kind L2
+  consumes position
+  emit tint
+  mask { strength = 0.5; }
+  deform { tint = vec3(1.0, 1.0, 1.0); }
+}
+"#;
+    let l2 = compile(half);
+    let l4 = compile(tinted);
+    let mut set = Set::build_many(
+        &gpu.device,
+        &gpu.queue,
+        &compile(STILL),
+        &[&l2],
+        None,
+        &[&l4],
+        Layering::Overdraw,
+        CAPACITY,
+        7,
+    )
+    .expect("builds");
+    set.resize(&gpu.device, W, H);
+    set.camera = karakuri_engine::camera::Orbit {
+        radius: 5.0,
+        speed: 0.0,
+        height: 0.0,
+        ..Default::default()
+    };
+
+    let brightest =
+        |set: &mut Set| frame(&gpu, set).chunks_exact(4).map(|t| t[0]).fold(0.0f32, f32::max);
+    let first = brightest(&mut set);
+    assert!(first > 0.1, "the added attribute never reached the frame: {first}");
+    let mut last = first;
+    for _ in 0..19 {
+        last = brightest(&mut set);
+    }
+    assert!(
+        (last - first).abs() < first * 0.05,
+        "twenty frames took the tint from {first} to {last} — the emitted slot kept this \
+         node's own output from the frame before"
+    );
+}
+
 /// **The gate is clamped, because `mix` extrapolates.**
 ///
 /// Nothing stops a `mask` block writing a `strength` of 2, and nothing should:
