@@ -74,7 +74,12 @@ fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
     errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
 }
 
-const W: u32 = 64;
+/// **Not square, deliberately.** The merge's targets are frame-sized and
+/// allocated from a `(width, height)` pair, so a transposition between the two
+/// is invisible to any square fixture — and what it produces is a target that
+/// is short in one axis, which `textureLoad` answers with zeros rather than an
+/// error. Half a frame goes black and nothing says so.
+const W: u32 = 96;
 const H: u32 = 64;
 
 fn build(gpu: &Gpu, l4s: &[String], layering: Layering) -> Set {
