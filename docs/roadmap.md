@@ -820,12 +820,21 @@ fine alone and is unreadable next to lights.
 a `kind` behind it, and a Set holds a chain of them. That is the half of this milestone that
 makes the library worth having, and it is done.
 
-**Six items from the Adds list below are not**, and they divide cleanly. Three are one
-dependency: **multiple L1 sources** (decided in full, unbuilt), **cross-source interpolation**
-which needs them, and the nested L5's motivating case — "two pipelines, one knob" — which is
-two sources. Three are their own work: **L2 amplification**, **slot interface contracts and
-the attribute derivation that comes with them**, and the **`Field` type** with the **graph
-compiler** that fuses it.
+**Five items from the Adds list below are not**, and they divide cleanly. Three are one
+dependency: **multiple L1 sources**, **cross-source interpolation** which needs them, and the
+nested L5's motivating case — "two pipelines, one knob" — which is two sources. Two are their
+own work: **slot interface contracts and the attribute derivation that comes with them**, and
+the **`Field` type**, with the **graph compiler** beside it.
+
+**Two corrections to the sentence this replaces.** It called multiple L1 sources *"decided in
+full"*; the spec has seven questions it does not answer, and the sharpest is that masking on
+a source is specified to be written against a *name* while every worked example writes an
+ordinal, which is the spelling the same section rejects. And it paired `Field` with the graph
+compiler as one item, where the prose two hundred lines above already splits them: fusion has
+nothing to fuse until `Field` exists, and is in any case classified as an optimisation over a
+materialising implementation that is already correct.
+
+**L2 amplification is built**, and it is struck from the list below.
 
 An earlier revision of this paragraph said every item was built. It was written from the list
 of things that had just landed rather than from the list this section actually names, which
@@ -1283,12 +1292,26 @@ than against one being taught to.
 - Multiple L1 sources, and the `source` attribute that keeps their identities apart. Per
   source `seed` counters starting at zero so structured layouts survive, and a per-source
   hash salt so randomness differs without structure differing
-- **L2 amplification** — a second kind of L2 whose output count differs from its input.
-  Kaleidoscopes, instancing, trails and subdivision are all unwriteable today because
-  `Geometry -> Geometry` is an endomorphism. The factor is declared and constant, amplifying
-  stages multiply rather than compose, and the output is derived and rebuilt each frame so
-  it needs neither double buffering nor compaction. This is the geometry-side version of the
-  argument for drawing one point cloud several ways
+- ~~**L2 amplification**~~ — **built.** `amplify <factor>` on an L2 header, `copy` readable
+  as the index of the copy being made, and `examples/kaleidoscope.kir` for the picture. Three
+  things it turned out to need that the paragraph this replaces did not mention, and all
+  three are about buffers rather than about the language.
+
+  **An amplifier owns its liveness**, because its buffer is `factor` times as long as its
+  input's and cannot be the same one. That is not the layer deciding liveness — still refused
+  — but the L1's decision re-indexed. The flags go down **before** the dead-slot return: a
+  killed element sits inside the live range for exactly one frame before the next scan
+  compacts it, and copies whose flags were merely left alone still draw in that frame.
+
+  **It owns a `Counts` too**, and a `Counts` is three numbers at once: the workgroups a pass
+  is dispatched in, the range a pass bounds itself by, and the instances a renderer draws.
+  Two of those are separately load-bearing for a stage *below* an amplifier — one is fixed at
+  build, the other at record — so a chain can be right about one and wrong about the other.
+
+  **A fixture smaller than one workgroup sees neither mistake.** Eight elements run in one
+  workgroup whatever range they were told, so every test here that means to catch a wrong
+  dispatch count needs more than 64 of them. Two injected defects survived a whole test file
+  before that was noticed, which is the argument for injecting them
 - Cross-source interpolation, restricted at first to static sources where `seed` is the slot
   index and the paired read is a direct one
 - **Slot interface contracts, attribute declarations, automatic adapters** — and the

@@ -102,6 +102,7 @@ fn checked(emit: Vec<Attr>, blocks: Vec<TBlock>) -> Checked {
         kind: Kind::L1,
         topology: Some(Topology::Points),
         capacity: None,
+        amplify: None,
         blend: None,
         params: vec![],
         emit,
@@ -404,5 +405,46 @@ fn fragment_cost_is_reported_separately_from_vertex_cost() {
     assert_ne!(
         cost.ops_per_element, cost.ops_per_fragment,
         "the two blocks differ in size, so their figures must too"
+    );
+}
+
+/// **An amplifying stage's per-element figure is a product, and this is where
+/// the multiplication is charged.**
+///
+/// A `deform` in a node of factor `n` runs `n` times for each element that
+/// reaches it, so its cost is `n` times its block cost — otherwise a stage of
+/// factor 64 running an expensive body sails through the ceiling at a
+/// sixty-fourth of what it really costs, which is the one thing this ceiling
+/// exists to prevent.
+///
+/// Measured against the same procedure with no declaration rather than against
+/// a constant, so the assertion stays true when the op weights change.
+#[test]
+fn an_amplifying_l2s_per_element_cost_is_multiplied_by_its_factor() {
+    let body = vec![
+        block(
+            BlockKind::Deform,
+            vec![let_stmt("a", lit_int(1)), let_stmt("b", lit_int(2))],
+        ),
+    ];
+    let mut plain = checked(vec![], body.clone());
+    plain.kind = Kind::L2;
+    plain.topology = None;
+
+    let mut amplified = plain.clone();
+    amplified.amplify = Some(8);
+
+    let plain_cost = estimate(&plain).expect("a trivial deform");
+    let amplified_cost = estimate(&amplified).expect("a trivial deform, eight times");
+
+    assert!(plain_cost.ops_per_element > 0, "the deform block is per element");
+    assert_eq!(
+        amplified_cost.ops_per_element,
+        plain_cost.ops_per_element * 8,
+        "eight copies of a body is eight times the body"
+    );
+    assert_eq!(
+        amplified_cost.ops_per_spawn, plain_cost.ops_per_spawn,
+        "an L2 does not spawn, and amplification does not give it a way to"
     );
 }

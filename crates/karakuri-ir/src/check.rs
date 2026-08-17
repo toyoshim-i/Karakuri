@@ -198,6 +198,7 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
                 Kind::L4 => Some(drawn_topology(&blocks)),
             },
             capacity: proc.capacity,
+            amplify: proc.amplify.map(|a| a.factor),
             blend: proc.blend,
             params: proc.params.clone(),
             emit: emit_vec.into_iter().map(|(a, _)| a).collect(),
@@ -294,6 +295,16 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 errors.push(
                     IrError::contract(proc.span, "`blend` is L4 only")
                         .with_hint("remove `blend`, or change `kind` to `L4`"),
+                );
+            }
+            if let Some(amp) = &proc.amplify {
+                errors.push(
+                    IrError::contract(amp.span, "`amplify` is L2 only")
+                        .with_hint(
+                            "remove `amplify`: how many elements an L1 makes is `capacity`, \
+                            which a Set turns. Amplification is a *multiplier on what reaches \
+                            it*, which is a thing only a stage with an input can be",
+                        ),
                 );
             }
             if proc.blocks.iter().all(|b| b.kind != BlockKind::Element) {
@@ -394,6 +405,59 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                         .with_hint("add `deform { … }`: it is the whole of what an L2 does"),
                 );
             }
+            // **A factor below two is refused, and the two cases are refused
+            // for different reasons.** Zero is a stage that discards every
+            // element, and liveness is the one thing the layer is not permitted
+            // to decide — it is settled by the compaction that runs once after
+            // L1, and nothing below a deformation reconsiders it. One is the
+            // endomorphism, which is what an L2 already is without the
+            // declaration: it would allocate a second buffer, a second set of
+            // liveness flags and a second `Counts` to produce, element for
+            // element, exactly what reached it. A spelling whose presence
+            // changes nothing observable is a spelling that will be read as
+            // meaning something.
+            if let Some(amp) = &proc.amplify {
+                if amp.factor < 2 {
+                    let (why, hint) = if amp.factor == 0 {
+                        (
+                            "a factor of 0 discards every element",
+                            "an L2 cannot decide liveness — that is settled by the compaction \
+                             which runs once after L1, and nothing downstream of a deformation \
+                             reconsiders it",
+                        )
+                    } else {
+                        (
+                            "a factor of 1 is the endomorphism an L2 already is",
+                            "remove `amplify`: a stage that makes one element per element is \
+                             what every L2 does, and declaring it would buy a second buffer \
+                             and a second set of liveness flags holding a copy of the first",
+                        )
+                    };
+                    errors.push(
+                        IrError::contract(
+                            amp.span,
+                            format!("`amplify` must be at least 2; {why}"),
+                        )
+                        .with_hint(hint),
+                    );
+                }
+                const MAX_AMPLIFY: u32 = 1024;
+                if amp.factor > MAX_AMPLIFY {
+                    errors.push(
+                        IrError::contract(
+                            amp.span,
+                            format!(
+                                "`amplify {}` is above the ceiling of {MAX_AMPLIFY}",
+                                amp.factor
+                            ),
+                        )
+                        .with_hint(
+                            "every element reaching this node becomes that many, and the derived \
+                            buffer is sized at the Set's whole `capacity` times the factor",
+                        ),
+                    );
+                }
+            }
         }
         // **An L3 declares nothing about geometry, because it has none.** It
         // produces the six numbers a camera is; what is drawn with them is the
@@ -418,6 +482,12 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 errors.push(
                     IrError::contract(proc.span, "`blend` is L4 only")
                         .with_hint("remove `blend`: an L3 draws nothing"),
+                );
+            }
+            if let Some(amp) = &proc.amplify {
+                errors.push(
+                    IrError::contract(amp.span, "`amplify` is L2 only")
+                        .with_hint("remove `amplify`: an L3 produces one viewpoint, not elements"),
                 );
             }
             if !proc.emit.is_empty() {
@@ -478,6 +548,16 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     proc.span,
                     "L4 procedures require a `blend` declaration",
                 ));
+            }
+            if let Some(amp) = &proc.amplify {
+                errors.push(
+                    IrError::contract(amp.span, "`amplify` is L2 only")
+                        .with_hint(
+                            "remove `amplify`: a renderer draws what reaches it and makes no \
+                            elements. Several copies of one element is a deformation that \
+                            amplifies, above the renderer rather than inside it",
+                        ),
+                );
             }
             // **A `vertex` block is what makes an L4 per-element**, and an L4
             // without one draws the whole frame instead — see
@@ -1106,18 +1186,18 @@ impl<'a> Checker<'a> {
     }
 
     /// **The mirror of [`Checker::marching_only`], and it fails the same way.**
-    /// `seed` is per-element identity; a fullscreen L4 has no element, no
-    /// element buffer bound, and a vertex stage the procedure did not write.
-    /// Read there it lowered to `in.seed` against a `VsOut` with no such field
-    /// — WGSL naga refuses, and wgpu's uncaptured error handler takes the
-    /// process down at startup or fails the swap worker.
+    /// `seed` and `copy` are per-element identity; a fullscreen L4 has no
+    /// element, no element buffer bound, and a vertex stage the procedure did
+    /// not write. Reading either lowered to `in.seed` against a `VsOut` with no
+    /// such field — WGSL naga refuses, and wgpu's uncaptured error handler takes
+    /// the process down at startup or fails the swap worker.
     ///
     /// This is the same rule `consumes` already states for the same reason, and
     /// the reason it needed a second statement is that `seed` is not a
     /// `consumes`: it is available everywhere an element is, which is exactly
     /// the sentence a fullscreen procedure falsifies.
     fn element_only(&self, amb: Ambient) -> bool {
-        !matches!(amb, Ambient::Seed) || !self.fullscreen
+        !matches!(amb, Ambient::Seed | Ambient::Copy) || !self.fullscreen
     }
 
     fn err(&mut self, stage: Stage, span: Span, msg: impl Into<String>) {
@@ -1614,14 +1694,15 @@ impl<'a> Checker<'a> {
             // The converse sentence, for the converse mistake — and it names
             // the `vertex` block too, because that is the thing to add rather
             // than the thing to remove.
-            if matches!(ambient, Ambient::Seed) && self.fullscreen {
+            if matches!(ambient, Ambient::Seed | Ambient::Copy) && self.fullscreen {
                 self.err_hint(
                     Stage::Contract,
                     span,
                     format!("`{name}` is per element, and this procedure draws the whole frame"),
                     "an L4 with no `vertex` block covers the frame and has no element to have \
-                     an identity. Add a `vertex` block to draw elements, or drive the picture \
-                     from `eye`, `ray` and `point_coord`, which are what a marcher has",
+                     an identity. Add a `vertex` block to draw elements, or drive the \
+                     picture from `eye`, `ray` and `point_coord`, which are what a \
+                     marcher has",
                 );
                 return None;
             }

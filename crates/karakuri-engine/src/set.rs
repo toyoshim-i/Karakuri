@@ -547,18 +547,39 @@ impl Set {
         // the order — a node knows how it deforms and not what is above it.
         let mut deforms: Vec<Deform> = Vec::new();
         let mut upstream: Vec<karakuri_ir::Attr> = l1.emit.clone();
+        // The engine-written slots and the element count at the current
+        // position, both of which an amplifier changes for everything below it.
+        let mut synthetic = karakuri_codegen::layout::Synthetic::NONE;
+        let mut chain_capacity = capacity;
+        // **Index of the last node that amplified**, which is where the chain's
+        // liveness and counts live from that point on. Tracked rather than
+        // recomputed from `deforms.last()`, because a node that does *not*
+        // amplify hands on whatever reached it — so the answer after
+        // `[amplify, plain]` is the first node's buffers, and asking the last
+        // node alone would give the simulation's.
+        let mut live: Option<usize> = None;
         for l2 in l2s {
             let node = {
-                let input = match deforms.last() {
-                    None => sim.geometry(),
-                    Some(prev) => {
-                        let from = sim.geometry();
-                        prev.geometry(from.alive, from.counts)
+                let from = sim.geometry();
+                let (alive, counts) = match live {
+                    None => (from.alive, from.counts),
+                    Some(k) => {
+                        let g = deforms[k].geometry(from.alive, from.counts);
+                        (g.alive, g.counts)
                     }
                 };
-                Deform::build(device, l2, &upstream, &input, capacity)
+                let input = match deforms.last() {
+                    None => sim.geometry(),
+                    Some(prev) => prev.geometry(alive, counts),
+                };
+                Deform::build(device, l2, &upstream, synthetic, &input, chain_capacity)
             };
             upstream = node.emits().to_vec();
+            synthetic = node.synthetic();
+            chain_capacity = chain_capacity.saturating_mul(node.amplify());
+            if node.amplifies() {
+                live = Some(deforms.len());
+            }
             deforms.push(node);
         }
 
@@ -581,9 +602,16 @@ impl Set {
         let camera_node = crate::node::Camera::build(device, l3);
         let renderers: Vec<Renderer> = {
             let from = sim.geometry();
+            let (alive, counts) = match live {
+                None => (from.alive, from.counts),
+                Some(k) => {
+                    let g = deforms[k].geometry(from.alive, from.counts);
+                    (g.alive, g.counts)
+                }
+            };
             let geometry = match deforms.last() {
                 None => sim.geometry(),
-                Some(last) => last.geometry(from.alive, from.counts),
+                Some(last) => last.geometry(alive, counts),
             };
             l4s.iter()
                 .map(|l4| Renderer::build(device, l4, &geometry, &camera_node))
@@ -1697,10 +1725,35 @@ impl Set {
         // the chain's output holding what the renderers are about to read, and
         // the parity has not moved, so it recomputes the same thing.
         let parity = self.sim.parity();
-        let counts = self.sim.counts();
+        // **Each node dispatches over the range at *its* position**, which the
+        // node above it decides. Walking it here rather than asking
+        // `self.sim` once is the whole of what an amplifier costs the chain: it
+        // multiplies the range for everything below it, and a stage handed the
+        // simulation's counts instead would deform the first `range` of
+        // `range * factor` elements and leave the rest holding the previous
+        // frame.
+        let mut counts = self.sim.counts();
         for node in &self.deforms {
             node.record(encoder, parity, counts);
+            if let Some(own) = node.counts() {
+                counts = own;
+            }
         }
+    }
+
+    /// The counts the chain ends on: the last amplifier's, or the simulation's
+    /// where there is none.
+    ///
+    /// **Asked of the list rather than remembered**, so that it cannot disagree
+    /// with the walk in [`Set::step`] about which node that is — the two are the
+    /// same question at two positions, and a stored answer is the shape this
+    /// file has already paid for three times.
+    fn output_counts(&self) -> &wgpu::Buffer {
+        self.deforms
+            .iter()
+            .rev()
+            .find_map(|node| node.counts())
+            .unwrap_or_else(|| self.sim.counts())
     }
 
     /// **The draw, without advancing anything.**
@@ -1727,7 +1780,10 @@ impl Set {
         // an L4 runs — and a preview draws a slot that nothing stepped. One pass
         // for the whole Set, because one camera serves every node in it.
         self.camera_node.record(encoder);
-        let (parity, counts) = (self.sim.parity(), self.sim.counts());
+        // The chain's output, not the simulation's: a renderer draws
+        // `instance_count` instances of whatever reached it, and below an
+        // amplifier that is `factor` times what the simulation holds.
+        let (parity, counts) = (self.sim.parity(), self.output_counts());
         // **The presence of an L5 is what decides overdraw from compositing**,
         // and it decides it here, in the one place the renderers are given
         // somewhere to draw. Under overdraw they share `target` and the first

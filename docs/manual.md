@@ -532,6 +532,21 @@ simulation and the draw:
 karakuri-cli --set examples/drift_shell.kir,examples/swirl_warp.kir,examples/soft_points.kir
 ```
 
+An L2 may also **make more elements than it was given**, which is the one thing in the
+language that changes a count. `amplify 6` on its header turns every element reaching it into
+six, and `copy` inside the block is which of the six this one is — so a kaleidoscope, an
+instancer or a trail is a deformation rather than a second simulation:
+
+```
+karakuri-cli --set examples/drift_shell.kir,examples/kaleidoscope.kir,examples/soft_points.kir
+```
+
+**One simulation, six draws.** The copies share their parent's `seed`, so anything derived
+from it — a colour, a phase — is the same in all six and they read as one object; telling
+them apart is the deliberate act of writing `copy` down. The cost is a product: the body runs
+six times per element and the estimate says so, so an expensive deformation is refused at a
+factor the same body would pass at.
+
 or an **L3**, which is the camera:
 
 ```

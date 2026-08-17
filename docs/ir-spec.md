@@ -46,12 +46,12 @@ kind L4        // rendering
 ```
 
 All four are built. `L5` is a `kind` in the design and not yet in the language — see
-[L2 and L3](#l2-and-l3--m3) and `docs/roadmap.md`.
+[L2 and L3](#l2-and-l3--built) and `docs/roadmap.md`.
 
 Each brings its own header rules, and a declaration belonging to another layer is refused
-where it is written rather than ignored: `capacity` and `topology` are L1's, `blend` is L4's,
-`emit` belongs to procedures that write elements. An L3 declares none of them — it produces a
-viewpoint, and what is drawn with it is the renderer's business.
+where it is written rather than ignored: `capacity` and `topology` are L1's, `amplify` is
+L2's, `blend` is L4's, `emit` belongs to procedures that write elements. An L3 declares none
+of them — it produces a viewpoint, and what is drawn with it is the renderer's business.
 
 ### capacity / topology (L1 only)
 
@@ -109,6 +109,28 @@ but a fork with no compilation in it, which primes almost immediately.
 
 The **live** count is dynamic, lives in an indirect-dispatch args buffer, and is not
 readable from IR. See [Element lifecycle](#element-lifecycle).
+
+### amplify (L2 only)
+
+```
+amplify 6
+```
+
+**The one declaration in the language that changes an element count.** Without it an L2 is
+an endomorphism and returns as many elements as it was given; with it, every element
+reaching the node becomes `factor` of them. See
+[L2 amplification](#l2-amplification--built) for what that buys and what it costs.
+
+- **A compile-time constant**, the same rule loop bounds and `capacity` follow, because the
+  output buffer is sized from it and the cost is multiplied out by it. There is no range and
+  no Set override: how much material to make is the operator's question and is `capacity`;
+  how many copies a kaleidoscope has is the procedure's own, and putting it on a fader would
+  resize a buffer mid-performance.
+- **At least 2, and at most 1024.** Zero would make the layer decide liveness, which is
+  settled entirely by the compaction that runs once after L1. One is the endomorphism an L2
+  already is, and would buy a second buffer holding a copy of the first. The ceiling is a
+  guard on the *product*: a chain of amplifiers multiplies, and a size that overflows a
+  `u32` is reported as a failed allocation rather than as a sentence about the file.
 
 ### param
 
@@ -794,7 +816,7 @@ then needs a separately maintained compact list of live slots — which costs a 
   living element**, which an L3 camera can point at for the cost of one buffer read. Spawn
   order is age order, and a live element at index 0 has nothing alive before it, so it stays
   there until it is the one that dies. An L1 that expects to be looked at can make that
-  element mean something — see [L2 and L3](#l2-and-l3--m3)
+  element mean something — see [L2 and L3](#l2-and-l3--built)
 - The scan result is fused into the `element` pass, which writes each survivor straight to
   its compacted index in the next buffer. Only the scan itself is an extra pass
 - The scan writes the survivor total and **nothing else**: `element` runs after it and
@@ -957,7 +979,12 @@ rather than an excess.
 and the four CSG operators have passed the checker since the beginning with nothing able to
 draw them. See `examples/field_march.kir`.
 
-Consumed attributes and `seed` are readable in both blocks. Per-element values reach
+**`seed` and `copy` are refused here**, and it is the same rule as `consumes` rather than a
+second one: they are per-element identity, and a fullscreen pass has no element. Left
+available they lowered to a varying against the engine's own vertex stage, which has no such
+field — valid `.kir`, invalid WGSL, and the process down before a frame was drawn.
+
+Consumed attributes and `seed` are readable in both blocks of a *per-element* L4. Per-element values reach
 `fragment` with **flat** interpolation. That is exact under both topologies for the same
 reason: a sprite and a segment are each one element's worth of values, so there is nothing
 to interpolate between. It is a topology with real *shared* vertices that would need the
@@ -1815,13 +1842,22 @@ top third, and silence is exactly 0.0.
 
 ## Beyond v0.2 — specified, not implemented
 
-Everything above this line is implemented and tested. Everything below is design that has
-been settled but not built: **no parser accepts it, no checker enforces it, and no
-generator emits it.** It is written down because later milestones depend on these shapes
-and because deciding them now keeps V1 from foreclosing them. Each carries the milestone
-it belongs to; see `docs/roadmap.md`.
+Everything above this line is implemented and tested. **Everything below carries its own
+state in its heading**, because this section has outlived the sentence that used to open it:
+a heading ending in *"— built"* is implemented and tested like the rest of the document, and
+one carrying a milestone is design that has been settled but not built — no parser accepts
+it, no checker enforces it, no generator emits it.
 
-### L2 and L3 — M3
+The unbuilt half is written down because later milestones depend on these shapes and because
+deciding them now keeps V1 from foreclosing them. The built half stays here rather than
+moving up because the reasoning is what makes each of them worth reading, and cutting a
+section into its rules and its argument would put the two in different places.
+
+Checked against a symbol rather than from memory, which is how the mismatch this note
+replaces came to be: `Kind::L2`, `Kind::L3`, `set::Published` and `node::Merge` all exist,
+so the four sections naming them are built.
+
+### L2 and L3 — built
 
 The layer algebra has been in `docs/roadmap.md` since before there was a compiler, and
 everything about L1 and L4 was decided by building them. L2 and L3 have been "later" for
@@ -1931,7 +1967,7 @@ scan between every pair of stages.
 
 **An L2's output is materialised, not fused.** One derived buffer per amplifying chain,
 rebuilt every frame, single-buffered and never compacted — which is what
-[L2 amplification](#l2-amplification--m3) already says of the amplifying kind, said now of
+[L2 amplification](#l2-amplification--built) already says of the amplifying kind, said now of
 both. The alternative is to fuse each L2 into whatever reads it, which costs no memory and
 **pays the L2's cost once per reader** — so a heavy noise deformation read by three
 renderers costs three times. Materialising pays once regardless of how many nodes read it,
@@ -1953,8 +1989,16 @@ in the wrong kind of procedure — a name that appeared in two layers would take
 amplifying node stays the **parent's**, and the copy index is a second value beside it;
 identity is the pair. That way `hash1(seed)` still gives every mirror image of one element
 the same colour, which is what makes eight copies read as one object, and breaking that is
-the deliberate `hash1(seed ^ copy)`. `copy` joins `seed` and `birth_frac` as a slot the
-engine writes and no procedure declares.
+the deliberate `hash1(seed + copy * 8191u)`. `copy` joins `seed` and `birth_frac` as a slot
+the engine writes — but **only where something upstream amplified**, unlike those two, which
+every element has: sixteen bytes on every element of every Set is what an unconditional slot
+costs, and a chain with no amplifier in it has nothing to put there. Where the slot is
+absent, `copy` reads `0u`, which is the true answer rather than a stand-in — an element that
+passed no amplifier is copy zero of itself.
+
+An earlier revision of this paragraph wrote the combination as `hash1(seed ^ copy)`. The
+language has no bitwise operators at all, so that was a spelling nothing could compile, in a
+sentence whose whole point was to name the thing an author writes.
 
 #### Neither per Set nor per deck: a camera belongs to an L4
 
@@ -2020,7 +2064,7 @@ Two consequences worth stating rather than discovering:
   allowed to have; snapping would put a hard cut in a set at the exact moment material ran
   out, which is when an operator is least able to answer for it.
 
-### What a Set publishes — M3
+### What a Set publishes — built
 
 A Set publishes every `param` every procedure in it declares, addressed by the node that
 declares it. With one L1 and one renderer that is about nine controls and the addressing is
@@ -2132,7 +2176,7 @@ pipelines merged by a nested L5 can publish that L5's crossfade as **one control
 scenes, one knob on the desk, and the twenty other numbers that made them stay in the file
 where the author left them.
 
-### L5 — M3
+### L5 — built
 
 L5 has been the deck's mix since M2 and has never been a `kind`. Under the node model it
 becomes one, and **it has two roles rather than two implementations**:
@@ -2427,11 +2471,11 @@ nothing.** That restriction is statically checkable and covers lattices and shel
 is most of what anyone wants to interpolate. Dynamic sources can wait for a correspondence
 structure.
 
-### L2 amplification — M3
+### L2 amplification — built
 
 `L2 : Geometry -> Geometry` is an endomorphism, which is what makes L2 freely stackable and
-also what makes kaleidoscopes, instancing, trails, and subdivision inexpressible: **nothing
-in the layer model can change the element count.**
+also what made kaleidoscopes, instancing, trails, and subdivision inexpressible: **nothing
+in the layer model could change the element count.**
 
 The gap is filled by a second kind of L2 rather than a new layer number. Both take geometry
 and return geometry, so they occupy the same slot position; what differs is the count mode,
@@ -2439,16 +2483,24 @@ which `Geometry` already declares.
 
 ```
 kind    L2
-amplify 8
+amplify 6
 ```
 
 - The factor is a compile-time constant, the same rule as loop bounds and `capacity`, so
-  the output buffer can be sized and the cost multiplied out statically.
+  the output buffer is sized and the cost multiplied out statically — see
+  [amplify](#amplify-l2-only) for the bounds and why there is no Set override.
 - Amplifying stages are **not** freely stackable: counts multiply rather than compose, so
-  each one's factor enters the estimate as a product.
-- Copies need distinguishing — eight mirror images are at eight positions — so a copy index
-  is readable inside an amplifying block, and identity downstream is the pair of the parent
-  `seed` and that index.
+  each one's factor enters the estimate as a product. It is charged where the multiplication
+  happens, on the node's own per-element figure, so a stage of factor 64 running an
+  expensive body is refused for the reason it deserves rather than sailing through at a
+  sixty-fourth of its true cost.
+- Copies need distinguishing — six petals are at six positions — so a copy index is
+  readable inside an amplifying block, and identity downstream is the pair of the parent
+  `seed` and that index. **Stacked amplifiers compose the index rather than overwrite it**: a
+  node of factor `n` turns a parent's `copy` into `copy * n + c`, which is the mixed-radix
+  numbering of the whole chain. Overwriting would make two elements of one parent
+  indistinguishable the moment a second amplifier ran, which is the whole of what `copy` is
+  for.
 
 Amplification is cheaper to build than its position suggests. **Its output is derived and
 recomputed every frame**, so unlike an L1 buffer it needs neither double buffering nor
@@ -2456,7 +2508,25 @@ compaction: nothing reads its previous value and its liveness is decided upstrea
 
 This is where the primitive-centric bet pays out on the geometry side, for the same reason
 the spec already gives for drawing one point cloud several ways: one simulated element
-producing eight mirrored copies costs one simulation and eight draws, not eight simulations.
+producing six copies costs one simulation and six draws, not six simulations.
+`examples/kaleidoscope.kir` is the picture.
+
+**What it turned out to need, and none of it was in the paragraph above.** An amplifier
+cannot share its input's alive buffer — its own is `factor` times as long — so it writes one,
+and what it writes is each parent's flag repeated. That is not the layer deciding liveness,
+which stays refused: it is the L1's decision re-indexed onto a longer buffer. **The flags are
+written before the dead-slot return**, which is the whole of why a parent that dies leaves no
+live copies: a killed element stays inside the live range until the next step's scan compacts
+it, so for exactly one frame it is a dead slot in range, and copies whose flags were merely
+left alone still draw.
+
+It needs a `Counts` of its own for the same reason and one more. A `Counts` is three numbers
+at once — the workgroups a compute pass is dispatched in, the range a pass bounds itself by,
+and the instances a renderer draws — and all three multiply. **The range and the workgroup
+count are separately load-bearing**, which is easy to miss: a stage below an amplifier bounds
+itself by the range it was *built* against and is dispatched over the count it is *recorded*
+with, so a chain can be right about one and wrong about the other, and a fixture with fewer
+elements than one workgroup covers sees neither mistake.
 
 ---
 

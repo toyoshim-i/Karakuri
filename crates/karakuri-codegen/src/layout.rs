@@ -398,22 +398,59 @@ fn attr_elem_ty(attr: Attr) -> StorageElemTy {
     }
 }
 
-/// Builds the `Element` struct layout for an L1 procedure's `emit` list:
-/// `seed` first, then `birth_frac`, then `emit` in declaration order. Fixed
-/// order because it is the shape of a struct in WGSL text, not a set of
-/// independently addressable bindings — unlike the old per-attribute
-/// binding numbers, there is no freedom to reorder without changing what
-/// every `prev[i].<field>` access compiles to.
+/// The slots the engine writes and no procedure declares, beyond the two every
+/// element has.
+///
+/// **Conditional, because each one is 16 bytes on every element of every Set
+/// that has it.** `seed` and `birth_frac` are unconditional because identity
+/// and spawn timing are properties of an element as such; what is here is a
+/// property of what happened *upstream*, so a chain that never amplified
+/// carries no `copy` and a Set that pays for one is a Set that has one.
+///
+/// One struct rather than a parameter per slot: `docs/roadmap.md` has two more
+/// of these coming — `source` from multiple L1 sources — and three independent
+/// booleans threaded through the same call sites is three places to forget one.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Synthetic {
+    /// `copy`: which copy of its parent this element is, from an amplifying L2
+    /// upstream. See `karakuri_ir::Ambient::Copy`.
+    pub copy: bool,
+}
+
+impl Synthetic {
+    /// What an L1 writes: neither, always. Nothing has amplified above the node
+    /// that makes the elements.
+    pub const NONE: Synthetic = Synthetic { copy: false };
+}
+
+/// Builds the `Element` struct layout for a procedure's `emit` list:
+/// `seed` first, then `birth_frac`, then whichever of [`Synthetic`] this
+/// position carries, then `emit` in declaration order. Fixed order because it
+/// is the shape of a struct in WGSL text, not a set of independently
+/// addressable bindings — unlike the old per-attribute binding numbers, there
+/// is no freedom to reorder without changing what every `prev[i].<field>`
+/// access compiles to.
+///
+/// **The synthetic slots come before the declared ones** so that the engine's
+/// direct writes — [`ElementLayout::offset_of`] for `seed` and `birth_frac` —
+/// land at offsets that do not move when a procedure declares one more
+/// attribute. It costs the property that two layouts in one chain share a
+/// prefix past the point an amplifier widened it, which nothing relies on:
+/// every node is compiled against the exact layout it was handed.
 ///
 /// L4 must be generated against the exact [`ElementLayout`] this returns for
-/// the L1 procedure it is paired with, since it reads the same physical
-/// buffer L1 wrote — see [`crate::l4::generate_l4`].
-pub fn generate_element_layout(emit: &[Attr]) -> ElementLayout {
+/// the node it reads, since it addresses the same physical buffer that node
+/// wrote — see [`crate::l4::generate_l4`].
+pub fn generate_element_layout(emit: &[Attr], synthetic: Synthetic) -> ElementLayout {
     let seed = ("seed", None, StorageElemTy::Vec4U32);
     let birth_frac = ("birth_frac", None, StorageElemTy::Vec4F32);
+    let copy = synthetic
+        .copy
+        .then_some(("copy", None, StorageElemTy::Vec4U32));
     let declared = emit.iter().map(|&attr| (attr.name(), Some(attr), attr_elem_ty(attr)));
     let slots: Vec<ElementSlot> = std::iter::once(seed)
         .chain(std::iter::once(birth_frac))
+        .chain(copy)
         .chain(declared)
         .enumerate()
         .map(|(i, (name, attr, elem_ty))| ElementSlot { name, attr, elem_ty, offset: i as u32 * 16 })
@@ -623,7 +660,7 @@ mod tests {
 
     #[test]
     fn element_layout_puts_seed_and_birth_frac_first_at_fixed_offsets() {
-        let layout = generate_element_layout(&[Attr::Position, Attr::Age]);
+        let layout = generate_element_layout(&[Attr::Position, Attr::Age], Synthetic::NONE);
         assert_eq!(layout.slots[0].name, "seed");
         assert_eq!(layout.slots[0].offset, 0);
         assert_eq!(layout.slots[1].name, "birth_frac");
@@ -636,14 +673,38 @@ mod tests {
 
     #[test]
     fn element_layout_stride_is_two_plus_emit_len_times_sixteen() {
-        assert_eq!(generate_element_layout(&[]).stride, 32);
-        assert_eq!(generate_element_layout(&[Attr::Position]).stride, 48);
-        assert_eq!(generate_element_layout(&[Attr::Position, Attr::Velocity, Attr::Age]).stride, 80);
+        assert_eq!(generate_element_layout(&[], Synthetic::NONE).stride, 32);
+        assert_eq!(generate_element_layout(&[Attr::Position], Synthetic::NONE).stride, 48);
+        assert_eq!(generate_element_layout(&[Attr::Position, Attr::Velocity, Attr::Age], Synthetic::NONE).stride, 80);
+    }
+
+    /// **`copy` is allocated only where something upstream amplified**, which
+    /// is the whole reason [`Synthetic`] exists as a parameter rather than the
+    /// slot being unconditional like the two above it: sixteen bytes on every
+    /// element of every Set is what unconditional costs, and a chain with no
+    /// amplifier in it has nothing to put there.
+    #[test]
+    fn the_copy_slot_is_allocated_only_when_something_amplified() {
+        let plain = generate_element_layout(&[Attr::Position], Synthetic::NONE);
+        assert!(!plain.slots.iter().any(|s| s.name == "copy"), "{plain:?}");
+        assert_eq!(plain.stride, 48);
+
+        let amplified = generate_element_layout(&[Attr::Position], Synthetic { copy: true });
+        assert_eq!(amplified.slots[2].name, "copy");
+        assert_eq!(amplified.slots[2].attr, None, "no procedure declares it");
+        assert_eq!(amplified.offset_of("copy"), 32);
+        assert_eq!(amplified.stride, 64, "one more sixteen-byte slot");
+        // **Before the declared attributes, with the other engine-written
+        // slots**, so that the two offsets the engine writes directly do not
+        // move when a procedure declares one more attribute.
+        assert_eq!(amplified.offset_of("seed"), 0);
+        assert_eq!(amplified.offset_of("birth_frac"), 16);
+        assert_eq!(amplified.offset_of("position"), 48);
     }
 
     #[test]
     fn offset_of_finds_the_synthetic_slots() {
-        let layout = generate_element_layout(&[Attr::Position]);
+        let layout = generate_element_layout(&[Attr::Position], Synthetic::NONE);
         assert_eq!(layout.offset_of("seed"), 0);
         assert_eq!(layout.offset_of("birth_frac"), 16);
         assert_eq!(layout.offset_of("position"), 32);
@@ -661,7 +722,7 @@ mod tests {
 
     #[test]
     fn write_element_struct_matches_the_layout_field_order() {
-        let layout = generate_element_layout(&[Attr::Position, Attr::Tint]);
+        let layout = generate_element_layout(&[Attr::Position, Attr::Tint], Synthetic::NONE);
         let mut out = String::new();
         write_element_struct(&mut out, &layout);
         assert!(out.contains("seed: vec4<u32>,"), "{out}");

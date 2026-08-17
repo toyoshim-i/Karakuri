@@ -125,6 +125,7 @@ mod tests {
             // `check` would have put here.
             topology: Some(Topology::Points),
             capacity: None,
+            amplify: None,
             blend: None,
             params: Vec::new(),
             emit: Vec::new(),
@@ -428,7 +429,7 @@ mod tests {
 
     #[test]
     fn l4_quad_expansion_and_hsv_to_rgb_wiring() {
-        let elements = crate::layout::generate_element_layout(&[Attr::Position]);
+        let elements = crate::layout::generate_element_layout(&[Attr::Position], crate::layout::Synthetic::NONE);
         let shader = generate_l4(&l4_proc(), &elements);
         let src = &shader.source;
         assert!(src.contains("@builtin(vertex_index) corner_idx: u32"), "{src}");

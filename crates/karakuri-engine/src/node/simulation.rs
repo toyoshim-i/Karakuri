@@ -778,7 +778,7 @@ mod tests {
     /// erroring."
     #[test]
     fn no_spawn_block_seeds_every_slot_with_its_index_and_marks_it_alive() {
-        let layout = karakuri_codegen::layout::generate_element_layout(&[karakuri_ir::Attr::Position, karakuri_ir::Attr::Age]);
+        let layout = karakuri_codegen::layout::generate_element_layout(&[karakuri_ir::Attr::Position, karakuri_ir::Attr::Age], karakuri_codegen::layout::Synthetic::NONE);
         let stride = layout.stride as usize;
         let capacity = 8u32;
         let (elements, alive) = initial_state(capacity, false, &layout);
@@ -800,7 +800,7 @@ mod tests {
     /// make dead slots read as live the moment the range grew past them.
     #[test]
     fn spawn_block_leaves_every_slot_zeroed() {
-        let layout = karakuri_codegen::layout::generate_element_layout(&[karakuri_ir::Attr::Position, karakuri_ir::Attr::Age]);
+        let layout = karakuri_codegen::layout::generate_element_layout(&[karakuri_ir::Attr::Position, karakuri_ir::Attr::Age], karakuri_codegen::layout::Synthetic::NONE);
         let stride = layout.stride as usize;
         let capacity = 8u32;
         let (elements, alive) = initial_state(capacity, true, &layout);

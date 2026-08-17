@@ -155,6 +155,15 @@ impl Resolver for L4Resolver {
 
     fn read_ambient(&self, amb: Ambient) -> String {
         match amb {
+            // **The same shape as `seed`, and for the same reason**: a
+            // per-element identity value, read from the element in the vertex
+            // stage and carried to the fragment as a flat varying. Where no
+            // amplifier ran the vertex prologue binds it to `0u`, so this
+            // spelling is correct whether or not the element has the slot.
+            Ambient::Copy => match self.block {
+                L4Block::Vertex => "copy".to_string(),
+                L4Block::Fragment => "in.copy".to_string(),
+            },
             Ambient::T => "u.t".to_string(),
             Ambient::Beats => "u.beats".to_string(),
             // The camera is its own bind group, written on the GPU by
@@ -241,39 +250,40 @@ fn emit_stmts(stmts: &[TStmt], resolver: &L4Resolver, req: &mut Requirements, in
     }
 }
 
-fn scan_expr(e: &TExpr, seed: &mut bool, attrs: &mut HashSet<Attr>) {
+fn scan_expr(e: &TExpr, seed: &mut bool, copy: &mut bool, attrs: &mut HashSet<Attr>) {
     match &e.kind {
         TExprKind::Attr(a) => {
             attrs.insert(*a);
         }
         TExprKind::Ambient(Ambient::Seed) => *seed = true,
+        TExprKind::Ambient(Ambient::Copy) => *copy = true,
         TExprKind::Ambient(_) | TExprKind::Lit(_) | TExprKind::Local(_) | TExprKind::Param(_) => {}
-        TExprKind::Unary { value, .. } => scan_expr(value, seed, attrs),
+        TExprKind::Unary { value, .. } => scan_expr(value, seed, copy, attrs),
         TExprKind::Binary { lhs, rhs, .. } => {
-            scan_expr(lhs, seed, attrs);
-            scan_expr(rhs, seed, attrs);
+            scan_expr(lhs, seed, copy, attrs);
+            scan_expr(rhs, seed, copy, attrs);
         }
         TExprKind::Builtin { args, .. } | TExprKind::Construct { args } => {
             for a in args {
-                scan_expr(a, seed, attrs);
+                scan_expr(a, seed, copy, attrs);
             }
         }
-        TExprKind::Swizzle { value, .. } => scan_expr(value, seed, attrs),
+        TExprKind::Swizzle { value, .. } => scan_expr(value, seed, copy, attrs),
     }
 }
 
-fn scan_stmts(stmts: &[TStmt], seed: &mut bool, attrs: &mut HashSet<Attr>) {
+fn scan_stmts(stmts: &[TStmt], seed: &mut bool, copy: &mut bool, attrs: &mut HashSet<Attr>) {
     for s in stmts {
         match s {
             TStmt::Let { value, .. } | TStmt::Var { value, .. } | TStmt::Assign { value, .. } => {
-                scan_expr(value, seed, attrs)
+                scan_expr(value, seed, copy, attrs)
             }
             TStmt::If { cond, then, els, .. } => {
-                scan_expr(cond, seed, attrs);
-                scan_stmts(then, seed, attrs);
-                scan_stmts(els, seed, attrs);
+                scan_expr(cond, seed, copy, attrs);
+                scan_stmts(then, seed, copy, attrs);
+                scan_stmts(els, seed, copy, attrs);
             }
-            TStmt::For { body, .. } => scan_stmts(body, seed, attrs),
+            TStmt::For { body, .. } => scan_stmts(body, seed, copy, attrs),
             TStmt::Kill { .. } => {}
         }
     }
@@ -281,11 +291,12 @@ fn scan_stmts(stmts: &[TStmt], seed: &mut bool, attrs: &mut HashSet<Attr>) {
 
 /// Which of `seed` and `consumes` the fragment block actually reads —
 /// exactly the set that needs to survive as a flat varying.
-fn used_in_fragment(block: &TBlock) -> (bool, HashSet<Attr>) {
+fn used_in_fragment(block: &TBlock) -> (bool, bool, HashSet<Attr>) {
     let mut seed = false;
+    let mut copy = false;
     let mut attrs = HashSet::new();
-    scan_stmts(&block.stmts, &mut seed, &mut attrs);
-    (seed, attrs)
+    scan_stmts(&block.stmts, &mut seed, &mut copy, &mut attrs);
+    (seed, copy, attrs)
 }
 
 fn write_element_bindings(out: &mut String, layout: &ElementLayout) {
@@ -317,13 +328,34 @@ fn corner_of(i: u32) -> vec2<f32> {
 }
 ";
 
-fn write_vsout_struct(out: &mut String, seed_used: bool, attrs_used: &[Attr], depth: bool) {
+/// **The two per-element identity values, and what the geometry can offer.**
+///
+/// Grouped rather than passed as three booleans because they are answers to one
+/// question asked of one procedure — which identity does this shader need, and
+/// is it there to be had — and three flags threaded through three functions is
+/// three chances to hand one of them to the wrong parameter.
+#[derive(Clone, Copy)]
+struct Identity {
+    /// The fragment block reads `seed`, so it needs a varying.
+    seed: bool,
+    /// The fragment block reads `copy`, so it needs one too.
+    copy: bool,
+    /// The geometry carries a `copy` slot, because something upstream
+    /// amplified. Where it does not, the vertex prologue binds `0u`.
+    has_copy_slot: bool,
+}
+
+fn write_vsout_struct(out: &mut String, id: Identity, attrs_used: &[Attr], depth: bool) {
     out.push_str("struct VsOut {\n");
     out.push_str("    @builtin(position) clip: vec4<f32>,\n");
     out.push_str("    @location(0) point_coord: vec2<f32>,\n");
     let mut loc = 1;
-    if seed_used {
+    if id.seed {
         out.push_str(&format!("    @location({loc}) @interpolate(flat) seed: u32,\n"));
+        loc += 1;
+    }
+    if id.copy {
+        out.push_str(&format!("    @location({loc}) @interpolate(flat) copy: u32,\n"));
         loc += 1;
     }
     for &a in attrs_used {
@@ -347,7 +379,7 @@ fn write_vsout_struct(out: &mut String, seed_used: bool, attrs_used: &[Attr], de
 
 fn vertex_entry(
     consumes: &[Attr],
-    seed_used: bool,
+    id: Identity,
     attrs_used: &[Attr],
     body: &str,
     topology: Topology,
@@ -357,6 +389,16 @@ fn vertex_entry(
     out.push_str("@vertex\n");
     out.push_str("fn vs(@builtin(vertex_index) corner_idx: u32, @builtin(instance_index) elem: u32) -> VsOut {\n");
     out.push_str("    let seed = elements[elem].seed.x;\n");
+    // **Bound whether or not anything reads it, and bound to a literal where
+    // the geometry has no such slot.** An element that reached this renderer
+    // without passing an amplifier is copy zero of itself — that is the answer,
+    // not the absence of one, and giving it here is what lets the lowering emit
+    // one spelling for `copy` regardless of what the chain above did.
+    out.push_str(if id.has_copy_slot {
+        "    let copy = elements[elem].copy.x;\n"
+    } else {
+        "    let copy = 0u;\n"
+    });
     for &a in consumes {
         out.push_str(&format!(
             "    let {} = elements[elem].{}.{};\n",
@@ -398,8 +440,11 @@ fn vertex_entry(
         // so `generate_l4` takes the other path entirely.
         Topology::Fullscreen => unreachable!("fullscreen has no per-element vertex stage"),
     }
-    if seed_used {
+    if id.seed {
         out.push_str("    out.seed = seed;\n");
+    }
+    if id.copy {
+        out.push_str("    out.copy = copy;\n");
     }
     for &a in attrs_used {
         out.push_str(&format!("    out.{} = {};\n", a.name(), a.name()));
@@ -599,7 +644,7 @@ const WEIGHTED_FS_EPILOGUE: &str = "    let _a = clamp(_color.a, 0.0, 1.0);
 const WEIGHTED_DEPTH: &str =
     "    let _depth01 = clamp((in.view_depth - cam.depth_range.x) * cam.depth_range.y, 0.0, 1.0);\n";
 
-fn fragment_entry(seed_used: bool, attrs_used: &[Attr], body: &str, weighted: bool) -> String {
+fn fragment_entry(id: Identity, attrs_used: &[Attr], body: &str, weighted: bool) -> String {
     let mut out = String::new();
     out.push_str("@fragment\n");
     if weighted {
@@ -608,7 +653,10 @@ fn fragment_entry(seed_used: bool, attrs_used: &[Attr], body: &str, weighted: bo
         out.push_str("fn fs(in: VsOut) -> @location(0) vec4<f32> {\n");
     }
     out.push_str("    let point_coord = in.point_coord;\n");
-    if seed_used {
+    if id.copy {
+        out.push_str("    let copy = in.copy;\n");
+    }
+    if id.seed {
         out.push_str("    let seed = in.seed;\n");
     }
     for &a in attrs_used {
@@ -688,7 +736,12 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
         .block(BlockKind::Vertex)
         .expect("a per-element L4 procedure has a vertex block");
 
-    let (seed_used, attrs_used_set) = used_in_fragment(fragment_blk);
+    let (seed_used, copy_used, attrs_used_set) = used_in_fragment(fragment_blk);
+    let id = Identity {
+        seed: seed_used,
+        copy: copy_used,
+        has_copy_slot: elements.slots.iter().any(|s| s.name == "copy"),
+    };
     let attrs_used: Vec<Attr> = checked.consumes.iter().copied().filter(|a| attrs_used_set.contains(a)).collect();
 
     let mut req = Requirements::default();
@@ -724,20 +777,20 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
     src.push('\n');
     src.push_str(CORNER_OF);
     src.push('\n');
-    write_vsout_struct(&mut src, seed_used, &attrs_used, weighted);
+    write_vsout_struct(&mut src, id, &attrs_used, weighted);
     src.push('\n');
     if weighted {
         src.push_str(WEIGHTED_FS_OUT);
     }
     src.push_str(&vertex_entry(
         &checked.consumes,
-        seed_used,
+        id,
         &attrs_used,
         &vertex_body,
         topology,
         weighted,
     ));
-    src.push_str(&fragment_entry(seed_used, &attrs_used, &fragment_body, weighted));
+    src.push_str(&fragment_entry(id, &attrs_used, &fragment_body, weighted));
 
     L4Shader {
         source: src,

@@ -1,7 +1,9 @@
 //! The L2 node: `Geometry -> Geometry`.
 
 use karakuri_codegen::generate_l2;
-use karakuri_codegen::layout::{binding, counts, group, ElementLayout, UniformLayout};
+use karakuri_codegen::layout::{
+    binding, counts, group, ElementLayout, Synthetic, UniformLayout, WORKGROUP_SIZE,
+};
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Attr;
 
@@ -38,7 +40,38 @@ pub(crate) struct Deform {
     /// What this node's output carries: everything that reached it, plus its
     /// own `emit`. The next node in a chain widens this in turn.
     emits: Vec<Attr>,
+    /// The engine-written slots this node's output carries. Travels beside
+    /// [`Deform::emits`] because the next node addresses this node's buffer and
+    /// has to name the same fields.
+    synthetic: Synthetic,
+    /// **What an amplifying node owns that an endomorphic one does not.**
+    /// `None` for a node that keeps the element count, and its absence is the
+    /// whole difference: without it this node hands its input's liveness and
+    /// its input's counts straight on, which is what every L2 did before
+    /// amplification existed.
+    amplified: Option<Amplified>,
     param_names: Vec<String>,
+}
+
+/// The three things a node that changes the element count has to own.
+///
+/// **A longer element buffer needs a longer alive buffer and a bigger set of
+/// counts, and neither can be borrowed.** `docs/ir-spec.md` puts liveness
+/// entirely upstream — an L2 cannot `kill()` — and this does not take that
+/// back: what is written here is each parent's flag, repeated `factor` times.
+/// The decision is still the L1's; only the indexing is this node's.
+///
+/// **Single-buffered and never compacted**, which is what makes amplification
+/// cheaper than its position suggests: the output is rebuilt from the input
+/// every frame, so nothing reads its previous value and there is no parity to
+/// choose between.
+struct Amplified {
+    factor: u32,
+    alive: wgpu::Buffer,
+    counts: wgpu::Buffer,
+    /// The one-invocation pass that turns the input's counts into this node's.
+    derive: wgpu::ComputePipeline,
+    derive_bg: wgpu::BindGroup,
 }
 
 impl Deform {
@@ -52,10 +85,19 @@ impl Deform {
         device: &wgpu::Device,
         l2: &Checked,
         upstream: &[Attr],
+        synthetic: Synthetic,
         input: &Geometry<'_>,
         capacity: u32,
     ) -> Deform {
-        let shader = generate_l2(l2, upstream);
+        let shader = generate_l2(l2, upstream, synthetic);
+        // **The output capacity, and it is what everything below this node is
+        // sized and dispatched against.** Saturating rather than wrapping: the
+        // checker caps a single factor, a Set caps its own capacity, and a chain
+        // of amplifiers is still a product that a `u32` can be walked off the
+        // end of. A saturated capacity allocates a buffer the device refuses,
+        // which is a reported error; a wrapped one allocates a buffer that is
+        // too small and is read past.
+        let out_capacity = capacity.saturating_mul(shader.amplify.unwrap_or(1));
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(&format!("{} (L2)", l2.name)),
             source: wgpu::ShaderSource::Wgsl(shader.source.as_str().into()),
@@ -63,7 +105,7 @@ impl Deform {
 
         let elements = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("{} elements", l2.name)),
-            size: u64::from(capacity) * u64::from(shader.element_layout.stride),
+            size: u64::from(out_capacity) * u64::from(shader.element_layout.stride),
             // No COPY_SRC: nothing reads this back. `Set::read_elements` is
             // about what the simulation holds, which is the L1's buffer and not
             // a derived one.
@@ -110,9 +152,36 @@ impl Deform {
             label: Some("L2 src"),
             entries: &[storage(binding::ELEMENT, true), storage(binding::ALIVE, true)],
         });
+        let dst_entries: Vec<wgpu::BindGroupLayoutEntry> = if shader.amplify.is_some() {
+            vec![storage(binding::ELEMENT, false), storage(binding::ALIVE, false)]
+        } else {
+            vec![storage(binding::ELEMENT, false)]
+        };
         let dst_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("L2 dst"),
-            entries: &[storage(binding::ELEMENT, false)],
+            entries: &dst_entries,
+        });
+
+        // Allocated before the bind group that names it, and only for a node
+        // that amplifies — a node that does not shares its input's, which is
+        // the same buffer under both parities and belongs to the L1.
+        let amplified_buffers = shader.amplify.map(|factor| {
+            let alive = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(&format!("{} alive", l2.name)),
+                size: u64::from(out_capacity) * 4,
+                usage: wgpu::BufferUsages::STORAGE,
+                mapped_at_creation: false,
+            });
+            let counts = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(&format!("{} counts", l2.name)),
+                // INDIRECT because a renderer draws from it and a further L2
+                // dispatches from it; COPY_DST is not needed, since every field
+                // is written by the derive pass and none by the host.
+                size: counts::SIZE,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT,
+                mapped_at_creation: false,
+            });
+            (factor, alive, counts)
         });
 
         let uniform_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -140,13 +209,20 @@ impl Deform {
             })
         };
         let src_bg = [bind_src("L2 src0", 0), bind_src("L2 src1", 1)];
+        let mut dst_bg_entries = vec![wgpu::BindGroupEntry {
+            binding: binding::ELEMENT,
+            resource: elements.as_entire_binding(),
+        }];
+        if let Some((_, alive, _)) = &amplified_buffers {
+            dst_bg_entries.push(wgpu::BindGroupEntry {
+                binding: binding::ALIVE,
+                resource: alive.as_entire_binding(),
+            });
+        }
         let dst_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("L2 dst"),
             layout: &dst_bgl,
-            entries: &[wgpu::BindGroupEntry {
-                binding: binding::ELEMENT,
-                resource: elements.as_entire_binding(),
-            }],
+            entries: &dst_bg_entries,
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -163,6 +239,43 @@ impl Deform {
             cache: None,
         });
 
+        let amplified = amplified_buffers.map(|(factor, alive, counts)| {
+            let source = include_str!("../shaders/amplify.wgsl")
+                .replace("{{COUNTS_STRUCT}}", counts::WGSL)
+                .replace("{{FACTOR}}", &factor.to_string())
+                .replace("{{WG}}", &WORKGROUP_SIZE.to_string());
+            let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some(&format!("{} (amplify counts)", l2.name)),
+                source: wgpu::ShaderSource::Wgsl(source.into()),
+            });
+            let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("amplify counts"),
+                entries: &[storage(0, true), storage(1, false)],
+            });
+            let derive_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("amplify counts"),
+                layout: &bgl,
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: input.counts.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 1, resource: counts.as_entire_binding() },
+                ],
+            });
+            let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("amplify counts"),
+                bind_group_layouts: &[&bgl],
+                push_constant_ranges: &[],
+            });
+            let derive = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("amplify counts"),
+                layout: Some(&layout),
+                module: &module,
+                entry_point: Some("derive"),
+                compilation_options: Default::default(),
+                cache: None,
+            });
+            Amplified { factor, alive, counts, derive, derive_bg }
+        });
+
         Deform {
             pipeline,
             uniforms,
@@ -174,8 +287,43 @@ impl Deform {
             elements,
             element_layout: shader.element_layout,
             emits: shader.emits,
+            synthetic: shader.synthetic,
+            amplified,
             param_names: l2.params.iter().map(|p| p.name.clone()).collect(),
         }
+    }
+
+    /// How many elements this node's output holds per element reaching it — the
+    /// number the next node down allocates against.
+    pub(crate) fn amplify(&self) -> u32 {
+        self.amplified.as_ref().map_or(1, |a| a.factor)
+    }
+
+    /// Whether this node owns the liveness and counts below it.
+    ///
+    /// Asked rather than derived from [`Deform::amplify`]: the two agree today
+    /// only because the checker refuses a factor below two, which is a rule in
+    /// another crate. What the chain needs to know is whose buffers it is on,
+    /// and that is this question rather than an arithmetic one about the count.
+    pub(crate) fn amplifies(&self) -> bool {
+        self.amplified.is_some()
+    }
+
+    /// The engine-written slots this node's output carries.
+    pub(crate) fn synthetic(&self) -> Synthetic {
+        self.synthetic
+    }
+
+    /// The counts everything below this node runs on, or `None` where this node
+    /// changed nothing and whatever reached it still applies.
+    ///
+    /// A `Counts` is three numbers at once — the workgroup count a compute pass
+    /// dispatches over, the live range a pass bounds itself by, and the instance
+    /// count a renderer draws — and an amplifier multiplies all three. Handing a
+    /// node below one the simulation's instead is a chain that computes four
+    /// elements and draws one of them.
+    pub(crate) fn counts(&self) -> Option<&wgpu::Buffer> {
+        self.amplified.as_ref().map(|a| &a.counts)
     }
 
     /// The edge this node offers downstream.
@@ -185,6 +333,16 @@ impl Deform {
     /// each frame, so there is nothing for a parity to choose between; the
     /// liveness is the L1's and passes through every deformation untouched.
     pub(crate) fn geometry<'a>(&'a self, alive: [&'a wgpu::Buffer; 2], counts: &'a wgpu::Buffer) -> Geometry<'a> {
+        // **An amplifier answers with its own liveness and its own counts**, and
+        // that is the one place the doc above stops being the whole story: the
+        // flags it hands on are still the L1's decision, re-indexed onto a
+        // buffer `factor` times as long, and the counts are the input's
+        // multiplied out. A node that does not amplify passes both straight
+        // through, unlooked-at.
+        let (alive, counts) = match &self.amplified {
+            None => (alive, counts),
+            Some(a) => ([&a.alive, &a.alive], &a.counts),
+        };
         Geometry {
             layout: &self.element_layout,
             elements: [&self.elements, &self.elements],
@@ -225,6 +383,20 @@ impl Deform {
     /// simulation reached, and running it between substeps would deform states
     /// nothing ever draws.
     pub(crate) fn record(&self, encoder: &mut wgpu::CommandEncoder, parity: usize, counts_buf: &wgpu::Buffer) {
+        // **Before the deformation, in its own pass.** What it writes is read as
+        // an indirect argument by everything below this node, and by nothing in
+        // the pass that follows it here — the deform still dispatches over the
+        // *input's* range, one invocation per parent, and makes the copies in a
+        // loop.
+        if let Some(a) = &self.amplified {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("amplify counts"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&a.derive);
+            pass.set_bind_group(0, &a.derive_bg, &[]);
+            pass.dispatch_workgroups(1, 1, 1);
+        }
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("deform"),
             timestamp_writes: None,

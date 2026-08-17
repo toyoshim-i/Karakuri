@@ -131,6 +131,9 @@ impl Resolver for L1Resolver {
 
     fn read_ambient(&self, amb: Ambient) -> String {
         match amb {
+            Ambient::Copy => {
+                unreachable!("`copy` is not available in an L1: nothing has amplified yet")
+            }
             Ambient::Capacity => "u.capacity".to_string(),
             Ambient::T => "step_args.t".to_string(),
             // Per substep alongside `t`, and for the same reason: a frame of
@@ -334,7 +337,11 @@ fn contains_kill(stmts: &[TStmt]) -> bool {
 pub fn generate_l1(checked: &Checked) -> L1Shader {
     assert_eq!(checked.kind, Kind::L1, "generate_l1 called on a non-L1 procedure");
 
-    let element_layout = layout::generate_element_layout(&checked.emit);
+    // **`Synthetic::NONE`, and it is a statement rather than a default.**
+    // Every slot beyond `seed` and `birth_frac` records something that happened
+    // to an element on its way down a chain, and nothing has happened to an
+    // element an L1 is in the act of making.
+    let element_layout = layout::generate_element_layout(&checked.emit, layout::Synthetic::NONE);
 
     // No `t`: it is per substep, not per frame, and lives in `StepArgs`.
     let mut b = UniformLayoutBuilder::new();

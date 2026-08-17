@@ -1,0 +1,59 @@
+// The first procedure here that changes how many elements there are.
+//
+// **`L2 : Geometry -> Geometry` is an endomorphism**, and that is what made
+// kaleidoscopes, instancing, trails and subdivision inexpressible: every stage
+// in the layer model returned as many elements as it was given. `amplify 6`
+// is the second kind of L2 — same signature, same slot, different count mode —
+// and it fills that gap with one header line.
+//
+// Three things it brings, and the second is the one to carry:
+//
+//   * **The factor is a compile-time constant**, the same rule loop bounds and
+//     `capacity` follow, so the output buffer is sized and the cost multiplied
+//     out before anything runs. A factor a fader could turn would resize a
+//     buffer mid-performance.
+//   * **`copy` is the copy index**, and identity below an amplifier is the
+//     *pair* of the parent's `seed` and it. That is what makes six petals read
+//     as one flower: `hash1(seed)` is still the same number in all six, so
+//     anything derived from it — a colour, a phase, a size — is shared, and
+//     telling them apart is the deliberate act of writing `copy` down.
+//   * **Nothing is stateful about it.** The output is derived and rebuilt every
+//     frame, so unlike an L1's buffer it needs neither double buffering nor
+//     compaction: nothing reads its previous value, and whether an element is
+//     alive was settled upstream by the L1 that made its parent.
+//
+// The cost is a product rather than a sum, which is the honest arithmetic: this
+// body runs six times for every element that reaches it, and the estimate says
+// so. One simulated element producing six petals is one simulation and six
+// draws, which is the same bet the renderer stack makes on the other side.
+
+proc kaleidoscope {
+  kind    L2
+  amplify 6
+
+  // How far the whole figure is opened out. At zero every copy sits on its
+  // parent and the picture is what it was without this stage — which is what
+  // makes the parameter a dial an operator can ride rather than a switch.
+  param spread : float [0.0, 3.0] = 1.4
+
+  // Turns the whole rosette. Separate from `spread` because they are separate
+  // gestures: one opens the figure, the other spins it.
+  param twist  : float [-2.0, 2.0] = 0.25
+
+  consumes position
+
+  deform {
+    // The copy's own angle around the ring, plus the parent's phase so that two
+    // elements at the same radius do not produce two identical rosettes.
+    let step  = 6.2831853 / 6.0;
+    let phase = hash1(seed) * 6.2831853;
+    let a     = float(copy) * step + phase + t * twist;
+
+    // **The radius comes from the parent, not from the copy.** Every petal is
+    // the same distance out as the element it came from, so the figure opens
+    // and closes with the material rather than in front of it.
+    let r = length(position) * spread;
+
+    position = vec3(cos(a) * r, position.y, sin(a) * r);
+  }
+}
