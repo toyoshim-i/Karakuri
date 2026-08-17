@@ -373,7 +373,9 @@ pub enum Ambient {
     /// and this index, and keeping them apart is what the pair buys:
     /// `hash1(seed)` still gives every mirror image of one element the same
     /// colour, which is what makes eight copies read as one object. Telling them
-    /// apart is the deliberate `hash1(seed ^ copy)`.
+    /// apart is the deliberate `hash1(seed + copy * 8191u)`. The language has no
+    /// bitwise operators, so the combination is arithmetic — a large odd
+    /// multiplier, so that two copies of different parents do not collide.
     ///
     /// Stacked amplifiers compose it rather than overwrite it — a node of factor
     /// `n` turns a parent's `copy` into `copy * n + c` — so the index stays

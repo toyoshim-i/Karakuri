@@ -430,10 +430,14 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
     // running an expensive body get refused for the reason it deserves rather
     // than sailing through at a sixty-fourth of its true cost.
     //
-    // `bytes_per_element` multiplies for the same reason and measures the same
-    // partial quantity it always did: this node's own `emit`, not the whole
-    // element passing through it. Amplified, that is the storage the node adds
-    // per element *reaching* it, which is the honest reading of the unit.
+    // `bytes_per_element` multiplies for the same reason and stays as partial a
+    // figure as it always was — `storage_bytes` counts this node's own `emit`
+    // and doubles it for the two buffers an L1 has, and an amplifying L2 has
+    // neither property: three synthetic slots rather than two, and one buffer
+    // rather than two. It is wrong in both directions and nothing reads it,
+    // which is why it is left alone rather than half-corrected here: the figure
+    // wants an owner, and that owner is the memory budget a deck's residency
+    // question needs, not this function.
     let amplify = u64::from(checked.amplify.unwrap_or(1));
     let ops_per_element = ops_per_element.saturating_mul(amplify);
 

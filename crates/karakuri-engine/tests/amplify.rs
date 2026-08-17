@@ -270,8 +270,21 @@ fn total_light(gpu: &Gpu, set: &mut Set) -> f64 {
         .sum()
 }
 
+/// Total brightness after a frame that **draws without stepping** — the audition
+/// path, where a deck shows an `Allocated` slot the still it stopped at.
+fn draw_only(gpu: &Gpu, set: &mut Set) -> f64 {
+    render_frame(gpu, set, false)
+        .chunks_exact(4)
+        .map(|t| f64::from(t[0]))
+        .sum()
+}
+
 /// RGBA f32 per texel, after one frame.
 fn frame(gpu: &Gpu, set: &mut Set) -> Vec<f32> {
+    render_frame(gpu, set, true)
+}
+
+fn render_frame(gpu: &Gpu, set: &mut Set, step: bool) -> Vec<f32> {
     let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba16Float, W, H);
     set.prepare(&gpu.queue, 1, &Signals::default());
 
@@ -283,7 +296,11 @@ fn frame(gpu: &Gpu, set: &mut Set) -> Vec<f32> {
         mapped_at_creation: false,
     });
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
-    set.render(&mut encoder, present.hdr_view(), 1);
+    if step {
+        set.render(&mut encoder, present.hdr_view(), 1);
+    } else {
+        set.draw(&mut encoder, present.hdr_view());
+    }
     encoder.copy_texture_to_buffer(
         present.hdr_texture().as_image_copy(),
         wgpu::TexelCopyBufferInfo {
@@ -474,5 +491,120 @@ fn every_stage_below_an_amplifier_still_sees_every_copy() {
         4,
         "and so does the stage below that one — a fifth band is the elements a \
          short dispatch never wrote, sitting at the origin"
+    );
+}
+
+/// **Four copies were drawn, and the count does not depend on telling them
+/// apart.**
+///
+/// Every other fixture here spreads its copies out and counts bands, which
+/// answers "how many *places*". This one puts them exactly on top of each other
+/// and measures light, which answers "how many *elements*" — and the two come
+/// apart whenever a copy lands where another already is, which is what a
+/// kaleidoscope at low spread does all the time.
+///
+/// Named for the corner count because that was the hypothesis, and it was
+/// wrong: multiplying `vertex_count` by the factor does *not* change this
+/// figure. The extra corners run past what `corner_of` defines and collapse, so
+/// the sprite is drawn once however many vertices are asked for. That defect is
+/// caught by reading the buffer, in `set.rs`'s own tests — there is no picture
+/// it changes.
+#[test]
+fn stacked_copies_are_counted_by_the_light_they_add() {
+    let gpu = Gpu::headless().expect("a GPU");
+
+    // The copies land on their parent, deliberately: with nothing separating
+    // them the only thing that can differ between the two frames is how much
+    // light each element contributed, which is what the claim is about.
+    let still = fan("still4", 4, 0.0);
+    let mut plain = build(&gpu, STILL, &[]);
+    let mut amplified = build(&gpu, STILL, &[&still]);
+
+    let one = total_light(&gpu, &mut plain);
+    let four = total_light(&gpu, &mut amplified);
+    assert!(
+        (four - one * 4.0).abs() < one * 0.05,
+        "four copies of one element is four times the light, not sixteen: {four} against {one}"
+    );
+}
+
+/// **A Set that has never been stepped still draws.**
+///
+/// A deck draws an `Allocated` slot without stepping it — that is what an
+/// audition is, and both `Set::draw` and `Deck` say in as many words that it
+/// shows the still the Set stopped at. An amplifier's counts are written by a
+/// pass of its own, and left to the step alone that pass had never run: the
+/// buffer was freshly allocated, therefore zeroed, therefore no vertices and no
+/// instances. A working Set auditioned as black.
+#[test]
+fn an_amplified_set_draws_without_having_been_stepped() {
+    let gpu = Gpu::headless().expect("a GPU");
+
+    let f = fan("fan4", 4, 0.0);
+    let mut plain = build(&gpu, STILL, &[]);
+    let mut amplified = build(&gpu, STILL, &[&f]);
+
+    let one = draw_only(&gpu, &mut plain);
+    let four = draw_only(&gpu, &mut amplified);
+    assert!(one > 0.0, "the unamplified Set draws its initial state without a step");
+    assert!(
+        (four - one * 4.0).abs() < one * 0.05,
+        "and the amplified one draws four copies of it: {four} against {one}"
+    );
+}
+
+/// **A chain too large for the device is refused by name, not fatally.**
+///
+/// wgpu answers an over-limit binding by panicking the thread that made it,
+/// which at startup takes the process down and on the swap worker is a
+/// `SetError::Panicked` with no sentence in it. The checker's ceiling on
+/// `amplify` cannot stand in for this: it sees one declaration, and what is too
+/// large is the Set's `capacity` times every factor above the node times the
+/// element stride — none of which a `.kir` file knows.
+///
+/// The numbers here are past any device rather than tuned to this one, so the
+/// test asserts the shape of the answer rather than a threshold.
+#[test]
+fn an_amplified_chain_too_large_for_the_device_is_refused_rather_than_fatal() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let huge = r#"
+proc huge {
+  kind     L1
+  topology points
+  capacity [1, 1048576] = 1048576
+
+  emit position
+
+  element {
+    position = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#;
+    // **A body that does nothing**, because the cost ceiling is a separate
+    // guard and would otherwise refuse this first: a factor of 1024 multiplies
+    // the block cost by 1024, so anything but the smallest `deform` is over
+    // 4096 ops/element before the buffer is ever sized. That is the estimator
+    // doing its job; it is not this one, and the two limits are independent.
+    let l2 = silent("enormous", 1024);
+    let l2 = compile(&l2);
+    let l4 = compile(DOTS);
+    let built = Set::build_many(
+        &gpu.device,
+        &gpu.queue,
+        &compile(huge),
+        &[&l2],
+        None,
+        &[&l4],
+        Layering::Overdraw,
+        1_048_576,
+        7,
+    );
+    let Err(err) = built else {
+        panic!("a billion elements is past every device, and building it should have said so");
+    };
+    let text = err.to_string();
+    assert!(
+        text.contains("enormous") && text.contains("amplifies to"),
+        "the refusal has to name the node and the size: {text}"
     );
 }

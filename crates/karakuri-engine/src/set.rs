@@ -120,6 +120,32 @@ pub enum SetError {
         l4: String,
         missing: String,
     },
+    /// An amplified chain that asks for a buffer bigger than the device binds.
+    ///
+    /// **Checked here rather than left to fail**, because failing is not what
+    /// it does: wgpu's uncaptured error handler panics the thread that built
+    /// it, which at startup takes the process down. `MAX_AMPLIFY` in the
+    /// checker is a bound on one declaration and cannot see either the Set's
+    /// `capacity` or the other factors in the chain — the product is only in
+    /// hand here, and so is the device.
+    ///
+    /// The limit is the device's, so this is a Set that runs on one machine and
+    /// is refused on another. That is the honest report: what is too large is a
+    /// property of where it is being asked to run, and the alternative to
+    /// naming it is a validation panic with the same cause and no sentence.
+    #[error(
+        "`{l2}` amplifies to {elements} elements ({bytes} bytes), and this device binds \
+         at most {limit}\n\
+         hint: lower `--capacity`, lower `amplify` in `{l2}`, or narrow the chain's `emit` \
+         — the buffer is the Set's capacity times every factor above this node, times the \
+         element stride"
+    )]
+    TooManyElements {
+        l2: String,
+        elements: u64,
+        bytes: u64,
+        limit: u64,
+    },
     /// More renderers than an L5 can fold.
     ///
     /// **Only under [`Layering::Composite`].** Overdrawing has no limit — the
@@ -572,7 +598,7 @@ impl Set {
                     None => sim.geometry(),
                     Some(prev) => prev.geometry(alive, counts),
                 };
-                Deform::build(device, l2, &upstream, synthetic, &input, chain_capacity)
+                Deform::build(device, l2, &upstream, synthetic, &input, chain_capacity)?
             };
             upstream = node.emits().to_vec();
             synthetic = node.synthetic();
@@ -695,6 +721,9 @@ impl Set {
         // failure that would only ever appear in a caller's test.
         set.camera_node.write_state(queue, &set.camera.state(0.0));
         set.camera_node.write_canvas(queue, 1.0);
+        // **After the simulation's own initialisation**, because what it primes
+        // is a function of that. See [`Set::prime`].
+        set.prime(device, queue);
         Ok(set)
     }
 
@@ -734,10 +763,17 @@ impl Set {
         n as f32 * self.dt
     }
 
-    /// How many elements the L1 node's current buffer holds — the draw's
-    /// instance count, and the range the next step will scan. Not quite the
-    /// alive count: an element killed during the step that just ran still
-    /// occupies its slot until the next step's scan reclaims it.
+    /// How many elements the L1 node's current buffer holds, and the range the
+    /// next step will scan. Not quite the alive count: an element killed during
+    /// the step that just ran still occupies its slot until the next step's
+    /// scan reclaims it.
+    ///
+    /// **Not the draw's instance count where the chain amplifies**, which it
+    /// used to be and is the sentence this doc carried until an L2 could change
+    /// a count. A renderer draws from [`Set::output_counts`]; below an amplifier
+    /// that is this number times every factor above it. This one is the
+    /// simulation's population, which is the figure a status line wants — how
+    /// much material a Set is holding, not how many primitives came of it.
     ///
     /// **This is a stall.** It copies four bytes off the GPU and blocks until
     /// the queue drains to read them, which is exactly what indirect dispatch
@@ -1718,6 +1754,10 @@ impl Set {
             steps
         };
         self.sim.record(encoder, steps);
+        // **Every amplifier's counts, before any node dispatches from one.**
+        // They derive from the simulation's, which the scan has just written,
+        // and in chain order because a second amplifier derives from the first.
+        self.record_counts(encoder);
         // **After every substep, once.** A deformation is a function of the
         // instant the simulation reached; running it between substeps would
         // deform states nothing ever draws, and cost one pass per substep to do
@@ -1739,6 +1779,56 @@ impl Set {
                 counts = own;
             }
         }
+    }
+
+    /// Every amplifier's derived counts, in chain order.
+    ///
+    /// Chain order because a second amplifier derives from the first, and one
+    /// invocation each because a count does not scale with anything.
+    fn record_counts(&self, encoder: &mut wgpu::CommandEncoder) {
+        for node in &self.deforms {
+            node.record_counts(encoder);
+        }
+    }
+
+    /// **Run the deformation chain once, at build, over the state the
+    /// simulation was initialised with.**
+    ///
+    /// A Set draws without stepping — that is what an audition of an
+    /// `Allocated` slot is, and both [`Set::draw`] and the deck say it shows
+    /// the still the Set stopped at. For a chain of plain L2s that is free:
+    /// they hand on the L1's own liveness and counts, which
+    /// `Simulation::initialize` writes at build, so a Set nothing has stepped
+    /// draws its initial state. **An amplifier has buffers of its own and they
+    /// are not free**: freshly allocated, therefore zeroed, therefore no
+    /// instances and every copy dead. A working Set auditioned black.
+    ///
+    /// So the derived buffers are primed here, on the same principle and in the
+    /// same place the simulation's are. What it costs is one pass per node at
+    /// build; what it buys is that *the chain's output always reflects the
+    /// simulation's current state*, from birth rather than from the first step
+    /// — which is the sentence every reader of that output already assumed.
+    ///
+    /// This is legal precisely because an L2 is stateless: its output is a pure
+    /// function of its input, so recomputing it advances nothing. A stateful
+    /// layer could not be primed without deciding what priming *means*.
+    fn prime(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        if self.deforms.is_empty() {
+            return;
+        }
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("prime the deformation chain"),
+        });
+        self.record_counts(&mut encoder);
+        let parity = self.sim.parity();
+        let mut counts = self.sim.counts();
+        for node in &self.deforms {
+            node.record(&mut encoder, parity, counts);
+            if let Some(own) = node.counts() {
+                counts = own;
+            }
+        }
+        queue.submit([encoder.finish()]);
     }
 
     /// The counts the chain ends on: the last amplifier's, or the simulation's
@@ -1965,5 +2055,140 @@ proc probe_l4 {
         let set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, 8, 1).expect("compatible pair");
 
         assert_eq!(set.live_count(&gpu.device, &gpu.queue), 0, "a spawn-block procedure starts empty");
+    }
+
+    /// **Every field of a derived `Counts` means what its name says**, including
+    /// the ones nothing below an amplifier reads.
+    ///
+    /// `survivors` is the scan's output and no pass below a deformation looks at
+    /// it, so a wrong value there is invisible in every picture — a fact
+    /// confirmed the hard way: dropping its multiplication left the whole
+    /// GPU test file green. It is still wrong. A `Counts` is handed on as a
+    /// whole, and one whose fields are true only where they happen to be read is
+    /// a buffer whose meaning depends on where it came from.
+    ///
+    /// Here rather than in `tests/amplify.rs` because the buffers are the node's
+    /// own and reaching them from outside the crate would mean widening the API
+    /// to say something only a test wants to know.
+    #[test]
+    fn an_amplifiers_derived_counts_multiply_every_element_count_and_no_other_field() {
+        let Some(gpu) = Gpu::headless().ok() else { return };
+        const FACTOR: u32 = 4;
+        const CAPACITY: u32 = 64;
+
+        let compile = |src: &str| -> Checked {
+            let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("parse: {e:?}"));
+            let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("check: {e:?}"));
+            karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("cost: {e:?}"));
+            checked
+        };
+        let l1 = compile(
+            r#"
+proc still {
+  kind     L1
+  topology points
+  capacity [64, 64] = 64
+
+  emit position
+
+  element {
+    position = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#,
+        );
+        let l2 = compile(
+            r#"
+proc mirror {
+  kind    L2
+  amplify 4
+
+  consumes position
+
+  deform {
+    position = position + vec3(0.0, float(copy), 0.0);
+  }
+}
+"#,
+        );
+        let l4 = compile(
+            r#"
+proc dots {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 1.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#,
+        );
+        let set = Set::build_many(
+            &gpu.device,
+            &gpu.queue,
+            &l1,
+            &[&l2],
+            None,
+            &[&l4],
+            Layering::Overdraw,
+            CAPACITY,
+            1,
+        )
+        .expect("a chain of one L1, one amplifying L2 and one L4");
+
+        // `build_many` primes the chain, so the derived counts are current
+        // without a step — which is the other thing this asserts.
+        let read = |buf: &wgpu::Buffer| -> [u32; 12] {
+            let size = karakuri_codegen::layout::counts::SIZE;
+            let readback = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("counts readback"),
+                size,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            encoder.copy_buffer_to_buffer(buf, 0, &readback, 0, size);
+            gpu.queue.submit([encoder.finish()]);
+            let slice = readback.slice(..);
+            slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
+            gpu.device.poll(wgpu::PollType::Wait).expect("poll");
+            let data = slice.get_mapped_range();
+            let mut out = [0u32; 12];
+            for (i, w) in data.chunks_exact(4).take(12).enumerate() {
+                out[i] = u32::from_le_bytes([w[0], w[1], w[2], w[3]]);
+            }
+            drop(data);
+            readback.unmap();
+            out
+        };
+
+        let from = read(set.sim.counts());
+        let derived = read(set.deforms[0].counts().expect("the node amplifies"));
+
+        // Field order is `counts::WGSL`'s: elem_xyz, range, vertex_count,
+        // instance_count, first_vertex, first_instance, survivors.
+        assert_eq!(derived[3], from[3] * FACTOR, "range");
+        assert_eq!(derived[5], from[5] * FACTOR, "instance_count");
+        assert_eq!(derived[8], from[8] * FACTOR, "survivors");
+        assert_eq!(
+            derived[0],
+            from[3] * FACTOR / karakuri_codegen::layout::WORKGROUP_SIZE,
+            "workgroups, over the amplified range"
+        );
+        assert_eq!((derived[1], derived[2]), (1, 1), "the other two dimensions");
+
+        // **And the two that are not counts of elements.** `vertex_count` is the
+        // corners of one primitive, which is a property of how a renderer
+        // expands an element; the two `first_*` are where a draw starts.
+        assert_eq!(derived[4], from[4], "vertex_count");
+        assert_eq!(derived[6], from[6], "first_vertex");
+        assert_eq!(derived[7], from[7], "first_instance");
     }
 }
