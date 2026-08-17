@@ -315,15 +315,6 @@ impl Derivation {
             Derivation::FrameDifference(_) => true,
         }
     }
-
-    /// What `docs/ir-spec.md` calls the derivation, for a diagnostic and for the
-    /// `derived` record in an artifact's metadata.
-    pub fn name(self) -> &'static str {
-        match self {
-            Derivation::SinceBirth => "spawn_time",
-            Derivation::FrameDifference(_) => "position",
-        }
-    }
 }
 
 /// Stage outputs. Written with attribute syntax; reading one is an error.

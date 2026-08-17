@@ -1313,9 +1313,11 @@ Generated IR passes through these in order. Failure at any stage means no artifa
 2. **Type check** — undefined identifiers, type mismatches, missing attribute assignments
 3. **Contract check** — no signal-bus reads, no shadowing, no assignment to a `let` or to
    an undeclared name, no reference to an attribute the procedure does not declare, and
-   each emitted attribute and required stage output assigned on every path. Note that
-   `consumes` ⊆ `emit` is **not** checked here: it relates two procedures and belongs to
-   Set composition, at stage 6. This stage also decides
+   each emitted attribute and required stage output assigned on every path. What an L1
+   consumes is checked here only where one file can answer it — `velocity` is synthesised
+   from `position`, so a procedure consuming the first and emitting neither is refused —
+   while *whether anybody emits it* belongs to Set composition at stage 6, because it
+   relates every procedure in the Set. This stage also decides
    [closed form versus accumulating](#closed-form-versus-accumulating) and records it —
    the one thing it produces that is not a diagnostic, since neither answer is an error
 4. **Cost estimation** — static instruction count × loop bounds, yielding a **per element**
@@ -2343,7 +2345,7 @@ one, and nothing else does.
 | Attribute | Derived from | Rule | What it costs |
 |---|---|---|---|
 | `age` | the spawn instant | `t - birth_t` | A `birth_t` slot, written once at spawn and carried. The subtraction happens where the attribute is read. |
-| `velocity` | `position` | `(position - position last step) / dt` | A `velocity` slot, written by the L1 against the step it already has. A reader sees an ordinary stored attribute. |
+| `velocity` | `position` | `(position - position last step) / dt` | A `velocity` slot, written by the **L1** against the step it already has. A reader sees an ordinary stored attribute. |
 
 **The two land differently, and the reason is a decision this language already made.** `t`
 is readable everywhere, so `age` can be the cheaper half stored and the subtraction done at
@@ -2371,6 +2373,24 @@ allocated there or not at all — the same conditional shape `copy` has.
 attribute that was both would have a slot *and* a substitution for one name, and every
 reader would have to know which applied where. A chain whose consumer sits above its emitter
 is therefore still a composition error naming the position, which is the honest report.
+
+**A derived `velocity` is the L1's motion and no deformation below it changes it**, which is
+a consequence of where the division happens and is the reading to want: a `velocity` is how
+the material is moving, and a warp is not motion but where the material is being put. An L2
+that wants the other reading emits its own `velocity`, and then nothing is derived at all.
+
+**An element's first update has no derived velocity.** A spawned element's first pass runs
+over a fraction of a step and `dt` is scaled to that fraction — right for a body that
+integrates, wrong for one that computes position from `t` and jumps a whole step regardless,
+where the quotient is inflated by `1/birth_frac` and that is up to twice the spawn batch. An
+element of a procedure with no `spawn` block has the same problem from the other end: it
+starts wherever an unwritten buffer left it. Both are a difference against a state the
+element was never in, so both answer zero until it has lived a whole step.
+
+**A derivation is not readable in a `spawn` block**, and this is refused rather than
+substituted: every rule reads state an element being allocated does not have yet — its spawn
+instant is written after the block runs, and last step's position is a step it has not
+lived.
 
 There is no adapter *node*. Both rules are pure functions of the element and the clock once
 one extra value rides along, so the synthesis is a substitution at the read site or a write

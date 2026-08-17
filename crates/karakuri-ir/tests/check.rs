@@ -2308,3 +2308,132 @@ proc confused {
     assert!(rendered.contains("mask"), "{rendered}");
     assert!(rendered.contains("L2"), "the diagnostic does not say where it belongs: {rendered}");
 }
+
+/// **A derived attribute is carried state, and `closed_form` has to see it.**
+///
+/// `is_closed_form` decides "accumulating" by whether a block reads an
+/// attribute the procedure carries, and the paragraph above it used to argue
+/// that inside an L1 `consumes ⊆ emit` held, so the membership test was
+/// belt-and-braces. Derivation removed that: an L1 may consume `velocity`
+/// without emitting it, and `velocity` is a stored difference — reading it is
+/// reading where the element has been.
+///
+/// A permissive answer here is silent and expensive. `Set::is_closed_form`
+/// decides whether beat sync is allowed, whether the governor primes the Set
+/// before putting it on air, and whether `Set::seek` may jump to an instant
+/// instead of stepping to it. All three would have taken accumulating material
+/// for closed form.
+#[test]
+fn reading_a_derived_attribute_makes_a_procedure_accumulating() {
+    let bare = check_ok(
+        r#"
+proc bare {
+  kind     L1
+  topology points
+  capacity [1, 1] = 1
+
+  emit position
+
+  element {
+    position = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#,
+    );
+    assert!(bare.closed_form, "nothing is read back, so `t` alone decides the state");
+
+    for attr in ["velocity", "age"] {
+        let src = format!(
+            r#"
+proc reads_derived {{
+  kind     L1
+  topology points
+  capacity [1, 1] = 1
+
+  emit     position
+  consumes {attr}
+
+  element {{
+    position = vec3(0.0, float({attr}) * 0.0, 0.0);
+  }}
+}}
+"#
+        );
+        // `float(...)` takes a scalar, so the vector case reads a component.
+        let src = src.replace("float(velocity)", "velocity.y");
+        let src = src.replace("float(age)", "age");
+        let checked = check_ok(&src);
+        assert!(
+            !checked.closed_form,
+            "`{attr}` is per-element state carried across frames, so reading it accumulates"
+        );
+    }
+}
+
+/// **A derivation is refused in a `spawn` block**, and refused rather than
+/// substituted because there is nothing to substitute: every rule reads state
+/// an element being allocated does not have yet.
+///
+/// It was neither, and that is why this is here. The read fell through to the
+/// ordinary path and lowered to a field the `Element` struct does not have, so
+/// a `.kir` that checked clean produced WGSL naga rejects — a wgpu validation
+/// panic at build, which at startup takes the process down and on the swap
+/// worker kills the thread instead of producing a rejection.
+#[test]
+fn a_derived_attribute_is_refused_in_a_spawn_block() {
+    for attr in ["age", "velocity"] {
+        let src = format!(
+            r#"
+proc spawn_reads {{
+  kind     L1
+  topology points
+  capacity [8, 8] = 8
+
+  param spawn_rate : float [0.0, 100.0] = 10.0
+
+  emit     position
+  consumes {attr}
+
+  spawn {{
+    position = vec3(0.0, 0.0, 0.0) + vec3(0.0, {read}, 0.0);
+  }}
+
+  element {{
+    position = position + vec3(0.0, 0.25, 0.0) * dt;
+  }}
+}}
+"#,
+            read = if attr == "age" { "age" } else { "velocity.y" }
+        );
+        let errs = check_err(&src);
+        assert!(
+            errs.iter().any(|e| e.message.contains(attr)
+                && e.hint.as_deref().unwrap_or_default().contains("derived")),
+            "expected `{attr}` to be refused in `spawn` with the rule named, got: {errs:?}"
+        );
+    }
+
+    // The same read in `element` is exactly what the rule is for.
+    check_ok(
+        r#"
+proc element_reads {
+  kind     L1
+  topology points
+  capacity [8, 8] = 8
+
+  param spawn_rate : float [0.0, 100.0] = 10.0
+
+  emit     position
+  consumes age
+
+  spawn {
+    position = vec3(0.0, 0.0, 0.0);
+  }
+
+  element {
+    position = vec3(0.0, age, 0.0);
+  }
+}
+"#,
+    );
+}

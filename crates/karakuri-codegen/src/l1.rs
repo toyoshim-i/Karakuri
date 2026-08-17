@@ -300,6 +300,11 @@ fn spawn_derivations(derived: &[Attr]) -> String {
         // The alternative — leaving it — is last frame's value for whichever
         // element held this slot before, which is a spawn that inherits the
         // motion of something that died.
+        //
+        // `w` is the *lived a step* flag and stays 0 here; see
+        // `element_derivations`. A zeroed buffer says the same thing, which is
+        // what makes a procedure with no `spawn` block get the same treatment
+        // without anything writing it.
         out.push_str("    next[slot].velocity = vec4<f32>(0.0, 0.0, 0.0, 0.0);\n");
     }
     out
@@ -317,10 +322,30 @@ fn element_derivations(derived: &[Attr]) -> String {
         out.push_str("    next[out].birth_t = prev[i].birth_t;\n");
     }
     if derived.contains(&Attr::Velocity) {
+        // **Zero until the element has lived a whole step**, and `w` is how
+        // that is known. Two situations need it and neither is exotic:
+        //
+        // A **spawned** element's first `element` pass runs over a fraction of
+        // a step, and `_dt` is scaled to that fraction — correct for a body
+        // that integrates, since the numerator is scaled by the same amount,
+        // and badly wrong for one that computes position from `t`, which jumps
+        // a whole step's worth regardless. The quotient is then inflated by
+        // `1/birth_frac`, which is up to twice the batch size: measured at 20x
+        // for a batch of ten, and it scales with `spawn_rate`.
+        //
+        // An element of a procedure with **no `spawn` block** starts at the
+        // origin, because that is what an unwritten buffer holds, and its first
+        // pass moves it to wherever the body puts it. That displacement is not
+        // motion; it is the difference between nothing and the initial state.
+        //
+        // Both are the same sentence — a difference against a state the element
+        // was never in — so both get the same answer.
         out.push_str(
-            "    next[out].velocity = vec4<f32>(\n\
-             \x20       (next[out].position.xyz - prev[i].position.xyz) / max(_dt, 1e-9),\n\
-             \x20       0.0);\n",
+            "    let _lived = prev[i].velocity.w > 0.5;\n\
+             \x20   next[out].velocity = select(\n\
+             \x20       vec4<f32>(0.0, 0.0, 0.0, 1.0),\n\
+             \x20       vec4<f32>((next[out].position.xyz - prev[i].position.xyz) / max(_dt, 1e-9), 1.0),\n\
+             \x20       _lived);\n",
         );
     }
     out

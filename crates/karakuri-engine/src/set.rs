@@ -112,13 +112,19 @@ pub enum SetError {
     /// pass can decide this. See the IR spec's validation pipeline, stage 6.
     #[error(
         "`{l4}` consumes {missing} which `{l1}` does not emit\n\
-         hint: add {missing} to `{l1}`'s `emit`, or pair `{l4}` with an L1 that emits it. \
-         `age` and `velocity` are synthesised where nothing emits them; nothing else is"
+         hint: {hint}"
     )]
     Composition {
         l1: String,
         l4: String,
         missing: String,
+        /// **Written where the refusal is decided, not assembled from a
+        /// template.** A blanket hint saying `velocity` is synthesised, printed
+        /// on a refusal *of* `velocity`, tells a regenerating model the spec is
+        /// wrong — and that is what one said, because the walk that knows the
+        /// real reason (the rule's source attribute is missing) dropped it and
+        /// let the generic message speak.
+        hint: String,
     },
     /// An amplified chain that asks for a buffer bigger than the device binds.
     ///
@@ -505,6 +511,8 @@ impl Set {
             .copied()
             .collect();
         let mut derived: Vec<karakuri_ir::Attr> = Vec::new();
+        // Rules that would have applied and could not, with what they wanted.
+        let mut blocked: Vec<(karakuri_ir::Attr, karakuri_ir::Attr)> = Vec::new();
         {
             let mut seen: Vec<karakuri_ir::Attr> = l1.emit.clone();
             // **The L1 is in this walk too**, and leaving it out is a shader
@@ -524,7 +532,13 @@ impl Set {
                     // no position, and deriving from something an L2 adds later
                     // would mean the L1 writing a slot from a value it does not
                     // have.
-                    if rule.source().is_some_and(|from| !l1.emit.contains(&from)) {
+                    //
+                    // The reason is kept rather than dropped: this is the one
+                    // case where the eventual refusal is *about the rule*, and
+                    // a message that does not say so reads as the spec
+                    // contradicting itself.
+                    if let Some(from) = rule.source().filter(|from| !l1.emit.contains(from)) {
+                        blocked.push((attr, from));
                         continue;
                     }
                     derived.push(attr);
@@ -547,14 +561,43 @@ impl Set {
                 .map(|a| format!("`{}`", a.name()))
                 .collect();
             if missing.is_empty() {
-                None
-            } else {
-                Some(SetError::Composition {
-                    l1: l1.name.clone(),
-                    l4: node.name.clone(),
-                    missing: missing.join(", "),
-                })
+                return None;
             }
+            // If a rule was blocked for one of these, say which value it wanted
+            // rather than repeating the generic advice — that is the whole of
+            // what makes the refusal actionable.
+            let hint = node
+                .consumes
+                .iter()
+                .find_map(|a| blocked.iter().find(|(attr, _)| attr == a))
+                .map(|(attr, from)| {
+                    format!(
+                        "`{}` is synthesised from `{}`, and `{}` emits neither. Add `{}` to \
+                         `{}`'s `emit` and `{}` follows",
+                        attr.name(),
+                        from.name(),
+                        l1.name,
+                        from.name(),
+                        l1.name,
+                        attr.name()
+                    )
+                })
+                .unwrap_or_else(|| {
+                    format!(
+                        "add {} to `{}`'s `emit`, or pair `{}` with an L1 that emits it. \
+                         `age` and `velocity` are synthesised where nothing emits them; nothing \
+                         else is",
+                        missing.join(", "),
+                        l1.name,
+                        node.name
+                    )
+                });
+            Some(SetError::Composition {
+                l1: l1.name.clone(),
+                l4: node.name.clone(),
+                missing: missing.join(", "),
+                hint,
+            })
         };
         for l2 in l2s {
             if l2.kind != Kind::L2 {

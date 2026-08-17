@@ -178,7 +178,12 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
     if errors.is_empty() {
         // Before the move: the classifier reads the checked blocks, and
         // `blocks` is about to become the struct's.
-        let closed_form = is_closed_form(proc.kind, &emit_set, &blocks);
+        let carried: HashSet<Attr> = emit_set
+            .iter()
+            .copied()
+            .chain(consumes_vec.iter().map(|(a, _)| *a).filter(|a| a.is_derivable()))
+            .collect();
+        let closed_form = is_closed_form(proc.kind, &carried, &blocks);
         let reads_beats = reads_beats(&blocks);
         Ok(Checked {
             name: proc.name.clone(),
@@ -736,24 +741,21 @@ fn dedup_attrs(
     (set, vec)
 }
 
-/// `consumes ⊆ emit`, checked directly with no derivation step. See the
-/// module docs: this only runs within a single procedure, so it is only
-/// meaningful for L1 (the only kind with an `emit` of its own to check
-/// `consumes` against). An L4 procedure's `consumes` is left for
-/// Set-composition time.
+/// `consumes` against what this procedure has, which since attribute derivation
+/// is **not** the same as `consumes ⊆ emit`.
 ///
-/// `velocity` and `age` get a different message from every other attribute:
-/// `docs/ir-spec.md` describes a derivation rule for exactly those two (see
-/// "Beyond v0.2 — specified, not implemented"), so a bare "not emitted"
-/// verdict would read as the spec being wrong. Naming the unimplemented rule
-/// keeps a regenerating model from concluding that and instead pointing it
-/// at the one fix that works today: emit the attribute.
-/// Walks `consumes` in declaration order rather than as a set, for two
-/// reasons: the diagnostic points at the offending name instead of at the
-/// whole procedure, and two missing attributes come out in the same order on
-/// every run. Set iteration order is not stable, and a diagnostic is output —
-/// the same source has to produce the same diagnostics, or a regeneration
-/// loop is reacting to something that reshuffles under it.
+/// Two attributes have a rule: `age` and `velocity`. An L1 may consume either
+/// without emitting it, and the engine provides it — see
+/// `docs/ir-spec.md`, "Attribute derivation". So what is checked here is
+/// narrower than it was and is genuinely a one-file question: **`velocity` is
+/// synthesised from `position`**, and whether *this* procedure emits `position`
+/// is something one file can answer. Whether anybody emits `velocity` is not,
+/// and that half moved to `Set::build_many`, which is the first point holding
+/// every procedure at once.
+///
+/// L1 only, for the reason it always was: an L1 is the whole of what is
+/// available to it, where an L2 and an L4 read what is available at their
+/// position in a chain.
 fn check_consumes_emitted(
     kind: Kind,
     emit: &HashSet<Attr>,
@@ -831,11 +833,15 @@ fn check_consumes_emitted(
 ///    value through a local is still a read of that attribute, and it is the
 ///    read this looks at, not the local.
 ///
-///    Within an L1 procedure `consumes ⊆ emit` holds
-///    (`check_consumes_emitted`), so in practice *any* attribute read in an L1
-///    block is a read of an emitted one. The membership test is still written
-///    out, because it is the rule the property actually names and it stays
-///    correct if the two lists are ever allowed to come apart.
+///    **The set tested against is what the procedure *carries*, not what it
+///    emits**, and the difference arrived with attribute derivation: an L1 may
+///    consume `age` or `velocity` without emitting either, and both are
+///    per-element state carried across frames. Reading one is reading where the
+///    element has been, which is exactly what this property is about. This
+///    paragraph used to say `consumes ⊆ emit` held inside an L1 and that the
+///    membership test was therefore belt-and-braces; it no longer holds, and a
+///    permissive answer here is the one the block below calls far worse — a
+///    scrub that produces garbage, and material put on air unwarmed.
 ///
 /// 2. **It has a `spawn` block.** Spawning and closed form cannot coexist, and
 ///    the reason is not about attributes at all: an element that does not
@@ -869,7 +875,7 @@ fn check_consumes_emitted(
 /// arbitrary `t` evaluates it once from wherever it happened to be. That is
 /// the failure this whole pass exists to refuse — checking clean and then
 /// coming up short at runtime. Under-claim.
-fn is_closed_form(kind: Kind, emit: &HashSet<Attr>, blocks: &[TBlock]) -> bool {
+fn is_closed_form(kind: Kind, carried: &HashSet<Attr>, blocks: &[TBlock]) -> bool {
     // Vacuously true for L4, and said here rather than left to fall out of an
     // empty `emit`. An L4 procedure holds no per-element state: it reads what
     // L1 wrote and throws the result at a target, so there is nothing about it
@@ -891,38 +897,46 @@ fn is_closed_form(kind: Kind, emit: &HashSet<Attr>, blocks: &[TBlock]) -> bool {
     }
     blocks
         .iter()
-        .all(|b| !accumulates(&b.stmts, emit))
+        .all(|b| !accumulates(&b.stmts, carried))
 }
 
 /// `kill()`, or a read of an emitted attribute, anywhere under `stmts`.
-fn accumulates(stmts: &[TStmt], emit: &HashSet<Attr>) -> bool {
+fn accumulates(stmts: &[TStmt], carried: &HashSet<Attr>) -> bool {
     stmts.iter().any(|s| match s {
         TStmt::Kill { .. } => true,
-        TStmt::Let { value, .. } | TStmt::Var { value, .. } => reads_emitted(value, emit),
-        TStmt::Assign { value, .. } => reads_emitted(value, emit),
+        TStmt::Let { value, .. } | TStmt::Var { value, .. } => reads_carried(value, carried),
+        TStmt::Assign { value, .. } => reads_carried(value, carried),
         TStmt::If { cond, then, els, .. } => {
-            reads_emitted(cond, emit) || accumulates(then, emit) || accumulates(els, emit)
+            reads_carried(cond, carried) || accumulates(then, carried) || accumulates(els, carried)
         }
-        TStmt::For { body, .. } => accumulates(body, emit),
+        TStmt::For { body, .. } => accumulates(body, carried),
     })
 }
 
-/// A read of an emitted attribute anywhere in one expression.
-fn reads_emitted(e: &TExpr, emit: &HashSet<Attr>) -> bool {
+/// A read of a **carried** attribute anywhere in one expression — one this
+/// procedure emits, or one the engine derives for it.
+///
+/// **The second half is not a detail.** A derived attribute is per-element state
+/// carried across frames exactly as an emitted one is: `age` is the clock minus
+/// a stored spawn instant, `velocity` is a stored difference. A procedure
+/// reading one is reading where it has been, which is what `closed_form` is
+/// asking about — and the block above this one used to say that could not
+/// happen, because `consumes ⊆ emit` held inside an L1. It does not any more.
+fn reads_carried(e: &TExpr, carried: &HashSet<Attr>) -> bool {
     match &e.kind {
-        TExprKind::Attr(a) => emit.contains(a),
+        TExprKind::Attr(a) => carried.contains(a),
         TExprKind::Lit(_)
         | TExprKind::Local(_)
         | TExprKind::Param(_)
         | TExprKind::Ambient(_) => false,
-        TExprKind::Unary { value, .. } => reads_emitted(value, emit),
+        TExprKind::Unary { value, .. } => reads_carried(value, carried),
         TExprKind::Binary { lhs, rhs, .. } => {
-            reads_emitted(lhs, emit) || reads_emitted(rhs, emit)
+            reads_carried(lhs, carried) || reads_carried(rhs, carried)
         }
         TExprKind::Builtin { args, .. } | TExprKind::Construct { args } => {
-            args.iter().any(|a| reads_emitted(a, emit))
+            args.iter().any(|a| reads_carried(a, carried))
         }
-        TExprKind::Swizzle { value, .. } => reads_emitted(value, emit),
+        TExprKind::Swizzle { value, .. } => reads_carried(value, carried),
     }
 }
 
@@ -1633,7 +1647,21 @@ impl<'a> Checker<'a> {
         }
         if let Some(attr) = Attr::from_name(name) {
             let available = match self.block {
-                Some(BlockKind::Spawn) | Some(BlockKind::Element) => {
+                // **A `spawn` block reads only what this procedure emits.**
+                // An attribute it merely `consumes` is one the engine derives,
+                // and every rule reads state an element does not have yet: the
+                // spawn instant is written after this block runs, and last
+                // step's position is a step this element has not lived. Read
+                // here, both would be whatever the slot held for the element
+                // that last occupied it.
+                //
+                // Refused rather than substituted, because there is no value to
+                // substitute. It is also refused rather than left to the
+                // lowering, which had no field to name and produced WGSL naga
+                // rejects — a `.kir` that checked clean and took the process
+                // down, which is the one shape this pass exists to prevent.
+                Some(BlockKind::Spawn) => self.emit.contains(&attr),
+                Some(BlockKind::Element) => {
                     self.emit.contains(&attr) || self.consumes.contains(&attr)
                 }
                 // **Both lists, and they mean different things here.** A
@@ -1664,6 +1692,13 @@ impl<'a> Checker<'a> {
             let hint = match self.block {
                 Some(BlockKind::Vertex) | Some(BlockKind::Fragment) => {
                     format!("add `{name}` to `consumes` to read it here")
+                }
+                Some(BlockKind::Spawn) if attr.is_derivable() && self.consumes.contains(&attr) => {
+                    format!(
+                        "`{name}` is derived, and a derivation reads state an element being \
+                         spawned does not have yet — add `{name}` to `emit` and write it here, \
+                         or read it in `element`"
+                    )
                 }
                 Some(BlockKind::Spawn) | Some(BlockKind::Element) => {
                     format!("add `{name}` to `emit` to read it here")
