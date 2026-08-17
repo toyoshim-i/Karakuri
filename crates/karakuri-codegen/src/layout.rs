@@ -368,14 +368,42 @@ pub struct ElementSlot {
 /// procedure — see `karakuri-engine`'s `node::Simulation::initialize`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ElementLayout {
-    /// `seed`, then `birth_frac`, then `emit` in declaration order — see
+    /// `seed`, then `birth_frac`, then the engine-written slots this position
+    /// carries, then `emit` in declaration order — see
     /// [`generate_element_layout`].
     pub slots: Vec<ElementSlot>,
     /// `slots.len() as u32 * 16`.
     pub stride: u32,
+    /// **Attributes readable here that have no slot**, synthesised at the read
+    /// site from one that does.
+    ///
+    /// This is what makes an `ElementLayout` the *contract* rather than a byte
+    /// layout: two of the things a consumer may name are not fields, and a
+    /// reader that only had `slots` would have to be told about them
+    /// separately — which is a second place for one fact. Everything that
+    /// lowers an attribute read asks this list first.
+    pub derived: Vec<Attr>,
 }
 
 impl ElementLayout {
+    /// Whether this position offers `attr` at all, as a slot or as a
+    /// derivation. **The whole of the composition check**, asked of one
+    /// attribute.
+    pub fn offers(&self, attr: Attr) -> bool {
+        self.slots.iter().any(|s| s.attr == Some(attr)) || self.derived.contains(&attr)
+    }
+
+    /// Whether `attr` is stored here rather than synthesised.
+    pub fn is_stored(&self, attr: Attr) -> bool {
+        self.slots.iter().any(|s| s.attr == Some(attr))
+    }
+
+    /// Whether the slot named `name` exists — for the engine-written ones,
+    /// which carry no [`Attr`].
+    pub fn has_slot(&self, name: &str) -> bool {
+        self.slots.iter().any(|s| s.name == name)
+    }
+
     /// The byte offset of the slot named `name` within one `Element` entry.
     /// Panics if no such slot exists — every caller asks for `seed` or
     /// `birth_frac`, which [`generate_element_layout`] always allocates.
@@ -417,6 +445,27 @@ pub struct Synthetic {
     pub copy: bool,
 }
 
+/// The slot a derivation rule needs on the element, and what it holds.
+///
+/// **Named here rather than by the rule**, because a name is a WGSL identifier
+/// that appears in a generated struct and at every read of it, and the rule
+/// lives in a crate that emits no WGSL.
+pub fn derivation_slot(attr: Attr) -> Option<(&'static str, Option<Attr>)> {
+    use karakuri_ir::Derivation;
+    match attr.derivation()? {
+        // Holds the spawn instant; `age` itself is the subtraction at the read
+        // site and has no slot.
+        Derivation::SinceBirth => Some(("birth_t", None)),
+        // Holds `velocity` itself, written by the L1 against the step it
+        // already has. A reader sees an ordinary attribute — see
+        // `Derivation::is_stored`.
+        Derivation::FrameDifference(Attr::Position) => Some(("velocity", Some(Attr::Velocity))),
+        // The rule table has one source today. A second would be a second slot
+        // and a second name, which is a decision rather than a line to add.
+        Derivation::FrameDifference(_) => None,
+    }
+}
+
 impl Synthetic {
     /// What an L1 writes: neither, always. Nothing has amplified above the node
     /// that makes the elements.
@@ -441,22 +490,47 @@ impl Synthetic {
 /// L4 must be generated against the exact [`ElementLayout`] this returns for
 /// the node it reads, since it addresses the same physical buffer that node
 /// wrote — see [`crate::l4::generate_l4`].
-pub fn generate_element_layout(emit: &[Attr], synthetic: Synthetic) -> ElementLayout {
+pub fn generate_element_layout(
+    emit: &[Attr],
+    synthetic: Synthetic,
+    derived: &[Attr],
+) -> ElementLayout {
     let seed = ("seed", None, StorageElemTy::Vec4U32);
     let birth_frac = ("birth_frac", None, StorageElemTy::Vec4F32);
     let copy = synthetic
         .copy
         .then_some(("copy", None, StorageElemTy::Vec4U32));
+    // **A derivation's source slot, allocated because something asked for the
+    // attribute it feeds.** This is the whole of what "the layout is the
+    // compiled form of the contract" means in practice: `emit` no longer
+    // decides the struct on its own, and a slot can exist that no procedure
+    // named. It stays conditional for the reason `copy` is — sixteen bytes on
+    // every element of every Set is what unconditional costs.
+    let sources: Vec<(&'static str, Option<Attr>, StorageElemTy)> = derived
+        .iter()
+        .filter_map(|&attr| derivation_slot(attr))
+        .map(|(name, holds)| (name, holds, StorageElemTy::Vec4F32))
+        .collect();
     let declared = emit.iter().map(|&attr| (attr.name(), Some(attr), attr_elem_ty(attr)));
     let slots: Vec<ElementSlot> = std::iter::once(seed)
         .chain(std::iter::once(birth_frac))
         .chain(copy)
+        .chain(sources)
         .chain(declared)
         .enumerate()
         .map(|(i, (name, attr, elem_ty))| ElementSlot { name, attr, elem_ty, offset: i as u32 * 16 })
         .collect();
     let stride = slots.len() as u32 * 16;
-    ElementLayout { slots, stride }
+    // **Only the rules a reader has to do arithmetic for.** Where the engine
+    // stores the attribute itself the slot above already carries it, and
+    // listing it here as well would make `offers` true twice and `is_stored`
+    // and `derived` disagree about the same attribute.
+    let substituted = derived
+        .iter()
+        .copied()
+        .filter(|a| a.derivation().is_some_and(|d| !d.is_stored()))
+        .collect();
+    ElementLayout { slots, stride, derived: substituted }
 }
 
 /// Writes `struct Element { ... };` for `layout`. Shared by [`crate::l1`]
@@ -660,7 +734,7 @@ mod tests {
 
     #[test]
     fn element_layout_puts_seed_and_birth_frac_first_at_fixed_offsets() {
-        let layout = generate_element_layout(&[Attr::Position, Attr::Age], Synthetic::NONE);
+        let layout = generate_element_layout(&[Attr::Position, Attr::Age], Synthetic::NONE, &[]);
         assert_eq!(layout.slots[0].name, "seed");
         assert_eq!(layout.slots[0].offset, 0);
         assert_eq!(layout.slots[1].name, "birth_frac");
@@ -673,9 +747,9 @@ mod tests {
 
     #[test]
     fn element_layout_stride_is_two_plus_emit_len_times_sixteen() {
-        assert_eq!(generate_element_layout(&[], Synthetic::NONE).stride, 32);
-        assert_eq!(generate_element_layout(&[Attr::Position], Synthetic::NONE).stride, 48);
-        assert_eq!(generate_element_layout(&[Attr::Position, Attr::Velocity, Attr::Age], Synthetic::NONE).stride, 80);
+        assert_eq!(generate_element_layout(&[], Synthetic::NONE, &[]).stride, 32);
+        assert_eq!(generate_element_layout(&[Attr::Position], Synthetic::NONE, &[]).stride, 48);
+        assert_eq!(generate_element_layout(&[Attr::Position, Attr::Velocity, Attr::Age], Synthetic::NONE, &[]).stride, 80);
     }
 
     /// **`copy` is allocated only where something upstream amplified**, which
@@ -685,11 +759,11 @@ mod tests {
     /// amplifier in it has nothing to put there.
     #[test]
     fn the_copy_slot_is_allocated_only_when_something_amplified() {
-        let plain = generate_element_layout(&[Attr::Position], Synthetic::NONE);
+        let plain = generate_element_layout(&[Attr::Position], Synthetic::NONE, &[]);
         assert!(!plain.slots.iter().any(|s| s.name == "copy"), "{plain:?}");
         assert_eq!(plain.stride, 48);
 
-        let amplified = generate_element_layout(&[Attr::Position], Synthetic { copy: true });
+        let amplified = generate_element_layout(&[Attr::Position], Synthetic { copy: true }, &[]);
         assert_eq!(amplified.slots[2].name, "copy");
         assert_eq!(amplified.slots[2].attr, None, "no procedure declares it");
         assert_eq!(amplified.offset_of("copy"), 32);
@@ -704,7 +778,7 @@ mod tests {
 
     #[test]
     fn offset_of_finds_the_synthetic_slots() {
-        let layout = generate_element_layout(&[Attr::Position], Synthetic::NONE);
+        let layout = generate_element_layout(&[Attr::Position], Synthetic::NONE, &[]);
         assert_eq!(layout.offset_of("seed"), 0);
         assert_eq!(layout.offset_of("birth_frac"), 16);
         assert_eq!(layout.offset_of("position"), 32);
@@ -722,7 +796,7 @@ mod tests {
 
     #[test]
     fn write_element_struct_matches_the_layout_field_order() {
-        let layout = generate_element_layout(&[Attr::Position, Attr::Tint], Synthetic::NONE);
+        let layout = generate_element_layout(&[Attr::Position, Attr::Tint], Synthetic::NONE, &[]);
         let mut out = String::new();
         write_element_struct(&mut out, &layout);
         assert!(out.contains("seed: vec4<u32>,"), "{out}");

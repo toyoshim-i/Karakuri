@@ -112,8 +112,8 @@ pub enum SetError {
     /// pass can decide this. See the IR spec's validation pipeline, stage 6.
     #[error(
         "`{l4}` consumes {missing} which `{l1}` does not emit\n\
-         hint: add {missing} to `{l1}`'s `emit`, or pair `{l4}` with an L1 that emits it \
-         — there is no derivation step"
+         hint: add {missing} to `{l1}`'s `emit`, or pair `{l4}` with an L1 that emits it. \
+         `age` and `velocity` are synthesised where nothing emits them; nothing else is"
     )]
     Composition {
         l1: String,
@@ -484,7 +484,61 @@ impl Set {
         // should fix all of them. The *first node* that fails stops the build,
         // because everything after it would be reported against a chain that
         // will not exist.
+        // **The plan, before anything is built.**
+        //
+        // A consumed attribute nothing emits used to be an unconditional error.
+        // Two of them have a derivation rule, and this is where the rule is
+        // applied: the Set is the first point that holds every procedure at
+        // once, so it is the only place that can tell "nobody emits this" from
+        // "nobody emits this *yet*".
+        //
+        // **Nothing any node emits is ever derived**, whatever the positions
+        // involved. An attribute that is both would have a slot and a
+        // substitution, and every reader would have to know which one applied
+        // where — so a chain that emits `age` somewhere keeps the old answer for
+        // a node above the emitter, which is a composition error naming a
+        // position, and that is the honest report.
+        let emitted: Vec<karakuri_ir::Attr> = l1
+            .emit
+            .iter()
+            .chain(l2s.iter().flat_map(|n| n.emit.iter()))
+            .copied()
+            .collect();
+        let mut derived: Vec<karakuri_ir::Attr> = Vec::new();
+        {
+            let mut seen: Vec<karakuri_ir::Attr> = l1.emit.clone();
+            // **The L1 is in this walk too**, and leaving it out is a shader
+            // that names a field nothing allocated. A procedure may consume
+            // what it does not emit — the checker allows exactly the two rules
+            // — and the slots those rules read are written by this same node,
+            // so what it reads back is the previous frame's, which is what
+            // `prev` means everywhere else in its own block.
+            for node in std::iter::once(&l1).chain(l2s.iter()).chain(l4s.iter()) {
+                for &attr in &node.consumes {
+                    if seen.contains(&attr) || derived.contains(&attr) || emitted.contains(&attr) {
+                        continue;
+                    }
+                    let Some(rule) = attr.derivation() else { continue };
+                    // **The source has to be on the element the L1 writes.** A
+                    // rule reading `position` cannot run over geometry that has
+                    // no position, and deriving from something an L2 adds later
+                    // would mean the L1 writing a slot from a value it does not
+                    // have.
+                    if rule.source().is_some_and(|from| !l1.emit.contains(&from)) {
+                        continue;
+                    }
+                    derived.push(attr);
+                }
+                for &attr in &node.emit {
+                    if !seen.contains(&attr) {
+                        seen.push(attr);
+                    }
+                }
+            }
+        }
+
         let mut available: Vec<karakuri_ir::Attr> = l1.emit.clone();
+        available.extend(derived.iter().copied());
         let check_against = |node: &Checked, available: &[karakuri_ir::Attr]| {
             let missing: Vec<String> = node
                 .consumes
@@ -566,12 +620,15 @@ impl Set {
         // **The L1 node**, generated, compiled and allocated at `capacity` —
         // which is where the range check lives, because the range is that
         // node's own. Everything the simulation needs is inside it.
-        let sim = Simulation::build(device, l1, capacity, seed_salt)?;
+        let sim = Simulation::build(device, l1, capacity, seed_salt, &derived)?;
 
         // **The L2 nodes**, each built against what reaches it. The chain is
         // walked here rather than inside a node because the *grouping* decides
         // the order — a node knows how it deforms and not what is above it.
         let mut deforms: Vec<Deform> = Vec::new();
+        // **Not `available`.** `upstream` is what has a *slot* at this position,
+        // which the layout function widens with the derivation slots itself —
+        // putting a derived attribute in this list would give it a second one.
         let mut upstream: Vec<karakuri_ir::Attr> = l1.emit.clone();
         // The engine-written slots and the element count at the current
         // position, both of which an amplifier changes for everything below it.
@@ -598,7 +655,7 @@ impl Set {
                     None => sim.geometry(),
                     Some(prev) => prev.geometry(alive, counts),
                 };
-                Deform::build(device, l2, &upstream, synthetic, &input, chain_capacity)?
+                Deform::build(device, l2, &upstream, synthetic, &derived, &input, chain_capacity)?
             };
             upstream = node.emits().to_vec();
             synthetic = node.synthetic();

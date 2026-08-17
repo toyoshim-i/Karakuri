@@ -345,6 +345,19 @@ struct Identity {
     has_copy_slot: bool,
 }
 
+/// A derived attribute's value, bound to a local of its own name.
+///
+/// Only the rules `Derivation::is_stored` says *false* for reach here — the
+/// others are ordinary slots by the time anything reads them.
+fn derived_binding(attr: Attr) -> String {
+    match attr.derivation() {
+        Some(karakuri_ir::Derivation::SinceBirth) => {
+            format!("    let {} = u.t - elements[elem].birth_t.x;\n", attr.name())
+        }
+        other => unreachable!("{:?} is not synthesised at the read site", other),
+    }
+}
+
 fn write_vsout_struct(out: &mut String, id: Identity, attrs_used: &[Attr], depth: bool) {
     out.push_str("struct VsOut {\n");
     out.push_str("    @builtin(position) clip: vec4<f32>,\n");
@@ -379,6 +392,7 @@ fn write_vsout_struct(out: &mut String, id: Identity, attrs_used: &[Attr], depth
 
 fn vertex_entry(
     consumes: &[Attr],
+    derived: &[Attr],
     id: Identity,
     attrs_used: &[Attr],
     body: &str,
@@ -399,7 +413,17 @@ fn vertex_entry(
     } else {
         "    let copy = 0u;\n"
     });
+    // **The one place a derived attribute differs from a stored one**, and it
+    // is a different right-hand side rather than a different anything else:
+    // past this prologue every read is of a local named after the attribute,
+    // and nothing downstream in this file knows or needs to know which kind it
+    // was. That is what makes the contract a contract — a consumer names what
+    // it wants and the position it sits at decides where the value comes from.
     for &a in consumes {
+        if derived.contains(&a) {
+            out.push_str(&derived_binding(a));
+            continue;
+        }
         out.push_str(&format!(
             "    let {} = elements[elem].{}.{};\n",
             a.name(),
@@ -784,6 +808,7 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
     }
     src.push_str(&vertex_entry(
         &checked.consumes,
+        &elements.derived,
         id,
         &attrs_used,
         &vertex_body,

@@ -114,10 +114,15 @@ pub struct L2Shader {
 /// between. It is passed in rather than derived for the same reason
 /// `generate_l4` takes an `ElementLayout`: the input buffer is somebody else's
 /// and this shader has to address it with the identical struct.
-pub fn generate_l2(checked: &Checked, upstream: &[Attr], synthetic: Synthetic) -> L2Shader {
+pub fn generate_l2(
+    checked: &Checked,
+    upstream: &[Attr],
+    synthetic: Synthetic,
+    derived: &[Attr],
+) -> L2Shader {
     assert_eq!(checked.kind, Kind::L2, "generate_l2 called on a non-L2 procedure");
 
-    let in_layout = layout::generate_element_layout(upstream, synthetic);
+    let in_layout = layout::generate_element_layout(upstream, synthetic, derived);
     // **An amplifier is where `copy` starts existing**, and once it exists it
     // is carried by every node below — so this is an `||`, not an assignment.
     let out_synthetic = Synthetic { copy: synthetic.copy || checked.amplify.is_some() };
@@ -130,7 +135,7 @@ pub fn generate_l2(checked: &Checked, upstream: &[Attr], synthetic: Synthetic) -
             emits.push(attr);
         }
     }
-    let out_layout = layout::generate_element_layout(&emits, out_synthetic);
+    let out_layout = layout::generate_element_layout(&emits, out_synthetic, derived);
 
     let mut b = UniformLayoutBuilder::new();
     // **`t` and `beats` are here rather than in `StepArgs`.** An L1 is
@@ -149,7 +154,7 @@ pub fn generate_l2(checked: &Checked, upstream: &[Attr], synthetic: Synthetic) -
     }
     let (uniform_layout, uniform_pad_f32) = b.finish();
 
-    let resolver = L2Resolver { has_copy: out_synthetic.copy };
+    let resolver = L2Resolver { has_copy: out_synthetic.copy, derived: out_layout.derived.clone() };
     let mut req = Requirements::default();
     let deform = checked
         .block(BlockKind::Deform)
@@ -262,10 +267,19 @@ struct L2Resolver {
     /// something above it did. Where it does not, `copy` is `0u` — the answer a
     /// chain that never amplified gives at every position in it.
     has_copy: bool,
+    /// Attributes readable here that have no slot, synthesised at the read
+    /// site. See `karakuri_ir::Derivation::is_stored`.
+    derived: Vec<Attr>,
 }
 
 impl Resolver for L2Resolver {
     fn read_attr(&self, attr: Attr) -> String {
+        if self.derived.contains(&attr) {
+            return match attr.derivation() {
+                Some(karakuri_ir::Derivation::SinceBirth) => "(u.t - dst[i].birth_t.x)".to_string(),
+                other => unreachable!("{other:?} is not synthesised at the read site"),
+            };
+        }
         format!("dst[i].{}.{}", attr.name(), crate::ty::attr_swizzle(attr.ty()))
     }
 

@@ -254,6 +254,7 @@ fn narrow_l1(attrs: &str) -> String {
         .map(|a| match a {
             "position" => "    position = sphere_point(hash1(seed), hash1(seed + 1u)) * 2.0;\n",
             "age" => "    age = age + dt;\n",
+            "normal" => "    normal = vec3(0.0, 1.0, 0.0);\n",
             other => panic!("narrow_l1 has no body for `{other}`"),
         })
         .collect();
@@ -263,22 +264,50 @@ fn narrow_l1(attrs: &str) -> String {
     )
 }
 
+/// An L4 consuming attributes with no derivation rule, for the composition
+/// tests below.
+///
+/// **`velocity` and `age` cannot be used for this any more**, and that is the
+/// point rather than an inconvenience: both have a rule now, so a pair missing
+/// one of them composes instead of failing. Two tests here used exactly those
+/// two as their "unsatisfiable" fixture and started passing for the wrong
+/// reason — a refusal test whose fixture became satisfiable asserts nothing and
+/// says nothing about it.
+const L4_UNSATISFIABLE: &str = r#"
+proc wants_shape {
+  kind  L4
+  blend additive
+
+  consumes position, normal, uv
+
+  vertex {
+    clip       = camera * vec4(position + normal * 0.0, 1.0);
+    point_size = 4.0 + uv.x * 0.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+
 /// Stage 6, the one check that needs both procedures at once. An L4 reads the
 /// element struct its paired L1 wrote, so consuming an attribute that L1 never
-/// emitted has no field to read — and without this check it surfaces as a WGSL
-/// parse failure from inside `create_shader_module`, which is an internal error
-/// where the contract calls for a diagnostic naming what to fix.
+/// emitted — and that nothing knows how to synthesise — has no field to read.
+/// Without this check it surfaces as a WGSL parse failure from inside
+/// `create_shader_module`, which is an internal error where the contract calls
+/// for a diagnostic naming what to fix.
 #[test]
 fn an_l4_consuming_what_the_l1_never_emits_is_refused() {
     let gpu = Gpu::headless().expect("no GPU available");
-    let l1 = compile(&narrow_l1("position, age"));
-    let l4 = compile(L4);
+    let l1 = compile(&narrow_l1("position, normal"));
+    let l4 = compile(L4_UNSATISFIABLE);
     let result = Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, 1);
     let msg = match result {
-        Ok(_) => panic!("`velocity` is consumed but never emitted, and was accepted"),
+        Ok(_) => panic!("`uv` is consumed, never emitted, and has no rule — and was accepted"),
         Err(e) => e.to_string(),
     };
-    assert!(msg.contains("velocity"), "{msg}");
+    assert!(msg.contains("uv"), "{msg}");
     assert!(msg.contains("emit"), "no hint at what to do: {msg}");
 }
 
@@ -288,12 +317,25 @@ fn an_l4_consuming_what_the_l1_never_emits_is_refused() {
 fn a_composition_error_names_every_missing_attribute() {
     let gpu = Gpu::headless().expect("no GPU available");
     let l1 = compile(&narrow_l1("position"));
-    let l4 = compile(L4);
+    let l4 = compile(L4_UNSATISFIABLE);
     let msg = match Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, 1) {
         Ok(_) => panic!("two attributes are missing and the pair was accepted"),
         Err(e) => e.to_string(),
     };
-    assert!(msg.contains("velocity") && msg.contains("age"), "{msg}");
+    assert!(msg.contains("normal") && msg.contains("uv"), "{msg}");
+}
+
+/// **And the pair that used to fail now composes**, which is the other half of
+/// the change and the half a refusal test cannot state. An L1 emitting only
+/// `position` paired with a renderer wanting `velocity` and `age` builds, and
+/// the two attributes are the engine's to provide.
+#[test]
+fn an_l4_consuming_a_derivable_attribute_composes_with_an_l1_that_emits_neither() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let l1 = compile(&narrow_l1("position"));
+    let l4 = compile(L4);
+    Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, 1)
+        .expect("`velocity` and `age` both have a derivation rule");
 }
 
 // ---------------------------------------------------------------------------

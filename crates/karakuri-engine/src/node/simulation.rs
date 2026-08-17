@@ -137,6 +137,9 @@ impl Simulation {
         l1: &Checked,
         capacity: u32,
         seed_salt: u32,
+        // What the Set decided to synthesise — see `Set::build_many`. The
+        // slots those rules read are written by this node and by nothing else.
+        derived: &[karakuri_ir::Attr],
     ) -> Result<Simulation, SetError> {
         let range = l1
             .capacity
@@ -150,7 +153,7 @@ impl Simulation {
             });
         }
 
-        let shader = generate_l1(l1);
+        let shader = generate_l1(l1, derived);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(&format!("{} (L1)", l1.name)),
             source: wgpu::ShaderSource::Wgsl(shader.source.as_str().into()),
@@ -778,7 +781,7 @@ mod tests {
     /// erroring."
     #[test]
     fn no_spawn_block_seeds_every_slot_with_its_index_and_marks_it_alive() {
-        let layout = karakuri_codegen::layout::generate_element_layout(&[karakuri_ir::Attr::Position, karakuri_ir::Attr::Age], karakuri_codegen::layout::Synthetic::NONE);
+        let layout = karakuri_codegen::layout::generate_element_layout(&[karakuri_ir::Attr::Position, karakuri_ir::Attr::Age], karakuri_codegen::layout::Synthetic::NONE, &[]);
         let stride = layout.stride as usize;
         let capacity = 8u32;
         let (elements, alive) = initial_state(capacity, false, &layout);
@@ -800,7 +803,7 @@ mod tests {
     /// make dead slots read as live the moment the range grew past them.
     #[test]
     fn spawn_block_leaves_every_slot_zeroed() {
-        let layout = karakuri_codegen::layout::generate_element_layout(&[karakuri_ir::Attr::Position, karakuri_ir::Attr::Age], karakuri_codegen::layout::Synthetic::NONE);
+        let layout = karakuri_codegen::layout::generate_element_layout(&[karakuri_ir::Attr::Position, karakuri_ir::Attr::Age], karakuri_codegen::layout::Synthetic::NONE, &[]);
         let stride = layout.stride as usize;
         let capacity = 8u32;
         let (elements, alive) = initial_state(capacity, true, &layout);

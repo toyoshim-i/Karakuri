@@ -179,13 +179,18 @@ Compatibility is a subset check **between two procedures**, not within one. `emi
 declared by the L1 procedure in a slot and `consumes` by the L4 procedure paired with it, so
 the check belongs to Set composition and cannot be made against a single `.kir` — the
 `soft_points` example below consumes three attributes and emits nothing, which is not an
-error but the normal shape of an L4 file. When the Set is built and `consumes` is not
-contained in the paired `emit`, the Set is rejected — **there is no derivation step in
-v0.2.** Synthesizing a missing attribute from what an L1 procedure does emit was designed —
-see "Attribute derivation" under [Beyond v0.2](#beyond-v02--specified-not-implemented) — but
-implementing it means new per-element state every procedure would carry, whether or not
-anything ever reads the derived value, so it waits for the milestone that adds general
-attribute adapters rather than being special-cased into v0.2's binary check.
+error but the normal shape of an L4 file.
+
+**Two attributes are satisfied by a rule where nothing emits them**, and every other one is
+a rejection: `age` and `velocity` are synthesised by the engine — see
+[Attribute derivation](#attribute-derivation--built). The check is therefore
+`consumes ⊆ available`, where *available* is what is emitted at this position plus what can
+be derived, and the Set is the only place that can evaluate it because it is the only place
+holding every procedure at once.
+
+**The cost is conditional, which is what let the rule land at all.** Each rule reads one
+engine-written slot, and the slot exists only where something actually consumes the
+attribute it feeds. A Set nobody asks `age` in pays nothing for `age`.
 
 Within one procedure the useful check is narrower: an attribute is readable or writable
 only if that procedure declares it, since only a declared attribute gets a buffer pair.
@@ -195,11 +200,11 @@ Available attributes:
 | Name | Type | Notes |
 |---|---|---|
 | `position` | `vec3` | |
-| `velocity` | `vec3` | |
 | `normal` | `vec3` | |
 | `uv` | `vec2` | |
 | `seed` | `uint` | spawn ordinal. Implicit — never declared, always readable. See [Element identity](#element-identity) |
-| `age` | `float` | seconds since spawn |
+| `age` | `float` | seconds since spawn. Derived where nothing emits it |
+| `velocity` | `vec3` | derived where nothing emits it, from the change in `position` over a step |
 | `size` | `float` | |
 | `tint` | `vec3` | linear RGB |
 
@@ -2329,31 +2334,49 @@ belongs to the probe in stage 7, which measures the real Set with its real param
 is the existing division of labour — estimate conservatively, let the probe be the
 authority — and L4 is simply a case where the estimate cannot be made sharp.
 
-### Attribute derivation — M3
+### Attribute derivation — built
 
-When a consumer requires an attribute the producer does not emit, a rule could let the
-compiler synthesize it instead of rejecting the Set — see [emit / consumes](#emit--consumes).
-v0.2 does not do this; an unmet `consumes` is an unconditional error, and the check pass
-says so by name for the two attributes below rather than leaving a model to wonder whether
-the rejection contradicts something the spec promised elsewhere.
+When a consumer requires an attribute the producer does not emit, a rule synthesises it
+instead of rejecting the Set — see [emit / consumes](#emit--consumes). Two attributes have
+one, and nothing else does.
 
-| Attribute | Derived from | Rule | What it needs |
+| Attribute | Derived from | Rule | What it costs |
 |---|---|---|---|
-| `velocity` | `position` | `(position - prev_position) / dt` | The position from **two** frames ago. Double buffering only ever retains one previous frame, so this is a third buffer, not a reinterpretation of the two that already exist. |
-| `age` | spawn time | accumulated `dt` since spawn | A stored spawn time. Nothing records when an element was spawned today — `t` at spawn would have to become new per-element state, paid for whether or not any consumer ever asks for `age`. |
+| `age` | the spawn instant | `t - birth_t` | A `birth_t` slot, written once at spawn and carried. The subtraction happens where the attribute is read. |
+| `velocity` | `position` | `(position - position last step) / dt` | A `velocity` slot, written by the L1 against the step it already has. A reader sees an ordinary stored attribute. |
 
-Both rules cost per-element storage that every procedure emitting the source attribute would
-carry regardless of whether anything downstream ever reads the derived one — the same
-always-on-cost shape the buffer-padding rule elsewhere in this document already normalizes
-rather than special-cases. That cost is worth taking on once, when Geometry's attribute-subset
-compatibility model gains general adapters (the slot interface contracts this milestone also
-adds), not as a one-off bolted onto v0.2's binary `emit`/`consumes` check — which is why this
-waits for M3 rather than landing sooner as an isolated feature.
+**The two land differently, and the reason is a decision this language already made.** `t`
+is readable everywhere, so `age` can be the cheaper half stored and the subtraction done at
+the read site — exact rather than accumulated, and nothing recomputed per frame. `velocity`
+is a difference divided by a step, and **an L4 deliberately has no `dt`**: a renderer is not
+given the simulation's step because it does not integrate. Synthesising it at the read site
+would mean smuggling `dt` into every renderer's uniform to serve one rule, so the division
+happens where the step already is.
 
-Once implemented, a derived attribute belongs in the compiled metadata as its own record —
-`{"t":"derived","attr":"age","from":"spawn_time"}` — so the UI can show it was inferred
-rather than authored, the same distinction [Metadata file format](#metadata-file-format--m4)
-already draws between what an artifact declares and what a Set records.
+**This document said `velocity` needed a third buffer. It does not.** The reasoning was
+that double buffering retains only one previous frame — true — but the obstacle it points
+at is worse than that and the answer is different from either: *compaction moves elements
+between frames*, so index `i` is not the same element in the two buffers and differencing
+them is differencing two strangers. A value carried **on** the element moves with it, which
+is what `seed` and `birth_frac` have always done, and needs no map from an identity back to
+a slot. One slot, no buffer, no pass.
+
+**The always-on cost this waited for turned out to be avoidable too.** The concern was that
+every procedure emitting `position` would carry the storage whether or not anything read the
+derived value. It does not: the Set is the first point holding every procedure at once, so
+it is the point that knows whether anything consumes the attribute, and the slot is
+allocated there or not at all — the same conditional shape `copy` has.
+
+**Nothing any node emits is ever derived**, wherever in a chain the emitter sits. An
+attribute that was both would have a slot *and* a substitution for one name, and every
+reader would have to know which applied where. A chain whose consumer sits above its emitter
+is therefore still a composition error naming the position, which is the honest report.
+
+There is no adapter *node*. Both rules are pure functions of the element and the clock once
+one extra value rides along, so the synthesis is a substitution at the read site or a write
+in the pass that already runs. A rule needing a reduction or a scan would need a node; these
+do not, and inventing one for them would put a position in the chain that has to be
+explained.
 
 ### Multiple L1 sources, and `source` — M3
 

@@ -547,6 +547,22 @@ them apart is the deliberate act of writing `copy` down. The cost is a product: 
 six times per element and the estimate says so, so an expensive deformation is refused at a
 factor the same body would pass at.
 
+### Two attributes you do not have to emit
+
+A renderer that wants `age` or `velocity` no longer needs an L1 that thought to emit them.
+Both are synthesised where nothing does: `age` from the instant the element was spawned, and
+`velocity` from how far it moved last step. So a motion-streak renderer pairs with any
+geometry that emits `position`, which is the point — a renderer that could only be used with
+the one L1 written alongside it is not a library.
+
+Nothing is declared and nothing is switched on. An L1 that *does* emit one of them keeps its
+own value, and the two never both apply. The storage is paid only where something actually
+asks: a Set whose renderers never mention `age` carries nothing for it.
+
+Every other attribute is unchanged — consuming `normal` over geometry that does not emit it
+is still refused, by name, at build. There is no rule for it and there is not going to be
+one: a normal is a property of a surface, and a point cloud has no surface to take it from.
+
 or an **L3**, which is the camera:
 
 ```

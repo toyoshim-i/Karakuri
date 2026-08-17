@@ -98,19 +98,28 @@ proc soft_points {
 }
 "#;
 
-/// An L4 consuming an attribute `L1` does not emit. `Set::build` refuses this
-/// pair — stage 6, the composition check — which is the cheapest way to get a
-/// build that fails *on the worker thread*, as opposed to one that fails
-/// earlier and never becomes a `Request` at all.
+/// An L4 consuming an attribute `L1` does not emit **and nothing can
+/// synthesise**. `Set::build` refuses this pair — stage 6, the composition
+/// check — which is the cheapest way to get a build that fails *on the worker
+/// thread*, as opposed to one that fails earlier and never becomes a `Request`
+/// at all.
+///
+/// **It used to want `velocity`, and that stopped working.** `velocity` and
+/// `age` have derivation rules now, so a pair missing either of them composes.
+/// Nothing about the tests below changed in intent; what changed is that their
+/// "cheapest failure" was quietly no longer a failure, and every one of them
+/// would have hung waiting for a rejection that was never coming. `normal` has
+/// no rule and is not going to acquire one — it is a property of a surface, and
+/// there is no surface to take it from.
 const L4_INCOMPATIBLE: &str = r#"
-proc wants_velocity {
+proc wants_normal {
   kind  L4
   blend additive
 
-  consumes position, velocity
+  consumes position, normal
 
   vertex {
-    clip       = camera * vec4(position + velocity, 1.0);
+    clip       = camera * vec4(position + normal, 1.0);
     point_size = 4.0;
   }
 
@@ -462,7 +471,7 @@ fn a_build_that_fails_changes_nothing() {
     let live_before = h.swap.set().live_count(&h.gpu.device, &h.gpu.queue);
     let frames_before = h.swap.frames_rendered();
 
-    tx.send(request(L4_INCOMPATIBLE, SECOND, "wants_velocity"))
+    tx.send(request(L4_INCOMPATIBLE, SECOND, "wants_normal"))
         .expect("worker alive");
     let (elapsed, seen) = h.frames_until(
         |e| matches!(e, Event::Rejected { .. }),
@@ -493,10 +502,10 @@ fn a_build_that_fails_changes_nothing() {
 
     let rejection = seen
         .iter()
-        .find(|s| s.contains("wants_velocity"))
+        .find(|s| s.contains("wants_normal"))
         .unwrap_or_else(|| panic!("no diagnostic naming the candidate: {seen:?}"));
     assert!(
-        rejection.contains("velocity"),
+        rejection.contains("normal"),
         "the rejection does not say what was wrong: {rejection}"
     );
 }
