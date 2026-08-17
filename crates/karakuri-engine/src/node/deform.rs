@@ -8,6 +8,7 @@ use karakuri_ir::typed::Checked;
 use karakuri_ir::Attr;
 
 use super::{Geometry, View};
+use crate::set::SetError;
 use crate::uniforms::UniformScratch;
 
 /// An L2 node: geometry in, geometry out.
@@ -88,16 +89,37 @@ impl Deform {
         synthetic: Synthetic,
         input: &Geometry<'_>,
         capacity: u32,
-    ) -> Deform {
+    ) -> Result<Deform, SetError> {
         let shader = generate_l2(l2, upstream, synthetic);
         // **The output capacity, and it is what everything below this node is
         // sized and dispatched against.** Saturating rather than wrapping: the
         // checker caps a single factor, a Set caps its own capacity, and a chain
         // of amplifiers is still a product that a `u32` can be walked off the
-        // end of. A saturated capacity allocates a buffer the device refuses,
-        // which is a reported error; a wrapped one allocates a buffer that is
-        // too small and is read past.
+        // end of. A wrapped capacity allocates a buffer that is too small and is
+        // read past; a saturated one is caught by the check below.
         let out_capacity = capacity.saturating_mul(shader.amplify.unwrap_or(1));
+        // **Asked of the device, here, rather than left to the allocation.**
+        // wgpu does not return an error for a binding above the limit — its
+        // uncaptured error handler panics the thread, which at startup takes the
+        // process down and on the swap worker is a `SetError::Panicked`. The
+        // checker's own ceiling on `amplify` cannot stand in for this: it sees
+        // one declaration, and what is too large is the product of the Set's
+        // capacity, every factor above this node, and the element stride, none
+        // of which a single file knows.
+        //
+        // Checked for every node rather than only for amplifiers, because a
+        // plain L2 *below* one inherits the amplified capacity and is exactly as
+        // able to exceed the limit.
+        let bytes = u64::from(out_capacity) * u64::from(shader.element_layout.stride);
+        let limit = u64::from(device.limits().max_storage_buffer_binding_size);
+        if bytes > limit {
+            return Err(SetError::TooManyElements {
+                l2: l2.name.clone(),
+                elements: u64::from(out_capacity),
+                bytes,
+                limit,
+            });
+        }
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(&format!("{} (L2)", l2.name)),
             source: wgpu::ShaderSource::Wgsl(shader.source.as_str().into()),
@@ -175,10 +197,15 @@ impl Deform {
             let counts = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(&format!("{} counts", l2.name)),
                 // INDIRECT because a renderer draws from it and a further L2
-                // dispatches from it; COPY_DST is not needed, since every field
-                // is written by the derive pass and none by the host.
+                // dispatches from it; COPY_SRC because nothing else can see
+                // what is in it — the fields a picture depends on are checked
+                // through the picture, and the ones it does not are only
+                // checkable by reading them. COPY_DST is not needed: every
+                // field is written by the derive pass and none by the host.
                 size: counts::SIZE,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT,
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::INDIRECT
+                    | wgpu::BufferUsages::COPY_SRC,
                 mapped_at_creation: false,
             });
             (factor, alive, counts)
@@ -276,7 +303,7 @@ impl Deform {
             Amplified { factor, alive, counts, derive, derive_bg }
         });
 
-        Deform {
+        Ok(Deform {
             pipeline,
             uniforms,
             uniform_layout: shader.uniform_layout.clone(),
@@ -290,7 +317,7 @@ impl Deform {
             synthetic: shader.synthetic,
             amplified,
             param_names: l2.params.iter().map(|p| p.name.clone()).collect(),
-        }
+        })
     }
 
     /// How many elements this node's output holds per element reaching it — the
@@ -382,21 +409,31 @@ impl Deform {
     /// once per substep: a deformation is a function of the instant the
     /// simulation reached, and running it between substeps would deform states
     /// nothing ever draws.
+    /// Derive this node's counts from the ones its input came with.
+    ///
+    /// **Separate from [`Deform::record`], because a frame that steps nothing
+    /// still needs it.** A deck draws an `Allocated` slot without stepping it —
+    /// that is what an audition is — and the counts this writes are the
+    /// renderer's indirect draw arguments. Left to the step, an amplified Set
+    /// that had never been stepped drew from a freshly allocated buffer, which
+    /// is zeroed: no vertices, no instances, a black audition of a Set that
+    /// works. The camera node is here for the identical reason and one function
+    /// along.
+    ///
+    /// Idempotent and one invocation, so running it in both places costs a
+    /// dispatch and cannot disagree with itself.
+    pub(crate) fn record_counts(&self, encoder: &mut wgpu::CommandEncoder) {
+        let Some(a) = &self.amplified else { return };
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("amplify counts"),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(&a.derive);
+        pass.set_bind_group(0, &a.derive_bg, &[]);
+        pass.dispatch_workgroups(1, 1, 1);
+    }
+
     pub(crate) fn record(&self, encoder: &mut wgpu::CommandEncoder, parity: usize, counts_buf: &wgpu::Buffer) {
-        // **Before the deformation, in its own pass.** What it writes is read as
-        // an indirect argument by everything below this node, and by nothing in
-        // the pass that follows it here — the deform still dispatches over the
-        // *input's* range, one invocation per parent, and makes the copies in a
-        // loop.
-        if let Some(a) = &self.amplified {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("amplify counts"),
-                timestamp_writes: None,
-            });
-            pass.set_pipeline(&a.derive);
-            pass.set_bind_group(0, &a.derive_bg, &[]);
-            pass.dispatch_workgroups(1, 1, 1);
-        }
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("deform"),
             timestamp_writes: None,

@@ -128,9 +128,18 @@ reaching the node becomes `factor` of them. See
   resize a buffer mid-performance.
 - **At least 2, and at most 1024.** Zero would make the layer decide liveness, which is
   settled entirely by the compaction that runs once after L1. One is the endomorphism an L2
-  already is, and would buy a second buffer holding a copy of the first. The ceiling is a
-  guard on the *product*: a chain of amplifiers multiplies, and a size that overflows a
-  `u32` is reported as a failed allocation rather than as a sentence about the file.
+  already is, and would buy a second buffer holding a copy of the first. The ceiling is on
+  the single declaration and keeps the *product* inside a `u32`; it is not what keeps a
+  buffer inside the device.
+
+**What is too large is decided where the Set is built, not here.** The buffer a node needs is
+the Set's `capacity`, times every factor above the node, times the element stride — and a
+`.kir` file knows none of the three. So `amplify 256` is a legal declaration that a Set at a
+large capacity is refused for, by name, with the number and the device's limit in the
+message. It is device-dependent by nature: what is too large is a property of where it is
+being asked to run. The alternative is not a portable answer, it is the same refusal with no
+sentence attached — wgpu answers an over-limit binding by panicking the thread that made it,
+which at startup takes the process down.
 
 ### param
 
@@ -984,7 +993,8 @@ second one: they are per-element identity, and a fullscreen pass has no element.
 available they lowered to a varying against the engine's own vertex stage, which has no such
 field — valid `.kir`, invalid WGSL, and the process down before a frame was drawn.
 
-Consumed attributes and `seed` are readable in both blocks of a *per-element* L4. Per-element values reach
+Consumed attributes, `seed` and `copy` are readable in both blocks of a *per-element* L4.
+Per-element values reach
 `fragment` with **flat** interpolation. That is exact under both topologies for the same
 reason: a sprite and a segment are each one element's worth of values, so there is nothing
 to interpolate between. It is a topology with real *shared* vertices that would need the
@@ -1998,7 +2008,10 @@ passed no amplifier is copy zero of itself.
 
 An earlier revision of this paragraph wrote the combination as `hash1(seed ^ copy)`. The
 language has no bitwise operators at all, so that was a spelling nothing could compile, in a
-sentence whose whole point was to name the thing an author writes.
+sentence whose whole point was to name the thing an author writes. It survived the correction
+twice over — once in this file two hundred lines below, and once in the doc comment on
+`Ambient::Copy` that the same commit wrote — which is what a phrase repeated in three places
+does when only the one being edited is looked at.
 
 #### Neither per Set nor per deck: a camera belongs to an L4
 
@@ -2339,7 +2352,7 @@ waits for M3 rather than landing sooner as an isolated feature.
 
 Once implemented, a derived attribute belongs in the compiled metadata as its own record —
 `{"t":"derived","attr":"age","from":"spawn_time"}` — so the UI can show it was inferred
-rather than authored, the same distinction [Metadata file format](#metadata-file-format)
+rather than authored, the same distinction [Metadata file format](#metadata-file-format--m4)
 already draws between what an artifact declares and what a Set records.
 
 ### Multiple L1 sources, and `source` — M3
@@ -2427,10 +2440,13 @@ Stated so a later reader can tell them from the parts above, which are forced.
   a Set file.
 
 **Identity is therefore a triple**, not a pair: `source` from here, `seed` from the source
-that produced the element, and `copy` from any amplifying node above it — see "Amplification
-carries `copy`". Three `uint`s of identity per element, none of which needs a full range, so
-packing `copy` alongside one of the others is available and is an engineering choice with no
-semantic consequence. Not made here because nothing yet counts sources.
+that produced the element, and `copy` from any amplifying node above it — see
+[L2 amplification](#l2-amplification--built). Three `uint`s of identity per element, none of
+which needs a full range, so packing `copy` alongside one of the others is available and is an
+engineering choice with no semantic consequence. Not made here because nothing yet counts
+sources — and note that `copy`'s slot is allocated only where something amplified, so the
+packing saves nothing on a chain that has no amplifier in it and everything it saves is on
+the chains that do.
 
 **Decided, not built.** Nothing assigns a `source` today because nothing merges.
 
@@ -2439,7 +2455,7 @@ semantic consequence. Not made here because nothing yet counts sources.
 mirror images read as one object. Merging requires it to give *different* values in different
 sources, so that two identical grids differ in colour without being arranged to. Both hold at
 once: the salt varies with `source` and is constant across `copy`. A procedure that wants the
-other behaviour on either axis writes it — `hash1(seed ^ copy)` breaks copies apart, and
+other behaviour on either axis writes it — `hash1(seed + copy * 8191u)` breaks copies apart, and
 nothing breaks sources together because nothing should.
 
 **Downstream treats sources differently by writing attributes, not by branching on
