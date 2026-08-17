@@ -54,6 +54,13 @@ pub struct Checked {
     /// another. See the comment in `Set::build`.
     pub topology: Option<Topology>,
     pub capacity: Option<CapacityDecl>,
+    /// **How many output elements this L2 makes per input element**, from
+    /// `amplify`. `None` is the endomorphism every L2 was before amplification
+    /// existed, and is *not* the same statement as `Some(1)`: nothing else in
+    /// the language distinguishes them, but the lowering does — a node with no
+    /// declaration generates the shader it always generated, shares its input's
+    /// liveness and its input's counts, and allocates nothing.
+    pub amplify: Option<u32>,
     pub blend: Option<Blend>,
     pub params: Vec<Param>,
     pub emit: Vec<Attr>,

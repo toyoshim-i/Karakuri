@@ -168,6 +168,7 @@ fn drift_shell() -> Checked {
         kind: Kind::L1,
         topology: Some(Topology::Points),
         capacity: None,
+        amplify: None,
         blend: None,
         params: vec![
             param_decl("spawn_rate", Ty::Float, 0.0, 40000.0),
@@ -258,6 +259,7 @@ fn soft_points() -> Checked {
         // would have put here.
         topology: Some(Topology::Points),
         capacity: None,
+        amplify: None,
         blend: Some(Blend::Additive),
         params: vec![
             param_decl("point_scale", Ty::Float, 0.5, 40.0),
@@ -338,6 +340,7 @@ fn shadowing_locals_l1() -> Checked {
         kind: Kind::L1,
         topology: Some(Topology::Points),
         capacity: None,
+        amplify: None,
         blend: None,
         params: vec![param_decl("radius", Ty::Float, 0.1, 8.0)],
         emit: vec![Attr::Position, Attr::Age],
@@ -404,6 +407,7 @@ fn shadowing_locals_l4() -> Checked {
         // would have put here.
         topology: Some(Topology::Points),
         capacity: None,
+        amplify: None,
         blend: Some(Blend::Additive),
         params: vec![param_decl("point_scale", Ty::Float, 0.5, 40.0), param_decl("hue", Ty::Float, 0.0, 1.0)],
         emit: vec![],
@@ -442,6 +446,7 @@ fn reserved_word_params_l1() -> Checked {
         kind: Kind::L1,
         topology: Some(Topology::Points),
         capacity: None,
+        amplify: None,
         blend: None,
         params,
         emit: vec![Attr::Age],
@@ -479,7 +484,7 @@ fn assert_layout_matches_text(source: &str, layout: &karakuri_codegen::layout::U
 /// built so its `consumes` is a subset of some L1 fixture's `emit`, and this
 /// derives the layout that L1 side would have produced.
 fn layout_for(l1: &Checked) -> karakuri_codegen::layout::ElementLayout {
-    karakuri_codegen::layout::generate_element_layout(&l1.emit)
+    karakuri_codegen::layout::generate_element_layout(&l1.emit, karakuri_codegen::layout::Synthetic::NONE)
 }
 
 fn validate(source: &str) {
@@ -597,6 +602,7 @@ fn reordered_subset_l4() -> Checked {
         // would have put here.
         topology: Some(Topology::Points),
         capacity: None,
+        amplify: None,
         blend: Some(Blend::Additive),
         params: vec![],
         emit: vec![],
@@ -644,6 +650,7 @@ fn consumes_nothing_l4() -> Checked {
         // would have put here.
         topology: Some(Topology::Points),
         capacity: None,
+        amplify: None,
         blend: Some(Blend::Additive),
         params: vec![],
         emit: vec![],
@@ -693,6 +700,7 @@ fn emits_every_attribute_l1() -> Checked {
         kind: Kind::L1,
         topology: Some(Topology::Points),
         capacity: None,
+        amplify: None,
         blend: None,
         params: vec![],
         emit: karakuri_ir::Attr::ALL.to_vec(),
@@ -758,6 +766,7 @@ fn l4_consuming_every_attribute_compiles_and_validates() {
         // would have put here.
         topology: Some(Topology::Points),
         capacity: None,
+        amplify: None,
         blend: Some(Blend::Additive),
         params: vec![],
         emit: vec![],
@@ -937,6 +946,7 @@ fn a_weighted_fullscreen_l4_compiles_and_validates() {
         kind: Kind::L4,
         topology: Some(Topology::Fullscreen),
         capacity: None,
+        amplify: None,
         blend: Some(Blend::Weighted),
         params: vec![],
         emit: vec![],
@@ -1054,6 +1064,7 @@ fn sweep() -> Checked {
         kind: Kind::L3,
         topology: None,
         capacity: None,
+        amplify: None,
         blend: None,
         params: vec![
             param_decl("radius", Ty::Float, 1.0, 40.0),
@@ -1155,6 +1166,240 @@ proc collides {
 "#;
     let parsed = karakuri_ir::parse(src).expect("parses");
     let checked = karakuri_ir::check::check(&parsed).expect("checks");
-    let shader = karakuri_codegen::generate_l2(&checked, &[Attr::Position, Attr::Age]);
+    let shader = karakuri_codegen::generate_l2(&checked, &[Attr::Position, Attr::Age], karakuri_codegen::layout::Synthetic::NONE);
     validate(&shader.source);
+}
+
+// ---------------------------------------------------------------------------
+// Amplification: an L2 whose output count differs from its input's.
+// ---------------------------------------------------------------------------
+
+fn compiled_l2(src: &str, upstream: &[Attr], synthetic: karakuri_codegen::layout::Synthetic)
+    -> karakuri_codegen::L2Shader
+{
+    let parsed = karakuri_ir::parse(src).expect("parses");
+    let checked = karakuri_ir::check::check(&parsed).expect("checks");
+    karakuri_codegen::generate_l2(&checked, upstream, synthetic)
+}
+
+const MIRROR: &str = r#"
+proc mirror {
+  kind    L2
+  amplify 4
+  consumes position
+  deform { position = position + vec3(0.0, float(copy), 0.0); }
+}
+"#;
+
+/// The amplifying entry point is a different shape from the endomorphic one —
+/// a loop over the copies, a second element index, and a liveness buffer of its
+/// own — so it gets its own trip through naga.
+#[test]
+fn an_amplifying_l2_lowers_to_valid_wgsl() {
+    let shader = compiled_l2(MIRROR, &[Attr::Position], karakuri_codegen::layout::Synthetic::NONE);
+    validate(&shader.source);
+    assert_eq!(shader.amplify, Some(4));
+    assert!(shader.synthetic.copy, "the node that amplified is where `copy` starts existing");
+    assert!(
+        shader.element_layout.slots.iter().any(|s| s.name == "copy"),
+        "the output carries the index: {:?}",
+        shader.element_layout
+    );
+}
+
+/// **An amplifier writes liveness and an endomorphism does not**, because an
+/// endomorphism shares the very buffer its input came with and an amplifier
+/// cannot — its own is `factor` times as long. The binding's presence is the
+/// observable half of that.
+#[test]
+fn only_an_amplifying_l2_binds_a_liveness_buffer_to_write() {
+    let amplifying = compiled_l2(MIRROR, &[Attr::Position], karakuri_codegen::layout::Synthetic::NONE);
+    assert!(amplifying.source.contains("dst_alive"), "{}", amplifying.source);
+
+    let plain = compiled_l2(
+        r#"
+proc plain {
+  kind L2
+  consumes position
+  deform { position = position * 2.0; }
+}
+"#,
+        &[Attr::Position],
+        karakuri_codegen::layout::Synthetic::NONE,
+    );
+    assert!(!plain.source.contains("dst_alive"), "{}", plain.source);
+}
+
+/// **Stacked amplifiers compose the index rather than overwrite it.** A node of
+/// factor `n` under a parent that already carried a `copy` writes
+/// `copy * n + c`, which is the mixed-radix numbering of the whole chain: it
+/// stays unique, and the parent's index is still recoverable by dividing.
+/// Overwriting would make two elements of one parent indistinguishable the
+/// moment a second amplifier ran, which is the whole of what `copy` is for.
+#[test]
+fn a_second_amplifier_composes_the_copy_index_rather_than_replacing_it() {
+    // The first has nothing above it, so it starts the numbering from the
+    // loop variable alone.
+    let first = compiled_l2(MIRROR, &[Attr::Position], karakuri_codegen::layout::Synthetic::NONE);
+    assert!(
+        first.source.contains("vec4<u32>(0u * 4u + _c"),
+        "a first amplifier numbers from nothing: {}",
+        first.source
+    );
+
+    // The second is handed the first's output, and reads the parent's index.
+    let second = compiled_l2(
+        r#"
+proc again {
+  kind    L2
+  amplify 3
+  consumes position
+  deform { position = position * 2.0; }
+}
+"#,
+        &[Attr::Position],
+        first.synthetic,
+    );
+    validate(&second.source);
+    assert!(
+        second.source.contains("vec4<u32>(src[_e].copy.x * 3u + _c"),
+        "a second amplifier composes: {}",
+        second.source
+    );
+}
+
+/// A node below an amplifier that does not amplify itself carries the index
+/// through untouched — it is somebody else's identity, and passing it on is the
+/// same pass-through every other slot gets.
+#[test]
+fn a_plain_l2_below_an_amplifier_carries_the_copy_index_through() {
+    let plain = compiled_l2(
+        r#"
+proc plain {
+  kind L2
+  consumes position
+  deform { position = position + vec3(0.0, float(copy), 0.0); }
+}
+"#,
+        &[Attr::Position],
+        karakuri_codegen::layout::Synthetic { copy: true },
+    );
+    validate(&plain.source);
+    assert!(plain.source.contains("dst[i].copy = src[i].copy;"), "{}", plain.source);
+    assert!(!plain.source.contains("dst_alive"), "it did not amplify: {}", plain.source);
+}
+
+/// Where nothing upstream amplified, `copy` is `0u` rather than a read of a
+/// slot that is not there — the answer a chain with no amplifier in it gives at
+/// every position in it.
+#[test]
+fn copy_reads_zero_where_no_slot_exists() {
+    let plain = compiled_l2(
+        r#"
+proc plain {
+  kind L2
+  consumes position
+  deform { position = position + vec3(0.0, float(copy), 0.0); }
+}
+"#,
+        &[Attr::Position],
+        karakuri_codegen::layout::Synthetic::NONE,
+    );
+    validate(&plain.source);
+    assert!(plain.source.contains("f32(0u)"), "{}", plain.source);
+}
+
+/// A mask over an amplifying node has to end up inside the copy loop, because
+/// what it gates is one copy rather than one parent — and the whole thing still
+/// has to be WGSL naga accepts, which is what a spliced block in a nested scope
+/// is easiest to get wrong.
+#[test]
+fn an_amplifying_l2_with_a_mask_lowers_to_valid_wgsl() {
+    let shader = compiled_l2(
+        r#"
+proc masked {
+  kind    L2
+  amplify 4
+  param   weight : float [0.0, 1.0] = 1.0
+  consumes position
+  mask   { let d = length(position); strength = d; }
+  deform { let d = float(copy); position = position + vec3(0.0, d, 0.0); }
+}
+"#,
+        &[Attr::Position],
+        karakuri_codegen::layout::Synthetic::NONE,
+    );
+    validate(&shader.source);
+}
+
+/// **An L4 reads `copy` the way it reads `seed`** — off the element in the
+/// vertex stage, carried to the fragment as a flat varying. It is the other
+/// half of identity below an amplifier, and a renderer is downstream.
+#[test]
+fn an_l4_reading_copy_lowers_to_valid_wgsl() {
+    let src = r#"
+proc tinted {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 4.0;
+  }
+
+  fragment {
+    let h = hash1(seed + copy * 8191u);
+    color   = vec4(h, h, h, 1.0);
+  }
+}
+"#;
+    let parsed = karakuri_ir::parse(src).expect("parses");
+    let checked = karakuri_ir::check::check(&parsed).expect("checks");
+    let amplified = karakuri_codegen::layout::generate_element_layout(
+        &[Attr::Position],
+        karakuri_codegen::layout::Synthetic { copy: true },
+    );
+    let shader = karakuri_codegen::generate_l4(&checked, &amplified);
+    validate(&shader.source);
+    assert!(shader.source.contains("let copy = elements[elem].copy.x;"), "{}", shader.source);
+    assert!(shader.source.contains("@interpolate(flat) copy: u32"), "{}", shader.source);
+}
+
+/// **The same L4 over geometry no amplifier touched still compiles**, and reads
+/// zero. A renderer is compiled against whatever chain it was given and cannot
+/// know whether one had an amplifier in it, so the answer where the slot is
+/// absent has to be a value rather than a refusal — and copy zero of itself is
+/// the true one.
+#[test]
+fn an_l4_reading_copy_over_unamplified_geometry_reads_zero() {
+    let src = r#"
+proc tinted {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 4.0;
+  }
+
+  fragment {
+    let h = hash1(copy);
+    color   = vec4(h, h, h, 1.0);
+  }
+}
+"#;
+    let parsed = karakuri_ir::parse(src).expect("parses");
+    let checked = karakuri_ir::check::check(&parsed).expect("checks");
+    let plain = karakuri_codegen::layout::generate_element_layout(
+        &[Attr::Position],
+        karakuri_codegen::layout::Synthetic::NONE,
+    );
+    let shader = karakuri_codegen::generate_l4(&checked, &plain);
+    validate(&shader.source);
+    assert!(shader.source.contains("let copy = 0u;"), "{}", shader.source);
+    assert!(!shader.source.contains("elements[elem].copy"), "{}", shader.source);
 }

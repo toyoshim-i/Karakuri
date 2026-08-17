@@ -1195,47 +1195,88 @@ proc marcher {
     );
 }
 
-/// **The mirror of the rule above, and it had the same failure mode.** `seed`
-/// is per-element identity, and a fullscreen L4 has no element: no element
-/// buffer is bound and the vertex stage is the engine's, not the procedure's.
-/// Read there it lowered to `in.seed` against a `VsOut` with no such field —
-/// valid `.kir`, invalid WGSL, and wgpu's uncaptured error handler took the
-/// process down before a frame was drawn.
-///
-/// Refused in the checker rather than in `Ambient::available_in` for the reason
-/// `eye` and `ray` are: what makes an L4 a marcher is the *absence* of a
-/// `vertex` block, and a block does not know its siblings.
-#[test]
-fn per_element_identity_is_refused_in_a_fullscreen_l4() {
-    let src = r#"
-proc marcher {
-  kind  L4
-  blend additive
+// ---------------------------------------------------------------------------
+// `amplify`: the one declaration that changes an element count.
+// ---------------------------------------------------------------------------
 
-  fragment {
-    let h = hash1(seed);
-    color   = vec4(h, h, h, 1.0);
+/// The declaration lands on `Checked`, which is where the lowering and the
+/// engine both read it from.
+#[test]
+fn an_amplifying_l2_checks_clean_and_carries_its_factor() {
+    let checked = check_ok(
+        r#"
+proc mirror {
+  kind    L2
+  amplify 8
+
+  consumes position
+
+  deform {
+    position = position * (1.0 + float(copy) * 0.1);
+  }
+}
+"#,
+    );
+    assert_eq!(checked.amplify, Some(8));
+    assert_eq!(checked.kind, Kind::L2);
+}
+
+/// An L2 with no declaration is the endomorphism it always was, and says so by
+/// carrying `None` rather than `Some(1)`.
+#[test]
+fn an_l2_with_no_amplify_declaration_carries_none() {
+    let checked = check_ok(
+        r#"
+proc plain {
+  kind L2
+
+  consumes position
+
+  deform {
+    position = position * 2.0;
+  }
+}
+"#,
+    );
+    assert_eq!(checked.amplify, None);
+}
+
+/// **`amplify` is L2's, and each refusal names what the layer does instead.**
+/// An L1's count is `capacity`, which a Set turns; an L3 makes a viewpoint; an
+/// L4 draws what reaches it. Amplification is a multiplier on an input, which
+/// is a thing only a stage with an input can be.
+#[test]
+fn amplify_is_refused_outside_an_l2() {
+    let l1 = r#"
+proc gen {
+  kind     L1
+  topology points
+  capacity [1, 8] = 4
+  amplify  8
+
+  emit position
+
+  element {
+    position = vec3(0.0, 0.0, 0.0);
   }
 }
 "#;
-    let errs = check_err(src);
-    assert!(
-        errs.iter().any(|e| e.message.contains("seed")
-            && e.message.contains("whole frame")
-            && e.hint.as_deref().unwrap_or_default().contains("vertex")),
-        "expected `seed` to be refused as per-element, got: {errs:?}"
-    );
-}
+    let l3 = r#"
+proc cam {
+  kind    L3
+  amplify 8
 
-/// The same value in a *per-element* L4 is what it has always been, and this is
-/// the half of the pair that keeps the refusal above from being a refusal of
-/// `seed` outright.
-#[test]
-fn per_element_identity_is_readable_in_an_l4_with_a_vertex_block() {
-    let src = r#"
-proc sprite {
-  kind  L4
-  blend additive
+  camera {
+    eye    = vec3(0.0, 0.0, 5.0);
+    target = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#;
+    let l4 = r#"
+proc dots {
+  kind    L4
+  blend   additive
+  amplify 8
 
   consumes position
 
@@ -1245,12 +1286,186 @@ proc sprite {
   }
 
   fragment {
-    let h = hash1(seed);
-    color   = vec4(h, h, h, 1.0);
+    color = vec4(1.0, 1.0, 1.0, 1.0);
   }
 }
 "#;
-    check_ok(src);
+    for src in [l1, l3, l4] {
+        let errs = check_err(src);
+        assert!(
+            errs.iter().any(|e| e.message.contains("`amplify` is L2 only")),
+            "expected `amplify` to be refused, got: {errs:?}"
+        );
+    }
+}
+
+/// **Below two, and the two cases are refused for different reasons.** Zero
+/// would make the layer decide liveness, which belongs entirely to the L1's
+/// compaction; one would allocate a second buffer to hold a copy of the first.
+#[test]
+fn an_amplify_factor_below_two_is_refused() {
+    for (factor, expected) in [(0u32, "discards every element"), (1, "endomorphism")] {
+        let src = format!(
+            r#"
+proc mirror {{
+  kind    L2
+  amplify {factor}
+
+  consumes position
+
+  deform {{
+    position = position * 2.0;
+  }}
+}}
+"#
+        );
+        let errs = check_err(&src);
+        assert!(
+            errs.iter().any(|e| e.message.contains("at least 2") && e.message.contains(expected)),
+            "expected `amplify {factor}` to be refused as {expected}, got: {errs:?}"
+        );
+    }
+}
+
+/// A ceiling on the single factor, so that a chain's *product* cannot walk a
+/// `u32` off its end before anything is allocated. The diagnostic for an
+/// overflowed buffer size is a failed allocation, which says nothing about the
+/// file that asked for it.
+#[test]
+fn an_amplify_factor_above_the_ceiling_is_refused() {
+    let src = r#"
+proc mirror {
+  kind    L2
+  amplify 4096
+
+  consumes position
+
+  deform {
+    position = position * 2.0;
+  }
+}
+"#;
+    let errs = check_err(src);
+    assert!(
+        errs.iter().any(|e| e.message.contains("above the ceiling")),
+        "expected a ceiling refusal, got: {errs:?}"
+    );
+    // And the value just under it is accepted, which is what makes the line
+    // above a ceiling rather than a refusal of large factors in general.
+    check_ok(&src.replace("4096", "1024"));
+}
+
+/// `copy` is readable where an element has one and nowhere else. An L1 is
+/// making the elements, so nothing has amplified above it; an L3 has no
+/// element at all.
+#[test]
+fn copy_is_readable_in_an_l2_and_refused_in_an_l1() {
+    check_ok(
+        r#"
+proc mirror {
+  kind    L2
+  amplify 4
+
+  consumes position
+
+  mask {
+    strength = 1.0;
+    if copy == 0u {
+      strength = 0.0;
+    }
+  }
+
+  deform {
+    position = position + vec3(0.0, float(copy), 0.0);
+  }
+}
+"#,
+    );
+    let errs = check_err(
+        r#"
+proc gen {
+  kind     L1
+  topology points
+  capacity [1, 8] = 4
+
+  emit position
+
+  element {
+    position = vec3(float(copy), 0.0, 0.0);
+  }
+}
+"#,
+    );
+    assert!(
+        errs.iter().any(|e| e.message.contains("copy")),
+        "expected `copy` to be refused in an L1, got: {errs:?}"
+    );
+}
+
+/// **The mirror of the rule above, and it had the same failure mode.**
+/// `seed` is per-element identity, and a fullscreen L4 has no element: no
+/// element buffer is bound and the vertex stage is the engine's, not the
+/// procedure's. Read there it lowered to `in.seed` against a `VsOut` with no
+/// such field — valid `.kir`, invalid WGSL, and wgpu's uncaptured error handler
+/// took the process down before a frame was drawn.
+///
+/// Refused here rather than in `Ambient::available_in` for the reason `eye` and
+/// `ray` are: what makes an L4 a marcher is the *absence* of a `vertex` block,
+/// and a block does not know its siblings.
+#[test]
+fn per_element_identity_is_refused_in_a_fullscreen_l4() {
+    for name in ["seed", "copy"] {
+        let src = format!(
+            r#"
+proc marcher {{
+  kind  L4
+  blend additive
+
+  fragment {{
+    let h = hash1({name});
+    color   = vec4(h, h, h, 1.0);
+  }}
+}}
+"#
+        );
+        let errs = check_err(&src);
+        assert!(
+            errs.iter().any(|e| e.message.contains(name)
+                && e.message.contains("whole frame")
+                && e.hint.as_deref().unwrap_or_default().contains("vertex")),
+            "expected `{name}` to be refused as per-element, got: {errs:?}"
+        );
+    }
+}
+
+/// The same two values in a *per-element* L4 are exactly what they have always
+/// been, and this is the half of the pair that keeps the refusal above from
+/// being a refusal of `seed` outright.
+#[test]
+fn per_element_identity_is_readable_in_an_l4_with_a_vertex_block() {
+    for name in ["seed", "copy"] {
+        let src = format!(
+            r#"
+proc sprite {{
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {{
+    clip       = vec4(position, 1.0);
+    point_size = 4.0;
+  }}
+
+  fragment {{
+    let h = hash1({name});
+    color   = vec4(h, h, h, 1.0);
+  }}
+}}
+"#
+        );
+        check_ok(&src);
+    }
 }
 
 /// `eye` and `ray` are fragment-only, and an L4 with a vertex block is

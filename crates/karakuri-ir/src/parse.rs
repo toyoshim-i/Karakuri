@@ -19,8 +19,8 @@
 //! a placeholder so a single mistake doesn't swallow the rest of the file.
 
 use crate::ast::{
-    Attr, BinOp, Blend, Block, BlockKind, CapacityDecl, Expr, Kind, Lit, Param, Proc, Stmt,
-    Topology, Ty, UnOp,
+    AmplifyDecl, Attr, BinOp, Blend, Block, BlockKind, CapacityDecl, Expr, Kind, Lit, Param, Proc,
+    Stmt, Topology, Ty, UnOp,
 };
 use crate::error::IrError;
 use crate::error::IrResult;
@@ -49,9 +49,9 @@ pub fn parse(src: &str) -> IrResult<Proc> {
 
 /// Header/block keywords. Declaration recovery scans forward to the next one
 /// of these (or `}`), so one bad declaration does not eat the rest of the file.
-const DECL_KEYWORDS: [&str; 14] = [
-    "kind", "topology", "capacity", "param", "emit", "consumes", "blend", "spawn", "element",
-    "deform", "mask", "camera", "vertex", "fragment",
+const DECL_KEYWORDS: [&str; 15] = [
+    "kind", "topology", "capacity", "amplify", "param", "emit", "consumes", "blend", "spawn",
+    "element", "deform", "mask", "camera", "vertex", "fragment",
 ];
 
 struct Parser {
@@ -314,6 +314,7 @@ impl Parser {
         let mut kind = None;
         let mut topology = None;
         let mut capacity = None;
+        let mut amplify = None;
         let mut blend = None;
         let mut params = Vec::new();
         let mut emit = Vec::new();
@@ -340,6 +341,7 @@ impl Parser {
                         }
                     }
                     "capacity" => capacity = Some(self.parse_capacity()),
+                    "amplify" => amplify = Some(self.parse_amplify()),
                     "param" => {
                         if let Some(p) = self.parse_param() {
                             params.push(p);
@@ -420,6 +422,7 @@ impl Parser {
             kind,
             topology,
             capacity,
+            amplify,
             blend,
             params,
             emit,
@@ -496,6 +499,18 @@ impl Parser {
                 None
             }
         }
+    }
+
+    /// `amplify <factor>` — a bare literal, unlike `capacity`'s range.
+    ///
+    /// **There is no range because there is nothing to override it with.** A
+    /// Set turns `capacity` because how much material to make is the operator's
+    /// question; how many copies a kaleidoscope has is the procedure's own, and
+    /// making it adjustable would resize a buffer from a fader.
+    fn parse_amplify(&mut self) -> AmplifyDecl {
+        let start = self.advance().span; // "amplify"
+        let factor = self.parse_u32_literal();
+        AmplifyDecl { factor, span: start.join(self.prev_span()) }
     }
 
     fn parse_capacity(&mut self) -> CapacityDecl {
@@ -1049,6 +1064,7 @@ fn empty_proc(span: Span) -> Proc {
         kind: Kind::L1,
         topology: None,
         capacity: None,
+        amplify: None,
         blend: None,
         params: Vec::new(),
         emit: Vec::new(),

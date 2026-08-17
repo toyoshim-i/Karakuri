@@ -366,6 +366,19 @@ impl Output {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Ambient {
     Seed,
+    /// **Which copy of its parent this element is**, from the amplifying L2
+    /// that made it — `0` where nothing upstream amplified.
+    ///
+    /// Identity downstream of an amplifier is the *pair* of the parent's `seed`
+    /// and this index, and keeping them apart is what the pair buys:
+    /// `hash1(seed)` still gives every mirror image of one element the same
+    /// colour, which is what makes eight copies read as one object. Telling them
+    /// apart is the deliberate `hash1(seed ^ copy)`.
+    ///
+    /// Stacked amplifiers compose it rather than overwrite it — a node of factor
+    /// `n` turns a parent's `copy` into `copy * n + c` — so the index stays
+    /// unique across the whole chain instead of only across the last stage.
+    Copy,
     Capacity,
     T,
     /// Musical position, in beats, on the session's tempo grid — the same
@@ -403,8 +416,9 @@ pub enum Ambient {
 }
 
 impl Ambient {
-    pub const ALL: [Ambient; 9] = [
+    pub const ALL: [Ambient; 10] = [
         Ambient::Seed,
+        Ambient::Copy,
         Ambient::Capacity,
         Ambient::T,
         Ambient::Beats,
@@ -418,6 +432,7 @@ impl Ambient {
     pub fn name(self) -> &'static str {
         match self {
             Ambient::Seed => "seed",
+            Ambient::Copy => "copy",
             Ambient::Capacity => "capacity",
             Ambient::T => "t",
             Ambient::Beats => "beats",
@@ -435,7 +450,7 @@ impl Ambient {
 
     pub fn ty(self) -> Ty {
         match self {
-            Ambient::Seed | Ambient::Capacity => Ty::Uint,
+            Ambient::Seed | Ambient::Copy | Ambient::Capacity => Ty::Uint,
             Ambient::T | Ambient::Beats | Ambient::Dt => Ty::Float,
             Ambient::Camera => Ty::Mat4,
             Ambient::Eye | Ambient::Ray => Ty::Vec3,
@@ -451,6 +466,14 @@ impl Ambient {
             // per-element value in a place where there is no element — and the
             // salt the engine mixes into it is a property of a Set's geometry.
             Ambient::Seed => kind != Kind::L3,
+            // **Downstream of an amplifier, and nowhere else it could mean
+            // anything.** An L1 writes the buffer an amplifier later reads, so
+            // `copy` there is zero by construction; an L3 has no element. In an
+            // L2 or an L4 it is either the index of the copy this invocation is
+            // producing or the one an upstream node produced, and where nothing
+            // upstream amplified it is zero — the same answer `seed` gives in a
+            // procedure that spawns nothing, and for the same reason.
+            Ambient::Copy => kind == Kind::L2 || kind == Kind::L4,
             Ambient::T | Ambient::Beats => true,
             Ambient::Capacity => kind == Kind::L1,
             // **An L3 gets `dt` and an L4 does not**, which is the asymmetry
@@ -524,6 +547,19 @@ impl CapacityDecl {
     }
 }
 
+/// `amplify <factor>`
+///
+/// **A compile-time constant, on the same terms as a loop bound**, because the
+/// output buffer is sized from it and the cost is multiplied out by it — neither
+/// of which a runtime value could do. It is the one thing in the language that
+/// changes an element count, which is why it is a header declaration rather than
+/// anything a block can say: what a `deform` writes is decided before it runs.
+#[derive(Debug, Clone, Copy)]
+pub struct AmplifyDecl {
+    pub factor: u32,
+    pub span: Span,
+}
+
 /// One `proc`, which is one file and fills one slot.
 #[derive(Debug, Clone)]
 pub struct Proc {
@@ -533,6 +569,8 @@ pub struct Proc {
     pub topology: Option<Topology>,
     /// L1 only.
     pub capacity: Option<CapacityDecl>,
+    /// L2 only.
+    pub amplify: Option<AmplifyDecl>,
     /// L4 only.
     pub blend: Option<Blend>,
     pub params: Vec<Param>,

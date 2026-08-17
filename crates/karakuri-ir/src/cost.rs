@@ -422,11 +422,27 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
         }
     }
 
+    // **Amplification is a product, and it is charged here rather than
+    // anywhere downstream.** A `deform` in a node of factor `n` runs `n` times
+    // for each element that reaches it, so its per-element figure is `n` times
+    // its block cost — which is what makes the ceiling mean the same thing for
+    // an amplifying stage as for any other, and what makes a stage of factor 64
+    // running an expensive body get refused for the reason it deserves rather
+    // than sailing through at a sixty-fourth of its true cost.
+    //
+    // `bytes_per_element` multiplies for the same reason and measures the same
+    // partial quantity it always did: this node's own `emit`, not the whole
+    // element passing through it. Amplified, that is the storage the node adds
+    // per element *reaching* it, which is the honest reading of the unit.
+    let amplify = u64::from(checked.amplify.unwrap_or(1));
+    let ops_per_element = ops_per_element.saturating_mul(amplify);
+
     let cost = Cost {
         ops_per_element,
         ops_per_spawn,
         ops_per_fragment,
-        bytes_per_element: storage_bytes(checked),
+        bytes_per_element: storage_bytes(checked)
+            .saturating_mul(checked.amplify.unwrap_or(1)),
     };
 
     for (measured, ceiling, unit) in [
