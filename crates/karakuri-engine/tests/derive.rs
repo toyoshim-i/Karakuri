@@ -444,3 +444,221 @@ proc emits_age {
         "the refusal has to name the attribute: {err}"
     );
 }
+
+/// **An L1 may consume a derived attribute, and the substitution it gets is its
+/// own previous frame's.**
+///
+/// Nothing here read one before, and that was the file's largest hole: deleting
+/// the derived branch of either the L1 or the L2 resolver left the whole
+/// workspace green, and what it produces is a shader naming a field the struct
+/// does not have — a wgpu validation panic at build, from a `.kir` the checker
+/// accepted.
+///
+/// The anchor is the same procedure emitting `age` and accumulating it. Both
+/// place the sprite by the age they read, so agreement is agreement to a texel.
+#[test]
+fn an_l1_reading_a_derived_age_matches_one_that_accumulates_its_own() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let l4 = reader("plain", "position", "position.y");
+
+    // The L1 writes its own age into `position.y`, so the renderer needs to
+    // know nothing about the rule.
+    let anchored = r#"
+proc anchored {
+  kind     L1
+  topology points
+  capacity [1, 1] = 1
+
+  emit position, age
+
+  element {
+    age      = age + dt;
+    position = vec3(0.0, age * 3.0 - 1.0, 0.0);
+  }
+}
+"#;
+    let derived = r#"
+proc derives {
+  kind     L1
+  topology points
+  capacity [1, 1] = 1
+
+  emit     position
+  consumes age
+
+  element {
+    position = vec3(0.0, age * 3.0 - 1.0, 0.0);
+  }
+}
+"#;
+    let mut a = build(&gpu, anchored, &l4);
+    let mut d = build(&gpu, derived, &l4);
+    let (ay, dy) = (centre_y(&gpu, &mut a, FRAMES), centre_y(&gpu, &mut d, FRAMES));
+    assert!(
+        (ay - dy).abs() < 1.5,
+        "an L1's own accumulated age put the sprite at row {ay} and a derived one at {dy}"
+    );
+}
+
+/// The same claim for an L2, which reads through a different resolver and would
+/// fail in a different file.
+#[test]
+fn an_l2_reading_a_derived_age_matches_one_the_l1_accumulates() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let l4 = reader("plain", "position", "position.y");
+    let lift = r#"
+proc lift {
+  kind L2
+
+  consumes position, age
+
+  deform {
+    position = vec3(0.0, age * 3.0 - 1.0, 0.0);
+  }
+}
+"#;
+    let anchored = build_chain(
+        &gpu,
+        &mover("anchored", "position, age", "    age = age + dt;\n"),
+        &[lift],
+        &l4,
+    )
+    .expect("the L1 emits `age`");
+    let derived = build_chain(&gpu, &mover("bare", "position", ""), &[lift], &l4)
+        .expect("nothing emits `age`, so it is derived");
+
+    let mut anchored = anchored;
+    let mut derived = derived;
+    let (ay, dy) = (
+        centre_y(&gpu, &mut anchored, FRAMES),
+        centre_y(&gpu, &mut derived, FRAMES),
+    );
+    assert!(
+        (ay - dy).abs() < 1.5,
+        "an L2 over an emitted age drew at row {ay} and over a derived one at {dy}"
+    );
+}
+
+/// **An element's first update has no velocity**, and the alternative measured
+/// twenty times the true speed.
+///
+/// A newly spawned element's first pass runs over a *fraction* of a step, and
+/// the step it is divided by is scaled to that fraction — right for a body that
+/// integrates, wrong for one that computes position from `t` and jumps a whole
+/// step regardless. An element of a procedure with no `spawn` block has the
+/// same problem from the other end: it starts at the origin because that is
+/// what an unwritten buffer holds, and its first pass is a difference against a
+/// state it was never in.
+///
+/// Read off the buffer rather than out of the picture, because the artifact is
+/// one frame of one batch and a mean position cannot see it.
+#[test]
+fn a_first_update_has_no_derived_velocity() {
+    let gpu = Gpu::headless().expect("a GPU");
+    const SPEED: f32 = 0.25;
+
+    // Closed form, so nothing about the body scales with the step: every
+    // element jumps to where `t` says it should be, whatever fraction of a step
+    // it has lived.
+    let l1 = format!(
+        r#"
+proc jumps {{
+  kind     L1
+  topology points
+  capacity [64, 64] = 64
+
+  param spawn_rate : float [0.0, 4000.0] = 600.0
+
+  emit position
+
+  spawn {{
+    position = vec3(0.0, 0.0, 0.0);
+  }}
+
+  element {{
+    position = vec3(0.0, {SPEED:?} * t, 0.0);
+  }}
+}}
+"#
+    );
+    let mut set = build(
+        &gpu,
+        &l1,
+        &reader("by_speed", "position, velocity", "length(velocity)"),
+    );
+    for _ in 0..3 {
+        frame(&gpu, &mut set);
+    }
+
+    let layout = set.element_layout().clone();
+    let offset = layout.offset_of("velocity") as usize;
+    let stride = layout.stride as usize;
+    let bytes = set.read_elements(&gpu.device, &gpu.queue);
+    let speeds: Vec<f32> = bytes
+        .chunks_exact(stride)
+        .map(|e| {
+            let y = f32::from_le_bytes(e[offset + 4..offset + 8].try_into().unwrap());
+            y.abs()
+        })
+        .collect();
+
+    // Every element is either still waiting for its first whole step, or moving
+    // at the one speed this procedure has. Nothing in between, and nothing
+    // above — an inflated first update reads as a multiple of the true speed,
+    // and the multiple is up to twice the batch size.
+    for (i, &v) in speeds.iter().enumerate() {
+        assert!(
+            v < 1e-4 || (v - SPEED).abs() < SPEED * 0.05,
+            "element {i} has a derived speed of {v}, and this procedure only ever moves at {SPEED}"
+        );
+    }
+    assert!(
+        speeds.iter().any(|&v| (v - SPEED).abs() < SPEED * 0.05),
+        "no element reached the true speed at all, so the assertion above was vacuous: {speeds:?}"
+    );
+}
+
+/// **A rule that could not run says why**, rather than repeating advice that
+/// contradicts it.
+///
+/// `velocity` is synthesised from `position`, so an L1 emitting neither cannot
+/// have it. The refusal for that used to drop the reason and fall through to
+/// the generic hint — which asserts, on a refusal *of* `velocity`, that
+/// `velocity` is synthesised where nothing emits it. A regenerating model
+/// reading that is being told the specification is wrong, and the one thing
+/// that would fix the file is the one thing the message does not name.
+#[test]
+fn a_blocked_rule_names_the_attribute_it_needed() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let no_position = r#"
+proc no_position {
+  kind     L1
+  topology points
+  capacity [8, 8] = 8
+
+  emit tint
+
+  element {
+    tint = vec3(1.0, 1.0, 1.0);
+  }
+}
+"#;
+    let err = build_chain(
+        &gpu,
+        no_position,
+        &[],
+        &reader("wants_speed", "velocity", "velocity.y"),
+    )
+    .err()
+    .expect("`velocity` derives from `position`, which this L1 does not emit");
+
+    let text = err.to_string();
+    assert!(
+        text.contains("position"),
+        "the refusal has to name what the rule wanted: {text}"
+    );
+    assert!(
+        !text.contains("nothing else is"),
+        "and must not fall through to the hint that says `velocity` is synthesised: {text}"
+    );
+}

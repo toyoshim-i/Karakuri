@@ -386,20 +386,8 @@ pub struct ElementLayout {
 }
 
 impl ElementLayout {
-    /// Whether this position offers `attr` at all, as a slot or as a
-    /// derivation. **The whole of the composition check**, asked of one
-    /// attribute.
-    pub fn offers(&self, attr: Attr) -> bool {
-        self.slots.iter().any(|s| s.attr == Some(attr)) || self.derived.contains(&attr)
-    }
-
-    /// Whether `attr` is stored here rather than synthesised.
-    pub fn is_stored(&self, attr: Attr) -> bool {
-        self.slots.iter().any(|s| s.attr == Some(attr))
-    }
-
     /// Whether the slot named `name` exists — for the engine-written ones,
-    /// which carry no [`Attr`].
+    /// which carry no [`Attr`], where asking by [`Attr`] is not possible.
     pub fn has_slot(&self, name: &str) -> bool {
         self.slots.iter().any(|s| s.name == name)
     }

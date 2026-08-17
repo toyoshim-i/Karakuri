@@ -764,7 +764,7 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
     let id = Identity {
         seed: seed_used,
         copy: copy_used,
-        has_copy_slot: elements.slots.iter().any(|s| s.name == "copy"),
+        has_copy_slot: elements.has_slot("copy"),
     };
     let attrs_used: Vec<Attr> = checked.consumes.iter().copied().filter(|a| attrs_used_set.contains(a)).collect();
 

@@ -547,6 +547,12 @@ them apart is the deliberate act of writing `copy` down. The cost is a product: 
 six times per element and the estimate says so, so an expensive deformation is refused at a
 factor the same body would pass at.
 
+or an **L3**, which is the camera:
+
+```
+karakuri-cli --set examples/drift_shell.kir,examples/beat_jump.kir,examples/soft_points.kir
+```
+
 ### Two attributes you do not have to emit
 
 A renderer that wants `age` or `velocity` no longer needs an L1 that thought to emit them.
@@ -559,15 +565,15 @@ Nothing is declared and nothing is switched on. An L1 that *does* emit one of th
 own value, and the two never both apply. The storage is paid only where something actually
 asks: a Set whose renderers never mention `age` carries nothing for it.
 
+**A derived `velocity` is the simulation's, not the chain's.** It is written where the step
+is — in the L1 — so a deformation below it moves the elements without changing it. That is
+the reading to want: a `velocity` is how the material is *moving*, and a warp is not motion,
+it is where the material is being put. An L2 that wants the other reading emits its own.
+
 Every other attribute is unchanged — consuming `normal` over geometry that does not emit it
 is still refused, by name, at build. There is no rule for it and there is not going to be
 one: a normal is a property of a surface, and a point cloud has no surface to take it from.
 
-or an **L3**, which is the camera:
-
-```
-karakuri-cli --set examples/drift_shell.kir,examples/beat_jump.kir,examples/soft_points.kir
-```
 
 There is nothing to spell for either. Every `.kir` declares its own `kind`, so the first path
 is the geometry and the rest are sorted by what they say they are — L2s deform in the order

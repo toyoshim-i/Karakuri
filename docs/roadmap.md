@@ -820,11 +820,12 @@ fine alone and is unreadable next to lights.
 a `kind` behind it, and a Set holds a chain of them. That is the half of this milestone that
 makes the library worth having, and it is done.
 
-**Five items from the Adds list below are not**, and they divide cleanly. Three are one
+**Four items from the Adds list below are not**, and they divide cleanly. Three are one
 dependency: **multiple L1 sources**, **cross-source interpolation** which needs them, and the
-nested L5's motivating case — "two pipelines, one knob" — which is two sources. Two are their
-own work: **slot interface contracts and the attribute derivation that comes with them**, and
-the **`Field` type**, with the **graph compiler** beside it.
+nested L5's motivating case — "two pipelines, one knob" — which is two sources. One is its
+own work: the **`Field` type**, with the **graph compiler** beside it.
+
+**Slot interface contracts landed as the attribute derivation**, and are struck below.
 
 **Two corrections to the sentence this replaces.** It called multiple L1 sources *"decided in
 full"*; the spec has seven questions it does not answer, and the sharpest is that masking on
