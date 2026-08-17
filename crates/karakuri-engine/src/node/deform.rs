@@ -87,10 +87,11 @@ impl Deform {
         l2: &Checked,
         upstream: &[Attr],
         synthetic: Synthetic,
+        derived: &[Attr],
         input: &Geometry<'_>,
         capacity: u32,
     ) -> Result<Deform, SetError> {
-        let shader = generate_l2(l2, upstream, synthetic);
+        let shader = generate_l2(l2, upstream, synthetic, derived);
         // **The output capacity, and it is what everything below this node is
         // sized and dispatched against.** Saturating rather than wrapping: the
         // checker caps a single factor, a Set caps its own capacity, and a chain

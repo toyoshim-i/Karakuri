@@ -1314,10 +1314,30 @@ than against one being taught to.
   before that was noticed, which is the argument for injecting them
 - Cross-source interpolation, restricted at first to static sources where `seed` is the slot
   index and the paired read is a direct one
-- **Slot interface contracts, attribute declarations, automatic adapters** — and the
-  attribute derivation that waits on them: `velocity` from `position`, `age` from spawn time.
-  Today an unmet `consumes` is an unconditional error and the check pass names those two
-  specially so a reader is not left wondering. Not built
+- ~~**Slot interface contracts, attribute declarations, automatic adapters**~~ — **built as
+  the derivation, and the three words above turned out to name one thing.** An unmet
+  `consumes` is no longer an unconditional error: `age` and `velocity` are synthesised where
+  nothing emits them, so a renderer wanting a motion streak composes with an L1 that never
+  thought to emit `velocity`. That coupling is the whole of what the contract existed to
+  remove.
+
+  **The contract is the element layout, subsumed rather than sat beside**, which is what the
+  note further down asked for. `generate_element_layout` no longer takes `emit` alone: it
+  takes what the *Set* decided, so a slot can exist that no procedure named, and an
+  `ElementLayout` now answers `offers` — as a slot, or as a derivation — rather than only
+  listing fields.
+
+  **Three things the design paragraph got wrong, all in the same direction.** It said
+  `velocity` needed a third buffer; it needs a slot, because the obstacle is compaction
+  reordering rather than buffer count. It said the storage would be always-on; it is
+  conditional, because the Set knows whether anything consumes the attribute. And it implied
+  adapters would be *nodes*; both rules are pure functions of the element and the clock, so
+  they are a substitution at the read site and a write in a pass that already runs. Nothing
+  was inserted into the chain.
+
+  What is **not** built from that bullet: user-declared attribute names, and the count-mode
+  and spatial-domain fields the algebra above mentions. Neither was needed by anything, and
+  `amplify` already carries the count mode where it matters
 - ~~L2 stacking with weights and attribute-based masks~~ — **built.** `weight` is a declared
   `param` and `mask` is a block writing a `strength` in `[0, 1]`; keeping them separate is
   what keeps the operator's control a `param`, since faders, bindings, transitions and a

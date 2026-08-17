@@ -26,8 +26,8 @@ pub mod span;
 pub mod typed;
 
 pub use ast::{
-    Ambient, Attr, BinOp, Blend, Block, BlockKind, CapacityDecl, Expr, Kind, Lit, Output, Param,
-    Proc, Stmt, Topology, Ty, UnOp,
+    Ambient, AmplifyDecl, Attr, BinOp, Blend, Block, BlockKind, CapacityDecl, Derivation, Expr,
+    Kind, Lit, Output, Param, Proc, Stmt, Topology, Ty, UnOp,
 };
 pub use error::{IrError, IrResult, Stage};
 pub use parse::parse;

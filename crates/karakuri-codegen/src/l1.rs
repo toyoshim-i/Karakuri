@@ -118,10 +118,27 @@ struct L1Resolver {
     read_idx: &'static str,
     write_idx: &'static str,
     block: BlockKind,
+    /// Attributes readable here that have no slot, synthesised at the read
+    /// site. An L1 may consume one: the slots the rules read are written by
+    /// this very procedure, so what it reads back is the previous frame's —
+    /// which is what `prev` means everywhere else in the block.
+    derived: Vec<Attr>,
 }
 
 impl Resolver for L1Resolver {
     fn read_attr(&self, attr: Attr) -> String {
+        if self.derived.contains(&attr) {
+            return match attr.derivation() {
+                Some(karakuri_ir::Derivation::SinceBirth) => {
+                    // **`step_args.t`, not `u.t`** — an L1 is substepped, and a
+                    // block that reads its own clock per substep has to read
+                    // this one, or an age would jump by a whole frame inside a
+                    // frame of several steps.
+                    format!("(step_args.t - prev[{}].birth_t.x)", self.read_idx)
+                }
+                other => unreachable!("{other:?} is not synthesised at the read site"),
+            };
+        }
         format!("prev[{}].{}.{}", self.read_idx, attr.name(), crate::ty::attr_swizzle(attr.ty()))
     }
 
@@ -266,7 +283,50 @@ fn write_element_bindings(out: &mut String, layout: &ElementLayout) {
 /// survivors end. `counts.survivors` is the scan's answer for *this* step,
 /// written by `finalize` and not yet rolled into `counts.range` — `advance`
 /// does that afterwards, because `element` still needs the pre-scan range.
-fn spawn_entry(body: &str) -> String {
+/// The engine-written slots a derivation rule needs, at spawn.
+///
+/// **After the body**, like `seed` and `birth_frac` and for the same reason: a
+/// `spawn` block writes the attributes it declares, and these are read off what
+/// it wrote.
+fn spawn_derivations(derived: &[Attr]) -> String {
+    let mut out = String::new();
+    if derived.contains(&Attr::Age) {
+        // **The instant, not a duration.** `age` is `t` minus this wherever it
+        // is read, which is exact at any clock and needs nothing per frame.
+        out.push_str("    next[slot].birth_t = vec4<f32>(step_args.t, 0.0, 0.0, 0.0);\n");
+    }
+    if derived.contains(&Attr::Velocity) {
+        // **Zero, because a new element has no previous frame to differ from.**
+        // The alternative — leaving it — is last frame's value for whichever
+        // element held this slot before, which is a spawn that inherits the
+        // motion of something that died.
+        out.push_str("    next[slot].velocity = vec4<f32>(0.0, 0.0, 0.0, 0.0);\n");
+    }
+    out
+}
+
+/// The same slots, on every step.
+///
+/// `velocity` is the one place this crate divides by the step, and it is
+/// deliberate: see `karakuri_ir::Derivation::is_stored`. It uses `_dt` rather
+/// than `u.dt`, so an element on its first update is differenced against the
+/// fraction of a step it actually lived — the same correction the body gets.
+fn element_derivations(derived: &[Attr]) -> String {
+    let mut out = String::new();
+    if derived.contains(&Attr::Age) {
+        out.push_str("    next[out].birth_t = prev[i].birth_t;\n");
+    }
+    if derived.contains(&Attr::Velocity) {
+        out.push_str(
+            "    next[out].velocity = vec4<f32>(\n\
+             \x20       (next[out].position.xyz - prev[i].position.xyz) / max(_dt, 1e-9),\n\
+             \x20       0.0);\n",
+        );
+    }
+    out
+}
+
+fn spawn_entry(body: &str, derivations: &str) -> String {
     format!(
         "@compute @workgroup_size({WORKGROUP_SIZE})
 fn spawn(@builtin(global_invocation_id) gid: vec3<u32>) {{
@@ -279,7 +339,7 @@ fn spawn(@builtin(global_invocation_id) gid: vec3<u32>) {{
 {body}    next[slot].seed = vec4<u32>(seed, 0u, 0u, 0u);
     next_alive[slot] = 1u;
     next[slot].birth_frac = vec4<f32>(birth_frac, 0.0, 0.0, 0.0);
-}}
+{derivations}}}
 
 "
     )
@@ -292,7 +352,7 @@ fn spawn(@builtin(global_invocation_id) gid: vec3<u32>) {{
 ///
 /// A static procedure gets `out = i` and no `prev_alive` read, because its
 /// alive flags are all 1 and its scan would be the identity.
-fn element_entry(body: &str, compacted: bool) -> String {
+fn element_entry(body: &str, compacted: bool, derivations: &str) -> String {
     let skip_dead = if compacted {
         // Its slot is being reclaimed by this step's scan; `dest[i]` for a
         // dead element is some survivor's destination, so writing through it
@@ -314,7 +374,7 @@ fn element(@builtin(global_invocation_id) gid: vec3<u32>) {{
 {body}    next[out].seed = vec4<u32>(seed, 0u, 0u, 0u);
     next_alive[out] = select(1u, 0u, _killed);
     next[out].birth_frac = vec4<f32>(1.0, 0.0, 0.0, 0.0);
-}}
+{derivations}}}
 "
     )
 }
@@ -334,14 +394,33 @@ fn contains_kill(stmts: &[TStmt]) -> bool {
 /// Lowers a `Checked` L1 procedure to WGSL. Panics if `checked.kind` is not
 /// `Kind::L1` or it has no `element` block — both are preconditions a
 /// `Checked` value from a real check pass already guarantees.
-pub fn generate_l1(checked: &Checked) -> L1Shader {
+/// `derived` is what the *Set* has decided to synthesise — the attributes some
+/// node below this one consumes and nothing emits. An L1 file cannot know it,
+/// which is the point: the slots those rules read are written here, at spawn and
+/// on every step, and only a caller holding the whole chain knows whether
+/// anything is going to ask for them.
+pub fn generate_l1(checked: &Checked, derived: &[Attr]) -> L1Shader {
     assert_eq!(checked.kind, Kind::L1, "generate_l1 called on a non-L1 procedure");
 
-    // **`Synthetic::NONE`, and it is a statement rather than a default.**
-    // Every slot beyond `seed` and `birth_frac` records something that happened
-    // to an element on its way down a chain, and nothing has happened to an
-    // element an L1 is in the act of making.
-    let element_layout = layout::generate_element_layout(&checked.emit, layout::Synthetic::NONE);
+    // **`Synthetic::NONE`, and it is a statement rather than a default.** `copy`
+    // records something that happened to an element on its way down a chain, and
+    // nothing has happened to an element an L1 is in the act of making. A
+    // derivation's source slot is not like that: it is written *here* precisely
+    // because here is where the element is made.
+    // **Nothing emitted can also be derived**, and the assertion is here rather
+    // than left implicit because getting it wrong is two slots of one name in a
+    // WGSL struct plus an engine write on top of the procedure's own. The Set
+    // decides `derived` by asking what is *missing*, so this holds by
+    // construction — which is exactly the kind of invariant that stops holding
+    // when a second caller appears.
+    debug_assert!(
+        derived.iter().all(|a| !checked.emit.contains(a)),
+        "`{}` both emits and derives {:?}",
+        checked.name,
+        derived.iter().filter(|a| checked.emit.contains(a)).collect::<Vec<_>>()
+    );
+    let element_layout =
+        layout::generate_element_layout(&checked.emit, layout::Synthetic::NONE, derived);
 
     // No `t`: it is per substep, not per frame, and lives in `StepArgs`.
     let mut b = UniformLayoutBuilder::new();
@@ -366,6 +445,7 @@ pub fn generate_l1(checked: &Checked) -> L1Shader {
             read_idx: "i",
             write_idx: "out",
             block: BlockKind::Element,
+            derived: element_layout.derived.clone(),
         };
         let mut out = String::new();
         emit_stmts(&element_blk.stmts, &resolver, &mut req, 1, &mut out);
@@ -376,6 +456,11 @@ pub fn generate_l1(checked: &Checked) -> L1Shader {
             read_idx: "slot",
             write_idx: "slot",
             block: BlockKind::Spawn,
+            // **Empty in a `spawn` block.** An element being allocated has no
+            // previous frame and no birth instant yet — the slot holding it is
+            // written after this body runs. Reading `age` there would be
+            // reading the value of whatever last occupied the slot.
+            derived: Vec::new(),
         };
         let mut out = String::new();
         emit_stmts(&blk.stmts, &resolver, &mut req, 1, &mut out);
@@ -398,9 +483,13 @@ pub fn generate_l1(checked: &Checked) -> L1Shader {
     src.push_str(&prelude::render(&req));
     src.push('\n');
     if let Some(body) = &spawn_body {
-        src.push_str(&spawn_entry(body));
+        src.push_str(&spawn_entry(body, &spawn_derivations(derived)));
     }
-    src.push_str(&element_entry(&element_body, compacted));
+    src.push_str(&element_entry(
+        &element_body,
+        compacted,
+        &element_derivations(derived),
+    ));
 
     L1Shader { source: src, uniform_layout, uniform_pad_f32, element_layout, has_spawn, compacted }
 }

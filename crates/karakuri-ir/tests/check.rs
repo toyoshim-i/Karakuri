@@ -420,23 +420,30 @@ proc bad {
     );
 }
 
-/// `velocity` is consumed but not emitted. `position` being emitted used to
-/// be enough for the check pass to derive `velocity` from it and let this
-/// through — but nothing downstream ever implemented that derivation: there
-/// is no WGSL emitter for it and no second frame of `position` history to
-/// compute it from. A procedure in this shape checked clean and then read
-/// zeros for `velocity` at runtime, which is exactly the failure "one
-/// severity" cannot allow — a rejection is what gives a regenerating model
-/// something to act on. Derivation is now design only, recorded below the
-/// "specified, not implemented" line in `docs/ir-spec.md`, and this must be
-/// a plain rejection.
+/// **`velocity` consumed and not emitted is now satisfied, and this test says
+/// the opposite of what it used to.**
+///
+/// It was a rejection test, and its reason was good while it held: the check
+/// pass had once accepted this shape on the strength of a derivation nothing
+/// implemented, so a procedure checked clean and then read zeros at runtime —
+/// the one failure "one severity" cannot allow. What changed is the second
+/// half. The engine writes a `velocity` slot from the step it already has, so
+/// the value is there and the acceptance is not a promise any more.
+///
+/// The rejection it becomes is the one that is still real: **`velocity` derives
+/// from `position`, and a procedure that emits neither cannot have it.** That
+/// is a question one file can answer, which is why it stayed in the checker
+/// while "does anybody emit this" moved to the Set.
 #[test]
-fn consumes_not_covered_by_emit_is_rejected_even_with_a_derivation_rule() {
-    let src = r#"
+fn a_consumed_velocity_is_satisfied_by_the_derivation_when_position_is_emitted() {
+    check_ok(
+        r#"
 proc weird {
   kind     L1
   topology points
   capacity [1024, 4096] = 2048
+
+  param spawn_rate : float [0.0, 4000.0] = 100.0
 
   emit     position, age
   consumes position, velocity, age
@@ -447,17 +454,34 @@ proc weird {
   }
 
   element {
-    position = position;
+    position = position + velocity * dt;
     age      = age + dt;
   }
 }
-"#;
-    let errs = check_err(src);
+"#,
+    );
+
+    // And the half that is still a refusal, with the source missing.
+    let errs = check_err(
+        r#"
+proc no_source {
+  kind     L1
+  topology points
+  capacity [1024, 4096] = 2048
+
+  emit     age
+  consumes velocity, age
+
+  element {
+    age = age + dt;
+  }
+}
+"#,
+    );
     assert!(
-        errs.iter()
-            .any(|e| e.message.contains("velocity") && e.message.contains("not implemented")),
-        "expected a diagnostic naming `velocity` and saying its derivation is not implemented, \
-         got: {errs:?}"
+        errs.iter().any(|e| e.message.contains("velocity")
+            && e.message.contains("derived from `position`")),
+        "expected the rule's source to be named, got: {errs:?}"
     );
 }
 
@@ -545,7 +569,7 @@ proc probe {
   capacity [64, 1024] = 256
 
   emit position
-  consumes position, velocity, normal
+  consumes position, normal, uv
 
   element {
     position = vec3(0.0, 0.0, 0.0);
@@ -557,25 +581,25 @@ proc probe {
         .iter()
         .filter(|e| e.message.contains("consumed but not emitted"))
         .map(|e| {
-            if e.message.contains("velocity") {
-                "velocity"
-            } else if e.message.contains("normal") {
+            if e.message.contains("normal") {
                 "normal"
+            } else if e.message.contains("uv") {
+                "uv"
             } else {
                 "?"
             }
         })
         .collect();
-    assert_eq!(named, vec!["velocity", "normal"], "{errs:?}");
+    assert_eq!(named, vec!["normal", "uv"], "{errs:?}");
 
-    // The `consumes` line, not the `proc` line: column 22 is where `velocity`
-    // starts, and the span covers exactly that word.
-    let velocity = errs
+    // The `consumes` line, not the `proc` line: the span covers exactly the
+    // word, so a repair prompt can point at it.
+    let normal = errs
         .iter()
-        .find(|e| e.message.contains("velocity"))
-        .expect("a diagnostic about `velocity`");
-    let text = &src[velocity.span.start as usize..velocity.span.end as usize];
-    assert_eq!(text, "velocity", "span covers `{text}`");
+        .find(|e| e.message.contains("normal"))
+        .expect("a diagnostic about `normal`");
+    let text = &src[normal.span.start as usize..normal.span.end as usize];
+    assert_eq!(text, "normal", "span covers `{text}`");
 }
 
 /// "`spawn` requires a spawn rate. Declare it as a parameter named

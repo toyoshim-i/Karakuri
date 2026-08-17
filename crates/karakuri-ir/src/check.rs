@@ -772,26 +772,40 @@ fn check_consumes_emitted(
         if emit.contains(&attr) {
             continue;
         }
-        let hint = format!("add `{}` to `emit`", attr.name());
-        // `is_derivable` names the two attributes the spec still describes a
-        // derivation rule for, purely so the message below can say so — it
-        // does not change the verdict, since the rule is unimplemented for
-        // both. See its doc comment in `ast.rs`.
-        let message = if attr.is_derivable() {
-            let source = match attr {
-                Attr::Velocity => "a derivation from `position`",
-                Attr::Age => "a derivation from spawn time",
-                _ => unreachable!("is_derivable is true for exactly Velocity and Age"),
-            };
-            format!(
-                "`{}` is consumed but not emitted; {source} is specified in `docs/ir-spec.md` \
-                 but not implemented",
-                attr.name()
-            )
-        } else {
-            format!("`{}` is consumed but not emitted", attr.name())
-        };
-        errors.push(IrError::contract(span, message).with_hint(hint));
+        // **A rule is a satisfaction, not a softer refusal.** `age` and
+        // `velocity` are synthesised where nothing emits them — the Set decides
+        // that, since it is the first point holding every procedure at once, and
+        // an L1 asking for one of them is asking for something the Set will
+        // provide. `velocity` additionally needs `position`, and that *is* a
+        // one-file question: the rule reads it off this procedure's own element.
+        if let Some(rule) = attr.derivation() {
+            match rule.source() {
+                None => continue,
+                Some(from) if emit.contains(&from) => continue,
+                Some(from) => {
+                    errors.push(
+                        IrError::contract(
+                            span,
+                            format!(
+                                "`{}` is derived from `{}`, which this procedure does not emit",
+                                attr.name(),
+                                from.name()
+                            ),
+                        )
+                        .with_hint(format!(
+                            "add `{}` to `emit`, or emit `{}` and compute it yourself",
+                            from.name(),
+                            attr.name()
+                        )),
+                    );
+                    continue;
+                }
+            }
+        }
+        errors.push(
+            IrError::contract(span, format!("`{}` is consumed but not emitted", attr.name()))
+                .with_hint(format!("add `{}` to `emit`", attr.name())),
+        );
     }
 }
 

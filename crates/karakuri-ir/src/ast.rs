@@ -226,16 +226,103 @@ impl Attr {
         }
     }
 
-    /// Whether `docs/ir-spec.md` describes a rule for synthesising this
-    /// attribute when a consumer needs it and the producer does not emit it.
-    /// No such rule is implemented — see "Beyond v0.2 — specified, not
-    /// implemented" — so this does not mean the check pass will accept a
-    /// `consumes` entry missing from `emit`; it only changes the diagnostic
-    /// `check_consumes_emitted` produces when it rejects one, so a
-    /// regenerating model is told the rule exists rather than told the spec
-    /// is wrong.
+    /// How this attribute is synthesised when a consumer needs it and nothing
+    /// upstream emits it, or `None` where there is no rule.
+    ///
+    /// **The rule names what the engine has to carry, not what a pass has to
+    /// run.** Both of the two are pure functions of the element and the clock
+    /// once one extra value rides along with the element — a spawn instant, or
+    /// last frame's position — so the synthesis is a substitution at the read
+    /// site and there is no adapter *node* anywhere. That is cheaper than the
+    /// alternative in the obvious way and in one less obvious one: a node would
+    /// have to sit somewhere in the chain, and where it sat would be visible.
+    pub fn derivation(self) -> Option<Derivation> {
+        Some(match self {
+            Attr::Age => Derivation::SinceBirth,
+            Attr::Velocity => Derivation::FrameDifference(Attr::Position),
+            _ => return None,
+        })
+    }
+
+    /// Whether [`Attr::derivation`] has a rule for this attribute.
     pub fn is_derivable(self) -> bool {
-        matches!(self, Attr::Velocity | Attr::Age)
+        self.derivation().is_some()
+    }
+}
+
+/// How an attribute nothing emits is synthesised.
+///
+/// **A closed set with two members**, because the two are what
+/// `docs/ir-spec.md` settled and because each one costs a slot on every element
+/// of any Set that needs it. Adding a third is adding a slot, which is the sort
+/// of thing that should be hard rather than a matter of extending a list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Derivation {
+    /// `age`, as the clock minus the instant the element was spawned.
+    ///
+    /// Exact rather than accumulated, which is the difference between this and
+    /// what an L1 writes by hand: an accumulated `age` drifts with the
+    /// substep count and with the birth-fraction correction, and this does not.
+    /// It costs the engine a `birth_t` slot, written once at spawn and carried.
+    SinceBirth,
+    /// `velocity`, as the change in a source attribute over one frame, divided
+    /// by the step.
+    ///
+    /// **It costs a slot holding last frame's value, and that is what makes it
+    /// survive compaction.** The obvious implementation — differencing the two
+    /// buffers double buffering already has — does not work, because compaction
+    /// moves elements between frames and index `i` is not the same element in
+    /// both. A value carried *on* the element moves with it, exactly as
+    /// `birth_frac` and `seed` do, and needs no map from an identity back to a
+    /// slot.
+    ///
+    /// `docs/ir-spec.md` said this needed a third buffer. It does not; it needs
+    /// a slot, which is the same answer the document already reaches for every
+    /// other per-element value the engine owns.
+    FrameDifference(Attr),
+}
+
+impl Derivation {
+    /// The attribute this rule reads, where it has one.
+    pub fn source(self) -> Option<Attr> {
+        match self {
+            Derivation::SinceBirth => None,
+            Derivation::FrameDifference(from) => Some(from),
+        }
+    }
+
+    /// **Whether the engine stores the derived attribute itself, or a reader
+    /// synthesises it from something else the engine stored.**
+    ///
+    /// The two rules answer differently, and the reason is a decision this
+    /// language already made rather than an implementation preference.
+    ///
+    /// `age` is `t` minus a stored spawn instant, and `t` is readable
+    /// everywhere — so the cheaper half is stored and the subtraction happens
+    /// where the attribute is read. Nothing has to be recomputed per frame and
+    /// the answer is exact rather than accumulated.
+    ///
+    /// `velocity` is a difference over a step divided by that step, and **an L4
+    /// deliberately has no `dt`**: a renderer is not given the simulation's step
+    /// because it does not integrate. Synthesising it at the read site would
+    /// mean smuggling `dt` into every renderer's uniform to serve one rule. So
+    /// the division happens where the step already is — in the L1's own pass,
+    /// against the same birth-fraction-corrected `dt` the simulation used — and
+    /// what a reader sees is an ordinary stored attribute.
+    pub fn is_stored(self) -> bool {
+        match self {
+            Derivation::SinceBirth => false,
+            Derivation::FrameDifference(_) => true,
+        }
+    }
+
+    /// What `docs/ir-spec.md` calls the derivation, for a diagnostic and for the
+    /// `derived` record in an artifact's metadata.
+    pub fn name(self) -> &'static str {
+        match self {
+            Derivation::SinceBirth => "spawn_time",
+            Derivation::FrameDifference(_) => "position",
+        }
     }
 }
 

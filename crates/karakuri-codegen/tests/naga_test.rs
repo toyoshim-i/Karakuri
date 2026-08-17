@@ -484,7 +484,7 @@ fn assert_layout_matches_text(source: &str, layout: &karakuri_codegen::layout::U
 /// built so its `consumes` is a subset of some L1 fixture's `emit`, and this
 /// derives the layout that L1 side would have produced.
 fn layout_for(l1: &Checked) -> karakuri_codegen::layout::ElementLayout {
-    karakuri_codegen::layout::generate_element_layout(&l1.emit, karakuri_codegen::layout::Synthetic::NONE)
+    karakuri_codegen::layout::generate_element_layout(&l1.emit, karakuri_codegen::layout::Synthetic::NONE, &[])
 }
 
 fn validate(source: &str) {
@@ -498,7 +498,7 @@ fn validate(source: &str) {
 
 #[test]
 fn drift_shell_l1_compiles_and_validates() {
-    let shader = karakuri_codegen::generate_l1(&drift_shell());
+    let shader = karakuri_codegen::generate_l1(&drift_shell(), &[]);
     validate(&shader.source);
 }
 
@@ -514,7 +514,7 @@ fn soft_points_l4_compiles_and_validates() {
 /// Every param name in this fixture is a real WGSL reserved word.
 #[test]
 fn params_named_after_wgsl_reserved_words_compile_and_validate() {
-    let shader = karakuri_codegen::generate_l1(&reserved_word_params_l1());
+    let shader = karakuri_codegen::generate_l1(&reserved_word_params_l1(), &[]);
     validate(&shader.source);
 }
 
@@ -527,13 +527,13 @@ fn params_named_after_wgsl_reserved_words_compile_and_validate() {
 /// pack a value into the wrong param's bytes.
 #[test]
 fn uniform_layout_and_emitted_struct_text_agree() {
-    let l1 = karakuri_codegen::generate_l1(&drift_shell());
+    let l1 = karakuri_codegen::generate_l1(&drift_shell(), &[]);
     assert_layout_matches_text(&l1.source, &l1.uniform_layout);
 
     let l4 = karakuri_codegen::generate_l4(&soft_points(), &layout_for(&drift_shell()));
     assert_layout_matches_text(&l4.source, &l4.uniform_layout);
 
-    let reserved = karakuri_codegen::generate_l1(&reserved_word_params_l1());
+    let reserved = karakuri_codegen::generate_l1(&reserved_word_params_l1(), &[]);
     assert_layout_matches_text(&reserved.source, &reserved.uniform_layout);
 
     // And specifically: the layout's semantic `name` must stay the
@@ -555,7 +555,7 @@ fn uniform_layout_and_emitted_struct_text_agree() {
 /// local shadowed the uniform binding.
 #[test]
 fn l1_locals_cannot_shadow_generated_identifiers() {
-    let shader = karakuri_codegen::generate_l1(&shadowing_locals_l1());
+    let shader = karakuri_codegen::generate_l1(&shadowing_locals_l1(), &[]);
     validate(&shader.source);
 }
 
@@ -734,7 +734,7 @@ fn zero_expr(ty: Ty) -> TExpr {
 #[test]
 fn l1_emitting_every_attribute_compiles_and_validates() {
     let checked = emits_every_attribute_l1();
-    let shader = karakuri_codegen::generate_l1(&checked);
+    let shader = karakuri_codegen::generate_l1(&checked, &[]);
     assert_eq!(shader.element_layout.slots.len(), 2 + karakuri_ir::Attr::ALL.len());
     assert_eq!(shader.element_layout.stride, (2 + karakuri_ir::Attr::ALL.len() as u32) * 16);
     validate(&shader.source);
@@ -797,7 +797,7 @@ fn l1_and_paired_l4_declare_byte_identical_element_structs() {
         &source[start..end]
     }
 
-    let l1 = karakuri_codegen::generate_l1(&drift_shell());
+    let l1 = karakuri_codegen::generate_l1(&drift_shell(), &[]);
     let l4 = karakuri_codegen::generate_l4(&soft_points(), &layout_for(&drift_shell()));
     assert_eq!(
         element_struct_text(&l1.source),
@@ -1166,7 +1166,7 @@ proc collides {
 "#;
     let parsed = karakuri_ir::parse(src).expect("parses");
     let checked = karakuri_ir::check::check(&parsed).expect("checks");
-    let shader = karakuri_codegen::generate_l2(&checked, &[Attr::Position, Attr::Age], karakuri_codegen::layout::Synthetic::NONE);
+    let shader = karakuri_codegen::generate_l2(&checked, &[Attr::Position, Attr::Age], karakuri_codegen::layout::Synthetic::NONE, &[]);
     validate(&shader.source);
 }
 
@@ -1179,7 +1179,7 @@ fn compiled_l2(src: &str, upstream: &[Attr], synthetic: karakuri_codegen::layout
 {
     let parsed = karakuri_ir::parse(src).expect("parses");
     let checked = karakuri_ir::check::check(&parsed).expect("checks");
-    karakuri_codegen::generate_l2(&checked, upstream, synthetic)
+    karakuri_codegen::generate_l2(&checked, upstream, synthetic, &[])
 }
 
 const MIRROR: &str = r#"
@@ -1360,6 +1360,7 @@ proc tinted {
     let amplified = karakuri_codegen::layout::generate_element_layout(
         &[Attr::Position],
         karakuri_codegen::layout::Synthetic { copy: true },
+       &[],
     );
     let shader = karakuri_codegen::generate_l4(&checked, &amplified);
     validate(&shader.source);
@@ -1397,6 +1398,7 @@ proc tinted {
     let plain = karakuri_codegen::layout::generate_element_layout(
         &[Attr::Position],
         karakuri_codegen::layout::Synthetic::NONE,
+       &[],
     );
     let shader = karakuri_codegen::generate_l4(&checked, &plain);
     validate(&shader.source);
