@@ -190,11 +190,16 @@ run reads a microphone — so what comes back is the performance and not just th
 | `--set L1.kir,L4.kir` | one deck slot. Repeat up to four times |
 | `--set L1.kir,L4.kir,L4.kir` | the same, drawn twice — one simulation, two renderers over it, in the order given |
 | `--set L1.kir,L2.kir,L4.kir` | a deformation between the two. Every path after the first is sorted by the `kind` it declares, so there is nothing new to spell: L2s deform in the order given, L4s draw in the order given |
+| `--set L1.kir,L3.kir,L4.kir` | a camera. One per slot; without one the built-in orbit |
+| `--merge N` | slot `N` **composites** its renderers instead of overdrawing them — a render target each, folded through a gain, an opacity, a blend mode and a mask per renderer. Costs one frame-sized target per renderer and folds at most four. Without it they share one target and meet through their own blend states, which is what you want for one cloud drawn two ways |
 | `L1.kir L4.kir` | the same, positionally, for one slot |
 | `--capacity N` | elements per Set. **Without it each procedure's own declared default is used**, which is what a `.kir`'s `capacity [min, max] = N` line is for; give this and it overrides every slot |
 | `--param name=value` | a uniform write, applied to every Set — and within a Set, to every node that declares the name |
-| `--param L4:1:name=value` | the same, addressed at one node. How two renderers over one geometry get different values; a bare name cannot, since it reaches both |
+| `--param L4:1:name=value` | the same, addressed at one node. How two renderers over one geometry get different values; a bare name cannot, since it reaches both. `L1`, `L2`, `L3` and `L4`, and the index is required |
+| `--publish NAME=key[LOW..HIGH]` | put one control on the console under a name the Set chose, over part of its declared range. Without any, every control is published — the first `--publish` makes the list *the* list. It narrows and never widens: a range outside what the procedure declared is refused |
+| `--publish NAME=L4:0:key[LOW..HIGH]` | the same, addressed at one node rather than every node declaring the key |
 | `--bind FIELDS` | attach a signal to a parameter — `layer=L1,key=turbulence,signal=energy,range=0.0..3.0` |
+| `--bind signal=control:NAME` | drive it from a **published control** instead of a signal. This is what a macro is: one knob on the desk moving several internal controls, each through its own curve and range. Publish first — a binding on a name nothing publishes is refused |
 | `--watch` | recompile and hot-swap when a `.kir` changes |
 | `--store DIR` | where the library, the scratch and the edit history live (default `.karakuri`) |
 | `--demo NAME` | drive itself from a script, for showing rather than playing. `transport` scrubs the beat clock; `lines` draws one L1 as sprites and as strokes and brings its own two-slot deck. Both loop |
@@ -490,10 +495,23 @@ The window is a preview, and an OBS capture of it covers the ordinary case — p
 first so the capture is the canvas exactly. Anything past that is output routing, which is
 deliberately outside this repository; see `docs/plugins.md`.
 
-### There are three ways to draw, and one way to blend
+### There are three ways to draw and two ways to blend
 
-`Topology` has three values now — `points`, `lines` and `fullscreen` — and `Blend` still has
-one, so everything is **additive**: a sprite, a stroke, or a marched field.
+`Topology` has three values — `points`, `lines` and `fullscreen` — and `Blend` has two.
+
+**`blend additive`** adds colour and occludes nothing. Everything glows, nothing is in front
+of anything, and it needs no sorting — which is why it is where this started.
+
+**`blend weighted`** is order-independent transparency: material in front hides material
+behind it, without a sort, at any element count. **It is not a drop-in swap.** `additive`
+sums past what coverage would allow, which is what makes emissive material read as light;
+`weighted` treats alpha as opacity, so a procedure written for one usually wants its exposure
+and its alpha reconsidered for the other. `examples/glass_shell.kir` is the one to read.
+
+A fragment's weight is how near the eye it is, measured between the **camera's own near and
+far planes** — so moving `far` moves every weighted fragment's weight. That is not a defect;
+it is what tying the weight to the frustum means, and it is the operator's lever on how hard
+the depth ordering reads.
 
 **Lines cost an L4 and nothing else.** A renderer draws segments by assigning `clip_b`, a
 second clip-space endpoint, alongside `clip`; leave it out and it draws sprites. The two
@@ -514,9 +532,39 @@ simulation and the draw:
 karakuri-cli --set examples/drift_shell.kir,examples/swirl_warp.kir,examples/soft_points.kir
 ```
 
-There is nothing to spell for it. Every `.kir` declares its own `kind`, so the first path is
-the geometry and the rest are sorted by what they say they are — L2s deform in the order
-given, L4s draw in the order given.
+or an **L3**, which is the camera:
+
+```
+karakuri-cli --set examples/drift_shell.kir,examples/beat_jump.kir,examples/soft_points.kir
+```
+
+There is nothing to spell for either. Every `.kir` declares its own `kind`, so the first path
+is the geometry and the rest are sorted by what they say they are — L2s deform in the order
+given, L4s draw in the order given, and a slot takes at most one camera.
+
+**Without an L3 the camera is a slow orbit**, which is what every example is written to look
+right under. An L3 replaces it for that slot: `beat_jump` cuts to a new angle on the beat and
+keeps facing the centre. It needs no state to do that — the angle is a hash of the beat
+number, so the camera is *seekable*, and scrubbing the transport puts it exactly where it
+would have been.
+
+**A deformation can apply partially**, in two ways that multiply into one:
+
+- **`weight`** is a `param` like any other, so it goes on a fader, takes a `--bind`, and can
+  be published — **when the modulator declares one.** It is a name the layer gives a meaning
+  to rather than one every L2 has: `late_bloom` declares it and `swirl_warp` does not, and
+  `--param L2:0:weight=0.3` on the second is reported and ignored like any other name nothing
+  declares.
+- **A `mask` block** decides *where*, per element, from the attributes reaching it —
+  `strength = smoothstep(0.2, 0.6, age)` blooms only what is old. This is where most of the
+  expressive range in a chain is: `examples/late_bloom.kir` is three lines of `deform`, and
+  masked on `age`, on `seed`, or on distance it is three different effects.
+
+They stack, and in either order, because an L2 keeps nothing between frames:
+
+```
+karakuri-cli --set examples/drift_shell.kir,examples/swirl_warp.kir,examples/late_bloom.kir,examples/soft_points.kir --param L2:1:weight=0.3
+```
 
 **One slot, one simulation, two renderers over it**, drawn in the order given. The passes
 run over one render target — the first clears it, the rest load what is there — so the
