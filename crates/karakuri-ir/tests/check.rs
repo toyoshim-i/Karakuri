@@ -1195,6 +1195,64 @@ proc marcher {
     );
 }
 
+/// **The mirror of the rule above, and it had the same failure mode.** `seed`
+/// is per-element identity, and a fullscreen L4 has no element: no element
+/// buffer is bound and the vertex stage is the engine's, not the procedure's.
+/// Read there it lowered to `in.seed` against a `VsOut` with no such field —
+/// valid `.kir`, invalid WGSL, and wgpu's uncaptured error handler took the
+/// process down before a frame was drawn.
+///
+/// Refused in the checker rather than in `Ambient::available_in` for the reason
+/// `eye` and `ray` are: what makes an L4 a marcher is the *absence* of a
+/// `vertex` block, and a block does not know its siblings.
+#[test]
+fn per_element_identity_is_refused_in_a_fullscreen_l4() {
+    let src = r#"
+proc marcher {
+  kind  L4
+  blend additive
+
+  fragment {
+    let h = hash1(seed);
+    color   = vec4(h, h, h, 1.0);
+  }
+}
+"#;
+    let errs = check_err(src);
+    assert!(
+        errs.iter().any(|e| e.message.contains("seed")
+            && e.message.contains("whole frame")
+            && e.hint.as_deref().unwrap_or_default().contains("vertex")),
+        "expected `seed` to be refused as per-element, got: {errs:?}"
+    );
+}
+
+/// The same value in a *per-element* L4 is what it has always been, and this is
+/// the half of the pair that keeps the refusal above from being a refusal of
+/// `seed` outright.
+#[test]
+fn per_element_identity_is_readable_in_an_l4_with_a_vertex_block() {
+    let src = r#"
+proc sprite {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip       = vec4(position, 1.0);
+    point_size = 4.0;
+  }
+
+  fragment {
+    let h = hash1(seed);
+    color   = vec4(h, h, h, 1.0);
+  }
+}
+"#;
+    check_ok(src);
+}
+
 /// `eye` and `ray` are fragment-only, and an L4 with a vertex block is
 /// per-element, where a ray through a fragment is not a thing a vertex has.
 #[test]

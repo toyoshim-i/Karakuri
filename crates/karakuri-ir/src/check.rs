@@ -1105,6 +1105,21 @@ impl<'a> Checker<'a> {
         !matches!(amb, Ambient::Eye | Ambient::Ray) || self.fullscreen
     }
 
+    /// **The mirror of [`Checker::marching_only`], and it fails the same way.**
+    /// `seed` is per-element identity; a fullscreen L4 has no element, no
+    /// element buffer bound, and a vertex stage the procedure did not write.
+    /// Read there it lowered to `in.seed` against a `VsOut` with no such field
+    /// — WGSL naga refuses, and wgpu's uncaptured error handler takes the
+    /// process down at startup or fails the swap worker.
+    ///
+    /// This is the same rule `consumes` already states for the same reason, and
+    /// the reason it needed a second statement is that `seed` is not a
+    /// `consumes`: it is available everywhere an element is, which is exactly
+    /// the sentence a fullscreen procedure falsifies.
+    fn element_only(&self, amb: Ambient) -> bool {
+        !matches!(amb, Ambient::Seed) || !self.fullscreen
+    }
+
     fn err(&mut self, stage: Stage, span: Span, msg: impl Into<String>) {
         self.errors.push(IrError::new(stage, span, msg));
     }
@@ -1470,7 +1485,9 @@ impl<'a> Checker<'a> {
             // reconsiders liveness — so a `kill()` here would remove an element
             // from a buffer whose live range had already been decided.
             let hint = if self.kind == Kind::L2 {
-                "an L2 rewrites elements and never removes them: compaction runs once, after                  L1, so liveness is settled before a `deform` sees anything. Fade it out                  instead — write `size` or `color`'s alpha — or kill it in the L1"
+                "an L2 rewrites elements and never removes them: compaction runs once, after L1, \
+                so liveness is settled before a `deform` sees anything. Fade it out instead — \
+                write `size` or `color`'s alpha — or kill it in the L1"
             } else {
                 "remove it, or move this logic into the `element` block"
             };
@@ -1582,7 +1599,9 @@ impl<'a> Checker<'a> {
         if let Some(ambient) = Ambient::from_name(name) {
             let available = match self.block {
                 Some(block) => {
-                    ambient.available_in(self.kind, block) && self.marching_only(ambient)
+                    ambient.available_in(self.kind, block)
+                        && self.marching_only(ambient)
+                        && self.element_only(ambient)
                 }
                 None => false,
             };
@@ -1592,6 +1611,20 @@ impl<'a> Checker<'a> {
             // A marcher's values get their own sentence, because "not available
             // in this block" would send an author looking at the block when what
             // is wrong is that the procedure has a `vertex` block at all.
+            // The converse sentence, for the converse mistake — and it names
+            // the `vertex` block too, because that is the thing to add rather
+            // than the thing to remove.
+            if matches!(ambient, Ambient::Seed) && self.fullscreen {
+                self.err_hint(
+                    Stage::Contract,
+                    span,
+                    format!("`{name}` is per element, and this procedure draws the whole frame"),
+                    "an L4 with no `vertex` block covers the frame and has no element to have \
+                     an identity. Add a `vertex` block to draw elements, or drive the picture \
+                     from `eye`, `ray` and `point_coord`, which are what a marcher has",
+                );
+                return None;
+            }
             if matches!(ambient, Ambient::Eye | Ambient::Ray) && self.kind == Kind::L4 {
                 self.err_hint(
                     Stage::Contract,
