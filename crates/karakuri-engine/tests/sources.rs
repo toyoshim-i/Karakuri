@@ -77,6 +77,32 @@ fn build(gpu: &Gpu, l1s: &[&str]) -> Set {
     build_with(gpu, l1s, &[DOTS], Layering::Overdraw)
 }
 
+fn build_paired(gpu: &Gpu, l1s: &[&str], l2: &str) -> Result<Set, karakuri_engine::set::SetError> {
+    let compiled: Vec<Checked> = l1s.iter().map(|s| compile(s)).collect();
+    let sources: Vec<(&Checked, u32)> = compiled.iter().map(|c| (c, 64)).collect();
+    let l2 = compile(l2);
+    let l4 = compile(DOTS);
+    let mut set = Set::build_many(
+        &gpu.device,
+        &gpu.queue,
+        &sources,
+        &[&l2],
+        None,
+        None,
+        &[&l4],
+        Layering::Overdraw,
+        7,
+    )?;
+    set.resize(&gpu.device, W, H);
+    set.camera = karakuri_engine::camera::Orbit {
+        radius: 6.0,
+        speed: 0.0,
+        height: 0.0,
+        ..Default::default()
+    };
+    Ok(set)
+}
+
 fn build_with(gpu: &Gpu, l1s: &[&str], l4s: &[&str], layering: Layering) -> Set {
     let compiled: Vec<Checked> = l1s.iter().map(|s| compile(s)).collect();
     let sources: Vec<(&Checked, u32)> = compiled.iter().map(|c| (c, 64)).collect();
@@ -378,5 +404,256 @@ fn two_pipelines_merge_and_publish_as_one_control() {
     assert!(
         two_sources > one_source * 1.5,
         "two sources composited hold more light than one: {two_sources} against {one_source}"
+    );
+}
+
+/// A lattice offset along the screen's horizontal, so that a morph *moves*.
+fn lattice_at(name: &str, z: f32) -> String {
+    lattice(name, 0.0).replace("0.0);\n    tint", &format!("{z:?});\n    tint"))
+}
+
+const MORPH: &str = r#"
+proc morph {
+  kind  L2
+  pairs
+
+  param k : float [0.0, 1.0] = 0.0
+
+  consumes position
+
+  deform {
+    position = mix(position, other.position, vec3(k, k, k));
+  }
+}
+"#;
+
+/// **A pairing L2 blends two geometries element by element.**
+///
+/// The two lattices sit at different depths along the screen's horizontal, so
+/// `k` slides the material from one to the other — and at the ends it has to
+/// land *on* each of them, which is what makes this a morph rather than a
+/// wobble. Measured as the horizontal centre of the lit texels.
+#[test]
+fn a_pairing_l2_morphs_between_two_sources() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let near = lattice_at("near", -1.2);
+    let far = lattice_at("far", 1.2);
+
+    let centre_x = |set: &mut Set| -> f32 {
+        let px = frame(&gpu, set);
+        let (mut sum, mut weight) = (0.0f64, 0.0f64);
+        for (i, t) in px.chunks_exact(4).enumerate() {
+            let v = f64::from(t[0] + t[1] + t[2]);
+            if v > 0.02 {
+                sum += v * f64::from(i as u32 % W);
+                weight += v;
+            }
+        }
+        assert!(weight > 0.0, "nothing was drawn");
+        (sum / weight) as f32
+    };
+
+    let mut set = build_paired(&gpu, &[&near, &far], MORPH).expect("two static sources");
+    let at_zero = centre_x(&mut set);
+
+    assert!(set.set_param_at(karakuri_ir::Kind::L2, 0, "k", 1.0));
+    let at_one = centre_x(&mut set);
+
+    // **The two ends are the two sources.** Built alone, each lands where the
+    // morph's corresponding end does — which is the assertion that makes this a
+    // blend of *those* geometries rather than of something else.
+    let mut just_near = build(&gpu, &[&near]);
+    let mut just_far = build(&gpu, &[&far]);
+    let (n, f) = (centre_x(&mut just_near), centre_x(&mut just_far));
+
+    assert!((at_zero - n).abs() < 1.5, "k=0 is the near source: {at_zero} against {n}");
+    assert!((at_one - f).abs() < 1.5, "k=1 is the paired source: {at_one} against {f}");
+    assert!((n - f).abs() > 8.0, "the two sources are far enough apart to tell apart");
+
+    // And the middle is between them, so `k` is a dial rather than a switch.
+    assert!(set.set_param_at(karakuri_ir::Kind::L2, 0, "k", 0.5));
+    let half = centre_x(&mut set);
+    assert!(
+        (half - (n + f) / 2.0).abs() < 2.0,
+        "k=0.5 sits between the two: {half} against {}",
+        (n + f) / 2.0
+    );
+}
+
+/// **The paired geometry is not drawn**, which is the question a Set-level
+/// pairing answers by construction: a pairing Set has one source with two
+/// simulations, one chain and one set of renderers.
+#[test]
+fn the_paired_geometry_is_never_drawn_on_its_own() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let near = lattice_at("near", -1.2);
+    let far = lattice_at("far", 1.2);
+
+    let mut paired = build_paired(&gpu, &[&near, &far], MORPH).expect("two static sources");
+    let mut alone = build(&gpu, &[&near]);
+
+    let (a, b) = (total(&gpu, &mut paired), total(&gpu, &mut alone));
+    assert!(
+        (a - b).abs() < b * 0.05,
+        "a morph at k=0 holds one lattice's worth of light, not two: {a} against {b}"
+    );
+    assert_eq!(paired.capacity(), alone.capacity(), "and allocates one lattice to be drawn");
+}
+
+/// **Pairing is by slot index, so a source that compacts cannot be paired.**
+/// After a compaction element 5 of one source is not element 5 of the other,
+/// and the pairing would match each element with a stranger without changing a
+/// line of the `.kir`.
+#[test]
+fn a_source_that_compacts_cannot_be_paired() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let near = lattice_at("near", -1.2);
+    let culled = lattice_at("culled", 1.2).replace(
+        "    tint     =",
+        "    if seed == 3u { kill(); }\n    tint     =",
+    );
+
+    let err = build_paired(&gpu, &[&near, &culled], MORPH)
+        .err()
+        .expect("a killing source moves its elements between slots");
+    let text = err.to_string();
+    assert!(
+        text.contains("culled") && text.contains("slot"),
+        "the refusal names the source and why: {text}"
+    );
+}
+
+/// A pairing L2 needs exactly two sources, and it has to be first in the chain
+/// because its second input is a *source* rather than whatever reached it.
+#[test]
+fn a_pairing_l2_states_what_it_needs() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let near = lattice_at("near", -1.2);
+
+    let err = build_paired(&gpu, &[&near], MORPH).err().expect("one source is not two");
+    assert!(err.to_string().contains("this Set has 1"), "{err}");
+}
+
+/// **The paired geometry's own `param`s reach it.**
+///
+/// It is an L1 procedure like any other and `--param L1:1:…` addresses it — but
+/// every L1 used to resolve against the *first* source's map, so a name the two
+/// did not share came back as a miss and reached the shader as zero. The shape
+/// that hides: the picture still has a shape in it, drawn from a value nobody
+/// set. Here the far lattice collapses to the origin, which reads as a morph
+/// that ends somewhere it should not.
+#[test]
+fn a_paired_sources_own_params_reach_it() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let near = lattice_at("near", -1.2);
+    // The far side's offset is a param of its own, and the near side has no
+    // such name — which is exactly the case a shared map answers wrongly.
+    let far = lattice_at("far", 1.2).replace(
+        "  emit position, tint",
+        "  param push : float [0.0, 2.0] = 0.0\n\n  emit position, tint",
+    );
+    let far = far.replace("* 0.5 - 1.75, 1.2)", "* 0.5 - 1.75, 1.2 + push)");
+
+    let centre_x = |set: &mut Set| -> f32 {
+        let px = frame(&gpu, set);
+        let (mut sum, mut weight) = (0.0f64, 0.0f64);
+        for (i, t) in px.chunks_exact(4).enumerate() {
+            let v = f64::from(t[0] + t[1] + t[2]);
+            if v > 0.02 {
+                sum += v * f64::from(i as u32 % W);
+                weight += v;
+            }
+        }
+        assert!(weight > 0.0, "nothing was drawn");
+        (sum / weight) as f32
+    };
+
+    let mut set = build_paired(&gpu, &[&near, &far], MORPH).expect("two static sources");
+    assert!(set.set_param_at(karakuri_ir::Kind::L2, 0, "k", 1.0));
+    let before = centre_x(&mut set);
+
+    // `push` belongs to the *second* L1 procedure, which is the paired one.
+    assert!(
+        set.set_param_at(karakuri_ir::Kind::L1, 1, "push", 2.0),
+        "the paired geometry is an L1 procedure and `L1:1` addresses it"
+    );
+    let after = centre_x(&mut set);
+    assert!(
+        (after - before).abs() > 3.0,
+        "the paired source's own param has to reach its own shader: {before} against {after}"
+    );
+}
+
+/// **Both sides of a pairing carry the same element struct**, including the
+/// slots the *chain* decided on rather than either procedure.
+///
+/// `age` is derived here — the renderer consumes it and neither source emits it
+/// — so every element grows a `birth_t` slot. Build the far side without that
+/// decision and its stride is sixteen bytes short of the struct the pairing
+/// node addresses it with, so `other[i].position` reads from the middle of the
+/// element before it. The picture still has a lattice in it; it is simply not
+/// the far one.
+#[test]
+fn both_sides_of_a_pairing_share_the_element_struct() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let near = lattice_at("near", -1.2);
+    let far = lattice_at("far", 1.2);
+
+    // Consumes an attribute nothing emits, so the chain derives it and every
+    // element gains a slot for what the rule reads.
+    let aged = DOTS.replace("consumes position, tint", "consumes position, tint, age").replace(
+        "    color = vec4(tint, 1.0);",
+        "    color = vec4(tint, 1.0) * (1.0 + age * 0.0);",
+    );
+
+    let compiled: Vec<Checked> = [&near, &far].iter().map(|s| compile(s)).collect();
+    let sources: Vec<(&Checked, u32)> = compiled.iter().map(|c| (c, 64)).collect();
+    let l2 = compile(MORPH);
+    let l4 = compile(&aged);
+    let mut set = Set::build_many(
+        &gpu.device,
+        &gpu.queue,
+        &sources,
+        &[&l2],
+        None,
+        None,
+        &[&l4],
+        Layering::Overdraw,
+        7,
+    )
+    .expect("two static sources and a derived attribute");
+    set.resize(&gpu.device, W, H);
+    set.camera = karakuri_engine::camera::Orbit {
+        radius: 6.0,
+        speed: 0.0,
+        height: 0.0,
+        ..Default::default()
+    };
+
+    let centre_x = |set: &mut Set| -> f32 {
+        let px = frame(&gpu, set);
+        let (mut sum, mut weight) = (0.0f64, 0.0f64);
+        for (i, t) in px.chunks_exact(4).enumerate() {
+            let v = f64::from(t[0] + t[1] + t[2]);
+            if v > 0.02 {
+                sum += v * f64::from(i as u32 % W);
+                weight += v;
+            }
+        }
+        assert!(weight > 0.0, "nothing was drawn");
+        (sum / weight) as f32
+    };
+
+    assert!(set.set_param_at(karakuri_ir::Kind::L2, 0, "k", 1.0));
+    let at_one = centre_x(&mut set);
+
+    // The far lattice, built alone with the same renderer, is where k=1 has to
+    // land — and it is a *position* rather than a brightness, because reading
+    // the wrong bytes gives a picture that is lit and in the wrong place.
+    let mut just_far = build_with(&gpu, &[&far], &[&aged], Layering::Overdraw);
+    let f = centre_x(&mut just_far);
+    assert!(
+        (at_one - f).abs() < 1.5,
+        "k=1 has to land on the far lattice: {at_one} against {f}"
     );
 }

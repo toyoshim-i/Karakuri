@@ -1,0 +1,28 @@
+// The same count of points, on a sphere.
+//
+// **Paired with `lattice_shell` by slot index**, which is why `seed` decides
+// where a point goes here too: element 5 of each is the same element to a
+// morph, so a lattice point and the sphere point it becomes have to be chosen
+// by the same number.
+//
+// Static for the same reason and with the same consequence — see the note at
+// the top of `lattice_shell.kir`.
+
+proc sphere_shell {
+  kind     L1
+  topology points
+  capacity [4096, 262144] = 32768
+
+  param radius : float [0.2, 4.0] = 1.9
+
+  emit position, tint
+
+  element {
+    // `sphere_point` takes two numbers in `[0, 1)` and gives a direction with
+    // no clustering at the poles — the distribution the builtin exists for.
+    let u = hash1(seed);
+    let v = hash1(seed + 1u);
+    position = sphere_point(u, v) * radius;
+    tint     = hsv_to_rgb(vec3(0.88 + hash1(seed + 2u) * 0.08, 0.65, 1.0));
+  }
+}

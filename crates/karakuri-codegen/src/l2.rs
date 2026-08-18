@@ -100,6 +100,8 @@ pub struct L2Shader {
     /// [`L2Shader::emits`] for the same reason — the next node in the chain
     /// compiles against this node's buffer and has to name the same fields.
     pub synthetic: Synthetic,
+    /// Whether this node pairs, so the engine knows to bind a second geometry.
+    pub pairs: bool,
     /// The declared `amplify` factor, echoed back so the engine sizes the
     /// output buffer from the same number the shader loops to. `None` is the
     /// endomorphism, which shares its input's liveness and counts and allocates
@@ -119,6 +121,11 @@ pub fn generate_l2(
     upstream: &[Attr],
     synthetic: Synthetic,
     derived: &[Attr],
+    // What the **paired** geometry emits, for a `pairs` L2. `None` for every
+    // other L2, and `Some` exactly when `checked.pairs` — passed rather than
+    // derived because it is another source's list and this procedure cannot
+    // know it.
+    other: Option<&[Attr]>,
     field: Option<&crate::field::FieldShader>,
 ) -> L2Shader {
     assert_eq!(checked.kind, Kind::L2, "generate_l2 called on a non-L2 procedure");
@@ -127,6 +134,20 @@ pub fn generate_l2(
     // **An amplifier is where `copy` starts existing**, and once it exists it
     // is carried by every node below — so this is an `||`, not an assignment.
     let out_synthetic = Synthetic { copy: synthetic.copy || checked.amplify.is_some() };
+    // **The paired geometry's own layout.** Two sources need not emit the same
+    // attributes — each chain instance is compiled against the source it runs
+    // over — so this is a second struct rather than a second view of the first.
+    debug_assert_eq!(
+        checked.pairs,
+        other.is_some(),
+        "`{}` declares `pairs` and was handed no paired geometry, or the reverse",
+        checked.name
+    );
+    let other_layout = other.map(|emits| {
+        // The paired side carries no `copy`: it is a *source*, and only an
+        // amplifier below one puts that slot on an element.
+        layout::generate_element_layout(emits, Synthetic::NONE, derived)
+    });
     // Upstream order first, then whatever this node adds, so a chain's layouts
     // share a prefix and a reader that only wants `position` finds it at the
     // same offset however many modulators ran.
@@ -169,7 +190,11 @@ pub fn generate_l2(
     }
     let (uniform_layout, uniform_pad_f32) = b.finish();
 
-    let resolver = L2Resolver { has_copy: out_synthetic.copy, derived: out_layout.derived.clone() };
+    let resolver = L2Resolver {
+        pairs: checked.pairs,
+        has_copy: out_synthetic.copy,
+        derived: out_layout.derived.clone(),
+    };
     let mut req = Requirements::default();
     let deform = checked
         .block(BlockKind::Deform)
@@ -234,6 +259,15 @@ pub fn generate_l2(
         group::PREV,
         binding::ALIVE,
     ));
+    if let Some(layout) = &other_layout {
+        src.push('\n');
+        layout::write_element_struct_named(&mut src, "ElementOther", layout);
+        src.push_str(&format!(
+            "@group({}) @binding({}) var<storage, read> other: array<ElementOther>;\n",
+            group::PREV,
+            binding::OTHER,
+        ));
+    }
     src.push_str(&format!(
         "@group({}) @binding({}) var<storage, read_write> dst: array<ElementOut>;\n",
         group::NEXT,
@@ -283,6 +317,7 @@ pub fn generate_l2(
         element_layout: out_layout,
         emits,
         synthetic: out_synthetic,
+        pairs: checked.pairs,
         amplify: checked.amplify,
     }
 }
@@ -290,6 +325,8 @@ pub fn generate_l2(
 /// Reads and writes both address `dst`, which is what makes an L2 stateless by
 /// construction — see the module doc.
 struct L2Resolver {
+    /// Whether this node pairs, so that `other.<attr>` has a buffer to read.
+    pairs: bool,
     /// Whether the **output** layout has a `copy` slot: this node amplifies, or
     /// something above it did. Where it does not, `copy` is `0u` — the answer a
     /// chain that never amplified gives at every position in it.
@@ -308,6 +345,18 @@ impl Resolver for L2Resolver {
             };
         }
         format!("dst[i].{}.{}", attr.name(), crate::ty::attr_swizzle(attr.ty()))
+    }
+
+    /// **The paired element, at the same slot index.** That is the whole of the
+    /// correspondence and the whole of why both sources must be static: `seed`
+    /// is the slot index only while nothing compacts, and a compaction would
+    /// pair each element with a stranger without changing a line of this.
+    ///
+    /// Indexed by `i` rather than by the loop's element index, because a node
+    /// that both pairs and amplifies is refused — see `check_header`.
+    fn read_other(&self, attr: Attr) -> String {
+        debug_assert!(self.pairs, "`other` reached a resolver for a node that does not pair");
+        format!("other[i].{}.{}", attr.name(), crate::ty::attr_swizzle(attr.ty()))
     }
 
     fn read_seed(&self) -> String {

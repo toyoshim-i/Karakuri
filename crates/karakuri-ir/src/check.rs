@@ -457,6 +457,24 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                         .with_hint("add `deform { … }`: it is the whole of what an L2 does"),
                 );
             }
+            // **Not both at once.** The two break the endomorphism on different
+            // axes and each is a change to what the invocation index *means*:
+            // an amplifier's index walks the input while the output is
+            // `factor` times as long, and a pairing node's index has to be the
+            // slot both sources share. A node that did both would need one
+            // index to be two things.
+            //
+            // Refused rather than resolved, because nothing wants it yet and a
+            // rule invented for no case is a rule nobody can check against one.
+            if let (Some(span), Some(_)) = (proc.pairs, &proc.amplify) {
+                errors.push(
+                    IrError::contract(span, "`pairs` and `amplify` cannot both apply")
+                        .with_hint(
+                            "split them: a node that pairs two geometries, and a node below it \
+                             that amplifies what the pairing produced",
+                        ),
+                );
+            }
             // **A factor below two is refused, and the two cases are refused
             // for different reasons.** Zero is a stage that discards every
             // element, and liveness is the one thing the layer is not permitted
