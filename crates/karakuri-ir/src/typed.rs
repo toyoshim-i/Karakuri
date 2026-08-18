@@ -66,7 +66,17 @@ pub struct Checked {
     pub emit: Vec<Attr>,
     pub consumes: Vec<Attr>,
     pub blocks: Vec<TBlock>,
-    /// Filled by cost estimation. `None` until stage 4 has run.
+    /// **Always `None`, and that is not what this field was for.**
+    ///
+    /// It was meant to be filled by stage 4, and nothing fills it:
+    /// `cost::estimate` takes a `&Checked` and returns its answer, and every
+    /// caller uses the return value. Two checks were written against this field
+    /// and were silently dead until a test asked one of them a question it
+    /// could not answer.
+    ///
+    /// Kept rather than deleted because the shape is still the right one — a
+    /// checked procedure ought to carry what it costs — but until something
+    /// fills it, **ask `cost::estimate` instead of reading this**.
     pub cost: Option<Cost>,
     /// **Whether this procedure can be evaluated at any `t` directly** —
     /// `docs/ir-spec.md`, "Closed form versus accumulating".
@@ -153,6 +163,28 @@ impl Checked {
 /// evaluates a field. Adding them charges a one-off spawn cost on every frame
 /// for the life of the element, and charges fill rate as though it were
 /// geometry.
+/// Field evaluations per unit of each of [`Cost`]'s quantities.
+///
+/// Three counters rather than one, because which ceiling an evaluation charges
+/// is decided by the block it sits in: one in a `vertex` happens per element
+/// and one in a `fragment` per covered pixel, and adding them would charge fill
+/// rate as though it were geometry — the same mistake the three op counts are
+/// separate to prevent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct FieldCalls {
+    pub per_element: u64,
+    pub per_spawn: u64,
+    pub per_fragment: u64,
+}
+
+impl FieldCalls {
+    /// Whether this procedure evaluates a field at all — which is what decides
+    /// whether a Set holding no field can build it.
+    pub fn any(self) -> bool {
+        self.per_element > 0 || self.per_spawn > 0 || self.per_fragment > 0
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Cost {
     /// Per live element, per frame: the L1 `element` block or the L4 `vertex`
@@ -180,6 +212,16 @@ pub struct Cost {
     /// multiplication happens where the Set is built, which is the first point
     /// holding both procedures.
     pub ops_per_evaluation: u64,
+    /// **How many times this procedure evaluates the Set's field**, per unit of
+    /// each quantity above.
+    ///
+    /// Not a cost: a count, which the Set multiplies by the field's
+    /// `ops_per_evaluation` and adds to the figure on the matching axis. It is
+    /// here rather than in the engine because it is what cost estimation
+    /// already knows and nothing else does — a `field(p)` inside `for i in
+    /// 0..48` is forty-eight evaluations, and only the pass that resolves loop
+    /// bounds can say so.
+    pub field_calls: FieldCalls,
     /// Bytes of attribute storage per element, both buffers counted.
     pub bytes_per_element: u32,
 }

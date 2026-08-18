@@ -145,6 +145,18 @@ builtins! {
     OpSubtract     => "op_subtract",     [Exact(Float), Exact(Float)] -> Exact(Float), Concrete, [];
     OpIntersect    => "op_intersect",    [Exact(Float), Exact(Float)] -> Exact(Float), Concrete, [];
 
+    // **The Set's field, evaluated at a point.** The one builtin whose body is
+    // not in this compiler: it lowers to a call of the function a `kind Field`
+    // procedure was spliced in as, so a Set that holds no field cannot satisfy
+    // a procedure that calls this — refused where the Set is built, which is
+    // the first point holding both.
+    //
+    // Its *weight* is not here either, and cannot be: what one evaluation
+    // costs is the field's own `ops_per_evaluation`, which belongs to another
+    // file. Cost estimation counts the call sites instead and the Set does the
+    // multiplication. See `Cost::field_calls`.
+    Field => "field", [Exact(Vec3)] -> Exact(Float), Concrete, [];
+
     // Transform
     RotX    => "rot_x",    [Exact(Vec3), Exact(Float)] -> Exact(Vec3), Concrete, [];
     RotY    => "rot_y",    [Exact(Vec3), Exact(Float)] -> Exact(Vec3), Concrete, [];

@@ -1,0 +1,56 @@
+// The first procedure here that is a shape and nothing else.
+//
+// **`kind Field` is a signed distance function**: handed a `point`, it assigns
+// a `distance`, and that is the whole of it. It draws nothing, counts nothing
+// and carries nothing — it is not geometry, it is a function of space.
+//
+// Three things it brings, and the second is the one to carry:
+//
+//   * **It is reusable across files**, which is what the SDF builtins never
+//     were. `sd_sphere` and the CSG operators have compiled since the beginning,
+//     but the only way to use a composition of them twice was to copy the
+//     expression — so `examples/field_march.kir` computes its normal from the
+//     sphere alone and is wrong on the box's faces, because the six more
+//     evaluations that would fix it are eighteen lines of copy.
+//   * **It has a file and no node**, which is the L5 argument run backwards. A
+//     `kind` says what a procedure *lowers to*; an L5 has none because it has no
+//     code to lower, and this has one because it has *only* code to lower. So
+//     there is no buffer, no pass, and no position in the chain — the body is
+//     spliced into whichever procedures evaluate it.
+//   * **Its cost is per evaluation**, and the caller pays it once per call. A
+//     marcher evaluating this forty-eight times pays for it forty-eight times,
+//     and the Set refuses the pair if the two together are over the ceiling
+//     neither is over alone.
+//
+// One per Set, on the same terms as the camera: several would need naming, and
+// naming is the notation fan-in brings with it.
+
+proc melt_blob {
+  kind Field
+
+  // A sphere and a box melted together, with a ring through them. At `blend_k`
+  // 0 the union is hard and the seam is a crease; softening it is the whole
+  // reason `op_smooth_union` exists.
+  param ball    : float [0.1, 2.0] = 0.8
+  param box     : float [0.1, 2.0] = 0.7
+  param ring    : float [0.2, 2.5] = 1.3
+  param thick   : float [0.02, 0.6] = 0.22
+  param blend_k : float [0.0, 1.5] = 0.55
+
+  // How fast the two halves breathe apart and back. Zero holds them still,
+  // which is what makes it a dial an operator can ride rather than a switch.
+  param drift   : float [0.0, 2.0] = 0.6
+
+  field {
+    // **The figure moves and the marcher does not know.** A field reads the
+    // clock like anything else, so what a renderer sees change from frame to
+    // frame is the shape itself rather than a camera going round it.
+    let sway = sin(t * drift) * 0.35;
+
+    let sph = sd_sphere(point - vec3(0.9 + sway, 0.0, 0.0), ball);
+    let bx  = sd_box(point + vec3(0.9 + sway, 0.0, 0.0), vec3(box, box, box));
+    let tor = sd_torus(point, vec2(ring, thick));
+
+    distance = op_union(op_smooth_union(sph, bx, blend_k), tor);
+  }
+}

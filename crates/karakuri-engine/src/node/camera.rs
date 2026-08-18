@@ -80,7 +80,11 @@ impl Camera {
     /// buffers, the derivation and the bind group every renderer names are the
     /// same in both cases — a procedure joins as a second writer of an edge that
     /// already exists.
-    pub(crate) fn build(device: &wgpu::Device, l3: Option<&Checked>) -> Camera {
+    pub(crate) fn build(
+        device: &wgpu::Device,
+        l3: Option<&Checked>,
+        field: Option<&karakuri_codegen::field::FieldShader>,
+    ) -> Camera {
         let state = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("camera state"),
             size: wire::STATE_SIZE,
@@ -185,7 +189,7 @@ impl Camera {
             entries: &[wgpu::BindGroupEntry { binding: 0, resource: derived.as_entire_binding() }],
         });
 
-        let proc = l3.map(|l3| Producer::build(device, l3, &state));
+        let proc = l3.map(|l3| Producer::build(device, l3, &state, field));
         Camera { state, derived, canvas, derive, derive_bg, read_bgl, read_bg, proc }
     }
 
@@ -317,8 +321,13 @@ impl Camera {
 }
 
 impl Producer {
-    fn build(device: &wgpu::Device, l3: &Checked, state: &wgpu::Buffer) -> Producer {
-        let shader = generate_l3(l3);
+    fn build(
+        device: &wgpu::Device,
+        l3: &Checked,
+        state: &wgpu::Buffer,
+        field: Option<&karakuri_codegen::field::FieldShader>,
+    ) -> Producer {
+        let shader = generate_l3(l3, field);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(&format!("{} (L3)", l3.name)),
             source: wgpu::ShaderSource::Wgsl(shader.source.as_str().into()),
@@ -413,6 +422,10 @@ impl Producer {
             .f32("dt", dt)
             .u32("seed_salt", view.seed_salt);
         super::write_params(&mut p, &self.uniform_layout, &self.param_names, view.param);
+        // **The spliced field's params, written by every caller.** A field has
+        // no node and therefore no uniform of its own; each procedure that
+        // evaluates it carries them in its own and writes the same answer.
+        super::write_params(&mut p, &self.uniform_layout, view.field_params, view.field_value);
         queue.write_buffer(&self.uniforms, 0, p.finish());
     }
 }
@@ -473,7 +486,7 @@ mod tests {
         };
         let aspect = 16.0 / 9.0;
 
-        let cam = Camera::build(&gpu.device, None);
+        let cam = Camera::build(&gpu.device, None, None);
         cam.write_state(&gpu.queue, &state);
         cam.write_canvas(&gpu.queue, aspect);
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
@@ -535,7 +548,7 @@ proc two {
         let l3 = karakuri_ir::check::check(&parsed).expect("checks");
         let aspect = 16.0 / 9.0;
 
-        let mut cam = Camera::build(&gpu.device, Some(&l3));
+        let mut cam = Camera::build(&gpu.device, Some(&l3), None);
         cam.write_canvas(&gpu.queue, aspect);
         cam.prepare(
             &gpu.queue,
@@ -545,6 +558,8 @@ proc two {
                 seed_salt: 0,
                 viewport: [16.0, 9.0],
                 param: &|_| None,
+                field_params: &[],
+                field_value: &|_| None,
             },
             crate::set::DT,
             // Unread: this node has a procedure, so the built-in is not its
@@ -613,11 +628,19 @@ proc six {
         let l3 = karakuri_ir::check::check(&parsed).expect("checks");
         let aspect = 4.0 / 3.0;
 
-        let mut cam = Camera::build(&gpu.device, Some(&l3));
+        let mut cam = Camera::build(&gpu.device, Some(&l3), None);
         cam.write_canvas(&gpu.queue, aspect);
         cam.prepare(
             &gpu.queue,
-            &View { t: 0.0, beats: 0.0, seed_salt: 0, viewport: [4.0, 3.0], param: &|_| None },
+            &View {
+                t: 0.0,
+                beats: 0.0,
+                seed_salt: 0,
+                viewport: [4.0, 3.0],
+                param: &|_| None,
+                field_params: &[],
+                field_value: &|_| None,
+            },
             crate::set::DT,
             &crate::camera::Orbit::default().state(0.0),
         );
@@ -677,7 +700,7 @@ proc six {
             near: 0.1,
             far: 50.0,
         };
-        let cam = Camera::build(&gpu.device, None);
+        let cam = Camera::build(&gpu.device, None, None);
         let derive = |aspect: f32| {
             cam.write_state(&gpu.queue, &state);
             cam.write_canvas(&gpu.queue, aspect);

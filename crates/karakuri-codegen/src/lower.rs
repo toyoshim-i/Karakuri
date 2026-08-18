@@ -69,6 +69,19 @@ pub trait Resolver {
     fn read_attr(&self, attr: Attr) -> String;
     fn read_seed(&self) -> String;
     fn read_ambient(&self, amb: Ambient) -> String;
+
+    /// A read of a declared `param`, where this resolver spells them
+    /// differently from every other one.
+    ///
+    /// **Only a field overrides this**, and it has to: its body is spliced into
+    /// a caller's shader and reads its params out of the *caller's* uniform, so
+    /// the two sets of names share one struct and are kept apart by a prefix.
+    /// Defaulted rather than required, because there is one such resolver and
+    /// four that want the ordinary spelling.
+    fn read_param(&self, name: &str) -> Option<String> {
+        let _ = name;
+        None
+    }
 }
 
 /// Lowers one expression, recording any helper functions or `mod`
@@ -77,7 +90,9 @@ pub fn lower_expr(expr: &TExpr, resolver: &dyn Resolver, req: &mut Requirements)
     match &expr.kind {
         TExprKind::Lit(lit) => lower_lit(*lit),
         TExprKind::Local(name) => mangle_local(name),
-        TExprKind::Param(name) => format!("u.{}", mangle_param(name)),
+        TExprKind::Param(name) => resolver
+            .read_param(name)
+            .unwrap_or_else(|| format!("u.{}", mangle_param(name))),
         TExprKind::Attr(attr) => resolver.read_attr(*attr),
         TExprKind::Ambient(Ambient::Seed) => resolver.read_seed(),
         TExprKind::Ambient(amb) => resolver.read_ambient(*amb),
@@ -168,6 +183,25 @@ fn lower_builtin(
         // `prelude::mod_helper_name`.
         req.note_mod(ret_ty);
         return format!("{}({})", mod_helper_name(ret_ty), inner.join(", "));
+    }
+
+    // **Not `field(...)`.** The call site's name is the language's; the
+    // function's name is this crate's, and it is spliced in from another
+    // procedure entirely. Noting it as a builtin would also ask the prelude for
+    // a body it does not have.
+    if func == Builtin::Field {
+        // **The caller's own spelling of the clock, at the call site.** A field
+        // is one body spliced into several kinds of module and an L1 reads `t`
+        // from `step_args` where everything else reads `u.t`, so the answer
+        // comes from the resolver that is lowering this call — which is the
+        // resolver that would have written it inline.
+        return format!(
+            "{}({}, {}, {})",
+            crate::field::FN,
+            inner.join(", "),
+            resolver.read_ambient(Ambient::T),
+            resolver.read_ambient(Ambient::Beats),
+        );
     }
 
     req.note_builtin(func);

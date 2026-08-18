@@ -248,6 +248,9 @@ pub struct Request {
     /// is a grouping around one viewpoint, and two viewpoints composited is a
     /// graph rather than a Set.
     pub l3: Option<Checked>,
+    /// The field, or `None` for a Set that evaluates none. At most one, on the
+    /// same terms as the camera — see [`karakuri_ir::Kind::Field`].
+    pub field: Option<Checked>,
     /// The renderers, in draw order — see [`Set::build_many`]. A rebuild names
     /// every one of them rather than the one that changed, for the reason the
     /// params below are restated: a request that depended on what happens to be
@@ -1068,6 +1071,7 @@ fn run_worker(
                 &request.l1,
                 &request.l2s.iter().collect::<Vec<_>>(),
                 request.l3.as_ref(),
+                request.field.as_ref(),
                 &request.l4s.iter().collect::<Vec<_>>(),
                 request.layering,
                 request.capacity,

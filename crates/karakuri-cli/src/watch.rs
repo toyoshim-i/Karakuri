@@ -280,6 +280,7 @@ impl Source for Watch {
         let mut addressed: Vec<(&'static str, usize, String)> = Vec::with_capacity(compiled.len());
         let mut l2s = Vec::new();
         let mut l3: Option<karakuri_ir::typed::Checked> = None;
+        let mut field: Option<karakuri_ir::typed::Checked> = None;
         let mut l4s = Vec::new();
         for (path, checked) in self.l4s.iter().zip(compiled) {
             // **A rebuild that cannot be built is `None`**, on the same terms a
@@ -313,9 +314,13 @@ impl Source for Watch {
                 // hold a field yet — nothing splices one into its callers — so
                 // rebuilding with one would produce a slot that silently lost
                 // the file it was told to watch.
-                karakuri_ir::Kind::Field => {
-                    refuse("a `kind Field`, which a Set cannot hold yet");
+                karakuri_ir::Kind::Field if field.is_some() => {
+                    refuse("a second `kind Field` — a slot evaluates one field");
                     return None;
+                }
+                karakuri_ir::Kind::Field => {
+                    addressed.push(("Field", 0, checked.name.clone()));
+                    field = Some(checked);
                 }
                 karakuri_ir::Kind::L1 => {
                     refuse("a second L1 — a slot simulates with one geometry");
@@ -407,6 +412,7 @@ impl Source for Watch {
             l1,
             l2s,
             l3,
+            field,
             l4s,
             layering: self.layering,
             capacity: self.capacity,

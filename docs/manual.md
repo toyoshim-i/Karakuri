@@ -553,6 +553,30 @@ or an **L3**, which is the camera:
 karakuri-cli --set examples/drift_shell.kir,examples/beat_jump.kir,examples/soft_points.kir
 ```
 
+### A shape in a file of its own
+
+A path in the list may also be a **field** — a signed distance function, and nothing else.
+It draws nothing and holds no elements; it is a shape, and whoever wants one evaluates it:
+
+```
+karakuri-cli --set examples/drift_shell.kir,examples/melt_blob.kir,examples/field_lens.kir
+```
+
+`field_lens.kir` is a renderer that **contains no shape at all**. It marches whatever the Set
+gives it, so the same file draws any field — and `melt_blob.kir` is a shape no renderer owns.
+Before this, a marcher carried its distance function inline and the two were inseparable.
+
+Its `param`s are yours to ride like any other, addressed by its kind:
+
+```
+karakuri-cli --param Field:0:blend_k=1.2 --set ...
+```
+
+One field per Set, the same as the camera. **The cost is the renderer's**: a field is inlined
+wherever it is evaluated, so a marcher that samples it forty times pays for it forty times —
+and a field that fits on its own and a marcher that fits on its own can still be refused
+together, with both figures in the message.
+
 ### Two attributes you do not have to emit
 
 A renderer that wants `age` or `velocity` no longer needs an L1 that thought to emit them.

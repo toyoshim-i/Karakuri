@@ -127,6 +127,19 @@ pub(crate) struct View<'a> {
     /// this signature, and `0.0` is the wrong answer for it either way; it is
     /// merely a quieter wrong answer than the panic it replaced.
     pub param: &'a dyn Fn(&str) -> Option<f32>,
+    /// **The spliced field's params, already under their WGSL names.**
+    ///
+    /// A field has no node, so nothing writes its uniform — every procedure
+    /// that evaluates it carries its params in its own, and each of them writes
+    /// these beside its own. The names are prefixed already because that is what
+    /// the layout has: a caller and the field it evaluates may both declare
+    /// `exposure`, and they are kept apart there rather than here.
+    pub field_params: &'a [String],
+    /// The value behind each of those names. Separate from [`View::param`]
+    /// because they come from a different map: a field's params are the
+    /// field's, addressed as `Field:0:…`, and every caller writes the same
+    /// answer into its own uniform.
+    pub field_value: &'a dyn Fn(&str) -> Option<f32>,
 }
 
 /// Everything one frame of simulation needs that is the grouping's rather than
@@ -147,6 +160,19 @@ pub(crate) struct Tick<'a> {
     pub instants: [(f32, f32); MAX_STEPS as usize],
     /// This frame's parameter values, on the same terms as [`View::param`].
     pub param: &'a dyn Fn(&str) -> Option<f32>,
+    /// **The spliced field's params, already under their WGSL names.**
+    ///
+    /// A field has no node, so nothing writes its uniform — every procedure
+    /// that evaluates it carries its params in its own, and each of them writes
+    /// these beside its own. The names are prefixed already because that is what
+    /// the layout has: a caller and the field it evaluates may both declare
+    /// `exposure`, and they are kept apart there rather than here.
+    pub field_params: &'a [String],
+    /// The value behind each of those names. Separate from [`View::param`]
+    /// because they come from a different map: a field's params are the
+    /// field's, addressed as `Field:0:…`, and every caller writes the same
+    /// answer into its own uniform.
+    pub field_value: &'a dyn Fn(&str) -> Option<f32>,
 }
 
 /// **Every declared param, packed as the layout declares it.**

@@ -69,6 +69,18 @@ impl Requirements {
     pub fn note_mod(&mut self, ty: Ty) {
         self.mod_types.insert(ty);
     }
+
+    /// Take on another module's requirements.
+    ///
+    /// **For a spliced field**, whose body lives in the caller's module and
+    /// therefore needs the caller's prelude to carry its helpers. Without this
+    /// a field calling `sd_torus` produces a call to a function nothing
+    /// emitted, in a shader that checked clean — the prelude being
+    /// demand-driven is exactly what makes the omission silent.
+    pub fn absorb(&mut self, other: &Requirements) {
+        self.builtins.extend(other.builtins.iter().copied());
+        self.mod_types.extend(other.mod_types.iter().copied());
+    }
 }
 
 /// The helper function name for `mod`/`%` at type `ty`.

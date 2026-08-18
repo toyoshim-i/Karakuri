@@ -82,16 +82,18 @@ impl Deform {
     /// available at this position in the chain. It is passed alongside the
     /// geometry rather than derived from it because an `ElementLayout` is a
     /// list of slots and two of them carry no `Attr` at all.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn build(
         device: &wgpu::Device,
         l2: &Checked,
         upstream: &[Attr],
         synthetic: Synthetic,
         derived: &[Attr],
+        field: Option<&karakuri_codegen::field::FieldShader>,
         input: &Geometry<'_>,
         capacity: u32,
     ) -> Result<Deform, SetError> {
-        let shader = generate_l2(l2, upstream, synthetic, derived);
+        let shader = generate_l2(l2, upstream, synthetic, derived, field);
         // **The output capacity, and it is what everything below this node is
         // sized and dispatched against.** Saturating rather than wrapping: the
         // checker caps a single factor, a Set caps its own capacity, and a chain
@@ -403,6 +405,10 @@ impl Deform {
             .u32("capacity", capacity)
             .u32("seed_salt", view.seed_salt);
         super::write_params(&mut p, &self.uniform_layout, &self.param_names, view.param);
+        // **The spliced field's params, written by every caller.** A field has
+        // no node and therefore no uniform of its own; each procedure that
+        // evaluates it carries them in its own and writes the same answer.
+        super::write_params(&mut p, &self.uniform_layout, view.field_params, view.field_value);
         queue.write_buffer(&self.uniforms, 0, p.finish());
     }
 

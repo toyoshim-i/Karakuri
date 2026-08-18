@@ -820,12 +820,15 @@ fine alone and is unreadable next to lights.
 a `kind` behind it, and a Set holds a chain of them. That is the half of this milestone that
 makes the library worth having, and it is done.
 
-**Four items from the Adds list below are not**, and they divide cleanly. Three are one
-dependency: **multiple L1 sources**, **cross-source interpolation** which needs them, and the
-nested L5's motivating case — "two pipelines, one knob" — which is two sources. One is its
-own work: the **`Field` type**, with the **graph compiler** beside it.
+**Three items from the Adds list below are not**, and they are one dependency: **multiple L1
+sources**, **cross-source interpolation** which needs them, and the nested L5's motivating
+case — "two pipelines, one knob" — which is two sources.
 
-**Slot interface contracts landed as the attribute derivation**, and are struck below.
+**Slot interface contracts landed as the attribute derivation** and **`Field` landed as a
+kind**; both are struck below. The **graph compiler** stays deferred on its own argument,
+two hundred lines above: its authoring half waits on the fan-in that multiple sources bring,
+and its fusion half is an optimisation over a materialising implementation that is already
+correct.
 
 **Two corrections to the sentence this replaces.** It called multiple L1 sources *"decided in
 full"*; the spec has seven questions it does not answer, and the sharpest is that masking on
@@ -1348,10 +1351,10 @@ than against one being taught to.
   one attachment (first clears, rest load), and no renderer changed to be in a list.
   `--set L1.kir,L4.kir,L4.kir` reaches it. What it *did* cost was the parameter model — every
   L4 in `examples/` declares `exposure`, so the collision refusal had to go first
-- **The `Field` type** — a spatial function represented as code rather than data. **The IR
-  half is built**: `kind Field`, a `field` block, `point` in and `distance` out, and a cost
-  axis of its own. What is left is the splice — nothing yet lowers a field into the
-  procedures that evaluate it, so the CLI refuses a Set holding one rather than dropping it.
+- ~~**The `Field` type**~~ — **built.** `kind Field`, a `field` block, `point` in and
+  `distance` out; `field(p)` evaluates the Set's field from any procedure;
+  `examples/melt_blob.kir` is a shape and `examples/field_lens.kir` is a marcher that
+  contains no shape at all.
 
   **It turned out to need no new syntactic category, and therefore not to reopen the
   "user-defined functions" non-goal.** The shape is one more kind, one more block, one more

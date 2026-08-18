@@ -27,6 +27,7 @@
 //! with a compiler behind it, not an implementation detail — see that
 //! module's doc comment.
 
+pub mod field;
 pub mod l1;
 pub mod l2;
 pub mod l3;
@@ -66,7 +67,7 @@ pub enum Shader {
 /// from `checked.emit`.
 pub fn generate(checked: &Checked, elements: Option<&ElementLayout>) -> Shader {
     match checked.kind {
-        Kind::L1 => Shader::L1(generate_l1(checked, &[])),
+        Kind::L1 => Shader::L1(generate_l1(checked, &[], None)),
         // **Not reachable through this entry point.** An L2 is generated
         // against the attributes available *where it sits* in a chain, which is
         // a list rather than one upstream layout — `Set::build` has it and this
@@ -77,10 +78,10 @@ pub fn generate(checked: &Checked, elements: Option<&ElementLayout>) -> Shader {
         // into whichever procedures evaluate it, so it has no module, no
         // bindings and no dispatch — there is nothing for a `Shader` to hold.
         Kind::Field => panic!("a field lowers into its callers: call generate_field"),
-        Kind::L3 => Shader::L3(generate_l3(checked)),
+        Kind::L3 => Shader::L3(generate_l3(checked, None)),
         Kind::L4 => {
             let elements = elements.expect("an L4 procedure needs its paired L1's ElementLayout");
-            Shader::L4(generate_l4(checked, elements))
+            Shader::L4(generate_l4(checked, elements, None))
         }
     }
 }
@@ -175,7 +176,7 @@ mod tests {
 
     #[test]
     fn attribute_read_after_assignment_still_reads_prev_buffer() {
-        let shader = generate_l1(&read_after_write_proc(), &[]);
+        let shader = generate_l1(&read_after_write_proc(), &[], None);
         // The write goes to `next[out]`; the following read must still be
         // `prev[i]`, never a reference to a local that captured the write.
         // Read and write index are separate expressions precisely because
@@ -194,7 +195,7 @@ mod tests {
     /// a binding for it.
     #[test]
     fn a_static_procedure_neither_binds_nor_reads_the_destination_indices() {
-        let shader = generate_l1(&read_after_write_proc(), &[]);
+        let shader = generate_l1(&read_after_write_proc(), &[], None);
         assert!(!shader.compacted, "no spawn block and no kill() is a static procedure");
         assert!(!shader.source.contains("dest"), "static `element` must not touch dest:\n{}", shader.source);
         assert!(
@@ -225,7 +226,7 @@ mod tests {
             span: span(),
         });
 
-        let shader = generate_l1(&p, &[]);
+        let shader = generate_l1(&p, &[], None);
         assert!(shader.compacted, "a kill() inside an if inside a for still kills");
         assert!(!shader.has_spawn, "no spawn block was added");
         assert!(shader.source.contains("let out = dest[i];"), "{}", shader.source);
@@ -259,7 +260,7 @@ mod tests {
 
     #[test]
     fn fbm_is_unrolled_at_generation_time() {
-        let shader = generate_l1(&fbm_proc(), &[]);
+        let shader = generate_l1(&fbm_proc(), &[], None);
         // Exactly one `perlin` helper definition, plus exactly three call
         // sites from unrolling `fbm(position, 3)` — counting bare
         // `"perlin("` would also match the helper's own `fn perlin(`.
@@ -292,7 +293,7 @@ mod tests {
 
     #[test]
     fn mod_helper_appears_only_when_percent_is_used_on_a_float() {
-        let with_rem = generate_l1(&float_rem_proc(), &[]);
+        let with_rem = generate_l1(&float_rem_proc(), &[], None);
         assert!(with_rem.source.contains("fn mod_f32("), "{}", with_rem.source);
         assert!(with_rem.source.contains("mod_f32(prev[i].age.x, 1.0)"), "{}", with_rem.source);
 
@@ -302,7 +303,7 @@ mod tests {
         p.emit = vec![Attr::Age];
         let assign = TStmt::Assign { target: Target::Attr(Attr::Age), value: lit_f(1.0), span: span() };
         p.blocks.push(TBlock { kind: BlockKind::Element, stmts: vec![assign], span: span() });
-        let without_rem = generate_l1(&p, &[]);
+        let without_rem = generate_l1(&p, &[], None);
         assert!(!without_rem.source.contains("mod_f32"), "{}", without_rem.source);
     }
 
@@ -330,7 +331,7 @@ mod tests {
         };
         p.emit = vec![Attr::Age];
         p.blocks.push(TBlock { kind: BlockKind::Element, stmts: vec![let_stmt, assign], span: span() });
-        let shader = generate_l1(&p, &[]);
+        let shader = generate_l1(&p, &[], None);
         assert!(shader.source.contains("let usr_bucket = (seed % 512u);"), "{}", shader.source);
         assert!(!shader.source.contains("mod_"), "{}", shader.source);
     }
@@ -346,7 +347,7 @@ mod tests {
         let assign = TStmt::Assign { target: Target::Attr(Attr::Age), value: lit_f(0.0), span: span() };
         p.blocks.push(TBlock { kind: BlockKind::Element, stmts: vec![assign], span: span() });
 
-        let shader = generate_l1(&p, &[]);
+        let shader = generate_l1(&p, &[], None);
         assert_eq!(shader.uniform_layout.total_size % 16, 0, "{:#?}", shader.uniform_layout);
         // The padded size must be large enough to hold every field, not
         // merely a multiple of 16 by accident.
@@ -435,7 +436,7 @@ mod tests {
     #[test]
     fn l4_quad_expansion_and_hsv_to_rgb_wiring() {
         let elements = crate::layout::generate_element_layout(&[Attr::Position], crate::layout::Synthetic::NONE, &[]);
-        let shader = generate_l4(&l4_proc(), &elements);
+        let shader = generate_l4(&l4_proc(), &elements, None);
         let src = &shader.source;
         assert!(src.contains("@builtin(vertex_index) corner_idx: u32"), "{src}");
         assert!(src.contains("@builtin(instance_index) elem: u32"), "{src}");

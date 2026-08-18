@@ -814,6 +814,39 @@ established.
 fan-in, and `docs/roadmap.md` says fan-in arrives with multiple L1 sources and brings its
 notation with it.
 
+#### Evaluating one
+
+Any procedure may call `field(p)`. It takes a position and returns the distance the Set's
+field gives at it:
+
+```
+for i in 0..40 {
+  let d = field(p);
+  if d < 0.005 { hit = 1.0; }
+  p = p + ray * max(d, 0.005);
+}
+```
+
+**A Set that holds no field refuses a procedure that calls one**, by name and at build. The
+call lowers to a function, and a module missing it is WGSL naga refuses — which is a panic on
+the thread that built it rather than a diagnostic.
+
+**The clock is passed in rather than read.** A field cannot know how its caller spells `t`:
+an L1 reads it from its per-substep arguments and everything else from its uniform, and one
+spliced body cannot say both. So the call site supplies the caller's own answer, which is the
+spelling that caller would have written inline.
+
+**A field's `param`s live in the uniform of every procedure that evaluates it**, under a
+prefix of their own — so a renderer and the field it draws may both declare `exposure`, and
+`--param Field:0:exposure` and `--param L4:0:exposure` reach different things. There is one
+value: every caller writes the same answer into its own uniform, because there is one field.
+
+**The two are costed together, at the Set.** A `field(p)` weighs nothing where a single file
+is estimated, since what one evaluation costs lives in another file — so the ceiling each of
+them passed was applied to a figure missing the other. A marcher evaluating a field forty
+times pays for it forty times, and a pair over the ceiling is refused with both figures in
+the message. Neither file need be over on its own.
+
 ### Spawn timing
 
 `spawn_rate * dt` is rarely an integer. The count is quantized with an **accumulator**: the
