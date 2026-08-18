@@ -1,0 +1,58 @@
+// A renderer that contains no shape at all.
+//
+// Every marcher before this one carried its own distance function inline —
+// `examples/field_march.kir` still does — which made the two inseparable: the
+// shape could not be reused and the marcher could not be pointed at anything
+// else. This one calls `field(p)` and takes whatever the Set gives it, so the
+// same file draws any `kind Field` procedure:
+//
+//   karakuri-cli --set drift_shell.kir,melt_blob.kir,field_lens.kir
+//
+// **The cost is the caller's**, and this file is the proof. A field is inlined
+// at every call site, so each step of the march is another copy of the field's
+// body, and the Set adds the two figures together against this procedure's
+// fragment ceiling. At forty steps the pair came to 4378 ops/fragment against
+// 4096 and was refused — neither file over on its own. Thirty-four is what fits
+// with `melt_blob`, and a cheaper field would buy back the steps.
+
+proc field_lens {
+  kind  L4
+  blend additive
+
+  param spin     : float [0.0, 2.0] = 0.3
+  param exposure : float [0.0, 8.0] = 1.0
+  param glow     : float [0.0, 4.0] = 0.8
+
+  fragment {
+    // Turning the ray rather than the samples: one rotation for the whole
+    // march instead of one per step. `examples/field_march.kir` records what
+    // the cost estimator had to say about the other way round.
+    let a  = -t * spin;
+    var p  = rot_y(eye, a);
+    let rd = rot_y(ray, a);
+
+    var d  = 10.0;
+    var it = 0.0;
+    var hit = 0.0;
+
+    for i in 0..34 {
+      d = field(p);
+      if d < 0.005 {
+        hit = 1.0;
+      }
+      if hit < 0.5 {
+        it = it + 1.0;
+      }
+      p = p + rd * max(d, 0.005);
+    }
+
+    // Steps-to-hit as shading: a surface reached early is near and bright, one
+    // reached late is grazing and dim. It costs nothing and needs no normal,
+    // which is the point — a normal is six more evaluations of a field this
+    // procedure does not own.
+    let near = 1.0 - it / 34.0;
+    let g    = hit * pow(near, 1.5) * exposure;
+
+    color = vec4(g * 0.55 + hit * glow * 0.05, g * 0.3, g * 1.1, 1.0);
+  }
+}

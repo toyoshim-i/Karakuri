@@ -84,7 +84,8 @@ fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
 fn build(gpu: &Gpu, w: u32, h: u32, camera: Orbit) -> Set {
     let l4 = compile(DOT);
     let mut set =
-        Set::build_many(&gpu.device, &gpu.queue, &compile(MARK), &[], None, &[&l4], Layering::Overdraw, 1, 7)
+        Set::build_many(&gpu.device, &gpu.queue, &compile(MARK), &[], None,
+        None, &[&l4], Layering::Overdraw, 1, 7)
             .expect("one L1 and one L4");
     set.resize(&gpu.device, w, h);
     set.camera = camera;
@@ -308,6 +309,7 @@ fn with_camera(gpu: &Gpu, l3: Option<&str>, l4: &str, w: u32, h: u32) -> Set {
         &compile(MARK),
         &[],
         l3.as_ref(),
+        None,
         &[&l4],
         Layering::Overdraw,
         1,

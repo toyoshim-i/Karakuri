@@ -1066,6 +1066,11 @@ fn layer_named(name: &str) -> Option<karakuri_ir::Kind> {
         "L2" => karakuri_ir::Kind::L2,
         "L3" => karakuri_ir::Kind::L3,
         "L4" => karakuri_ir::Kind::L4,
+        // **Addressed by its kind, like everything else.** A field has no node,
+        // and its params are still an operator's to ride — every procedure that
+        // evaluates it writes the same value into its own uniform, so one
+        // address reaches all of them.
+        "Field" => karakuri_ir::Kind::Field,
         _ => return None,
     })
 }
@@ -1599,6 +1604,8 @@ struct Material {
     l2s: Vec<karakuri_ir::typed::Checked>,
     /// The camera, or `None` for the built-in orbit. At most one per slot.
     l3: Option<karakuri_ir::typed::Checked>,
+    /// The field, or `None`. At most one per slot, on the camera's terms.
+    field: Option<karakuri_ir::typed::Checked>,
     l4s: Vec<karakuri_ir::typed::Checked>,
 }
 
@@ -1694,8 +1701,10 @@ fn replay_session(args: &Args, id: &str) {
         // **A Set file carries neither a chain nor a camera yet.** It records
         // an L1 and its renderers, so a replay of one draws them from the
         // built-in orbit — the same gap L2 has, and the same fix will close
-        // both. `--set` is where a chain and a camera are spelled today.
+        // both. `--set` is where a chain, a camera and a field are spelled
+        // today.
         &[],
+        None,
         None,
         &loaded.l4s,
         // **A Set file does not record a layering**, on the same terms it
@@ -1898,6 +1907,7 @@ fn rebuild(
         // Artifacts recorded by a session, which stores an L1 and its
         // renderers — see the note at the other `build` call site.
         &[],
+        None,
         None,
         &l4s,
         karakuri_engine::set::Layering::Overdraw,
@@ -2255,7 +2265,13 @@ fn main() {
     // point: one path, so a loaded Set can be watched and rewritten.
     if let Some(loaded) = loaded.filter(|_| !editable) {
         eprintln!("  slot 0: set `{}`", loaded.id);
-        procs.push(Material { l1: loaded.l1, l2s: Vec::new(), l3: None, l4s: loaded.l4s });
+        procs.push(Material {
+            l1: loaded.l1,
+            l2s: Vec::new(),
+            l3: None,
+            field: None,
+            l4s: loaded.l4s,
+        });
     }
     for (slot, (l1, rest)) in args.sets.iter().enumerate() {
         let named: Vec<String> = rest.iter().map(|p| p.display().to_string()).collect();
@@ -2273,6 +2289,7 @@ fn main() {
         // second would be playing something nobody asked for.
         let mut l2s = Vec::new();
         let mut l3: Option<karakuri_ir::typed::Checked> = None;
+        let mut field: Option<karakuri_ir::typed::Checked> = None;
         let mut l4s = Vec::new();
         for (path, checked) in rest.iter().zip(rest.iter().map(load)) {
             match checked.kind {
@@ -2292,20 +2309,18 @@ fn main() {
                     std::process::exit(1);
                 }
                 karakuri_ir::Kind::L3 => l3 = Some(checked),
-                // **Refused rather than dropped**, on the same terms as a
-                // second L1: the checker accepts a `kind Field` file and
-                // nothing yet splices one into the procedures that evaluate it,
-                // so a run that took the path and ignored it would draw a
-                // picture nobody asked for.
-                karakuri_ir::Kind::Field => {
+                // **One field per slot**, refused rather than last-one-wins on
+                // exactly the camera's terms: several would need naming, and
+                // naming is fan-in.
+                karakuri_ir::Kind::Field if field.is_some() => {
                     eprintln!(
-                        "slot {slot}: {} is a `kind Field`, which checks but which a Set \
-                         cannot hold yet — a field lowers into whoever evaluates it and \
-                         nothing does that today",
+                        "slot {slot}: {} is a second `kind Field` — a slot evaluates one \
+                         field, and naming several is the notation fan-in brings with it",
                         path.display()
                     );
                     std::process::exit(1);
                 }
+                karakuri_ir::Kind::Field => field = Some(checked),
                 karakuri_ir::Kind::L1 => {
                     eprintln!(
                         "slot {slot}: {} is an L1 and so is {} — a slot simulates with one \
@@ -2325,7 +2340,7 @@ fn main() {
             );
             std::process::exit(1);
         }
-        procs.push(Material { l1: load(l1), l2s, l3, l4s });
+        procs.push(Material { l1: load(l1), l2s, l3, field, l4s });
     }
 
     // Saving is a one-shot: it writes what the flags say and stops, on the same
@@ -2429,13 +2444,19 @@ fn build_deck(
         .iter()
         .enumerate()
         .map(|(slot, material)| {
-            let (l1, l2s, l3, l4s) =
-                (&material.l1, &material.l2s, material.l3.as_ref(), &material.l4s);
+            let (l1, l2s, l3, field, l4s) = (
+                &material.l1,
+                &material.l2s,
+                material.l3.as_ref(),
+                material.field.as_ref(),
+                &material.l4s,
+            );
             let set = build(
                 gpu,
                 l1,
                 l2s,
                 l3,
+                field,
                 l4s,
                 if args.merge.contains(&slot) {
                     karakuri_engine::set::Layering::Composite
@@ -2569,6 +2590,7 @@ fn build(
     l1: &karakuri_ir::typed::Checked,
     l2s: &[karakuri_ir::typed::Checked],
     l3: Option<&karakuri_ir::typed::Checked>,
+    field: Option<&karakuri_ir::typed::Checked>,
     l4s: &[karakuri_ir::typed::Checked],
     layering: karakuri_engine::set::Layering,
     capacity: u32,
@@ -2580,7 +2602,9 @@ fn build(
 ) -> Set {
     let deform: Vec<&karakuri_ir::typed::Checked> = l2s.iter().collect();
     let draw: Vec<&karakuri_ir::typed::Checked> = l4s.iter().collect();
-    match Set::build_many(&gpu.device, &gpu.queue, l1, &deform, l3, &draw, layering, capacity, seed)
+    match Set::build_many(
+        &gpu.device, &gpu.queue, l1, &deform, l3, field, &draw, layering, capacity, seed,
+    )
     {
         Ok(mut set) => {
             // **The `camera` record, and only when nothing else produces one.**

@@ -84,6 +84,7 @@ fn build(gpu: &Gpu) -> Set {
         &compile(GRID),
         &[],
         None,
+        None,
         &[&a, &b],
         Layering::Overdraw,
         4,

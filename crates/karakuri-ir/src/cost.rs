@@ -212,6 +212,12 @@ const W_SRGB_LINEAR: u64 = W_TRANSCENDENTAL + 2; // a pow-shaped curve
 /// cost depends on its compile-time octave count.
 fn builtin_weight(func: Builtin, args: &[TExpr]) -> u64 {
     match func {
+        // **Zero here, and counted instead.** What one evaluation costs is the
+        // field's own figure, which lives in another file and is not in hand
+        // until the Set is built. Giving it a stand-in weight would be a
+        // number that is wrong for every field, and giving it the largest
+        // plausible one would refuse callers that are fine.
+        Builtin::Field => 0,
         Builtin::Abs
         | Builtin::Floor
         | Builtin::Ceil
@@ -301,21 +307,33 @@ struct HotSpot {
     span: Span,
 }
 
-fn stmts_cost(stmts: &[TStmt], mult: u64, block: BlockKind, hot: &mut Option<HotSpot>) -> u64 {
+fn stmts_cost(
+    stmts: &[TStmt],
+    mult: u64,
+    block: BlockKind,
+    hot: &mut Option<HotSpot>,
+    calls: &mut u64,
+) -> u64 {
     stmts
         .iter()
-        .fold(0u64, |total, s| total.saturating_add(stmt_cost(s, mult, block, hot)))
+        .fold(0u64, |total, s| total.saturating_add(stmt_cost(s, mult, block, hot, calls)))
 }
 
-fn stmt_cost(stmt: &TStmt, mult: u64, block: BlockKind, hot: &mut Option<HotSpot>) -> u64 {
+fn stmt_cost(
+    stmt: &TStmt,
+    mult: u64,
+    block: BlockKind,
+    hot: &mut Option<HotSpot>,
+    calls: &mut u64,
+) -> u64 {
     match stmt {
         TStmt::Let { value, .. } | TStmt::Var { value, .. } | TStmt::Assign { value, .. } => {
-            1u64.saturating_add(expr_cost(value, mult, block, hot))
+            1u64.saturating_add(expr_cost(value, mult, block, hot, calls))
         }
         TStmt::If { cond, then, els, .. } => {
-            let cond_cost = expr_cost(cond, mult, block, hot);
-            let then_cost = stmts_cost(then, mult, block, hot);
-            let els_cost = stmts_cost(els, mult, block, hot);
+            let cond_cost = expr_cost(cond, mult, block, hot, calls);
+            let then_cost = stmts_cost(then, mult, block, hot, calls);
+            let els_cost = stmts_cost(els, mult, block, hot, calls);
             // Both arms are charged for hot-spot tracking (both were walked
             // above), but the total only counts the pricier one plus the
             // test: on a GPU both are usually executed by every lane anyway,
@@ -329,7 +347,7 @@ fn stmt_cost(stmt: &TStmt, mult: u64, block: BlockKind, hot: &mut Option<HotSpot
             // cost is computed, not executed `iterations` times — which is
             // what keeps a huge literal bound cheap to estimate.
             let inner_mult = mult.saturating_mul(iterations);
-            let body_cost = stmts_cost(body, inner_mult, block, hot);
+            let body_cost = stmts_cost(body, inner_mult, block, hot, calls);
             // +1 per iteration for the loop counter's increment/compare.
             iterations.saturating_mul(body_cost.saturating_add(1))
         }
@@ -349,18 +367,30 @@ fn loop_iterations(start: i32, end: i32) -> u64 {
     }
 }
 
-fn expr_cost(expr: &TExpr, mult: u64, block: BlockKind, hot: &mut Option<HotSpot>) -> u64 {
+fn expr_cost(
+    expr: &TExpr,
+    mult: u64,
+    block: BlockKind,
+    hot: &mut Option<HotSpot>,
+    calls: &mut u64,
+) -> u64 {
     match &expr.kind {
         TExprKind::Lit(_)
         | TExprKind::Local(_)
         | TExprKind::Param(_)
         | TExprKind::Attr(_)
         | TExprKind::Ambient(_) => 1,
-        TExprKind::Unary { value, .. } => 1u64.saturating_add(expr_cost(value, mult, block, hot)),
+        TExprKind::Unary { value, .. } => 1u64.saturating_add(expr_cost(value, mult, block, hot, calls)),
         TExprKind::Binary { lhs, rhs, .. } => 1u64
-            .saturating_add(expr_cost(lhs, mult, block, hot))
-            .saturating_add(expr_cost(rhs, mult, block, hot)),
+            .saturating_add(expr_cost(lhs, mult, block, hot, calls))
+            .saturating_add(expr_cost(rhs, mult, block, hot, calls)),
         TExprKind::Builtin { func, args } => {
+            // **`mult`, not one.** A `field(p)` inside `for i in 0..48` is
+            // forty-eight evaluations, and the number the Set multiplies has to
+            // be the number that actually happens.
+            if *func == Builtin::Field {
+                *calls = calls.saturating_add(mult);
+            }
             let weight = builtin_weight(*func, args);
             let contribution = weight.saturating_mul(mult);
             let is_new_max = hot.as_ref().is_none_or(|h| contribution > h.contribution);
@@ -374,14 +404,14 @@ fn expr_cost(expr: &TExpr, mult: u64, block: BlockKind, hot: &mut Option<HotSpot
             }
             let args_cost = args
                 .iter()
-                .fold(0u64, |total, a| total.saturating_add(expr_cost(a, mult, block, hot)));
+                .fold(0u64, |total, a| total.saturating_add(expr_cost(a, mult, block, hot, calls)));
             weight.saturating_add(args_cost)
         }
         TExprKind::Construct { args } => 1u64.saturating_add(
             args.iter()
-                .fold(0u64, |total, a| total.saturating_add(expr_cost(a, mult, block, hot))),
+                .fold(0u64, |total, a| total.saturating_add(expr_cost(a, mult, block, hot, calls))),
         ),
-        TExprKind::Swizzle { value, .. } => 1u64.saturating_add(expr_cost(value, mult, block, hot)),
+        TExprKind::Swizzle { value, .. } => 1u64.saturating_add(expr_cost(value, mult, block, hot, calls)),
     }
 }
 
@@ -398,9 +428,15 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
     let mut ops_per_spawn = 0u64;
     let mut ops_per_fragment = 0u64;
     let mut ops_per_evaluation = 0u64;
+    let mut field_calls = crate::typed::FieldCalls::default();
 
     for block in &checked.blocks {
-        let block_cost = stmts_cost(&block.stmts, 1, block.kind, &mut hot);
+        // **Counted per block**, because which of the three ceilings a call
+        // charges is decided by the block it is in: a `field(p)` in a `vertex`
+        // is once per element and one in a `fragment` is once per covered
+        // pixel, and the two are not comparable numbers.
+        let mut block_calls = 0u64;
+        let block_cost = stmts_cost(&block.stmts, 1, block.kind, &mut hot, &mut block_calls);
         block_totals.push((block.kind, block_cost));
         // Each block's cost is charged to the quantity it actually scales
         // with. These are not summed: see `Cost`.
@@ -410,10 +446,17 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
             // A `mask` runs once per live element beside the `deform` it
             // gates, so it scales with exactly what that does.
             BlockKind::Element | BlockKind::Deform | BlockKind::Mask | BlockKind::Vertex => {
-                ops_per_element = ops_per_element.saturating_add(block_cost)
+                ops_per_element = ops_per_element.saturating_add(block_cost);
+                field_calls.per_element = field_calls.per_element.saturating_add(block_calls);
             }
-            BlockKind::Spawn => ops_per_spawn = ops_per_spawn.saturating_add(block_cost),
-            BlockKind::Fragment => ops_per_fragment = ops_per_fragment.saturating_add(block_cost),
+            BlockKind::Spawn => {
+                ops_per_spawn = ops_per_spawn.saturating_add(block_cost);
+                field_calls.per_spawn = field_calls.per_spawn.saturating_add(block_calls);
+            }
+            BlockKind::Fragment => {
+                ops_per_fragment = ops_per_fragment.saturating_add(block_cost);
+                field_calls.per_fragment = field_calls.per_fragment.saturating_add(block_calls);
+            }
             // **Charged to nothing, because it scales with nothing.** A
             // `camera` block runs once per frame, in one invocation, whatever
             // the capacity and whatever the frame size — the only block in this
@@ -464,6 +507,7 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
         ops_per_spawn,
         ops_per_fragment,
         ops_per_evaluation,
+        field_calls,
         bytes_per_element: storage_bytes(checked)
             .saturating_mul(checked.amplify.unwrap_or(1)),
     };
@@ -486,6 +530,50 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
     }
 
     Ok(cost)
+}
+
+/// **Re-check a caller with the field it evaluates multiplied in.**
+///
+/// A `field(p)` weighs nothing where the caller is estimated, because what one
+/// evaluation costs lives in another file. So the ceiling a caller passed was a
+/// ceiling applied to an incomplete figure, and this is where it is completed —
+/// at the Set, which is the first point holding both procedures.
+///
+/// **Not a nicety.** `examples/field_march.kir` marches forty-eight steps; a
+/// field of 48 ops/evaluation adds 2304 to a 4096 fragment ceiling. A Set that
+/// skipped this would run a shader nobody had costed, and the number it is over
+/// by would be invisible.
+pub fn check_with_field(caller: &Checked, per_evaluation: u64) -> IrResult<()> {
+    // **Estimated, not read.** `Checked::cost` is never filled by anything —
+    // see its own doc — so taking it from there made this function a no-op that
+    // reported success.
+    let cost = estimate(caller)?;
+    let calls = cost.field_calls;
+    for (own, count, ceiling, unit) in [
+        (cost.ops_per_element, calls.per_element, MAX_OPS_PER_ELEMENT, "ops/element"),
+        (cost.ops_per_spawn, calls.per_spawn, MAX_OPS_PER_SPAWN, "ops/spawn"),
+        (cost.ops_per_fragment, calls.per_fragment, fragment_ceiling(caller), "ops/fragment"),
+    ] {
+        if count == 0 {
+            continue;
+        }
+        let total = own.saturating_add(count.saturating_mul(per_evaluation));
+        if total > ceiling {
+            return Err(vec![IrError::new(
+                crate::error::Stage::Cost,
+                caller.span,
+                format!(
+                    "{total} {unit} with the field multiplied in exceeds the {ceiling} {unit} \
+                     ceiling ({own} of its own, plus {count} evaluations at {per_evaluation})"
+                ),
+            )
+            .with_hint(
+                "a field is inlined at every call site, so evaluating one in a loop costs the \
+                 loop's count — cut the field, cut the evaluations, or cut the loop",
+            )]);
+        }
+    }
+    Ok(())
 }
 
 /// Build the rejection diagnostic. Per the validation pipeline section, a cost

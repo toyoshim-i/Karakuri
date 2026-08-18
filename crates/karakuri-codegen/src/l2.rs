@@ -119,6 +119,7 @@ pub fn generate_l2(
     upstream: &[Attr],
     synthetic: Synthetic,
     derived: &[Attr],
+    field: Option<&crate::field::FieldShader>,
 ) -> L2Shader {
     assert_eq!(checked.kind, Kind::L2, "generate_l2 called on a non-L2 procedure");
 
@@ -151,6 +152,14 @@ pub fn generate_l2(
     b.field("seed_salt", "u32");
     for p in &checked.params {
         b.param_field(p.name.clone(), wgsl_ty(p.ty));
+    }
+    // **A spliced field's params live here**, under a prefix of their own so
+    // that this procedure and the field it evaluates may both declare
+    // `exposure` — see `layout::mangle_field_param`.
+    if let Some(f) = field {
+        for (name, ty) in &f.params {
+            b.field_param_field(name, ty);
+        }
     }
     let (uniform_layout, uniform_pad_f32) = b.finish();
 
@@ -239,7 +248,19 @@ pub fn generate_l2(
         ));
     }
     src.push('\n');
+    // **The field's helpers before its body, and its body before every entry
+    // point.** A spliced field lives in this module, so this module's prelude
+    // has to carry what it calls — the prelude is demand-driven, and a field
+    // calling `sd_torus` in a caller that does not would otherwise produce a
+    // call to a function nothing emitted, in a shader that checked clean.
+    if let Some(f) = field {
+        req.absorb(&f.requirements);
+    }
     src.push_str(&prelude::render(&req));
+    if let Some(f) = field {
+        src.push('\n');
+        src.push_str(&f.source);
+    }
     src.push('\n');
     src.push_str(&deform_entry(
         &in_layout,

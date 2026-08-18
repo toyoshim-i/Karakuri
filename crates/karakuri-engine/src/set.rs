@@ -126,6 +126,36 @@ pub enum SetError {
         /// let the generic message speak.
         hint: String,
     },
+    /// A caller and the field it evaluates are together over a cost ceiling.
+    ///
+    /// **Neither file is over on its own**, which is why this is here: a
+    /// `field(p)` weighs nothing where a single procedure is estimated, so the
+    /// ceiling each of them passed was applied to a figure that was missing the
+    /// other. A field is inlined at every call site, so a marcher evaluating one
+    /// forty-eight times pays for it forty-eight times.
+    #[error(
+        "`{caller}` with `{field}` inlined is over budget: {detail}\n\
+         hint: a field costs its caller once per evaluation — cut the field, the \
+         evaluations, or the loop around them"
+    )]
+    FieldTooExpensive {
+        caller: String,
+        field: String,
+        detail: String,
+    },
+    /// A procedure evaluates `field(p)` and the Set holds no field.
+    ///
+    /// **Refused here because nowhere else could.** A `kind Field` file is
+    /// another procedure entirely, so no single-file pass can know whether one
+    /// is present; and the call lowers to a function name, so a module without
+    /// it is WGSL naga refuses — a panic on the thread that built it, from a
+    /// `.kir` that checked clean.
+    #[error(
+        "`{caller}` evaluates `field(p)` and this Set has no field\n\
+         hint: add a `kind Field` procedure to the slot — `--set L1.kir,shape.kir,L4.kir`, \
+         sorted by the `kind` each file declares"
+    )]
+    NoField { caller: String },
     /// An amplified chain that asks for a buffer bigger than the device binds.
     ///
     /// **Checked here rather than left to fail**, because failing is not what
@@ -340,6 +370,14 @@ pub struct Set {
     /// working, and an author opts in by naming what they want rather than by
     /// hiding twenty-four things. See `docs/ir-spec.md`, "What a Set publishes".
     interface: Vec<Published>,
+    /// **The spliced field's params, under their WGSL names.** Held here rather
+    /// than on each node because there is one field and every caller writes the
+    /// same values into its own uniform — see
+    /// [`crate::node::View::field_params`].
+    field_params: Vec<String>,
+    /// Whether this Set holds a field at all. Not `!field_params.is_empty()`: a
+    /// field may declare no `param`, and the two questions are different ones.
+    has_field: bool,
 }
 
 /// One control on the console, and where it lands inside the Set.
@@ -417,7 +455,9 @@ impl Set {
         capacity: u32,
         seed_salt: u32,
     ) -> Result<Set, SetError> {
-        Set::build_many(device, queue, l1, &[], None, &[l4], Layering::Overdraw, capacity, seed_salt)
+        Set::build_many(
+            device, queue, l1, &[], None, None, &[l4], Layering::Overdraw, capacity, seed_salt,
+        )
     }
 
     /// **One geometry, several renderers over it, drawn in list order.**
@@ -448,6 +488,7 @@ impl Set {
         l1: &Checked,
         l2s: &[&Checked],
         l3: Option<&Checked>,
+        field: Option<&Checked>,
         l4s: &[&Checked],
         layering: Layering,
         capacity: u32,
@@ -663,7 +704,63 @@ impl Set {
         // **The L1 node**, generated, compiled and allocated at `capacity` —
         // which is where the range check lives, because the range is that
         // node's own. Everything the simulation needs is inside it.
-        let sim = Simulation::build(device, l1, capacity, seed_salt, &derived)?;
+        // **Compiled once, spliced into everything that evaluates it.** A field
+        // has no node — it lowers into its callers — so this is the whole of
+        // what a Set does with one, and the `Option` is the whole of "a Set may
+        // have a field".
+        if let Some(f) = field {
+            if f.kind != Kind::Field {
+                return Err(SetError::WrongKind {
+                    slot: "Field",
+                    expected: Kind::Field,
+                    actual: f.kind,
+                });
+            }
+        }
+        let field_shader = field.map(karakuri_codegen::field::generate_field);
+        let field_shader = field_shader.as_ref();
+
+        // **The ceiling every caller passed was applied to an incomplete
+        // figure**, because a `field(p)` weighs nothing where a single file is
+        // estimated. This is where it is completed.
+        if let Some(f) = field {
+            // **Estimated here rather than read off `Checked`.** That field is
+            // never filled by anything — `cost::estimate` returns its answer and
+            // the callers discard it — so reading it made both this check and
+            // the one below silently dead. Asking is cheap: a tree walk over
+            // material that has already been through the same walk once.
+            let per_evaluation = karakuri_ir::cost::estimate(f)
+                .map(|c| c.ops_per_evaluation)
+                .unwrap_or(0);
+            for caller in std::iter::once(&l1).chain(l2s.iter()).chain(l3.iter()).chain(l4s.iter())
+            {
+                if let Err(errs) = karakuri_ir::cost::check_with_field(caller, per_evaluation) {
+                    return Err(SetError::FieldTooExpensive {
+                        caller: caller.name.clone(),
+                        field: f.name.clone(),
+                        detail: errs.first().map(|e| e.message.clone()).unwrap_or_default(),
+                    });
+                }
+            }
+        }
+
+        // **A procedure that evaluates a field needs one to be there**, and
+        // nothing below this point could report it: the call lowers to a
+        // function name, and a module missing that function is WGSL naga
+        // refuses — a panic on the thread that built it, from a `.kir` the
+        // checker accepted.
+        if field.is_none() {
+            let caller = std::iter::once(&l1)
+                .chain(l2s.iter())
+                .chain(l3.iter())
+                .chain(l4s.iter())
+                .find(|n| karakuri_ir::cost::estimate(n).is_ok_and(|c| c.field_calls.any()));
+            if let Some(caller) = caller {
+                return Err(SetError::NoField { caller: caller.name.clone() });
+            }
+        }
+
+        let sim = Simulation::build(device, l1, capacity, seed_salt, &derived, field_shader)?;
 
         // **The L2 nodes**, each built against what reaches it. The chain is
         // walked here rather than inside a node because the *grouping* decides
@@ -698,7 +795,16 @@ impl Set {
                     None => sim.geometry(),
                     Some(prev) => prev.geometry(alive, counts),
                 };
-                Deform::build(device, l2, &upstream, synthetic, &derived, &input, chain_capacity)?
+                Deform::build(
+                    device,
+                    l2,
+                    &upstream,
+                    synthetic,
+                    &derived,
+                    field_shader,
+                    &input,
+                    chain_capacity,
+                )?
             };
             upstream = node.emits().to_vec();
             synthetic = node.synthetic();
@@ -725,7 +831,7 @@ impl Set {
                 return Err(SetError::WrongKind { slot: "L3", expected: Kind::L3, actual: l3.kind });
             }
         }
-        let camera_node = crate::node::Camera::build(device, l3);
+        let camera_node = crate::node::Camera::build(device, l3, field_shader);
         let renderers: Vec<Renderer> = {
             let from = sim.geometry();
             let (alive, counts) = match live {
@@ -740,7 +846,7 @@ impl Set {
                 Some(last) => last.geometry(alive, counts),
             };
             l4s.iter()
-                .map(|l4| Renderer::build(device, l4, &geometry, &camera_node))
+                .map(|l4| Renderer::build(device, l4, &geometry, &camera_node, field_shader))
                 .collect()
         };
 
@@ -755,6 +861,10 @@ impl Set {
             .chain(l2s.iter().map(|n| map(n)))
             .chain(l3.map(map))
             .chain(l4s.iter().map(|n| map(n)))
+            // **Last, and by declared name.** The prefix belongs to the WGSL
+            // spelling and to nothing else: an operator writes
+            // `--param Field:0:ball`, which is the name the file declares.
+            .chain(field.map(map))
             .collect();
         // The same walk, so a node's values and its ranges cannot end up at
         // different indices — the defect this file has already paid for twice.
@@ -765,6 +875,7 @@ impl Set {
             .chain(l2s.iter().map(|n| declared(n)))
             .chain(l3.map(declared))
             .chain(l4s.iter().map(|n| declared(n)))
+            .chain(field.map(declared))
             .collect();
 
         let set = Set {
@@ -811,6 +922,15 @@ impl Set {
             edges: vec![Input::default(); renderer_count],
             bindings: Vec::new(),
             interface: Vec::new(),
+            has_field: field.is_some(),
+            field_params: field
+                .map(|f| {
+                    f.params
+                        .iter()
+                        .map(|p| karakuri_codegen::layout::mangle_field_param(&p.name))
+                        .collect()
+                })
+                .unwrap_or_default(),
         };
         set.sim.initialize(queue);
         // **A camera before the first `prepare`.** The state buffer starts
@@ -1094,11 +1214,14 @@ impl Set {
             // Zero or one: the built-in camera is a field on this struct rather
             // than a node, and has no parameter map to address.
             Kind::L3 => start..start + self.camera_node.node_count(),
-            Kind::L4 => start..self.params.len(),
+            Kind::L4 => start..self.params.len() - usize::from(self.has_field),
             // Empty, on the same terms `L3` is empty for a Set with no camera
             // procedure: the kind is addressable and there is nothing at that
             // address, so a `--param Field:…` is reported as reaching no node.
-            Kind::Field => start..start,
+            // One when the Set holds a field, zero otherwise — the same shape
+            // `L3` has, and for the same reason: the kind is addressable and a
+            // Set that has none reports `--param Field:…` as reaching nothing.
+            Kind::Field => start..start + usize::from(self.has_field),
         }
     }
 
@@ -1577,7 +1700,16 @@ impl Set {
         {
             let (bindings, params) = (&self.bindings, &self.params[0]);
             let param = |name: &str| effective(bindings, params, Kind::L1, 0, name);
-            let tick = crate::node::Tick { steps, dt: self.dt, instants, param: &param };
+            let field_at = self.nodes_of(Kind::Field).next();
+            let field_values = field_at.and_then(|at| self.params.get(at));
+            let tick = crate::node::Tick {
+                steps,
+                dt: self.dt,
+                instants,
+                param: &param,
+                field_params: &self.field_params,
+                field_value: &|name: &str| field_value(field_values, name),
+            };
             self.sim.prepare(queue, &tick);
         }
 
@@ -1631,13 +1763,21 @@ impl Set {
             // calls this closure — and it would become a renderer's `exposure`
             // arriving as the orbit's `radius` the moment the built-in took one.
             let at = self.nodes_of(Kind::L3).next();
-            let (bindings, params, dt) =
-                (&self.bindings, at.and_then(|at| self.params.get(at)), self.dt);
+            let field_at = self.nodes_of(Kind::Field).next();
+            let (bindings, params, dt, field_params, field_values) = (
+                &self.bindings,
+                at.and_then(|at| self.params.get(at)),
+                self.dt,
+                &self.field_params,
+                field_at.and_then(|at| self.params.get(at)),
+            );
             let view = crate::node::View {
                 t,
                 beats: self.last_beats,
                 seed_salt: self.seed_salt,
                 viewport: self.viewport,
+                field_params,
+                field_value: &|name: &str| field_value(field_values, name),
                 param: &|name: &str| {
                     params.and_then(|p| effective(bindings, p, Kind::L3, 0, name))
                 },
@@ -1645,8 +1785,15 @@ impl Set {
             let fallback = self.camera.state(t);
             self.camera_node.prepare(queue, &view, dt, &fallback);
         }
-        let (bindings, beats, salt, viewport) =
-            (&self.bindings, self.last_beats, self.seed_salt, self.viewport);
+        let field_at = self.nodes_of(Kind::Field).next();
+        let (bindings, beats, salt, viewport, field_params, field_values) = (
+            &self.bindings,
+            self.last_beats,
+            self.seed_salt,
+            self.viewport,
+            &self.field_params,
+            field_at.and_then(|at| self.params.get(at)),
+        );
         // **Asked rather than re-derived.** This line spelled out `1 +
         // deforms.len()` and was right until an L3 landed between the
         // deformations and the renderers — after which every renderer read the
@@ -1663,6 +1810,8 @@ impl Set {
                 beats,
                 seed_salt: salt,
                 viewport,
+                field_params,
+                field_value: &|name: &str| field_value(field_values, name),
                 param: &|name: &str| effective(bindings, params, Kind::L4, at, name),
             };
             renderer.write_uniforms(queue, &view);
@@ -1677,8 +1826,16 @@ impl Set {
     /// output cannot disagree about when this frame is.
     fn write_l2_uniforms(&mut self, queue: &wgpu::Queue) {
         let t = self.time();
-        let (bindings, beats, salt, viewport, dt) =
-            (&self.bindings, self.last_beats, self.seed_salt, self.viewport, self.dt);
+        let field_at = self.nodes_of(Kind::Field).next();
+        let (bindings, beats, salt, viewport, dt, field_params, field_values) = (
+            &self.bindings,
+            self.last_beats,
+            self.seed_salt,
+            self.viewport,
+            self.dt,
+            &self.field_params,
+            field_at.and_then(|at| self.params.get(at)),
+        );
         let capacity = self.sim.capacity();
         // The range is read before the loop: `self.deforms` is borrowed mutably
         // by the iterator and `self.params` immutably by the closure, which are
@@ -1696,6 +1853,8 @@ impl Set {
                 beats,
                 seed_salt: salt,
                 viewport,
+                field_params,
+                field_value: &|name: &str| field_value(field_values, name),
                 param: &|name: &str| effective(bindings, params, Kind::L2, at, name),
             };
             node.write_uniforms(queue, &view, dt, capacity);
@@ -2030,6 +2189,16 @@ impl VideoSource for Set {
     }
 }
 
+
+/// A spliced field's parameter value, by its **WGSL** name.
+///
+/// The map is keyed by the declared name, so the prefix comes off here — one
+/// place, rather than at each of the four nodes that write it.
+fn field_value(map: Option<&HashMap<String, f32>>, wgsl_name: &str) -> Option<f32> {
+    let declared = wgsl_name.strip_prefix("field_")?;
+    map?.get(declared).copied()
+}
+
 /// The scalar default of a param, for the uniform. Vector params are not yet
 /// driven from here — every param the examples declare is a float.
 ///
@@ -2252,6 +2421,7 @@ proc dots {
             &gpu.queue,
             &l1,
             &[&l2],
+            None,
             None,
             &[&l4],
             Layering::Overdraw,

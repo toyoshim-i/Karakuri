@@ -51,11 +51,12 @@ impl Renderer {
         l4: &Checked,
         geometry: &Geometry<'_>,
         camera: &Camera,
+        field: Option<&karakuri_codegen::field::FieldShader>,
     ) -> Renderer {
         let fullscreen = l4.topology == Some(karakuri_ir::Topology::Fullscreen);
         let weighted = l4.blend == Some(karakuri_ir::Blend::Weighted);
 
-        let shader = generate_l4(l4, geometry.layout);
+        let shader = generate_l4(l4, geometry.layout, field);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(&format!("{} (L4)", l4.name)),
             source: wgpu::ShaderSource::Wgsl(shader.source.as_str().into()),
@@ -289,6 +290,10 @@ impl Renderer {
             p.vec2("viewport", view.viewport);
         }
         super::write_params(&mut p, &self.uniform_layout, &self.param_names, view.param);
+        // **The spliced field's params, written by every caller.** A field has
+        // no node and therefore no uniform of its own; each procedure that
+        // evaluates it carries them in its own and writes the same answer.
+        super::write_params(&mut p, &self.uniform_layout, view.field_params, view.field_value);
         queue.write_buffer(&self.uniforms, 0, p.finish());
     }
 

@@ -498,13 +498,13 @@ fn validate(source: &str) {
 
 #[test]
 fn drift_shell_l1_compiles_and_validates() {
-    let shader = karakuri_codegen::generate_l1(&drift_shell(), &[]);
+    let shader = karakuri_codegen::generate_l1(&drift_shell(), &[], None);
     validate(&shader.source);
 }
 
 #[test]
 fn soft_points_l4_compiles_and_validates() {
-    let shader = karakuri_codegen::generate_l4(&soft_points(), &layout_for(&drift_shell()));
+    let shader = karakuri_codegen::generate_l4(&soft_points(), &layout_for(&drift_shell()), None);
     validate(&shader.source);
 }
 
@@ -514,7 +514,7 @@ fn soft_points_l4_compiles_and_validates() {
 /// Every param name in this fixture is a real WGSL reserved word.
 #[test]
 fn params_named_after_wgsl_reserved_words_compile_and_validate() {
-    let shader = karakuri_codegen::generate_l1(&reserved_word_params_l1(), &[]);
+    let shader = karakuri_codegen::generate_l1(&reserved_word_params_l1(), &[], None);
     validate(&shader.source);
 }
 
@@ -527,13 +527,13 @@ fn params_named_after_wgsl_reserved_words_compile_and_validate() {
 /// pack a value into the wrong param's bytes.
 #[test]
 fn uniform_layout_and_emitted_struct_text_agree() {
-    let l1 = karakuri_codegen::generate_l1(&drift_shell(), &[]);
+    let l1 = karakuri_codegen::generate_l1(&drift_shell(), &[], None);
     assert_layout_matches_text(&l1.source, &l1.uniform_layout);
 
-    let l4 = karakuri_codegen::generate_l4(&soft_points(), &layout_for(&drift_shell()));
+    let l4 = karakuri_codegen::generate_l4(&soft_points(), &layout_for(&drift_shell()), None);
     assert_layout_matches_text(&l4.source, &l4.uniform_layout);
 
-    let reserved = karakuri_codegen::generate_l1(&reserved_word_params_l1(), &[]);
+    let reserved = karakuri_codegen::generate_l1(&reserved_word_params_l1(), &[], None);
     assert_layout_matches_text(&reserved.source, &reserved.uniform_layout);
 
     // And specifically: the layout's semantic `name` must stay the
@@ -555,13 +555,13 @@ fn uniform_layout_and_emitted_struct_text_agree() {
 /// local shadowed the uniform binding.
 #[test]
 fn l1_locals_cannot_shadow_generated_identifiers() {
-    let shader = karakuri_codegen::generate_l1(&shadowing_locals_l1(), &[]);
+    let shader = karakuri_codegen::generate_l1(&shadowing_locals_l1(), &[], None);
     validate(&shader.source);
 }
 
 #[test]
 fn l4_locals_cannot_shadow_generated_identifiers() {
-    let shader = karakuri_codegen::generate_l4(&shadowing_locals_l4(), &layout_for(&shadowing_locals_l1()));
+    let shader = karakuri_codegen::generate_l4(&shadowing_locals_l4(), &layout_for(&shadowing_locals_l1()), None);
     validate(&shader.source);
 }
 
@@ -670,7 +670,7 @@ fn consumes_nothing_l4() -> Checked {
 /// byte identity must hold regardless of what a paired L4 happens to read.
 #[test]
 fn l4_consuming_a_reordered_subset_compiles_and_validates() {
-    let shader = karakuri_codegen::generate_l4(&reordered_subset_l4(), &layout_for(&drift_shell()));
+    let shader = karakuri_codegen::generate_l4(&reordered_subset_l4(), &layout_for(&drift_shell()), None);
     validate(&shader.source);
 }
 
@@ -678,7 +678,7 @@ fn l4_consuming_a_reordered_subset_compiles_and_validates() {
 /// `soft_points`, which emits nothing.
 #[test]
 fn l4_consuming_nothing_compiles_and_validates() {
-    let shader = karakuri_codegen::generate_l4(&consumes_nothing_l4(), &layout_for(&drift_shell()));
+    let shader = karakuri_codegen::generate_l4(&consumes_nothing_l4(), &layout_for(&drift_shell()), None);
     validate(&shader.source);
 }
 
@@ -734,7 +734,7 @@ fn zero_expr(ty: Ty) -> TExpr {
 #[test]
 fn l1_emitting_every_attribute_compiles_and_validates() {
     let checked = emits_every_attribute_l1();
-    let shader = karakuri_codegen::generate_l1(&checked, &[]);
+    let shader = karakuri_codegen::generate_l1(&checked, &[], None);
     assert_eq!(shader.element_layout.slots.len(), 2 + karakuri_ir::Attr::ALL.len());
     assert_eq!(shader.element_layout.stride, (2 + karakuri_ir::Attr::ALL.len() as u32) * 16);
     validate(&shader.source);
@@ -779,7 +779,7 @@ fn l4_consuming_every_attribute_compiles_and_validates() {
         reads_beats: false,
         span: span(),
     };
-    let shader = karakuri_codegen::generate_l4(&l4, &layout_for(&l1));
+    let shader = karakuri_codegen::generate_l4(&l4, &layout_for(&l1), None);
     validate(&shader.source);
 }
 
@@ -797,8 +797,8 @@ fn l1_and_paired_l4_declare_byte_identical_element_structs() {
         &source[start..end]
     }
 
-    let l1 = karakuri_codegen::generate_l1(&drift_shell(), &[]);
-    let l4 = karakuri_codegen::generate_l4(&soft_points(), &layout_for(&drift_shell()));
+    let l1 = karakuri_codegen::generate_l1(&drift_shell(), &[], None);
+    let l4 = karakuri_codegen::generate_l4(&soft_points(), &layout_for(&drift_shell()), None);
     assert_eq!(
         element_struct_text(&l1.source),
         element_struct_text(&l4.source),
@@ -866,7 +866,7 @@ fn soft_streaks() -> Checked {
 /// are easy to write and easy to get past a reviewer while naga refuses them.
 #[test]
 fn a_lines_l4_compiles_and_validates() {
-    let shader = karakuri_codegen::generate_l4(&soft_streaks(), &layout_for(&drift_shell()));
+    let shader = karakuri_codegen::generate_l4(&soft_streaks(), &layout_for(&drift_shell()), None);
     validate(&shader.source);
 }
 
@@ -883,8 +883,8 @@ fn a_lines_l4_compiles_and_validates() {
 #[test]
 fn each_topology_emits_its_own_placement_and_not_the_others() {
     let layout = layout_for(&drift_shell());
-    let points = karakuri_codegen::generate_l4(&soft_points(), &layout).source;
-    let lines = karakuri_codegen::generate_l4(&soft_streaks(), &layout).source;
+    let points = karakuri_codegen::generate_l4(&soft_points(), &layout, None).source;
+    let lines = karakuri_codegen::generate_l4(&soft_streaks(), &layout, None).source;
 
     assert!(points.contains("ndc_offset"), "the points shader lost the sprite offset");
     assert!(!points.contains("half_vp"), "the points shader is expanding a segment");
@@ -912,7 +912,7 @@ fn soft_glass() -> Checked {
 /// `@location(1)` is the part most likely to be almost right.
 #[test]
 fn a_weighted_l4_compiles_and_validates() {
-    let shader = karakuri_codegen::generate_l4(&soft_glass(), &layout_for(&drift_shell()));
+    let shader = karakuri_codegen::generate_l4(&soft_glass(), &layout_for(&drift_shell()), None);
     validate(&shader.source);
 }
 
@@ -922,7 +922,7 @@ fn a_weighted_l4_compiles_and_validates() {
 fn a_weighted_lines_l4_compiles_and_validates() {
     let mut checked = soft_streaks();
     checked.blend = Some(Blend::Weighted);
-    let shader = karakuri_codegen::generate_l4(&checked, &layout_for(&drift_shell()));
+    let shader = karakuri_codegen::generate_l4(&checked, &layout_for(&drift_shell()), None);
     validate(&shader.source);
 }
 
@@ -957,7 +957,7 @@ fn a_weighted_fullscreen_l4_compiles_and_validates() {
         reads_beats: false,
         span: span(),
     };
-    let shader = karakuri_codegen::generate_l4(&l4, &layout_for(&drift_shell()));
+    let shader = karakuri_codegen::generate_l4(&l4, &layout_for(&drift_shell()), None);
     validate(&shader.source);
     assert!(
         !shader.uniform_layout.fields.iter().any(|f| f.name == "depth_range"),
@@ -983,8 +983,8 @@ fn a_weighted_fullscreen_l4_compiles_and_validates() {
 #[test]
 fn each_blend_mode_emits_its_own_fragment_epilogue_and_not_the_others() {
     let layout = layout_for(&drift_shell());
-    let additive = karakuri_codegen::generate_l4(&soft_points(), &layout);
-    let weighted = karakuri_codegen::generate_l4(&soft_glass(), &layout);
+    let additive = karakuri_codegen::generate_l4(&soft_points(), &layout, None);
+    let weighted = karakuri_codegen::generate_l4(&soft_glass(), &layout, None);
 
     assert!(weighted.source.contains("@location(1) reveal"), "no revealage target");
     assert!(weighted.source.contains("view_depth"), "no depth to weigh by");
@@ -1082,7 +1082,7 @@ fn sweep() -> Checked {
 
 #[test]
 fn a_camera_shader_parses_and_validates() {
-    validate(&karakuri_codegen::generate_l3(&sweep()).source);
+    validate(&karakuri_codegen::generate_l3(&sweep(), None).source);
 }
 
 /// **The four an author did not write are written anyway**, before the block
@@ -1101,7 +1101,7 @@ fn a_camera_shader_parses_and_validates() {
 /// exist; here they are held against the values that struct documents.
 #[test]
 fn every_camera_output_is_written_whether_or_not_the_block_assigned_it() {
-    let src = karakuri_codegen::generate_l3(&sweep()).source;
+    let src = karakuri_codegen::generate_l3(&sweep(), None).source;
     for field in ["eye", "look_at", "up", "fov_y", "near", "far"] {
         assert!(
             src.contains(&format!("cam.{field}")),
@@ -1128,7 +1128,7 @@ fn every_camera_output_is_written_whether_or_not_the_block_assigned_it() {
 /// entry point rather than this one's.
 #[test]
 fn a_camera_shader_dispatches_one_invocation_over_nothing() {
-    let src = karakuri_codegen::generate_l3(&sweep()).source;
+    let src = karakuri_codegen::generate_l3(&sweep(), None).source;
     assert!(src.contains("@workgroup_size(1)"), "{src}");
     assert!(!src.contains("global_invocation_id"), "a camera indexed something:\n{src}");
     assert!(!src.contains("counts"), "a camera read a live range:\n{src}");
@@ -1137,7 +1137,7 @@ fn a_camera_shader_dispatches_one_invocation_over_nothing() {
 /// The uniform carries the clock and the params, and nothing per element.
 #[test]
 fn a_camera_uniform_carries_the_clock_and_its_params() {
-    let shader = karakuri_codegen::generate_l3(&sweep());
+    let shader = karakuri_codegen::generate_l3(&sweep(), None);
     let names: Vec<&str> = shader.uniform_layout.fields.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(names, vec!["t", "beats", "dt", "seed_salt", "radius", "speed"]);
 }
@@ -1166,7 +1166,7 @@ proc collides {
 "#;
     let parsed = karakuri_ir::parse(src).expect("parses");
     let checked = karakuri_ir::check::check(&parsed).expect("checks");
-    let shader = karakuri_codegen::generate_l2(&checked, &[Attr::Position, Attr::Age], karakuri_codegen::layout::Synthetic::NONE, &[]);
+    let shader = karakuri_codegen::generate_l2(&checked, &[Attr::Position, Attr::Age], karakuri_codegen::layout::Synthetic::NONE, &[], None);
     validate(&shader.source);
 }
 
@@ -1179,7 +1179,7 @@ fn compiled_l2(src: &str, upstream: &[Attr], synthetic: karakuri_codegen::layout
 {
     let parsed = karakuri_ir::parse(src).expect("parses");
     let checked = karakuri_ir::check::check(&parsed).expect("checks");
-    karakuri_codegen::generate_l2(&checked, upstream, synthetic, &[])
+    karakuri_codegen::generate_l2(&checked, upstream, synthetic, &[], None)
 }
 
 const MIRROR: &str = r#"
@@ -1362,7 +1362,7 @@ proc tinted {
         karakuri_codegen::layout::Synthetic { copy: true },
        &[],
     );
-    let shader = karakuri_codegen::generate_l4(&checked, &amplified);
+    let shader = karakuri_codegen::generate_l4(&checked, &amplified, None);
     validate(&shader.source);
     assert!(shader.source.contains("let copy = elements[elem].copy.x;"), "{}", shader.source);
     assert!(shader.source.contains("@interpolate(flat) copy: u32"), "{}", shader.source);
@@ -1400,7 +1400,7 @@ proc tinted {
         karakuri_codegen::layout::Synthetic::NONE,
        &[],
     );
-    let shader = karakuri_codegen::generate_l4(&checked, &plain);
+    let shader = karakuri_codegen::generate_l4(&checked, &plain, None);
     validate(&shader.source);
     assert!(shader.source.contains("let copy = 0u;"), "{}", shader.source);
     assert!(!shader.source.contains("elements[elem].copy"), "{}", shader.source);

@@ -596,6 +596,20 @@ pub fn mangle_param(name: &str) -> String {
     format!("param_{name}")
 }
 
+/// The WGSL spelling of a **field's** `param`, in a caller's uniform.
+///
+/// **A different prefix, and that is what makes a collision impossible.** A
+/// field's body is spliced into its caller's shader and reads its params out of
+/// the caller's uniform, so the two sets of names share one struct — and a
+/// renderer declaring `exposure` beside a field declaring `exposure` would
+/// otherwise be one field with two meanings. Prefixing them apart costs
+/// nothing and removes the refusal that would otherwise have to exist, which
+/// is the better of the two: `--param Field:0:exposure` and
+/// `--param L4:0:exposure` name different things and both work.
+pub fn mangle_field_param(name: &str) -> String {
+    format!("field_{name}")
+}
+
 /// The complete field order and size of a generated uniform struct. This is
 /// the other half of the "byte offsets" contract alongside [`ElementSlot`] —
 /// `karakuri-engine` packs the CPU-side struct that gets uploaded to this
@@ -658,6 +672,15 @@ impl UniformLayoutBuilder {
         let name = name.into();
         let wgsl_name = mangle_param(&name);
         self.push(name, wgsl_name, wgsl_ty)
+    }
+
+    /// Adds a field for a **field's** declared `param` — see
+    /// [`mangle_field_param`]. The semantic `name` is prefixed too, because the
+    /// engine looks a uniform field up by that name and a Set may hold a field
+    /// and a renderer that declare the same one.
+    pub fn field_param_field(&mut self, name: &str, wgsl_ty: &'static str) -> &mut Self {
+        let wgsl_name = mangle_field_param(name);
+        self.push(wgsl_name.clone(), wgsl_name, wgsl_ty)
     }
 
     fn push(&mut self, name: String, wgsl_name: String, wgsl_ty: &'static str) -> &mut Self {

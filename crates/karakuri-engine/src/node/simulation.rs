@@ -140,6 +140,7 @@ impl Simulation {
         // What the Set decided to synthesise — see `Set::build_many`. The
         // slots those rules read are written by this node and by nothing else.
         derived: &[karakuri_ir::Attr],
+        field: Option<&karakuri_codegen::field::FieldShader>,
     ) -> Result<Simulation, SetError> {
         let range = l1
             .capacity
@@ -153,7 +154,7 @@ impl Simulation {
             });
         }
 
-        let shader = generate_l1(l1, derived);
+        let shader = generate_l1(l1, derived, field);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(&format!("{} (L1)", l1.name)),
             source: wgpu::ShaderSource::Wgsl(shader.source.as_str().into()),
@@ -465,6 +466,13 @@ impl Simulation {
                 .u32("capacity", self.capacity)
                 .u32("seed_salt", self.seed_salt);
             super::write_params(&mut p, &self.uniform_layout, &self.param_names, tick.param);
+            // See `View::field_params`: a field has no uniform of its own.
+            super::write_params(
+                &mut p,
+                &self.uniform_layout,
+                tick.field_params,
+                tick.field_value,
+            );
             queue.write_buffer(&self.uniforms, 0, p.finish());
         }
         self.write_step_args(queue, tick);

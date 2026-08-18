@@ -427,7 +427,11 @@ fn contains_kill(stmts: &[TStmt]) -> bool {
 /// which is the point: the slots those rules read are written here, at spawn and
 /// on every step, and only a caller holding the whole chain knows whether
 /// anything is going to ask for them.
-pub fn generate_l1(checked: &Checked, derived: &[Attr]) -> L1Shader {
+pub fn generate_l1(
+    checked: &Checked,
+    derived: &[Attr],
+    field: Option<&crate::field::FieldShader>,
+) -> L1Shader {
     assert_eq!(checked.kind, Kind::L1, "generate_l1 called on a non-L1 procedure");
 
     // **`Synthetic::NONE`, and it is a statement rather than a default.** `copy`
@@ -457,6 +461,14 @@ pub fn generate_l1(checked: &Checked, derived: &[Attr]) -> L1Shader {
     b.field("seed_salt", "u32");
     for p in &checked.params {
         b.param_field(p.name.clone(), wgsl_ty(p.ty));
+    }
+    // **A spliced field's params live here**, under a prefix of their own so
+    // that this procedure and the field it evaluates may both declare
+    // `exposure` — see `layout::mangle_field_param`.
+    if let Some(f) = field {
+        for (name, ty) in &f.params {
+            b.field_param_field(name, ty);
+        }
     }
     let (uniform_layout, uniform_pad_f32) = b.finish();
 
@@ -508,7 +520,19 @@ pub fn generate_l1(checked: &Checked, derived: &[Attr]) -> L1Shader {
     src.push('\n');
     write_element_bindings(&mut src, &element_layout);
     src.push('\n');
+    // **The field's helpers before its body, and its body before every entry
+    // point.** A spliced field lives in this module, so this module's prelude
+    // has to carry what it calls — the prelude is demand-driven, and a field
+    // calling `sd_torus` in a caller that does not would otherwise produce a
+    // call to a function nothing emitted, in a shader that checked clean.
+    if let Some(f) = field {
+        req.absorb(&f.requirements);
+    }
     src.push_str(&prelude::render(&req));
+    if let Some(f) = field {
+        src.push('\n');
+        src.push_str(&f.source);
+    }
     src.push('\n');
     if let Some(body) = &spawn_body {
         src.push_str(&spawn_entry(body, &spawn_derivations(derived)));

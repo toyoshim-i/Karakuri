@@ -717,7 +717,11 @@ fn fragment_entry(id: Identity, attrs_used: &[Attr], body: &str, weighted: bool)
 /// has both checked procedures, so it is what passes the L1 side's layout
 /// through. L4 still only *reads* the slots it `consumes`, plus `seed` — it
 /// just declares the full struct so its layout matches.
-pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
+pub fn generate_l4(
+    checked: &Checked,
+    elements: &ElementLayout,
+    field: Option<&crate::field::FieldShader>,
+) -> L4Shader {
     assert_eq!(checked.kind, Kind::L4, "generate_l4 called on a non-L4 procedure");
     // Inferred by the check pass from whether `vertex` assigns `clip_b`. It is
     // **the L4's own answer and the only one that reaches lowering** — the
@@ -742,7 +746,7 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
     // below textually unchanged rather than threading a condition through it,
     // and keeps `viewport` and `camera` out of a uniform that never reads them.
     if topology == Topology::Fullscreen {
-        return generate_fullscreen(checked, fragment_blk, elements, weighted);
+        return generate_fullscreen(checked, fragment_blk, elements, weighted, field);
     }
 
     let mut b = UniformLayoutBuilder::new();
@@ -756,6 +760,14 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
     b.field("viewport", "vec2<f32>");
     for p in &checked.params {
         b.param_field(p.name.clone(), wgsl_ty(p.ty));
+    }
+    // **A spliced field's params live here**, under a prefix of their own so
+    // that this procedure and the field it evaluates may both declare
+    // `exposure` — see `layout::mangle_field_param`.
+    if let Some(f) = field {
+        for (name, ty) in &f.params {
+            b.field_param_field(name, ty);
+        }
     }
     let (uniform_layout, uniform_pad_f32) = b.finish();
 
@@ -800,7 +812,19 @@ pub fn generate_l4(checked: &Checked, elements: &ElementLayout) -> L4Shader {
     if let Some(g) = camera_group {
         write_camera_binding(&mut src, g);
     }
+    // **The field's helpers before its body, and its body before every entry
+    // point.** A spliced field lives in this module, so this module's prelude
+    // has to carry what it calls — the prelude is demand-driven, and a field
+    // calling `sd_torus` in a caller that does not would otherwise produce a
+    // call to a function nothing emitted, in a shader that checked clean.
+    if let Some(f) = field {
+        req.absorb(&f.requirements);
+    }
     src.push_str(&prelude::render(&req));
+    if let Some(f) = field {
+        src.push('\n');
+        src.push_str(&f.source);
+    }
     src.push('\n');
     src.push_str(CORNER_OF);
     src.push('\n');
@@ -854,6 +878,7 @@ fn generate_fullscreen(
     fragment_blk: &TBlock,
     elements: &ElementLayout,
     weighted: bool,
+    field: Option<&crate::field::FieldShader>,
 ) -> L4Shader {
     let mut b = UniformLayoutBuilder::new();
     b.field("t", "f32");
@@ -863,6 +888,14 @@ fn generate_fullscreen(
     // camera's own bind group, and the projection is already in it.
     for p in &checked.params {
         b.param_field(p.name.clone(), wgsl_ty(p.ty));
+    }
+    // **A spliced field's params live here**, under a prefix of their own so
+    // that this procedure and the field it evaluates may both declare
+    // `exposure` — see `layout::mangle_field_param`.
+    if let Some(f) = field {
+        for (name, ty) in &f.params {
+            b.field_param_field(name, ty);
+        }
     }
     let (uniform_layout, uniform_pad_f32) = b.finish();
 
@@ -883,7 +916,19 @@ fn generate_fullscreen(
     // the one that draws a flat colour still pays for a basis it computes and
     // discards.
     write_camera_binding(&mut src, FULLSCREEN_CAMERA_GROUP);
+    // **The field's helpers before its body, and its body before every entry
+    // point.** A spliced field lives in this module, so this module's prelude
+    // has to carry what it calls — the prelude is demand-driven, and a field
+    // calling `sd_torus` in a caller that does not would otherwise produce a
+    // call to a function nothing emitted, in a shader that checked clean.
+    if let Some(f) = field {
+        req.absorb(&f.requirements);
+    }
     src.push_str(&prelude::render(&req));
+    if let Some(f) = field {
+        src.push('\n');
+        src.push_str(&f.source);
+    }
     src.push('\n');
     src.push_str(FULLSCREEN_VS);
     if weighted {
