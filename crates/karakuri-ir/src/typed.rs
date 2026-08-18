@@ -142,12 +142,41 @@ impl Checked {
         self.blocks.iter().find(|b| b.kind == kind)
     }
 
-    /// Whether every `capacity` element is live from frame zero. A procedure
-    /// with no `spawn` block never allocates, so `seed` is the initial slot
-    /// index and lattice generators work as written.
+    /// **Whether nothing ever moves an element between slots**, so that `seed`
+    /// is the slot index for the whole run.
+    ///
+    /// Two things move elements and this asks about both. A `spawn` block
+    /// allocates, and `kill()` makes the next step's scan compact the survivors
+    /// down — and compaction is order preserving, which keeps blend order
+    /// stable and moves every element after the gap.
+    ///
+    /// **It used to ask only about `spawn`**, and its own sentence — "every
+    /// `capacity` element is live from frame zero" — was false for a procedure
+    /// that kills without spawning: those are all live at frame zero and are not
+    /// after it. Nothing called it, so nothing was wrong yet; the predicate a
+    /// caller will want is this one, and it is the one `karakuri-codegen` has
+    /// been computing all along to decide whether to generate the compacted
+    /// element entry.
     pub fn is_static(&self) -> bool {
-        self.kind == Kind::L1 && self.block(BlockKind::Spawn).is_none()
+        self.kind == Kind::L1
+            && self.block(BlockKind::Spawn).is_none()
+            && !self.blocks.iter().any(|b| contains_kill(&b.stmts))
     }
+}
+
+/// Whether these statements can remove an element.
+///
+/// In this crate rather than in the generator that first needed it, because two
+/// callers want it now and they are in different crates: the lowering, to choose
+/// the compacted `element` entry point, and [`Checked::is_static`], to say
+/// whether `seed` is the slot index.
+pub fn contains_kill(stmts: &[TStmt]) -> bool {
+    stmts.iter().any(|s| match s {
+        TStmt::Kill { .. } => true,
+        TStmt::If { then, els, .. } => contains_kill(then) || contains_kill(els),
+        TStmt::For { body, .. } => contains_kill(body),
+        TStmt::Let { .. } | TStmt::Var { .. } | TStmt::Assign { .. } => false,
+    })
 }
 
 /// What an artifact records about its own expense.
