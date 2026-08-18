@@ -399,6 +399,10 @@ pub struct Set {
     /// same values into its own uniform — see
     /// [`crate::node::View::field_params`].
     field_params: Vec<String>,
+    /// The same params under the names they were **declared** with, which is
+    /// what an address names: `--param Field:0:ball`, `--bind layer=Field`, and
+    /// a published control all use this, and only the uniform uses the other.
+    field_declared: Vec<String>,
     /// Whether this Set holds a field at all. Not `!field_params.is_empty()`: a
     /// field may declare no `param`, and the two questions are different ones.
     has_field: bool,
@@ -1004,6 +1008,9 @@ impl Set {
             bindings: Vec::new(),
             interface: Vec::new(),
             has_field: field.is_some(),
+            field_declared: field
+                .map(|f| f.params.iter().map(|p| p.name.clone()).collect())
+                .unwrap_or_default(),
             field_params: field
                 .map(|f| {
                     f.params
@@ -1229,8 +1236,15 @@ impl Set {
                 0 => Vec::new(),
                 _ => vec![self.camera_node.param_names()],
             },
-            // No node, so no names — see `slot_of`.
-            Kind::Field => Vec::new(),
+            // **One "node" that is no node at all.** A field has no pass and no
+            // buffers, and its params are still declared, addressable, and an
+            // operator's to ride — so what is returned here is the list the
+            // field declared, and every caller writes the same answer into its
+            // own uniform.
+            Kind::Field => match self.field_declared.is_empty() && !self.has_field {
+                true => Vec::new(),
+                false => vec![&self.field_declared],
+            },
             Kind::L4 => self.renderers.iter().map(|r| r.param_names()).collect(),
         };
         let found = names.iter().enumerate().any(|(at, n)| {
@@ -1275,13 +1289,13 @@ impl Set {
             // already gets.
             Kind::L3 => 1 + self.deforms.len(),
             Kind::L4 => 1 + self.deforms.len() + self.camera_node.node_count(),
-            // **Last, and it addresses no node.** A field has no pass and no
-            // buffers — it lowers into whoever evaluates it — so there is
-            // nothing here for a slot index to point at. It is still an
-            // addressable *kind*, because its `param`s are an operator's to
-            // ride; where those live is the next thing to decide, and until it
-            // is decided a `--param Field:…` reaches nothing and is reported as
-            // reaching nothing rather than being silently dropped.
+            // **Last, and it addresses a node that does not exist.** A field
+            // has no pass and no buffers — it lowers into whoever evaluates it —
+            // so what the slot points at is a parameter map and nothing else.
+            // That is enough for every surface an operator has: an override, a
+            // signal binding, a published control, a saved Set file. Every
+            // procedure that evaluates the field writes the same answer into
+            // its own uniform, so one address reaches all of them.
             Kind::Field => 1 + self.deforms.len() + self.camera_node.node_count() + self.renderers.len(),
         }
     }
@@ -1419,7 +1433,7 @@ impl Set {
     /// position that procedure did not say it still looks like itself at.
     fn declared_range(&self, at: Option<(Kind, u32)>, key: &str) -> Option<[f32; 2]> {
         let mut found: Option<[f32; 2]> = None;
-        for layer in [Kind::L1, Kind::L2, Kind::L3, Kind::L4] {
+        for layer in Kind::ALL {
             for (index, slot) in self.nodes_of(layer).enumerate() {
                 if at.is_some_and(|(l, i)| l != layer || i != index as u32) {
                     continue;
@@ -1542,7 +1556,7 @@ impl Set {
     /// is exactly what an unpublished control still being reachable means, and
     /// is the operator's business rather than a case to reconcile here.
     fn value_at(&self, at: Option<(Kind, u32)>, key: &str) -> Option<f32> {
-        for layer in [Kind::L1, Kind::L2, Kind::L3, Kind::L4] {
+        for layer in Kind::ALL {
             for (index, slot) in self.nodes_of(layer).enumerate() {
                 if at.is_some_and(|(l, i)| l != layer || i != index as u32) {
                     continue;
@@ -1608,7 +1622,7 @@ impl Set {
         // where a layer's nodes are — and a copy of it is a copy that can be
         // right about `L2` and wrong about `L3`. This one was, and reported
         // every camera parameter as a renderer's.
-        let addressed: Vec<(Kind, u32, usize)> = [Kind::L1, Kind::L2, Kind::L3, Kind::L4]
+        let addressed: Vec<(Kind, u32, usize)> = Kind::ALL
             .into_iter()
             .flat_map(|layer| {
                 self.nodes_of(layer)
@@ -1988,7 +2002,7 @@ impl Set {
         // Read before the loop: `slot_of` and `nodes_of` take `&self`, and the
         // loop holds `self.bindings` mutably. Three small numbers rather than a
         // borrow that cannot be had.
-        let ranges: Vec<(usize, std::ops::Range<usize>)> = [Kind::L1, Kind::L2, Kind::L3, Kind::L4]
+        let ranges: Vec<(usize, std::ops::Range<usize>)> = Kind::ALL
             .into_iter()
             .map(|k| (self.slot_of(k), self.nodes_of(k)))
             .collect();

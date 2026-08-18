@@ -17,12 +17,24 @@ use serde::{Deserialize, Serialize};
 
 use crate::hash::Hash;
 
+/// Which kind of procedure a record addresses.
+///
+/// **A format addition, not a format change**: `Field` was added after the
+/// other four, and every stream written before it is read unchanged because a
+/// value nobody wrote cannot appear. That is the same move the `blend`
+/// declaration made by existing with one legal value — the shape is chosen so
+/// that growing it costs nothing to what came before.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Layer {
     L1,
     L2,
     L3,
     L4,
+    /// A `kind Field` procedure. **It addresses no node** — a field has no pass
+    /// and no buffers, it lowers into whoever evaluates it — but its `param`s
+    /// are declared, addressable and an operator's to ride, so a record naming
+    /// them needs somewhere to say so.
+    Field,
 }
 
 /// `serde`'s `skip_serializing_if` wants a predicate by path, and `u32::is_zero`

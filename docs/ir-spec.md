@@ -841,6 +841,17 @@ prefix of their own — so a renderer and the field it draws may both declare `e
 `--param Field:0:exposure` and `--param L4:0:exposure` reach different things. There is one
 value: every caller writes the same answer into its own uniform, because there is one field.
 
+The prefix has to make the name unforgeable rather than unlikely. It is a separator no
+`.kir` identifier can contain, because a caller declaring `param field_radius` beside a field
+declaring `param radius` is otherwise one name with two meanings — and the engine looks a
+uniform field up by that name.
+
+**A field is spliced only into the procedures that evaluate it.** Otherwise a field's body
+takes down shaders with nothing to do with it, and every node in the Set carries its params.
+
+**A field cannot evaluate a field.** There is one per Set, so that is a function calling
+itself, which WGSL forbids.
+
 **The two are costed together, at the Set.** A `field(p)` weighs nothing where a single file
 is estimated, since what one evaluation costs lives in another file — so the ceiling each of
 them passed was applied to a figure missing the other. A marcher evaluating a field forty

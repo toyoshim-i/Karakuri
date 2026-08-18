@@ -76,6 +76,17 @@ pub enum Topology {
     Fullscreen,
 }
 
+impl Kind {
+    /// **Every kind, in the order a Set addresses them.**
+    ///
+    /// Here rather than spelled out at each site: four separate loops in
+    /// `karakuri-engine` carried this list, and `Field` was added to none of
+    /// them — so a field's `param` could be written but not bound, published,
+    /// read back or saved. One list, and the next kind reaches every one of
+    /// them by existing.
+    pub const ALL: [Kind; 5] = [Kind::L1, Kind::L2, Kind::L3, Kind::L4, Kind::Field];
+}
+
 impl Topology {
     pub fn name(self) -> &'static str {
         match self {

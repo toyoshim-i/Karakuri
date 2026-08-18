@@ -1405,3 +1405,231 @@ proc tinted {
     assert!(shader.source.contains("let copy = 0u;"), "{}", shader.source);
     assert!(!shader.source.contains("elements[elem].copy"), "{}", shader.source);
 }
+
+// ---------------------------------------------------------------------------
+// A spliced field, in each of the five modules that can carry one.
+// ---------------------------------------------------------------------------
+
+/// A field exercising everything a spliced body can reach: the clock, a param,
+/// an SDF builtin, a `mod`, and `fbm` — which this crate unrolls in Rust, so its
+/// requirement lands in the *field's* set and has to be absorbed by the caller.
+const SPLICED: &str = r#"
+proc wobble {
+  kind Field
+
+  param radius : float [0.1, 3.0] = 1.0
+
+  field {
+    let n = fbm(point, 3) * 0.1;
+    let a = mod(point.x, 2.0);
+    distance = sd_sphere(point, radius) + n + a * 0.0 + sin(t + beats) * 0.0;
+  }
+}
+"#;
+
+fn spliced() -> karakuri_codegen::field::FieldShader {
+    let parsed = karakuri_ir::parse(SPLICED).expect("parses");
+    let checked = karakuri_ir::check::check(&parsed).expect("checks");
+    karakuri_codegen::field::generate_field(&checked)
+}
+
+fn compiled(src: &str) -> karakuri_ir::typed::Checked {
+    let parsed = karakuri_ir::parse(src).expect("parses");
+    karakuri_ir::check::check(&parsed).expect("checks")
+}
+
+/// **Every caller kind, through a real WGSL front end.**
+///
+/// The engine's own tests reach one shape — a fullscreen L4 — so three of the
+/// five splice sites had no coverage at any level, and deleting the splice from
+/// any of them left the whole workspace green. What breaks is not subtle: a
+/// module that names `_field_at` and does not define it.
+///
+/// The field above reads `t` and `beats`, which each caller spells its own way,
+/// and calls `fbm`, whose unrolled `perlin` requirement belongs to the field and
+/// has to reach the caller's prelude.
+#[test]
+fn a_spliced_field_validates_in_every_kind_of_caller() {
+    let field = spliced();
+    let layout = karakuri_codegen::layout::generate_element_layout(
+        &[Attr::Position],
+        karakuri_codegen::layout::Synthetic::NONE,
+        &[],
+    );
+
+    // L1, in both of its blocks.
+    let l1 = compiled(
+        r#"
+proc gen {
+  kind     L1
+  topology points
+  capacity [1, 64] = 8
+
+  param spawn_rate : float [0.0, 100.0] = 10.0
+
+  emit position
+
+  spawn   { position = vec3(field(vec3(0.0, 0.0, 0.0)), 0.0, 0.0); }
+  element { position = position + vec3(0.0, field(position), 0.0) * dt; }
+}
+"#,
+    );
+    validate(&karakuri_codegen::generate_l1(&l1, &[], Some(&field)).source);
+
+    // L2, in both of its blocks.
+    let l2 = compiled(
+        r#"
+proc warp {
+  kind L2
+  consumes position
+  mask   { strength = clamp(field(position), 0.0, 1.0); }
+  deform { position = position * (1.0 + field(position) * 0.01); }
+}
+"#,
+    );
+    validate(
+        &karakuri_codegen::generate_l2(
+            &l2,
+            &[Attr::Position],
+            karakuri_codegen::layout::Synthetic::NONE,
+            &[],
+            Some(&field),
+        )
+        .source,
+    );
+
+    // L3.
+    let l3 = compiled(
+        r#"
+proc look {
+  kind L3
+  camera {
+    eye    = vec3(0.0, 0.0, 4.0 + field(vec3(0.0, 0.0, 0.0)));
+    target = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#,
+    );
+    validate(&karakuri_codegen::generate_l3(&l3, Some(&field)).source);
+
+    // L4 with a vertex block — per element, which is a different generator from
+    // the fullscreen one below.
+    let l4 = compiled(
+        r#"
+proc dots {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 2.0 + field(position) * 0.0;
+  }
+
+  fragment {
+    let d = field(vec3(0.0, 0.0, 0.0));
+    color = vec4(d, d, d, 1.0);
+  }
+}
+"#,
+    );
+    validate(&karakuri_codegen::generate_l4(&l4, &layout, Some(&field)).source);
+
+    // L4 with none — fullscreen.
+    let full = compiled(
+        r#"
+proc marcher {
+  kind  L4
+  blend additive
+
+  fragment {
+    let d = field(eye + ray);
+    color = vec4(d, d, d, 1.0);
+  }
+}
+"#,
+    );
+    validate(&karakuri_codegen::generate_l4(&full, &layout, Some(&field)).source);
+}
+
+/// **A caller that mentions no field carries none of it**, which is what keeps
+/// a bad field body from taking down shaders with nothing to do with it — and
+/// keeps every node in the Set from growing the field's params.
+#[test]
+fn a_caller_that_evaluates_no_field_is_not_spliced() {
+    let field = spliced();
+    let plain = compiled(
+        r#"
+proc plain {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 2.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#,
+    );
+    let layout = karakuri_codegen::layout::generate_element_layout(
+        &[Attr::Position],
+        karakuri_codegen::layout::Synthetic::NONE,
+        &[],
+    );
+    let src = karakuri_codegen::generate_l4(&plain, &layout, Some(&field)).source;
+    validate(&src);
+    assert!(!src.contains("_field_at"), "the function is not here: {src}");
+    assert!(!src.contains("field_radius"), "and neither are its params: {src}");
+}
+
+/// **The clock is the caller's own spelling**, passed at the call site. An L1
+/// reads `t` per substep from `step_args` where everything else reads `u` — one
+/// spliced body cannot say both, and a body that assumed either produced a
+/// module naming a field that module does not have.
+#[test]
+fn a_spliced_field_takes_the_clock_from_its_caller() {
+    let field = spliced();
+    let l1 = compiled(
+        r#"
+proc gen {
+  kind     L1
+  topology points
+  capacity [1, 64] = 8
+
+  emit position
+
+  element { position = vec3(field(position), 0.0, 0.0); }
+}
+"#,
+    );
+    let src = karakuri_codegen::generate_l1(&l1, &[], Some(&field)).source;
+    assert!(src.contains("step_args.t"), "an L1 passes its per-substep clock: {src}");
+
+    let layout = karakuri_codegen::layout::generate_element_layout(
+        &[Attr::Position],
+        karakuri_codegen::layout::Synthetic::NONE,
+        &[],
+    );
+    let full = compiled(
+        r#"
+proc marcher {
+  kind  L4
+  blend additive
+
+  fragment {
+    let d = field(eye);
+    color = vec4(d, d, d, 1.0);
+  }
+}
+"#,
+    );
+    let src = karakuri_codegen::generate_l4(&full, &layout, Some(&field)).source;
+    assert!(src.contains("_field_at(") && src.contains("u.t"), "and a renderer passes `u.t`: {src}");
+}
