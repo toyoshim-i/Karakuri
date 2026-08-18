@@ -1015,10 +1015,7 @@ fn parse_bind(value: &str) -> Result<Binding, String> {
             karakuri_ir::Kind::L2 => Layer::L2,
             karakuri_ir::Kind::L3 => Layer::L3,
             karakuri_ir::Kind::L4 => Layer::L4,
-            // `--bind` parses its layer from a fixed list that has no `Field`,
-            // so this is unreachable by construction rather than by argument —
-            // and it stays unreachable until the record format grows one.
-            karakuri_ir::Kind::Field => unreachable!("`--bind` has no `Field` layer to parse"),
+            karakuri_ir::Kind::Field => Layer::Field,
         },
         index,
         key,

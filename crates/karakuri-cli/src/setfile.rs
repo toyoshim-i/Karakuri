@@ -211,9 +211,7 @@ fn layer_ordinal(layer: Kind) -> u8 {
         Kind::L2 => 1,
         Kind::L3 => 2,
         Kind::L4 => 3,
-        // Last, matching `Set::slot_of`. A field addresses no node, so nothing
-        // sorts here yet — the ordinal exists so that the two orders cannot
-        // disagree when it does.
+        // Last, matching `Set::slot_of`.
         Kind::Field => 4,
     }
 }
@@ -223,7 +221,12 @@ fn layer_from_ordinal(n: u8) -> Layer {
         0 => Layer::L1,
         1 => Layer::L2,
         2 => Layer::L3,
-        _ => Layer::L4,
+        3 => Layer::L4,
+        // **Not the `_` arm.** `Field` used to fall into `L4`'s catch-all, so a
+        // `--param Field:0:x` was saved as `L4:0:x` and reloaded onto renderer
+        // zero — silently dropped if that renderer had no such name, and
+        // silently wrong if it did.
+        _ => Layer::Field,
     }
 }
 
@@ -240,6 +243,7 @@ fn kind_of(layer: Layer) -> Kind {
         Layer::L2 => Kind::L2,
         Layer::L3 => Kind::L3,
         Layer::L4 => Kind::L4,
+        Layer::Field => Kind::Field,
     }
 }
 
@@ -252,13 +256,7 @@ pub fn record_from_binding(binding: &Binding) -> Record {
             Kind::L2 => Layer::L2,
             Kind::L3 => Layer::L3,
             Kind::L4 => Layer::L4,
-            // **The record format has no `Field` layer, and adding one is a
-            // format addition to make when a field's params have somewhere to
-            // live.** Unreachable rather than a placeholder: a binding is
-            // attached by `Set::bind`, which refuses a key no node of that
-            // layer declares, and a field has no nodes at all — so a
-            // `Binding` naming this kind cannot be constructed.
-            Kind::Field => unreachable!("a field has no node to bind a signal to"),
+            Kind::Field => Layer::Field,
         },
         index: binding.index,
         key: binding.key.clone(),
@@ -288,6 +286,7 @@ fn layer_name(layer: Layer) -> &'static str {
         Layer::L2 => "L2",
         Layer::L3 => "L3",
         Layer::L4 => "L4",
+        Layer::Field => "Field",
     }
 }
 
@@ -311,6 +310,44 @@ pub struct Saving<'a> {
 /// so a Set file is a few dozen lines a human can read rather than a copy of
 /// the material. Content addressing means saving the same procedure twice
 /// stores it once.
+/// **Refused rather than mislabelled**, for anything but an L1 and its
+/// renderers.
+///
+/// A Set file records a `slot` per procedure and this function was given "the
+/// L1, and every other path" — so an L2, an L3 or a field was written as an
+/// `L4` slot. That reloads as `slot L4 needs a L4 procedure, got Field`, which
+/// is the good case; the bad one is an L2 whose `deform` the loader hands to a
+/// renderer. The gap is real and old — a Set file carries an L1 and its
+/// renderers, and `--set` is where a chain is spelled — and saying so is better
+/// than a file that cannot be read back.
+fn refuse_unsavable(paths: &[std::path::PathBuf]) -> Result<(), String> {
+    for path in paths {
+        let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let Ok(proc) = karakuri_ir::parse(&src) else { continue };
+        if proc.kind != Kind::L4 {
+            return Err(format!(
+                "{} is a `kind {}`, and a Set file carries an L1 and its renderers\n\
+                 hint: a chain — L2s, an L3, a field — is spelled with `--set` today. Saving \
+                 one would write it as an L4 and read it back as one",
+                path.display(),
+                kind_name(proc.kind),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The name a `kind` declaration uses.
+fn kind_name(kind: Kind) -> &'static str {
+    match kind {
+        Kind::L1 => "L1",
+        Kind::L2 => "L2",
+        Kind::L3 => "L3",
+        Kind::L4 => "L4",
+        Kind::Field => "Field",
+    }
+}
+
 pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
     let Saving {
         l1_path,
@@ -321,6 +358,7 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
         camera,
         seed,
     } = set;
+    refuse_unsavable(l4_paths)?;
     let put = |path: &Path| -> Result<Hash, String> {
         let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
         store

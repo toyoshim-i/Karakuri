@@ -230,3 +230,90 @@ proc heavy {
         "the refusal names both and says how many evaluations: {text}"
     );
 }
+
+/// **Two renderers in one Set read the same field value.** A field has no node,
+/// so nothing owns the value: every caller writes it into its own uniform, and
+/// "the same answer everywhere" is a property of the Set rather than of any one
+/// of them.
+///
+/// Both renderers draw the same figure, so they agree exactly or not at all —
+/// and the assertion is against a *third* Set at a different radius, so two
+/// renderers agreeing on the wrong number cannot pass.
+#[test]
+fn two_renderers_in_one_set_agree_on_the_fields_value() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let field = compile(BALL);
+    let l4 = compile(LENS);
+
+    let mut both = Set::build_many(
+        &gpu.device,
+        &gpu.queue,
+        &compile(STILL),
+        &[],
+        None,
+        Some(&field),
+        &[&l4, &l4],
+        Layering::Overdraw,
+        1,
+        7,
+    )
+    .expect("two renderers over one field");
+    both.resize(&gpu.device, W, H);
+    both.camera = karakuri_engine::camera::Orbit {
+        radius: 5.0,
+        speed: 0.0,
+        height: 0.0,
+        ..Default::default()
+    };
+    assert!(both.set_param_at(karakuri_ir::Kind::Field, 0, "radius", 2.0));
+
+    let mut one = build(&gpu, Some(BALL), LENS).expect("one renderer");
+    assert!(one.set_param_at(karakuri_ir::Kind::Field, 0, "radius", 2.0));
+
+    // Additive, so two renderers drawing the same figure cover the same texels
+    // — the count is the figure's area, not its brightness.
+    let (a, b) = (covered(&gpu, &mut both), covered(&gpu, &mut one));
+    assert_eq!(a, b, "both renderers found the same sphere");
+
+    let mut small = build(&gpu, Some(BALL), LENS).expect("one renderer");
+    assert!(
+        covered(&gpu, &mut small) < b / 2,
+        "and the default radius covers much less, so the agreement above is not agreement on \
+         a value nothing set"
+    );
+}
+
+/// **A field's `param` is an operator's on every surface, not just `--param`.**
+/// It has no node, and five separate loops over the layers decided which
+/// surfaces reach it — `Field` was in none of them, so a value could be
+/// overridden and then not bound, published, read back or saved.
+#[test]
+fn a_fields_param_reaches_every_operator_surface() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let mut set = build(&gpu, Some(BALL), LENS).expect("a Set with a field");
+
+    assert!(
+        set.bind(karakuri_engine::Binding::new(
+            karakuri_ir::Kind::Field,
+            "radius",
+            "energy",
+            karakuri_engine::Curve::Lin,
+            [0.3, 2.0],
+        )),
+        "a signal has to be attachable to a field's param"
+    );
+
+    set.publish(karakuri_engine::set::Published {
+        name: "size".to_string(),
+        at: Some((karakuri_ir::Kind::Field, 0)),
+        key: "radius".to_string(),
+        range: [0.3, 2.0],
+    })
+    .expect("a field's param has to be publishable");
+
+    assert!(
+        set.published().iter().any(|p| p.key == "radius"),
+        "and the published interface has to show it: {:?}",
+        set.published()
+    );
+}

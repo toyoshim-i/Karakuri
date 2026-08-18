@@ -566,7 +566,8 @@ karakuri-cli --set examples/drift_shell.kir,examples/melt_blob.kir,examples/fiel
 gives it, so the same file draws any field — and `melt_blob.kir` is a shape no renderer owns.
 Before this, a marcher carried its distance function inline and the two were inseparable.
 
-Its `param`s are yours to ride like any other, addressed by its kind:
+Its `param`s are yours to ride like any other — an override, a fader, a signal
+binding, a published control — addressed by its kind:
 
 ```
 karakuri-cli --param Field:0:blend_k=1.2 --set ...
