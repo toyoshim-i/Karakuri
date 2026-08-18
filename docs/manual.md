@@ -553,6 +553,29 @@ or an **L3**, which is the camera:
 karakuri-cli --set examples/drift_shell.kir,examples/beat_jump.kir,examples/soft_points.kir
 ```
 
+### Two geometries in one Set
+
+More than one L1 in a slot is a **merge**: each simulates on its own and the renderers draw
+all of them.
+
+```
+karakuri-cli --set drift_shell.kir,beat_shell.kir,soft_points.kir
+```
+
+**Each source counts its own `seed` from zero**, so `seed % 64u` lays out a lattice the same
+way in both — a shared counter would put the second one somewhere else. And **each has its
+own hash salt**, so the same file used twice comes out in two colours without your arranging
+it. That is the default rather than something to set up.
+
+Each source runs at the capacity *it* declares, and `--capacity` overrides all of them.
+`--param L1:1:spawn_rate=…` addresses the second source; a bare `--param spawn_rate=…`
+reaches both.
+
+**What is not there yet is treating them differently.** A mask on which source an element
+came from wants a way to *name* a source, and a name has to be written where the source is
+used — in a Set file, which today carries an L1 and its renderers. Until then the two are
+merged and drawn, and telling them apart is done by giving them different `.kir` files.
+
 ### A shape in a file of its own
 
 A path in the list may also be a **field** — a signed distance function, and nothing else.

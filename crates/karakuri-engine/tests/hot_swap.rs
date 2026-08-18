@@ -174,14 +174,13 @@ fn request(l4_src: &str, capacity: u32, label: &str) -> Request {
 fn request_many(l4_srcs: &[&str], capacity: u32, label: &str) -> Request {
     Request {
         id: 1,
-        l1: compile(L1),
+        l1s: vec![(compile(L1), capacity)],
         l2s: Vec::new(),
         l3: None,
         field: None,
         layering: karakuri_engine::set::Layering::Overdraw,
         published: Vec::new(),
         l4s: l4_srcs.iter().map(|s| compile(s)).collect(),
-        capacity,
         seed_salt: 19274,
         params: Vec::new(),
         bindings: Vec::new(),

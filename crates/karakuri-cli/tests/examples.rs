@@ -145,13 +145,12 @@ fn the_pairs_the_docs_offer_compose() {
         karakuri_engine::Set::build_many(
             &gpu.device,
             &gpu.queue,
-            l1,
+        &[(l1, capacity)],
             &l2s,
             l3,
             by(karakuri_ir::Kind::Field).next(),
             &l4s,
             karakuri_engine::set::Layering::Overdraw,
-            capacity,
             0,
         )
         .unwrap_or_else(|e| panic!("{} does not build: {e}", chain.join(" + ")));

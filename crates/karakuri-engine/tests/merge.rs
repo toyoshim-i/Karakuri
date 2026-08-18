@@ -88,13 +88,12 @@ fn build(gpu: &Gpu, l4s: &[String], layering: Layering) -> Set {
     let mut set = Set::build_many(
         &gpu.device,
         &gpu.queue,
-        &compile(GRID),
+        &[(&compile(GRID), 16)],
         &[],
         None,
         None,
         &refs,
         layering,
-        16,
         5,
     )
     .expect("one L1 and some L4s");
@@ -301,13 +300,12 @@ fn compositing_refuses_more_renderers_than_an_l5_can_fold() {
         Set::build_many(
             &gpu.device,
             &gpu.queue,
-            &compile(GRID),
+        &[(&compile(GRID), 16)],
             &[],
             None,
             None,
             &refs,
             Layering::Composite,
-            16,
             5,
         )
         .err()

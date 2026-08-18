@@ -2273,14 +2273,13 @@ fn a_swap_in_one_slot_leaves_the_other_slot_alone() {
 
     tx.send(Request {
         id: 1,
-        l1: compile(L1),
+        l1s: vec![(compile(L1), SWAPPED)],
         l2s: Vec::new(),
         l3: None,
         field: None,
         layering: karakuri_engine::set::Layering::Overdraw,
         published: Vec::new(),
         l4s: vec![compile(L4)],
-        capacity: SWAPPED,
         seed_salt: SEED_A,
         params: Vec::new(),
         bindings: Vec::new(),
@@ -2385,14 +2384,13 @@ fn an_off_air_slot_is_not_judged_against_its_neighbours_frames() {
 
     tx.send(Request {
         id: 1,
-        l1: compile(L1),
+        l1s: vec![(compile(L1), SWAPPED)],
         l2s: Vec::new(),
         l3: None,
         field: None,
         layering: karakuri_engine::set::Layering::Overdraw,
         published: Vec::new(),
         l4s: vec![compile(L4)],
-        capacity: SWAPPED,
         seed_salt: SEED_B,
         params: Vec::new(),
         bindings: Vec::new(),

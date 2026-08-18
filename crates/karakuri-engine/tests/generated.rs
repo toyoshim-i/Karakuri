@@ -302,7 +302,8 @@ fn an_l4_consuming_what_the_l1_never_emits_is_refused() {
     let gpu = Gpu::headless().expect("no GPU available");
     let l1 = compile(&narrow_l1("position, normal"));
     let l4 = compile(L4_UNSATISFIABLE);
-    let result = Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, 1);
+    let result = Set::build(&gpu.device, &gpu.queue,
+        &l1, &l4, CAPACITY, 1);
     let msg = match result {
         Ok(_) => panic!("`uv` is consumed, never emitted, and has no rule — and was accepted"),
         Err(e) => e.to_string(),
@@ -318,7 +319,8 @@ fn a_composition_error_names_every_missing_attribute() {
     let gpu = Gpu::headless().expect("no GPU available");
     let l1 = compile(&narrow_l1("position"));
     let l4 = compile(L4_UNSATISFIABLE);
-    let msg = match Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, 1) {
+    let msg = match Set::build(&gpu.device, &gpu.queue,
+        &l1, &l4, CAPACITY, 1) {
         Ok(_) => panic!("two attributes are missing and the pair was accepted"),
         Err(e) => e.to_string(),
     };
@@ -334,7 +336,8 @@ fn an_l4_consuming_a_derivable_attribute_composes_with_an_l1_that_emits_neither(
     let gpu = Gpu::headless().expect("no GPU available");
     let l1 = compile(&narrow_l1("position"));
     let l4 = compile(L4);
-    Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, 1)
+    Set::build(&gpu.device, &gpu.queue,
+        &l1, &l4, CAPACITY, 1)
         .expect("`velocity` and `age` both have a derivation rule");
 }
 
@@ -419,7 +422,8 @@ proc accumulate {
     let l1 = compile(ACCUM);
     let l4 = compile(L4);
     let make = || {
-        let mut set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, 19274)
+        let mut set = Set::build(&gpu.device, &gpu.queue,
+        &l1, &l4, CAPACITY, 19274)
             .expect("the pair is compatible");
         set.resize(&gpu.device, WIDTH, HEIGHT);
         set
@@ -478,7 +482,8 @@ fn a_validation_error_at_build_is_returned_rather_than_fatal() {
             .replace("4.0 + uv.x * 0.0", "4.0"),
     );
 
-    let result = Set::build(&gpu.device, &gpu.queue, &l1, &l4, u32::MAX, 1);
+    let result = Set::build(&gpu.device, &gpu.queue,
+        &l1, &l4, u32::MAX, 1);
     let err = match result {
         Ok(_) => panic!("a capacity of u32::MAX is past every device and was accepted"),
         Err(e) => e.to_string(),
