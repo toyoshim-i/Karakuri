@@ -467,7 +467,7 @@ impl Simulation {
                 .u32("seed_salt", self.seed_salt);
             super::write_params(&mut p, &self.uniform_layout, &self.param_names, tick.param);
             // See `View::field_params`: a field has no uniform of its own.
-            super::write_params(
+            super::write_field_params(
                 &mut p,
                 &self.uniform_layout,
                 tick.field_params,

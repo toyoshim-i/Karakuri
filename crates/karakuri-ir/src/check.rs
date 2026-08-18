@@ -227,6 +227,31 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
 /// A vertex block is required of every L4 and its absence was already reported,
 /// so a procedure with none falls back to `points` rather than being given a
 /// second diagnostic about a block it does not have.
+/// Whether these statements evaluate `field(p)` anywhere.
+///
+/// Over the *untyped* tree, because it is asked in `check_header` before the
+/// blocks are checked — and a `field` block that is refused for recursion should
+/// say so rather than first reporting whatever else went wrong inside it.
+fn calls_field(stmts: &[crate::ast::Stmt]) -> bool {
+    use crate::ast::{Expr, Stmt};
+    fn in_expr(e: &Expr) -> bool {
+        match e {
+            Expr::Call { name, args, .. } => name == "field" || args.iter().any(in_expr),
+            Expr::Unary { value, .. } => in_expr(value),
+            Expr::Binary { lhs, rhs, .. } => in_expr(lhs) || in_expr(rhs),
+            Expr::Swizzle { value, .. } => in_expr(value),
+            _ => false,
+        }
+    }
+    stmts.iter().any(|s| match s {
+        Stmt::Let { value, .. } | Stmt::Var { value, .. } => in_expr(value),
+        Stmt::Assign { value, .. } => in_expr(value),
+        Stmt::If { cond, then, els, .. } => in_expr(cond) || calls_field(then) || calls_field(els),
+        Stmt::For { body, .. } => calls_field(body),
+        Stmt::Kill { .. } => false,
+    })
+}
+
 fn drawn_topology(blocks: &[TBlock]) -> Topology {
     let Some(vertex) = blocks.iter().find(|b| b.kind == BlockKind::Vertex) else {
         // No per-element position to compute, so nothing per element to draw:
@@ -573,6 +598,31 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     IrError::contract(proc.span, "Field procedures require a `field` block")
                         .with_hint("add `field { … }`: it is the whole of what a field does"),
                 );
+            }
+            // **A field cannot evaluate a field, and the one it would evaluate
+            // is itself.** There is one per Set, so `field(p)` inside a `field`
+            // block is a function calling itself — which WGSL forbids outright,
+            // and which reached it as a shader-module panic from a `.kir` that
+            // checked clean.
+            //
+            // Refused as recursion rather than as "not available here", because
+            // that is what it is: the day a Set holds two fields, one naming
+            // the other is a question worth asking, and this sentence will
+            // still be the right one about naming itself.
+            if let Some(block) = proc.block(BlockKind::Field) {
+                if calls_field(&block.stmts) {
+                    errors.push(
+                        IrError::contract(
+                            block.span,
+                            "a field cannot evaluate a field: there is one per Set, so this \
+                             would be a function calling itself",
+                        )
+                        .with_hint(
+                            "inline what you wanted from it — a field is the one procedure \
+                             whose whole body is an expression over `point`",
+                        ),
+                    );
+                }
             }
         }
         Kind::L4 => {

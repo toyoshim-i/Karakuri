@@ -81,6 +81,12 @@ pub fn generate_l3(checked: &Checked, field: Option<&crate::field::FieldShader>)
     // **A spliced field's params live here**, under a prefix of their own so
     // that this procedure and the field it evaluates may both declare
     // `exposure` — see `layout::mangle_field_param`.
+    //
+    // **Only where the procedure evaluates one.** The field used to be spliced
+    // into every module in the Set, so a renderer that never mentions one still
+    // carried its params and still failed to compile if the field's body did —
+    // a `.kir` taking down shaders that have nothing to do with it.
+    let field = field.filter(|_| crate::evaluates_field(checked));
     if let Some(f) = field {
         for (name, ty) in &f.params {
             b.field_param_field(name, ty);

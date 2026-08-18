@@ -196,6 +196,27 @@ pub(crate) struct Tick<'a> {
 ///
 /// One copy, called by all four nodes, so that a layer added later cannot
 /// reintroduce the panic by writing its own loop.
+/// The spliced field's params, for a node that has them.
+///
+/// **Filtered by the layout rather than by the caller.** A Set hands every node
+/// the same list, and only the nodes that actually evaluate the field carry
+/// those fields — so a node that does not must skip them, and the thing that
+/// knows is the layout in its hand. Writing them blind panics the packer with
+/// "uniform layout has no field", on the frame path.
+pub(crate) fn write_field_params(
+    p: &mut crate::uniforms::UniformPacker<'_>,
+    layout: &karakuri_codegen::layout::UniformLayout,
+    names: &[String],
+    value: &dyn Fn(&str) -> Option<f32>,
+) {
+    let mine: Vec<String> = names
+        .iter()
+        .filter(|n| layout.fields.iter().any(|f| &f.name == *n))
+        .cloned()
+        .collect();
+    write_params(p, layout, &mine, value);
+}
+
 pub(crate) fn write_params(
     p: &mut crate::uniforms::UniformPacker<'_>,
     layout: &karakuri_codegen::layout::UniformLayout,
