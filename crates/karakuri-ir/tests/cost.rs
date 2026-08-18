@@ -448,3 +448,30 @@ fn an_amplifying_l2s_per_element_cost_is_multiplied_by_its_factor() {
         "an L2 does not spawn, and amplification does not give it a way to"
     );
 }
+
+/// **A field's cost is on its own axis, and the three beside it stay zero.**
+///
+/// What a field scales with is *how often its caller calls it* — once per
+/// element in a `vertex`, forty-eight times in a march loop — which is a
+/// property of the caller. Charging it to `ops_per_element` would put a rate
+/// against a quantity a field does not have, and would give it a ceiling that
+/// says nothing about what evaluating it costs anybody.
+#[test]
+fn a_fields_cost_is_per_evaluation_and_not_per_element() {
+    let mut c = checked(
+        vec![],
+        vec![block(
+            BlockKind::Field,
+            vec![let_stmt("a", lit_int(1)), let_stmt("b", lit_int(2))],
+        )],
+    );
+    c.kind = Kind::Field;
+    c.topology = None;
+
+    let cost = estimate(&c).expect("a trivial field");
+    assert!(cost.ops_per_evaluation > 0, "the field block is per evaluation");
+    assert_eq!(cost.ops_per_element, 0, "a field has no elements");
+    assert_eq!(cost.ops_per_spawn, 0, "and nothing to spawn");
+    assert_eq!(cost.ops_per_fragment, 0, "and covers no pixels");
+    assert_eq!(cost.bytes_per_element, 0, "and stores nothing per element");
+}

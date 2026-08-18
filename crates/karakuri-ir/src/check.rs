@@ -201,6 +201,8 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
                 // An L3 has no geometry at all — it produces a viewpoint.
                 Kind::L3 => None,
                 Kind::L4 => Some(drawn_topology(&blocks)),
+                // A field is a function of space and has no elements at all.
+                Kind::Field => None,
             },
             capacity: proc.capacity,
             amplify: proc.amplify.map(|a| a.factor),
@@ -244,6 +246,7 @@ fn kind_name(kind: Kind) -> &'static str {
         Kind::L2 => "L2",
         Kind::L3 => "L3",
         Kind::L4 => "L4",
+        Kind::Field => "Field",
     }
 }
 
@@ -528,6 +531,47 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 errors.push(
                     IrError::contract(proc.span, "L3 procedures require a `camera` block")
                         .with_hint("add `camera { … }`: it is the whole of what an L3 does"),
+                );
+            }
+        }
+        // **A field declares nothing about geometry, because it is not
+        // geometry.** It takes a position and returns a distance; there are no
+        // elements to count, to draw, to emit or to consume.
+        Kind::Field => {
+            for (present, what, hint) in [
+                (proc.capacity.is_some(), "capacity", "a field has no elements to allocate"),
+                (proc.topology.is_some(), "topology", "a field is a function, not geometry"),
+                (proc.blend.is_some(), "blend", "a field draws nothing"),
+                (
+                    proc.amplify.is_some(),
+                    "amplify",
+                    "a field makes no elements, so there is nothing to multiply",
+                ),
+            ] {
+                if present {
+                    errors.push(
+                        IrError::contract(proc.span, format!("`{what}` is not a field's"))
+                            .with_hint(format!("remove `{what}`: {hint}")),
+                    );
+                }
+            }
+            if !proc.emit.is_empty() || !proc.consumes.is_empty() {
+                errors.push(
+                    IrError::contract(
+                        proc.span,
+                        "`emit` and `consumes` are about elements, and a field has none",
+                    )
+                    .with_hint(
+                        "remove them: a field is handed `point` and returns `distance`, and \
+                         the material that happens to be at that point is not something it \
+                         can see",
+                    ),
+                );
+            }
+            if !proc.blocks.iter().any(|b| b.kind == BlockKind::Field) {
+                errors.push(
+                    IrError::contract(proc.span, "Field procedures require a `field` block")
+                        .with_hint("add `field { … }`: it is the whole of what a field does"),
                 );
             }
         }
@@ -1028,6 +1072,10 @@ fn assigns_clip_b(stmts: &[TStmt]) -> bool {
 fn required_keys(block: BlockKind, emit: &HashSet<Attr>, draws_lines: bool) -> Vec<CovKey> {
     match block {
         BlockKind::Spawn | BlockKind::Element => emit.iter().map(|a| CovKey::Attr(*a)).collect(),
+        // The whole of what a field produces, and there is nothing optional
+        // beside it — a field that assigned nothing would be a function with no
+        // return value.
+        BlockKind::Field => vec![CovKey::Output(Output::Distance)],
         // `point_size` is required unconditionally here — see the module
         // docs on why the literal "when the topology is points" condition
         // cannot be evaluated from an L4 file alone. It stays required now
@@ -1339,6 +1387,10 @@ impl<'a> Checker<'a> {
         }
         if let Some(attr) = Attr::from_name(name) {
             let available = match self.block {
+                // **A field has no element**, so no attribute is writable in
+                // one. It is a function of space, and the material that happens
+                // to be at a point is not something it is given.
+                Some(BlockKind::Field) => false,
                 Some(BlockKind::Spawn) | Some(BlockKind::Element) => self.emit.contains(&attr),
                 // **A `deform` writes what it consumes as well as what it
                 // emits**, and rewriting is the more common of the two:
@@ -1660,6 +1712,8 @@ impl<'a> Checker<'a> {
                 // lowering, which had no field to name and produced WGSL naga
                 // rejects — a `.kir` that checked clean and took the process
                 // down, which is the one shape this pass exists to prevent.
+                // Read side of the same rule: no element, no attributes.
+                Some(BlockKind::Field) => false,
                 Some(BlockKind::Spawn) => self.emit.contains(&attr),
                 Some(BlockKind::Element) => {
                     self.emit.contains(&attr) || self.consumes.contains(&attr)
@@ -1690,6 +1744,10 @@ impl<'a> Checker<'a> {
                 return Some(TExpr::new(attr.ty(), span, TExprKind::Attr(attr)));
             }
             let hint = match self.block {
+                Some(BlockKind::Field) => format!(
+                    "a field is a function of space: it is handed `point` and nothing else, \
+                     so `{name}` — a property of an element — has no meaning here"
+                ),
                 Some(BlockKind::Vertex) | Some(BlockKind::Fragment) => {
                     format!("add `{name}` to `consumes` to read it here")
                 }

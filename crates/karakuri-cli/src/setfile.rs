@@ -211,6 +211,10 @@ fn layer_ordinal(layer: Kind) -> u8 {
         Kind::L2 => 1,
         Kind::L3 => 2,
         Kind::L4 => 3,
+        // Last, matching `Set::slot_of`. A field addresses no node, so nothing
+        // sorts here yet — the ordinal exists so that the two orders cannot
+        // disagree when it does.
+        Kind::Field => 4,
     }
 }
 
@@ -248,6 +252,13 @@ pub fn record_from_binding(binding: &Binding) -> Record {
             Kind::L2 => Layer::L2,
             Kind::L3 => Layer::L3,
             Kind::L4 => Layer::L4,
+            // **The record format has no `Field` layer, and adding one is a
+            // format addition to make when a field's params have somewhere to
+            // live.** Unreachable rather than a placeholder: a binding is
+            // attached by `Set::bind`, which refuses a key no node of that
+            // layer declares, and a field has no nodes at all — so a
+            // `Binding` naming this kind cannot be constructed.
+            Kind::Field => unreachable!("a field has no node to bind a signal to"),
         },
         index: binding.index,
         key: binding.key.clone(),

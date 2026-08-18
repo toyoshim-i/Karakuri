@@ -26,6 +26,20 @@ pub enum Kind {
     L3,
     /// Rendering. Stateless, a render pipeline.
     L4,
+    /// **A spatial function: `vec3 -> float`.** Code rather than data, and the
+    /// only kind that lowers to no pass of its own.
+    ///
+    /// `docs/roadmap.md`'s L5 note says a `kind` is what a procedure *lowers
+    /// to*, and that an L5 has no `kind` because it has no code to lower. This
+    /// is the mirror: a field has *only* code to lower, so it has a file and no
+    /// node. What it lowers to is a WGSL function spliced into whichever
+    /// procedures evaluate it, which is why it needs no buffer, no pass and no
+    /// position in the chain.
+    ///
+    /// One per Set, on the same terms as the camera: several would need naming,
+    /// naming is fan-in, and `docs/roadmap.md` says fan-in arrives with
+    /// multiple L1 sources and brings its notation with it.
+    Field,
 }
 
 /// What a procedure's geometry *is*, on an L1 header, and what an L4 procedure
@@ -368,6 +382,14 @@ pub enum Output {
     /// predicate is expressible — `step(0.7, age)` — and a soft boundary, which
     /// a spatial mask needs, is not expressible the other way round.
     Strength,
+    /// field: **the signed distance at [`Ambient::Point`].** **Required** in a
+    /// `field` block, and the whole of what a field produces.
+    ///
+    /// Signed rather than unsigned, and a distance rather than a density,
+    /// because that is what every builtin in the SDF table returns and what the
+    /// CSG operators compose. A field that returned something else would have
+    /// no operators.
+    Distance,
     /// camera: the far plane. Defaults to 100.
     ///
     /// **Not decorative.** `blend weighted` normalises a fragment's depth
@@ -377,7 +399,7 @@ pub enum Output {
 }
 
 impl Output {
-    pub const ALL: [Output; 11] = [
+    pub const ALL: [Output; 12] = [
         Output::Clip,
         Output::ClipB,
         Output::PointSize,
@@ -389,6 +411,7 @@ impl Output {
         Output::Near,
         Output::Far,
         Output::Strength,
+        Output::Distance,
     ];
 
     pub fn name(self) -> &'static str {
@@ -404,6 +427,7 @@ impl Output {
             Output::Near => "near",
             Output::Far => "far",
             Output::Strength => "strength",
+            Output::Distance => "distance",
         }
     }
 
@@ -414,9 +438,12 @@ impl Output {
     pub fn ty(self) -> Ty {
         match self {
             Output::Clip | Output::ClipB | Output::Color => Ty::Vec4,
-            Output::PointSize | Output::FovY | Output::Near | Output::Far | Output::Strength => {
-                Ty::Float
-            }
+            Output::PointSize
+            | Output::FovY
+            | Output::Near
+            | Output::Far
+            | Output::Strength
+            | Output::Distance => Ty::Float,
             Output::Eye | Output::Target | Output::Up => Ty::Vec3,
         }
     }
@@ -432,6 +459,7 @@ impl Output {
             | Output::Near
             | Output::Far => BlockKind::Camera,
             Output::Strength => BlockKind::Mask,
+            Output::Distance => BlockKind::Field,
         }
     }
 }
@@ -459,6 +487,14 @@ pub enum Ambient {
     /// `n` turns a parent's `copy` into `copy * n + c` — so the index stays
     /// unique across the whole chain instead of only across the last stage.
     Copy,
+    /// **Where the field is being evaluated**, in world space. `field` block
+    /// only.
+    ///
+    /// The argument of `field(p)`, seen from inside. It is an ambient rather
+    /// than a declared parameter because a `.kir` procedure has no parameter
+    /// list — every block reads its inputs by name, and this is that pattern
+    /// with one input.
+    Point,
     Capacity,
     T,
     /// Musical position, in beats, on the session's tempo grid — the same
@@ -496,9 +532,10 @@ pub enum Ambient {
 }
 
 impl Ambient {
-    pub const ALL: [Ambient; 10] = [
+    pub const ALL: [Ambient; 11] = [
         Ambient::Seed,
         Ambient::Copy,
+        Ambient::Point,
         Ambient::Capacity,
         Ambient::T,
         Ambient::Beats,
@@ -513,6 +550,7 @@ impl Ambient {
         match self {
             Ambient::Seed => "seed",
             Ambient::Copy => "copy",
+            Ambient::Point => "point",
             Ambient::Capacity => "capacity",
             Ambient::T => "t",
             Ambient::Beats => "beats",
@@ -533,7 +571,7 @@ impl Ambient {
             Ambient::Seed | Ambient::Copy | Ambient::Capacity => Ty::Uint,
             Ambient::T | Ambient::Beats | Ambient::Dt => Ty::Float,
             Ambient::Camera => Ty::Mat4,
-            Ambient::Eye | Ambient::Ray => Ty::Vec3,
+            Ambient::Eye | Ambient::Ray | Ambient::Point => Ty::Vec3,
             Ambient::PointCoord => Ty::Vec2,
         }
     }
@@ -554,6 +592,11 @@ impl Ambient {
             // upstream amplified it is zero — the same answer `seed` gives in a
             // procedure that spawns nothing, and for the same reason.
             Ambient::Copy => kind == Kind::L2 || kind == Kind::L4,
+            // **The one input a field has, and nowhere else has one.** Every
+            // other block is handed an element or a fragment; a field is handed
+            // a position and nothing else, which is what makes it a function of
+            // space rather than of the material in it.
+            Ambient::Point => block == BlockKind::Field,
             Ambient::T | Ambient::Beats => true,
             Ambient::Capacity => kind == Kind::L1,
             // **An L3 gets `dt` and an L4 does not**, which is the asymmetry
@@ -689,6 +732,10 @@ pub enum BlockKind {
     Mask,
     /// L3: produce this frame's camera state.
     Camera,
+    /// Field: the signed distance at [`Ambient::Point`]. The whole of a field
+    /// procedure, and the only block whose lowering is a WGSL function rather
+    /// than an entry point.
+    Field,
     /// L4: once per element.
     Vertex,
     /// L4: once per rasterised fragment.
@@ -705,6 +752,7 @@ impl BlockKind {
             BlockKind::Camera => "camera",
             BlockKind::Vertex => "vertex",
             BlockKind::Fragment => "fragment",
+            BlockKind::Field => "field",
         }
     }
 
@@ -727,6 +775,7 @@ impl BlockKind {
             BlockKind::Deform | BlockKind::Mask => Kind::L2,
             BlockKind::Camera => Kind::L3,
             BlockKind::Vertex | BlockKind::Fragment => Kind::L4,
+            BlockKind::Field => Kind::Field,
         }
     }
 }

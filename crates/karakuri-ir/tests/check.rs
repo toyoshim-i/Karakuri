@@ -2437,3 +2437,154 @@ proc element_reads {
 "#,
     );
 }
+
+// ---------------------------------------------------------------------------
+// `kind Field`: a spatial function, and the only kind with no pass of its own.
+// ---------------------------------------------------------------------------
+
+const BLOB: &str = r#"
+proc blob {
+  kind Field
+
+  param ball : float [0.1, 2.0] = 0.8
+
+  field {
+    let sph = sd_sphere(point - vec3(0.9, 0.0, 0.0), ball);
+    let bx  = sd_box(point + vec3(0.9, 0.0, 0.0), vec3(0.7, 0.7, 0.7));
+    distance = op_smooth_union(sph, bx, 0.55);
+  }
+}
+"#;
+
+/// A field is a procedure like any other — a `kind`, a block, `param`s an
+/// operator rides — and declares nothing about geometry, because it is not
+/// geometry.
+#[test]
+fn a_field_checks_clean_and_carries_no_geometry() {
+    let checked = check_ok(BLOB);
+    assert_eq!(checked.kind, Kind::Field);
+    assert_eq!(checked.topology, None, "a field is a function, not geometry");
+    assert!(checked.emit.is_empty() && checked.consumes.is_empty());
+    assert_eq!(checked.params.len(), 1);
+    assert!(checked.block(BlockKind::Field).is_some());
+}
+
+/// **`point` is a field's only input, and no other block has one.** Every other
+/// block is handed an element or a fragment; this one is handed a position.
+#[test]
+fn point_is_readable_in_a_field_block_and_nowhere_else() {
+    check_ok(BLOB);
+
+    let errs = check_err(
+        r#"
+proc reads_point {
+  kind     L1
+  topology points
+  capacity [1, 1] = 1
+
+  emit position
+
+  element {
+    position = point;
+  }
+}
+"#,
+    );
+    assert!(
+        errs.iter().any(|e| e.message.contains("point")),
+        "expected `point` to be refused outside a field, got: {errs:?}"
+    );
+}
+
+/// `distance` is the whole of what a field produces, so a field that assigns
+/// nothing is a function with no return value.
+#[test]
+fn a_field_must_assign_distance() {
+    let errs = check_err(
+        r#"
+proc silent {
+  kind Field
+
+  field {
+    let d = sd_sphere(point, 1.0);
+  }
+}
+"#,
+    );
+    assert!(
+        errs.iter().any(|e| e.message.contains("distance")),
+        "expected `distance` to be required, got: {errs:?}"
+    );
+}
+
+/// **A field has no element**, so nothing an element carries is readable in
+/// one. The diagnostic says why rather than telling the author to declare it,
+/// because declaring it is not available and would not help.
+#[test]
+fn attributes_are_refused_in_a_field_block() {
+    let errs = check_err(
+        r#"
+proc peeks {
+  kind Field
+
+  field {
+    distance = length(position) - 1.0;
+  }
+}
+"#,
+    );
+    assert!(
+        errs.iter().any(|e| e.message.contains("position")
+            && e.hint.as_deref().unwrap_or_default().contains("function of space")),
+        "expected a diagnostic explaining a field has no element, got: {errs:?}"
+    );
+}
+
+/// Every geometry declaration is refused where it is written, on the same terms
+/// an L3 refuses them: a field counts nothing, draws nothing and carries
+/// nothing.
+#[test]
+fn a_field_refuses_every_geometry_declaration() {
+    for (decl, word) in [
+        ("capacity [1, 8] = 4", "capacity"),
+        ("topology points", "topology"),
+        ("blend additive", "blend"),
+        ("amplify 4", "amplify"),
+    ] {
+        let src = format!(
+            r#"
+proc wrong {{
+  kind Field
+  {decl}
+
+  field {{
+    distance = length(point) - 1.0;
+  }}
+}}
+"#
+        );
+        let errs = check_err(&src);
+        assert!(
+            errs.iter().any(|e| e.message.contains(word)),
+            "expected `{word}` to be refused on a field, got: {errs:?}"
+        );
+    }
+
+    let errs = check_err(
+        r#"
+proc wrong {
+  kind Field
+
+  emit position
+
+  field {
+    distance = length(point) - 1.0;
+  }
+}
+"#,
+    );
+    assert!(
+        errs.iter().any(|e| e.message.contains("emit")),
+        "expected `emit` to be refused on a field, got: {errs:?}"
+    );
+}

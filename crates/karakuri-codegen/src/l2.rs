@@ -296,6 +296,9 @@ impl Resolver for L2Resolver {
             // loop. One spelling for both is the element's own slot.
             Ambient::Copy if self.has_copy => "dst[i].copy.x".to_string(),
             Ambient::Copy => "0u".to_string(),
+            Ambient::Point => {
+                unreachable!("`point` is a field's only input and appears in no other block")
+            }
             Ambient::Capacity => "u.capacity".to_string(),
             Ambient::T => "u.t".to_string(),
             Ambient::Beats => "u.beats".to_string(),
