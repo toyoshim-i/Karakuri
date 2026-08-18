@@ -853,9 +853,11 @@ material for since it can rebuild a Set from records.
 a `kind` behind it, and a Set holds a chain of them. That is the half of this milestone that
 makes the library worth having, and it is done.
 
-**Three items from the Adds list below are not**, and they are one dependency: **multiple L1
-sources**, **cross-source interpolation** which needs them, and the nested L5's motivating
-case — "two pipelines, one knob" — which is two sources.
+**One item from the Adds list below is not**: **cross-source interpolation**. Multiple L1
+sources landed, and the nested L5's motivating case landed with them — "two pipelines, one
+knob" was waiting on nothing but a Set able to hold two geometries, and it now renders and is
+tested: two sources, two renderers, two composited targets, and one published control that
+moves all four instances.
 
 **Slot interface contracts landed as the attribute derivation** and **`Field` landed as a
 kind**; both are struck below. The **graph compiler** stays deferred on its own argument,
@@ -907,9 +909,13 @@ a cut chosen by hashing the beat number is a pure function of the clock, so it i
 `kind` says what a procedure lowers to; an L5 has no code to lower, since the compositing is
 fixed. So there is no `kind L5` file and there should not be — `crate::node::Merge` is the
 node, `crate::mix` is the shader and the per-input controls both roles share, and `--merge
-<slot>` is how a Set asks for one. What is still ahead of it is the motivating case: "two
-pipelines merged by a nested L5, published as one control" needs **L1 multiple**, which is
-decided and unbuilt, so what a merge composites today is several renderers over one geometry.
+<slot>` is how a Set asks for one.
+
+**The motivating case has landed**, and it needed no change to the L5 at all. "Two pipelines
+merged by a nested L5, published as one control" was waiting on nothing but a Set able to
+hold two geometries: a merge composites *renderers*, and every source draws into the target
+its renderer owns, so "first onto this attachment clears it" carried the whole of it. Two
+sources, two renderers, two targets, four instances and one knob.
 
 What is left is **what a Set publishes**. It is specified in `docs/ir-spec.md` with its open
 questions closed — including the last one this project carried, how two merged geometries keep their
