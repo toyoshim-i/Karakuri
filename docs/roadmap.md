@@ -1389,8 +1389,19 @@ than against one being taught to.
   workgroup whatever range they were told, so every test here that means to catch a wrong
   dispatch count needs more than 64 of them. Two injected defects survived a whole test file
   before that was noticed, which is the argument for injecting them
-- Cross-source interpolation, restricted at first to static sources where `seed` is the slot
-  index and the paired read is a direct one
+- **Cross-source interpolation**, restricted to static sources where `seed` is the slot index
+  and the paired read is a direct one. **The language half is built**: `pairs` on an L2
+  header, `other.<attr>` for the paired element, and every path that could reach one refuses
+  it by name until the node that takes two exists.
+
+  **It needed no new syntactic category.** `other.position` reaches the checker as a swizzle
+  — `expr . ident` is the grammar — so deciding it there costs one header keyword and one
+  base name, and nothing else in the language moves. That is the same shape `amplify` had,
+  and the two now break the L2 endomorphism on its two different axes: count and arity.
+
+  **Which two geometries is the Set's**, in `--set` order, and a Set holding a pairing L2 has
+  exactly two sources. This is the system's first fan-in and it deliberately brings no general
+  notation for one
 - ~~**Slot interface contracts, attribute declarations, automatic adapters**~~ — **built as
   the derivation, and the three words above turned out to name one thing.** An unmet
   `consumes` is no longer an unconditional error: `age` and `velocity` are synthesised where

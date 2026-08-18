@@ -49,9 +49,9 @@ pub fn parse(src: &str) -> IrResult<Proc> {
 
 /// Header/block keywords. Declaration recovery scans forward to the next one
 /// of these (or `}`), so one bad declaration does not eat the rest of the file.
-const DECL_KEYWORDS: [&str; 16] = [
-    "kind", "topology", "capacity", "amplify", "param", "emit", "consumes", "blend", "spawn",
-    "element", "deform", "mask", "camera", "field", "vertex", "fragment",
+const DECL_KEYWORDS: [&str; 17] = [
+    "kind", "topology", "capacity", "amplify", "pairs", "param", "emit", "consumes", "blend",
+    "spawn", "element", "deform", "mask", "camera", "field", "vertex", "fragment",
 ];
 
 struct Parser {
@@ -315,6 +315,7 @@ impl Parser {
         let mut topology = None;
         let mut capacity = None;
         let mut amplify = None;
+        let mut pairs = None;
         let mut blend = None;
         let mut params = Vec::new();
         let mut emit = Vec::new();
@@ -342,6 +343,10 @@ impl Parser {
                     }
                     "capacity" => capacity = Some(self.parse_capacity()),
                     "amplify" => amplify = Some(self.parse_amplify()),
+                    // A bare keyword, unlike every other header declaration:
+                    // there is nothing to say beyond that it applies, because
+                    // the arity is two and the sources are the Set's.
+                    "pairs" => pairs = Some(self.advance().span),
                     "param" => {
                         if let Some(p) = self.parse_param() {
                             params.push(p);
@@ -424,6 +429,7 @@ impl Parser {
             topology,
             capacity,
             amplify,
+            pairs,
             blend,
             params,
             emit,
@@ -1068,6 +1074,7 @@ fn empty_proc(span: Span) -> Proc {
         topology: None,
         capacity: None,
         amplify: None,
+        pairs: None,
         blend: None,
         params: Vec::new(),
         emit: Vec::new(),

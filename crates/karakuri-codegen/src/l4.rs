@@ -255,6 +255,9 @@ fn emit_stmts(stmts: &[TStmt], resolver: &L4Resolver, req: &mut Requirements, in
 
 fn scan_expr(e: &TExpr, seed: &mut bool, copy: &mut bool, attrs: &mut HashSet<Attr>) {
     match &e.kind {
+        TExprKind::Other(_) => {
+            unreachable!("`other` is a `pairs` L2's, and an L4 cannot declare one")
+        }
         TExprKind::Attr(a) => {
             attrs.insert(*a);
         }
