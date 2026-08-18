@@ -2588,3 +2588,55 @@ proc wrong {
         "expected `emit` to be refused on a field, got: {errs:?}"
     );
 }
+
+/// **`is_static` asks whether anything ever moves an element between slots**,
+/// which is two questions and used to be one.
+///
+/// A `spawn` block allocates; `kill()` makes the next step's scan compact the
+/// survivors down. Either one and `seed` stops being the slot index — which is
+/// the property a caller wants it for, and which the `kill`-only case
+/// falsified while the answer stayed true.
+#[test]
+fn a_procedure_that_kills_is_not_static() {
+    let lattice = r#"
+proc lattice {
+  kind     L1
+  topology points
+  capacity [64, 64] = 64
+
+  emit position
+
+  element {
+    position = vec3(float(seed % 8u), float(seed / 8u), 0.0);
+  }
+}
+"#;
+    assert!(check_ok(lattice).is_static(), "nothing spawns and nothing dies");
+
+    // The same procedure, killing. Every element is live at frame zero and not
+    // after it, so the old sentence was true and the answer was wrong.
+    let culled = lattice.replace(
+        "    position = vec3(float(seed % 8u), float(seed / 8u), 0.0);",
+        "    position = vec3(float(seed % 8u), float(seed / 8u), 0.0);\n    if seed == 3u { kill(); }",
+    );
+    assert!(
+        !check_ok(&culled).is_static(),
+        "a `kill()` compacts, and compaction moves every element after the gap"
+    );
+
+    let spawning = r#"
+proc fountain {
+  kind     L1
+  topology points
+  capacity [64, 64] = 64
+
+  param spawn_rate : float [0.0, 100.0] = 10.0
+
+  emit position
+
+  spawn   { position = vec3(0.0, 0.0, 0.0); }
+  element { position = position; }
+}
+"#;
+    assert!(!check_ok(spawning).is_static(), "and a `spawn` block allocates");
+}

@@ -407,18 +407,6 @@ fn element(@builtin(global_invocation_id) gid: vec3<u32>) {{
     )
 }
 
-/// Whether `stmts` reaches a `kill()` anywhere, including inside an `if` or
-/// a `for`. A procedure that can never call it can never lose an element,
-/// which together with having no `spawn` block is what makes it static.
-fn contains_kill(stmts: &[TStmt]) -> bool {
-    stmts.iter().any(|s| match s {
-        TStmt::Kill { .. } => true,
-        TStmt::If { then, els, .. } => contains_kill(then) || contains_kill(els),
-        TStmt::For { body, .. } => contains_kill(body),
-        TStmt::Let { .. } | TStmt::Var { .. } | TStmt::Assign { .. } => false,
-    })
-}
-
 /// Lowers a `Checked` L1 procedure to WGSL. Panics if `checked.kind` is not
 /// `Kind::L1` or it has no `element` block — both are preconditions a
 /// `Checked` value from a real check pass already guarantees.
@@ -484,7 +472,7 @@ pub fn generate_l1(
         .block(BlockKind::Element)
         .expect("an L1 procedure must have an element block");
     let has_spawn = checked.block(BlockKind::Spawn).is_some();
-    let compacted = has_spawn || contains_kill(&element_blk.stmts);
+    let compacted = has_spawn || karakuri_ir::typed::contains_kill(&element_blk.stmts);
 
     let element_body = {
         let resolver = L1Resolver {
