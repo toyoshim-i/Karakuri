@@ -126,6 +126,30 @@ pub enum SetError {
         /// let the generic message speak.
         hint: String,
     },
+    /// **wgpu refused something this engine asked it to build**, and the ask
+    /// was one no check above caught.
+    ///
+    /// Every diagnostic beside this one is a refusal *this* compiler decided,
+    /// with a sentence about the `.kir` that caused it. This one is the
+    /// residue: a validation error from the driver's own checks, carried out
+    /// rather than allowed to reach wgpu's uncaptured handler — which panics
+    /// the thread that made the call, and at startup takes the process down.
+    ///
+    /// **It is a bug report, not a diagnostic.** Every instance is something
+    /// the check pass should have refused with a sentence about the file, so
+    /// the message says so: an author reading this has found a hole rather than
+    /// made a mistake. Five distinct ones were found in a single milestone —
+    /// `seed` in a fullscreen L4, a derived attribute in `spawn`, an L3
+    /// evaluating a field the Set has none of, a field evaluating itself, and
+    /// an amplified chain past the device's binding limit — and each was a
+    /// process death before it was a refusal.
+    #[error(
+        "`{proc}` produced something this device refused, which is a compiler bug rather \
+         than a mistake in the file: {detail}\n\
+         hint: it should have been refused with a sentence about the `.kir`. Please report \
+         the procedure and this message"
+    )]
+    Invalid { proc: String, detail: String },
     /// A caller and the field it evaluates are together over a cost ceiling.
     ///
     /// **Neither file is over on its own**, which is why this is here: a
@@ -481,8 +505,65 @@ impl Set {
     // list of L2s, an optional L3, a list of L4s — and grouping them into a
     // struct would be a second spelling of "the nodes of a Set", which is what
     // the Set being returned already is.
+    /// **Everything this function builds happens inside a validation error
+    /// scope**, which is the difference between a diagnostic and a dead
+    /// process.
+    ///
+    /// wgpu's default answer to a validation error is to report it to an
+    /// uncaptured handler that *panics the thread that made the call*. On the
+    /// swap worker that is a `SetError::Panicked` — recoverable, and the
+    /// running Set survives; at startup there is no `catch_unwind` above it and
+    /// the process exits. A scope changes where the error goes: per the WebGPU
+    /// rules an error a scope captures is **not** reported to the uncaptured
+    /// handler, so it arrives here as a value.
+    ///
+    /// **This is a net, not a plan.** Everything it catches is something the
+    /// check pass should have refused with a sentence about the `.kir`, and
+    /// `SetError::Invalid` says so. What the net buys is that finding the next
+    /// hole costs a diagnostic rather than a crash — five were found in one
+    /// milestone, each of them a process death first and a refusal afterwards.
     #[allow(clippy::too_many_arguments)]
     pub fn build_many(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        l1: &Checked,
+        l2s: &[&Checked],
+        l3: Option<&Checked>,
+        field: Option<&Checked>,
+        l4s: &[&Checked],
+        layering: Layering,
+        capacity: u32,
+        seed_salt: u32,
+    ) -> Result<Set, SetError> {
+        device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let built = Set::build_inner(
+            device, queue, l1, l2s, l3, field, l4s, layering, capacity, seed_salt,
+        );
+        // **Popped on every path**, which is why the body is a second function
+        // rather than this one: it returns early in a dozen places, and a scope
+        // left on the stack would catch the *next* build's errors and report
+        // them against this one.
+        let captured = pollster::block_on(device.pop_error_scope());
+
+        match (built, captured) {
+            // **Our own refusal wins.** Where both fired, ours is the one with
+            // a sentence about the file in it, and the driver's is the same
+            // fact stated in the driver's terms.
+            (Err(e), _) => Err(e),
+            // **The Set is dropped rather than returned.** A build that
+            // produced a validation error produced a resource that does not
+            // exist, and every handle naming it is one wgpu will refuse again
+            // at the first draw — silently, since by then nothing is watching.
+            (Ok(_), Some(e)) => Err(SetError::Invalid {
+                proc: l1.name.clone(),
+                detail: e.to_string(),
+            }),
+            (Ok(set), None) => Ok(set),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn build_inner(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         l1: &Checked,
