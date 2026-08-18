@@ -853,8 +853,10 @@ material for since it can rebuild a Set from records.
 a `kind` behind it, and a Set holds a chain of them. That is the half of this milestone that
 makes the library worth having, and it is done.
 
-**One item from the Adds list below is not**: **cross-source interpolation**. Multiple L1
-sources landed, and the nested L5's motivating case landed with them — "two pipelines, one
+**Nothing from the Adds list below is outstanding.** Cross-source interpolation was the last,
+and it landed as a pairing L2 — `pairs` on the header, `other.<attr>` for the paired element,
+and a Set that holds exactly two sources when the chain begins with one. Multiple L1 sources
+landed before it, and the nested L5's motivating case landed with those — "two pipelines, one
 knob" was waiting on nothing but a Set able to hold two geometries, and it now renders and is
 tested: two sources, two renderers, two composited targets, and one published control that
 moves all four instances.
@@ -1398,6 +1400,18 @@ than against one being taught to.
   — `expr . ident` is the grammar — so deciding it there costs one header keyword and one
   base name, and nothing else in the language moves. That is the same shape `amplify` had,
   and the two now break the L2 endomorphism on its two different axes: count and arity.
+
+  **A pairing Set is one source made of two simulations**, not two sources — which is what
+  answers "is the far geometry also drawn?" by construction rather than by a rule: there is
+  one chain and one set of renderers over the pair, and the second simulation feeds the
+  pairing node and nothing else.
+
+  **Two defects, and both were a second copy of one fact.** The paired simulation was built
+  without the chain's derived-attribute list, so its element struct was a slot short of the
+  one the pairing node addresses it with and `other[i].position` read from the middle of the
+  element before it. And every L1 resolved its params against the *first* source's map, so a
+  name the two did not share came back a miss and reached the shader as zero — a picture with
+  a shape in it, drawn from a value nobody set. `examples/morph.kir` is the picture.
 
   **Which two geometries is the Set's**, in `--set` order, and a Set holding a pairing L2 has
   exactly two sources. This is the system's first fan-in and it deliberately brings no general

@@ -1177,7 +1177,7 @@ proc collides {
 "#;
     let parsed = karakuri_ir::parse(src).expect("parses");
     let checked = karakuri_ir::check::check(&parsed).expect("checks");
-    let shader = karakuri_codegen::generate_l2(&checked, &[Attr::Position, Attr::Age], karakuri_codegen::layout::Synthetic::NONE, &[], None);
+    let shader = karakuri_codegen::generate_l2(&checked, &[Attr::Position, Attr::Age], karakuri_codegen::layout::Synthetic::NONE, &[], None, None);
     validate(&shader.source);
 }
 
@@ -1190,7 +1190,7 @@ fn compiled_l2(src: &str, upstream: &[Attr], synthetic: karakuri_codegen::layout
 {
     let parsed = karakuri_ir::parse(src).expect("parses");
     let checked = karakuri_ir::check::check(&parsed).expect("checks");
-    karakuri_codegen::generate_l2(&checked, upstream, synthetic, &[], None)
+    karakuri_codegen::generate_l2(&checked, upstream, synthetic, &[], None, None)
 }
 
 const MIRROR: &str = r#"
@@ -1504,6 +1504,7 @@ proc warp {
             &[Attr::Position],
             karakuri_codegen::layout::Synthetic::NONE,
             &[],
+            None,
             Some(&field),
         )
         .source,

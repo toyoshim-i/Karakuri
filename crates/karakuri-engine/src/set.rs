@@ -167,18 +167,58 @@ pub enum SetError {
         field: String,
         detail: String,
     },
-    /// An L2 that pairs two geometries, in a Set that cannot build one yet.
+    /// A pairing L2 that is not the first node in the chain.
     ///
-    /// **Refused rather than ignored**: nothing lowers the second input, so a
-    /// Set that took the file and dropped the declaration would run the
-    /// deformation over one geometry — a picture nobody asked for, from a
-    /// `.kir` that checked clean.
+    /// Its second input is a **simulation**, not whatever reached its position:
+    /// there is one paired geometry and it is a source. A pairing node further
+    /// down would be reading a raw source beside a deformed one, which is two
+    /// different instants of the same material.
     #[error(
-        "`{l2}` declares `pairs`, and nothing yet lowers the second geometry\n\
-         hint: the language accepts it and the engine does not build it — remove `pairs`, or \
-         wait for the node that takes two"
+        "`{l2}` pairs two geometries and sits at position {at} in the chain\n\
+         hint: a pairing L2 reads a *source*, so it has to be the first one. Put the \
+         deformations after it"
     )]
-    Unpaired { l2: String },
+    PairingNotFirst { l2: String, at: usize },
+    /// A pairing L2 in a Set that does not hold exactly two sources.
+    #[error(
+        "`{l2}` pairs two geometries and this Set has {sources}\n\
+         hint: name exactly two L1s — `--set A.kir,B.kir,{l2}.kir,L4.kir`. Naming which two \
+         of several is what a fan-in notation is for, and there is not one yet"
+    )]
+    PairingArity { l2: String, sources: usize },
+    /// A pairing L2 over a source that compacts.
+    ///
+    /// **The correspondence is the slot index**, and it is the same element in
+    /// both sources only while nothing moves one. A `spawn` block allocates and
+    /// a `kill()` makes the next step's scan compact the survivors down; either
+    /// one and the pairing quietly matches each element with a stranger.
+    #[error(
+        "`{l2}` pairs by slot index and `{l1}` does not keep its elements at fixed slots\n\
+         hint: a paired source must have no `spawn` block and no `kill()` — either one \
+         compacts, and after a compaction element 5 of one source is not element 5 of the \
+         other"
+    )]
+    PairingNotStatic { l2: String, l1: String },
+    /// A pairing L2 whose far source cannot support a derivation the chain
+    /// needs.
+    ///
+    /// Both sides are addressed with the same element struct — one chain runs
+    /// over the pair — so a rule that applies to one applies to both, and one
+    /// that the far side has nothing to derive from is a slot nothing fills.
+    #[error(
+        "`{l2}` pairs with `{l1}`, and `{attr}` is derived from something `{l1}` does not \
+         emit\n\
+         hint: both sides of a pairing carry the same attributes — emit the source attribute \
+         in both, or stop consuming `{attr}`"
+    )]
+    PairingDerivation { l2: String, l1: String, attr: String },
+    /// A pairing L2 over two sources of different sizes.
+    #[error(
+        "`{l2}` pairs two geometries of {a} and {b} elements\n\
+         hint: pairing is by slot index, so both sources have to be the same size — set one \
+         `--capacity`, or declare the same default in both"
+    )]
+    PairingCapacity { l2: String, a: u32, b: u32 },
     /// A Set with no geometry at all.
     ///
     /// **Refused for the same reason an empty renderer list is**: a Set is a
@@ -348,6 +388,17 @@ pub(crate) struct Source {
     /// **The L1 node.** Every buffer, pipeline and bind group the simulation
     /// needs, and the spawn accumulator that decides what it creates.
     sim: Simulation,
+    /// **The paired geometry**, for a Set whose chain begins with a `pairs` L2.
+    ///
+    /// It belongs to this source rather than being one of its own, and that is
+    /// what answers "is the second geometry drawn?" by construction: a pairing
+    /// Set has one `Source`, one chain and one set of renderers, and the second
+    /// simulation feeds the pairing node and nothing else.
+    ///
+    /// `Option` rather than a list, because the language says two: a pairing L2
+    /// takes two geometries, and naming several is what a fan-in notation is
+    /// for.
+    paired: Option<Simulation>,
     /// **The L2 nodes, in chain order**, instantiated for this source. Each
     /// reads what the one before it wrote and writes its own buffer, so the
     /// geometry the renderers see is the last one's — or the simulation's, when
@@ -392,6 +443,13 @@ pub struct Set {
     /// so accepting one is a change where the sources are *made* and nowhere
     /// else.
     sources: Vec<Source>,
+    /// **How many L1 *procedures* the Set was built from**, which is not
+    /// `sources.len()` when the chain pairs: two procedures become one source
+    /// with two simulations in it. `params` and `ranges` are per procedure and
+    /// the addressing is per procedure, so this is the number both use — asking
+    /// the source list gave an answer one too small, and every layer after L1
+    /// shifted with it.
+    l1_count: usize,
 
     /// **Manual** parameter values: the `.kir` defaults, as moved by a `param`
     /// record or a `--param` override. A binding never writes here — it blends
@@ -648,8 +706,35 @@ impl Set {
                 max: crate::deck::MAX_SLOTS,
             });
         }
-        if let Some(l2) = l2s.iter().find(|n| n.pairs) {
-            return Err(SetError::Unpaired { l2: l2.name.clone() });
+        // **A pairing chain is one source made of two simulations**, not two
+        // sources: the second feeds the pairing node and nothing else, which is
+        // what makes "is it drawn?" a question with no place to be asked.
+        let pairing = l2s.iter().position(|n| n.pairs);
+        if let Some(at) = pairing {
+            if at != 0 {
+                return Err(SetError::PairingNotFirst { l2: l2s[at].name.clone(), at });
+            }
+            if l1s.len() != 2 {
+                return Err(SetError::PairingArity {
+                    l2: l2s[at].name.clone(),
+                    sources: l1s.len(),
+                });
+            }
+            for (l1, _) in l1s {
+                if !l1.is_static() {
+                    return Err(SetError::PairingNotStatic {
+                        l2: l2s[at].name.clone(),
+                        l1: l1.name.clone(),
+                    });
+                }
+            }
+            if l1s[0].1 != l1s[1].1 {
+                return Err(SetError::PairingCapacity {
+                    l2: l2s[at].name.clone(),
+                    a: l1s[0].1,
+                    b: l1s[1].1,
+                });
+            }
         }
         for (l1, _) in l1s {
             if l1.kind != Kind::L1 {
@@ -759,8 +844,16 @@ impl Set {
         // instance: every source draws into the target its renderer owns, and
         // the first source is the one that clears it.
         let renderer_count = l4s.len();
-        let mut sources: Vec<Source> = Vec::with_capacity(l1s.len());
-        for (at, &(l1, capacity)) in l1s.iter().enumerate() {
+        // **Pairing collapses the list.** Two sources become one `Source` with
+        // two simulations in it, so the loop below runs once and everything
+        // under it — one chain, one set of renderers — is what a Set of one
+        // source has.
+        let heads: &[(&Checked, u32)] = match pairing {
+            None => l1s,
+            Some(_) => &l1s[..1],
+        };
+        let mut sources: Vec<Source> = Vec::with_capacity(heads.len());
+        for (at, &(l1, capacity)) in heads.iter().enumerate() {
             let salt = salt_for(seed_salt, at);
             // **The plan, before anything is built.**
             //
@@ -938,6 +1031,47 @@ impl Set {
 
             let sim = Simulation::build(device, l1, capacity, salt, &derived, field_shader)?;
 
+            // **The paired geometry is built with the same `derived` list**, and
+            // that is not a convenience: the pairing node addresses its buffer
+            // with a struct generated from this list, so a far side built with a
+            // different one is a struct that disagrees about every offset past
+            // the first derived slot. It read the wrong bytes and the picture
+            // went black, which is the quietest way that can go wrong.
+            let paired: Option<(Vec<karakuri_ir::Attr>, Simulation)> = match pairing {
+                None => None,
+                Some(at) => {
+                    let (far, far_capacity) = l1s[1];
+                    // A rule the far side cannot support is refused here rather
+                    // than producing a slot nothing fills: `velocity` is derived
+                    // from `position`, and a geometry emitting neither has
+                    // nothing to derive it from.
+                    for attr in &derived {
+                        if attr
+                            .derivation()
+                            .and_then(|d| d.source())
+                            .is_some_and(|from| !far.emit.contains(&from))
+                        {
+                            return Err(SetError::PairingDerivation {
+                                l2: l2s[at].name.clone(),
+                                l1: far.name.clone(),
+                                attr: attr.name().to_string(),
+                            });
+                        }
+                    }
+                    Some((
+                        far.emit.clone(),
+                        Simulation::build(
+                            device,
+                            far,
+                            far_capacity,
+                            salt_for(seed_salt, 1),
+                            &derived,
+                            field_shader,
+                        )?,
+                    ))
+                }
+            };
+
             // **The L2 nodes**, each built against what reaches it. The chain is
             // walked here rather than inside a node because the *grouping* decides
             // the order — a node knows how it deforms and not what is above it.
@@ -971,12 +1105,21 @@ impl Set {
                         None => sim.geometry(),
                         Some(prev) => prev.geometry(alive, counts),
                     };
+                    // **The paired geometry, for the node that declares it.**
+                    // It reads a *simulation* rather than whatever reached this
+                    // position, which is why a pairing L2 has to be first in
+                    // the chain — refused above if it is not.
+                    let paired = paired.as_ref().filter(|_| l2.pairs);
+                    let other = paired.map(|(emits, sim): &(Vec<karakuri_ir::Attr>, Simulation)| {
+                        (emits.as_slice(), sim.geometry())
+                    });
                     Deform::build(
                         device,
                         l2,
                         &upstream,
                         synthetic,
                         &derived,
+                        other.as_ref().map(|(a, g)| (*a, g)),
                         field_shader,
                         &input,
                         chain_capacity,
@@ -1018,7 +1161,13 @@ impl Set {
                     .map(|l4| Renderer::build(device, l4, &geometry, &camera_node, field_shader))
                     .collect()
             };
-            sources.push(Source { salt, sim, deforms, renderers });
+            sources.push(Source {
+                salt,
+                sim,
+                paired: paired.map(|(_, s)| s),
+                deforms,
+                renderers,
+            });
         }
 
         // One map per node, in the order [`Set::slot_of`] addresses them: the
@@ -1100,6 +1249,7 @@ impl Set {
             edges: vec![Input::default(); renderer_count],
             bindings: Vec::new(),
             interface: Vec::new(),
+            l1_count: l1s.len(),
             has_field: field.is_some(),
             field_declared: field
                 .map(|f| f.params.iter().map(|p| p.name.clone()).collect())
@@ -1115,6 +1265,9 @@ impl Set {
         };
         for source in &set.sources {
             source.sim.initialize(queue);
+            if let Some(other) = &source.paired {
+                other.initialize(queue);
+            }
         }
         // **A camera before the first `prepare`.** The state buffer starts
         // zeroed, and a camera whose eye and target coincide has no forward
@@ -1185,8 +1338,9 @@ impl Set {
     /// — tracking an estimate host-side — would be worse: a number that is
     /// usually right is harder to distrust than one that is honestly expensive.
     pub fn live_count(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> u32 {
-        // **Summed**, because a Set's population is all of it. With one source
-        // this is that source's, which is what it always was.
+        // **Summed**, because a Set's population is all of it. The paired
+        // geometry is *not* counted: it feeds the pairing node and is never
+        // drawn, so counting it would report twice the material anyone can see.
         self.sources.iter().map(|s| s.sim.live_count(device, queue)).sum()
     }
 
@@ -1209,7 +1363,8 @@ impl Set {
     pub fn capacity(&self) -> u32 {
         // **Summed, to match `live_count`.** A Set of two sources allocates
         // both, and reporting one of them beside a population that is all of
-        // them said "8192 live of 4096".
+        // them said "8192 live of 4096". The paired geometry is left out for
+        // the same reason it is left out of the count: nothing draws it.
         self.sources.iter().map(|s| s.sim.capacity()).sum()
     }
 
@@ -1290,6 +1445,9 @@ impl Set {
         self.steps_taken = 0;
         for source in &mut self.sources {
             source.sim.rewind(queue);
+            if let Some(other) = &mut source.paired {
+                other.rewind(queue);
+            }
         }
     }
 
@@ -1335,9 +1493,17 @@ impl Set {
         }
         let range = self.nodes_of(binding.layer);
         let names: Vec<&[String]> = match binding.layer {
-            // **One entry per source**, because each source *is* an L1
-            // procedure and `--param L1:1:…` names the second one.
-            Kind::L1 => self.sources.iter().map(|s| s.sim.param_names()).collect(),
+            // **One entry per L1 *procedure***, which includes a paired
+            // geometry: it is an L1 with params of its own, and an operator
+            // riding them is riding the far end of a morph.
+            Kind::L1 => self
+                .sources
+                .iter()
+                .flat_map(|s| {
+                    std::iter::once(s.sim.param_names())
+                        .chain(s.paired.iter().map(|p| p.param_names()))
+                })
+                .collect(),
             // **One entry per L2 procedure, not per instance.** A chain is
             // instantiated once per source and the procedures are shared, so an
             // address names the procedure and the Set writes it to every
@@ -1397,7 +1563,7 @@ impl Set {
     fn procedures(&self, layer: Kind) -> usize {
         let first = &self.sources[0];
         match layer {
-            Kind::L1 => self.sources.len(),
+            Kind::L1 => self.l1_count,
             Kind::L2 => first.deforms.len(),
             Kind::L3 => self.camera_node.node_count(),
             Kind::L4 => first.renderers.len(),
@@ -1408,7 +1574,12 @@ impl Set {
     fn slot_of(&self, layer: Kind) -> usize {
         match layer {
             Kind::L1 => 0,
-            Kind::L2 => 1,
+            // **After every L1 procedure**, which is more than one now. This
+            // said `1` and was right while a Set held one geometry — the same
+            // constant the L4 arm below spelled out before an L3 landed between
+            // them, and the same defect: an origin that happens to be a
+            // constant is an origin nobody notices stopping being one.
+            Kind::L2 => self.l1_count,
             // **An L3's place is between the deformations and the renderers**,
             // and there is at most one — a Set is a grouping around one
             // viewpoint. A Set whose camera is the built-in has none at all, so
@@ -1416,9 +1587,9 @@ impl Set {
             // empty range: a `--param L3:…` then reaches no node and is reported
             // as reaching none, which is the answer a name no procedure declares
             // already gets.
-            Kind::L3 => self.sources.len() + self.procedures(Kind::L2),
+            Kind::L3 => self.l1_count + self.procedures(Kind::L2),
             Kind::L4 => {
-                self.sources.len() + self.procedures(Kind::L2) + self.camera_node.node_count()
+                self.l1_count + self.procedures(Kind::L2) + self.camera_node.node_count()
             }
             // **Last, and it addresses a node that does not exist.** A field
             // has no pass and no buffers — it lowers into whoever evaluates it —
@@ -1428,7 +1599,7 @@ impl Set {
             // procedure that evaluates the field writes the same answer into
             // its own uniform, so one address reaches all of them.
             Kind::Field => {
-                self.sources.len()
+                self.l1_count
                     + self.procedures(Kind::L2)
                     + self.camera_node.node_count()
                     + self.procedures(Kind::L4)
@@ -1440,7 +1611,7 @@ impl Set {
     fn nodes_of(&self, layer: Kind) -> std::ops::Range<usize> {
         let start = self.slot_of(layer);
         match layer {
-            Kind::L1 => start..start + self.sources.len(),
+            Kind::L1 => start..start + self.l1_count,
             Kind::L2 => start..start + self.procedures(Kind::L2),
             // Zero or one: the built-in camera is a field on this struct rather
             // than a node, and has no parameter map to address.
@@ -1929,20 +2100,37 @@ impl Set {
         }
 
         {
-            let (bindings, params) = (&self.bindings, &self.params[0]);
-            let param = |name: &str| effective(bindings, params, Kind::L1, 0, name);
+            let bindings = &self.bindings;
             let field_at = self.nodes_of(Kind::Field).next();
             let field_values = field_at.and_then(|at| self.params.get(at));
-            let tick = crate::node::Tick {
-                steps,
-                dt: self.dt,
-                instants,
-                param: &param,
-                field_params: &self.field_params,
-                field_value: &|name: &str| field_value(field_values, name),
-            };
+            let field_params = &self.field_params;
+            let params = &self.params;
+
+            // **Every L1 procedure resolves against its own map**, and a paired
+            // geometry is one of them. Handing it the near side's was a silent
+            // miss for every name the two do not share: `sphere_shell`'s
+            // `radius` was looked up in `lattice_shell`'s map, came back
+            // `None`, and the sphere collapsed to the origin — a picture with a
+            // shape in it, drawn from a value nobody set.
+            //
+            // The index walks the L1 procedures rather than the sources,
+            // because a pairing Set has two of the first and one of the second.
+            let mut at = 0usize;
             for source in &mut self.sources {
-                source.sim.prepare(queue, &tick);
+                for sim in std::iter::once(&mut source.sim).chain(source.paired.as_mut()) {
+                    let own = &params[at];
+                    let param = |name: &str| effective(bindings, own, Kind::L1, at, name);
+                    let tick = crate::node::Tick {
+                        steps,
+                        dt: self.dt,
+                        instants,
+                        param: &param,
+                        field_params,
+                        field_value: &|name: &str| field_value(field_values, name),
+                    };
+                    sim.prepare(queue, &tick);
+                    at += 1;
+                }
             }
         }
 
@@ -2275,6 +2463,13 @@ impl Set {
         };
         for source in &mut self.sources {
             source.sim.record(encoder, steps);
+            // **The paired geometry steps too.** It is a simulation, not a
+            // buffer: it has its own `element` block and its own clock, and a
+            // Set that stepped only the near side would pair a moving geometry
+            // with a frozen one.
+            if let Some(other) = &mut source.paired {
+                other.record(encoder, steps);
+            }
         }
         // **Every amplifier's counts, before any node dispatches from one.**
         // They derive from the simulation's, which the scan has just written,

@@ -1,0 +1,37 @@
+// A cube of points on a lattice, still.
+//
+// **Static by construction**, and that is not decoration: no `spawn` block and
+// no `kill()`, so nothing ever moves an element between slots and `seed` is the
+// slot index for the whole run. That is what makes it pairable — a morph
+// matches element 5 of one geometry with element 5 of the other, and after a
+// compaction those are two different elements.
+
+proc lattice_shell {
+  kind     L1
+  topology points
+  capacity [4096, 262144] = 32768
+
+  // **The cube of this is the capacity**, and the two are declared together so
+  // that a seed never falls outside the lattice: at `side` 32 the default
+  // capacity is 32768, which is exactly 32 cubed. A `side` an operator turns
+  // down leaves the tail of the seeds on the last plane, which is a visible
+  // and honest consequence rather than a hidden one.
+  param side  : float [4.0, 32.0] = 32.0
+  param scale : float [0.2, 4.0]  = 1.6
+
+  emit position, tint
+
+  element {
+    let n = uint(side);
+    let i = seed % n;
+    let j = (seed / n) % n;
+    let k = seed / (n * n);
+
+    let u = (float(i) / side) * 2.0 - 1.0;
+    let v = (float(j) / side) * 2.0 - 1.0;
+    let w = (float(k) / side) * 2.0 - 1.0;
+
+    position = vec3(u, v, w) * scale;
+    tint     = hsv_to_rgb(vec3(0.55 + hash1(seed) * 0.08, 0.7, 1.0));
+  }
+}

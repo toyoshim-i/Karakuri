@@ -582,6 +582,28 @@ karakuri-cli --merge 0 --publish 'level=exposure[0..2]' \
 One fader moves all four — every source drawn by every renderer — because a published control
 without an address reaches every procedure declaring the name.
 
+### Morphing one geometry into another
+
+An L2 with `pairs` on its header takes **two** geometries and produces one, matching their
+elements by slot index:
+
+```
+karakuri-cli --param L2:0:k=0.5 \
+  --set lattice_shell.kir,sphere_shell.kir,morph.kir,soft_points.kir
+```
+
+`k` is an ordinary `param`, so a fader, a signal binding, a transition and a published control
+all reach it. At 0 you see the first geometry, at 1 the second, and in between every element
+is on its way.
+
+**Both sources have to be still.** No `spawn` block and no `kill()` in either — a spawn
+allocates and a kill compacts, and after a compaction element 5 of one geometry is not
+element 5 of the other, so the pairing would match each element with a stranger. The Set
+refuses the pair by name rather than drawing that.
+
+They also have to be the same size, and the far one is **never drawn on its own**: a pairing
+Set is one geometry made of two simulations, with one chain and one set of renderers over it.
+
 **What is not there yet is treating them differently.** A mask on which source an element
 came from wants a way to *name* a source, and a name has to be written where the source is
 used — in a Set file, which today carries an L1 and its renderers. Until then the two are
