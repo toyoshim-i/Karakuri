@@ -61,6 +61,11 @@ pub struct Checked {
     /// declaration generates the shader it always generated, shares its input's
     /// liveness and its input's counts, and allocates nothing.
     pub amplify: Option<u32>,
+    /// **This L2 takes two geometries and produces one** — see
+    /// `karakuri_ir::ast::Proc::pairs`. The paired element's attributes are read
+    /// as `other.<name>`, and the correspondence is the slot index, which is
+    /// only the same element in both sources while neither compacts.
+    pub pairs: bool,
     pub blend: Option<Blend>,
     pub params: Vec<Param>,
     pub emit: Vec<Attr>,
@@ -337,6 +342,15 @@ pub enum TExprKind {
     Param(String),
     /// A read, which is always of the previous frame's value.
     Attr(Attr),
+    /// A read of the **paired** element's attribute, from the second geometry a
+    /// `pairs` L2 takes. Written `other.<name>`.
+    ///
+    /// Its own variant rather than a flag on [`TExprKind::Attr`], because every
+    /// pass that walks attribute reads has to decide about it: cost weighs it
+    /// the same, the lowering addresses a different buffer, and
+    /// `is_closed_form` treats it as a read of carried state exactly as it
+    /// treats the near side.
+    Other(Attr),
     Ambient(Ambient),
     Unary {
         op: crate::ast::UnOp,

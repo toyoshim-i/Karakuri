@@ -167,6 +167,18 @@ pub enum SetError {
         field: String,
         detail: String,
     },
+    /// An L2 that pairs two geometries, in a Set that cannot build one yet.
+    ///
+    /// **Refused rather than ignored**: nothing lowers the second input, so a
+    /// Set that took the file and dropped the declaration would run the
+    /// deformation over one geometry — a picture nobody asked for, from a
+    /// `.kir` that checked clean.
+    #[error(
+        "`{l2}` declares `pairs`, and nothing yet lowers the second geometry\n\
+         hint: the language accepts it and the engine does not build it — remove `pairs`, or \
+         wait for the node that takes two"
+    )]
+    Unpaired { l2: String },
     /// A Set with no geometry at all.
     ///
     /// **Refused for the same reason an empty renderer list is**: a Set is a
@@ -635,6 +647,9 @@ impl Set {
                 count: l4s.len(),
                 max: crate::deck::MAX_SLOTS,
             });
+        }
+        if let Some(l2) = l2s.iter().find(|n| n.pairs) {
+            return Err(SetError::Unpaired { l2: l2.name.clone() });
         }
         for (l1, _) in l1s {
             if l1.kind != Kind::L1 {

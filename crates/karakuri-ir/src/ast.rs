@@ -705,6 +705,23 @@ pub struct Proc {
     pub capacity: Option<CapacityDecl>,
     /// L2 only.
     pub amplify: Option<AmplifyDecl>,
+    /// **L2 only: this modulator takes two geometries and produces one.**
+    ///
+    /// The span of the `pairs` keyword, so a refusal can point at it.
+    ///
+    /// `L2 : Geometry -> Geometry` is an endomorphism, which is what makes a
+    /// chain stackable — and this breaks it in the second of the two possible
+    /// directions. `amplify` broke it on the *count* axis, one element in and
+    /// several out; this breaks it on the *arity* axis, two geometries in and
+    /// one out. Both stay in the same slot position and both are declared in the
+    /// header, because what a `deform` writes is decided before it runs.
+    ///
+    /// **This is the system's first fan-in.** What it does not bring is a
+    /// general notation for one: which two geometries is the `--set` list's
+    /// order, and a Set holding a `pairs` L2 has exactly two sources. Naming
+    /// several is what a real fan-in notation is for, and it arrives with the
+    /// thing that needs it.
+    pub pairs: Option<Span>,
     /// L4 only.
     pub blend: Option<Blend>,
     pub params: Vec<Param>,

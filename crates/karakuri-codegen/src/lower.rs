@@ -67,6 +67,14 @@ pub trait Resolver {
     /// prev/next rule impossible to get wrong by construction rather than by
     /// discipline.
     fn read_attr(&self, attr: Attr) -> String;
+
+    /// A read of the **paired** element, from the second geometry a `pairs` L2
+    /// takes. Only that resolver has one; the checker refuses `other` anywhere
+    /// else, so every other implementation says so rather than inventing an
+    /// answer.
+    fn read_other(&self, attr: Attr) -> String {
+        unreachable!("`other.{}` is refused outside a `pairs` L2", attr.name())
+    }
     fn read_seed(&self) -> String;
     fn read_ambient(&self, amb: Ambient) -> String;
 
@@ -94,6 +102,7 @@ pub fn lower_expr(expr: &TExpr, resolver: &dyn Resolver, req: &mut Requirements)
             .read_param(name)
             .unwrap_or_else(|| format!("u.{}", mangle_param(name))),
         TExprKind::Attr(attr) => resolver.read_attr(*attr),
+        TExprKind::Other(attr) => resolver.read_other(*attr),
         TExprKind::Ambient(Ambient::Seed) => resolver.read_seed(),
         TExprKind::Ambient(amb) => resolver.read_ambient(*amb),
         TExprKind::Unary { op, value } => {

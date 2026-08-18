@@ -2640,3 +2640,130 @@ proc fountain {
 "#;
     assert!(!check_ok(spawning).is_static(), "and a `spawn` block allocates");
 }
+
+// ---------------------------------------------------------------------------
+// `pairs`: an L2 that takes two geometries and produces one.
+// ---------------------------------------------------------------------------
+
+const MORPH: &str = r#"
+proc morph {
+  kind  L2
+  pairs
+
+  param k : float [0.0, 1.0] = 0.5
+
+  consumes position
+
+  deform {
+    position = mix(position, other.position, vec3(k, k, k));
+  }
+}
+"#;
+
+/// The declaration lands on `Checked`, and `other.<attr>` resolves to a read of
+/// the paired element.
+#[test]
+fn a_pairing_l2_checks_clean_and_carries_its_declaration() {
+    let checked = check_ok(MORPH);
+    assert!(checked.pairs);
+    assert_eq!(checked.kind, Kind::L2);
+
+    let deform = checked.block(BlockKind::Deform).expect("a deform");
+    let reads_other = |stmts: &[TStmt]| {
+        stmts.iter().any(|s| match s {
+            TStmt::Assign { value, .. } => format!("{value:?}").contains("Other"),
+            _ => false,
+        })
+    };
+    assert!(reads_other(&deform.stmts), "`other.position` is a paired read");
+}
+
+/// **`other` means nothing without the declaration**, and the diagnostic says
+/// what to add rather than that the name does not exist.
+#[test]
+fn other_is_refused_in_an_l2_that_does_not_pair() {
+    let errs = check_err(&MORPH.replace("  pairs\n", ""));
+    assert!(
+        errs.iter().any(|e| e.message.contains("second geometry")
+            && e.hint.as_deref().unwrap_or_default().contains("pairs")),
+        "expected the declaration to be named, got: {errs:?}"
+    );
+}
+
+/// **One `consumes` covers both sides.** The paired geometry is an input edge,
+/// and pairing reads the same attribute from each — so an attribute this node
+/// does not take is not readable on either side.
+#[test]
+fn other_reads_only_what_the_node_consumes() {
+    let errs = check_err(&MORPH.replace("other.position", "other.tint"));
+    assert!(
+        errs.iter().any(|e| e.message.contains("tint") && e.message.contains("not consumed")),
+        "expected `other.tint` to need `tint` in `consumes`, got: {errs:?}"
+    );
+}
+
+/// `pairs` is L2's, on the same terms `amplify` is: an L1 makes geometry rather
+/// than taking any, an L3 makes a viewpoint, and an L4 draws what reaches it.
+#[test]
+fn pairs_is_refused_outside_an_l2() {
+    let l1 = r#"
+proc gen {
+  kind     L1
+  topology points
+  capacity [1, 8] = 4
+  pairs
+
+  emit position
+
+  element { position = vec3(0.0, 0.0, 0.0); }
+}
+"#;
+    let l4 = r#"
+proc dots {
+  kind  L4
+  blend additive
+  pairs
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 4.0;
+  }
+
+  fragment { color = vec4(1.0, 1.0, 1.0, 1.0); }
+}
+"#;
+    for src in [l1, l4] {
+        let errs = check_err(src);
+        assert!(
+            errs.iter().any(|e| e.message.contains("`pairs` is L2 only")),
+            "expected `pairs` to be refused, got: {errs:?}"
+        );
+    }
+}
+
+/// **`other` is reserved everywhere**, not only where it means something. A
+/// local called `other` reads fine today and stops the day the file grows the
+/// declaration, which is the shape every reserved name here prevents.
+#[test]
+fn other_is_a_reserved_name() {
+    let errs = check_err(
+        r#"
+proc shadow {
+  kind L2
+
+  consumes position
+
+  deform {
+    let other = length(position);
+    position = position * other;
+  }
+}
+"#,
+    );
+    assert!(
+        errs.iter().any(|e| e.message.contains("`other` is reserved")),
+        "expected `other` to be reserved, got: {errs:?}"
+    );
+}

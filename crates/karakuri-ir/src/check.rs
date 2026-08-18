@@ -126,6 +126,7 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
     // **What makes an L4 a marcher**, and the one procedure-wide fact a block
     // checker needs: `eye` and `ray` are defined by the ray prologue a
     // fullscreen fragment stage opens with, and by nothing else.
+    let pairs = proc.pairs.is_some();
     let fullscreen =
         proc.kind == Kind::L4 && proc.blocks.iter().all(|b| b.kind != BlockKind::Vertex);
     let mut blocks = Vec::with_capacity(proc.blocks.len());
@@ -141,6 +142,7 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
             block_kind_owner,
             Some(block.kind),
             fullscreen,
+            pairs,
             &params,
             &emit_set,
             &consumes_set,
@@ -206,6 +208,7 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
             },
             capacity: proc.capacity,
             amplify: proc.amplify.map(|a| a.factor),
+            pairs: proc.pairs.is_some(),
             blend: proc.blend,
             params: proc.params.clone(),
             emit: emit_vec.into_iter().map(|(a, _)| a).collect(),
@@ -251,6 +254,14 @@ fn calls_field(stmts: &[crate::ast::Stmt]) -> bool {
         Stmt::Kill { .. } => false,
     })
 }
+
+/// The base name a paired read is written against: `other.position`.
+///
+/// Reserved everywhere, not only in a `pairs` L2 — a local called `other` in an
+/// ordinary procedure would read fine today and stop reading the day the file
+/// grew the declaration, which is the shape every other reserved name here
+/// exists to prevent.
+pub const OTHER: &str = "other";
 
 fn drawn_topology(blocks: &[TBlock]) -> Topology {
     let Some(vertex) = blocks.iter().find(|b| b.kind == BlockKind::Vertex) else {
@@ -338,6 +349,14 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                             which a Set turns. Amplification is a *multiplier on what reaches \
                             it*, which is a thing only a stage with an input can be",
                         ),
+                );
+            }
+            if let Some(span) = proc.pairs {
+                errors.push(
+                    IrError::contract(span, "`pairs` is L2 only").with_hint(
+                        "remove `pairs`: an L1 makes geometry rather than taking any, so there \
+                         is no second one for it to pair with",
+                    ),
                 );
             }
             if proc.blocks.iter().all(|b| b.kind != BlockKind::Element) {
@@ -523,6 +542,12 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                         .with_hint("remove `amplify`: an L3 produces one viewpoint, not elements"),
                 );
             }
+            if let Some(span) = proc.pairs {
+                errors.push(
+                    IrError::contract(span, "`pairs` is L2 only")
+                        .with_hint("remove `pairs`: an L3 produces a viewpoint, not geometry"),
+                );
+            }
             if !proc.emit.is_empty() {
                 errors.push(
                     IrError::contract(proc.span, "`emit` is for procedures that write elements")
@@ -658,6 +683,14 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                         ),
                 );
             }
+            if let Some(span) = proc.pairs {
+                errors.push(
+                    IrError::contract(span, "`pairs` is L2 only").with_hint(
+                        "remove `pairs`: a renderer draws what reaches it. Pairing two \
+                         geometries is a deformation, above the renderer rather than inside it",
+                    ),
+                );
+            }
             // **A `vertex` block is what makes an L4 per-element**, and an L4
             // without one draws the whole frame instead — see
             // `Topology::Fullscreen`. So its absence is a declaration rather
@@ -752,6 +785,11 @@ fn check_reserved(name: &str, span: Span, kind: Kind, kind_of_decl: &str, errors
             IrError::contract(span, format!("`{name}` shadows an attribute name"))
                 .with_hint("pick a different name — attributes and params share one scope"),
         );
+    } else if name == OTHER {
+        errors.push(
+            IrError::contract(span, format!("`{name}` is reserved"))
+                .with_hint("`other` names the second geometry a `pairs` L2 takes"),
+        );
     } else if Ambient::from_name(name).is_some() {
         errors.push(IrError::contract(span, format!("`{name}` shadows an ambient value")));
     } else if shadows_output(name, kind) {
@@ -790,7 +828,7 @@ fn check_params(proc: &Proc, errors: &mut Vec<IrError>) -> HashMap<String, Ty> {
         // constant-ish value (a literal or a constructor of literals), not
         // an expression referencing the rest of the procedure.
         let mut checker =
-            Checker::new(proc.kind, None, false, &empty_params, &empty_attrs, &empty_attrs);
+            Checker::new(proc.kind, None, false, false, &empty_params, &empty_attrs, &empty_attrs);
         if let Some(v) = checker.check_expr(&p.default) {
             if v.ty != p.ty {
                 errors.push(IrError::ty(
@@ -1018,7 +1056,9 @@ fn accumulates(stmts: &[TStmt], carried: &HashSet<Attr>) -> bool {
 /// happen, because `consumes ⊆ emit` held inside an L1. It does not any more.
 fn reads_carried(e: &TExpr, carried: &HashSet<Attr>) -> bool {
     match &e.kind {
-        TExprKind::Attr(a) => carried.contains(a),
+        // **Both sides.** A paired read is a read of the other source's carried
+        // state, which is state all the same.
+        TExprKind::Attr(a) | TExprKind::Other(a) => carried.contains(a),
         TExprKind::Lit(_)
         | TExprKind::Local(_)
         | TExprKind::Param(_)
@@ -1068,6 +1108,7 @@ fn reads_beats(blocks: &[TBlock]) -> bool {
             | TExprKind::Local(_)
             | TExprKind::Param(_)
             | TExprKind::Attr(_)
+            | TExprKind::Other(_)
             | TExprKind::Ambient(_) => false,
             TExprKind::Unary { value, .. } => in_expr(value),
             TExprKind::Binary { lhs, rhs, .. } => in_expr(lhs) || in_expr(rhs),
@@ -1260,6 +1301,9 @@ struct Checker<'a> {
     /// about the procedure, and a block checker otherwise sees only its own
     /// block. `eye` and `ray` need it — see [`Checker::marching_only`].
     fullscreen: bool,
+    /// Whether this procedure declares `pairs`, which is what makes `other`
+    /// mean anything.
+    pairs: bool,
     params: &'a HashMap<String, Ty>,
     emit: &'a HashSet<Attr>,
     consumes: &'a HashSet<Attr>,
@@ -1280,6 +1324,7 @@ impl<'a> Checker<'a> {
         kind: Kind,
         block: Option<BlockKind>,
         fullscreen: bool,
+        pairs: bool,
         params: &'a HashMap<String, Ty>,
         emit: &'a HashSet<Attr>,
         consumes: &'a HashSet<Attr>,
@@ -1288,6 +1333,7 @@ impl<'a> Checker<'a> {
             kind,
             block,
             fullscreen,
+            pairs,
             params,
             emit,
             consumes,
@@ -1404,6 +1450,15 @@ impl<'a> Checker<'a> {
         }
         if Attr::from_name(name).is_some() {
             self.err(Stage::Contract, span, format!("`{name}` shadows an attribute name"));
+            return;
+        }
+        if name == OTHER {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{name}` is reserved"),
+                "`other` names the second geometry a `pairs` L2 takes",
+            );
             return;
         }
         if Ambient::from_name(name).is_some() {
@@ -2269,7 +2324,68 @@ impl<'a> Checker<'a> {
         Some(TExpr::new(ty, span, TExprKind::Construct { args }))
     }
 
+    /// `other.<attr>` — the paired element's attribute.
+    ///
+    /// **Only in a `pairs` L2, and only for something it consumes.** The second
+    /// geometry is an input edge: this node reads it and writes its own output,
+    /// so what is readable there is what the node declared it takes.
+    fn check_other(&mut self, name: &str, span: Span) -> Option<TExpr> {
+        let Some(attr) = Attr::from_name(name) else {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{OTHER}.{name}` is not an attribute"),
+                "the paired element has the attributes an element has — \
+                 `other.position`, `other.tint` — and nothing else",
+            );
+            return None;
+        };
+        if !self.pairs {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{OTHER}` is the second geometry, and this procedure takes one"),
+                "add `pairs` to the header: an L2 that declares it takes two geometries and \
+                 produces one, pairing their elements by slot index",
+            );
+            return None;
+        }
+        if !matches!(self.block, Some(BlockKind::Deform) | Some(BlockKind::Mask)) {
+            self.err(
+                Stage::Contract,
+                span,
+                format!("`{OTHER}` is readable in a `deform` or a `mask`, and nowhere else"),
+            );
+            return None;
+        }
+        if !self.consumes.contains(&attr) {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{OTHER}.{name}` is not consumed"),
+                format!(
+                    "add `{name}` to `consumes`: the paired geometry is an input edge, and one \
+                     `consumes` covers both sides of it — pairing reads the same attribute from \
+                     each"
+                ),
+            );
+            return None;
+        }
+        Some(TExpr::new(attr.ty(), span, TExprKind::Other(attr)))
+    }
+
     fn check_swizzle(&mut self, value: &Expr, components: &str, span: Span) -> Option<TExpr> {
+        // **`other.position` is not a swizzle**, and it arrives here because it
+        // is *shaped* like one — `expr . ident` is the grammar, and the parser
+        // is right not to decide which it is. Deciding here costs no new
+        // syntactic category, which is the whole reason the paired read is
+        // spelled this way: a `pairs` L2 adds one header keyword and one base
+        // name, and nothing else in the language moves.
+        if let Expr::Ident { name, .. } = value {
+            if name == OTHER {
+                return self.check_other(components, span);
+            }
+        }
         let v = self.check_expr(value)?;
         let width = match v.ty {
             Ty::Vec2 => 2u8,

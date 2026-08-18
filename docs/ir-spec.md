@@ -118,6 +118,48 @@ but a fork with no compilation in it, which primes almost immediately.
 The **live** count is dynamic, lives in an indirect-dispatch args buffer, and is not
 readable from IR. See [Element lifecycle](#element-lifecycle).
 
+### pairs (L2 only)
+
+```
+kind  L2
+pairs
+```
+
+**An L2 that takes two geometries and produces one.** `L2 : Geometry -> Geometry` is an
+endomorphism, and this breaks it in the second of the two possible directions: `amplify`
+breaks it on the *count* axis, one element in and several out, and this breaks it on the
+*arity* axis. Both stay in the same slot position and both are header declarations, because
+what a `deform` writes is decided before it runs.
+
+The paired element's attributes are read as **`other.<name>`**:
+
+```
+deform {
+  position = mix(position, other.position, vec3(k, k, k));
+}
+```
+
+- **`other.position` is not a swizzle**, and it reaches the checker because it is *shaped*
+  like one — `expr . ident` is the grammar. Deciding it there costs no new syntactic
+  category, which is the whole reason the paired read is spelled this way: a pairing L2 adds
+  one header keyword and one base name, and nothing else in the language moves.
+- **One `consumes` covers both sides.** The second geometry is an input edge and pairing
+  reads the same attribute from each, so an attribute this node does not take is not readable
+  on either side.
+- **`other` is reserved everywhere**, not only where it means something. A local called
+  `other` reads fine today and stops reading the day the file grows the declaration.
+- Readable in a `deform` and a `mask`, and nowhere else.
+
+**Which two geometries is the Set's answer, not the file's.** A Set holding a pairing L2 has
+exactly two sources and they are paired in `--set` order. **This is the system's first
+fan-in, and it deliberately brings no general notation for one** — naming several is what a
+real fan-in notation is for, and it arrives with the thing that needs it.
+
+**The correspondence is the slot index**, which is the same element in both sources only
+while neither compacts. So both sources must be *static*: no `spawn` block and no `kill()`,
+which `Checked::is_static` answers and which is why that predicate had to start asking about
+both.
+
 ### amplify (L2 only)
 
 ```
