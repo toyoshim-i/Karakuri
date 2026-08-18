@@ -1326,9 +1326,36 @@ than against one being taught to.
   (residency, priming, hot swap, budget, transport, preview, meters: properties of a Set being
   played, which have nothing to do with mixing and sit beside L5 only because that is where a
   performance happens)
-- Multiple L1 sources, and the `source` attribute that keeps their identities apart. Per
+- **Multiple L1 sources**, and the `source` attribute that keeps their identities apart. Per
   source `seed` counters starting at zero so structured layouts survive, and a per-source
-  hash salt so randomness differs without structure differing
+  hash salt so randomness differs without structure differing. **The ownership is built and
+  nothing yet builds a second source**: a Set holds a *list* of sources, each one a
+  simulation and the chain over it, and the list is always one long.
+
+  **The chain is per source rather than the geometry being concatenated**, and two things
+  force that. Two sources kill independently, so compaction is each source's own and there is
+  no shared live range to concatenate into. And with a chain instance per source, **two
+  sources need not agree on what they `emit`** — each instance is compiled against the layout
+  of the source it runs over, which is a question with no answer at all if one buffer has to
+  hold both.
+
+  What falls out is that **`source` need not be an element slot**, which the spec assumed it
+  would be. A chain instance knows statically which source it belongs to, so what varies with
+  the source is a *uniform* — and an element slot is sixteen bytes on every element of every
+  merged Set. That is the third time in this milestone a per-element cost the spec took for
+  granted turned out to be avoidable, after `velocity`'s third buffer and the always-on
+  derivation storage.
+
+  **Addressing is by procedure and not by instance.** `--param L2:0:x` names the first L2
+  *procedure*, and the Set writes it into every source's instance of it — the same
+  relationship a spliced field's params already have with their callers. "First onto this
+  attachment clears it" needed no second rule for several sources, since it was already about
+  the attachment rather than about the list.
+
+  Still open, and stated because the spec calls them decided: how a mask *names* a source.
+  The spec says a name resolved where the Set is built, and every worked example writes an
+  ordinal — which is the spelling the same section rejects. Names want Set files to carry
+  sources, and a Set file today carries an L1 and its renderers
 - ~~**L2 amplification**~~ — **built.** `amplify <factor>` on an L2 header, `copy` readable
   as the index of the copy being made, and `examples/kaleidoscope.kir` for the picture. Three
   things it turned out to need that the paragraph this replaces did not mention, and all

@@ -290,6 +290,41 @@ enum Clock {
     Local,
 }
 
+/// **One geometry source, and the chain over it.**
+///
+/// A Set may hold several — `docs/ir-spec.md`, "Multiple L1 sources" — and what
+/// makes that work is that the *chain* is per source rather than the geometry
+/// being concatenated into one buffer. Two things force it and one falls out.
+///
+/// **Two sources kill independently**, so compaction is each source's own and
+/// there is no shared live range to concatenate into. And with a chain instance
+/// per source, **two sources need not agree on what they `emit`**: each
+/// instance is compiled against the layout of the source it runs over, which is
+/// a question that has no answer at all if one buffer has to hold both.
+///
+/// What falls out is that `source` need not be an element slot. A chain
+/// instance knows statically which source it belongs to, so what varies with
+/// the source is a uniform — and sixteen bytes on every element of every merged
+/// Set is what carrying it would have cost.
+///
+/// **The procedures are shared and the instances are not.** `--param L2:0:x`
+/// addresses the first L2 *procedure*, and the Set writes that value into every
+/// source's instance of it — the same relationship a spliced field's params
+/// already have with their callers.
+pub(crate) struct Source {
+    /// **The L1 node.** Every buffer, pipeline and bind group the simulation
+    /// needs, and the spawn accumulator that decides what it creates.
+    sim: Simulation,
+    /// **The L2 nodes, in chain order**, instantiated for this source. Each
+    /// reads what the one before it wrote and writes its own buffer, so the
+    /// geometry the renderers see is the last one's — or the simulation's, when
+    /// there are none.
+    deforms: Vec<Deform>,
+    /// **One per L4 procedure**, compiled against *this* source's element
+    /// layout and drawing this source's elements.
+    renderers: Vec<Renderer>,
+}
+
 pub struct Set {
     seed_salt: u32,
     /// Simulation steps elapsed. Time is `steps_taken * dt`, computed on
@@ -316,31 +351,14 @@ pub struct Set {
     /// [`Set::reads_beats`].
     reads_beats: bool,
 
-    /// **The L1 node.** Every buffer, pipeline and bind group the simulation
-    /// needs, and the spawn accumulator that decides what it creates. What
-    /// crosses from it to the renderer below is a [`Geometry`](crate::node::Geometry)
-    /// resolved once at build time, plus a parity and a counts buffer this
-    /// module fetches every frame — the half of that edge that has no type yet.
-    sim: Simulation,
-    /// **The L2 nodes, in chain order.** Each reads what the one before it
-    /// wrote and writes its own buffer, so the geometry the renderers see is
-    /// the last one's — or the simulation's, when there are none.
+    /// **The geometry sources, and the chain over each** — see [`Source`].
     ///
-    /// They run once per frame, after every substep, rather than once per
-    /// substep: a deformation is a function of the instant the simulation
-    /// reached, and running it between substeps would deform states nothing
-    /// ever draws.
-    deforms: Vec<Deform>,
-    /// **The L4 nodes, in draw order.** Each owns its pipeline, its uniform, its
-    /// accumulation targets under `blend weighted`, and the bind groups naming
-    /// the element buffers the node above holds — the edge, resolved.
-    ///
-    /// **Several of them is overdraw, not compositing.** They run in order over
-    /// the one attachment, the first clearing it and the rest loading what is
-    /// there, so a stack of five costs one target rather than five. A target
-    /// apiece is what an L5 is for. Never empty: a Set with nothing to draw is
-    /// refused at build.
-    renderers: Vec<Renderer>,
+    /// **At least one, and today exactly one.** The list is the structure a
+    /// second source needs; nothing yet builds a Set with more, and every path
+    /// below is written against the list rather than against its first entry —
+    /// so accepting one is a change where the sources are *made* and nowhere
+    /// else.
+    sources: Vec<Source>,
 
     /// **Manual** parameter values: the `.kir` defaults, as moved by a `param`
     /// record or a `--param` override. A binding never writes here — it blends
@@ -989,9 +1007,7 @@ impl Set {
                 || l2s.iter().any(|n| n.reads_beats)
                 || l3.is_some_and(|n| n.reads_beats)
                 || l4s.iter().any(|n| n.reads_beats),
-            sim,
-            deforms,
-            renderers,
+            sources: vec![Source { sim, deforms, renderers }],
             params,
             ranges,
             camera: Orbit::default(),
@@ -1020,7 +1036,9 @@ impl Set {
                 })
                 .unwrap_or_default(),
         };
-        set.sim.initialize(queue);
+        for source in &set.sources {
+            source.sim.initialize(queue);
+        }
         // **A camera before the first `prepare`.** The state buffer starts
         // zeroed, and a camera whose eye and target coincide has no forward
         // direction — `normalize` of it is NaN, and a NaN view matrix is a blank
@@ -1045,7 +1063,7 @@ impl Set {
     /// Never from the render thread mid-frame, on those same terms.
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         self.viewport = [width.max(1) as f32, height.max(1) as f32];
-        for renderer in &mut self.renderers {
+        for renderer in self.sources.iter_mut().flat_map(|s| &mut s.renderers) {
             renderer.resize(device, width, height);
         }
         if let Some(merge) = &mut self.merge {
@@ -1090,7 +1108,9 @@ impl Set {
     /// — tracking an estimate host-side — would be worse: a number that is
     /// usually right is harder to distrust than one that is honestly expensive.
     pub fn live_count(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> u32 {
-        self.sim.live_count(device, queue)
+        // **Summed**, because a Set's population is all of it. With one source
+        // this is that source's, which is what it always was.
+        self.sources.iter().map(|s| s.sim.live_count(device, queue)).sum()
     }
 
     /// The raw bytes of the element buffer the renderer is currently reading,
@@ -1099,15 +1119,18 @@ impl Set {
     /// kept their order, which is a claim about `seed` values in slots and
     /// cannot be made from a rendered image.
     pub fn read_elements(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> Vec<u8> {
-        self.sim.read_elements(device, queue)
+        // **The first source's.** With several there are several buffers and
+        // no one of them is "the elements"; a caller that wants another asks
+        // for it, and none does yet.
+        self.sources[0].sim.read_elements(device, queue)
     }
 
     pub fn element_layout(&self) -> &ElementLayout {
-        self.sim.element_layout()
+        self.sources[0].sim.element_layout()
     }
 
     pub fn capacity(&self) -> u32 {
-        self.sim.capacity()
+        self.sources[0].sim.capacity()
     }
 
     /// **Whether this Set's state at any `t` is reachable by evaluating it
@@ -1185,7 +1208,9 @@ impl Set {
     /// version that needs it.
     pub fn rewind(&mut self, _device: &wgpu::Device, queue: &wgpu::Queue) {
         self.steps_taken = 0;
-        self.sim.rewind(queue);
+        for source in &mut self.sources {
+            source.sim.rewind(queue);
+        }
     }
 
     /// Attach a signal to a `param`. Returns `false` if `binding.layer`
@@ -1230,8 +1255,14 @@ impl Set {
         }
         let range = self.nodes_of(binding.layer);
         let names: Vec<&[String]> = match binding.layer {
-            Kind::L1 => vec![self.sim.param_names()],
-            Kind::L2 => self.deforms.iter().map(|d| d.param_names()).collect(),
+            // **One entry per source**, because each source *is* an L1
+            // procedure and `--param L1:1:…` names the second one.
+            Kind::L1 => self.sources.iter().map(|s| s.sim.param_names()).collect(),
+            // **One entry per L2 procedure, not per instance.** A chain is
+            // instantiated once per source and the procedures are shared, so an
+            // address names the procedure and the Set writes it to every
+            // instance — the first source's list is every procedure's list.
+            Kind::L2 => self.sources[0].deforms.iter().map(|d| d.param_names()).collect(),
             Kind::L3 => match self.camera_node.node_count() {
                 0 => Vec::new(),
                 _ => vec![self.camera_node.param_names()],
@@ -1245,7 +1276,7 @@ impl Set {
                 true => Vec::new(),
                 false => vec![&self.field_declared],
             },
-            Kind::L4 => self.renderers.iter().map(|r| r.param_names()).collect(),
+            Kind::L4 => self.sources[0].renderers.iter().map(|r| r.param_names()).collect(),
         };
         let found = names.iter().enumerate().any(|(at, n)| {
             binding.covers(at)
@@ -1276,6 +1307,24 @@ impl Set {
     /// constant. That is the price of one flat list, and it is the right price:
     /// a `Vec` per layer would make "which node is this" three questions
     /// instead of one arithmetic.
+    /// How many **procedures** of `layer` this Set holds, which is not how many
+    /// instances of them run.
+    ///
+    /// A chain is instantiated once per source, so a Set of two sources and one
+    /// L2 runs two deformations and addresses one. Read off the first source
+    /// because every source runs the same procedures, in the same order —
+    /// which is what makes an address mean one thing.
+    fn procedures(&self, layer: Kind) -> usize {
+        let first = &self.sources[0];
+        match layer {
+            Kind::L1 => self.sources.len(),
+            Kind::L2 => first.deforms.len(),
+            Kind::L3 => self.camera_node.node_count(),
+            Kind::L4 => first.renderers.len(),
+            Kind::Field => usize::from(self.has_field),
+        }
+    }
+
     fn slot_of(&self, layer: Kind) -> usize {
         match layer {
             Kind::L1 => 0,
@@ -1287,8 +1336,10 @@ impl Set {
             // empty range: a `--param L3:…` then reaches no node and is reported
             // as reaching none, which is the answer a name no procedure declares
             // already gets.
-            Kind::L3 => 1 + self.deforms.len(),
-            Kind::L4 => 1 + self.deforms.len() + self.camera_node.node_count(),
+            Kind::L3 => self.sources.len() + self.procedures(Kind::L2),
+            Kind::L4 => {
+                self.sources.len() + self.procedures(Kind::L2) + self.camera_node.node_count()
+            }
             // **Last, and it addresses a node that does not exist.** A field
             // has no pass and no buffers — it lowers into whoever evaluates it —
             // so what the slot points at is a parameter map and nothing else.
@@ -1296,7 +1347,12 @@ impl Set {
             // signal binding, a published control, a saved Set file. Every
             // procedure that evaluates the field writes the same answer into
             // its own uniform, so one address reaches all of them.
-            Kind::Field => 1 + self.deforms.len() + self.camera_node.node_count() + self.renderers.len(),
+            Kind::Field => {
+                self.sources.len()
+                    + self.procedures(Kind::L2)
+                    + self.camera_node.node_count()
+                    + self.procedures(Kind::L4)
+            }
         }
     }
 
@@ -1304,8 +1360,8 @@ impl Set {
     fn nodes_of(&self, layer: Kind) -> std::ops::Range<usize> {
         let start = self.slot_of(layer);
         match layer {
-            Kind::L1 => start..start + 1,
-            Kind::L2 => start..start + self.deforms.len(),
+            Kind::L1 => start..start + self.sources.len(),
+            Kind::L2 => start..start + self.procedures(Kind::L2),
             // Zero or one: the built-in camera is a field on this struct rather
             // than a node, and has no parameter map to address.
             Kind::L3 => start..start + self.camera_node.node_count(),
@@ -1805,7 +1861,9 @@ impl Set {
                 field_params: &self.field_params,
                 field_value: &|name: &str| field_value(field_values, name),
             };
-            self.sim.prepare(queue, &tick);
+            for source in &mut self.sources {
+                source.sim.prepare(queue, &tick);
+            }
         }
 
         // The grid at exactly this frame's `t`, on the same terms as the
@@ -1897,9 +1955,13 @@ impl Set {
         // the one answer to "where does this layer start"; a second copy of it
         // is a second thing to remember to change.
         let first = self.slot_of(Kind::L4);
-        for (at, (renderer, params)) in
-            self.renderers.iter_mut().zip(&self.params[first..]).enumerate()
-        {
+        // **The procedure's index, not the instance's.** Every source runs the
+        // same renderers in the same order, so the value addressed at
+        // `L4:2:exposure` is written into every source's third one — which is
+        // what makes one address mean one thing however many sources there are.
+        let params = &self.params[first..];
+        for source in &mut self.sources {
+            for (at, (renderer, params)) in source.renderers.iter_mut().zip(params).enumerate() {
             let view = crate::node::View {
                 t,
                 beats,
@@ -1910,6 +1972,7 @@ impl Set {
                 param: &|name: &str| effective(bindings, params, Kind::L4, at, name),
             };
             renderer.write_uniforms(queue, &view);
+            }
         }
     }
 
@@ -1931,7 +1994,7 @@ impl Set {
             &self.field_params,
             field_at.and_then(|at| self.params.get(at)),
         );
-        let capacity = self.sim.capacity();
+        let capacity = self.sources[0].sim.capacity();
         // The range is read before the loop: `self.deforms` is borrowed mutably
         // by the iterator and `self.params` immutably by the closure, which are
         // disjoint fields — but a call on `self` inside the same expression is
@@ -1942,7 +2005,9 @@ impl Set {
         // happens to be right for L2 because that layer starts at a constant —
         // which is exactly the kind of accident that stops being one.
         let range = self.nodes_of(Kind::L2);
-        for (at, (node, params)) in self.deforms.iter_mut().zip(&self.params[range]).enumerate() {
+        let params = &self.params[range];
+        for source in &mut self.sources {
+            for (at, (node, params)) in source.deforms.iter_mut().zip(params).enumerate() {
             let view = crate::node::View {
                 t,
                 beats,
@@ -1953,6 +2018,7 @@ impl Set {
                 param: &|name: &str| effective(bindings, params, Kind::L2, at, name),
             };
             node.write_uniforms(queue, &view, dt, capacity);
+            }
         }
     }
 
@@ -2119,12 +2185,14 @@ impl Set {
         // not excuse the simulation if another reads them all. `all` on an empty
         // list would be vacuously true, which is why an empty list is refused at
         // build rather than handled here.
-        let steps = if self.renderers.iter().all(|r| r.is_fullscreen()) {
+        let steps = if self.sources.iter().flat_map(|s| &s.renderers).all(|r| r.is_fullscreen()) {
             0
         } else {
             steps
         };
-        self.sim.record(encoder, steps);
+        for source in &mut self.sources {
+            source.sim.record(encoder, steps);
+        }
         // **Every amplifier's counts, before any node dispatches from one.**
         // They derive from the simulation's, which the scan has just written,
         // and in chain order because a second amplifier derives from the first.
@@ -2135,19 +2203,25 @@ impl Set {
         // it. It runs even at `steps == 0` — a paused frame still has to leave
         // the chain's output holding what the renderers are about to read, and
         // the parity has not moved, so it recomputes the same thing.
-        let parity = self.sim.parity();
         // **Each node dispatches over the range at *its* position**, which the
-        // node above it decides. Walking it here rather than asking
-        // `self.sim` once is the whole of what an amplifier costs the chain: it
+        // node above it decides. Walking it here rather than asking the
+        // simulation once is the whole of what an amplifier costs the chain: it
         // multiplies the range for everything below it, and a stage handed the
         // simulation's counts instead would deform the first `range` of
         // `range * factor` elements and leave the rest holding the previous
         // frame.
-        let mut counts = self.sim.counts();
-        for node in &self.deforms {
-            node.record(encoder, parity, counts);
-            if let Some(own) = node.counts() {
-                counts = own;
+        //
+        // **Per source**, because the walk is over that source's own chain and
+        // its own parity — two sources compact independently, so neither number
+        // is shared.
+        for source in &self.sources {
+            let parity = source.sim.parity();
+            let mut counts = source.sim.counts();
+            for node in &source.deforms {
+                node.record(encoder, parity, counts);
+                if let Some(own) = node.counts() {
+                    counts = own;
+                }
             }
         }
     }
@@ -2157,7 +2231,7 @@ impl Set {
     /// Chain order because a second amplifier derives from the first, and one
     /// invocation each because a count does not scale with anything.
     fn record_counts(&self, encoder: &mut wgpu::CommandEncoder) {
-        for node in &self.deforms {
+        for node in self.sources.iter().flat_map(|s| &s.deforms) {
             node.record_counts(encoder);
         }
     }
@@ -2184,19 +2258,21 @@ impl Set {
     /// function of its input, so recomputing it advances nothing. A stateful
     /// layer could not be primed without deciding what priming *means*.
     fn prime(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        if self.deforms.is_empty() {
+        if self.sources.iter().all(|s| s.deforms.is_empty()) {
             return;
         }
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("prime the deformation chain"),
         });
         self.record_counts(&mut encoder);
-        let parity = self.sim.parity();
-        let mut counts = self.sim.counts();
-        for node in &self.deforms {
-            node.record(&mut encoder, parity, counts);
-            if let Some(own) = node.counts() {
-                counts = own;
+        for source in &self.sources {
+            let parity = source.sim.parity();
+            let mut counts = source.sim.counts();
+            for node in &source.deforms {
+                node.record(&mut encoder, parity, counts);
+                if let Some(own) = node.counts() {
+                    counts = own;
+                }
             }
         }
         queue.submit([encoder.finish()]);
@@ -2209,12 +2285,13 @@ impl Set {
     /// with the walk in [`Set::step`] about which node that is — the two are the
     /// same question at two positions, and a stored answer is the shape this
     /// file has already paid for three times.
-    fn output_counts(&self) -> &wgpu::Buffer {
-        self.deforms
+    fn output_counts<'a>(&self, source: &'a Source) -> &'a wgpu::Buffer {
+        source
+            .deforms
             .iter()
             .rev()
             .find_map(|node| node.counts())
-            .unwrap_or_else(|| self.sim.counts())
+            .unwrap_or_else(|| source.sim.counts())
     }
 
     /// **The draw, without advancing anything.**
@@ -2241,26 +2318,45 @@ impl Set {
         // an L4 runs — and a preview draws a slot that nothing stepped. One pass
         // for the whole Set, because one camera serves every node in it.
         self.camera_node.record(encoder);
-        // The chain's output, not the simulation's: a renderer draws
-        // `instance_count` instances of whatever reached it, and below an
-        // amplifier that is `factor` times what the simulation holds.
-        let (parity, counts) = (self.sim.parity(), self.output_counts());
         // **The presence of an L5 is what decides overdraw from compositing**,
         // and it decides it here, in the one place the renderers are given
         // somewhere to draw. Under overdraw they share `target` and the first
-        // one clears it; under compositing each has a cleared target of its own
-        // — `first` is true for every one of them, because "first onto this
-        // attachment" is what it means and each of them is.
-        let Some(merge) = &self.merge else {
-            for (i, renderer) in self.renderers.iter().enumerate() {
-                renderer.draw(encoder, target, parity, counts, i == 0);
+        // one clears it; under compositing each renderer *procedure* has a
+        // cleared target of its own.
+        //
+        // **"First" is about the attachment, not about the list**, which is
+        // what makes several sources fit without a second rule: whoever writes
+        // an attachment first clears it and everyone after loads. Under
+        // overdraw that is the very first draw of the frame; under compositing
+        // it is the first source, since every source draws into the target its
+        // renderer procedure owns.
+        //
+        // The counts are the chain's output rather than the simulation's — a
+        // renderer draws `instance_count` instances of whatever reached it, and
+        // below an amplifier that is `factor` times what the simulation holds —
+        // and they are each source's own, because two sources compact
+        // independently.
+        let merge = self.merge.as_ref();
+        for (source_at, source) in self.sources.iter().enumerate() {
+            let (parity, counts) = (source.sim.parity(), self.output_counts(source));
+            for (i, renderer) in source.renderers.iter().enumerate() {
+                match merge {
+                    None => renderer.draw(
+                        encoder,
+                        target,
+                        parity,
+                        counts,
+                        source_at == 0 && i == 0,
+                    ),
+                    Some(merge) => {
+                        renderer.draw(encoder, merge.target(i), parity, counts, source_at == 0)
+                    }
+                }
             }
-            return;
-        };
-        for (i, renderer) in self.renderers.iter().enumerate() {
-            renderer.draw(encoder, merge.target(i), parity, counts, true);
         }
-        merge.record(encoder, target);
+        if let Some(merge) = merge {
+            merge.record(encoder, target);
+        }
     }
 }
 
@@ -2553,8 +2649,9 @@ proc dots {
             out
         };
 
-        let from = read(set.sim.counts());
-        let derived = read(set.deforms[0].counts().expect("the node amplifies"));
+        let source = &set.sources[0];
+        let from = read(source.sim.counts());
+        let derived = read(source.deforms[0].counts().expect("the node amplifies"));
 
         // Field order is `counts::WGSL`'s: elem_xyz, range, vertex_count,
         // instance_count, first_vertex, first_instance, survivors.
