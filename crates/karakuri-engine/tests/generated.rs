@@ -449,3 +449,42 @@ proc accumulate {
         "an accumulating procedure saw a different clock under a different frame rate"
     );
 }
+
+/// **A validation error is a diagnostic, not a dead process.**
+///
+/// wgpu's default answer to one is an uncaptured-error handler that panics the
+/// thread that made the call — which on the swap worker is recoverable and at
+/// startup is the process. `Set::build_many` runs inside a validation error
+/// scope, and per the WebGPU rules an error a scope captures is not reported to
+/// the uncaptured handler, so it comes back as a value.
+///
+/// **The fixture asks for something no `.kir` can express**, deliberately: this
+/// is the net under the check pass, and a test that reached it through a
+/// checker hole would stop testing the net the moment the hole was closed. Five
+/// such holes were found in one milestone, each a process death before it was a
+/// refusal, and the net is what makes the sixth cost a message instead.
+#[test]
+fn a_validation_error_at_build_is_returned_rather_than_fatal() {
+    let gpu = Gpu::headless().expect("no GPU available");
+
+    // A capacity beyond any device's buffer limit. The checker cannot refuse
+    // this — `capacity` is a Set-level dial and the limit is the device's — and
+    // it is exactly the shape a driver answers with a validation error.
+    let l1 = compile(&narrow_l1("position").replace("[1024, 262144] = 4096", "[1, 4294967295] = 4096"));
+    let l4 = compile(
+        &L4_UNSATISFIABLE
+            .replace("consumes position, normal, uv", "consumes position")
+            .replace("position + normal * 0.0", "position")
+            .replace("4.0 + uv.x * 0.0", "4.0"),
+    );
+
+    let result = Set::build(&gpu.device, &gpu.queue, &l1, &l4, u32::MAX, 1);
+    let err = match result {
+        Ok(_) => panic!("a capacity of u32::MAX is past every device and was accepted"),
+        Err(e) => e.to_string(),
+    };
+    assert!(
+        err.contains("this device refused") || err.contains("outside the range"),
+        "a device refusal has to arrive as a message: {err}"
+    );
+}

@@ -814,6 +814,39 @@ fine alone and is unreadable next to lights.
 
 ### M3 — Expressive depth
 
+**A validation error is now a diagnostic rather than a dead process**, and that is worth
+recording here because of how it was learned. wgpu answers a validation error by reporting it
+to an uncaptured handler that *panics the thread that made the call*: on the swap worker that
+is a `SetError::Panicked` and the running Set survives, and at startup there is no
+`catch_unwind` above it and the process exits. `Set::build_many` now runs inside a validation
+error scope, and per the WebGPU rules an error a scope captures is not reported to the
+uncaptured handler — so it arrives as a value.
+
+**Five process deaths in one milestone is what prompted it**, and they were not all the same
+shape: `seed` in a fullscreen L4, a derived attribute read in `spawn`, an L3 evaluating a
+field the Set has none of, a field evaluating itself, and an amplified chain past the device's
+buffer limit. Four are generated WGSL that naga refuses; **the fifth is a resource limit and
+not a shader at all**, which is why the scope is the right net and validating with naga before
+the call would only have caught four of five. Each was injected with its own refusal disabled
+and each came back as a message.
+
+**Rust's memory safety does not reach any of this**, and it is worth saying why: the failure
+is in a *different language*, generated at run time, whose type system runs after this
+compiler has already shipped its answer. That is the whole reason the check pass carries the
+burden it does, and the reason every widening of what checks clean opens a hole — five of
+them, here, in one milestone.
+
+**The net is a net and not a plan.** Everything it catches is something the check pass should
+have refused with a sentence about the `.kir`, and `SetError::Invalid` says exactly that: an
+author who sees it has found a compiler bug rather than made a mistake. What it buys is that
+finding the sixth hole costs a message instead of a crash.
+
+What it does **not** reach: device loss, a GPU hang, a driver crash. Those are the cases a
+separate process would rescue, and none of the five was one — a compile is not where a device
+dies. Rescuing those means the *render* crossing a process boundary, which is a frame-path
+cost, or `Device::set_device_lost_callback` and rebuilding, which the deck already has the
+material for since it can rebuild a Set from records.
+
 **Goal:** the combinatorial range that makes the library worth having.
 
 **Where it stands.** The **layer model is complete**: every `Ln` in the algebra is a node with
