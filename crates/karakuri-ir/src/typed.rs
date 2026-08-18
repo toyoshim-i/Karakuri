@@ -175,13 +175,26 @@ pub struct FieldCalls {
     pub per_element: u64,
     pub per_spawn: u64,
     pub per_fragment: u64,
+    /// **Every call, in every block, including the ones no ceiling is charged
+    /// for.** A `camera` block scales with nothing and is charged to none of the
+    /// three above, so its calls landed nowhere and [`FieldCalls::any`] said an
+    /// L3 evaluating a field did not — which made the Set's refusal skip it and
+    /// the process die on a shader naming a function nothing had spliced in.
+    ///
+    /// Counted separately rather than folded into one of the three, because
+    /// the three are *rates* and this is not: what it answers is "does this
+    /// procedure evaluate a field", which has no denominator.
+    pub total: u64,
 }
 
 impl FieldCalls {
     /// Whether this procedure evaluates a field at all — which is what decides
     /// whether a Set holding no field can build it.
+    ///
+    /// **Asks the total, not the three rates.** A block charged to no ceiling
+    /// still calls the function.
     pub fn any(self) -> bool {
-        self.per_element > 0 || self.per_spawn > 0 || self.per_fragment > 0
+        self.total > 0
     }
 }
 

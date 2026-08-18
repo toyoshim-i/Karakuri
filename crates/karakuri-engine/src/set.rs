@@ -927,7 +927,7 @@ impl Set {
                 .map(|f| {
                     f.params
                         .iter()
-                        .map(|p| karakuri_codegen::layout::mangle_field_param(&p.name))
+                        .map(|p| karakuri_codegen::layout::field_param_key(&p.name))
                         .collect()
                 })
                 .unwrap_or_default(),
@@ -2190,12 +2190,14 @@ impl VideoSource for Set {
 }
 
 
-/// A spliced field's parameter value, by its **WGSL** name.
+/// A spliced field's parameter value, by the **semantic** name the layout holds.
 ///
 /// The map is keyed by the declared name, so the prefix comes off here — one
-/// place, rather than at each of the four nodes that write it.
-fn field_value(map: Option<&HashMap<String, f32>>, wgsl_name: &str) -> Option<f32> {
-    let declared = wgsl_name.strip_prefix("field_")?;
+/// place, rather than at each of the four nodes that write it. The separator is
+/// a character no `.kir` identifier can contain, which is what makes this
+/// strip unambiguous — see `layout::field_param_key`.
+fn field_value(map: Option<&HashMap<String, f32>>, key: &str) -> Option<f32> {
+    let declared = key.strip_prefix("field\u{1}")?;
     map?.get(declared).copied()
 }
 

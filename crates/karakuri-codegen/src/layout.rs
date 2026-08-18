@@ -598,6 +598,10 @@ pub fn mangle_param(name: &str) -> String {
 
 /// The WGSL spelling of a **field's** `param`, in a caller's uniform.
 ///
+/// A `\u{1}` rather than an underscore, so the result is not an identifier any
+/// author could have typed — see [`UniformLayoutBuilder::field_param_field`] for
+/// why the *semantic* name has to be unforgeable and not merely unlikely.
+///
 /// **A different prefix, and that is what makes a collision impossible.** A
 /// field's body is spliced into its caller's shader and reads its params out of
 /// the caller's uniform, so the two sets of names share one struct — and a
@@ -608,6 +612,22 @@ pub fn mangle_param(name: &str) -> String {
 /// `--param L4:0:exposure` name different things and both work.
 pub fn mangle_field_param(name: &str) -> String {
     format!("field_{name}")
+}
+
+/// The **semantic** name of a field's `param`, which is what the engine looks a
+/// uniform field up by.
+///
+/// **Not the WGSL spelling**, and the difference is a defect this had. A caller
+/// declaring `param field_radius` beside a field declaring `param radius` gave
+/// two uniform fields with the semantic name `field_radius`; the packer finds by
+/// name and takes the first, so the second was never written and its assertion
+/// took the render thread down. The prefix makes the *WGSL* namespace safe and
+/// says nothing about this one.
+///
+/// The separator is a character no `.kir` identifier can contain, so this name
+/// cannot collide with any declared one however it is spelled.
+pub fn field_param_key(name: &str) -> String {
+    format!("field\u{1}{name}")
 }
 
 /// The complete field order and size of a generated uniform struct. This is
@@ -679,8 +699,7 @@ impl UniformLayoutBuilder {
     /// engine looks a uniform field up by that name and a Set may hold a field
     /// and a renderer that declare the same one.
     pub fn field_param_field(&mut self, name: &str, wgsl_ty: &'static str) -> &mut Self {
-        let wgsl_name = mangle_field_param(name);
-        self.push(wgsl_name.clone(), wgsl_name, wgsl_ty)
+        self.push(field_param_key(name), mangle_field_param(name), wgsl_ty)
     }
 
     fn push(&mut self, name: String, wgsl_name: String, wgsl_ty: &'static str) -> &mut Self {

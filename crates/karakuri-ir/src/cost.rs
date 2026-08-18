@@ -437,6 +437,11 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
         // pixel, and the two are not comparable numbers.
         let mut block_calls = 0u64;
         let block_cost = stmts_cost(&block.stmts, 1, block.kind, &mut hot, &mut block_calls);
+        // **Every block, before the match below decides which ceiling it is
+        // charged to.** Two of them are charged to none — a `camera` scales with
+        // nothing, and a `field` is charged to its callers — and a call in
+        // either is still a call.
+        field_calls.total = field_calls.total.saturating_add(block_calls);
         block_totals.push((block.kind, block_cost));
         // Each block's cost is charged to the quantity it actually scales
         // with. These are not summed: see `Cost`.

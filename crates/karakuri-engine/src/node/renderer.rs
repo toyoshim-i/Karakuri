@@ -293,7 +293,12 @@ impl Renderer {
         // **The spliced field's params, written by every caller.** A field has
         // no node and therefore no uniform of its own; each procedure that
         // evaluates it carries them in its own and writes the same answer.
-        super::write_params(&mut p, &self.uniform_layout, view.field_params, view.field_value);
+        super::write_field_params(
+            &mut p,
+            &self.uniform_layout,
+            view.field_params,
+            view.field_value,
+        );
         queue.write_buffer(&self.uniforms, 0, p.finish());
     }
 

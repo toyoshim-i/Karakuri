@@ -28,6 +28,15 @@
 //! module's doc comment.
 
 pub mod field;
+
+/// Whether `checked` evaluates `field(p)` anywhere.
+///
+/// **Asked of the cost estimate**, which already walks every block and counts
+/// them — a second walk here would be a second answer to one question, and this
+/// file has paid for that shape before.
+pub(crate) fn evaluates_field(checked: &karakuri_ir::typed::Checked) -> bool {
+    karakuri_ir::cost::estimate(checked).is_ok_and(|c| c.field_calls.any())
+}
 pub mod l1;
 pub mod l2;
 pub mod l3;
