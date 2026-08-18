@@ -74,9 +74,14 @@ fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
 }
 
 fn build(gpu: &Gpu, l1s: &[&str]) -> Set {
+    build_with(gpu, l1s, &[DOTS], Layering::Overdraw)
+}
+
+fn build_with(gpu: &Gpu, l1s: &[&str], l4s: &[&str], layering: Layering) -> Set {
     let compiled: Vec<Checked> = l1s.iter().map(|s| compile(s)).collect();
     let sources: Vec<(&Checked, u32)> = compiled.iter().map(|c| (c, 64)).collect();
-    let l4 = compile(DOTS);
+    let draw: Vec<Checked> = l4s.iter().map(|s| compile(s)).collect();
+    let draw_refs: Vec<&Checked> = draw.iter().collect();
     let mut set = Set::build_many(
         &gpu.device,
         &gpu.queue,
@@ -84,11 +89,11 @@ fn build(gpu: &Gpu, l1s: &[&str]) -> Set {
         &[],
         None,
         None,
-        &[&l4],
-        Layering::Overdraw,
+        &draw_refs,
+        layering,
         7,
     )
-    .expect("several sources and one renderer");
+    .expect("several sources and some renderers");
     set.resize(&gpu.device, W, H);
     // Head-on and still, so the lattice lands on the frame as a lattice.
     set.camera = karakuri_engine::camera::Orbit {
@@ -255,4 +260,123 @@ fn two_sources_of_one_procedure_differ_in_colour() {
     // And it is still the same *material*: every channel grew, so the second
     // source drew a lattice rather than nothing.
     assert!((0..3).all(|c| b[c] > a[c] * 1.2), "{a:?} against {b:?}");
+}
+
+/// A second renderer, so that "two pipelines" is two of each.
+const HALO: &str = r#"
+proc halo {
+  kind  L4
+  blend additive
+
+  consumes position, tint
+
+  // **Dark by default**, so that any light in the frame came from the
+  // published control. With a non-zero default, a control reaching one renderer
+  // and not the other is indistinguishable from one reaching both.
+  param exposure : float [0.0, 2.0] = 0.0
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 5.0;
+  }
+
+  fragment {
+    let d = length(point_coord * 2.0 - 1.0);
+    color = vec4(tint * exposure, max(0.0, 1.0 - d) * 0.4);
+  }
+}
+"#;
+
+const LIT: &str = r#"
+proc lit {
+  kind  L4
+  blend additive
+
+  consumes position, tint
+
+  // **Dark by default**, so that any light in the frame came from the
+  // published control. With a non-zero default, a control reaching one renderer
+  // and not the other is indistinguishable from one reaching both.
+  param exposure : float [0.0, 2.0] = 0.0
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 2.0;
+  }
+
+  fragment {
+    color = vec4(tint * exposure, 1.0);
+  }
+}
+"#;
+
+/// **Two pipelines, merged by a nested L5, published as one control.**
+///
+/// The case the L5 node was built for and could not be shown doing: what a
+/// merge composited was several renderers over *one* geometry, because a Set
+/// held one source. Two sources and two renderers is four instances, two
+/// targets, and — the point — **one knob**.
+///
+/// The control is a wildcard, so it reaches every procedure declaring the name
+/// rather than one addressed node; both renderers move together, which is what
+/// "published as one control" means and is the half a picture alone cannot
+/// show.
+#[test]
+fn two_pipelines_merge_and_publish_as_one_control() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let one_src = lattice("one", 0.0);
+    let two_src = lattice("two", 0.0);
+
+    let mut set = build_with(&gpu, &[&one_src, &two_src], &[LIT, HALO], Layering::Composite);
+    set.publish(karakuri_engine::set::Published {
+        name: "level".to_string(),
+        at: None,
+        key: "exposure".to_string(),
+        range: [0.0, 2.0],
+    })
+    .expect("both renderers declare `exposure`, so a wildcard reaches them");
+
+    assert_eq!(set.published().len(), 1, "one control over two procedures");
+
+    // **The control has to reach every renderer, and the way to see that is to
+    // turn each of them off by hand afterwards.** With the published maximum in
+    // place, silencing renderer 0 must take light out and leave some, and
+    // silencing renderer 1 as well must take the rest — which is only true if
+    // the control put a value into both.
+    assert!(set.set_published("level", 2.0));
+    let both = total(&gpu, &mut set);
+
+    assert!(set.set_param_at(karakuri_ir::Kind::L4, 0, "exposure", 0.0));
+    let one = total(&gpu, &mut set);
+    assert!(one < both * 0.9, "silencing one renderer takes light out: {one} of {both}");
+    assert!(one > both * 0.05, "and leaves the other lit: {one} of {both}");
+
+    assert!(set.set_param_at(karakuri_ir::Kind::L4, 1, "exposure", 0.0));
+    let none = total(&gpu, &mut set);
+    assert!(
+        none < both * 0.02,
+        "silencing both takes all of it, so the control had reached both: {none} of {both}"
+    );
+
+    // **And the merge folds both sources into each target**, which is what
+    // "first onto this attachment" has to mean when several sources draw into
+    // one: the composited frame carries twice a single source's light, not one
+    // source's because the second cleared it.
+    assert!(set.set_published("level", 2.0));
+    let two_sources = total(&gpu, &mut set);
+    let mut alone = build_with(&gpu, &[&one_src], &[LIT, HALO], Layering::Composite);
+    alone
+        .publish(karakuri_engine::set::Published {
+            name: "level".to_string(),
+            at: None,
+            key: "exposure".to_string(),
+            range: [0.0, 2.0],
+        })
+        .expect("the same interface");
+    assert!(alone.set_published("level", 2.0));
+    let one_source = total(&gpu, &mut alone);
+    assert!(
+        two_sources > one_source * 1.5,
+        "two sources composited hold more light than one: {two_sources} against {one_source}"
+    );
 }

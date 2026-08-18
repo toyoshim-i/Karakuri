@@ -571,6 +571,17 @@ Each source runs at the capacity *it* declares, and `--capacity` overrides all o
 `--param L1:1:spawn_rate=…` addresses the second source; a bare `--param spawn_rate=…`
 reaches both.
 
+Two sources and two renderers under `--merge` is **two pipelines composited, published as one
+control**:
+
+```
+karakuri-cli --merge 0 --publish 'level=exposure[0..2]' \
+  --set drift_shell.kir,beat_shell.kir,soft_points.kir,drift_streaks.kir
+```
+
+One fader moves all four — every source drawn by every renderer — because a published control
+without an address reaches every procedure declaring the name.
+
 **What is not there yet is treating them differently.** A mask on which source an element
 came from wants a way to *name* a source, and a name has to be written where the source is
 used — in a Set file, which today carries an L1 and its renderers. Until then the two are
