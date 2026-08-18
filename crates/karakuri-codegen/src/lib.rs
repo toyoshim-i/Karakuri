@@ -72,6 +72,11 @@ pub fn generate(checked: &Checked, elements: Option<&ElementLayout>) -> Shader {
         // a list rather than one upstream layout — `Set::build` has it and this
         // signature does not. Call `generate_l2` directly.
         Kind::L2 => panic!("an L2 is generated against its position in a chain: call generate_l2"),
+        // **Not reachable through this entry point, and unlike an L2 it has no
+        // entry point of its own.** A field lowers to a WGSL *function* spliced
+        // into whichever procedures evaluate it, so it has no module, no
+        // bindings and no dispatch — there is nothing for a `Shader` to hold.
+        Kind::Field => panic!("a field lowers into its callers: call generate_field"),
         Kind::L3 => Shader::L3(generate_l3(checked)),
         Kind::L4 => {
             let elements = elements.expect("an L4 procedure needs its paired L1's ElementLayout");

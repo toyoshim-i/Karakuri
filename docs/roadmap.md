@@ -1348,7 +1348,18 @@ than against one being taught to.
   one attachment (first clears, rest load), and no renderer changed to be in a list.
   `--set L1.kir,L4.kir,L4.kir` reaches it. What it *did* cost was the parameter model — every
   L4 in `examples/` declares `exposure`, so the collision refusal had to go first
-- The `Field` type — a spatial function represented as code rather than data
+- **The `Field` type** — a spatial function represented as code rather than data. **The IR
+  half is built**: `kind Field`, a `field` block, `point` in and `distance` out, and a cost
+  axis of its own. What is left is the splice — nothing yet lowers a field into the
+  procedures that evaluate it, so the CLI refuses a Set holding one rather than dropping it.
+
+  **It turned out to need no new syntactic category, and therefore not to reopen the
+  "user-defined functions" non-goal.** The shape is one more kind, one more block, one more
+  ambient and one more output — exactly what L2 and L3 added. What made that possible is the
+  L5 argument run backwards: a `kind` says what a procedure *lowers to*, an L5 has no `kind`
+  because it has no code to lower, and a field has *only* code to lower, so it has a file and
+  no node. A consumer evaluates it as `field(p)`, and one per Set is the same restriction the
+  camera already has — several would need naming, and naming is fan-in.
 - Graph compiler. Node graph as authoring representation, render graph as execution
   representation, with fusion of `Field` chains into single shaders
 - ~~`blend weighted` (weighted blended OIT) alongside `blend additive`~~ — **built**

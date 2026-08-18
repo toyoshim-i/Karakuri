@@ -164,6 +164,9 @@ impl Resolver for L4Resolver {
                 L4Block::Vertex => "copy".to_string(),
                 L4Block::Fragment => "in.copy".to_string(),
             },
+            Ambient::Point => {
+                unreachable!("`point` is a field's only input and appears in no other block")
+            }
             Ambient::T => "u.t".to_string(),
             Ambient::Beats => "u.beats".to_string(),
             // The camera is its own bind group, written on the GPU by

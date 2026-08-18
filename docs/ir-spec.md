@@ -43,10 +43,18 @@ kind L1        // geometry generation
 kind L2        // geometry modulation
 kind L3        // the camera
 kind L4        // rendering
+kind Field     // a signed distance at a point
 ```
 
-All four are built. `L5` is a `kind` in the design and not yet in the language — see
-[L2 and L3](#l2-and-l3--built) and `docs/roadmap.md`.
+All five are built. `L5` is **not** among them and should not be: a `kind` says what a
+procedure *lowers to*, and an L5 has no code to lower since the compositing is fixed — so
+there is no `kind L5` file, and `crate::node::Merge` is the node. See
+[L5](#l5--built) and `docs/roadmap.md`.
+
+**`Field` is the mirror of that argument**, which is why it is a kind and has no node: it
+has *only* code to lower. What it lowers to is a WGSL function spliced into whichever
+procedures evaluate it, so it needs no buffer, no pass and no position in the chain — see
+[The `field` block](#the-field-block).
 
 Each brings its own header rules, and a declaration belonging to another layer is refused
 where it is written rather than ignored: `capacity` and `topology` are L1's, `amplify` is
@@ -754,6 +762,57 @@ yet, because an L3 is allowed to hold state and smoothing is written against a s
 
 `eye` is also readable, as an ambient, in a marching L4's `fragment` block. One concept,
 written here and read there — the same relationship `position` has between an L1 and an L4.
+
+### The `field` block
+
+A `kind Field` procedure is a signed distance function: it is handed a position and returns
+a distance, and that is the whole of it.
+
+```
+proc blob {
+  kind Field
+
+  param ball    : float [0.1, 2.0] = 0.8
+  param blend_k : float [0.0, 1.5] = 0.55
+
+  field {
+    let sph = sd_sphere(point - vec3(0.9, 0.0, 0.0), ball);
+    let bx  = sd_box(point + vec3(0.9, 0.0, 0.0), vec3(0.7, 0.7, 0.7));
+    distance = op_smooth_union(sph, bx, blend_k);
+  }
+}
+```
+
+- **`point` is the one input**, in world space, and is readable in no other block. Every
+  other block is handed an element or a fragment; this one is handed a position, which is
+  what makes it a function of space rather than of the material in it.
+- **`distance` is required and is the only output.** Signed rather than unsigned and a
+  distance rather than a density, because that is what the whole [SDF](#sdf) table returns
+  and what the CSG operators compose. A field returning anything else would have no
+  operators.
+- **No attribute is readable.** A field has no element — refused with that sentence rather
+  than with advice to declare one, since declaring one is not available and would not help.
+- **No geometry declaration is legal**: no `capacity`, `topology`, `blend`, `amplify`,
+  `emit` or `consumes`. It counts nothing, draws nothing and carries nothing.
+
+**Its cost is on an axis of its own.** A field is reported in **ops per evaluation**, and
+the three other figures are zero for one. What it scales with is *how often its caller calls
+it* — once per element in a `vertex`, forty-eight times in a march loop — which is a property
+of the caller. Charging it per element would be a rate against a quantity a field does not
+have, and would give it a ceiling that says nothing about what evaluating it costs anybody.
+The number that has to fit under a ceiling is the caller's with this multiplied into it.
+
+**Why `Field` is a `kind` and has no node.** `docs/roadmap.md` settled that a `kind` says
+what a procedure *lowers to*, and that an L5 has no `kind` because it has no code to lower.
+A field is the mirror: it has only code to lower. So it has a file and no node, needs no
+buffer and no pass, and takes no position in the chain — which is also why it introduces no
+new syntactic category. There is no user-defined function here; there is one more kind, one
+more block, one more ambient and one more output, which is the shape L2 and L3 already
+established.
+
+**One per Set**, on the same terms as the camera. Several would need naming, naming is
+fan-in, and `docs/roadmap.md` says fan-in arrives with multiple L1 sources and brings its
+notation with it.
 
 ### Spawn timing
 

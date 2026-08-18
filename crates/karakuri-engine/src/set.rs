@@ -1028,6 +1028,8 @@ impl Set {
                 0 => Vec::new(),
                 _ => vec![self.camera_node.param_names()],
             },
+            // No node, so no names — see `slot_of`.
+            Kind::Field => Vec::new(),
             Kind::L4 => self.renderers.iter().map(|r| r.param_names()).collect(),
         };
         let found = names.iter().enumerate().any(|(at, n)| {
@@ -1072,6 +1074,14 @@ impl Set {
             // already gets.
             Kind::L3 => 1 + self.deforms.len(),
             Kind::L4 => 1 + self.deforms.len() + self.camera_node.node_count(),
+            // **Last, and it addresses no node.** A field has no pass and no
+            // buffers — it lowers into whoever evaluates it — so there is
+            // nothing here for a slot index to point at. It is still an
+            // addressable *kind*, because its `param`s are an operator's to
+            // ride; where those live is the next thing to decide, and until it
+            // is decided a `--param Field:…` reaches nothing and is reported as
+            // reaching nothing rather than being silently dropped.
+            Kind::Field => 1 + self.deforms.len() + self.camera_node.node_count() + self.renderers.len(),
         }
     }
 
@@ -1085,6 +1095,10 @@ impl Set {
             // than a node, and has no parameter map to address.
             Kind::L3 => start..start + self.camera_node.node_count(),
             Kind::L4 => start..self.params.len(),
+            // Empty, on the same terms `L3` is empty for a Set with no camera
+            // procedure: the kind is addressable and there is nothing at that
+            // address, so a `--param Field:…` is reported as reaching no node.
+            Kind::Field => start..start,
         }
     }
 
@@ -1755,6 +1769,9 @@ impl Set {
                 Kind::L2 => ranges[1].clone(),
                 Kind::L3 => ranges[2].clone(),
                 Kind::L4 => ranges[3].clone(),
+                // Nothing to resolve against, and `Set::bind` refuses the key
+                // before this runs — see `Set::nodes_of`.
+                Kind::Field => (0, 0..0),
             };
             let manual = range
                 .clone()

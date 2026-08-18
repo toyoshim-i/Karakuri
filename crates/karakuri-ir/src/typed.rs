@@ -146,12 +146,13 @@ impl Checked {
 /// no total cost to be judged on. The cost at any capacity is a multiplication,
 /// and that per-element figure is the intrinsic property of the procedure.
 ///
-/// The three op counts are **separate quantities and must not be summed**, a
-/// thing that is easy to get wrong because they share a unit. Each scales with
+/// The op counts are **separate quantities and must not be summed**, a thing
+/// that is easy to get wrong because they share a unit. Each scales with
 /// something different: `element` with live population, `spawn` with spawn rate,
-/// and `fragment` with covered pixels. Adding them charges a one-off spawn cost
-/// on every frame for the life of the element, and charges fill rate as though
-/// it were geometry.
+/// `fragment` with covered pixels, and `evaluation` with how often a caller
+/// evaluates a field. Adding them charges a one-off spawn cost on every frame
+/// for the life of the element, and charges fill rate as though it were
+/// geometry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Cost {
     /// Per live element, per frame: the L1 `element` block or the L4 `vertex`
@@ -167,6 +168,18 @@ pub struct Cost {
     /// which is exactly why an L4 artifact publishes a measurement at reference
     /// conditions instead of a per-element number.
     pub ops_per_fragment: u64,
+    /// **Per evaluation of a `kind Field` procedure**, and zero for every other
+    /// kind. A fourth quantity rather than a share of the three above, because
+    /// what it scales with is *how often the caller calls it* — once per element
+    /// in a `vertex`, forty-eight times in a march loop — which is a property of
+    /// the caller and not of the field.
+    ///
+    /// It carries no ceiling of its own for the same reason: a field is not
+    /// expensive or cheap on its own terms, and the number that has to fit under
+    /// a ceiling is the caller's, with this multiplied into it. That
+    /// multiplication happens where the Set is built, which is the first point
+    /// holding both procedures.
+    pub ops_per_evaluation: u64,
     /// Bytes of attribute storage per element, both buffers counted.
     pub bytes_per_element: u32,
 }

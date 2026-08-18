@@ -27,10 +27,19 @@ fn compile(src: &str) -> Result<Checked, String> {
     let proc = karakuri_ir::parse(src).map_err(|e| render(&e, src))?;
     let checked = karakuri_ir::check::check(&proc).map_err(|e| render(&e, src))?;
     let cost = karakuri_ir::cost::estimate(&checked).map_err(|e| render(&e, src))?;
-    eprintln!(
-        "  {} — {} ops/element, {} ops/spawn, {} bytes/element",
-        proc.name, cost.ops_per_element, cost.ops_per_spawn, cost.bytes_per_element
-    );
+    // **A field is reported on its own terms**, because none of the three
+    // figures beside it means anything for one: it has no elements to have a
+    // per-element cost, nothing to spawn, and no storage. Printing those three
+    // zeroes beside a `96 bytes/element` it does not use was a line that read
+    // as a measurement and was not one.
+    if proc.kind == karakuri_ir::Kind::Field {
+        eprintln!("  {} — {} ops/evaluation", proc.name, cost.ops_per_evaluation);
+    } else {
+        eprintln!(
+            "  {} — {} ops/element, {} ops/spawn, {} bytes/element",
+            proc.name, cost.ops_per_element, cost.ops_per_spawn, cost.bytes_per_element
+        );
+    }
     Ok(checked)
 }
 

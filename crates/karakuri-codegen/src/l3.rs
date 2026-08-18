@@ -149,7 +149,8 @@ impl Resolver for L3Resolver {
             // is never new.
             Ambient::Dt => "u.dt".to_string(),
             Ambient::Seed => unreachable!("read_seed handles this"),
-            Ambient::Copy
+            Ambient::Point
+            | Ambient::Copy
             | Ambient::Capacity
             | Ambient::Camera
             | Ambient::PointCoord

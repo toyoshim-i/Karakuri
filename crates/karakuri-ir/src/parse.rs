@@ -49,9 +49,9 @@ pub fn parse(src: &str) -> IrResult<Proc> {
 
 /// Header/block keywords. Declaration recovery scans forward to the next one
 /// of these (or `}`), so one bad declaration does not eat the rest of the file.
-const DECL_KEYWORDS: [&str; 15] = [
+const DECL_KEYWORDS: [&str; 16] = [
     "kind", "topology", "capacity", "amplify", "param", "emit", "consumes", "blend", "spawn",
-    "element", "deform", "mask", "camera", "vertex", "fragment",
+    "element", "deform", "mask", "camera", "field", "vertex", "fragment",
 ];
 
 struct Parser {
@@ -365,6 +365,7 @@ impl Parser {
                     "deform" => blocks.push(self.parse_block(BlockKind::Deform)),
                     "mask" => blocks.push(self.parse_block(BlockKind::Mask)),
                     "camera" => blocks.push(self.parse_block(BlockKind::Camera)),
+                    "field" => blocks.push(self.parse_block(BlockKind::Field)),
                     "vertex" => blocks.push(self.parse_block(BlockKind::Vertex)),
                     "fragment" => blocks.push(self.parse_block(BlockKind::Fragment)),
                     _ => {
@@ -440,18 +441,20 @@ impl Parser {
     /// at the end of `parse_proc`.
     fn parse_kind(&mut self) -> Kind {
         self.advance(); // "kind"
-        match self.expect_ident("`L1`, `L2`, `L3` or `L4`") {
+        match self.expect_ident("`L1`, `L2`, `L3`, `L4` or `Field`") {
             Some((name, span)) => match name.as_str() {
                 "L1" => Kind::L1,
                 "L2" => Kind::L2,
                 "L3" => Kind::L3,
                 "L4" => Kind::L4,
+                "Field" => Kind::Field,
                 _ => {
                     self.error_with_hint(
                         span,
                         format!("unknown kind `{name}`"),
                         "this compiler builds `L1` (geometry), `L2` (geometry modulation), \
-                         `L3` (the camera) and `L4` (rendering)",
+                         `L3` (the camera), `L4` (rendering) and `Field` (a signed distance \
+                         at a point, spliced into whoever evaluates it)",
                     );
                     Kind::L1
                 }

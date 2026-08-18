@@ -126,6 +126,12 @@ fn native_bytes(ty: Ty) -> u32 {
 }
 
 fn storage_bytes(checked: &Checked) -> u32 {
+    // **A field has no element and therefore no per-element storage.** Without
+    // this it reported the unconditional slots every element carries, which is
+    // a number about a thing it does not have.
+    if checked.kind == crate::ast::Kind::Field {
+        return 0;
+    }
     checked.emit.iter().fold(ALWAYS_ALLOCATED_BYTES, |total, attr| {
         total + align16(native_bytes(attr.ty())) * 2
     })
@@ -391,6 +397,7 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
 
     let mut ops_per_spawn = 0u64;
     let mut ops_per_fragment = 0u64;
+    let mut ops_per_evaluation = 0u64;
 
     for block in &checked.blocks {
         let block_cost = stmts_cost(&block.stmts, 1, block.kind, &mut hot);
@@ -419,6 +426,17 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
             // rejection message about some other block, and a future ceiling
             // has a number to use.
             BlockKind::Camera => {}
+            // **Charged per *evaluation*, on its own axis.** A field runs
+            // wherever it is called and as often as the caller calls it — once
+            // per element in a `vertex`, forty-eight times in a march loop — so
+            // it scales with nothing the caller does not decide. Its figure is
+            // what a caller multiplies, and the multiplication happens where
+            // the Set is built, which is the first point holding both.
+            //
+            // Not charged to `ops_per_element`: that would be a rate against a
+            // quantity a field does not have, and would put a ceiling on a
+            // field that says nothing about what evaluating it costs anybody.
+            BlockKind::Field => ops_per_evaluation = ops_per_evaluation.saturating_add(block_cost),
         }
     }
 
@@ -445,6 +463,7 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
         ops_per_element,
         ops_per_spawn,
         ops_per_fragment,
+        ops_per_evaluation,
         bytes_per_element: storage_bytes(checked)
             .saturating_mul(checked.amplify.unwrap_or(1)),
     };

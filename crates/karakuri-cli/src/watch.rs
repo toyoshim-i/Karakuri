@@ -309,6 +309,14 @@ impl Source for Watch {
                     addressed.push(("L4", l4s.len(), checked.name.clone()));
                     l4s.push(checked);
                 }
+                // **Refused rather than accepted and ignored.** A Set cannot
+                // hold a field yet — nothing splices one into its callers — so
+                // rebuilding with one would produce a slot that silently lost
+                // the file it was told to watch.
+                karakuri_ir::Kind::Field => {
+                    refuse("a `kind Field`, which a Set cannot hold yet");
+                    return None;
+                }
                 karakuri_ir::Kind::L1 => {
                     refuse("a second L1 — a slot simulates with one geometry");
                     return None;

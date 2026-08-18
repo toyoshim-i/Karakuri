@@ -1015,6 +1015,10 @@ fn parse_bind(value: &str) -> Result<Binding, String> {
             karakuri_ir::Kind::L2 => Layer::L2,
             karakuri_ir::Kind::L3 => Layer::L3,
             karakuri_ir::Kind::L4 => Layer::L4,
+            // `--bind` parses its layer from a fixed list that has no `Field`,
+            // so this is unreachable by construction rather than by argument —
+            // and it stays unreachable until the record format grows one.
+            karakuri_ir::Kind::Field => unreachable!("`--bind` has no `Field` layer to parse"),
         },
         index,
         key,
@@ -2288,6 +2292,20 @@ fn main() {
                     std::process::exit(1);
                 }
                 karakuri_ir::Kind::L3 => l3 = Some(checked),
+                // **Refused rather than dropped**, on the same terms as a
+                // second L1: the checker accepts a `kind Field` file and
+                // nothing yet splices one into the procedures that evaluate it,
+                // so a run that took the path and ignored it would draw a
+                // picture nobody asked for.
+                karakuri_ir::Kind::Field => {
+                    eprintln!(
+                        "slot {slot}: {} is a `kind Field`, which checks but which a Set \
+                         cannot hold yet — a field lowers into whoever evaluates it and \
+                         nothing does that today",
+                        path.display()
+                    );
+                    std::process::exit(1);
+                }
                 karakuri_ir::Kind::L1 => {
                     eprintln!(
                         "slot {slot}: {} is an L1 and so is {} — a slot simulates with one \

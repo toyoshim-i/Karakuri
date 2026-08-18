@@ -148,6 +148,9 @@ impl Resolver for L1Resolver {
 
     fn read_ambient(&self, amb: Ambient) -> String {
         match amb {
+            Ambient::Point => {
+                unreachable!("`point` is a field's only input and appears in no other block")
+            }
             Ambient::Copy => {
                 unreachable!("`copy` is not available in an L1: nothing has amplified yet")
             }
