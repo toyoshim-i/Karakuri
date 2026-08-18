@@ -1597,7 +1597,9 @@ fn seed_for(slot: usize) -> u32 {
 /// the loader reads which is which off the files. Order *within* a kind is list
 /// order, which is chain order for L2s and draw order for L4s.
 struct Material {
-    l1: karakuri_ir::typed::Checked,
+    /// **The geometry sources**, in the order their paths appeared. At least
+    /// one; several is a merge.
+    l1s: Vec<karakuri_ir::typed::Checked>,
     l2s: Vec<karakuri_ir::typed::Checked>,
     /// The camera, or `None` for the built-in orbit. At most one per slot.
     l3: Option<karakuri_ir::typed::Checked>,
@@ -1694,7 +1696,7 @@ fn replay_session(args: &Args, id: &str) {
 
     let mut set = build(
         &gpu,
-        &loaded.l1,
+        std::slice::from_ref(&loaded.l1),
         // **A Set file carries neither a chain nor a camera yet.** It records
         // an L1 and its renderers, so a replay of one draws them from the
         // built-in orbit — the same gap L2 has, and the same fix will close
@@ -1900,7 +1902,7 @@ fn rebuild(
         .collect::<Result<Vec<_>, String>>()?;
     Ok(build(
         gpu,
-        &l1,
+        std::slice::from_ref(&l1),
         // Artifacts recorded by a session, which stores an L1 and its
         // renderers — see the note at the other `build` call site.
         &[],
@@ -2263,7 +2265,7 @@ fn main() {
     if let Some(loaded) = loaded.filter(|_| !editable) {
         eprintln!("  slot 0: set `{}`", loaded.id);
         procs.push(Material {
-            l1: loaded.l1,
+            l1s: vec![loaded.l1],
             l2s: Vec::new(),
             l3: None,
             field: None,
@@ -2284,6 +2286,11 @@ fn main() {
         // a kind. A second L1 is refused rather than silently ignored: a slot
         // simulates with one geometry, and a run that quietly dropped the
         // second would be playing something nobody asked for.
+        // **The first path is the first source**, and every later `kind L1` is
+        // another one. Each simulates independently — its own `seed` from zero,
+        // its own hash salt, its own compaction — and the renderers draw all of
+        // them. See `docs/ir-spec.md`, "Multiple L1 sources".
+        let mut l1s = vec![load(l1)];
         let mut l2s = Vec::new();
         let mut l3: Option<karakuri_ir::typed::Checked> = None;
         let mut field: Option<karakuri_ir::typed::Checked> = None;
@@ -2318,15 +2325,11 @@ fn main() {
                     std::process::exit(1);
                 }
                 karakuri_ir::Kind::Field => field = Some(checked),
-                karakuri_ir::Kind::L1 => {
-                    eprintln!(
-                        "slot {slot}: {} is an L1 and so is {} — a slot simulates with one \
-                         geometry and draws it with as many renderers as it likes",
-                        path.display(),
-                        l1.display()
-                    );
-                    std::process::exit(1);
-                }
+                // **A second L1 is a second source**, not a mistake. Each one
+                // simulates independently — its own `seed` from zero, its own
+                // hash salt, its own compaction — and the renderers draw all of
+                // them. See `docs/ir-spec.md`, "Multiple L1 sources".
+                karakuri_ir::Kind::L1 => l1s.push(checked),
             }
         }
         if l4s.is_empty() {
@@ -2337,7 +2340,7 @@ fn main() {
             );
             std::process::exit(1);
         }
-        procs.push(Material { l1: load(l1), l2s, l3, field, l4s });
+        procs.push(Material { l1s, l2s, l3, field, l4s });
     }
 
     // Saving is a one-shot: it writes what the flags say and stops, on the same
@@ -2407,7 +2410,7 @@ fn report_live_counts(gpu: &Gpu, deck: &Deck) {
     for slot in 0..deck.slot_count() {
         let set = deck.slot(slot).set();
         eprintln!(
-            "  slot {slot}: {} live of {}",
+            "  slot {slot}: {} live of {} allocated",
             set.live_count(&gpu.device, &gpu.queue),
             set.capacity()
         );
@@ -2442,7 +2445,7 @@ fn build_deck(
         .enumerate()
         .map(|(slot, material)| {
             let (l1, l2s, l3, field, l4s) = (
-                &material.l1,
+                material.l1s.as_slice(),
                 &material.l2s,
                 material.l3.as_ref(),
                 material.field.as_ref(),
@@ -2460,7 +2463,7 @@ fn build_deck(
                 } else {
                     karakuri_engine::set::Layering::Overdraw
                 },
-                capacity_for(args, l1),
+                capacity_for(args, &l1[0]),
                 &args.overrides,
                 &args.bindings,
                 &args.published,
@@ -2497,7 +2500,7 @@ fn build_deck(
                             args.sets[slot].0.clone(),
                             args.sets[slot].1.clone(),
                             layering,
-                            capacity_for(args, l1),
+                            capacity_for(args, &l1[0]),
                             seed_for(slot),
                             args.overrides.clone(),
                             args.published.clone(),
@@ -2584,7 +2587,7 @@ fn describe(binding: &Binding, signals: &Signals) -> String {
 #[allow(clippy::too_many_arguments)]
 fn build(
     gpu: &Gpu,
-    l1: &karakuri_ir::typed::Checked,
+    l1s: &[karakuri_ir::typed::Checked],
     l2s: &[karakuri_ir::typed::Checked],
     l3: Option<&karakuri_ir::typed::Checked>,
     field: Option<&karakuri_ir::typed::Checked>,
@@ -2599,8 +2602,13 @@ fn build(
 ) -> Set {
     let deform: Vec<&karakuri_ir::typed::Checked> = l2s.iter().collect();
     let draw: Vec<&karakuri_ir::typed::Checked> = l4s.iter().collect();
+    // **Each source at the capacity it declares**, and `--capacity` overrides
+    // all of them. One number cannot serve two L1s with different ranges, and
+    // the pair travels together so a length mismatch is not expressible.
+    let sources: Vec<(&karakuri_ir::typed::Checked, u32)> =
+        l1s.iter().map(|l1| (l1, capacity)).collect();
     match Set::build_many(
-        &gpu.device, &gpu.queue, l1, &deform, l3, field, &draw, layering, capacity, seed,
+        &gpu.device, &gpu.queue, &sources, &deform, l3, field, &draw, layering, seed,
     )
     {
         Ok(mut set) => {

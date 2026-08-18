@@ -80,13 +80,12 @@ fn build(gpu: &Gpu, field: Option<&str>, l4: &str) -> Result<Set, SetError> {
     let mut set = Set::build_many(
         &gpu.device,
         &gpu.queue,
-        &compile(STILL),
+        &[(&compile(STILL), 1)],
         &[],
         None,
         field.as_ref(),
         &[&compile(l4)],
         Layering::Overdraw,
-        1,
         7,
     )?;
     set.resize(&gpu.device, W, H);
@@ -248,13 +247,12 @@ fn two_renderers_in_one_set_agree_on_the_fields_value() {
     let mut both = Set::build_many(
         &gpu.device,
         &gpu.queue,
-        &compile(STILL),
+        &[(&compile(STILL), 1)],
         &[],
         None,
         Some(&field),
         &[&l4, &l4],
         Layering::Overdraw,
-        1,
         7,
     )
     .expect("two renderers over one field");

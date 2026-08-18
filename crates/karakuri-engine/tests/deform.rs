@@ -138,13 +138,12 @@ fn build_over(gpu: &Gpu, l1: &str, l2s: &[&str], capacity: u32) -> Set {
     let mut set = Set::build_many(
         &gpu.device,
         &gpu.queue,
-        &compile(l1),
+        &[(&compile(l1), capacity)],
         &l2_refs,
         None,
         None,
         &[&l4],
         Layering::Overdraw,
-        capacity,
         7,
     )
     .expect("a chain of one L1, some L2s and one L4");
@@ -372,14 +371,16 @@ proc tinted_dots {
     let l4 = compile(tinted);
     let l1 = compile(STILL);
 
-    Set::build_many(&gpu.device, &gpu.queue, &l1, &[&l2], None,
-        None, &[&l4], Layering::Overdraw, CAPACITY, 7)
+    Set::build_many(&gpu.device, &gpu.queue,
+        &[(&l1, CAPACITY)], &[&l2], None,
+        None, &[&l4], Layering::Overdraw, 7)
         .expect("the renderer consumes what the deformation emits");
 
     // The same renderer without the deformation has nowhere to read `tint`
     // from, and the error has to name it.
-    let err = Set::build_many(&gpu.device, &gpu.queue, &l1, &[], None,
-        None, &[&l4], Layering::Overdraw, CAPACITY, 7)
+    let err = Set::build_many(&gpu.device, &gpu.queue,
+        &[(&l1, CAPACITY)], &[], None,
+        None, &[&l4], Layering::Overdraw, 7)
         .err()
         .expect("`tint` is not available without the deformation that emits it");
     let message = err.to_string();
@@ -584,13 +585,12 @@ proc paint {{
         let mut set = Set::build_many(
             &gpu.device,
             &gpu.queue,
-            &compile(STILL),
+        &[(&compile(STILL), CAPACITY)],
             &[&l2],
             None,
         None,
             &[&l4],
             Layering::Overdraw,
-            CAPACITY,
             7,
         )
         .expect("builds");
@@ -671,13 +671,12 @@ proc half_paint {
     let mut set = Set::build_many(
         &gpu.device,
         &gpu.queue,
-        &compile(STILL),
+        &[(&compile(STILL), CAPACITY)],
         &[&l2],
         None,
         None,
         &[&l4],
         Layering::Overdraw,
-        CAPACITY,
         7,
     )
     .expect("builds");

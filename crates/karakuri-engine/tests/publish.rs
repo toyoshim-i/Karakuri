@@ -81,13 +81,12 @@ fn build(gpu: &Gpu) -> Set {
     Set::build_many(
         &gpu.device,
         &gpu.queue,
-        &compile(GRID),
+        &[(&compile(GRID), 4)],
         &[],
         None,
         None,
         &[&a, &b],
         Layering::Overdraw,
-        4,
         1,
     )
     .expect("one L1 and two L4s")

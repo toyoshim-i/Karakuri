@@ -409,13 +409,12 @@ impl Source for Watch {
         }
         Some(Request {
             id,
-            l1,
+            l1s: vec![(l1, self.capacity)],
             l2s,
             l3,
             field,
             l4s,
             layering: self.layering,
-            capacity: self.capacity,
             seed_salt: self.seed_salt,
             params: self.overrides.clone(),
             published: self.published.clone(),

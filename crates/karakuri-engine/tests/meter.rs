@@ -825,14 +825,13 @@ fn a_build_landing_on_a_slot_retires_its_meter() {
     requests
         .send(Request {
             id: 1,
-            l1: compile(L1),
+            l1s: vec![(compile(L1), CAPACITY)],
             l2s: Vec::new(),
             l3: None,
             field: None,
         layering: karakuri_engine::set::Layering::Overdraw,
         published: Vec::new(),
             l4s: vec![compile(&L4.replace("{{EXPOSURE}}", "0.000"))],
-            capacity: CAPACITY,
             seed_salt: SEED,
             params: Vec::new(),
             bindings: Vec::new(),

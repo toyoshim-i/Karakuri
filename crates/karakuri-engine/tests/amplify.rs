@@ -214,13 +214,12 @@ fn build(gpu: &Gpu, l1: &str, l2s: &[&str]) -> Set {
     let mut set = Set::build_many(
         &gpu.device,
         &gpu.queue,
-        &compile(l1),
+        &[(&compile(l1), capacity)],
         &l2_refs,
         None,
         None,
         &[&l4],
         Layering::Overdraw,
-        capacity,
         7,
     )
     .expect("a chain of one L1, some L2s and one L4");
@@ -592,13 +591,12 @@ proc huge {
     let built = Set::build_many(
         &gpu.device,
         &gpu.queue,
-        &compile(huge),
+        &[(&compile(huge), 1_048_576)],
         &[&l2],
         None,
         None,
         &[&l4],
         Layering::Overdraw,
-        1_048_576,
         7,
     );
     let Err(err) = built else {

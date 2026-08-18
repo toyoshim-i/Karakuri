@@ -1352,10 +1352,17 @@ than against one being taught to.
   attachment clears it" needed no second rule for several sources, since it was already about
   the attachment rather than about the list.
 
-  Still open, and stated because the spec calls them decided: how a mask *names* a source.
-  The spec says a name resolved where the Set is built, and every worked example writes an
-  ordinal — which is the spelling the same section rejects. Names want Set files to carry
-  sources, and a Set file today carries an L1 and its renderers
+  **The salt is derived and not assigned**, which is the provisional half. The spec calls for
+  a value chosen when a source is added and *recorded*, so it survives the list being
+  reordered; derived from the ordinal, it gives the picture the spec asks for — two identical
+  grids in different colours by default — and not the stability. Reordering `--set` changes
+  which colour is which. Assigning it wants a Set file able to carry sources, and one carries
+  an L1 and its renderers.
+
+  Still open for the same reason: **how a mask names a source.** The spec says a name resolved
+  where the Set is built, and every worked example writes an ordinal — which is the spelling
+  the same section rejects. Nothing reads `source` yet, so nothing is wrong today; what is
+  missing is the half that makes two sources treatable *differently*
 - ~~**L2 amplification**~~ — **built.** `amplify <factor>` on an L2 header, `copy` readable
   as the index of the copy being made, and `examples/kaleidoscope.kir` for the picture. Three
   things it turned out to need that the paragraph this replaces did not mention, and all

@@ -167,6 +167,13 @@ pub enum SetError {
         field: String,
         detail: String,
     },
+    /// A Set with no geometry at all.
+    ///
+    /// **Refused for the same reason an empty renderer list is**: a Set is a
+    /// video source, and one with nothing to simulate has nothing for its
+    /// renderers to draw.
+    #[error("a Set needs at least one L1 — there is nothing to draw")]
+    NoGeometry,
     /// A procedure evaluates `field(p)` and the Set holds no field.
     ///
     /// **Refused here because nowhere else could.** A `kind Field` file is
@@ -312,6 +319,20 @@ enum Clock {
 /// source's instance of it — the same relationship a spliced field's params
 /// already have with their callers.
 pub(crate) struct Source {
+    /// **This source's hash salt**, which is *not* the Set's.
+    ///
+    /// `docs/ir-spec.md` moves the salt from per layer to per source, and the
+    /// picture it buys is the point: two identical grids differ in colour by
+    /// default rather than by being arranged to, because `hash1(seed)` differs
+    /// between sources while `seed % 512u` does not.
+    ///
+    /// **Derived from the Set's salt and the source's ordinal**, which is the
+    /// provisional half. The spec calls for a value *assigned* when a source is
+    /// added and recorded in the stream, so that it survives reordering — and
+    /// that needs a Set file able to carry sources, which one cannot. Until it
+    /// can, reordering the list on a command line changes the colours, and
+    /// nothing else about the picture.
+    salt: u32,
     /// **The L1 node.** Every buffer, pipeline and bind group the simulation
     /// needs, and the spawn accumulator that decides what it creates.
     sim: Simulation,
@@ -502,7 +523,15 @@ impl Set {
         seed_salt: u32,
     ) -> Result<Set, SetError> {
         Set::build_many(
-            device, queue, l1, &[], None, None, &[l4], Layering::Overdraw, capacity, seed_salt,
+            device,
+            queue,
+            &[(l1, capacity)],
+            &[],
+            None,
+            None,
+            &[l4],
+            Layering::Overdraw,
+            seed_salt,
         )
     }
 
@@ -548,19 +577,17 @@ impl Set {
     pub fn build_many(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        l1: &Checked,
+        l1s: &[(&Checked, u32)],
         l2s: &[&Checked],
         l3: Option<&Checked>,
         field: Option<&Checked>,
         l4s: &[&Checked],
         layering: Layering,
-        capacity: u32,
         seed_salt: u32,
     ) -> Result<Set, SetError> {
         device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let built = Set::build_inner(
-            device, queue, l1, l2s, l3, field, l4s, layering, capacity, seed_salt,
-        );
+        let built =
+            Set::build_inner(device, queue, l1s, l2s, l3, field, l4s, layering, seed_salt);
         // **Popped on every path**, which is why the body is a second function
         // rather than this one: it returns early in a dozen places, and a scope
         // left on the stack would catch the *next* build's errors and report
@@ -577,7 +604,7 @@ impl Set {
             // exist, and every handle naming it is one wgpu will refuse again
             // at the first draw — silently, since by then nothing is watching.
             (Ok(_), Some(e)) => Err(SetError::Invalid {
-                proc: l1.name.clone(),
+                proc: l1s.first().map_or_else(String::new, |(p, _)| p.name.clone()),
                 detail: e.to_string(),
             }),
             (Ok(set), None) => Ok(set),
@@ -588,31 +615,35 @@ impl Set {
     fn build_inner(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        l1: &Checked,
+        l1s: &[(&Checked, u32)],
         l2s: &[&Checked],
         l3: Option<&Checked>,
         field: Option<&Checked>,
         l4s: &[&Checked],
         layering: Layering,
-        capacity: u32,
         seed_salt: u32,
     ) -> Result<Set, SetError> {
+        let Some(&(first_l1, _)) = l1s.first() else {
+            return Err(SetError::NoGeometry);
+        };
         if l4s.is_empty() {
-            return Err(SetError::NoRenderer { l1: l1.name.clone() });
+            return Err(SetError::NoRenderer { l1: first_l1.name.clone() });
         }
         if layering == Layering::Composite && l4s.len() > crate::deck::MAX_SLOTS {
             return Err(SetError::TooManyInputs {
-                l1: l1.name.clone(),
+                l1: first_l1.name.clone(),
                 count: l4s.len(),
                 max: crate::deck::MAX_SLOTS,
             });
         }
-        if l1.kind != Kind::L1 {
-            return Err(SetError::WrongKind {
-                slot: "L1",
-                expected: Kind::L1,
-                actual: l1.kind,
-            });
+        for (l1, _) in l1s {
+            if l1.kind != Kind::L1 {
+                return Err(SetError::WrongKind {
+                    slot: "L1",
+                    expected: Kind::L1,
+                    actual: l1.kind,
+                });
+            }
         }
         // **`consumes ⊆ available at this position`, walked down the chain.**
         //
@@ -634,179 +665,6 @@ impl Set {
         // should fix all of them. The *first node* that fails stops the build,
         // because everything after it would be reported against a chain that
         // will not exist.
-        // **The plan, before anything is built.**
-        //
-        // A consumed attribute nothing emits used to be an unconditional error.
-        // Two of them have a derivation rule, and this is where the rule is
-        // applied: the Set is the first point that holds every procedure at
-        // once, so it is the only place that can tell "nobody emits this" from
-        // "nobody emits this *yet*".
-        //
-        // **Nothing any node emits is ever derived**, whatever the positions
-        // involved. An attribute that is both would have a slot and a
-        // substitution, and every reader would have to know which one applied
-        // where — so a chain that emits `age` somewhere keeps the old answer for
-        // a node above the emitter, which is a composition error naming a
-        // position, and that is the honest report.
-        let emitted: Vec<karakuri_ir::Attr> = l1
-            .emit
-            .iter()
-            .chain(l2s.iter().flat_map(|n| n.emit.iter()))
-            .copied()
-            .collect();
-        let mut derived: Vec<karakuri_ir::Attr> = Vec::new();
-        // Rules that would have applied and could not, with what they wanted.
-        let mut blocked: Vec<(karakuri_ir::Attr, karakuri_ir::Attr)> = Vec::new();
-        {
-            let mut seen: Vec<karakuri_ir::Attr> = l1.emit.clone();
-            // **The L1 is in this walk too**, and leaving it out is a shader
-            // that names a field nothing allocated. A procedure may consume
-            // what it does not emit — the checker allows exactly the two rules
-            // — and the slots those rules read are written by this same node,
-            // so what it reads back is the previous frame's, which is what
-            // `prev` means everywhere else in its own block.
-            for node in std::iter::once(&l1).chain(l2s.iter()).chain(l4s.iter()) {
-                for &attr in &node.consumes {
-                    if seen.contains(&attr) || derived.contains(&attr) || emitted.contains(&attr) {
-                        continue;
-                    }
-                    let Some(rule) = attr.derivation() else { continue };
-                    // **The source has to be on the element the L1 writes.** A
-                    // rule reading `position` cannot run over geometry that has
-                    // no position, and deriving from something an L2 adds later
-                    // would mean the L1 writing a slot from a value it does not
-                    // have.
-                    //
-                    // The reason is kept rather than dropped: this is the one
-                    // case where the eventual refusal is *about the rule*, and
-                    // a message that does not say so reads as the spec
-                    // contradicting itself.
-                    if let Some(from) = rule.source().filter(|from| !l1.emit.contains(from)) {
-                        blocked.push((attr, from));
-                        continue;
-                    }
-                    derived.push(attr);
-                }
-                for &attr in &node.emit {
-                    if !seen.contains(&attr) {
-                        seen.push(attr);
-                    }
-                }
-            }
-        }
-
-        let mut available: Vec<karakuri_ir::Attr> = l1.emit.clone();
-        available.extend(derived.iter().copied());
-        let check_against = |node: &Checked, available: &[karakuri_ir::Attr]| {
-            let missing: Vec<String> = node
-                .consumes
-                .iter()
-                .filter(|a| !available.contains(a))
-                .map(|a| format!("`{}`", a.name()))
-                .collect();
-            if missing.is_empty() {
-                return None;
-            }
-            // If a rule was blocked for one of these, say which value it wanted
-            // rather than repeating the generic advice — that is the whole of
-            // what makes the refusal actionable.
-            let hint = node
-                .consumes
-                .iter()
-                .find_map(|a| blocked.iter().find(|(attr, _)| attr == a))
-                .map(|(attr, from)| {
-                    format!(
-                        "`{}` is synthesised from `{}`, and `{}` emits neither. Add `{}` to \
-                         `{}`'s `emit` and `{}` follows",
-                        attr.name(),
-                        from.name(),
-                        l1.name,
-                        from.name(),
-                        l1.name,
-                        attr.name()
-                    )
-                })
-                .unwrap_or_else(|| {
-                    format!(
-                        "add {} to `{}`'s `emit`, or pair `{}` with an L1 that emits it. \
-                         `age` and `velocity` are synthesised where nothing emits them; nothing \
-                         else is",
-                        missing.join(", "),
-                        l1.name,
-                        node.name
-                    )
-                });
-            Some(SetError::Composition {
-                l1: l1.name.clone(),
-                l4: node.name.clone(),
-                missing: missing.join(", "),
-                hint,
-            })
-        };
-        for l2 in l2s {
-            if l2.kind != Kind::L2 {
-                return Err(SetError::WrongKind {
-                    slot: "L2",
-                    expected: Kind::L2,
-                    actual: l2.kind,
-                });
-            }
-            if let Some(e) = check_against(l2, &available) {
-                return Err(e);
-            }
-            for &attr in &l2.emit {
-                if !available.contains(&attr) {
-                    available.push(attr);
-                }
-            }
-        }
-        for l4 in l4s {
-            if l4.kind != Kind::L4 {
-                return Err(SetError::WrongKind {
-                    slot: "L4",
-                    expected: Kind::L4,
-                    actual: l4.kind,
-                });
-            }
-            if let Some(e) = check_against(l4, &available) {
-                return Err(e);
-            }
-        }
-
-        // **There is deliberately no third check, comparing the two
-        // topologies.** An L1 declares one and an L4 now carries an inferred
-        // one, so the comparison is available and looks principled — and it
-        // would refuse the pairing M3 exists to enable: the same cloud drawn
-        // as sprites by one L4 and as streaks by another. A segment under
-        // `Topology::Lines` gets both of its ends from attributes the L4
-        // consumes, so a renderer needs nothing from the geometry beyond what
-        // the composition check above already verifies. The declaration on
-        // the L1 side says what the geometry is *meant to read as*; it
-        // constrains no renderer, and requiring the two to agree would invent
-        // a dependency the lowering does not have.
-
-        // **The rule that needs to know how many renderers there are.** A
-        // fullscreen L4 puts one fragment on each texel, so a weighted resolve
-        // of it alone reproduces exactly what `additive` accumulates into a
-        // cleared target — the two extra attachments and the resolve pass buy an
-        // identical picture. That stops being true the moment something else is
-        // drawing into the same target, because then the resolve composites
-        // `over` what is under it rather than replacing a clear. So it is
-        // refused for a lone renderer and allowed in a stack, and the rule is
-        // about the *count* rather than about the position: making it depend on
-        // which slot the node sits in would be a refusal an author trips over by
-        // reordering.
-        if let [only] = l4s {
-            if only.blend == Some(karakuri_ir::Blend::Weighted)
-                && only.topology == Some(karakuri_ir::Topology::Fullscreen)
-            {
-                return Err(SetError::WeightedFullscreen { l4: only.name.clone() });
-            }
-        }
-
-        // **The L1 node**, generated, compiled and allocated at `capacity` —
-        // which is where the range check lives, because the range is that
-        // node's own. Everything the simulation needs is inside it.
         // **Compiled once, spliced into everything that evaluates it.** A field
         // has no node — it lowers into its callers — so this is the whole of
         // what a Set does with one, and the `Option` is the whole of "a Set may
@@ -835,7 +693,8 @@ impl Set {
             let per_evaluation = karakuri_ir::cost::estimate(f)
                 .map(|c| c.ops_per_evaluation)
                 .unwrap_or(0);
-            for caller in std::iter::once(&l1).chain(l2s.iter()).chain(l3.iter()).chain(l4s.iter())
+            for caller in
+                l1s.iter().map(|(l1, _)| l1).chain(l2s.iter()).chain(l3.iter()).chain(l4s.iter())
             {
                 if let Err(errs) = karakuri_ir::cost::check_with_field(caller, per_evaluation) {
                     return Err(SetError::FieldTooExpensive {
@@ -853,7 +712,9 @@ impl Set {
         // refuses — a panic on the thread that built it, from a `.kir` the
         // checker accepted.
         if field.is_none() {
-            let caller = std::iter::once(&l1)
+            let caller = l1s
+                .iter()
+                .map(|(l1, _)| l1)
                 .chain(l2s.iter())
                 .chain(l3.iter())
                 .chain(l4s.iter())
@@ -863,29 +724,269 @@ impl Set {
             }
         }
 
-        let sim = Simulation::build(device, l1, capacity, seed_salt, &derived, field_shader)?;
+        // **One camera for the whole Set**, however many sources — sharing is
+        // edge fan-out and needs no rule.
+        if let Some(l3) = l3 {
+            if l3.kind != Kind::L3 {
+                return Err(SetError::WrongKind { slot: "L3", expected: Kind::L3, actual: l3.kind });
+            }
+        }
+        let camera_node = crate::node::Camera::build(device, l3, field_shader);
 
-        // **The L2 nodes**, each built against what reaches it. The chain is
-        // walked here rather than inside a node because the *grouping* decides
-        // the order — a node knows how it deforms and not what is above it.
-        let mut deforms: Vec<Deform> = Vec::new();
-        // **Not `available`.** `upstream` is what has a *slot* at this position,
-        // which the layout function widens with the derivation slots itself —
-        // putting a derived attribute in this list would give it a second one.
-        let mut upstream: Vec<karakuri_ir::Attr> = l1.emit.clone();
-        // The engine-written slots and the element count at the current
-        // position, both of which an amplifier changes for everything below it.
-        let mut synthetic = karakuri_codegen::layout::Synthetic::NONE;
-        let mut chain_capacity = capacity;
-        // **Index of the last node that amplified**, which is where the chain's
-        // liveness and counts live from that point on. Tracked rather than
-        // recomputed from `deforms.last()`, because a node that does *not*
-        // amplify hands on whatever reached it — so the answer after
-        // `[amplify, plain]` is the first node's buffers, and asking the last
-        // node alone would give the simulation's.
-        let mut live: Option<usize> = None;
-        for l2 in l2s {
-            let node = {
+        // **Everything below is per source**, because everything below depends
+        // on what that source emits: which attributes are derived, which the
+        // chain may consume, what the element layout is, and therefore what
+        // every node over it compiles against. Two sources that emit different
+        // things are two different chains — which is the whole reason the chain
+        // is instantiated per source rather than the geometry concatenated into
+        // one buffer.
+        // **One target per renderer *procedure*** under compositing, not per
+        // instance: every source draws into the target its renderer owns, and
+        // the first source is the one that clears it.
+        let renderer_count = l4s.len();
+        let mut sources: Vec<Source> = Vec::with_capacity(l1s.len());
+        for (at, &(l1, capacity)) in l1s.iter().enumerate() {
+            let salt = salt_for(seed_salt, at);
+            // **The plan, before anything is built.**
+            //
+            // A consumed attribute nothing emits used to be an unconditional error.
+            // Two of them have a derivation rule, and this is where the rule is
+            // applied: the Set is the first point that holds every procedure at
+            // once, so it is the only place that can tell "nobody emits this" from
+            // "nobody emits this *yet*".
+            //
+            // **Nothing any node emits is ever derived**, whatever the positions
+            // involved. An attribute that is both would have a slot and a
+            // substitution, and every reader would have to know which one applied
+            // where — so a chain that emits `age` somewhere keeps the old answer for
+            // a node above the emitter, which is a composition error naming a
+            // position, and that is the honest report.
+            let emitted: Vec<karakuri_ir::Attr> = l1
+                .emit
+                .iter()
+                .chain(l2s.iter().flat_map(|n| n.emit.iter()))
+                .copied()
+                .collect();
+            let mut derived: Vec<karakuri_ir::Attr> = Vec::new();
+            // Rules that would have applied and could not, with what they wanted.
+            let mut blocked: Vec<(karakuri_ir::Attr, karakuri_ir::Attr)> = Vec::new();
+            {
+                let mut seen: Vec<karakuri_ir::Attr> = l1.emit.clone();
+                // **The L1 is in this walk too**, and leaving it out is a shader
+                // that names a field nothing allocated. A procedure may consume
+                // what it does not emit — the checker allows exactly the two rules
+                // — and the slots those rules read are written by this same node,
+                // so what it reads back is the previous frame's, which is what
+                // `prev` means everywhere else in its own block.
+                for node in std::iter::once(&l1).chain(l2s.iter()).chain(l4s.iter()) {
+                    for &attr in &node.consumes {
+                        if seen.contains(&attr) || derived.contains(&attr) || emitted.contains(&attr) {
+                            continue;
+                        }
+                        let Some(rule) = attr.derivation() else { continue };
+                        // **The source has to be on the element the L1 writes.** A
+                        // rule reading `position` cannot run over geometry that has
+                        // no position, and deriving from something an L2 adds later
+                        // would mean the L1 writing a slot from a value it does not
+                        // have.
+                        //
+                        // The reason is kept rather than dropped: this is the one
+                        // case where the eventual refusal is *about the rule*, and
+                        // a message that does not say so reads as the spec
+                        // contradicting itself.
+                        if let Some(from) = rule.source().filter(|from| !l1.emit.contains(from)) {
+                            blocked.push((attr, from));
+                            continue;
+                        }
+                        derived.push(attr);
+                    }
+                    for &attr in &node.emit {
+                        if !seen.contains(&attr) {
+                            seen.push(attr);
+                        }
+                    }
+                }
+            }
+
+            let mut available: Vec<karakuri_ir::Attr> = l1.emit.clone();
+            available.extend(derived.iter().copied());
+            let check_against = |node: &Checked, available: &[karakuri_ir::Attr]| {
+                let missing: Vec<String> = node
+                    .consumes
+                    .iter()
+                    .filter(|a| !available.contains(a))
+                    .map(|a| format!("`{}`", a.name()))
+                    .collect();
+                if missing.is_empty() {
+                    return None;
+                }
+                // If a rule was blocked for one of these, say which value it wanted
+                // rather than repeating the generic advice — that is the whole of
+                // what makes the refusal actionable.
+                let hint = node
+                    .consumes
+                    .iter()
+                    .find_map(|a| blocked.iter().find(|(attr, _)| attr == a))
+                    .map(|(attr, from)| {
+                        format!(
+                            "`{}` is synthesised from `{}`, and `{}` emits neither. Add `{}` to \
+                             `{}`'s `emit` and `{}` follows",
+                            attr.name(),
+                            from.name(),
+                            l1.name,
+                            from.name(),
+                            l1.name,
+                            attr.name()
+                        )
+                    })
+                    .unwrap_or_else(|| {
+                        format!(
+                            "add {} to `{}`'s `emit`, or pair `{}` with an L1 that emits it. \
+                             `age` and `velocity` are synthesised where nothing emits them; nothing \
+                             else is",
+                            missing.join(", "),
+                            l1.name,
+                            node.name
+                        )
+                    });
+                Some(SetError::Composition {
+                    l1: l1.name.clone(),
+                    l4: node.name.clone(),
+                    missing: missing.join(", "),
+                    hint,
+                })
+            };
+            for l2 in l2s {
+                if l2.kind != Kind::L2 {
+                    return Err(SetError::WrongKind {
+                        slot: "L2",
+                        expected: Kind::L2,
+                        actual: l2.kind,
+                    });
+                }
+                if let Some(e) = check_against(l2, &available) {
+                    return Err(e);
+                }
+                for &attr in &l2.emit {
+                    if !available.contains(&attr) {
+                        available.push(attr);
+                    }
+                }
+            }
+            for l4 in l4s {
+                if l4.kind != Kind::L4 {
+                    return Err(SetError::WrongKind {
+                        slot: "L4",
+                        expected: Kind::L4,
+                        actual: l4.kind,
+                    });
+                }
+                if let Some(e) = check_against(l4, &available) {
+                    return Err(e);
+                }
+            }
+
+            // **There is deliberately no third check, comparing the two
+            // topologies.** An L1 declares one and an L4 now carries an inferred
+            // one, so the comparison is available and looks principled — and it
+            // would refuse the pairing M3 exists to enable: the same cloud drawn
+            // as sprites by one L4 and as streaks by another. A segment under
+            // `Topology::Lines` gets both of its ends from attributes the L4
+            // consumes, so a renderer needs nothing from the geometry beyond what
+            // the composition check above already verifies. The declaration on
+            // the L1 side says what the geometry is *meant to read as*; it
+            // constrains no renderer, and requiring the two to agree would invent
+            // a dependency the lowering does not have.
+
+            // **The rule that needs to know how many renderers there are.** A
+            // fullscreen L4 puts one fragment on each texel, so a weighted resolve
+            // of it alone reproduces exactly what `additive` accumulates into a
+            // cleared target — the two extra attachments and the resolve pass buy an
+            // identical picture. That stops being true the moment something else is
+            // drawing into the same target, because then the resolve composites
+            // `over` what is under it rather than replacing a clear. So it is
+            // refused for a lone renderer and allowed in a stack, and the rule is
+            // about the *count* rather than about the position: making it depend on
+            // which slot the node sits in would be a refusal an author trips over by
+            // reordering.
+            if let [only] = l4s {
+                if only.blend == Some(karakuri_ir::Blend::Weighted)
+                    && only.topology == Some(karakuri_ir::Topology::Fullscreen)
+                {
+                    return Err(SetError::WeightedFullscreen { l4: only.name.clone() });
+                }
+            }
+
+            // **The L1 node**, generated, compiled and allocated at `capacity` —
+            // which is where the range check lives, because the range is that
+            // node's own. Everything the simulation needs is inside it.
+
+            let sim = Simulation::build(device, l1, capacity, salt, &derived, field_shader)?;
+
+            // **The L2 nodes**, each built against what reaches it. The chain is
+            // walked here rather than inside a node because the *grouping* decides
+            // the order — a node knows how it deforms and not what is above it.
+            let mut deforms: Vec<Deform> = Vec::new();
+            // **Not `available`.** `upstream` is what has a *slot* at this position,
+            // which the layout function widens with the derivation slots itself —
+            // putting a derived attribute in this list would give it a second one.
+            let mut upstream: Vec<karakuri_ir::Attr> = l1.emit.clone();
+            // The engine-written slots and the element count at the current
+            // position, both of which an amplifier changes for everything below it.
+            let mut synthetic = karakuri_codegen::layout::Synthetic::NONE;
+            let mut chain_capacity = capacity;
+            // **Index of the last node that amplified**, which is where the chain's
+            // liveness and counts live from that point on. Tracked rather than
+            // recomputed from `deforms.last()`, because a node that does *not*
+            // amplify hands on whatever reached it — so the answer after
+            // `[amplify, plain]` is the first node's buffers, and asking the last
+            // node alone would give the simulation's.
+            let mut live: Option<usize> = None;
+            for l2 in l2s {
+                let node = {
+                    let from = sim.geometry();
+                    let (alive, counts) = match live {
+                        None => (from.alive, from.counts),
+                        Some(k) => {
+                            let g = deforms[k].geometry(from.alive, from.counts);
+                            (g.alive, g.counts)
+                        }
+                    };
+                    let input = match deforms.last() {
+                        None => sim.geometry(),
+                        Some(prev) => prev.geometry(alive, counts),
+                    };
+                    Deform::build(
+                        device,
+                        l2,
+                        &upstream,
+                        synthetic,
+                        &derived,
+                        field_shader,
+                        &input,
+                        chain_capacity,
+                    )?
+                };
+                upstream = node.emits().to_vec();
+                synthetic = node.synthetic();
+                chain_capacity = chain_capacity.saturating_mul(node.amplify());
+                if node.amplifies() {
+                    live = Some(deforms.len());
+                }
+                deforms.push(node);
+            }
+
+            // **The L4 nodes**, generated, compiled and bound against the edge the
+            // last node in the chain offers: the element layout, and the two
+            // buffers indexed by parity. Everything about how one draws is its own
+            // — see [`crate::node::Renderer`] — including the blend-mode rule that
+            // needs both halves in hand. They all read the same edge, which is the
+            // whole point: one simulation, several ways of looking at it.
+            // **One camera node, however many renderers.** Sharing is edge fan-out
+            // and needs no rule: two L4s reading one camera are one viewpoint drawn
+            // two ways. Two reading *different* cameras is a graph, which is what an
+            // L5 is for and not what a Set is.
+            let renderers: Vec<Renderer> = {
                 let from = sim.geometry();
                 let (alive, counts) = match live {
                     None => (from.alive, from.counts),
@@ -894,64 +995,16 @@ impl Set {
                         (g.alive, g.counts)
                     }
                 };
-                let input = match deforms.last() {
+                let geometry = match deforms.last() {
                     None => sim.geometry(),
-                    Some(prev) => prev.geometry(alive, counts),
+                    Some(last) => last.geometry(alive, counts),
                 };
-                Deform::build(
-                    device,
-                    l2,
-                    &upstream,
-                    synthetic,
-                    &derived,
-                    field_shader,
-                    &input,
-                    chain_capacity,
-                )?
+                l4s.iter()
+                    .map(|l4| Renderer::build(device, l4, &geometry, &camera_node, field_shader))
+                    .collect()
             };
-            upstream = node.emits().to_vec();
-            synthetic = node.synthetic();
-            chain_capacity = chain_capacity.saturating_mul(node.amplify());
-            if node.amplifies() {
-                live = Some(deforms.len());
-            }
-            deforms.push(node);
+            sources.push(Source { salt, sim, deforms, renderers });
         }
-
-        // **The L4 nodes**, generated, compiled and bound against the edge the
-        // last node in the chain offers: the element layout, and the two
-        // buffers indexed by parity. Everything about how one draws is its own
-        // — see [`crate::node::Renderer`] — including the blend-mode rule that
-        // needs both halves in hand. They all read the same edge, which is the
-        // whole point: one simulation, several ways of looking at it.
-        let renderer_count = l4s.len();
-        // **One camera node, however many renderers.** Sharing is edge fan-out
-        // and needs no rule: two L4s reading one camera are one viewpoint drawn
-        // two ways. Two reading *different* cameras is a graph, which is what an
-        // L5 is for and not what a Set is.
-        if let Some(l3) = l3 {
-            if l3.kind != Kind::L3 {
-                return Err(SetError::WrongKind { slot: "L3", expected: Kind::L3, actual: l3.kind });
-            }
-        }
-        let camera_node = crate::node::Camera::build(device, l3, field_shader);
-        let renderers: Vec<Renderer> = {
-            let from = sim.geometry();
-            let (alive, counts) = match live {
-                None => (from.alive, from.counts),
-                Some(k) => {
-                    let g = deforms[k].geometry(from.alive, from.counts);
-                    (g.alive, g.counts)
-                }
-            };
-            let geometry = match deforms.last() {
-                None => sim.geometry(),
-                Some(last) => last.geometry(alive, counts),
-            };
-            l4s.iter()
-                .map(|l4| Renderer::build(device, l4, &geometry, &camera_node, field_shader))
-                .collect()
-        };
 
         // One map per node, in the order [`Set::slot_of`] addresses them: the
         // L1's, then each renderer's. Two nodes declaring one name now hold two
@@ -960,7 +1013,11 @@ impl Set {
         let map = |node: &Checked| -> HashMap<String, f32> {
             node.params.iter().filter_map(|p| declared(&p)).collect()
         };
-        let params = std::iter::once(map(l1))
+        // **One map per L1 procedure**, which is one per source: each source
+        // *is* an L1, and `--param L1:1:spawn_rate` names the second one.
+        let params = l1s
+            .iter()
+            .map(|(l1, _)| map(l1))
             .chain(l2s.iter().map(|n| map(n)))
             .chain(l3.map(map))
             .chain(l4s.iter().map(|n| map(n)))
@@ -974,7 +1031,9 @@ impl Set {
         let declared = |node: &Checked| -> HashMap<String, [f32; 2]> {
             node.params.iter().map(|p| (p.name.clone(), [p.min, p.max])).collect()
         };
-        let ranges = std::iter::once(declared(l1))
+        let ranges = l1s
+            .iter()
+            .map(|(l1, _)| declared(l1))
             .chain(l2s.iter().map(|n| declared(n)))
             .chain(l3.map(declared))
             .chain(l4s.iter().map(|n| declared(n)))
@@ -999,15 +1058,18 @@ impl Set {
             // are both vacuously closed form. The conjunction is written out
             // anyway: it is the sentence that is true, and one that named a
             // layer would have to be revisited by every layer added after it.
-            closed_form: l1.closed_form
+            // **Every source, because a Set is seekable only if all of it is.**
+            // One accumulating geometry beside four closed-form ones is a Set
+            // that cannot be scrubbed to, and the conjunction is what says so.
+            closed_form: l1s.iter().all(|(n, _)| n.closed_form)
                 && l2s.iter().all(|n| n.closed_form)
                 && l3.is_none_or(|n| n.closed_form)
                 && l4s.iter().all(|n| n.closed_form),
-            reads_beats: l1.reads_beats
+            reads_beats: l1s.iter().any(|(n, _)| n.reads_beats)
                 || l2s.iter().any(|n| n.reads_beats)
                 || l3.is_some_and(|n| n.reads_beats)
                 || l4s.iter().any(|n| n.reads_beats),
-            sources: vec![Source { sim, deforms, renderers }],
+            sources,
             params,
             ranges,
             camera: Orbit::default(),
@@ -1130,7 +1192,10 @@ impl Set {
     }
 
     pub fn capacity(&self) -> u32 {
-        self.sources[0].sim.capacity()
+        // **Summed, to match `live_count`.** A Set of two sources allocates
+        // both, and reporting one of them beside a population that is all of
+        // them said "8192 live of 4096".
+        self.sources.iter().map(|s| s.sim.capacity()).sum()
     }
 
     /// **Whether this Set's state at any `t` is reachable by evaluating it
@@ -1939,10 +2004,9 @@ impl Set {
             self.camera_node.prepare(queue, &view, dt, &fallback);
         }
         let field_at = self.nodes_of(Kind::Field).next();
-        let (bindings, beats, salt, viewport, field_params, field_values) = (
+        let (bindings, beats, viewport, field_params, field_values) = (
             &self.bindings,
             self.last_beats,
-            self.seed_salt,
             self.viewport,
             &self.field_params,
             field_at.and_then(|at| self.params.get(at)),
@@ -1961,6 +2025,10 @@ impl Set {
         // what makes one address mean one thing however many sources there are.
         let params = &self.params[first..];
         for source in &mut self.sources {
+            // **The source's salt, not the Set's.** `docs/ir-spec.md` moves it
+            // from per layer to per source so that two identical geometries
+            // differ in colour by default rather than by being arranged to.
+            let salt = source.salt;
             for (at, (renderer, params)) in source.renderers.iter_mut().zip(params).enumerate() {
             let view = crate::node::View {
                 t,
@@ -1985,10 +2053,9 @@ impl Set {
     fn write_l2_uniforms(&mut self, queue: &wgpu::Queue) {
         let t = self.time();
         let field_at = self.nodes_of(Kind::Field).next();
-        let (bindings, beats, salt, viewport, dt, field_params, field_values) = (
+        let (bindings, beats, viewport, dt, field_params, field_values) = (
             &self.bindings,
             self.last_beats,
-            self.seed_salt,
             self.viewport,
             self.dt,
             &self.field_params,
@@ -2007,6 +2074,7 @@ impl Set {
         let range = self.nodes_of(Kind::L2);
         let params = &self.params[range];
         for source in &mut self.sources {
+            let salt = source.salt;
             for (at, (node, params)) in source.deforms.iter_mut().zip(params).enumerate() {
             let view = crate::node::View {
                 t,
@@ -2381,6 +2449,23 @@ impl VideoSource for Set {
 }
 
 
+/// A source's hash salt, from the Set's and the source's ordinal.
+///
+/// **The provisional half of `source`.** `docs/ir-spec.md` calls for a value
+/// *assigned* when a source is added and recorded in the stream, so that it
+/// survives the list being reordered — and that needs a Set file able to carry
+/// sources, which one cannot. Derived here instead, which gives the picture the
+/// spec asks for (two identical grids in different colours by default) and not
+/// the stability (reordering the list on a command line changes which colour is
+/// which).
+///
+/// An odd multiplier, so that adjacent ordinals do not give adjacent salts —
+/// `hash1` mixes, but a salt that walks by one is a salt whose first mixing
+/// round is nearly the same.
+fn salt_for(set_salt: u32, source: usize) -> u32 {
+    set_salt.wrapping_add((source as u32).wrapping_mul(0x9E37_79B9))
+}
+
 /// A spliced field's parameter value, by the **semantic** name the layout holds.
 ///
 /// The map is keyed by the declared name, so the prefix comes off here — one
@@ -2612,13 +2697,12 @@ proc dots {
         let set = Set::build_many(
             &gpu.device,
             &gpu.queue,
-            &l1,
+            &[(&l1, CAPACITY)],
             &[&l2],
             None,
             None,
             &[&l4],
             Layering::Overdraw,
-            CAPACITY,
             1,
         )
         .expect("a chain of one L1, one amplifying L2 and one L4");

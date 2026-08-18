@@ -240,7 +240,11 @@ pub struct Request {
     /// match an outcome to the source that produced it, and this is the only
     /// thread between them.
     pub id: u64,
-    pub l1: Checked,
+    /// **The geometry sources, each with the capacity it runs at.** A list
+    /// because a Set holds a list — see `crate::set::Source` — and the capacity
+    /// travels beside each one because each declares its own range, so one
+    /// number cannot serve two.
+    pub l1s: Vec<(Checked, u32)>,
     /// The deformations, in chain order — each reads what the one before wrote.
     /// Empty for a Set that draws its geometry as the L1 made it.
     pub l2s: Vec<Checked>,
@@ -261,7 +265,6 @@ pub struct Request {
     /// params below are: a request that depended on what happens to be live is
     /// not reproducible from a record stream.
     pub layering: crate::set::Layering,
-    pub capacity: u32,
     pub seed_salt: u32,
     /// Applied to the new Set once it is built. Parameter values are the one
     /// piece of Set state that is not structural, so they are the one thing
@@ -1068,13 +1071,12 @@ fn run_worker(
             Set::build_many(
                 &device,
                 &queue,
-                &request.l1,
+                &request.l1s.iter().map(|(p, c)| (p, *c)).collect::<Vec<_>>(),
                 &request.l2s.iter().collect::<Vec<_>>(),
                 request.l3.as_ref(),
                 request.field.as_ref(),
                 &request.l4s.iter().collect::<Vec<_>>(),
                 request.layering,
-                request.capacity,
                 request.seed_salt,
             )
             .map(|mut set| {

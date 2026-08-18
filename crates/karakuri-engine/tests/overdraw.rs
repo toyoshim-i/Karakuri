@@ -127,13 +127,15 @@ fn build(gpu: &Gpu, l4s: &[&str]) -> Set {
 fn try_build(gpu: &Gpu, l1: &str, l4s: &[&str]) -> Result<Set, SetError> {
     let compiled: Vec<Checked> = l4s.iter().map(|s| compile(s)).collect();
     let refs: Vec<&Checked> = compiled.iter().collect();
-    Set::build_many(&gpu.device, &gpu.queue, &compile(l1), &[], None, None, &refs, karakuri_engine::set::Layering::Overdraw, 2, 3)
+    Set::build_many(&gpu.device, &gpu.queue,
+        &[(&compile(l1), 2)], &[], None, None, &refs, karakuri_engine::set::Layering::Overdraw, 3)
 }
 
 fn build_over(gpu: &Gpu, l1: &str, l4s: &[&str]) -> Set {
     let compiled: Vec<Checked> = l4s.iter().map(|s| compile(s)).collect();
     let refs: Vec<&Checked> = compiled.iter().collect();
-    let mut set = Set::build_many(&gpu.device, &gpu.queue, &compile(l1), &[], None, None, &refs, karakuri_engine::set::Layering::Overdraw, 2, 3)
+    let mut set = Set::build_many(&gpu.device, &gpu.queue,
+        &[(&compile(l1), 2)], &[], None, None, &refs, karakuri_engine::set::Layering::Overdraw, 3)
         .expect("one L1 and however many renderers over it");
     set.resize(&gpu.device, W, H);
     set

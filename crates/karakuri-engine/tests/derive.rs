@@ -134,13 +134,12 @@ fn build_chain(
     let mut set = Set::build_many(
         &gpu.device,
         &gpu.queue,
-        &l1,
+        &[(&l1, capacity)],
         &l2_refs,
         None,
         None,
         &[&compile(l4)],
         Layering::Overdraw,
-        capacity,
         7,
     )?;
     set.resize(&gpu.device, W, H);
