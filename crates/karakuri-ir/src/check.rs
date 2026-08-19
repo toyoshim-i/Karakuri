@@ -24,16 +24,17 @@
 //!   procedure can meaningfully do, since only L1 has persistent per-element
 //!   state to emit); an L4 procedure's `consumes` is recorded as-is and left
 //!   for Set-composition time, outside this crate's scope.
-//! - **No attribute derivation.** `docs/ir-spec.md` once specified deriving
-//!   `velocity` from `position` and `age` from spawn time when `consumes`
-//!   was not covered by `emit`; that section now lives below the "specified,
-//!   not implemented" line. Neither rule has ever been backed by a WGSL
-//!   emitter or by the per-element state either would need (two frames of
-//!   `position` history for `velocity`, a spawn timestamp for `age`), so a
-//!   `consumes` entry relying on one used to check clean and then be missing
-//!   at runtime — the one failure mode "one severity" cannot tolerate,
-//!   because a regenerating model gets no diagnostic to react to. This pass
-//!   rejects every `consumes` entry not covered by `emit`, unconditionally.
+//! - **Attribute derivation splits the `consumes ⊆ emit` check in two, and
+//!   this pass keeps only the half one file can answer.** `age` and
+//!   `velocity` are synthesised where nothing emits them: the engine gives
+//!   `age` a `birth_t` slot and `velocity` a slot the L1 writes, so an L1
+//!   consuming either without emitting it is asking for something the Set
+//!   will provide rather than making a contradiction. What stays here is the
+//!   part that is genuinely local — `velocity` is derived *from* `position`,
+//!   and whether this procedure emits `position` is a one-file question. See
+//!   [`check_consumes_emitted`]. Whether anybody at all emits a consumed
+//!   attribute is `Set::build_many`'s check, at the first point that holds
+//!   every procedure at once.
 //! - **Signal-bus names are not enumerable here.** `karakuri-signal`'s bus
 //!   accepts *any* name (falling back to a zero-confidence synthesized
 //!   sample), so there is no closed vocabulary to match against. Consequently
