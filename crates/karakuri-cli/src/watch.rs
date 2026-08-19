@@ -310,10 +310,10 @@ impl Source for Watch {
                     addressed.push(("L4", l4s.len(), checked.name.clone()));
                     l4s.push(checked);
                 }
-                // **Refused rather than accepted and ignored.** A Set cannot
-                // hold a field yet — nothing splices one into its callers — so
-                // rebuilding with one would produce a slot that silently lost
-                // the file it was told to watch.
+                // **Refused rather than accepted and ignored.** A slot
+                // evaluates one field: `field(p)` names it by being the only
+                // one, and rebuilding with two would produce a slot that
+                // silently lost one of the files it was told to watch.
                 karakuri_ir::Kind::Field if field.is_some() => {
                     refuse("a second `kind Field` — a slot evaluates one field");
                     return None;
@@ -322,8 +322,20 @@ impl Source for Watch {
                     addressed.push(("Field", 0, checked.name.clone()));
                     field = Some(checked);
                 }
+                // **A slot can be built with two geometries and cannot be
+                // *rebuilt* with them**, which is a gap rather than a rule:
+                // `--set a.kir,b.kir,renderer.kir` starts fine, and then every
+                // save prints this and changes nothing. What is missing is a
+                // name — a rebuild is addressed as `(slot, layer, index)`
+                // everywhere it is recorded, and so are the edit history and
+                // the session stream, and none of them can say "the second
+                // geometry". See `docs/roadmap.md`, "Naming what a Set holds".
                 karakuri_ir::Kind::L1 => {
-                    refuse("a second L1 — a slot simulates with one geometry");
+                    refuse(
+                        "a second L1 — a slot rebuilds with one geometry, so this slot is \
+                         not being watched. Run it without `--watch`, or edit one geometry \
+                         at a time",
+                    );
                     return None;
                 }
             }

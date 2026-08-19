@@ -124,8 +124,10 @@ builtins! {
     Reflect   => "reflect",   [Same, Same] -> Same, VectorOnly, [];
     Refract   => "refract",   [Same, Same, Exact(Float)] -> Same, VectorOnly, [];
 
-    // Hash and noise. Salted with the layer's seed stream value, so re-seeding
-    // a Set changes randomness without touching structure.
+    // Hash and noise. Salted per *source* — every layer over one geometry
+    // shares the salt, and two geometries in one Set get different ones — so
+    // re-seeding a Set changes randomness without touching structure, and two
+    // sources built from the same procedure do not draw the same dust.
     Hash1      => "hash1",       [Exact(Uint)] -> Exact(Float), Concrete, [];
     Hash2      => "hash2",       [Exact(Uint)] -> Exact(Vec2), Concrete, [];
     Hash3      => "hash3",       [Exact(Uint)] -> Exact(Vec3), Concrete, [];
