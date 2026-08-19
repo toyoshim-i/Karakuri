@@ -741,6 +741,23 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     "L4 procedures require a `fragment` block",
                 ));
             }
+            // **A renderer emits nothing**, and this was the one layer where
+            // saying so was left out. An L3 and a field both refuse `emit` by
+            // name; an L4's was accepted, given no buffer, and read back by
+            // `is_closed_form` — which had to state "vacuously true for L4"
+            // partly to stop a stray `emit` dragging a Set into needing to be
+            // primed. Refusing it is the same fact said once instead of
+            // compensated for downstream.
+            if let Some((_, span)) = proc.emit.first() {
+                errors.push(
+                    IrError::contract(*span, "`emit` is not an L4 declaration")
+                        .with_hint(
+                            "a renderer draws what reaches it and stores nothing: it has no \
+                             element buffer to emit into. `consumes` is how an L4 says what \
+                             it reads",
+                        ),
+                );
+            }
         }
     }
 
