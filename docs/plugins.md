@@ -6,8 +6,10 @@ is otherwise cleanly closed. Syphon needs Objective-C interop; Link needs cmake 
 compiler. Neither cost is paid once: it is paid by everyone who builds the repository,
 including on platforms where the feature does not exist.
 
-This document draws the line they hang off. **The sink half of it is built** and the rest
-is not — see "The window never waits" for what exists.
+This document draws the line they hang off. **The input half is built** — `--tempo-source`
+runs and Ableton Link is what it was tested against — and **the sink half is built** on the
+host's side of the boundary. What does not exist is any output plugin, and the distribution
+machinery below is a design rather than a description: nothing fetches anything yet.
 
 ## Why these two and not other things
 
@@ -117,11 +119,14 @@ is permitted and would mean a binary linking it is distributed under the GPL, so
 boundary that matters is between two *programs*. Nothing about a directory changes that, and
 nothing about a directory has to.
 
-**The built artifacts are not committed here either.** What is committed is a
+**The built artifacts will not be committed here either.** What will be committed is a
 manifest — per plugin: name, interface version, the plugin repository's tag, and per target
-triple an asset name and a sha256. `cargo xtask plugins` fetches the current triple's assets,
-verifies them, and drops them in a gitignored directory that is also the default plugin
-search path, so the development flow and the installed flow use the same lookup.
+triple an asset name and a sha256. `cargo xtask plugins` will fetch the current triple's
+assets, verify them, and drop them in a gitignored directory that is also the default plugin
+search path, so the development flow and the installed flow use the same lookup. **None of
+this exists yet**: there is no manifest file and no `xtask` crate in the workspace. It is
+written down now because the shape decides what the host can say when a plugin is missing,
+which is the table below.
 
 **`cargo build` must never touch the network.** A fetch inside `build.rs` would break
 offline and sandboxed builds, run for people who do not want plugins, and destroy the
@@ -135,7 +140,7 @@ these three states apart:
 | State | What the host says |
 |---|---|
 | No entry for this target triple | this platform does not have that feature |
-| An entry, but nothing fetched | run `cargo xtask plugins` |
+| An entry, but nothing fetched | run `cargo xtask plugins` (once that exists) |
 | Fetched, interface version mismatch | refuse to load, and name both versions |
 
 Without it, all three are "the file is not there", and a Windows user cannot tell whether
