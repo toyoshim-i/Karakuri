@@ -2100,6 +2100,28 @@ choose, and changing one is a redesign rather than an edit. The reasoning behind
 - Spawn timing is engine-side. No ambient exposes the birth fraction: an exposed one is
   forgotten by half the generators that need it and applied twice by the other half.
 
+**Surfaces, and where an authored value lives**
+
+- **The destination is a GUI application and the CLI is scaffolding.** Every decision about
+  where a value lives follows from that: **anything authored lives in a record, and a flag
+  is a way to write into the record rather than a second place the truth lives.** A design
+  that puts a value only on the command line is building on the part that gets replaced.
+- The rule is already load-bearing and was not written down. Every control — a key press, a
+  MIDI knob, an MCP tool call — ends in the **same record**, which is what makes a session
+  replay with none of them attached. That is not tidiness: it is what will let a GUI replace
+  the CLI without touching the engine.
+- **"The command line cannot express it" is never a reason a value cannot exist.** It is a
+  reason to check that the *record* can, and then to give the flag whatever spelling the
+  record needs. The naming decision at the head of M4 is the worked example: a name lives in
+  a Set file, and the command line writes one because it is the only authoring surface that
+  exists yet.
+- When a flag and a loaded file both say something, **the flag wins** — the rule `--param`
+  and `--bind` already follow beside `--load-set`, where the file's values are applied first
+  and the command line's are appended after.
+- A surface may narrow what is *shown* and never what is *reachable*. Publishing decides
+  attention, not authority; `--param` still addresses any control in any node. Whatever M5
+  builds inherits that.
+
 **Editing and revision**
 
 - A Set **value** is immutable and content-addressed; a **compiled instance** is not. Every
