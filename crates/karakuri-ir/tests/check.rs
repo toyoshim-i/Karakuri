@@ -954,21 +954,24 @@ fn drift_shell_is_accumulating() {
 
 /// **L4 is vacuously closed form, and nothing an L4 file can say changes it.**
 ///
-/// `emit` has no meaning on an L4 procedure — only L1 attributes get buffers —
-/// and nothing rejects one, so a generated file can carry a stray `emit` that
-/// duplicates its `consumes`. Classifying by "reads an attribute in `emit`"
-/// alone then calls a stateless procedure accumulating, and since a Set is
-/// closed form only when both of its procedures are, one meaningless line in an
-/// L4 file makes a whole seekable Set look like it needs priming. The property
-/// is about per-element state and L4 has none.
+/// The property is about per-element state and an L4 has none: it reads what
+/// reached it and throws the result at a target. Classifying by "reads an
+/// attribute it emits" would make a renderer that consumes what it draws look
+/// accumulating, and since a Set is closed form only when every procedure in it
+/// is, one renderer would make a whole seekable Set look like it needed
+/// priming.
+///
+/// `emit` on an L4 is refused outright now — see
+/// [`emit_is_refused_on_a_renderer`] — which is the same fact said once instead
+/// of compensated for here. This stays because the short-circuit is what makes
+/// the answer independent of what the file says.
 #[test]
-fn an_l4_that_declares_emit_is_still_vacuously_closed_form() {
+fn an_l4_is_vacuously_closed_form() {
     let src = r#"
 proc odd_l4 {
   kind  L4
   blend additive
 
-  emit     position
   consumes position
 
   vertex {
@@ -986,8 +989,8 @@ proc odd_l4 {
     assert!(
         checked.closed_form,
         "an L4 holds no per-element state at all, so the flag is supposed to be \
-         vacuously true — a stray `emit` on a stateless procedure made the whole \
-         Set look like it needed priming"
+         vacuously true — a renderer reading what it draws made the whole Set \
+         look like it needed priming"
     );
 }
 
@@ -2537,6 +2540,36 @@ proc peeks {
         errs.iter().any(|e| e.message.contains("position")
             && e.hint.as_deref().unwrap_or_default().contains("function of space")),
         "expected a diagnostic explaining a field has no element, got: {errs:?}"
+    );
+}
+
+/// **A renderer emits nothing**, and it was the one layer that did not say so.
+///
+/// An L3 and a field both refuse `emit` by name. An L4's was accepted, given no
+/// buffer, and then read back by `is_closed_form` — which states "vacuously
+/// true for L4" partly to stop a stray `emit` making a Set look accumulating
+/// and dragging it into needing to be primed. That is a compensation for a
+/// declaration that should not have parsed.
+#[test]
+fn emit_is_refused_on_a_renderer() {
+    let errs = check_err(
+        r#"
+proc draws {
+  kind L4
+  blend additive
+
+  emit position
+
+  fragment {
+    color = vec4(1.0);
+  }
+}
+"#,
+    );
+    assert!(
+        errs.iter().any(|e| e.message.contains("emit")
+            && e.hint.as_deref().unwrap_or_default().contains("consumes")),
+        "expected `emit` to be refused on an L4, and `consumes` offered, got: {errs:?}"
     );
 }
 
