@@ -360,9 +360,13 @@ fn a_derived_velocity_matches_one_the_procedure_writes() {
 /// **The slot is allocated because something asked**, and a Set nothing asks in
 /// pays nothing.
 ///
-/// Sixteen bytes per element per rule is what an unconditional slot would cost
-/// every Set in the library, and the two rules together are more than the whole
-/// of `position`. The stride is the observable.
+/// A slot per element per rule is what an unconditional one would cost every Set
+/// in the library. **The observable is the slot list and not the stride**, which
+/// it used to be: every slot was a padded sixteen bytes then, so "one more slot"
+/// and "sixteen more bytes" were the same sentence. They are not any more —
+/// `birth_t` is a `f32` and lands in the four bytes `seed` and `birth_frac`
+/// leave, so it is now free — and a stride assertion would have read that as the
+/// slot not existing.
 #[test]
 fn a_derivations_slot_exists_only_where_something_consumes_it() {
     let gpu = Gpu::headless().expect("a GPU");
@@ -381,13 +385,37 @@ fn a_derivations_slot_exists_only_where_something_consumes_it() {
         &reader("both", "position, age, velocity", "age + velocity.y"),
     );
 
+    let has = |s: &Set, name: &str| s.element_layout().slots.iter().any(|f| f.name == name);
+    for (set, label) in [
+        (&plain, "plain"),
+        (&aged, "aged"),
+        (&moving, "moving"),
+        (&both, "both"),
+    ] {
+        assert_eq!(
+            has(set, "birth_t"),
+            label == "aged" || label == "both",
+            "{label}: `birth_t`"
+        );
+        assert_eq!(
+            has(set, "velocity"),
+            label == "moving" || label == "both",
+            "{label}: `velocity`"
+        );
+    }
+
+    // And a stored derivation still costs bytes, because `velocity` is a `vec3`
+    // and there is no padding upstream of it to hide in. Its companion flag is
+    // the one that is free — it lands in the four bytes the `vec3` leaves.
     let stride = |s: &Set| s.element_layout().stride;
-    assert_eq!(stride(&aged), stride(&plain) + 16, "`birth_t`");
-    assert_eq!(stride(&moving), stride(&plain) + 16, "`velocity`");
+    assert!(
+        stride(&moving) > stride(&plain),
+        "a stored derivation is not free"
+    );
     assert_eq!(
         stride(&both),
-        stride(&plain) + 32,
-        "one slot each, not one between them"
+        stride(&moving),
+        "`birth_t` fits in what was already padding"
     );
 }
 

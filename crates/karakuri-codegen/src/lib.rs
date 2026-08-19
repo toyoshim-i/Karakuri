@@ -207,9 +207,7 @@ mod tests {
             shader.source
         );
         assert!(
-            shader
-                .source
-                .contains("let usr_again = prev[i].position.xyz;"),
+            shader.source.contains("let usr_again = prev[i].position;"),
             "expected the re-read to reference prev[i].position, got:\n{}",
             shader.source
         );
@@ -384,7 +382,7 @@ mod tests {
             with_rem.source
         );
         assert!(
-            with_rem.source.contains("mod_f32(prev[i].age.x, 1.0)"),
+            with_rem.source.contains("mod_f32(prev[i].age, 1.0)"),
             "{}",
             with_rem.source
         );
@@ -643,8 +641,12 @@ mod tests {
         assert!(src.contains("return srgb_to_linear(srgb);"), "{src}");
         assert!(!src.contains("return linear_to_srgb(srgb);"), "{src}");
         // position is consumed but never read in fragment, so it must not
-        // become a varying.
-        assert!(!src.contains("position: vec3<f32>,\n"), "{src}");
+        // become a varying. Asked of the *varying* rather than of the whole
+        // module: the `Element` struct declares `position: vec3<f32>` now that
+        // a slot is its attribute's own width, and a bare substring search
+        // finds that instead — which is the assertion passing for a reason
+        // that has nothing to do with what it is checking.
+        assert!(!src.contains(") position: vec3<f32>,"), "{src}");
         // point_coord is fragment-only ambient and IS used in fragment.
         assert!(src.contains("in.point_coord"), "{src}");
     }

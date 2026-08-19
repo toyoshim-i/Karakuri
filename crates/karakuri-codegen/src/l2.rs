@@ -81,7 +81,7 @@ use crate::layout::{
 };
 use crate::lower::{lower_expr, mangle_local, Resolver};
 use crate::prelude::{self, Requirements};
-use crate::ty::{pad_to_vec4, wgsl_ty};
+use crate::ty::wgsl_ty;
 
 pub struct L2Shader {
     pub source: String,
@@ -347,15 +347,11 @@ impl Resolver for L2Resolver {
     fn read_attr(&self, attr: Attr) -> String {
         if self.derived.contains(&attr) {
             return match attr.derivation() {
-                Some(karakuri_ir::Derivation::SinceBirth) => "(u.t - dst[i].birth_t.x)".to_string(),
+                Some(karakuri_ir::Derivation::SinceBirth) => "(u.t - dst[i].birth_t)".to_string(),
                 other => unreachable!("{other:?} is not synthesised at the read site"),
             };
         }
-        format!(
-            "dst[i].{}.{}",
-            attr.name(),
-            crate::ty::attr_swizzle(attr.ty())
-        )
+        format!("dst[i].{}", attr.name())
     }
 
     /// **The paired element, at the same slot index.** That is the whole of the
@@ -370,15 +366,11 @@ impl Resolver for L2Resolver {
             self.pairs,
             "`other` reached a resolver for a node that does not pair"
         );
-        format!(
-            "other[i].{}.{}",
-            attr.name(),
-            crate::ty::attr_swizzle(attr.ty())
-        )
+        format!("other[i].{}", attr.name())
     }
 
     fn read_seed(&self) -> String {
-        "dst[i].seed.x".to_string()
+        "dst[i].seed".to_string()
     }
 
     fn read_ambient(&self, amb: Ambient) -> String {
@@ -388,7 +380,7 @@ impl Resolver for L2Resolver {
             // is on and only after the write above; below one they do not agree
             // at all, since the value there is a composed index and there is no
             // loop. One spelling for both is the element's own slot.
-            Ambient::Copy if self.has_copy => "dst[i].copy.x".to_string(),
+            Ambient::Copy if self.has_copy => "dst[i].copy".to_string(),
             Ambient::Copy => "0u".to_string(),
             Ambient::Point => {
                 unreachable!("`point` is a field's only input and appears in no other block")
@@ -441,8 +433,7 @@ fn emit_stmts(
                         out.push_str(&format!("{pad}{} = {v};\n", mangle_local(name)))
                     }
                     Target::Attr(attr) => {
-                        let wrapped = pad_to_vec4(attr.ty(), "f32", &v);
-                        out.push_str(&format!("{pad}dst[i].{} = {wrapped};\n", attr.name()));
+                        out.push_str(&format!("{pad}dst[i].{} = {v};\n", attr.name()));
                     }
                     // `strength` is the only one an L2 has, and it belongs to
                     // the `mask` block — the checker refuses it in a `deform`.
@@ -536,13 +527,11 @@ fn deform_entry(
     // moment a second amplifier ran, which is the whole of what `copy` is for.
     if let Some(factor) = amplify {
         let parent = if in_layout.slots.iter().any(|s| s.name == "copy") {
-            format!("src[{src_i}].copy.x")
+            format!("src[{src_i}].copy")
         } else {
             "0u".to_string()
         };
-        copy.push_str(&format!(
-            "    dst[i].copy = vec4<u32>({parent} * {factor}u + _c, 0u, 0u, 0u);\n"
-        ));
+        copy.push_str(&format!("    dst[i].copy = {parent} * {factor}u + _c;\n"));
     }
     // **The gate is computed before the body and applied after it**, over a copy
     // of what reached this node. Two consequences, and both are the point: the

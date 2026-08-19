@@ -385,10 +385,7 @@ struct Identity {
 fn derived_binding(attr: Attr) -> String {
     match attr.derivation() {
         Some(karakuri_ir::Derivation::SinceBirth) => {
-            format!(
-                "    let {} = u.t - elements[elem].birth_t.x;\n",
-                attr.name()
-            )
+            format!("    let {} = u.t - elements[elem].birth_t;\n", attr.name())
         }
         other => unreachable!("{:?} is not synthesised at the read site", other),
     }
@@ -442,14 +439,14 @@ fn vertex_entry(
     let mut out = String::new();
     out.push_str("@vertex\n");
     out.push_str("fn vs(@builtin(vertex_index) corner_idx: u32, @builtin(instance_index) elem: u32) -> VsOut {\n");
-    out.push_str("    let seed = elements[elem].seed.x;\n");
+    out.push_str("    let seed = elements[elem].seed;\n");
     // **Bound whether or not anything reads it, and bound to a literal where
     // the geometry has no such slot.** An element that reached this renderer
     // without passing an amplifier is copy zero of itself — that is the answer,
     // not the absence of one, and giving it here is what lets the lowering emit
     // one spelling for `copy` regardless of what the chain above did.
     out.push_str(if id.has_copy_slot {
-        "    let copy = elements[elem].copy.x;\n"
+        "    let copy = elements[elem].copy;\n"
     } else {
         "    let copy = 0u;\n"
     });
@@ -465,10 +462,9 @@ fn vertex_entry(
             continue;
         }
         out.push_str(&format!(
-            "    let {} = elements[elem].{}.{};\n",
+            "    let {} = elements[elem].{};\n",
             a.name(),
-            a.name(),
-            crate::ty::attr_swizzle(a.ty())
+            a.name()
         ));
     }
     out.push_str("    var _clip: vec4<f32>;\n");
