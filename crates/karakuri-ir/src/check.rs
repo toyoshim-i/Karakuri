@@ -1936,6 +1936,22 @@ impl<'a> Checker<'a> {
                 );
                 return None;
             }
+            // The same shape once more, from the third side. A field has no
+            // element for a reason an author cannot see from the block: it is
+            // not a node, so "which element" has no answer at the point the
+            // splice lands.
+            if ambient == Ambient::Seed && self.kind == Kind::Field {
+                self.err_hint(
+                    Stage::Contract,
+                    span,
+                    "`seed` is per element, and a field has none",
+                    "a field is a function of space — it is handed `point` and nothing else, \
+                     and it is spliced into every procedure that calls `field(p)`, including \
+                     fragment stages that have no element at all. Vary it with `t`, `beats` \
+                     or a `param` instead",
+                );
+                return None;
+            }
             if matches!(ambient, Ambient::Eye | Ambient::Ray) && self.kind == Kind::L4 {
                 self.err_hint(
                     Stage::Contract,
