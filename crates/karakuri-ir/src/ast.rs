@@ -591,10 +591,14 @@ impl Ambient {
     pub fn available_in(self, kind: Kind, block: BlockKind) -> bool {
         match self {
             // **Not in a `camera` block**, which has no element to have one.
-            // An L3 runs once a frame over nothing, so `seed` there would be a
-            // per-element value in a place where there is no element — and the
-            // salt the engine mixes into it is a property of a Set's geometry.
-            Ambient::Seed => kind != Kind::L3,
+            // **Two kinds have no element, and `seed` is refused in both.** An
+            // L3 runs once a frame over nothing, and the salt the engine mixes
+            // into `seed` is a property of a Set's geometry, which a camera is
+            // not. A field is a function of space: it is handed a `point`, it
+            // is spliced into whichever procedures call `field(p)`, and one of
+            // those may be a fragment stage — so there is no element even in
+            // principle, let alone one this evaluation belongs to.
+            Ambient::Seed => kind != Kind::L3 && kind != Kind::Field,
             // **Downstream of an amplifier, and nowhere else it could mean
             // anything.** An L1 writes the buffer an amplifier later reads, so
             // `copy` there is zero by construction; an L3 has no element. In an

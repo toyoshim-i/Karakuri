@@ -2540,6 +2540,36 @@ proc peeks {
     );
 }
 
+/// **`seed` is per element, and a field has none** — the same sentence
+/// `attributes_are_refused_in_a_field_block` states, for the one per-element
+/// value that is not an attribute.
+///
+/// It needed its own test for the reason it needed its own rule: `seed` is
+/// available in every block *an element reaches*, and that sentence is
+/// falsified twice — by a fullscreen L4 and by a field. The first was found by
+/// running it; this one checked clean and reached `FieldResolver::read_seed`,
+/// which is an `unreachable!`, so a `.kir` nobody could see anything wrong with
+/// panicked the thread that compiled it.
+#[test]
+fn seed_is_refused_in_a_field_block() {
+    let errs = check_err(
+        r#"
+proc jitter {
+  kind Field
+
+  field {
+    distance = length(point) - 1.0 + hash1(seed) * 0.01;
+  }
+}
+"#,
+    );
+    assert!(
+        errs.iter().any(|e| e.message.contains("seed")
+            && e.hint.as_deref().unwrap_or_default().contains("function of space")),
+        "expected `seed` to be refused with a field's own reason, got: {errs:?}"
+    );
+}
+
 /// Every geometry declaration is refused where it is written, on the same terms
 /// an L3 refuses them: a field counts nothing, draws nothing and carries
 /// nothing.
