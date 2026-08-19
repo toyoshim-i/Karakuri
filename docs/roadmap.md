@@ -836,6 +836,61 @@ fine alone and is unreadable next to lights.
 
 ### M3 — Expressive depth
 
+**Goal:** the combinatorial range that makes the library worth having.
+
+**Closed.** Every `Ln` in the algebra is a node with a `kind` behind it, and a Set holds a
+chain of them: one or more L1 geometries, a list of L2 deformations, an optional L3 camera,
+a list of L4 renderers, an optional L5 folding those, and a `kind Field` any of them may
+call. `--set` reaches all of it with no new syntax — files are sorted by the `kind` each
+declares. Parameters, bindings, the edit history and the MCP surface address a *node* rather
+than a layer, and a Set can say which of them a console sees.
+
+Every item on the Adds list below is struck. Four things that were inside those items are
+**not** built, and each is struck through to where it went rather than left implied:
+
+- The **graph compiler**, split in two. Its authoring half opens M4 as "Naming what a Set
+  holds"; its fusion half is in "Deferred by decision" with a trigger.
+- A source's **salt is derived rather than assigned**, so `--set` order decides which
+  geometry gets which randomness — M4, same item.
+- **How a mask names a source**, and the `source` attribute it would read — M4, same item.
+- **What an L3 points at**: a reduction, or element zero. Decided, refused by name in the
+  checker, and waiting on the same naming — M4, same item.
+
+That is one piece of work under four headings, which is why it is scheduled once.
+
+**What it cost**, on M1's terms, since that section promised this accounting would be worth
+more than the estimates: 64 commits, 21000 lines, 9 test files, 9 examples, 844 tests. The
+implementation was again not the expensive half.
+
+**Six `.kir` files that checked clean took the process down**, one of them found on the last
+day of the milestone by an audit rather than by anything running. Every one is the same
+shape — a feature widened what the checker accepts, and some position the widened thing can
+now reach had nothing to emit — and every one was a *different* position: a fullscreen L4
+has no element, a `spawn` block has no derived attribute yet, an L3 has no field, a field
+cannot evaluate itself, an amplified chain outgrows the device, and a field has no `seed`.
+Being able to say that shape out loud did not stop the sixth.
+
+**Three review passes returned about fifteen real defects**, and a documentation audit at
+the close returned five more — including that sixth process death, a second geometry running
+at the first one's capacity, and a Set file discarding the capacity it had just recorded. A
+claim in prose is a test nobody runs, and roughly a third of the time the prose was the half
+that was right.
+
+**The recurring defect has a name now: one fact derived in two places.** Slot arithmetic
+that a constant `1` was right about until a Set could hold two L1s. A layer list built twice.
+`l1_count` against `sources.len()`. A comment stating what a loop does beside a loop that
+does something else, since the day the loop was written. None of these is a hard problem;
+all of them are invisible until the second place moves.
+
+**And the tests learned three things about their own material.** A fixture below the
+workgroup size cannot see a wrong dispatch count — 64 elements is the floor. A freshly
+allocated buffer is zeroed, so "never written" and "written correctly" are the same picture.
+And a measurement has to be able to see the defect: a band count cannot see overlapping
+elements where additive light can, and a light total cannot see a position where a centroid
+can.
+
+---
+
 **A validation error is now a diagnostic rather than a dead process**, and that is worth
 recording here because of how it was learned. wgpu answers a validation error by reporting it
 to an uncaptured handler that *panics the thread that made the call*: on the swap worker that
@@ -852,10 +907,14 @@ not a shader at all**, which is why the scope is the right net and validating wi
 the call would only have caught four of five. Each was injected with its own refusal disabled
 and each came back as a message.
 
+**The sixth arrived after this paragraph was written**, which is the paragraph earning its
+keep: `seed` in a `field` block, found by an audit on the last day of the milestone. It is
+refused now, and it would have been a message rather than a crash if it had not been.
+
 **Rust's memory safety does not reach any of this**, and it is worth saying why: the failure
 is in a *different language*, generated at run time, whose type system runs after this
 compiler has already shipped its answer. That is the whole reason the check pass carries the
-burden it does, and the reason every widening of what checks clean opens a hole — five of
+burden it does, and the reason every widening of what checks clean opens a hole — six of
 them, here, in one milestone.
 
 **The net is a net and not a plan.** Everything it catches is something the check pass should
@@ -864,19 +923,12 @@ author who sees it has found a compiler bug rather than made a mistake. What it 
 finding the sixth hole costs a message instead of a crash.
 
 What it does **not** reach: device loss, a GPU hang, a driver crash. Those are the cases a
-separate process would rescue, and none of the five was one — a compile is not where a device
+separate process would rescue, and none of the six was one — a compile is not where a device
 dies. Rescuing those means the *render* crossing a process boundary, which is a frame-path
 cost, or `Device::set_device_lost_callback` and rebuilding, which the deck already has the
 material for since it can rebuild a Set from records.
 
-**Goal:** the combinatorial range that makes the library worth having.
-
-**Where it stands.** The **layer model is complete**: every `Ln` in the algebra is a node with
-a `kind` behind it, and a Set holds a chain of them. That is the half of this milestone that
-makes the library worth having, and it is done.
-
-**Every item on the Adds list below has landed except the graph compiler, and three named
-things are outstanding underneath them.** Cross-source interpolation was the last to land,
+**How it went, item by item.** Cross-source interpolation was the last to land,
 as a pairing L2 — `pairs` on the header, `other.<attr>` for the paired element, and a Set
 that holds exactly two sources when the chain begins with one. Multiple L1 sources landed
 before it, and the nested L5's motivating case landed with those — "two pipelines, one knob"
@@ -884,38 +936,17 @@ was waiting on nothing but a Set able to hold two geometries, and it now renders
 tested: two sources, two renderers, two composited targets, and one published control that
 moves all four instances.
 
-The three that are outstanding, each recorded where it belongs and repeated here because a
-milestone summary that hides them is the thing this paragraph exists to prevent:
-
-- **A source's salt is derived and not assigned**, so reordering `--set` changes which
-  geometry gets which randomness. Under "L1 multiple".
-- **How a mask names a source**, and with it the `source` attribute, which does not exist.
-- **What an L3 points at** — a reduction or element zero — which the checker refuses by name
-  and which needs addressing the language does not have.
-
-All three are the same missing thing, and it now has a section of its own: "Naming what a
-Set holds", below.
-
 **Slot interface contracts landed as the attribute derivation** and **`Field` landed as a
-kind**; both are struck below. The **graph compiler is split in two and scheduled
-separately** — see "Naming what a Set holds" for the authoring half, which is now the first
-work of M4, and "Deferred by decision" for fusion, which is parked with a trigger.
+kind**; both are struck below.
 
-**A correction to the sentence this replaces.** It called multiple L1 sources *"decided in
-full"*, and they are not: what shipped is the merging, not the identity.
+**A correction to a sentence this replaces.** An earlier revision called multiple L1 sources
+*"decided in full"*, and they are not: what shipped is the merging, not the identity. Another
+said every Adds item was built, written from the list of things that had just landed rather
+than from the list this section names — which is the kind of claim a milestone summary exists
+to prevent rather than to make.
 
-**L2 amplification is built**, and it is struck from the list below.
-
-An earlier revision of this paragraph said every item was built. It was written from the list
-of things that had just landed rather than from the list this section actually names, which
-is the kind of claim a milestone summary exists to prevent rather than to make.
-
-The rendering front is closed — `lines`, a fullscreen L4, `blend
-weighted`. The structural front is closed too: `Ln` is a node, a Set holds a **chain**
-(one L1, a list of L2s, one optional L3, a list of L4s, and optionally an L5 folding the
-renderers) and `--set L1.kir,L2.kir,L3.kir,L4.kir` reaches it with no new syntax — files are
-sorted by the `kind` each declares. Parameters, bindings, the edit history and the MCP surface
-all address a node rather than a layer, and a Set can now say which of those a console sees.
+**L2 amplification is built**, and so is the rendering front this milestone owed —
+`topology lines`, a fullscreen L4 that marches, and `blend weighted`.
 
 **L3 is built, edge first.** `L4 : (Geometry, Camera) -> Texture` makes a camera an input
 *edge*, and it is one: the six numbers a camera *is* go into a GPU buffer, a compute pass
@@ -1377,12 +1408,11 @@ than against one being taught to.
   (residency, priming, hot swap, budget, transport, preview, meters: properties of a Set being
   played, which have nothing to do with mixing and sit beside L5 only because that is where a
   performance happens)
-- **Multiple L1 sources**, and the `source` attribute that keeps their identities apart. Per
-  source `seed` counters starting at zero so structured layouts survive, and a per-source
-  hash salt so randomness differs without structure differing. **Built**: a Set holds a
-  *list* of sources, each one a simulation and the chain over it, and
-  `--set a.kir,b.kir,renderer.kir` fills it. The `source` attribute is not built and has no
-  value to carry — see the salt paragraph below.
+- ~~**Multiple L1 sources**~~ — **built, except the identity**, which is M4's. Per-source
+  `seed` counters starting at zero so structured layouts survive, and a per-source hash salt
+  so randomness differs without structure differing. A Set holds a *list* of sources, each
+  one a simulation and the chain over it, and `--set a.kir,b.kir,renderer.kir` fills it. The
+  `source` attribute is not built and has no value to carry — see the salt paragraph below.
 
   **The chain is per source rather than the geometry being concatenated**, and two things
   force that. Two sources kill independently, so compaction is each source's own and there is
@@ -1436,7 +1466,7 @@ than against one being taught to.
   workgroup whatever range they were told, so every test here that means to catch a wrong
   dispatch count needs more than 64 of them. Two injected defects survived a whole test file
   before that was noticed, which is the argument for injecting them
-- **Cross-source interpolation**, restricted to static sources where `seed` is the slot index
+- ~~**Cross-source interpolation**~~ — **built**, restricted to static sources where `seed` is the slot index
   and the paired read is a direct one. **The language half is built**: `pairs` on an L2
   header, `other.<attr>` for the paired element. **And the engine half**: the pairing node binds
   the second geometry as a third input buffer and reads `other[i]` at the same slot index, and
@@ -1510,9 +1540,9 @@ than against one being taught to.
   because it has no code to lower, and a field has *only* code to lower, so it has a file and
   no node. A consumer evaluates it as `field(p)`, and one per Set is the same restriction the
   camera already has — several would need naming, and naming is fan-in.
-- Graph compiler. Node graph as authoring representation, render graph as execution
+- ~~Graph compiler~~. Node graph as authoring representation, render graph as execution
   representation, with fusion of `Field` chains into single shaders. **Split and rescheduled
-  rather than done**: the authoring half opens M4 as "Naming what a Set holds", and fusion is
+  rather than built**: the authoring half opens M4 as "Naming what a Set holds", and fusion is
   deferred with a trigger. Neither is M3's any more
 - ~~`blend weighted` (weighted blended OIT) alongside `blend additive`~~ — **built**
 
