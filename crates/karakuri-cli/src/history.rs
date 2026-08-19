@@ -222,7 +222,13 @@ pub fn seed<'a>(shared: &Shared, sets: impl Iterator<Item = (usize, Vec<&'a Path
 /// Deliberately not a parse, for the reason [`declared_name`] gives: this runs
 /// before anything is compiled, and a file that does not compile still needs a
 /// name to be found again under.
-fn declared_kind(source: &[u8]) -> Option<&'static str> {
+///
+/// **Shared with `mcp::Slots`**, which resolves a `(slot, layer, index)`
+/// address by the same scan. Two readers of a `kind` line would be two rules
+/// for what layer a file is on, and the layer a snapshot is filed under has to
+/// be the layer an agent addresses it by or the surface would be editing one
+/// node and undoing another.
+pub(crate) fn declared_kind(source: &[u8]) -> Option<&'static str> {
     let text = std::str::from_utf8(source).ok()?;
     for line in text.lines() {
         let Some(rest) = line.trim_start().strip_prefix("kind") else {

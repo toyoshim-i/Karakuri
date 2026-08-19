@@ -1654,14 +1654,14 @@ no name:**
 |---|---|
 | A slot with two geometries cannot be rebuilt under `--watch` | It starts, then every save prints a refusal and changes nothing |
 | A slot holding a chain or a second geometry cannot be saved as a Set file | `--save-set` refuses it, and `--record-session` with it |
-| MCP reaches an L1 and the renderers and no other node | An L2, an L3, a field and a second geometry are all unreachable to a model |
+| ~~MCP reaches an L1 and the renderers and no other node~~ | **Closed.** A model reads and writes every node at `(slot, layer, index)` |
 | One `kind Field` per Set, one L3 per Set | Refused at build, with "several would need naming" as the reason |
 | A mask cannot say which source it applies to | The `source` attribute does not exist |
 | A source's salt is derived from `--set` order rather than assigned | Reordering changes which geometry gets which randomness |
 
 The first three are the sharp ones, because they are surfaces that *already exist* and stop
-working the moment a Set holds what M3 taught it to hold. The rest are features that were
-capped at one rather than designed for several.
+working the moment a Set holds what M3 taught it to hold — one of them is closed already. The
+rest are features that were capped at one rather than designed for several.
 
 **What it is, concretely.** Names for nodes, written where they are used rather than in the
 `.kir` — on the terms HTML gives an `id`, since a procedure used twice is two nodes. The
