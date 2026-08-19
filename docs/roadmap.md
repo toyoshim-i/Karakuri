@@ -964,8 +964,10 @@ Deciding *where the camera lives* is what the geometry-reading case forces, and 
 whether or not anything reads geometry yet.
 
 What is left on this front is what an L3 can point at — a reduction, or element zero — which
-is addressing the language does not have; and state, which the layer is allowed to hold and
-which is what damping a follow needs. `examples/beat_jump.kir` is the half that needs neither:
+is addressing the language does not have and which the checker refuses by name; **scheduled,
+at the head of M4, as one item with the other three things that want a node to have a name.**
+And state, which the layer is allowed to hold and which is what damping a follow needs —
+nothing has needed it, so nothing has built it. `examples/beat_jump.kir` is the half that needs neither:
 a cut chosen by hashing the beat number is a pure function of the clock, so it is seekable.
 
 **L5 is a node kind, and that is two words this project had been using as one.** A `.kir`'s
@@ -980,9 +982,9 @@ hold two geometries: a merge composites *renderers*, and every source draws into
 its renderer owns, so "first onto this attachment clears it" carried the whole of it. Two
 sources, two renderers, two targets, four instances and one knob.
 
-What is left is **what a Set publishes**. It is specified in `docs/ir-spec.md` with its open
-questions closed — including the last one this project carried, how two merged geometries keep their
-identities apart. Nothing below is waiting on a decision.
+**What a Set publishes** landed alongside it, and is struck in the list below: an interface
+names which controls a console sees, under what name, over what part of their declared
+range.
 
 **First, and before any of the list below: more than one way to draw.**
 
@@ -1553,7 +1555,12 @@ than against one being taught to.
   cannot be told apart at all
 - IR must be a real IR from M1, not a thin wrapper over WGSL, or fusion has nothing to work
   with
-- `capacity` must already be a Set-level value rather than baked into the artifact
+- `capacity` must already be a Set-level value rather than baked into the artifact.
+  **Discharged, and then outgrown**: it is a uniform and not a constant, which is the half
+  that mattered — the generated WGSL is the same at any capacity — but it is no longer
+  Set-level. Each source runs at the default its own procedure declares. The demand was
+  written when a Set held one geometry, and what it was really asking for was that capacity
+  not be baked into a *compiled artifact*, which still holds
 
 **Clear before building**
 
@@ -1564,10 +1571,23 @@ than against one being taught to.
   slot to its attribute's natural width: every slot is still a padded 16 bytes, which
   doubles VRAM per element against what it needs. That bill comes due at M2's deck, where
   the constraint is how many Sets fit resident, and it is one function in `layout.rs`.
+
+  **Two milestones later it is still 16 bytes, and the bill never came.** Four resident Sets
+  at 262144 elements have not run a machine out of memory, so nothing forced it — and a
+  deformation chain now allocates a whole element buffer per amplifying stage, which pushes
+  in the same direction without having pushed hard enough either. Left undone deliberately
+  rather than forgotten: it is `generate_element_layout` and the offsets that read it, and
+  the thing that will schedule it is a Set that does not fit, not a milestone boundary.
 - **An L4 is now compiled against a specific L1's element layout**, since both declare the
   same struct over the same buffer. That is the slot interface contract arriving early and
   informally. When the contract becomes a real declaration, it should subsume this rather
   than sit beside it.
+
+  **It did.** `emit` and `consumes` are the declaration, `Set::build_many` is the check, and
+  attribute derivation is the adapter — so `consumes ⊆ available at this position` is now
+  stated and enforced rather than being a property of two files happening to agree. The
+  layout compilation stayed, and is now the *mechanism* under a declaration rather than the
+  whole of the arrangement. That is the shape this note asked for.
 - ~~**Give an L4 procedure a way to say what it renders.**~~ **Done, and the answer was to
   add no declaration at all.** The problem was real: quad expansion was justified by
   `topology points` while `topology` was an L1 header field a checked L4 tree had no
