@@ -135,8 +135,13 @@ attached**: `--record-session` writes a `procedure` record whenever a swap lands
 `--replay` rebuilds the slot at the frame it changed on. That was not true when this surface
 was first built, and it is the one thing it needed of the format.
 
-Three things worth knowing before you rely on it:
+Four things worth knowing before you rely on it:
 
+- **It reaches an L1 and the renderers, and nothing else in a slot.** An L2, an L3 and a
+  `kind Field` are real nodes and none of them is addressable here — a rewrite is
+  `(slot, layer, index)` and this surface was built when those were the only two layers there
+  were. Those are edited in the files, with `--watch` picking them up. A slot's *second*
+  geometry is unreachable for the same reason.
 - **`--watch` is what picks a write up.** Without it the file changes and the screen does
   not; the tool says so, but it is easier to just pass it.
 - **A model that writes something too expensive is caught by the same machinery that catches
@@ -177,6 +182,12 @@ cargo run -p karakuri-cli -- --replay take1 --seq frames/
 A replay reads a `tick` where a live run reads a clock, and the recorded audio where a live
 run reads a microphone — so what comes back is the performance and not just the material.
 
+**A Set file carries one geometry and its renderers, and refuses anything else by name.** A
+slot holding an L2, an L3, a `kind Field` or a second geometry cannot be saved, and
+`--record-session` refuses it too, since a session opens with a Set file. Those slots are
+spelled on the command line and kept in a shell script until the format can name their
+nodes.
+
 ---
 
 ## Reference
@@ -195,11 +206,11 @@ run reads a microphone — so what comes back is the performance and not just th
 | `L1.kir L4.kir` | the same, positionally, for one slot |
 | `--capacity N` | elements per Set. **Without it each procedure's own declared default is used**, which is what a `.kir`'s `capacity [min, max] = N` line is for; give this and it overrides every slot |
 | `--param name=value` | a uniform write, applied to every Set — and within a Set, to every node that declares the name |
-| `--param L4:1:name=value` | the same, addressed at one node. How two renderers over one geometry get different values; a bare name cannot, since it reaches both. `L1`, `L2`, `L3` and `L4`, and the index is required |
+| `--param L4:1:name=value` | the same, addressed at one node. How two renderers over one geometry get different values; a bare name cannot, since it reaches both. `L1`, `L2`, `L3`, `L4` and `Field`, and the index is required |
 | `--publish NAME=key[LOW..HIGH]` | put one control on the console under a name the Set chose, over part of its declared range. Without any, every control is published — the first `--publish` makes the list *the* list. It narrows and never widens: a range outside what the procedure declared is refused |
 | `--publish NAME=L4:0:key[LOW..HIGH]` | the same, addressed at one node rather than every node declaring the key |
-| `--bind FIELDS` | attach a signal to a parameter — `layer=L1,key=turbulence,signal=energy,range=0.0..3.0` |
-| `--bind signal=control:NAME` | drive it from a **published control** instead of a signal. This is what a macro is: one knob on the desk moving several internal controls, each through its own curve and range. Publish first — a binding on a name nothing publishes is refused |
+| `--bind FIELDS` | attach a signal to a parameter — `layer=L1,key=turbulence,signal=energy,range=0.0..3.0`. `layer`, `key`, `signal` and `range` are required; `index=N`, `curve=lin\|pow2\|sqrt\|smooth` and the `noise.*` fields are optional. `--help` lists them all |
+| `--bind signal=control:NAME` | drive it from a **published control** instead of a signal. This is what a macro is: one knob on the desk moving several internal controls, each through its own curve and range. Publish first — a binding on a name nothing publishes is reported and dropped, and the run continues without it |
 | `--watch` | recompile and hot-swap when a `.kir` changes |
 | `--store DIR` | where the library, the scratch and the edit history live (default `.karakuri`) |
 | `--demo NAME` | drive itself from a script, for showing rather than playing. `transport` scrubs the beat clock; `lines` draws one L1 as sprites and as strokes and brings its own two-slot deck. Both loop |
@@ -217,7 +228,7 @@ run reads a microphone — so what comes back is the performance and not just th
 |---|---|
 | `--tonemap NAME` | `clamp`, `reinhard`, `aces` (default), `agx` |
 | `--exposure N` | before the tone map |
-| `--budget-ms N` | the frame budget the governor and the hot-swap watchdog judge against |
+| `--budget-ms N` | the frame budget the hot-swap watchdog judges a candidate against, default 20. The governor's priming budget is a different quantity — measured per-Set cost against a 16.7 ms compute budget — and is not on a flag |
 
 **Input**
 
@@ -281,14 +292,19 @@ run reads a microphone — so what comes back is the performance and not just th
 | `n` | where a fade starts: next bar, next beat, now |
 | `j` | how long: 4, 2, 8 beats, or a cut |
 
-**The clock** (needs `--audio-in`)
+**The clock**
+
+| | |
+|---|---|
+| `y` | cycle the focused slot's sync: free, tempo, beat |
+| `u` `i` | scrub the focused slot, a quarter beat a press. Beat sync only |
+
+**The room** (needs `--audio-in`)
 
 | | |
 |---|---|
 | `b` | tap the beat |
 | `,` `.` | halve / double the grid and the octave |
-| `y` | cycle the focused slot's sync: free, tempo, beat |
-| `u` `i` | scrub the focused slot, a quarter beat a press. Beat sync only |
 | `o` `p` | latency offset down / up, 5 ms |
 
 **The window**
@@ -306,7 +322,7 @@ Printed twice a second, and on `s`. One group per slot, then the session:
 
 ```
  0 LIVE g1.00 t12.4s o0.50 m0.041 p2.13   >1 prim g1.00 t0.0s over m---- p----
-| e0.34 on0.02 c1.00 | lock 128.0bpm heard127.8 c0.81 err+0.004b off20ms | aces exp 1.00 | 59.8 fps
+| e0.34 on0.02 c1.00 | lock 128.0bpm heard127.8 c0.81 err+0.004b off20ms | ACES exp 1.00 | 59.8 fps
 ```
 
 **Columns that would say the default are not printed at all** — four slots all reading
@@ -330,6 +346,7 @@ is up and an absent blend means `add`.
 | `heard` `err` | what the tracker last estimated, and how far the grid is from it |
 | `x2?` | the tracker thinks the grid may be an octave off. It will not fix it; `,` and `.` will |
 | `off` | the latency offset |
+| `key=value` | what each binding on that slot last wrote, one column each. Absent when the slot has no bindings |
 | `ableton-link 2p` | the tempo source and its peer count, with ` ?` not yet heard from, ` stop` stopped, ` GONE` died, `xN` anchors rejected. The grid's tempo follows it here when there is no `--audio-in` to print it |
 
 The audio group is absent entirely without `--audio-in`.
@@ -395,8 +412,11 @@ Every version that **compiles** is kept, whoever wrote it:
 .karakuri/history/2026/08/16/143052-271_slot0_L4_beat_strokes.kir
 ```
 
-Including the version the run started with, so the first edit is undoable and
-not only the second. Including versions that compiled and were then rolled back
+Including the version the run started with, whether or not it compiles — that one
+is snapshotted before anything is parsed, so the first edit is undoable and not
+only the second, and a run started from a broken file can still be walked back
+to it. Its layer is read off the file, so an L2's starting version is filed as an
+L2 and joins the same chain its later versions land in. Including versions that compiled and were then rolled back
 for costing too much — those are the ones a session recording does *not* have,
 because it only records what reached the screen.
 
@@ -570,6 +590,12 @@ it. That is the default rather than something to set up.
 Each source runs at the capacity *it* declares, and `--capacity` overrides all of them.
 `--param L1:1:spawn_rate=…` addresses the second source; a bare `--param spawn_rate=…`
 reaches both.
+
+**What a second source does not have is a name**, and three surfaces stop there because of
+it. A slot with two geometries cannot be rebuilt under `--watch` — it starts fine and then
+every save prints a refusal and changes nothing. It cannot be written as a Set file or
+recorded into a session. And MCP reaches its first geometry and its renderers and not the
+second. Editing a second geometry live is a text editor and a restart today.
 
 Two sources and two renderers under `--merge` is **two pipelines composited, published as one
 control**:
