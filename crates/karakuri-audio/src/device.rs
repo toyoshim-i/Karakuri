@@ -185,51 +185,52 @@ impl AudioInput {
         // `frames` is how many this callback delivered and `rate` its sample
         // rate, so that a hop landing part-way through a buffer can say how
         // much of that buffer came *after* it — see the lag below.
-        let mut on_samples = move |mono: &mut dyn Iterator<Item = f32>, frames: usize, rate: f32| {
-            for (index, sample) in mono.enumerate() {
-                ring[write] = sample;
-                write = (write + 1) % BLOCK;
-                filled = (filled + 1).min(BLOCK);
-                since_hop += 1;
-                if since_hop < HOP || filled < BLOCK {
-                    continue;
+        let mut on_samples =
+            move |mono: &mut dyn Iterator<Item = f32>, frames: usize, rate: f32| {
+                for (index, sample) in mono.enumerate() {
+                    ring[write] = sample;
+                    write = (write + 1) % BLOCK;
+                    filled = (filled + 1).min(BLOCK);
+                    since_hop += 1;
+                    if since_hop < HOP || filled < BLOCK {
+                        continue;
+                    }
+                    since_hop = 0;
+
+                    // Oldest first, so the newest sample is the last one — which is
+                    // the instant every phase in this crate is measured against.
+                    let (tail, head) = ring.split_at(write);
+                    block[..head.len()].copy_from_slice(head);
+                    block[head.len()..].copy_from_slice(tail);
+
+                    let analysis = analyzer.analyze(&block);
+                    tracker.set_centre_bpm(f32::from_bits(follower.load(Ordering::Relaxed)));
+                    tracker.push(analysis.novelty);
+
+                    if let Ok(mut slot) = publisher.try_lock() {
+                        // **How much of this buffer arrived after the sample that
+                        // ends this block**, which is how old the analysis instant
+                        // already is when it is published. A hop can land anywhere
+                        // in a buffer, so this runs from a whole buffer down to
+                        // nothing; charging the buffer's *whole* duration every
+                        // time — which is what this did — over-stated `A` by up to
+                        // one buffer and by half of one on average, and the
+                        // correction then led by that much too much.
+                        //
+                        // What is left unaccounted is the delivery delay: the gap
+                        // between the last sample being captured and this callback
+                        // running. Nothing portable measures it, and it is one of
+                        // the terms the operator's offset exists to absorb.
+                        let after = (frames - 1 - index) as f32 / rate;
+                        *slot = Some(Published {
+                            frame: analysis.frame,
+                            estimate: tracker.estimate(),
+                            analysis_lag: after + window_lag,
+                            at: Instant::now(),
+                        });
+                    }
                 }
-                since_hop = 0;
-
-                // Oldest first, so the newest sample is the last one — which is
-                // the instant every phase in this crate is measured against.
-                let (tail, head) = ring.split_at(write);
-                block[..head.len()].copy_from_slice(head);
-                block[head.len()..].copy_from_slice(tail);
-
-                let analysis = analyzer.analyze(&block);
-                tracker.set_centre_bpm(f32::from_bits(follower.load(Ordering::Relaxed)));
-                tracker.push(analysis.novelty);
-
-                if let Ok(mut slot) = publisher.try_lock() {
-                    // **How much of this buffer arrived after the sample that
-                    // ends this block**, which is how old the analysis instant
-                    // already is when it is published. A hop can land anywhere
-                    // in a buffer, so this runs from a whole buffer down to
-                    // nothing; charging the buffer's *whole* duration every
-                    // time — which is what this did — over-stated `A` by up to
-                    // one buffer and by half of one on average, and the
-                    // correction then led by that much too much.
-                    //
-                    // What is left unaccounted is the delivery delay: the gap
-                    // between the last sample being captured and this callback
-                    // running. Nothing portable measures it, and it is one of
-                    // the terms the operator's offset exists to absorb.
-                    let after = (frames - 1 - index) as f32 / rate;
-                    *slot = Some(Published {
-                        frame: analysis.frame,
-                        estimate: tracker.estimate(),
-                        analysis_lag: after + window_lag,
-                        at: Instant::now(),
-                    });
-                }
-            }
-        };
+            };
 
         let error = |e: cpal::Error| {
             // Printed rather than propagated: by the time this fires the stream
@@ -277,7 +278,9 @@ impl AudioInput {
             other => return Err(AudioError::SampleFormat(format!("{other:?}"))),
         }
         .map_err(|e| AudioError::Build(e.to_string()))?;
-        stream.play().map_err(|e| AudioError::Build(e.to_string()))?;
+        stream
+            .play()
+            .map_err(|e| AudioError::Build(e.to_string()))?;
 
         Ok(AudioInput {
             _stream: stream,
@@ -413,10 +416,12 @@ fn pick(host: &cpal::Host, selector: &str) -> Result<cpal::Device, AudioError> {
             .collect::<Vec<_>>()
     };
     if selector.eq_ignore_ascii_case("default") {
-        return host.default_input_device().ok_or_else(|| AudioError::NoMatch {
-            wanted: selector.to_string(),
-            available: inputs().iter().map(describe).collect(),
-        });
+        return host
+            .default_input_device()
+            .ok_or_else(|| AudioError::NoMatch {
+                wanted: selector.to_string(),
+                available: inputs().iter().map(describe).collect(),
+            });
     }
     let wanted = selector.to_lowercase();
     inputs()
@@ -465,7 +470,8 @@ mod tests {
     #[test]
     fn staleness_moves_the_confidence_and_not_the_measurement() {
         let silent = AudioFrame::silent(8);
-        let stale = silent.with_confidence(silent.confidence * staleness(Duration::from_millis(300)));
+        let stale =
+            silent.with_confidence(silent.confidence * staleness(Duration::from_millis(300)));
         assert_eq!(stale.energy, 0.0);
         assert!(stale.confidence > 0.0 && stale.confidence < 1.0);
 
@@ -509,7 +515,10 @@ mod tests {
         let mut previous = 1.0;
         for ms in [0u64, 50, 150, 275, 400, 499] {
             let reading = aged(&published, Duration::from_millis(ms));
-            assert_eq!(reading.frame.energy, 0.6, "the measurement moved at {ms} ms");
+            assert_eq!(
+                reading.frame.energy, 0.6,
+                "the measurement moved at {ms} ms"
+            );
             assert_eq!(reading.estimate.bpm, 128.0);
             assert!(
                 reading.frame.confidence <= previous,
@@ -518,7 +527,8 @@ mod tests {
             // The estimate is believed in the same proportion, or a stale grid
             // would go on being evidence after the signals stopped being.
             assert!(
-                (reading.estimate.confidence - published.estimate.confidence * reading.frame.confidence)
+                (reading.estimate.confidence
+                    - published.estimate.confidence * reading.frame.confidence)
                     .abs()
                     < 1e-6
             );
@@ -536,12 +546,17 @@ mod tests {
         // — a slide over 450 ms rather than a snap, and it does reach zero.
         assert_eq!(aged(&published, Duration::ZERO).frame.confidence, 1.0);
         assert_eq!(
-            aged(&published, Duration::from_secs_f32(FRESH_SECONDS)).frame.confidence,
+            aged(&published, Duration::from_secs_f32(FRESH_SECONDS))
+                .frame
+                .confidence,
             1.0
         );
         let dead = aged(&published, Duration::from_secs_f32(STALE_SECONDS));
         assert_eq!(dead.frame.confidence, 0.0);
         assert_eq!(dead.estimate.confidence, 0.0);
-        assert_eq!(dead.frame.energy, 0.6, "a dead input rewrote the last block");
+        assert_eq!(
+            dead.frame.energy, 0.6,
+            "a dead input rewrote the last block"
+        );
     }
 }

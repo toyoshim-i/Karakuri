@@ -339,7 +339,11 @@ fn a_rate_change_takes_effect_from_a_defined_frame() {
     for _ in 0..2 {
         frame(&gpu, &mut deck, &present, 1);
     }
-    assert_eq!(steps_taken(deck.slot(0).set()), 6, "one in four stepped early");
+    assert_eq!(
+        steps_taken(deck.slot(0).set()),
+        6,
+        "one in four stepped early"
+    );
     deck.set_residency(0, Residency::Allocated);
     frame(&gpu, &mut deck, &present, 1);
     deck.set_residency(0, Residency::Priming);
@@ -418,7 +422,8 @@ fn a_priming_slot_that_goes_live_shows_warmed_state() {
         lit(&always)
     );
     assert_eq!(
-        primed, always,
+        primed,
+        always,
         "a slot primed for {WARM} frames and then put on air is not the slot that \
          was on air for {} — priming is not reaching the same state that being \
          live reaches",
@@ -580,7 +585,8 @@ fn the_priming_rate_does_not_change_the_signal_a_warming_set_reads() {
                 "beat",
                 Curve::Lin,
                 [0.0, 8.0]
-            )).attached(),
+            ))
+            .attached(),
             "`speed` is a declared L1 param of CREEP"
         );
         let mut deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], WIDTH, HEIGHT);
@@ -606,7 +612,11 @@ fn the_priming_rate_does_not_change_the_signal_a_warming_set_reads() {
 
     let (full, slowed) = (warm(1), warm(ONE_IN));
 
-    assert_eq!(full.len(), STEPS, "the full-rate run did not take a step a frame");
+    assert_eq!(
+        full.len(),
+        STEPS,
+        "the full-rate run did not take a step a frame"
+    );
     assert!(
         full.iter().any(|&v| v != full[0]),
         "every value in the run is {}, so this comparison would hold against \
@@ -644,13 +654,15 @@ fn warming_at_full_rate_reads_the_same_signal_as_being_on_air() {
     let run = |residency: Residency| -> Vec<f32> {
         let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
         let mut set = build(&gpu, SEED_A);
-        assert!(set.bind(Binding::new(
-            Kind::L1,
-            "speed",
-            "beat",
-            Curve::Lin,
-            [0.0, 8.0]
-        )).attached());
+        assert!(set
+            .bind(Binding::new(
+                Kind::L1,
+                "speed",
+                "beat",
+                Curve::Lin,
+                [0.0, 8.0]
+            ))
+            .attached());
         let mut deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], WIDTH, HEIGHT);
         deck.set_signals(Signals::new(120.0, u64::from(SEED_A)));
         deck.set_residency(0, residency);
@@ -672,7 +684,12 @@ fn warming_at_full_rate_reads_the_same_signal_as_being_on_air() {
         .iter()
         .zip(&warming)
         .position(|(a, b)| a != b)
-        .map(|i| format!("first at step {i}: live {} vs warming {}", live[i], warming[i]));
+        .map(|i| {
+            format!(
+                "first at step {i}: live {} vs warming {}",
+                live[i], warming[i]
+            )
+        });
     assert!(
         differs.is_none(),
         "a slot warming at full rate read a different signal than the same slot on \

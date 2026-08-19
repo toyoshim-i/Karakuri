@@ -48,19 +48,35 @@ use std::collections::HashMap;
 /// construction rather than by two lists agreeing.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Action {
-    Gain { slot: u8, value: f32 },
-    Opacity { slot: u8, value: f32 },
-    Exposure { value: f32 },
+    Gain {
+        slot: u8,
+        value: f32,
+    },
+    Opacity {
+        slot: u8,
+        value: f32,
+    },
+    Exposure {
+        value: f32,
+    },
     /// On air, or off it. A press, and the deck decides which way — the same
     /// thing the space bar does.
-    ToggleOnAir { slot: u8 },
+    ToggleOnAir {
+        slot: u8,
+    },
     /// Ask a slot to warm off air, or withdraw the request.
-    TogglePriming { slot: u8 },
-    CycleBlend { slot: u8 },
+    TogglePriming {
+        slot: u8,
+    },
+    CycleBlend {
+        slot: u8,
+    },
     /// Audition a slot, or `None` for the mix. Direct rather than a cycle: a
     /// surface has a pad per slot and reaching slot 3 through three presses is
     /// a keyboard's compromise, not a surface's.
-    Preview { slot: Option<u8> },
+    Preview {
+        slot: Option<u8>,
+    },
     Tap,
 }
 
@@ -132,8 +148,14 @@ enum Key {
     /// on", which is the right default: a surface is usually the only thing
     /// plugged in, and an operator who has to discover their controller's
     /// channel before anything works has a map that does not load.
-    Cc { channel: Option<u8>, controller: u8 },
-    Note { channel: Option<u8>, note: u8 },
+    Cc {
+        channel: Option<u8>,
+        controller: u8,
+    },
+    Note {
+        channel: Option<u8>,
+        note: u8,
+    },
 }
 
 /// One operator's table.
@@ -204,7 +226,12 @@ impl Map {
                     channel: Some(channel),
                     note,
                 })
-                .or_else(|| self.find(Key::Note { channel: None, note }))?,
+                .or_else(|| {
+                    self.find(Key::Note {
+                        channel: None,
+                        note,
+                    })
+                })?,
                 None,
             ),
             Message::NoteOff { .. } => return None,
@@ -288,15 +315,19 @@ fn parse_line(line: &str) -> Result<(Key, Target), String> {
         return Err("a note is a press, and this control takes a position; map a `cc`".to_string());
     }
     if !is_note && !target.continuous() {
-        return Err("a control change is a position, and this control takes a press; map a `note`"
-            .to_string());
+        return Err(
+            "a control change is a position, and this control takes a press; map a `note`"
+                .to_string(),
+        );
     }
     Ok((key, target))
 }
 
 fn parse_key(from: &str) -> Result<Key, String> {
     let mut words = from.split_whitespace();
-    let kind = words.next().ok_or_else(|| "expected `cc` or `note`".to_string())?;
+    let kind = words
+        .next()
+        .ok_or_else(|| "expected `cc` or `note`".to_string())?;
     let number: u8 = words
         .next()
         .ok_or_else(|| format!("`{kind}` needs a number"))?
@@ -472,18 +503,36 @@ mod tests {
     #[test]
     fn a_fader_reaches_both_ends_of_its_range_exactly() {
         let m = map("cc 1 -> gain 0");
-        assert_eq!(m.action(cc(1, 0)), Some(Action::Gain { slot: 0, value: 0.0 }));
+        assert_eq!(
+            m.action(cc(1, 0)),
+            Some(Action::Gain {
+                slot: 0,
+                value: 0.0
+            })
+        );
         assert_eq!(
             m.action(cc(1, 127)),
-            Some(Action::Gain { slot: 0, value: 1.0 })
+            Some(Action::Gain {
+                slot: 0,
+                value: 1.0
+            })
         );
         // And an explicit range, both ends, so the default is not the only one
         // that lands.
         let m = map("cc 1 -> gain 0 [0.5, 2.5]");
-        assert_eq!(m.action(cc(1, 0)), Some(Action::Gain { slot: 0, value: 0.5 }));
+        assert_eq!(
+            m.action(cc(1, 0)),
+            Some(Action::Gain {
+                slot: 0,
+                value: 0.5
+            })
+        );
         assert_eq!(
             m.action(cc(1, 127)),
-            Some(Action::Gain { slot: 0, value: 2.5 })
+            Some(Action::Gain {
+                slot: 0,
+                value: 2.5
+            })
         );
     }
 
@@ -559,7 +608,10 @@ mod tests {
                 controller: 1,
                 value: 127
             }),
-            Some(Action::Gain { slot: 3, value: 1.0 })
+            Some(Action::Gain {
+                slot: 3,
+                value: 1.0
+            })
         );
         assert_eq!(
             m.action(Message::ControlChange {
@@ -567,7 +619,10 @@ mod tests {
                 controller: 1,
                 value: 127
             }),
-            Some(Action::Gain { slot: 0, value: 1.0 })
+            Some(Action::Gain {
+                slot: 0,
+                value: 1.0
+            })
         );
     }
 
@@ -597,8 +652,7 @@ mod tests {
     /// rather than one that loads as something else.
     #[test]
     fn every_control_in_the_vocabulary_parses_and_answers() {
-        let m = map(
-            "cc 1 -> gain 2\n\
+        let m = map("cc 1 -> gain 2\n\
              cc 2 -> opacity 3\n\
              cc 3 -> exposure\n\
              note 36 -> on-air 1\n\
@@ -606,10 +660,12 @@ mod tests {
              note 38 -> blend 3\n\
              note 39 -> preview 1\n\
              note 40 -> preview mix\n\
-             note 41 -> tap",
-        );
+             note 41 -> tap");
         assert_eq!(m.len(), 9);
-        assert!(matches!(m.action(cc(1, 127)), Some(Action::Gain { slot: 2, .. })));
+        assert!(matches!(
+            m.action(cc(1, 127)),
+            Some(Action::Gain { slot: 2, .. })
+        ));
         assert!(matches!(
             m.action(cc(2, 127)),
             Some(Action::Opacity { slot: 3, .. })
@@ -642,11 +698,9 @@ mod tests {
     /// does not become part of it.
     #[test]
     fn comments_and_blank_lines_are_skipped() {
-        let m = map(
-            "# the slot faders\n\
+        let m = map("# the slot faders\n\
              \n\
-             cc 1 -> gain 0   # channel strip 1\n",
-        );
+             cc 1 -> gain 0   # channel strip 1\n");
         assert_eq!(m.len(), 1);
         assert!(m.action(cc(1, 127)).is_some());
     }

@@ -149,7 +149,10 @@ impl State {
     /// `(near, 1 / (far - near))`, which is what a weighted fragment is measured
     /// against — packed so the shader multiplies rather than divides.
     pub fn depth_range(&self) -> [f32; 2] {
-        [self.near, 1.0 / (self.far - self.near).max(f32::MIN_POSITIVE)]
+        [
+            self.near,
+            1.0 / (self.far - self.near).max(f32::MIN_POSITIVE),
+        ]
     }
 }
 
@@ -232,8 +235,16 @@ mod tests {
         };
         let clip = transform(cam.view_proj(0.0, 16.0 / 9.0), [0.0, 0.0, 0.0]);
         assert!(clip[3] > 0.0, "origin must be in front of the camera");
-        assert!((clip[0] / clip[3]).abs() < 1e-5, "x = {}", clip[0] / clip[3]);
-        assert!((clip[1] / clip[3]).abs() < 1e-5, "y = {}", clip[1] / clip[3]);
+        assert!(
+            (clip[0] / clip[3]).abs() < 1e-5,
+            "x = {}",
+            clip[0] / clip[3]
+        );
+        assert!(
+            (clip[1] / clip[3]).abs() < 1e-5,
+            "y = {}",
+            clip[1] / clip[3]
+        );
     }
 
     #[test]

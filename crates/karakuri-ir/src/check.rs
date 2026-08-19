@@ -184,7 +184,12 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
         let carried: HashSet<Attr> = emit_set
             .iter()
             .copied()
-            .chain(consumes_vec.iter().map(|(a, _)| *a).filter(|a| a.is_derivable()))
+            .chain(
+                consumes_vec
+                    .iter()
+                    .map(|(a, _)| *a)
+                    .filter(|a| a.is_derivable()),
+            )
             .collect();
         let closed_form = is_closed_form(proc.kind, &carried, &blocks);
         let reads_beats = reads_beats(&blocks);
@@ -250,7 +255,9 @@ fn calls_field(stmts: &[crate::ast::Stmt]) -> bool {
     stmts.iter().any(|s| match s {
         Stmt::Let { value, .. } | Stmt::Var { value, .. } => in_expr(value),
         Stmt::Assign { value, .. } => in_expr(value),
-        Stmt::If { cond, then, els, .. } => in_expr(cond) || calls_field(then) || calls_field(els),
+        Stmt::If {
+            cond, then, els, ..
+        } => in_expr(cond) || calls_field(then) || calls_field(els),
         Stmt::For { body, .. } => calls_field(body),
         Stmt::Kill { .. } => false,
     })
@@ -325,14 +332,11 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 // fullscreen. Refused where it is written rather than left to
                 // mean something arbitrary downstream.
                 Some(Topology::Fullscreen) => errors.push(
-                    IrError::contract(
-                        proc.span,
-                        "`fullscreen` describes a renderer, not geometry",
-                    )
-                    .with_hint(
-                        "use `points` or `lines` here. An L4 draws the whole frame by \
+                    IrError::contract(proc.span, "`fullscreen` describes a renderer, not geometry")
+                        .with_hint(
+                            "use `points` or `lines` here. An L4 draws the whole frame by \
                          having no `vertex` block, which is the only way to say it",
-                    ),
+                        ),
                 ),
                 Some(_) => {}
             }
@@ -344,21 +348,18 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             }
             if let Some(amp) = &proc.amplify {
                 errors.push(
-                    IrError::contract(amp.span, "`amplify` is L2 only")
-                        .with_hint(
-                            "remove `amplify`: how many elements an L1 makes is `capacity`, \
+                    IrError::contract(amp.span, "`amplify` is L2 only").with_hint(
+                        "remove `amplify`: how many elements an L1 makes is `capacity`, \
                             which a Set turns. Amplification is a *multiplier on what reaches \
                             it*, which is a thing only a stage with an input can be",
-                        ),
+                    ),
                 );
             }
             if let Some(span) = proc.pairs {
-                errors.push(
-                    IrError::contract(span, "`pairs` is L2 only").with_hint(
-                        "remove `pairs`: an L1 makes geometry rather than taking any, so there \
+                errors.push(IrError::contract(span, "`pairs` is L2 only").with_hint(
+                    "remove `pairs`: an L1 makes geometry rather than taking any, so there \
                          is no second one for it to pair with",
-                    ),
-                );
+                ));
             }
             if proc.blocks.iter().all(|b| b.kind != BlockKind::Element) {
                 errors.push(IrError::contract(
@@ -377,12 +378,15 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             if let Some(spawn) = proc.block(BlockKind::Spawn) {
                 match proc.spawn_rate() {
                     None => errors.push(
-                        IrError::contract(spawn.span, "a `spawn` block requires a `spawn_rate` param")
-                            .with_hint(
-                                "add `param spawn_rate : float [0.0, 40000.0] = 8000.0` — elements \
+                        IrError::contract(
+                            spawn.span,
+                            "a `spawn` block requires a `spawn_rate` param",
+                        )
+                        .with_hint(
+                            "add `param spawn_rate : float [0.0, 40000.0] = 8000.0` — elements \
                                  per second, which the engine reads to decide how many elements \
                                  each step creates",
-                            ),
+                        ),
                     ),
                     Some(p) if p.ty != Ty::Float => errors.push(
                         IrError::contract(
@@ -411,21 +415,19 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
         Kind::L2 => {
             if let Some(cap) = &proc.capacity {
                 errors.push(
-                    IrError::contract(cap.span, "`capacity` is L1 only")
-                        .with_hint(
-                            "remove `capacity`: an L2 gets as many elements as reach it, and \
+                    IrError::contract(cap.span, "`capacity` is L1 only").with_hint(
+                        "remove `capacity`: an L2 gets as many elements as reach it, and \
                              how many that is belongs to the L1 that made them",
-                        ),
+                    ),
                 );
             }
             if proc.topology.is_some() {
                 errors.push(
-                    IrError::contract(proc.span, "`topology` is L1's")
-                        .with_hint(
-                            "remove `topology`: a deformation moves elements about and does \
+                    IrError::contract(proc.span, "`topology` is L1's").with_hint(
+                        "remove `topology`: a deformation moves elements about and does \
                              not turn a cloud into strands, so what the geometry reads as \
                              stays what the L1 declared",
-                        ),
+                    ),
                 );
             }
             if proc.blend.is_some() {
@@ -469,11 +471,10 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             // rule invented for no case is a rule nobody can check against one.
             if let (Some(span), Some(_)) = (proc.pairs, &proc.amplify) {
                 errors.push(
-                    IrError::contract(span, "`pairs` and `amplify` cannot both apply")
-                        .with_hint(
-                            "split them: a node that pairs two geometries, and a node below it \
+                    IrError::contract(span, "`pairs` and `amplify` cannot both apply").with_hint(
+                        "split them: a node that pairs two geometries, and a node below it \
                              that amplifies what the pairing produced",
-                        ),
+                    ),
                 );
             }
             // **A factor below two is refused, and the two cases are refused
@@ -505,11 +506,8 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                         )
                     };
                     errors.push(
-                        IrError::contract(
-                            amp.span,
-                            format!("`amplify` must be at least 2; {why}"),
-                        )
-                        .with_hint(hint),
+                        IrError::contract(amp.span, format!("`amplify` must be at least 2; {why}"))
+                            .with_hint(hint),
                     );
                 }
                 const MAX_AMPLIFY: u32 = 1024;
@@ -536,11 +534,10 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
         Kind::L3 => {
             if let Some(cap) = &proc.capacity {
                 errors.push(
-                    IrError::contract(cap.span, "`capacity` is L1 only")
-                        .with_hint(
-                            "remove `capacity`: an L3 produces one viewpoint per frame and \
+                    IrError::contract(cap.span, "`capacity` is L1 only").with_hint(
+                        "remove `capacity`: an L3 produces one viewpoint per frame and \
                              has no elements of its own",
-                        ),
+                    ),
                 );
             }
             if proc.topology.is_some() {
@@ -585,11 +582,7 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             // clean and lower to a camera that ignores it.
             if !proc.consumes.is_empty() {
                 errors.push(
-                    IrError::contract(
-                        proc.span,
-                        "an L3 cannot consume attributes yet",
-                    )
-                    .with_hint(
+                    IrError::contract(proc.span, "an L3 cannot consume attributes yet").with_hint(
                         "remove `consumes`: a camera that reads geometry points at a reduction \
                          — a centroid, or element zero — and that addressing is specified in \
                          `docs/ir-spec.md` but not built. A camera on the clock alone works today",
@@ -608,8 +601,16 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
         // elements to count, to draw, to emit or to consume.
         Kind::Field => {
             for (present, what, hint) in [
-                (proc.capacity.is_some(), "capacity", "a field has no elements to allocate"),
-                (proc.topology.is_some(), "topology", "a field is a function, not geometry"),
+                (
+                    proc.capacity.is_some(),
+                    "capacity",
+                    "a field has no elements to allocate",
+                ),
+                (
+                    proc.topology.is_some(),
+                    "topology",
+                    "a field is a function, not geometry",
+                ),
                 (proc.blend.is_some(), "blend", "a field draws nothing"),
                 (
                     proc.amplify.is_some(),
@@ -694,21 +695,18 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             }
             if let Some(amp) = &proc.amplify {
                 errors.push(
-                    IrError::contract(amp.span, "`amplify` is L2 only")
-                        .with_hint(
-                            "remove `amplify`: a renderer draws what reaches it and makes no \
+                    IrError::contract(amp.span, "`amplify` is L2 only").with_hint(
+                        "remove `amplify`: a renderer draws what reaches it and makes no \
                             elements. Several copies of one element is a deformation that \
                             amplifies, above the renderer rather than inside it",
-                        ),
+                    ),
                 );
             }
             if let Some(span) = proc.pairs {
-                errors.push(
-                    IrError::contract(span, "`pairs` is L2 only").with_hint(
-                        "remove `pairs`: a renderer draws what reaches it. Pairing two \
+                errors.push(IrError::contract(span, "`pairs` is L2 only").with_hint(
+                    "remove `pairs`: a renderer draws what reaches it. Pairing two \
                          geometries is a deformation, above the renderer rather than inside it",
-                    ),
-                );
+                ));
             }
             // **A `vertex` block is what makes an L4 per-element**, and an L4
             // without one draws the whole frame instead — see
@@ -719,8 +717,7 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             // consequence, because it is what lets the engine skip the paired
             // L1's simulation — an optimisation that is provable with this and
             // merely plausible without it.
-            if proc.blocks.iter().all(|b| b.kind != BlockKind::Vertex)
-                && !proc.consumes.is_empty()
+            if proc.blocks.iter().all(|b| b.kind != BlockKind::Vertex) && !proc.consumes.is_empty()
             {
                 errors.push(
                     IrError::contract(
@@ -750,12 +747,11 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             // compensated for downstream.
             if let Some((_, span)) = proc.emit.first() {
                 errors.push(
-                    IrError::contract(*span, "`emit` is not an L4 declaration")
-                        .with_hint(
-                            "a renderer draws what reaches it and stores nothing: it has no \
+                    IrError::contract(*span, "`emit` is not an L4 declaration").with_hint(
+                        "a renderer draws what reaches it and stores nothing: it has no \
                              element buffer to emit into. `consumes` is how an L4 says what \
                              it reads",
-                        ),
+                    ),
                 );
             }
         }
@@ -810,11 +806,20 @@ fn shadows_output(name: &str, kind: Kind) -> bool {
 
 /// Attributes, ambients, and stage outputs are a closed, reserved vocabulary
 /// that no param or local may take on — see the module docs on shadowing.
-fn check_reserved(name: &str, span: Span, kind: Kind, kind_of_decl: &str, errors: &mut Vec<IrError>) {
+fn check_reserved(
+    name: &str,
+    span: Span,
+    kind: Kind,
+    kind_of_decl: &str,
+    errors: &mut Vec<IrError>,
+) {
     if name == "id" {
         errors.push(
-            IrError::contract(span, format!("`id` is reserved and cannot be used as a {kind_of_decl} name"))
-                .with_hint("there is no `id` — element identity is `seed`"),
+            IrError::contract(
+                span,
+                format!("`id` is reserved and cannot be used as a {kind_of_decl} name"),
+            )
+            .with_hint("there is no `id` — element identity is `seed`"),
         );
     } else if Attr::from_name(name).is_some() {
         errors.push(
@@ -827,9 +832,15 @@ fn check_reserved(name: &str, span: Span, kind: Kind, kind_of_decl: &str, errors
                 .with_hint("`other` names the second geometry a `pairs` L2 takes"),
         );
     } else if Ambient::from_name(name).is_some() {
-        errors.push(IrError::contract(span, format!("`{name}` shadows an ambient value")));
+        errors.push(IrError::contract(
+            span,
+            format!("`{name}` shadows an ambient value"),
+        ));
     } else if shadows_output(name, kind) {
-        errors.push(IrError::contract(span, format!("`{name}` shadows a stage output name")));
+        errors.push(IrError::contract(
+            span,
+            format!("`{name}` shadows a stage output name"),
+        ));
     }
 }
 
@@ -840,16 +851,14 @@ fn check_params(proc: &Proc, errors: &mut Vec<IrError>) -> HashMap<String, Ty> {
 
     for p in &proc.params {
         if !matches!(p.ty, Ty::Float | Ty::Vec2 | Ty::Vec3) {
-            errors.push(
-                IrError::ty(
-                    p.span,
-                    format!(
-                        "param `{}` has type `{}`; params may only be `float`, `vec2`, or `vec3`",
-                        p.name,
-                        p.ty.name()
-                    ),
+            errors.push(IrError::ty(
+                p.span,
+                format!(
+                    "param `{}` has type `{}`; params may only be `float`, `vec2`, or `vec3`",
+                    p.name,
+                    p.ty.name()
                 ),
-            );
+            ));
         }
         check_reserved(&p.name, p.span, proc.kind, "param", errors);
         if map.contains_key(&p.name) {
@@ -863,8 +872,15 @@ fn check_params(proc: &Proc, errors: &mut Vec<IrError>) -> HashMap<String, Ty> {
         // params, no attributes, no ambients. A default is meant to be a
         // constant-ish value (a literal or a constructor of literals), not
         // an expression referencing the rest of the procedure.
-        let mut checker =
-            Checker::new(proc.kind, None, false, false, &empty_params, &empty_attrs, &empty_attrs);
+        let mut checker = Checker::new(
+            proc.kind,
+            None,
+            false,
+            false,
+            &empty_params,
+            &empty_attrs,
+            &empty_attrs,
+        );
         if let Some(v) = checker.check_expr(&p.default) {
             if v.ty != p.ty {
                 errors.push(IrError::ty(
@@ -973,8 +989,11 @@ fn check_consumes_emitted(
             }
         }
         errors.push(
-            IrError::contract(span, format!("`{}` is consumed but not emitted", attr.name()))
-                .with_hint(format!("add `{}` to `emit`", attr.name())),
+            IrError::contract(
+                span,
+                format!("`{}` is consumed but not emitted", attr.name()),
+            )
+            .with_hint(format!("add `{}` to `emit`", attr.name())),
         );
     }
 }
@@ -1063,9 +1082,7 @@ fn is_closed_form(kind: Kind, carried: &HashSet<Attr>, blocks: &[TBlock]) -> boo
     if blocks.iter().any(|b| b.kind == BlockKind::Spawn) {
         return false;
     }
-    blocks
-        .iter()
-        .all(|b| !accumulates(&b.stmts, carried))
+    blocks.iter().all(|b| !accumulates(&b.stmts, carried))
 }
 
 /// `kill()`, or a read of an emitted attribute, anywhere under `stmts`.
@@ -1074,7 +1091,9 @@ fn accumulates(stmts: &[TStmt], carried: &HashSet<Attr>) -> bool {
         TStmt::Kill { .. } => true,
         TStmt::Let { value, .. } | TStmt::Var { value, .. } => reads_carried(value, carried),
         TStmt::Assign { value, .. } => reads_carried(value, carried),
-        TStmt::If { cond, then, els, .. } => {
+        TStmt::If {
+            cond, then, els, ..
+        } => {
             reads_carried(cond, carried) || accumulates(then, carried) || accumulates(els, carried)
         }
         TStmt::For { body, .. } => accumulates(body, carried),
@@ -1095,10 +1114,9 @@ fn reads_carried(e: &TExpr, carried: &HashSet<Attr>) -> bool {
         // **Both sides.** A paired read is a read of the other source's carried
         // state, which is state all the same.
         TExprKind::Attr(a) | TExprKind::Other(a) => carried.contains(a),
-        TExprKind::Lit(_)
-        | TExprKind::Local(_)
-        | TExprKind::Param(_)
-        | TExprKind::Ambient(_) => false,
+        TExprKind::Lit(_) | TExprKind::Local(_) | TExprKind::Param(_) | TExprKind::Ambient(_) => {
+            false
+        }
         TExprKind::Unary { value, .. } => reads_carried(value, carried),
         TExprKind::Binary { lhs, rhs, .. } => {
             reads_carried(lhs, carried) || reads_carried(rhs, carried)
@@ -1131,9 +1149,9 @@ fn reads_beats(blocks: &[TBlock]) -> bool {
             TStmt::Kill { .. } => false,
             TStmt::Let { value, .. } | TStmt::Var { value, .. } => in_expr(value),
             TStmt::Assign { value, .. } => in_expr(value),
-            TStmt::If { cond, then, els, .. } => {
-                in_expr(cond) || in_stmts(then) || in_stmts(els)
-            }
+            TStmt::If {
+                cond, then, els, ..
+            } => in_expr(cond) || in_stmts(then) || in_stmts(els),
             TStmt::For { body, .. } => in_stmts(body),
         })
     }
@@ -1209,7 +1227,10 @@ fn required_keys(block: BlockKind, emit: &HashSet<Attr>, draws_lines: bool) -> V
         // that `lines` exists, because a segment has a width for the same
         // reason a sprite has a size.
         BlockKind::Vertex => {
-            let mut keys = vec![CovKey::Output(Output::Clip), CovKey::Output(Output::PointSize)];
+            let mut keys = vec![
+                CovKey::Output(Output::Clip),
+                CovKey::Output(Output::PointSize),
+            ];
             if draws_lines {
                 keys.push(CovKey::Output(Output::ClipB));
             }
@@ -1317,7 +1338,10 @@ impl Scope {
     }
 
     fn declare(&mut self, name: String, info: LocalInfo) {
-        self.frames.last_mut().expect("at least one frame").insert(name, info);
+        self.frames
+            .last_mut()
+            .expect("at least one frame")
+            .insert(name, info);
     }
 }
 
@@ -1412,8 +1436,15 @@ impl<'a> Checker<'a> {
         self.errors.push(IrError::new(stage, span, msg));
     }
 
-    fn err_hint(&mut self, stage: Stage, span: Span, msg: impl Into<String>, hint: impl Into<String>) {
-        self.errors.push(IrError::new(stage, span, msg).with_hint(hint));
+    fn err_hint(
+        &mut self,
+        stage: Stage,
+        span: Span,
+        msg: impl Into<String>,
+        hint: impl Into<String>,
+    ) {
+        self.errors
+            .push(IrError::new(stage, span, msg).with_hint(hint));
     }
 
     // -- statements ---------------------------------------------------------
@@ -1432,7 +1463,12 @@ impl<'a> Checker<'a> {
                 value,
                 span,
             } => self.check_assign(target, *op, value, *span),
-            Stmt::If { cond, then, els, span } => self.check_if(cond, then, els, *span),
+            Stmt::If {
+                cond,
+                then,
+                els,
+                span,
+            } => self.check_if(cond, then, els, *span),
             Stmt::For {
                 var,
                 start,
@@ -1485,7 +1521,11 @@ impl<'a> Checker<'a> {
             return;
         }
         if Attr::from_name(name).is_some() {
-            self.err(Stage::Contract, span, format!("`{name}` shadows an attribute name"));
+            self.err(
+                Stage::Contract,
+                span,
+                format!("`{name}` shadows an attribute name"),
+            );
             return;
         }
         if name == OTHER {
@@ -1498,11 +1538,19 @@ impl<'a> Checker<'a> {
             return;
         }
         if Ambient::from_name(name).is_some() {
-            self.err(Stage::Contract, span, format!("`{name}` shadows an ambient value"));
+            self.err(
+                Stage::Contract,
+                span,
+                format!("`{name}` shadows an ambient value"),
+            );
             return;
         }
         if shadows_output(name, self.kind) {
-            self.err(Stage::Contract, span, format!("`{name}` shadows a stage output name"));
+            self.err(
+                Stage::Contract,
+                span,
+                format!("`{name}` shadows a stage output name"),
+            );
             return;
         }
         if self.params.contains_key(name) {
@@ -1510,7 +1558,11 @@ impl<'a> Checker<'a> {
             return;
         }
         if self.scope.lookup(name).is_some() {
-            self.err(Stage::Contract, span, format!("`{name}` shadows another local"));
+            self.err(
+                Stage::Contract,
+                span,
+                format!("`{name}` shadows another local"),
+            );
         }
     }
 
@@ -1542,8 +1594,11 @@ impl<'a> Checker<'a> {
                 Some(BlockKind::Deform) => {
                     self.emit.contains(&attr) || self.consumes.contains(&attr)
                 }
-                Some(BlockKind::Vertex) | Some(BlockKind::Fragment) | Some(BlockKind::Camera)
-                | Some(BlockKind::Mask) | None => false,
+                Some(BlockKind::Vertex)
+                | Some(BlockKind::Fragment)
+                | Some(BlockKind::Camera)
+                | Some(BlockKind::Mask)
+                | None => false,
             };
             if !available {
                 let hint = match self.block {
@@ -1599,7 +1654,10 @@ impl<'a> Checker<'a> {
                     Stage::Contract,
                     span,
                     format!("`{name}` belongs to the `{}` block", output.block().name()),
-                    format!("write `{name}` inside `{}`, not here", output.block().name()),
+                    format!(
+                        "write `{name}` inside `{}`, not here",
+                        output.block().name()
+                    ),
                 );
                 return TargetRes::Invalid;
             }
@@ -1615,7 +1673,13 @@ impl<'a> Checker<'a> {
         TargetRes::Invalid
     }
 
-    fn check_assign(&mut self, target: &str, op: Option<BinOp>, value: &Expr, span: Span) -> Option<TStmt> {
+    fn check_assign(
+        &mut self,
+        target: &str,
+        op: Option<BinOp>,
+        value: &Expr,
+        span: Span,
+    ) -> Option<TStmt> {
         let value_t = self.check_expr(value);
         let res = self.resolve_target(target, span);
 
@@ -1756,7 +1820,14 @@ impl<'a> Checker<'a> {
         })
     }
 
-    fn check_for(&mut self, var: &str, start: i32, end: i32, body: &[Stmt], span: Span) -> Option<TStmt> {
+    fn check_for(
+        &mut self,
+        var: &str,
+        start: i32,
+        end: i32,
+        body: &[Stmt],
+        span: Span,
+    ) -> Option<TStmt> {
         self.scope.push();
         self.check_declarable_name(var, span);
         self.scope.declare(
@@ -1806,7 +1877,9 @@ impl<'a> Checker<'a> {
 
     fn check_expr(&mut self, e: &Expr) -> Option<TExpr> {
         match e {
-            Expr::Lit { value, span } => Some(TExpr::new(value.ty(), *span, TExprKind::Lit(*value))),
+            Expr::Lit { value, span } => {
+                Some(TExpr::new(value.ty(), *span, TExprKind::Lit(*value)))
+            }
             Expr::Ident { name, span } => self.check_ident(name, *span),
             Expr::Unary { op, value, span } => {
                 let v = self.check_expr(value)?;
@@ -1827,13 +1900,21 @@ impl<'a> Checker<'a> {
                 self.desugar_compound(*op, l, r, *span)
             }
             Expr::Call { name, args, span } => self.check_call(name, args, *span),
-            Expr::Swizzle { value, components, span } => self.check_swizzle(value, components, *span),
+            Expr::Swizzle {
+                value,
+                components,
+                span,
+            } => self.check_swizzle(value, components, *span),
         }
     }
 
     fn check_ident(&mut self, name: &str, span: Span) -> Option<TExpr> {
         if let Some(info) = self.scope.lookup(name) {
-            return Some(TExpr::new(info.ty, span, TExprKind::Local(name.to_string())));
+            return Some(TExpr::new(
+                info.ty,
+                span,
+                TExprKind::Local(name.to_string()),
+            ));
         }
         if let Some(ty) = self.params.get(name) {
             return Some(TExpr::new(*ty, span, TExprKind::Param(name.to_string())));
@@ -1877,7 +1958,9 @@ impl<'a> Checker<'a> {
                 // value. Refusing it is better than a rule an author has to
                 // remember.
                 Some(BlockKind::Mask) => self.consumes.contains(&attr),
-                Some(BlockKind::Vertex) | Some(BlockKind::Fragment) => self.consumes.contains(&attr),
+                Some(BlockKind::Vertex) | Some(BlockKind::Fragment) => {
+                    self.consumes.contains(&attr)
+                }
                 // An L3 has no element in hand — see `check_header`.
                 Some(BlockKind::Camera) | None => false,
             };
@@ -2025,7 +2108,11 @@ impl<'a> Checker<'a> {
                 if matches!(ty, Ty::Float | Ty::Int | Ty::Vec2 | Ty::Vec3 | Ty::Vec4) {
                     Some(ty)
                 } else {
-                    self.err(Stage::Type, span, format!("`-` is not defined for `{}`", ty.name()));
+                    self.err(
+                        Stage::Type,
+                        span,
+                        format!("`-` is not defined for `{}`", ty.name()),
+                    );
                     None
                 }
             }
@@ -2098,7 +2185,12 @@ impl<'a> Checker<'a> {
 
         // Arithmetic: same type, or `float`/vector broadcast, or the
         // `camera * vecN` special case (matrices have no other operation).
-        if lhs == rhs && matches!(lhs, Ty::Float | Ty::Int | Ty::Uint | Ty::Vec2 | Ty::Vec3 | Ty::Vec4) {
+        if lhs == rhs
+            && matches!(
+                lhs,
+                Ty::Float | Ty::Int | Ty::Uint | Ty::Vec2 | Ty::Vec3 | Ty::Vec4
+            )
+        {
             return Some(lhs);
         }
         match (lhs, rhs) {
@@ -2161,11 +2253,21 @@ impl<'a> Checker<'a> {
 
         for &i in sig.const_args {
             if let Some(a) = args_ast.get(i) {
-                if !matches!(a, Expr::Lit { value: Lit::Int(_), .. }) {
+                if !matches!(
+                    a,
+                    Expr::Lit {
+                        value: Lit::Int(_),
+                        ..
+                    }
+                ) {
                     self.err_hint(
                         Stage::Type,
                         a.span(),
-                        format!("argument {} to `{}` must be a literal integer", i + 1, b.name()),
+                        format!(
+                            "argument {} to `{}` must be a literal integer",
+                            i + 1,
+                            b.name()
+                        ),
                         "octave counts are unrolled at lowering time, so they cannot be a \
                          runtime value",
                     );
@@ -2193,7 +2295,12 @@ impl<'a> Checker<'a> {
                         self.err(
                             Stage::Type,
                             actual.span,
-                            format!("`{}` expects `{}`, found `{}`", b.name(), t.name(), actual.ty.name()),
+                            format!(
+                                "`{}` expects `{}`, found `{}`",
+                                b.name(),
+                                t.name(),
+                                actual.ty.name()
+                            ),
                         );
                         ok = false;
                     }
@@ -2271,7 +2378,11 @@ impl<'a> Checker<'a> {
                     self.err(
                         Stage::Type,
                         a.span,
-                        format!("`{}(...)` converts a scalar number, found `{}`", ty.name(), a.ty.name()),
+                        format!(
+                            "`{}(...)` converts a scalar number, found `{}`",
+                            ty.name(),
+                            a.ty.name()
+                        ),
                     );
                     return None;
                 }
@@ -2287,7 +2398,11 @@ impl<'a> Checker<'a> {
                 if args_ast.len() == 1 {
                     if let Some(a) = self.check_expr(&args_ast[0]) {
                         if a.ty == Ty::Float {
-                            return Some(TExpr::new(ty, span, TExprKind::Construct { args: vec![a] }));
+                            return Some(TExpr::new(
+                                ty,
+                                span,
+                                TExprKind::Construct { args: vec![a] },
+                            ));
                         }
                         // Not a scalar: fall through to the general rule,
                         // which will accept it if it happens to already be
@@ -2320,7 +2435,11 @@ impl<'a> Checker<'a> {
                 self.check_constructor_concat(ty, n, checked, span)
             }
             Ty::Bool | Ty::Mat3 | Ty::Mat4 => {
-                self.err(Stage::Type, span, format!("`{}` cannot be constructed", ty.name()));
+                self.err(
+                    Stage::Type,
+                    span,
+                    format!("`{}` cannot be constructed", ty.name()),
+                );
                 for a in args_ast {
                     self.check_expr(a);
                 }
@@ -2332,12 +2451,20 @@ impl<'a> Checker<'a> {
     /// The shared tail of vector construction: every argument must be
     /// `float`/`vec2`/`vec3`/`vec4`, and their component counts must sum to
     /// exactly `n`.
-    fn check_constructor_concat(&mut self, ty: Ty, n: usize, args: Vec<TExpr>, span: Span) -> Option<TExpr> {
+    fn check_constructor_concat(
+        &mut self,
+        ty: Ty,
+        n: usize,
+        args: Vec<TExpr>,
+        span: Span,
+    ) -> Option<TExpr> {
         let mut total = 0usize;
         let mut ok = true;
         for a in &args {
             match a.ty.components() {
-                Some(c) if matches!(a.ty, Ty::Float | Ty::Vec2 | Ty::Vec3 | Ty::Vec4) => total += c as usize,
+                Some(c) if matches!(a.ty, Ty::Float | Ty::Vec2 | Ty::Vec3 | Ty::Vec4) => {
+                    total += c as usize
+                }
                 _ => {
                     self.err(
                         Stage::Type,
@@ -2447,7 +2574,10 @@ impl<'a> Checker<'a> {
                 self.err(
                     Stage::Type,
                     span,
-                    format!("cannot swizzle `{}`; only vectors have components", other.name()),
+                    format!(
+                        "cannot swizzle `{}`; only vectors have components",
+                        other.name()
+                    ),
                 );
                 return None;
             }
@@ -2456,7 +2586,10 @@ impl<'a> Checker<'a> {
             self.err(
                 Stage::Type,
                 span,
-                format!("swizzle must have 1 to 4 components, found {}", components.len()),
+                format!(
+                    "swizzle must have 1 to 4 components, found {}",
+                    components.len()
+                ),
             );
             return None;
         }
@@ -2473,7 +2606,9 @@ impl<'a> Checker<'a> {
                     self.err(
                         Stage::Type,
                         span,
-                        format!("`{c}` is not a valid swizzle component; use `x`, `y`, `z`, or `w`"),
+                        format!(
+                            "`{c}` is not a valid swizzle component; use `x`, `y`, `z`, or `w`"
+                        ),
                     );
                     ok = false;
                     continue;
@@ -2484,7 +2619,11 @@ impl<'a> Checker<'a> {
                     Stage::Type,
                     span,
                     format!("`.{c}` is out of range for a {width}-component vector"),
-                    format!("`{}` only has components `{}`", v.ty.name(), &"xyzw"[..width as usize]),
+                    format!(
+                        "`{}` only has components `{}`",
+                        v.ty.name(),
+                        &"xyzw"[..width as usize]
+                    ),
                 );
                 ok = false;
                 continue;

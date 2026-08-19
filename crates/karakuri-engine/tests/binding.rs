@@ -212,7 +212,11 @@ fn value_of(deck: &Deck, slot: usize, key: &str) -> f32 {
 fn a_beat_binding_moves_a_param_in_time_with_the_deck_oscillator() {
     let gpu = Gpu::headless().expect("no GPU");
     let mut set = build(&gpu);
-    assert_eq!(set.set_param("radius", 2.5), 1, "the param must be declared for the write to mean anything");
+    assert_eq!(
+        set.set_param("radius", 2.5),
+        1,
+        "the param must be declared for the write to mean anything"
+    );
     assert!(
         set.bind(Binding::new(
             Kind::L1,
@@ -220,7 +224,8 @@ fn a_beat_binding_moves_a_param_in_time_with_the_deck_oscillator() {
             "beat",
             Curve::Lin,
             [1.0, 5.0]
-        )).attached(),
+        ))
+        .attached(),
         "`radius` is a declared L1 param"
     );
     let (mut deck, present) = deck_of(&gpu, vec![set], 1);
@@ -282,15 +287,33 @@ fn a_bound_param_reaches_the_shader_by_the_same_path_a_param_override_takes() {
     const RATE: f32 = 20_000.0;
     let bound_to = |key: &str, layer, value: f32, manual: f32| {
         let mut set = build(&gpu);
-        assert_eq!(set.set_param("spawn_rate", RATE), 1, "the param must be declared for the write to mean anything");
-        assert_eq!(set.set_param(key, manual), 1, "the param must be declared for the write to mean anything");
-        assert!(set.bind(Binding::new(layer, key, "beat", Curve::Lin, [value, value])).attached());
+        assert_eq!(
+            set.set_param("spawn_rate", RATE),
+            1,
+            "the param must be declared for the write to mean anything"
+        );
+        assert_eq!(
+            set.set_param(key, manual),
+            1,
+            "the param must be declared for the write to mean anything"
+        );
+        assert!(set
+            .bind(Binding::new(layer, key, "beat", Curve::Lin, [value, value]))
+            .attached());
         set
     };
     let set_to = |key: &str, value: f32| {
         let mut set = build(&gpu);
-        assert_eq!(set.set_param("spawn_rate", RATE), 1, "the param must be declared for the write to mean anything");
-        assert_eq!(set.set_param(key, value), 1, "the param must be declared for the write to mean anything");
+        assert_eq!(
+            set.set_param("spawn_rate", RATE),
+            1,
+            "the param must be declared for the write to mean anything"
+        );
+        assert_eq!(
+            set.set_param(key, value),
+            1,
+            "the param must be declared for the write to mean anything"
+        );
         set
     };
     let render_of = |set: Set| {
@@ -332,7 +355,11 @@ fn a_binding_reaches_the_spawn_accumulator_and_not_only_the_uniform() {
 
     // Nothing spawns at all without the binding: `spawn_rate` is zero by hand.
     let mut unbound = build(&gpu);
-    assert_eq!(unbound.set_param("spawn_rate", 0.0), 1, "the param must be declared for the write to mean anything");
+    assert_eq!(
+        unbound.set_param("spawn_rate", 0.0),
+        1,
+        "the param must be declared for the write to mean anything"
+    );
     let (mut deck, present) = deck_of(&gpu, vec![unbound], 5);
     for _ in 0..30 {
         frame(&gpu, &mut deck, &present, 1);
@@ -347,14 +374,20 @@ fn a_binding_reaches_the_spawn_accumulator_and_not_only_the_uniform() {
     // constant rate: the range's two ends are equal, so the count depends on
     // the binding being read rather than on the phase it was read at.
     let mut bound = build(&gpu);
-    assert_eq!(bound.set_param("spawn_rate", 0.0), 1, "the param must be declared for the write to mean anything");
-    assert!(bound.bind(Binding::new(
-        Kind::L1,
-        "spawn_rate",
-        "beat",
-        Curve::Lin,
-        [3000.0, 3000.0]
-    )).attached());
+    assert_eq!(
+        bound.set_param("spawn_rate", 0.0),
+        1,
+        "the param must be declared for the write to mean anything"
+    );
+    assert!(bound
+        .bind(Binding::new(
+            Kind::L1,
+            "spawn_rate",
+            "beat",
+            Curve::Lin,
+            [3000.0, 3000.0]
+        ))
+        .attached());
     let (mut deck, present) = deck_of(&gpu, vec![bound], 5);
     for _ in 0..30 {
         frame(&gpu, &mut deck, &present, 1);
@@ -375,17 +408,23 @@ fn a_manual_value_is_kept_and_blended_from_rather_than_overwritten() {
     let gpu = Gpu::headless().expect("no GPU");
     let mut set = build(&gpu);
     // What `--param radius=7.0` does.
-    assert_eq!(set.set_param("radius", 7.0), 1, "the param must be declared for the write to mean anything");
+    assert_eq!(
+        set.set_param("radius", 7.0),
+        1,
+        "the param must be declared for the write to mean anything"
+    );
     // An *invented* signal, so the manual value keeps 90% of the weight and
     // its survival is observable in the written value rather than only in the
     // map it came from.
-    assert!(set.bind(Binding::new(
-        Kind::L1,
-        "radius",
-        "energy",
-        Curve::Lin,
-        [0.0, 1.0]
-    )).attached());
+    assert!(set
+        .bind(Binding::new(
+            Kind::L1,
+            "radius",
+            "energy",
+            Curve::Lin,
+            [0.0, 1.0]
+        ))
+        .attached());
     let (mut deck, present) = deck_of(&gpu, vec![set], 2);
 
     for _ in 0..10 {
@@ -413,14 +452,20 @@ fn a_manual_value_is_kept_and_blended_from_rather_than_overwritten() {
 fn a_signal_with_no_provider_leaves_the_param_where_it_was_put() {
     let gpu = Gpu::headless().expect("no GPU");
     let mut set = build(&gpu);
-    assert_eq!(set.set_param("radius", 3.25), 1, "the param must be declared for the write to mean anything");
-    assert!(set.bind(Binding::new(
-        Kind::L1,
-        "radius",
-        "mic_level",
-        Curve::Pow2,
-        [100.0, 200.0]
-    )).attached());
+    assert_eq!(
+        set.set_param("radius", 3.25),
+        1,
+        "the param must be declared for the write to mean anything"
+    );
+    assert!(set
+        .bind(Binding::new(
+            Kind::L1,
+            "radius",
+            "mic_level",
+            Curve::Pow2,
+            [100.0, 200.0]
+        ))
+        .attached());
     let (mut deck, present) = deck_of(&gpu, vec![set], 3);
 
     for _ in 0..20 {
@@ -459,14 +504,16 @@ fn the_same_ticks_and_seed_reproduce_a_noise_binding_bit_for_bit() {
                 rate: 0.5,
                 stream: 3,
             }),
-        ).attached();
+        )
+        .attached();
         set.bind(Binding::new(
             Kind::L4,
             "hue",
             "bar",
             Curve::Smooth,
             [0.0, 1.0],
-        )).attached();
+        ))
+        .attached();
         let (mut deck, present) = deck_of(&gpu, vec![set], seed);
         let mut out = Vec::new();
         for steps in ticks {
@@ -489,14 +536,20 @@ fn every_live_slot_reads_the_same_session_phase() {
     let sets: Vec<Set> = (0..2)
         .map(|_| {
             let mut set = build(&gpu);
-            assert_eq!(set.set_param("radius", 2.0), 1, "the param must be declared for the write to mean anything");
-            assert!(set.bind(Binding::new(
-                Kind::L1,
-                "radius",
-                "beat",
-                Curve::Pow2,
-                [1.0, 5.0]
-            )).attached());
+            assert_eq!(
+                set.set_param("radius", 2.0),
+                1,
+                "the param must be declared for the write to mean anything"
+            );
+            assert!(set
+                .bind(Binding::new(
+                    Kind::L1,
+                    "radius",
+                    "beat",
+                    Curve::Pow2,
+                    [1.0, 5.0]
+                ))
+                .attached());
             set
         })
         .collect();
@@ -548,14 +601,20 @@ fn the_session_clock_advances_by_the_same_clamped_steps_the_slots_do() {
 
     let bound = |gpu: &Gpu| {
         let mut set = build(gpu);
-        assert_eq!(set.set_param("radius", 2.0), 1, "the param must be declared for the write to mean anything");
-        assert!(set.bind(Binding::new(
-            Kind::L1,
-            "radius",
-            "beat",
-            Curve::Lin,
-            [1.0, 5.0]
-        )).attached());
+        assert_eq!(
+            set.set_param("radius", 2.0),
+            1,
+            "the param must be declared for the write to mean anything"
+        );
+        assert!(set
+            .bind(Binding::new(
+                Kind::L1,
+                "radius",
+                "beat",
+                Curve::Lin,
+                [1.0, 5.0]
+            ))
+            .attached());
         set
     };
 
@@ -566,7 +625,12 @@ fn the_session_clock_advances_by_the_same_clamped_steps_the_slots_do() {
     let (mut capped, present_b) = deck_of(&gpu, vec![bound(&gpu)], 8);
     for _ in 0..12 {
         frame(&gpu, &mut fast, &present_a, over);
-        frame(&gpu, &mut capped, &present_b, karakuri_engine::set::MAX_STEPS);
+        frame(
+            &gpu,
+            &mut capped,
+            &present_b,
+            karakuri_engine::set::MAX_STEPS,
+        );
         assert_eq!(
             value_of(&fast, 0, "radius"),
             value_of(&capped, 0, "radius"),
@@ -636,8 +700,16 @@ fn a_param_name_two_nodes_declare_is_two_values_one_per_node() {
 
     // A name with no address is every node that declares it — one knob, both
     // layers — which is what a `--param` and a `param` record ask for.
-    assert_eq!(set.set_param("radius", 4.0), 2, "a bare name must move both");
-    assert_eq!(set.set_param("point_scale", 9.0), 1, "only the L4 declares it");
+    assert_eq!(
+        set.set_param("radius", 4.0),
+        2,
+        "a bare name must move both"
+    );
+    assert_eq!(
+        set.set_param("point_scale", 9.0),
+        1,
+        "only the L4 declares it"
+    );
     assert_eq!(set.set_param("nothing_declares_this", 1.0), 0);
 
     // Back to two distinct values by rebuilding, since a bare name cannot set
@@ -660,7 +732,8 @@ fn a_param_name_two_nodes_declare_is_two_values_one_per_node() {
                 "nothing_measures_this",
                 Curve::Lin,
                 [0.0, 100.0]
-            )).attached(),
+            ))
+            .attached(),
             "`radius` is declared on {layer:?}"
         );
     }
@@ -731,39 +804,47 @@ fn binding_a_param_the_layer_does_not_declare_is_refused() {
     let gpu = Gpu::headless().expect("no GPU");
     let mut set = build(&gpu);
 
-    assert!(!set.bind(Binding::new(
-        Kind::L1,
-        "no_such_param",
-        "beat",
-        Curve::Lin,
-        [0.0, 1.0]
-    )).attached());
+    assert!(!set
+        .bind(Binding::new(
+            Kind::L1,
+            "no_such_param",
+            "beat",
+            Curve::Lin,
+            [0.0, 1.0]
+        ))
+        .attached());
     // `hue` is L4's, so an L1 binding to it must not attach.
-    assert!(!set.bind(Binding::new(
-        Kind::L1,
-        "hue",
-        "beat",
-        Curve::Lin,
-        [0.0, 1.0]
-    )).attached());
-    assert!(set.bind(Binding::new(
-        Kind::L4,
-        "hue",
-        "beat",
-        Curve::Lin,
-        [0.0, 1.0]
-    )).attached());
+    assert!(!set
+        .bind(Binding::new(
+            Kind::L1,
+            "hue",
+            "beat",
+            Curve::Lin,
+            [0.0, 1.0]
+        ))
+        .attached());
+    assert!(set
+        .bind(Binding::new(
+            Kind::L4,
+            "hue",
+            "beat",
+            Curve::Lin,
+            [0.0, 1.0]
+        ))
+        .attached());
     assert_eq!(set.bindings().len(), 1);
 
     // A second binding on the same param replaces the first rather than
     // stacking behind it, so the write never depends on attachment order.
-    assert!(set.bind(Binding::new(
-        Kind::L4,
-        "hue",
-        "bar",
-        Curve::Sqrt,
-        [0.0, 1.0]
-    )).attached());
+    assert!(set
+        .bind(Binding::new(
+            Kind::L4,
+            "hue",
+            "bar",
+            Curve::Sqrt,
+            [0.0, 1.0]
+        ))
+        .attached());
     assert_eq!(set.bindings().len(), 1);
     assert_eq!(set.bindings()[0].signal, "bar");
 }
@@ -787,7 +868,10 @@ fn a_measured_signal_moves_a_param_fully_where_the_invented_one_moves_a_tenth() 
     // measured frame is given *the same value*, so the only difference between
     // the two runs is how much it is believed.
     let invented_sample = signals.sample("energy");
-    assert_eq!(invented_sample.confidence, 0.1, "energy should be invented here");
+    assert_eq!(
+        invented_sample.confidence, 0.1,
+        "energy should be invented here"
+    );
 
     let manual = 1.0;
     let range = [0.0, 10.0];
@@ -895,7 +979,14 @@ fn measuring_something_does_not_disturb_a_signal_nobody_measures() {
     }));
 
     let manual = 2.5;
-    for name in ["beat", "bar", "bpm", "band4", "band7", "nothing_provides_this"] {
+    for name in [
+        "beat",
+        "bar",
+        "bpm",
+        "band4",
+        "band7",
+        "nothing_provides_this",
+    ] {
         let mut a = Binding::new(Kind::L1, "turbulence", name, Curve::Pow2, [0.0, 10.0]);
         let mut b = Binding::new(Kind::L1, "turbulence", name, Curve::Pow2, [0.0, 10.0]);
         assert_eq!(
@@ -925,13 +1016,15 @@ fn measuring_something_does_not_disturb_a_signal_nobody_measures() {
 fn a_measured_signal_reaches_the_uniform_a_param_override_would_write() {
     let gpu = Gpu::headless().expect("no GPU");
     let mut set = build(&gpu);
-    assert!(set.bind(Binding::new(
-        Kind::L1,
-        "radius",
-        "energy",
-        Curve::Lin,
-        [0.5, 8.0]
-    )).attached());
+    assert!(set
+        .bind(Binding::new(
+            Kind::L1,
+            "radius",
+            "energy",
+            Curve::Lin,
+            [0.5, 8.0]
+        ))
+        .attached());
     let (mut deck, present) = deck_of(&gpu, vec![set], u64::from(SEED));
 
     frame(&gpu, &mut deck, &present, 1);

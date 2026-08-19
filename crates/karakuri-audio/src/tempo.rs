@@ -850,9 +850,15 @@ mod tests {
             );
             // Whatever the centre was taken to mean, the fold means the same.
             let folded = fold(133.0, centre);
-            assert!(window.contains(&folded), "133 → {folded}, outside {window:?}");
+            assert!(
+                window.contains(&folded),
+                "133 → {folded}, outside {window:?}"
+            );
         }
-        assert_eq!(Tracker::new(0.01, 0.02, 400.0).centre_bpm(), *BPM_RANGE.end());
+        assert_eq!(
+            Tracker::new(0.01, 0.02, 400.0).centre_bpm(),
+            *BPM_RANGE.end()
+        );
     }
 
     // -- the estimate -------------------------------------------------------
@@ -1149,7 +1155,10 @@ mod tests {
             low.bpm, low.confidence
         );
         let right = track(&clicks(174.0, 14.0, 0.8), 174.0).estimate();
-        assert!(!right.half_tempo_hint, "a correct grid hinted at half tempo");
+        assert!(
+            !right.half_tempo_hint,
+            "a correct grid hinted at half tempo"
+        );
         for hat in [0.15_f32, 0.3, 0.45] {
             let estimate = track(&kick_and_hat(90.0, 14.0, hat), 90.0).estimate();
             assert!(
@@ -1228,8 +1237,6 @@ mod tests {
         }
         samples
     }
-
-
 
     // -- extrapolation ------------------------------------------------------
 

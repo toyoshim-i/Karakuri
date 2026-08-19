@@ -128,12 +128,18 @@ pub fn generate_l2(
     other: Option<&[Attr]>,
     field: Option<&crate::field::FieldShader>,
 ) -> L2Shader {
-    assert_eq!(checked.kind, Kind::L2, "generate_l2 called on a non-L2 procedure");
+    assert_eq!(
+        checked.kind,
+        Kind::L2,
+        "generate_l2 called on a non-L2 procedure"
+    );
 
     let in_layout = layout::generate_element_layout(upstream, synthetic, derived);
     // **An amplifier is where `copy` starts existing**, and once it exists it
     // is carried by every node below — so this is an `||`, not an assignment.
-    let out_synthetic = Synthetic { copy: synthetic.copy || checked.amplify.is_some() };
+    let out_synthetic = Synthetic {
+        copy: synthetic.copy || checked.amplify.is_some(),
+    };
     // **The paired geometry's own layout.** Two sources need not emit the same
     // attributes — each chain instance is compiled against the source it runs
     // over — so this is a second struct rather than a second view of the first.
@@ -209,11 +215,12 @@ pub fn generate_l2(
     // anything but a `float`, and multiplying it in here is what keeps it an
     // ordinary param everywhere else — publishable, bindable, saved in a Set
     // file — rather than a second mechanism beside the mask.
-    let weight = checked
-        .params
-        .iter()
-        .any(|p| p.name == "weight")
-        .then(|| format!("    strength = strength * u.{};\n", layout::mangle_param("weight")));
+    let weight = checked.params.iter().any(|p| p.name == "weight").then(|| {
+        format!(
+            "    strength = strength * u.{};\n",
+            layout::mangle_param("weight")
+        )
+    });
     let mask = checked.block(BlockKind::Mask).map(|block| {
         let mut out = String::new();
         emit_stmts(&block.stmts, &resolver, &mut req, 1, &mut out);
@@ -344,7 +351,11 @@ impl Resolver for L2Resolver {
                 other => unreachable!("{other:?} is not synthesised at the read site"),
             };
         }
-        format!("dst[i].{}.{}", attr.name(), crate::ty::attr_swizzle(attr.ty()))
+        format!(
+            "dst[i].{}.{}",
+            attr.name(),
+            crate::ty::attr_swizzle(attr.ty())
+        )
     }
 
     /// **The paired element, at the same slot index.** That is the whole of the
@@ -355,8 +366,15 @@ impl Resolver for L2Resolver {
     /// Indexed by `i` rather than by the loop's element index, because a node
     /// that both pairs and amplifies is refused — see `check_header`.
     fn read_other(&self, attr: Attr) -> String {
-        debug_assert!(self.pairs, "`other` reached a resolver for a node that does not pair");
-        format!("other[i].{}.{}", attr.name(), crate::ty::attr_swizzle(attr.ty()))
+        debug_assert!(
+            self.pairs,
+            "`other` reached a resolver for a node that does not pair"
+        );
+        format!(
+            "other[i].{}.{}",
+            attr.name(),
+            crate::ty::attr_swizzle(attr.ty())
+        )
     }
 
     fn read_seed(&self) -> String {
@@ -436,7 +454,9 @@ fn emit_stmts(
                     }
                 }
             }
-            TStmt::If { cond, then, els, .. } => {
+            TStmt::If {
+                cond, then, els, ..
+            } => {
                 let c = lower_expr(cond, r, req);
                 out.push_str(&format!("{pad}if {c} {{\n"));
                 emit_stmts(then, r, req, indent + 1, out);
@@ -448,7 +468,13 @@ fn emit_stmts(
                     out.push_str(&format!("{pad}}}\n"));
                 }
             }
-            TStmt::For { var, start, end, body, .. } => {
+            TStmt::For {
+                var,
+                start,
+                end,
+                body,
+                ..
+            } => {
                 let v = mangle_local(var);
                 out.push_str(&format!(
                     "{pad}for (var {v}: i32 = {start}; {v} < {end}; {v} = {v} + 1) {{\n"

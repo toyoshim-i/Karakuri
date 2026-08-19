@@ -22,7 +22,11 @@ fn capture(gpu: &Gpu, present: &Present, points: &mut Points) -> Vec<u8> {
     let format = wgpu::TextureFormat::Rgba8UnormSrgb;
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("tonemap test target"),
-        size: wgpu::Extent3d { width: WIDTH, height: HEIGHT, depth_or_array_layers: 1 },
+        size: wgpu::Extent3d {
+            width: WIDTH,
+            height: HEIGHT,
+            depth_or_array_layers: 1,
+        },
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
@@ -54,7 +58,11 @@ fn capture(gpu: &Gpu, present: &Present, points: &mut Points) -> Vec<u8> {
                 rows_per_image: Some(HEIGHT),
             },
         },
-        wgpu::Extent3d { width: WIDTH, height: HEIGHT, depth_or_array_layers: 1 },
+        wgpu::Extent3d {
+            width: WIDTH,
+            height: HEIGHT,
+            depth_or_array_layers: 1,
+        },
     );
     gpu.queue.submit([encoder.finish()]);
 
@@ -86,7 +94,10 @@ fn brightest_channel(pixels: &[u8]) -> u8 {
 }
 
 fn fully_saturated_texels(pixels: &[u8]) -> usize {
-    pixels.chunks_exact(4).filter(|p| p[0] == 255 && p[1] == 255 && p[2] == 255).count()
+    pixels
+        .chunks_exact(4)
+        .filter(|p| p[0] == 255 && p[1] == 255 && p[2] == 255)
+        .count()
 }
 
 #[test]
@@ -97,7 +108,12 @@ fn the_constructor_default_is_aces_at_unit_exposure() {
     // the enum. ACES was picked by looking at the four rendered side by side;
     // see `TonemapUniform::default_op`.
     let gpu = Gpu::headless().expect("no GPU available");
-    let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba8UnormSrgb, WIDTH, HEIGHT);
+    let present = Present::new(
+        &gpu.device,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        WIDTH,
+        HEIGHT,
+    );
     let mut points = hot_points(&gpu);
 
     let default_pixels = capture(&gpu, &present, &mut points);
@@ -127,7 +143,12 @@ fn switching_operators_on_one_present_changes_the_output() {
     // The whole point of a uniform-driven operator: one `Present`, one
     // pipeline, never rebuilt, and four visibly different results.
     let gpu = Gpu::headless().expect("no GPU available");
-    let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba8UnormSrgb, WIDTH, HEIGHT);
+    let present = Present::new(
+        &gpu.device,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        WIDTH,
+        HEIGHT,
+    );
     let mut points = hot_points(&gpu);
 
     let mut render_with = |op, exposure, white_point| {
@@ -139,11 +160,20 @@ fn switching_operators_on_one_present_changes_the_output() {
     let aces = render_with(TonemapOp::Aces, 1.0, 1.0);
     let agx = render_with(TonemapOp::AgX, 1.0, 1.0);
 
-    assert_ne!(clamp, reinhard, "Reinhard must differ from the Clamp baseline");
+    assert_ne!(
+        clamp, reinhard,
+        "Reinhard must differ from the Clamp baseline"
+    );
     assert_ne!(clamp, aces, "ACES must differ from the Clamp baseline");
     assert_ne!(clamp, agx, "AgX must differ from the Clamp baseline");
-    assert_ne!(reinhard, aces, "Reinhard and ACES must not coincide on saturated input");
-    assert_ne!(aces, agx, "ACES and AgX must not coincide on saturated input");
+    assert_ne!(
+        reinhard, aces,
+        "Reinhard and ACES must not coincide on saturated input"
+    );
+    assert_ne!(
+        aces, agx,
+        "ACES and AgX must not coincide on saturated input"
+    );
 }
 
 #[test]
@@ -154,12 +184,20 @@ fn a_real_tonemapper_recovers_detail_that_clamp_destroys() {
     // compresses instead of clipping, so it should produce strictly fewer
     // fully-saturated texels than Clamp on the same content.
     let gpu = Gpu::headless().expect("no GPU available");
-    let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba8UnormSrgb, WIDTH, HEIGHT);
+    let present = Present::new(
+        &gpu.device,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        WIDTH,
+        HEIGHT,
+    );
     let mut points = hot_points(&gpu);
 
     present.set_tonemap(&gpu.queue, TonemapOp::Clamp, 1.0, 1.0);
     let clamp_flat = fully_saturated_texels(&capture(&gpu, &present, &mut points));
-    assert!(clamp_flat > 0, "the probe must actually blow out somewhere under Clamp");
+    assert!(
+        clamp_flat > 0,
+        "the probe must actually blow out somewhere under Clamp"
+    );
 
     present.set_tonemap(&gpu.queue, TonemapOp::Aces, 1.0, 1.0);
     assert!(
@@ -181,7 +219,12 @@ fn exposure_is_the_operators_own_control_not_a_recompile() {
     // `params.exposure`, which stands in for a procedure's `param exposure`.
     // Turning it down on a fixed HDR source should darken the ACES result.
     let gpu = Gpu::headless().expect("no GPU available");
-    let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba8UnormSrgb, WIDTH, HEIGHT);
+    let present = Present::new(
+        &gpu.device,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        WIDTH,
+        HEIGHT,
+    );
     let mut points = hot_points(&gpu);
 
     present.set_tonemap(&gpu.queue, TonemapOp::Aces, 1.0, 1.0);
@@ -190,5 +233,8 @@ fn exposure_is_the_operators_own_control_not_a_recompile() {
     let dim = capture(&gpu, &present, &mut points);
 
     let sum = |pixels: &[u8]| pixels.iter().map(|&b| u64::from(b)).sum::<u64>();
-    assert!(sum(&dim) < sum(&bright), "lowering exposure must darken the tonemapped result");
+    assert!(
+        sum(&dim) < sum(&bright),
+        "lowering exposure must darken the tonemapped result"
+    );
 }

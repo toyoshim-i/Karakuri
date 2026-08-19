@@ -203,7 +203,14 @@ impl Oit {
         });
 
         let (accum, reveal, bind_group) = make_targets(device, &layout, 1, 1);
-        Oit { resolve, layout, accum, reveal, bind_group, size: (1, 1) }
+        Oit {
+            resolve,
+            layout,
+            accum,
+            reveal,
+            bind_group,
+            size: (1, 1),
+        }
     }
 
     /// Reallocation, so never from the render thread mid-frame — the same terms
@@ -302,12 +309,17 @@ fn make_targets(
         device
             .create_texture(&wgpu::TextureDescriptor {
                 label: Some(label),
-                size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             })
             .create_view(&Default::default())
@@ -321,8 +333,14 @@ fn make_targets(
         label: Some("oit resolve"),
         layout,
         entries: &[
-            wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&accum) },
-            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&reveal) },
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&accum),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(&reveal),
+            },
         ],
     });
     (accum, reveal, bind_group)

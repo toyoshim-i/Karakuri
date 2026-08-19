@@ -72,8 +72,12 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         // at one node are two facts rather than one overwriting the other —
         // which is what they are: "the Set's exposure" and "renderer 1's
         // exposure" can both be true, and the engine resolves the overlap.
-        Record::Param { layer, index, key, .. } => Some(Key::Param(*layer, *index, key.clone())),
-        Record::Bind { layer, index, key, .. } => Some(Key::Bind(*layer, *index, key.clone())),
+        Record::Param {
+            layer, index, key, ..
+        } => Some(Key::Param(*layer, *index, key.clone())),
+        Record::Bind {
+            layer, index, key, ..
+        } => Some(Key::Bind(*layer, *index, key.clone())),
         Record::Camera { .. } => Some(Key::Camera),
         Record::Seed { stream, .. } => Some(Key::Seed(*stream)),
         Record::Src { hash, line, .. } => Some(Key::Src(*hash, *line)),
@@ -113,7 +117,11 @@ pub fn project(session: &[Line]) -> Vec<Line> {
 
     order
         .into_iter()
-        .map(|key| latest.remove(&key).expect("key was just inserted for this exact fold"))
+        .map(|key| {
+            latest
+                .remove(&key)
+                .expect("key was just inserted for this exact fold")
+        })
         .collect()
 }
 
@@ -129,7 +137,10 @@ mod tests {
     #[test]
     fn drops_ticks() {
         let session = vec![
-            line(Record::Set { id: "s".into(), v: 1 }),
+            line(Record::Set {
+                id: "s".into(),
+                v: 1,
+            }),
             line(Record::Tick { steps: 1 }),
             line(Record::Tick { steps: 1 }),
         ];
@@ -193,14 +204,21 @@ mod tests {
     #[test]
     fn drops_audio_and_tempo_too() {
         let session = vec![
-            line(Record::Set { id: "s".into(), v: 1 }),
+            line(Record::Set {
+                id: "s".into(),
+                v: 1,
+            }),
             line(Record::Audio {
                 energy: 0.4,
                 onset: 0.0,
                 bands: vec![0.1, 0.2],
                 confidence: 1.0,
             }),
-            line(Record::Tempo { bpm: 128.0, shift: -0.01, confidence: 0.8 }),
+            line(Record::Tempo {
+                bpm: 128.0,
+                shift: -0.01,
+                confidence: 0.8,
+            }),
             line(Record::Tick { steps: 1 }),
             line(Record::Audio {
                 energy: 0.9,
@@ -208,7 +226,11 @@ mod tests {
                 bands: vec![0.9, 0.8],
                 confidence: 1.0,
             }),
-            line(Record::Tempo { bpm: 128.1, shift: 0.0, confidence: 0.9 }),
+            line(Record::Tempo {
+                bpm: 128.1,
+                shift: 0.0,
+                confidence: 0.9,
+            }),
         ];
         let set = project(&session);
         assert_eq!(set.len(), 1);
@@ -220,14 +242,14 @@ mod tests {
         let session = vec![
             line(Record::Param {
                 layer: Layer::L1,
-            index: None,
+                index: None,
                 key: "radius".into(),
                 value: Value::Scalar(2.0),
             }),
             line(Record::Tick { steps: 1 }),
             line(Record::Param {
                 layer: Layer::L1,
-            index: None,
+                index: None,
                 key: "radius".into(),
                 value: Value::Scalar(2.6),
             }),
@@ -237,20 +259,36 @@ mod tests {
         assert_eq!(set.len(), 1);
         assert_eq!(
             set[0].record(),
-            &Record::Param { layer: Layer::L1,
-            index: None, key: "radius".into(), value: Value::Scalar(2.6) }
+            &Record::Param {
+                layer: Layer::L1,
+                index: None,
+                key: "radius".into(),
+                value: Value::Scalar(2.6)
+            }
         );
     }
 
     #[test]
     fn distinct_keys_stay_distinct() {
         let session = vec![
-            line(Record::Param { layer: Layer::L1,
-            index: None, key: "radius".into(), value: Value::Scalar(2.0) }),
-            line(Record::Param { layer: Layer::L4,
-            index: None, key: "radius".into(), value: Value::Scalar(0.5) }),
-            line(Record::Param { layer: Layer::L1,
-            index: None, key: "turbulence".into(), value: Value::Scalar(0.8) }),
+            line(Record::Param {
+                layer: Layer::L1,
+                index: None,
+                key: "radius".into(),
+                value: Value::Scalar(2.0),
+            }),
+            line(Record::Param {
+                layer: Layer::L4,
+                index: None,
+                key: "radius".into(),
+                value: Value::Scalar(0.5),
+            }),
+            line(Record::Param {
+                layer: Layer::L1,
+                index: None,
+                key: "turbulence".into(),
+                value: Value::Scalar(0.8),
+            }),
         ];
         let set = project(&session);
         assert_eq!(set.len(), 3);
@@ -259,19 +297,39 @@ mod tests {
     #[test]
     fn first_occurrence_position_is_kept_on_update() {
         let session = vec![
-            line(Record::Capacity { layer: Layer::L1, value: 65536 }),
-            line(Record::Param { layer: Layer::L1,
-            index: None, key: "radius".into(), value: Value::Scalar(2.0) }),
-            line(Record::Capacity { layer: Layer::L1, value: 524288 }),
+            line(Record::Capacity {
+                layer: Layer::L1,
+                value: 65536,
+            }),
+            line(Record::Param {
+                layer: Layer::L1,
+                index: None,
+                key: "radius".into(),
+                value: Value::Scalar(2.0),
+            }),
+            line(Record::Capacity {
+                layer: Layer::L1,
+                value: 524288,
+            }),
         ];
         let set = project(&session);
         assert_eq!(set.len(), 2);
         // Capacity keeps its original (first) position, but the updated value.
-        assert_eq!(set[0].record(), &Record::Capacity { layer: Layer::L1, value: 524288 });
+        assert_eq!(
+            set[0].record(),
+            &Record::Capacity {
+                layer: Layer::L1,
+                value: 524288
+            }
+        );
         assert_eq!(
             set[1].record(),
-            &Record::Param { layer: Layer::L1,
-            index: None, key: "radius".into(), value: Value::Scalar(2.0) }
+            &Record::Param {
+                layer: Layer::L1,
+                index: None,
+                key: "radius".into(),
+                value: Value::Scalar(2.0)
+            }
         );
     }
 
@@ -280,11 +338,19 @@ mod tests {
         let session = vec![
             line(Record::Unknown),
             line(Record::Unknown),
-            line(Record::Set { id: "s".into(), v: 1 }),
+            line(Record::Set {
+                id: "s".into(),
+                v: 1,
+            }),
         ];
         let set = project(&session);
         // Both unknown lines survive, distinct from each other.
-        assert_eq!(set.iter().filter(|l| l.record() == &Record::Unknown).count(), 2);
+        assert_eq!(
+            set.iter()
+                .filter(|l| l.record() == &Record::Unknown)
+                .count(),
+            2
+        );
         assert_eq!(set.len(), 3);
     }
 }

@@ -41,21 +41,28 @@ const SCRUB: f64 = -2.0;
 fn compile(path: &Path) -> Checked {
     let src = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("{}: {e} — run from the repository root", path.display()));
-    let proc = karakuri_ir::parse(&src)
-        .unwrap_or_else(|errs| panic!("{}", render(&errs, &src)));
-    let checked = karakuri_ir::check::check(&proc)
-        .unwrap_or_else(|errs| panic!("{}", render(&errs, &src)));
-    karakuri_ir::cost::estimate(&checked)
-        .unwrap_or_else(|errs| panic!("{}", render(&errs, &src)));
+    let proc = karakuri_ir::parse(&src).unwrap_or_else(|errs| panic!("{}", render(&errs, &src)));
+    let checked =
+        karakuri_ir::check::check(&proc).unwrap_or_else(|errs| panic!("{}", render(&errs, &src)));
+    karakuri_ir::cost::estimate(&checked).unwrap_or_else(|errs| panic!("{}", render(&errs, &src)));
     checked
 }
 
 fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
+    errs.iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// One frame: step the deck, tone map, read back sRGB bytes.
-fn frame(gpu: &Gpu, deck: &mut Deck, present: &Present, view: &wgpu::TextureView, target: &wgpu::Texture) -> Vec<u8> {
+fn frame(
+    gpu: &Gpu,
+    deck: &mut Deck,
+    present: &Present,
+    view: &wgpu::TextureView,
+    target: &wgpu::Texture,
+) -> Vec<u8> {
     let bytes_per_row = WIDTH * 4;
     let readback = gpu.device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("transport scrub readback"),
@@ -77,7 +84,11 @@ fn frame(gpu: &Gpu, deck: &mut Deck, present: &Present, view: &wgpu::TextureView
                 rows_per_image: Some(HEIGHT),
             },
         },
-        wgpu::Extent3d { width: WIDTH, height: HEIGHT, depth_or_array_layers: 1 },
+        wgpu::Extent3d {
+            width: WIDTH,
+            height: HEIGHT,
+            depth_or_array_layers: 1,
+        },
     );
     f.finish();
 
@@ -122,11 +133,20 @@ fn main() {
     deck.set_transport(0, Sync::Beat, BPM, 0.0)
         .expect("`beat_shell` is closed form");
 
-    let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba8UnormSrgb, WIDTH, HEIGHT);
+    let present = Present::new(
+        &gpu.device,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        WIDTH,
+        HEIGHT,
+    );
     present.set_tonemap(&gpu.queue, TonemapOp::Aces, 1.0, 4.0);
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("transport scrub target"),
-        size: wgpu::Extent3d { width: WIDTH, height: HEIGHT, depth_or_array_layers: 1 },
+        size: wgpu::Extent3d {
+            width: WIDTH,
+            height: HEIGHT,
+            depth_or_array_layers: 1,
+        },
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
@@ -177,7 +197,11 @@ fn main() {
     // match: the material has to have moved between the two positions.
     println!(
         "rewound frame vs the frame it was at before scrubbing:            {}",
-        if rewound == last { "identical — nothing moved, so this proves nothing" } else { "different" }
+        if rewound == last {
+            "identical — nothing moved, so this proves nothing"
+        } else {
+            "different"
+        }
     );
     println!("\nwritten to {}/", out.display());
 }

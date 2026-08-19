@@ -68,7 +68,11 @@ impl Rig {
         // The window starts centred on the session tempo, which is the same
         // number the oscillator free-runs at — one number doing both jobs, as
         // it does on the command line.
-        let tracker = Tracker::new(analyzer.hop_seconds(), analyzer.window_lag(), free_running_bpm);
+        let tracker = Tracker::new(
+            analyzer.hop_seconds(),
+            analyzer.window_lag(),
+            free_running_bpm,
+        );
         Rig {
             analyzer,
             tracker,
@@ -84,8 +88,8 @@ impl Rig {
     /// One rendered frame, with whatever audio has arrived by now.
     fn frame(&mut self, samples: &[f32], lead: bool) {
         // The device delivers a sample `INPUT_LATENCY` after it happened.
-        let available = (((self.now - f64::from(INPUT_LATENCY)) * RATE as f64) as isize).max(0)
-            as usize;
+        let available =
+            (((self.now - f64::from(INPUT_LATENCY)) * RATE as f64) as isize).max(0) as usize;
         while self.next_block + BLOCK <= available.min(samples.len()) {
             let analysis = self
                 .analyzer
@@ -100,9 +104,8 @@ impl Rig {
         }
 
         if self.published.is_finite() {
-            let age = (self.now - self.published) as f32
-                + INPUT_LATENCY
-                + self.analyzer.window_lag();
+            let age =
+                (self.now - self.published) as f32 + INPUT_LATENCY + self.analyzer.window_lag();
             let ahead = if lead { age + OUTPUT_LAG } else { 0.0 };
             if let Some(c) = self
                 .lock
@@ -251,7 +254,11 @@ fn the_default_input_opens_and_delivers() {
         Ok(input) => input,
         Err(e) => panic!("could not open the default input: {e}"),
     };
-    eprintln!("opened {} at {} Hz", input.description(), input.sample_rate());
+    eprintln!(
+        "opened {} at {} Hz",
+        input.description(),
+        input.sample_rate()
+    );
     let mut best = 0.0f32;
     for _ in 0..100 {
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -272,7 +279,6 @@ fn the_default_input_opens_and_delivers() {
         "the device opened but delivered nothing in a second"
     );
 }
-
 
 /// **An octave-low grid has to be steady as well as wrong.** Half of a click
 /// train's pulses are on that grid and half are between them, and the two sets

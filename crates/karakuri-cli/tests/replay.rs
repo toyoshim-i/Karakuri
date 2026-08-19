@@ -30,10 +30,7 @@ fn workspace() -> PathBuf {
 }
 
 fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "karakuri-replay-{name}-{}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("karakuri-replay-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("scratch");
     dir
@@ -60,7 +57,9 @@ fn store_with_a_set(dir: &Path) -> (String, String) {
 }
 
 fn write_session(store: &str, id: &str, head: &str, body: &[&str]) {
-    let path = Path::new(store).join("sessions").join(format!("{id}.ndjson"));
+    let path = Path::new(store)
+        .join("sessions")
+        .join(format!("{id}.ndjson"));
     std::fs::create_dir_all(path.parent().expect("sessions dir")).expect("sessions dir");
     let mut text = head.to_string();
     if !text.ends_with('\n') {
@@ -162,8 +161,14 @@ fn the_stream_decides_what_a_replay_renders_at() {
         &[r#"{"t":"canvas","width":300,"height":200}"#, TICK, TICK],
     );
 
-    assert_eq!(png_size(&replay(&store, "small", &dir.join("s.png"))), (256, 256));
-    assert_eq!(png_size(&replay(&store, "odd", &dir.join("o.png"))), (300, 200));
+    assert_eq!(
+        png_size(&replay(&store, "small", &dir.join("s.png"))),
+        (256, 256)
+    );
+    assert_eq!(
+        png_size(&replay(&store, "odd", &dir.join("o.png"))),
+        (300, 200)
+    );
 
     let refused = Command::new(env!("CARGO_BIN_EXE_karakuri-cli"))
         .current_dir(workspace())
@@ -179,7 +184,10 @@ fn the_stream_decides_what_a_replay_renders_at() {
         ])
         .output()
         .expect("run karakuri-cli");
-    assert!(!refused.status.success(), "`--canvas` was obeyed on a replay");
+    assert!(
+        !refused.status.success(),
+        "`--canvas` was obeyed on a replay"
+    );
     assert!(
         String::from_utf8_lossy(&refused.stderr).contains("--canvas"),
         "the refusal does not name the flag"
@@ -211,10 +219,8 @@ fn a_procedure_record_changes_what_the_rest_of_the_session_renders() {
     // `position`, so it composes with any L1 and cannot be confused with what
     // the head was playing.
     let root = workspace();
-    let drained = std::fs::read_to_string(
-        root.join("crates/karakuri-cli/tests/fixtures/flat.kir"),
-    )
-    .expect("the flat fixture");
+    let drained = std::fs::read_to_string(root.join("crates/karakuri-cli/tests/fixtures/flat.kir"))
+        .expect("the flat fixture");
 
     // Both procedures into the store, which is where a `procedure` record
     // points. The L1 is unchanged and named anyway: a Set is built from all of them.
@@ -234,13 +240,13 @@ fn a_procedure_record_changes_what_the_rest_of_the_session_renders() {
     let l4_hash = put(&drained);
 
     let ticks = [TICK; 8];
-    let plain: Vec<&str> = std::iter::once(CANVAS).chain(ticks.iter().copied()).collect();
+    let plain: Vec<&str> = std::iter::once(CANVAS)
+        .chain(ticks.iter().copied())
+        .collect();
     write_session(&store, "plain", &head, &plain);
 
-    let procedure_l1 =
-        format!(r#"{{"t":"procedure","slot":0,"layer":"L1","proc":"{l1_hash}"}}"#);
-    let procedure_l4 =
-        format!(r#"{{"t":"procedure","slot":0,"layer":"L4","proc":"{l4_hash}"}}"#);
+    let procedure_l1 = format!(r#"{{"t":"procedure","slot":0,"layer":"L1","proc":"{l1_hash}"}}"#);
+    let procedure_l4 = format!(r#"{{"t":"procedure","slot":0,"layer":"L4","proc":"{l4_hash}"}}"#);
     let changed: Vec<&str> = vec![
         CANVAS,
         TICK,

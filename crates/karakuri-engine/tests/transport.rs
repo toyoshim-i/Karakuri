@@ -222,7 +222,11 @@ fn a_free_slot_advances_by_the_sessions_own_steps() {
 
     for i in 1..=20 {
         frame(&gpu, &mut deck, &present);
-        assert_eq!(steps_taken(&deck), i, "a free slot did not step once a frame");
+        assert_eq!(
+            steps_taken(&deck),
+            i,
+            "a free slot did not step once a frame"
+        );
     }
 }
 
@@ -323,7 +327,11 @@ fn tempo_sync_scales_the_rate_and_leaves_the_material_alone() {
     let mut last = Vec::new();
     for i in 1..=20 {
         last = frame(&gpu, &mut fast, &present);
-        assert_eq!(steps_taken(&fast), i * 2, "a 2x slot did not take two steps");
+        assert_eq!(
+            steps_taken(&fast),
+            i * 2,
+            "a 2x slot did not take two steps"
+        );
     }
 
     // The same forty steps reached free-running, in forty frames. Bit for bit:

@@ -80,7 +80,9 @@
 use karakuri_ir::typed::{Checked, TStmt, Target};
 use karakuri_ir::{Ambient, Attr, BlockKind, Kind};
 
-use crate::layout::{self, binding, group, ElementLayout, UniformLayout, UniformLayoutBuilder, WORKGROUP_SIZE};
+use crate::layout::{
+    self, binding, group, ElementLayout, UniformLayout, UniformLayoutBuilder, WORKGROUP_SIZE,
+};
 use crate::lower::{lower_expr, mangle_local, Resolver};
 use crate::prelude::{self, Requirements};
 use crate::ty::{pad_to_vec4, wgsl_ty};
@@ -139,7 +141,12 @@ impl Resolver for L1Resolver {
                 other => unreachable!("{other:?} is not synthesised at the read site"),
             };
         }
-        format!("prev[{}].{}.{}", self.read_idx, attr.name(), crate::ty::attr_swizzle(attr.ty()))
+        format!(
+            "prev[{}].{}.{}",
+            self.read_idx,
+            attr.name(),
+            crate::ty::attr_swizzle(attr.ty())
+        )
     }
 
     fn read_seed(&self) -> String {
@@ -176,7 +183,13 @@ impl Resolver for L1Resolver {
     }
 }
 
-fn emit_stmts(stmts: &[TStmt], resolver: &L1Resolver, req: &mut Requirements, indent: usize, out: &mut String) {
+fn emit_stmts(
+    stmts: &[TStmt],
+    resolver: &L1Resolver,
+    req: &mut Requirements,
+    indent: usize,
+    out: &mut String,
+) {
     let pad = "    ".repeat(indent);
     for stmt in stmts {
         match stmt {
@@ -191,15 +204,23 @@ fn emit_stmts(stmts: &[TStmt], resolver: &L1Resolver, req: &mut Requirements, in
             TStmt::Assign { target, value, .. } => {
                 let v = lower_expr(value, resolver, req);
                 match target {
-                    Target::Local(name) => out.push_str(&format!("{pad}{} = {v};\n", mangle_local(name))),
+                    Target::Local(name) => {
+                        out.push_str(&format!("{pad}{} = {v};\n", mangle_local(name)))
+                    }
                     Target::Attr(attr) => {
                         let wrapped = pad_to_vec4(attr.ty(), "f32", &v);
-                        out.push_str(&format!("{pad}next[{}].{} = {wrapped};\n", resolver.write_idx, attr.name()));
+                        out.push_str(&format!(
+                            "{pad}next[{}].{} = {wrapped};\n",
+                            resolver.write_idx,
+                            attr.name()
+                        ));
                     }
                     Target::Output(o) => unreachable!("L1 never assigns stage output {o:?}"),
                 }
             }
-            TStmt::If { cond, then, els, .. } => {
+            TStmt::If {
+                cond, then, els, ..
+            } => {
                 let c = lower_expr(cond, resolver, req);
                 out.push_str(&format!("{pad}if {c} {{\n"));
                 emit_stmts(then, resolver, req, indent + 1, out);
@@ -211,9 +232,17 @@ fn emit_stmts(stmts: &[TStmt], resolver: &L1Resolver, req: &mut Requirements, in
                     out.push_str(&format!("{pad}}}\n"));
                 }
             }
-            TStmt::For { var, start, end, body, .. } => {
+            TStmt::For {
+                var,
+                start,
+                end,
+                body,
+                ..
+            } => {
                 let v = mangle_local(var);
-                out.push_str(&format!("{pad}for (var {v}: i32 = {start}; {v} < {end}; {v} = {v} + 1) {{\n"));
+                out.push_str(&format!(
+                    "{pad}for (var {v}: i32 = {start}; {v} < {end}; {v} = {v} + 1) {{\n"
+                ));
                 emit_stmts(body, resolver, req, indent + 1, out);
                 out.push_str(&format!("{pad}}}\n"));
             }
@@ -420,7 +449,11 @@ pub fn generate_l1(
     derived: &[Attr],
     field: Option<&crate::field::FieldShader>,
 ) -> L1Shader {
-    assert_eq!(checked.kind, Kind::L1, "generate_l1 called on a non-L1 procedure");
+    assert_eq!(
+        checked.kind,
+        Kind::L1,
+        "generate_l1 called on a non-L1 procedure"
+    );
 
     // **`Synthetic::NONE`, and it is a statement rather than a default.** `copy`
     // records something that happened to an element on its way down a chain, and
@@ -437,7 +470,10 @@ pub fn generate_l1(
         derived.iter().all(|a| !checked.emit.contains(a)),
         "`{}` both emits and derives {:?}",
         checked.name,
-        derived.iter().filter(|a| checked.emit.contains(a)).collect::<Vec<_>>()
+        derived
+            .iter()
+            .filter(|a| checked.emit.contains(a))
+            .collect::<Vec<_>>()
     );
     let element_layout =
         layout::generate_element_layout(&checked.emit, layout::Synthetic::NONE, derived);
@@ -537,5 +573,12 @@ pub fn generate_l1(
         &element_derivations(derived),
     ));
 
-    L1Shader { source: src, uniform_layout, uniform_pad_f32, element_layout, has_spawn, compacted }
+    L1Shader {
+        source: src,
+        uniform_layout,
+        uniform_pad_f32,
+        element_layout,
+        has_spawn,
+        compacted,
+    }
 }

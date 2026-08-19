@@ -73,7 +73,11 @@ pub struct FieldShader {
 
 /// Generate the WGSL function for one field.
 pub fn generate_field(checked: &Checked) -> FieldShader {
-    assert_eq!(checked.kind, Kind::Field, "generate_field called on a non-Field procedure");
+    assert_eq!(
+        checked.kind,
+        Kind::Field,
+        "generate_field called on a non-Field procedure"
+    );
 
     let block = checked
         .block(BlockKind::Field)
@@ -104,7 +108,11 @@ pub fn generate_field(checked: &Checked) -> FieldShader {
          }}\n"
     );
 
-    FieldShader { source, requirements: req, params }
+    FieldShader {
+        source,
+        requirements: req,
+        params,
+    }
 }
 
 /// Reads resolve to the function parameter and to the caller's uniform; there
@@ -113,7 +121,10 @@ struct FieldResolver;
 
 impl Resolver for FieldResolver {
     fn read_attr(&self, attr: Attr) -> String {
-        unreachable!("`{}` is refused in a field block: a field has no element", attr.name())
+        unreachable!(
+            "`{}` is refused in a field block: a field has no element",
+            attr.name()
+        )
     }
 
     fn read_seed(&self) -> String {
@@ -161,7 +172,9 @@ fn emit_stmts(stmts: &[TStmt], req: &mut Requirements, indent: usize, out: &mut 
                     other => unreachable!("a field never assigns {other:?}"),
                 }
             }
-            TStmt::If { cond, then, els, .. } => {
+            TStmt::If {
+                cond, then, els, ..
+            } => {
                 let c = lower_expr(cond, &FieldResolver, req);
                 out.push_str(&format!("{pad}if {c} {{\n"));
                 emit_stmts(then, req, indent + 1, out);
@@ -173,7 +186,13 @@ fn emit_stmts(stmts: &[TStmt], req: &mut Requirements, indent: usize, out: &mut 
                     out.push_str(&format!("{pad}}}\n"));
                 }
             }
-            TStmt::For { var, start, end, body, .. } => {
+            TStmt::For {
+                var,
+                start,
+                end,
+                body,
+                ..
+            } => {
                 let v = mangle_local(var);
                 out.push_str(&format!(
                     "{pad}for (var {v}: i32 = {start}; {v} < {end}; {v} = {v} + 1) {{\n"

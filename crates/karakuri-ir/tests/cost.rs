@@ -26,7 +26,11 @@ fn attr_expr(a: Attr) -> TExpr {
 }
 
 fn ambient_dt() -> TExpr {
-    TExpr::new(Ty::Float, Span::EMPTY, TExprKind::Ambient(karakuri_ir::Ambient::Dt))
+    TExpr::new(
+        Ty::Float,
+        Span::EMPTY,
+        TExprKind::Ambient(karakuri_ir::Ambient::Dt),
+    )
 }
 
 fn lit_int(v: i32) -> TExpr {
@@ -135,11 +139,19 @@ fn trivial_procedure_costs_little() {
         BinOp::Add,
         Ty::Vec3,
         attr_expr(Attr::Position),
-        binary(BinOp::Mul, Ty::Vec3, attr_expr(Attr::Velocity), ambient_dt()),
+        binary(
+            BinOp::Mul,
+            Ty::Vec3,
+            attr_expr(Attr::Velocity),
+            ambient_dt(),
+        ),
     );
     let c = checked(
         vec![Attr::Position],
-        vec![block(BlockKind::Element, vec![assign_attr(Attr::Position, value)])],
+        vec![block(
+            BlockKind::Element,
+            vec![assign_attr(Attr::Position, value)],
+        )],
     );
 
     let cost = estimate(&c).expect("well under the ceiling");
@@ -171,7 +183,14 @@ fn nested_loops_multiply_the_body_cost() {
     // land nowhere near 32 (e.g. flattening to a single 6-iteration loop
     // gives 6 * (4 + 1) = 30, a different number, for a different program) —
     // the exact value pins down that nesting multiplies.
-    let body = vec![let_stmt("x", call(Builtin::Abs, Ty::Float, vec![swizzle_x(attr_expr(Attr::Velocity))]))];
+    let body = vec![let_stmt(
+        "x",
+        call(
+            Builtin::Abs,
+            Ty::Float,
+            vec![swizzle_x(attr_expr(Attr::Velocity))],
+        ),
+    )];
     let inner = for_stmt(0, 3, body);
     let outer = for_stmt(0, 2, vec![inner]);
     let c = checked(vec![], vec![block(BlockKind::Element, vec![outer])]);
@@ -191,14 +210,24 @@ fn expensive_builtin_outweighs_cheap_one() {
         vec![],
         vec![block(
             BlockKind::Element,
-            vec![let_stmt("a", call(Builtin::Curl, Ty::Vec3, vec![attr_expr(Attr::Position)]))],
+            vec![let_stmt(
+                "a",
+                call(Builtin::Curl, Ty::Vec3, vec![attr_expr(Attr::Position)]),
+            )],
         )],
     );
     let abs_proc = checked(
         vec![],
         vec![block(
             BlockKind::Element,
-            vec![let_stmt("a", call(Builtin::Abs, Ty::Float, vec![swizzle_x(attr_expr(Attr::Position))]))],
+            vec![let_stmt(
+                "a",
+                call(
+                    Builtin::Abs,
+                    Ty::Float,
+                    vec![swizzle_x(attr_expr(Attr::Position))],
+                ),
+            )],
         )],
     );
 
@@ -230,7 +259,11 @@ fn fbm_scales_with_octave_count() {
                 BlockKind::Element,
                 vec![let_stmt(
                     "a",
-                    call(Builtin::Fbm, Ty::Float, vec![attr_expr(Attr::Position), lit_int(octaves)]),
+                    call(
+                        Builtin::Fbm,
+                        Ty::Float,
+                        vec![attr_expr(Attr::Position), lit_int(octaves)],
+                    ),
                 )],
             )],
         )
@@ -249,7 +282,10 @@ fn fbm_scales_with_octave_count() {
     // octaves (6 more) adds a fixed amount regardless of the fixed overhead
     // around it (the position/octave-literal reads and the `let`).
     let per_octave = (eight.ops_per_element - two.ops_per_element) / 6;
-    assert!(per_octave >= 10, "fbm should cost noticeably more per octave, got {per_octave}");
+    assert!(
+        per_octave >= 10,
+        "fbm should cost noticeably more per octave, got {per_octave}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -301,7 +337,10 @@ fn rejection_message_carries_the_estimate_and_the_ceiling() {
     // 6344 > MAX_OPS_PER_ELEMENT (4096), so this must be rejected, and the
     // message must say both 6344 and 4096 — "over budget" alone would tell a
     // repair prompt nothing about how much to cut.
-    let body = vec![let_stmt("x", call(Builtin::Curl, Ty::Vec3, vec![attr_expr(Attr::Position)]))];
+    let body = vec![let_stmt(
+        "x",
+        call(Builtin::Curl, Ty::Vec3, vec![attr_expr(Attr::Position)]),
+    )];
     let inner = for_stmt(0, 8, body);
     let outer = for_stmt(0, 8, vec![inner]);
     let c = checked(vec![], vec![block(BlockKind::Element, vec![outer])]);
@@ -310,18 +349,30 @@ fn rejection_message_carries_the_estimate_and_the_ceiling() {
     assert_eq!(errs.len(), 1);
     let message = &errs[0].message;
 
-    assert!(message.contains("6344"), "message should state the estimate: {message}");
+    assert!(
+        message.contains("6344"),
+        "message should state the estimate: {message}"
+    );
     assert!(
         message.contains(&MAX_OPS_PER_ELEMENT.to_string()),
         "message should state the ceiling: {message}"
     );
-    assert!(message.contains("curl"), "message should name what dominated: {message}");
+    assert!(
+        message.contains("curl"),
+        "message should name what dominated: {message}"
+    );
 
     // The hint is where the actionable part belongs, per the pipeline's
     // rejection rules — the message states numbers, the hint states what to
     // do about them.
-    let hint = errs[0].hint.as_ref().expect("a cost rejection should carry a hint");
-    assert!(hint.contains("curl"), "hint should point at the dominant call: {hint}");
+    let hint = errs[0]
+        .hint
+        .as_ref()
+        .expect("a cost rejection should carry a hint");
+    assert!(
+        hint.contains("curl"),
+        "hint should point at the dominant call: {hint}"
+    );
 }
 
 #[test]
@@ -331,7 +382,12 @@ fn rejection_without_a_dominant_builtin_still_names_a_block() {
     // naming the block that dominated.
     let body = vec![assign_attr(
         Attr::Position,
-        binary(BinOp::Add, Ty::Vec3, attr_expr(Attr::Position), attr_expr(Attr::Velocity)),
+        binary(
+            BinOp::Add,
+            Ty::Vec3,
+            attr_expr(Attr::Position),
+            attr_expr(Attr::Velocity),
+        ),
     )];
     let mut loop_stmt = for_stmt(0, 2000, body);
     for _ in 0..3 {
@@ -345,7 +401,10 @@ fn rejection_without_a_dominant_builtin_still_names_a_block() {
         message.contains(&MAX_OPS_PER_ELEMENT.to_string()),
         "message should state the ceiling: {message}"
     );
-    assert!(message.contains("element"), "message should name the dominant block: {message}");
+    assert!(
+        message.contains("element"),
+        "message should name the dominant block: {message}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -357,11 +416,7 @@ fn rejection_without_a_dominant_builtin_still_names_a_block() {
 /// frame. Charging the two together would reject it for work it does not repeat.
 #[test]
 fn spawn_cost_is_not_charged_against_the_per_frame_figure() {
-    let expensive = call(
-        Builtin::Curl,
-        Ty::Vec3,
-        vec![attr_expr(Attr::Position)],
-    );
+    let expensive = call(Builtin::Curl, Ty::Vec3, vec![attr_expr(Attr::Position)]);
     let c = checked(
         vec![Attr::Position],
         vec![
@@ -422,12 +477,10 @@ fn fragment_cost_is_reported_separately_from_vertex_cost() {
 /// a constant, so the assertion stays true when the op weights change.
 #[test]
 fn an_amplifying_l2s_per_element_cost_is_multiplied_by_its_factor() {
-    let body = vec![
-        block(
-            BlockKind::Deform,
-            vec![let_stmt("a", lit_int(1)), let_stmt("b", lit_int(2))],
-        ),
-    ];
+    let body = vec![block(
+        BlockKind::Deform,
+        vec![let_stmt("a", lit_int(1)), let_stmt("b", lit_int(2))],
+    )];
     let mut plain = checked(vec![], body.clone());
     plain.kind = Kind::L2;
     plain.topology = None;
@@ -438,7 +491,10 @@ fn an_amplifying_l2s_per_element_cost_is_multiplied_by_its_factor() {
     let plain_cost = estimate(&plain).expect("a trivial deform");
     let amplified_cost = estimate(&amplified).expect("a trivial deform, eight times");
 
-    assert!(plain_cost.ops_per_element > 0, "the deform block is per element");
+    assert!(
+        plain_cost.ops_per_element > 0,
+        "the deform block is per element"
+    );
     assert_eq!(
         amplified_cost.ops_per_element,
         plain_cost.ops_per_element * 8,
@@ -470,7 +526,10 @@ fn a_fields_cost_is_per_evaluation_and_not_per_element() {
     c.topology = None;
 
     let cost = estimate(&c).expect("a trivial field");
-    assert!(cost.ops_per_evaluation > 0, "the field block is per evaluation");
+    assert!(
+        cost.ops_per_evaluation > 0,
+        "the field block is per evaluation"
+    );
     assert_eq!(cost.ops_per_element, 0, "a field has no elements");
     assert_eq!(cost.ops_per_spawn, 0, "and nothing to spawn");
     assert_eq!(cost.ops_per_fragment, 0, "and covers no pixels");

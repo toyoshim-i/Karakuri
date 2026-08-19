@@ -98,7 +98,10 @@ impl Renderer {
         // per instance by reading the flag.
         let attr_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("attrs"),
-            entries: &[storage_entry(binding::ELEMENT), storage_entry(binding::ALIVE)],
+            entries: &[
+                storage_entry(binding::ELEMENT),
+                storage_entry(binding::ALIVE),
+            ],
         });
 
         let uniform_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -227,7 +230,11 @@ impl Renderer {
                 module: &module,
                 entry_point: Some("fs"),
                 compilation_options: Default::default(),
-                targets: if weighted { &weighted_targets } else { &additive_target },
+                targets: if weighted {
+                    &weighted_targets
+                } else {
+                    &additive_target
+                },
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -247,7 +254,9 @@ impl Renderer {
             scratch: UniformScratch::new(&shader.uniform_layout),
             uniform_bg,
             attr_bg,
-            camera_bg: shader.camera_group.map(|g| (g, camera.bind_group().clone())),
+            camera_bg: shader
+                .camera_group
+                .map(|g| (g, camera.bind_group().clone())),
             oit: weighted.then(|| Oit::new(device)),
             fullscreen,
             param_names: l4.params.iter().map(|p| p.name.clone()).collect(),
@@ -280,7 +289,9 @@ impl Renderer {
     pub(crate) fn write_uniforms(&mut self, queue: &wgpu::Queue, view: &View<'_>) {
         let fullscreen = self.fullscreen;
         let mut p = self.scratch.pack(&self.uniform_layout);
-        p.f32("t", view.t).f32("beats", view.beats).u32("seed_salt", view.seed_salt);
+        p.f32("t", view.t)
+            .f32("beats", view.beats)
+            .u32("seed_salt", view.seed_salt);
         // Two shapes of uniform, because the two shaders need different things:
         // a per-element one expands sprites and strokes and needs the viewport
         // in pixels; a fullscreen one has no primitive to size. Writing a field

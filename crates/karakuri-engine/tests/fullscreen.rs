@@ -73,13 +73,17 @@ proc marcher {{
 
 fn compile(src: &str) -> Checked {
     let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
+    let checked =
+        karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     checked
 }
 
 fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
+    errs.iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn build(gpu: &Gpu, l1: &str, l4: &str) -> Set {
@@ -114,7 +118,11 @@ fn draw(gpu: &Gpu, set: &mut Set, steps: u8) -> Vec<[f32; 4]> {
                 rows_per_image: Some(H),
             },
         },
-        wgpu::Extent3d { width: W, height: H, depth_or_array_layers: 1 },
+        wgpu::Extent3d {
+            width: W,
+            height: H,
+            depth_or_array_layers: 1,
+        },
     );
     gpu.queue.submit([encoder.finish()]);
 
@@ -159,7 +167,11 @@ fn at(px: &[[f32; 4]], x: u32, y: u32) -> [f32; 4] {
 #[test]
 fn a_fullscreen_procedure_covers_every_texel() {
     let gpu = Gpu::headless().expect("no GPU available");
-    let mut set = build(&gpu, SPAWNING_L1, &fullscreen_l4("    color = vec4(1.0, 1.0, 1.0, 1.0);"));
+    let mut set = build(
+        &gpu,
+        SPAWNING_L1,
+        &fullscreen_l4("    color = vec4(1.0, 1.0, 1.0, 1.0);"),
+    );
     let px = draw(&gpu, &mut set, 1);
 
     let dark = px.iter().filter(|t| t[0] < 0.5).count();
@@ -176,7 +188,11 @@ fn a_fullscreen_procedure_covers_every_texel() {
 fn the_paired_l1_is_not_stepped_at_all() {
     let gpu = Gpu::headless().expect("no GPU available");
 
-    let mut marched = build(&gpu, SPAWNING_L1, &fullscreen_l4("    color = vec4(1.0, 1.0, 1.0, 1.0);"));
+    let mut marched = build(
+        &gpu,
+        SPAWNING_L1,
+        &fullscreen_l4("    color = vec4(1.0, 1.0, 1.0, 1.0);"),
+    );
     let mut sprites = build(&gpu, SPAWNING_L1, SPRITE_L4);
     for _ in 0..4 {
         draw(&gpu, &mut marched, 1);
@@ -211,7 +227,10 @@ fn time_still_advances_for_a_fullscreen_set() {
     }
     let late = draw(&gpu, &mut set, 1);
 
-    assert!(at(&early, 64, 32)[0] < at(&late, 64, 32)[0], "`t` did not move");
+    assert!(
+        at(&early, 64, 32)[0] < at(&late, 64, 32)[0],
+        "`t` did not move"
+    );
 }
 
 /// `point_coord` runs across the frame, in the orientation a fragment can act
@@ -226,10 +245,26 @@ fn point_coord_spans_the_frame_left_to_right_and_top_to_bottom() {
     );
     let px = draw(&gpu, &mut set, 1);
 
-    assert!(at(&px, 1, 32)[0] < 0.05, "x is {} at the left edge", at(&px, 1, 32)[0]);
-    assert!(at(&px, W - 2, 32)[0] > 0.95, "x is {} at the right edge", at(&px, W - 2, 32)[0]);
-    assert!(at(&px, 64, 1)[1] < 0.05, "y is {} at the top", at(&px, 64, 1)[1]);
-    assert!(at(&px, 64, H - 2)[1] > 0.95, "y is {} at the bottom", at(&px, 64, H - 2)[1]);
+    assert!(
+        at(&px, 1, 32)[0] < 0.05,
+        "x is {} at the left edge",
+        at(&px, 1, 32)[0]
+    );
+    assert!(
+        at(&px, W - 2, 32)[0] > 0.95,
+        "x is {} at the right edge",
+        at(&px, W - 2, 32)[0]
+    );
+    assert!(
+        at(&px, 64, 1)[1] < 0.05,
+        "y is {} at the top",
+        at(&px, 64, 1)[1]
+    );
+    assert!(
+        at(&px, 64, H - 2)[1] > 0.95,
+        "y is {} at the bottom",
+        at(&px, 64, H - 2)[1]
+    );
 }
 
 /// **`ray` is a unit vector and it fans out across the frame.** Both halves
@@ -283,5 +318,8 @@ fn the_eye_is_where_the_camera_is() {
     // origin, scaled by 0.1 to stay inside f16's comfortable range.
     let expected = (8.0f32 * 8.0 + 2.0 * 2.0).sqrt() * 0.1;
     let got = at(&px, 64, 32)[0];
-    assert!((got - expected).abs() < 0.02, "|eye| * 0.1 is {got}, expected {expected}");
+    assert!(
+        (got - expected).abs() < 0.02,
+        "|eye| * 0.1 is {got}, expected {expected}"
+    );
 }

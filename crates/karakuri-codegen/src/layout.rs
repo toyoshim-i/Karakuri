@@ -418,7 +418,11 @@ fn attr_elem_ty(attr: Attr) -> StorageElemTy {
     // covers all of them; only the synthetic `seed` slot needs `Vec4U32`.
     match attr.ty() {
         Ty::Float | Ty::Vec2 | Ty::Vec3 => StorageElemTy::Vec4F32,
-        other => unreachable!("attribute {} has non-float-family type {:?}", attr.name(), other),
+        other => unreachable!(
+            "attribute {} has non-float-family type {:?}",
+            attr.name(),
+            other
+        ),
     }
 }
 
@@ -507,14 +511,21 @@ pub fn generate_element_layout(
         .filter_map(|&attr| derivation_slot(attr))
         .map(|(name, holds)| (name, holds, StorageElemTy::Vec4F32))
         .collect();
-    let declared = emit.iter().map(|&attr| (attr.name(), Some(attr), attr_elem_ty(attr)));
+    let declared = emit
+        .iter()
+        .map(|&attr| (attr.name(), Some(attr), attr_elem_ty(attr)));
     let slots: Vec<ElementSlot> = std::iter::once(seed)
         .chain(std::iter::once(birth_frac))
         .chain(copy)
         .chain(sources)
         .chain(declared)
         .enumerate()
-        .map(|(i, (name, attr, elem_ty))| ElementSlot { name, attr, elem_ty, offset: i as u32 * 16 })
+        .map(|(i, (name, attr, elem_ty))| ElementSlot {
+            name,
+            attr,
+            elem_ty,
+            offset: i as u32 * 16,
+        })
         .collect();
     let stride = slots.len() as u32 * 16;
     // **Only the rules a reader has to do arithmetic for.** Where the engine
@@ -526,7 +537,11 @@ pub fn generate_element_layout(
         .copied()
         .filter(|a| a.derivation().is_some_and(|d| !d.is_stored()))
         .collect();
-    ElementLayout { slots, stride, derived: substituted }
+    ElementLayout {
+        slots,
+        stride,
+        derived: substituted,
+    }
 }
 
 /// Writes `struct Element { ... };` for `layout`. Shared by [`crate::l1`]
@@ -682,7 +697,10 @@ pub struct UniformLayoutBuilder {
 
 impl UniformLayoutBuilder {
     pub fn new() -> UniformLayoutBuilder {
-        UniformLayoutBuilder { fields: Vec::new(), offset: 0 }
+        UniformLayoutBuilder {
+            fields: Vec::new(),
+            offset: 0,
+        }
     }
 
     /// Adds one of this crate's own fixed fields (`t`, `dt`, `capacity`, …).
@@ -713,7 +731,13 @@ impl UniformLayoutBuilder {
     fn push(&mut self, name: String, wgsl_name: String, wgsl_ty: &'static str) -> &mut Self {
         let (align, size) = align_size(wgsl_ty);
         let offset = align_up(self.offset, align);
-        self.fields.push(UniformField { name, wgsl_name, wgsl_ty, offset, size });
+        self.fields.push(UniformField {
+            name,
+            wgsl_name,
+            wgsl_ty,
+            offset,
+            size,
+        });
         self.offset = offset + size;
         self
     }
@@ -727,7 +751,13 @@ impl UniformLayoutBuilder {
         let total_size = align_up(self.offset, 16);
         let pad_bytes = total_size - self.offset;
         debug_assert_eq!(pad_bytes % 4, 0);
-        (UniformLayout { fields: self.fields, total_size }, pad_bytes / 4)
+        (
+            UniformLayout {
+                fields: self.fields,
+                total_size,
+            },
+            pad_bytes / 4,
+        )
     }
 }
 
@@ -785,9 +815,23 @@ mod tests {
 
     #[test]
     fn element_layout_stride_is_two_plus_emit_len_times_sixteen() {
-        assert_eq!(generate_element_layout(&[], Synthetic::NONE, &[]).stride, 32);
-        assert_eq!(generate_element_layout(&[Attr::Position], Synthetic::NONE, &[]).stride, 48);
-        assert_eq!(generate_element_layout(&[Attr::Position, Attr::Velocity, Attr::Age], Synthetic::NONE, &[]).stride, 80);
+        assert_eq!(
+            generate_element_layout(&[], Synthetic::NONE, &[]).stride,
+            32
+        );
+        assert_eq!(
+            generate_element_layout(&[Attr::Position], Synthetic::NONE, &[]).stride,
+            48
+        );
+        assert_eq!(
+            generate_element_layout(
+                &[Attr::Position, Attr::Velocity, Attr::Age],
+                Synthetic::NONE,
+                &[]
+            )
+            .stride,
+            80
+        );
     }
 
     /// **`copy` is allocated only where something upstream amplified**, which
@@ -828,7 +872,10 @@ mod tests {
         // case analysis is needed to compute a slot's size.
         for attr in Attr::ALL {
             let ty = attr_elem_ty(attr);
-            assert!(matches!(ty, StorageElemTy::Vec4F32 | StorageElemTy::Vec4U32));
+            assert!(matches!(
+                ty,
+                StorageElemTy::Vec4F32 | StorageElemTy::Vec4U32
+            ));
         }
     }
 
@@ -846,7 +893,10 @@ mod tests {
         let birth_at = out.find("birth_frac:").unwrap();
         let pos_at = out.find("position:").unwrap();
         let tint_at = out.find("tint:").unwrap();
-        assert!(seed_at < birth_at && birth_at < pos_at && pos_at < tint_at, "{out}");
+        assert!(
+            seed_at < birth_at && birth_at < pos_at && pos_at < tint_at,
+            "{out}"
+        );
     }
 
     #[test]
@@ -877,7 +927,10 @@ mod tests {
             let (layout, pad_f32) = b.finish();
             let mut out = String::new();
             write_uniform_struct(&mut out, &layout, pad_f32);
-            assert!(!out.contains("array<f32"), "param_count={param_count}:\n{out}");
+            assert!(
+                !out.contains("array<f32"),
+                "param_count={param_count}:\n{out}"
+            );
         }
     }
 

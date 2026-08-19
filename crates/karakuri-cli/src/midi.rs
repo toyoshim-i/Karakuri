@@ -115,7 +115,10 @@ impl Router {
             Message::ControlChange { controller, .. } => (controller, true),
             Message::NoteOn { note, .. } | Message::NoteOff { note, .. } => (note, false),
         };
-        if !self.seen_unmapped.insert((message.channel(), number, is_cc)) {
+        if !self
+            .seen_unmapped
+            .insert((message.channel(), number, is_cc))
+        {
             return;
         }
         self.notices.push(format!(

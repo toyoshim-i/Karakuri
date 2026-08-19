@@ -421,7 +421,11 @@ mod correction_tests {
         // A tempo correction is a rate change, and noise time takes it —
         // continuously, with no jump at the instant it lands.
         osc.correct(240.0, 0.0);
-        assert_eq!(osc.elapsed_beats(), elapsed, "noise time jumped on a rate change");
+        assert_eq!(
+            osc.elapsed_beats(),
+            elapsed,
+            "noise time jumped on a rate change"
+        );
         osc.advance(1, 1.0);
         assert!(
             (osc.elapsed_beats() - elapsed - 4.0).abs() < 1e-9,

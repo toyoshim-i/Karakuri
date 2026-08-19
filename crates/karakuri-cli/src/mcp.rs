@@ -131,7 +131,10 @@ impl Slots {
             "L4" => pair.1.get(index).ok_or_else(|| match pair.1.len() {
                 0 => format!("slot {slot} has no L4: a Set needs at least one renderer"),
                 1 => format!("slot {slot} has one L4 and `index` is {index}"),
-                n => format!("slot {slot} draws with {n} renderers, so `index` is 0-{}", n - 1),
+                n => format!(
+                    "slot {slot} draws with {n} renderers, so `index` is 0-{}",
+                    n - 1
+                ),
             }),
             // **Two layers, where a slot can hold five.** An L2, an L3 and a
             // `kind Field` are all real nodes in a slot and none of them is
@@ -212,13 +215,14 @@ pub fn serve(port: u16, slots: Slots, watching: bool) -> Result<Reporter, String
                 // the surface for the rest of the run — and a panic inside it
                 // dropped the listener, leaving a process that had announced a
                 // port and was no longer on it.
-                let spawned = std::thread::Builder::new()
-                    .name("mcp-conn".into())
-                    .spawn(move || {
-                        if let Err(e) = handle(stream, &state) {
-                            eprintln!("mcp: {e}");
-                        }
-                    });
+                let spawned =
+                    std::thread::Builder::new()
+                        .name("mcp-conn".into())
+                        .spawn(move || {
+                            if let Err(e) = handle(stream, &state) {
+                                eprintln!("mcp: {e}");
+                            }
+                        });
                 if spawned.is_err() {
                     eprintln!("mcp: could not start a thread for a connection");
                 }
@@ -272,10 +276,7 @@ impl State {
 /// an assumption about the *good* client and nothing enforced it. What enforces
 /// anything now: an `Origin` check, a body cap before any allocation, a read
 /// timeout, and a thread per connection.
-fn handle(
-    stream: std::net::TcpStream,
-    state: &std::sync::Mutex<State>,
-) -> Result<(), String> {
+fn handle(stream: std::net::TcpStream, state: &std::sync::Mutex<State>) -> Result<(), String> {
     stream.set_nodelay(true).ok();
     stream.set_read_timeout(Some(IDLE)).ok();
     let mut reader = std::io::BufReader::new(stream.try_clone().map_err(|e| e.to_string())?);
@@ -385,7 +386,12 @@ fn handle(
         }
 
         let Some(length) = length else {
-            return respond(&mut writer, 411, "text/plain", b"a POST needs a content-length");
+            return respond(
+                &mut writer,
+                411,
+                "text/plain",
+                b"a POST needs a content-length",
+            );
         };
         if length > MAX_BODY {
             return respond(&mut writer, 413, "text/plain", b"that body is too large");
@@ -417,10 +423,7 @@ fn handle(
 ///
 /// `read_line` has no cap, so a line with no newline in it is a second way to
 /// exhaust memory — quieter than a huge `Content-Length` and the same ending.
-fn read_capped(
-    reader: &mut impl BufRead,
-    into: &mut String,
-) -> Result<usize, String> {
+fn read_capped(reader: &mut impl BufRead, into: &mut String) -> Result<usize, String> {
     let mut taken = std::io::Read::take(reader.by_ref(), MAX_BODY as u64);
     let read = taken
         .read_line(into)
@@ -466,7 +469,9 @@ fn respond(
         "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: keep-alive\r\n\r\n",
         body.len()
     );
-    writer.write_all(head.as_bytes()).map_err(|e| e.to_string())?;
+    writer
+        .write_all(head.as_bytes())
+        .map_err(|e| e.to_string())?;
     writer.write_all(body).map_err(|e| e.to_string())?;
     writer.flush().map_err(|e| e.to_string())
 }
@@ -716,8 +721,11 @@ fn swap_outcome(state: &mut State) -> Result<String, String> {
     let missing = if dropped == 0 {
         String::new()
     } else {
-        format!("\n\n({dropped} earlier report{} were dropped for want of room — this is \
-                 not the whole history)", if dropped == 1 { "" } else { "s" })
+        format!(
+            "\n\n({dropped} earlier report{} were dropped for want of room — this is \
+                 not the whole history)",
+            if dropped == 1 { "" } else { "s" }
+        )
     };
     Ok(if state.recent.is_empty() {
         format!(
@@ -823,9 +831,11 @@ fn vocabulary() -> String {
     // which outputs are *required* — that is a rule in the check pass rather
     // than a property of the enum — so the prose says it and the spec resource
     // carries the detail.
-    out.push_str("\n# Topologies\n\nDeclared by an L1's `topology`. What a *renderer* draws \
+    out.push_str(
+        "\n# Topologies\n\nDeclared by an L1's `topology`. What a *renderer* draws \
                   is not declared: an L4 draws segments when its `vertex` block assigns \
-                  `clip_b` and sprites when it does not.\n\n");
+                  `clip_b` and sprites when it does not.\n\n",
+    );
     for topology in [Topology::Points, Topology::Lines, Topology::Fullscreen] {
         let note = match topology {
             Topology::Points => "one sprite per element",
@@ -873,12 +883,14 @@ fn vocabulary() -> String {
         out.push_str(&format!("- `{}` — {note}\n", blend.name()));
     }
 
-    out.push_str("\n# Stage outputs\n\nAssigned like attributes; reading one is an error. \
+    out.push_str(
+        "\n# Stage outputs\n\nAssigned like attributes; reading one is an error. \
                   `clip` and `point_size` are required in a `vertex` block, and `color` in a \
                   `fragment` block, on every path through it — but **a `vertex` block is \
                   itself optional**, which is how an L4 says it draws the whole frame. \
                   `clip_b` is the one optional output, and assigning it on only some paths \
-                  is rejected.\n\n");
+                  is rejected.\n\n",
+    );
     out.push_str("| name | type | block |\n|---|---|---|\n");
     for output in Output::ALL {
         out.push_str(&format!(
@@ -1022,7 +1034,10 @@ proc probe_l4 {
         let result = &reply["result"];
         (
             result["isError"].as_bool().unwrap_or(true),
-            result["content"][0]["text"].as_str().unwrap_or("").to_string(),
+            result["content"][0]["text"]
+                .as_str()
+                .unwrap_or("")
+                .to_string(),
         )
     }
 
@@ -1030,9 +1045,17 @@ proc probe_l4 {
     #[test]
     fn a_procedure_can_be_read_and_rewritten_over_the_wire() {
         let server = start(true);
-        let (failed, source) = call(server.port, "read_procedure", json!({"slot":0,"layer":"L4"}));
+        let (failed, source) = call(
+            server.port,
+            "read_procedure",
+            json!({"slot":0,"layer":"L4"}),
+        );
         assert!(!failed, "{source}");
-        assert!(source.contains("proc probe_l4"), "{}", &source[..80.min(source.len())]);
+        assert!(
+            source.contains("proc probe_l4"),
+            "{}",
+            &source[..80.min(source.len())]
+        );
 
         // **Prepended rather than substituted.** This asserted a phrase out of
         // the example's own comment header once, and broke the day somebody
@@ -1078,7 +1101,11 @@ proc probe_l4 {
     #[test]
     fn a_procedure_for_the_other_layer_is_refused() {
         let server = start(true);
-        let (_, l1) = call(server.port, "read_procedure", json!({"slot":0,"layer":"L1"}));
+        let (_, l1) = call(
+            server.port,
+            "read_procedure",
+            json!({"slot":0,"layer":"L1"}),
+        );
         let (failed, said) = call(
             server.port,
             "write_procedure",
@@ -1101,7 +1128,10 @@ proc probe_l4 {
         );
         assert_eq!(status, 413, "an exabyte body was not refused");
         // And the server is still there afterwards, which is the whole claim.
-        let (status, _) = post(server.port, &json!({"jsonrpc":"2.0","id":1,"method":"ping"}).to_string());
+        let (status, _) = post(
+            server.port,
+            &json!({"jsonrpc":"2.0","id":1,"method":"ping"}).to_string(),
+        );
         assert_eq!(status, 200, "the server did not survive");
     }
 
@@ -1124,7 +1154,10 @@ proc probe_l4 {
         );
         assert_eq!(status, 403, "a cross-origin write was answered");
         // A local client sends no Origin at all and is still served.
-        let (status, _) = post(server.port, &json!({"jsonrpc":"2.0","id":1,"method":"ping"}).to_string());
+        let (status, _) = post(
+            server.port,
+            &json!({"jsonrpc":"2.0","id":1,"method":"ping"}).to_string(),
+        );
         assert_eq!(status, 200);
     }
 
@@ -1206,7 +1239,10 @@ proc probe_l4 {
             ),
         );
         assert_eq!(status, 405);
-        assert!(!body.contains("\"id\":99"), "the smuggled request ran: {body}");
+        assert!(
+            !body.contains("\"id\":99"),
+            "the smuggled request ran: {body}"
+        );
     }
 
     /// Field names are case-insensitive, and a length that is not a number is
@@ -1218,12 +1254,18 @@ proc probe_l4 {
         let body = json!({"jsonrpc":"2.0","id":1,"method":"ping"}).to_string();
         let (status, reply) = raw(
             server.port,
-            &format!("POST / HTTP/1.1\r\nCONTENT-LENGTH: {}\r\n\r\n{body}", body.len()),
+            &format!(
+                "POST / HTTP/1.1\r\nCONTENT-LENGTH: {}\r\n\r\n{body}",
+                body.len()
+            ),
         );
         assert_eq!(status, 200, "an uppercase header name was not understood");
         assert!(reply.contains("result"), "{reply}");
 
-        let (status, said) = raw(server.port, "POST / HTTP/1.1\r\nContent-Length: 12x\r\n\r\n");
+        let (status, said) = raw(
+            server.port,
+            "POST / HTTP/1.1\r\nContent-Length: 12x\r\n\r\n",
+        );
         assert_eq!(status, 400);
         assert!(said.contains("not a number"), "{said}");
     }
@@ -1235,7 +1277,10 @@ proc probe_l4 {
         let _silent = std::net::TcpStream::connect(("127.0.0.1", server.port)).expect("connect");
         // The first version served every connection on one thread, so this
         // second one waited for the first to hang up — which it never does.
-        let (status, _) = post(server.port, &json!({"jsonrpc":"2.0","id":1,"method":"ping"}).to_string());
+        let (status, _) = post(
+            server.port,
+            &json!({"jsonrpc":"2.0","id":1,"method":"ping"}).to_string(),
+        );
         assert_eq!(status, 200, "a silent socket wedged the server");
     }
 
@@ -1260,20 +1305,29 @@ proc probe_l4 {
             json!({"slot":0,"layer":"L4","source":source}),
         );
         assert!(!failed, "{said}");
-        assert!(said.contains("also slot 1"), "the other slot was not named: {said}");
+        assert!(
+            said.contains("also slot 1"),
+            "the other slot was not named: {said}"
+        );
         // **Where the version it replaced went.** This said "there is no
         // backup" while `--watch` was snapshotting every version that compiled
         // into the edit history — and it is the text a model reads, so the one
         // surface that could have told it the file was recoverable said the
         // opposite.
-        assert!(said.contains("history"), "where the old version went: {said}");
+        assert!(
+            said.contains("history"),
+            "where the old version went: {said}"
+        );
     }
 
     /// The tools and resources a client is offered are the ones that answer.
     #[test]
     fn everything_advertised_can_be_called() {
         let server = start(true);
-        let (_, listed) = post(server.port, &json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}).to_string());
+        let (_, listed) = post(
+            server.port,
+            &json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}).to_string(),
+        );
         let listed: Value = serde_json::from_str(&listed).expect("json");
         let names: Vec<String> = listed["result"]["tools"]
             .as_array()
@@ -1284,11 +1338,16 @@ proc probe_l4 {
         assert!(!names.is_empty(), "no tools were advertised");
         for name in &names {
             let (_, said) = call(server.port, name, json!({"slot":0,"layer":"L4"}));
-            assert!(!said.is_empty(), "`{name}` is advertised and answers nothing");
+            assert!(
+                !said.is_empty(),
+                "`{name}` is advertised and answers nothing"
+            );
         }
 
-        let (_, listed) =
-            post(server.port, &json!({"jsonrpc":"2.0","id":1,"method":"resources/list"}).to_string());
+        let (_, listed) = post(
+            server.port,
+            &json!({"jsonrpc":"2.0","id":1,"method":"resources/list"}).to_string(),
+        );
         let listed: Value = serde_json::from_str(&listed).expect("json");
         let uris: Vec<String> = listed["result"]["resources"]
             .as_array()
@@ -1304,8 +1363,13 @@ proc probe_l4 {
                     .to_string(),
             );
             let reply: Value = serde_json::from_str(&body).expect("json");
-            let text = reply["result"]["contents"][0]["text"].as_str().unwrap_or("");
-            assert!(text.len() > 100, "`{uri}` is advertised and reads as nothing");
+            let text = reply["result"]["contents"][0]["text"]
+                .as_str()
+                .unwrap_or("");
+            assert!(
+                text.len() > 100,
+                "`{uri}` is advertised and reads as nothing"
+            );
         }
     }
 
@@ -1313,8 +1377,10 @@ proc probe_l4 {
     #[test]
     fn initialize_answers_with_a_protocol_version_and_capabilities() {
         let server = start(true);
-        let (status, body) =
-            post(server.port, &json!({"jsonrpc":"2.0","id":1,"method":"initialize"}).to_string());
+        let (status, body) = post(
+            server.port,
+            &json!({"jsonrpc":"2.0","id":1,"method":"initialize"}).to_string(),
+        );
         assert_eq!(status, 200);
         let reply: Value = serde_json::from_str(&body).expect("json");
         assert_eq!(reply["result"]["protocolVersion"], json!(PROTOCOL));
@@ -1327,7 +1393,11 @@ proc probe_l4 {
     #[test]
     fn a_write_without_watch_says_nothing_will_pick_it_up() {
         let server = start(false);
-        let (_, source) = call(server.port, "read_procedure", json!({"slot":0,"layer":"L4"}));
+        let (_, source) = call(
+            server.port,
+            "read_procedure",
+            json!({"slot":0,"layer":"L4"}),
+        );
         let (failed, said) = call(
             server.port,
             "write_procedure",
@@ -1457,7 +1527,11 @@ mod tests {
             );
         }
         for line in outputs.lines().filter(|l| l.starts_with("| `")) {
-            let name = line.trim_start_matches("| `").split('`').next().expect("a name");
+            let name = line
+                .trim_start_matches("| `")
+                .split('`')
+                .next()
+                .expect("a name");
             assert!(
                 karakuri_ir::Output::from_name(name).is_some(),
                 "the vocabulary lists an output `{name}` the checker does not know"
@@ -1519,13 +1593,17 @@ mod tests {
             &std::path::PathBuf::from("a/sprites.kir")
         );
 
-        let past = stacked.path(0, "L4", 2).expect_err("there is no third renderer");
+        let past = stacked
+            .path(0, "L4", 2)
+            .expect_err("there is no third renderer");
         assert!(past.contains("0-1"), "the range is not named: {past}");
 
         // The L1 is one node, so an index on it is a mistake worth saying —
         // quietly ignoring it would let a model believe it had addressed
         // something.
-        let l1_indexed = stacked.path(0, "L1", 1).expect_err("a Set simulates with one L1");
+        let l1_indexed = stacked
+            .path(0, "L1", 1)
+            .expect_err("a Set simulates with one L1");
         assert!(l1_indexed.contains("one L1"), "{l1_indexed}");
     }
 

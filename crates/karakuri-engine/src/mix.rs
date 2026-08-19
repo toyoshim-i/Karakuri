@@ -56,7 +56,13 @@ pub struct Input {
 
 impl Default for Input {
     fn default() -> Input {
-        Input { gain: 1.0, opacity: 1.0, blend: Blend::Add, mask: Mask::default(), live: true }
+        Input {
+            gain: 1.0,
+            opacity: 1.0,
+            blend: Blend::Add,
+            mask: Mask::default(),
+            live: true,
+        }
     }
 }
 
@@ -169,7 +175,12 @@ impl Composite {
         });
 
         let bind_group = Composite::bind(device, &layout, &uniform, views);
-        Composite { pipeline, layout, uniform, bind_group }
+        Composite {
+            pipeline,
+            layout,
+            uniform,
+            bind_group,
+        }
     }
 
     /// The shader binds [`MAX_SLOTS`] textures whatever the caller's size is, so

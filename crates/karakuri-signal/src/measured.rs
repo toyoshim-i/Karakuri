@@ -246,8 +246,8 @@ mod tests {
         let synthesized = SynthesizedBus::new(&osc);
 
         for name in NAMES {
-            let is_measured = matches!(name, "energy" | "onset")
-                || matches!(name, "band" | "band0" | "band3");
+            let is_measured =
+                matches!(name, "energy" | "onset") || matches!(name, "band" | "band0" | "band3");
             if is_measured {
                 continue;
             }

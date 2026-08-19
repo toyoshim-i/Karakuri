@@ -377,12 +377,20 @@ pub struct ParamWrite {
 impl ParamWrite {
     /// Every node that declares `key`.
     pub fn everywhere(key: impl Into<String>, value: f32) -> ParamWrite {
-        ParamWrite { at: None, key: key.into(), value }
+        ParamWrite {
+            at: None,
+            key: key.into(),
+            value,
+        }
     }
 
     /// One node.
     pub fn at(layer: Kind, index: u32, key: impl Into<String>, value: f32) -> ParamWrite {
-        ParamWrite { at: Some((layer, index)), key: key.into(), value }
+        ParamWrite {
+            at: Some((layer, index)),
+            key: key.into(),
+            value,
+        }
     }
 }
 

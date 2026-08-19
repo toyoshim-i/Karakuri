@@ -131,7 +131,8 @@ proc wants_normal {
 
 fn compile(src: &str) -> Checked {
     let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
+    let checked =
+        karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     checked
 }
@@ -215,15 +216,14 @@ struct Harness {
 }
 
 impl Harness {
-    fn new(
-        budget_ms: f32,
-        capacity: u32,
-        size: (u32, u32),
-        source: Box<dyn Source>,
-    ) -> Harness {
+    fn new(budget_ms: f32, capacity: u32, size: (u32, u32), source: Box<dyn Source>) -> Harness {
         let gpu = Gpu::headless().expect("no GPU available");
-        let present =
-            Present::new(&gpu.device, wgpu::TextureFormat::Rgba16Float, size.0, size.1);
+        let present = Present::new(
+            &gpu.device,
+            wgpu::TextureFormat::Rgba16Float,
+            size.0,
+            size.1,
+        );
         let set = Harness::build(&gpu, L4, capacity);
         let mut swap = HotSwap::new(&gpu.device, &gpu.queue, set, budget_ms, source);
         swap.resize(&gpu.device, size.0, size.1);
@@ -295,11 +295,7 @@ impl Harness {
     /// Render frames until `wanted` matches an event, and return how many
     /// frames that took. Every event seen along the way is collected, so a
     /// caller can check that nothing else happened either.
-    fn frames_until(
-        &mut self,
-        wanted: impl Fn(&Event) -> bool,
-        what: &str,
-    ) -> (u64, Vec<String>) {
+    fn frames_until(&mut self, wanted: impl Fn(&Event) -> bool, what: &str) -> (u64, Vec<String>) {
         let started = Instant::now();
         let from = self.swap.frames_rendered();
         let mut seen = Vec::new();
@@ -368,7 +364,8 @@ fn a_build_runs_in_the_background_and_lands_between_two_frames() {
     let t_before = h.swap.set().time();
     assert!(t_before > 0.0, "the first Set never stepped");
 
-    tx.send(request(L4, SECOND, "second")).expect("worker alive");
+    tx.send(request(L4, SECOND, "second"))
+        .expect("worker alive");
     let (in_flight, _) = h.frames_until(is_swapped, "the swap");
 
     assert!(
@@ -446,7 +443,11 @@ fn a_swapped_in_set_carries_the_bindings_the_request_stated() {
 
     let set = h.swap.set();
     assert_eq!(set.capacity(), SECOND, "the swap did not land");
-    assert_eq!(set.param("radius").expect("declared"), 4.0, "the override did not survive");
+    assert_eq!(
+        set.param("radius").expect("declared"),
+        4.0,
+        "the override did not survive"
+    );
     assert_eq!(
         set.bindings().len(),
         1,
@@ -473,10 +474,7 @@ fn a_build_that_fails_changes_nothing() {
 
     tx.send(request(L4_INCOMPATIBLE, SECOND, "wants_normal"))
         .expect("worker alive");
-    let (elapsed, seen) = h.frames_until(
-        |e| matches!(e, Event::Rejected { .. }),
-        "the rejection",
-    );
+    let (elapsed, seen) = h.frames_until(|e| matches!(e, Event::Rejected { .. }), "the rejection");
 
     assert_eq!(
         h.swap.set().capacity(),
@@ -540,7 +538,8 @@ fn a_build_arrives_measured_and_still_arrives_cold() {
          nothing can have measured it"
     );
 
-    tx.send(request(L4, SECOND, "measured")).expect("worker alive");
+    tx.send(request(L4, SECOND, "measured"))
+        .expect("worker alive");
     h.frames_until(is_swapped, "the swap");
 
     assert_eq!(h.swap.set().capacity(), SECOND);
@@ -608,7 +607,8 @@ fn the_watchdog_rolls_back_and_restores_the_previous_set_where_it_was_parked() {
     for _ in 0..10 {
         h.frame();
     }
-    tx.send(request(L4, SECOND, "second")).expect("worker alive");
+    tx.send(request(L4, SECOND, "second"))
+        .expect("worker alive");
 
     // Where the outgoing Set was parked: its step count at the top of the
     // frame the swap landed on, which is the last moment anything stepped it.
@@ -628,10 +628,7 @@ fn the_watchdog_rolls_back_and_restores_the_previous_set_where_it_was_parked() {
     assert_eq!(h.swap.set().capacity(), SECOND, "the candidate is live");
     assert!(h.swap.on_trial(), "the candidate is not being watched");
 
-    let (frames, seen) = h.frames_until(
-        |e| matches!(e, Event::RolledBack { .. }),
-        "the rollback",
-    );
+    let (frames, seen) = h.frames_until(|e| matches!(e, Event::RolledBack { .. }), "the rollback");
 
     assert_eq!(
         h.swap.set().capacity(),
@@ -681,7 +678,8 @@ fn a_candidate_that_holds_the_budget_is_kept() {
     for _ in 0..5 {
         h.frame();
     }
-    tx.send(request(L4, SECOND, "second")).expect("worker alive");
+    tx.send(request(L4, SECOND, "second"))
+        .expect("worker alive");
     h.frames_until(is_swapped, "the swap");
     let (_, seen) = h.frames_until(|e| matches!(e, Event::Accepted { .. }), "the verdict");
 
@@ -806,7 +804,10 @@ fn a_worker_that_dies_is_reported_once_and_does_not_disturb_the_live_set() {
         }
     }
 
-    assert_eq!(lost, 1, "the dead worker was reported {lost} times, not once");
+    assert_eq!(
+        lost, 1,
+        "the dead worker was reported {lost} times, not once"
+    );
     assert_eq!(h.swap.set().capacity(), FIRST, "the live Set was disturbed");
     assert!(!h.swap.on_trial());
 }
@@ -845,7 +846,8 @@ fn frame_times_across_a_swap_are_measured_and_reported() {
     }
     let before = h.intervals.len();
 
-    tx.send(request(L4, capacity, "second")).expect("worker alive");
+    tx.send(request(L4, capacity, "second"))
+        .expect("worker alive");
     let in_flight = h.frames_until(is_swapped, "the swap").0;
     // One more frame before the slice indices are taken. `Harness::frame`
     // pushes an interval at the *top* of a frame, so when the `Swapped` event
@@ -876,7 +878,10 @@ fn frame_times_across_a_swap_are_measured_and_reported() {
         h.size.0, h.size.1
     );
     summarize("steady, before the request", &h.intervals[..before]);
-    summarize("while the build was in flight", &h.intervals[before..at_swap - 1]);
+    summarize(
+        "while the build was in flight",
+        &h.intervals[before..at_swap - 1],
+    );
     // The frame the swap landed on gets its own line: it is the one frame that
     // could plausibly cost something, since it is where the live Set is
     // replaced and where the incoming pipelines are used for the first time.
@@ -967,14 +972,21 @@ fn pixels(gpu: &Gpu, texture: &wgpu::Texture) -> Vec<u16> {
                 rows_per_image: Some(height),
             },
         },
-        wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
     );
     gpu.queue.submit([encoder.finish()]);
     let slice = buffer.slice(..);
     slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
     gpu.device.poll(wgpu::PollType::Wait).expect("poll");
     let data = slice.get_mapped_range();
-    let out = data.chunks_exact(2).map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+    let out = data
+        .chunks_exact(2)
+        .map(|b| u16::from_le_bytes([b[0], b[1]]))
+        .collect();
     drop(data);
     buffer.unmap();
     out
@@ -1043,9 +1055,11 @@ fn a_rewound_set_is_indistinguishable_from_one_that_was_never_stepped() {
         a.chunks_exact(4).any(|p| p[0] != 0),
         "neither Set drew anything, so this comparison is two black frames"
     );
-    assert_eq!(a, b, "a probed-and-rewound Set renders differently from a fresh one");
+    assert_eq!(
+        a, b,
+        "a probed-and-rewound Set renders differently from a fresh one"
+    );
 }
-
 
 /// **A swap carries the Set's interface, and a macro survives it.**
 ///
@@ -1073,32 +1087,40 @@ fn a_swap_carries_the_interface_a_macro_is_bound_to() {
         key: "exposure".to_string(),
         range: [0.0, 4.0],
     });
-    next.bindings.push(
-        karakuri_engine::Binding::new(
-            karakuri_ir::Kind::L4,
-            "exposure",
-            "control:level",
-            karakuri_engine::binding::Curve::Lin,
-            [0.0, 8.0],
-        ),
-    );
+    next.bindings.push(karakuri_engine::Binding::new(
+        karakuri_ir::Kind::L4,
+        "exposure",
+        "control:level",
+        karakuri_engine::binding::Curve::Lin,
+        [0.0, 8.0],
+    ));
     tx.send(next).expect("worker alive");
     h.frames_until(|e| matches!(e, Event::Swapped { .. }), "the build to land");
 
     let set = h.swap.set();
     assert_eq!(
-        set.published().iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+        set.published()
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect::<Vec<_>>(),
         vec!["level"],
         "the interface did not cross the swap"
     );
-    assert_eq!(set.bindings().len(), 1, "the binding was refused, so the order is wrong");
+    assert_eq!(
+        set.bindings().len(),
+        1,
+        "the binding was refused, so the order is wrong"
+    );
 
     // And it drives. The binding resolved on the first frame after the swap,
     // from the control at whatever the `.kir` default left it — what matters
     // here is that it resolved from the *control* at all, which a binding
     // holding its manual value would not have.
     let driven = set.bindings()[0].value();
-    let expected = set.published_value("level").expect("the control holds a value") * 2.0;
+    let expected = set
+        .published_value("level")
+        .expect("the control holds a value")
+        * 2.0;
     assert!(
         (driven - expected).abs() < 1e-3,
         "the macro resolved to {driven}, where the control at {} maps to {expected}",

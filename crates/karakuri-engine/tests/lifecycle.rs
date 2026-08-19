@@ -80,19 +80,24 @@ proc emitter {{
 
 fn compile(src: &str) -> Checked {
     let proc = karakuri_ir::parse(src).unwrap_or_else(|errs| panic!("{}", render(&errs, src)));
-    let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|errs| panic!("{}", render(&errs, src)));
+    let checked =
+        karakuri_ir::check::check(&proc).unwrap_or_else(|errs| panic!("{}", render(&errs, src)));
     karakuri_ir::cost::estimate(&checked).unwrap_or_else(|errs| panic!("{}", render(&errs, src)));
     checked
 }
 
 fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
+    errs.iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn build(gpu: &Gpu, l1_src: &str, capacity: u32) -> Set {
     let l1 = compile(l1_src);
     let l4 = compile(L4);
-    let mut set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, capacity, 19274).expect("compatible pair");
+    let mut set =
+        Set::build(&gpu.device, &gpu.queue, &l1, &l4, capacity, 19274).expect("compatible pair");
     set.resize(&gpu.device, WIDTH, HEIGHT);
     set
 }
@@ -134,7 +139,11 @@ fn frame(gpu: &Gpu, set: &mut Set, steps: u8) -> Vec<u16> {
                 rows_per_image: Some(HEIGHT),
             },
         },
-        wgpu::Extent3d { width: WIDTH, height: HEIGHT, depth_or_array_layers: 1 },
+        wgpu::Extent3d {
+            width: WIDTH,
+            height: HEIGHT,
+            depth_or_array_layers: 1,
+        },
     );
     gpu.queue.submit([encoder.finish()]);
 
@@ -142,7 +151,10 @@ fn frame(gpu: &Gpu, set: &mut Set, steps: u8) -> Vec<u16> {
     slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
     gpu.device.poll(wgpu::PollType::Wait).expect("poll");
     let data = slice.get_mapped_range();
-    let out = data.chunks_exact(2).map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+    let out = data
+        .chunks_exact(2)
+        .map(|b| u16::from_le_bytes([b[0], b[1]]))
+        .collect();
     drop(data);
     readback.unmap();
     out
@@ -176,7 +188,11 @@ fn live_position_x(gpu: &Gpu, set: &Set) -> Vec<f32> {
     (0..live)
         .map(|i| {
             let at = i * stride + off;
-            f32::from_le_bytes(bytes[at..at + 4].try_into().expect("four bytes of position.x"))
+            f32::from_le_bytes(
+                bytes[at..at + 4]
+                    .try_into()
+                    .expect("four bytes of position.x"),
+            )
         })
         .collect()
 }
@@ -206,20 +222,31 @@ fn a_killed_element_leaves_and_the_survivors_keep_their_order() {
         step(&gpu, &mut set, 1);
     }
     let before = live_seeds(&gpu, &set);
-    assert!(before.len() > 10, "the emitter never filled up: {} live", before.len());
+    assert!(
+        before.len() > 10,
+        "the emitter never filled up: {} live",
+        before.len()
+    );
 
     step(&gpu, &mut set, 1);
     let after = live_seeds(&gpu, &set);
 
     // Some of `before` must be gone — the lifetime is two steps.
-    let survivors: Vec<u32> = after.iter().copied().filter(|s| before.contains(s)).collect();
+    let survivors: Vec<u32> = after
+        .iter()
+        .copied()
+        .filter(|s| before.contains(s))
+        .collect();
     assert!(
         survivors.len() < before.len(),
         "nothing died: {} before, {} of them still live",
         before.len(),
         survivors.len()
     );
-    assert!(!survivors.is_empty(), "everything died at once, so this proves nothing about order");
+    assert!(
+        !survivors.is_empty(),
+        "everything died at once, so this proves nothing about order"
+    );
 
     // ...and the ones that stayed are still in the order they were in.
     assert!(
@@ -229,7 +256,10 @@ fn a_killed_element_leaves_and_the_survivors_keep_their_order() {
 
     // Seeds are a monotone spawn ordinal, so a slot-ordered live set is
     // ascending whether or not anything died.
-    assert!(after.windows(2).all(|w| w[0] < w[1]), "live seeds are not ascending: {after:?}");
+    assert!(
+        after.windows(2).all(|w| w[0] < w[1]),
+        "live seeds are not ascending: {after:?}"
+    );
 }
 
 /// The narrow version of the same claim, with no spawning to confuse it: an
@@ -270,10 +300,15 @@ proc plain {
   fragment { color = vec4(1.0, 1.0, 1.0, 1.0); }
 }
 "#;
-    let mut set = Set::build(&gpu.device, &gpu.queue, &compile(l1), &compile(l4), 256, 1).expect("pair");
+    let mut set =
+        Set::build(&gpu.device, &gpu.queue, &compile(l1), &compile(l4), 256, 1).expect("pair");
     set.resize(&gpu.device, WIDTH, HEIGHT);
 
-    assert_eq!(set.live_count(&gpu.device, &gpu.queue), 256, "everything starts alive");
+    assert_eq!(
+        set.live_count(&gpu.device, &gpu.queue),
+        256,
+        "everything starts alive"
+    );
 
     // Reading an attribute yields the *previous* frame's value, so `age`
     // inside step k is `(k - 1) * dt`. It first exceeds 0.025 (one and a
@@ -292,7 +327,10 @@ proc plain {
     // And what is left is exactly the seeds that did not kill themselves,
     // still in ascending order.
     let seeds = live_seeds(&gpu, &set);
-    assert_eq!(seeds, (0..256u32).filter(|s| s % 4 != 0).collect::<Vec<_>>());
+    assert_eq!(
+        seeds,
+        (0..256u32).filter(|s| s % 4 != 0).collect::<Vec<_>>()
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -318,7 +356,11 @@ fn spawning_fills_toward_capacity_and_stops_there() {
         counts.push(set.live_count(&gpu.device, &gpu.queue));
     }
 
-    assert_eq!(&counts[..5], &[100, 200, 300, 400, 500], "the fill rate is 100 per step: {counts:?}");
+    assert_eq!(
+        &counts[..5],
+        &[100, 200, 300, 400, 500],
+        "the fill rate is 100 per step: {counts:?}"
+    );
     assert!(
         counts[5..].iter().all(|&c| c == capacity),
         "the count must stop at capacity, not overshoot or wrap: {counts:?}"
@@ -329,7 +371,10 @@ fn spawning_fills_toward_capacity_and_stops_there() {
     // of order.
     let seeds = live_seeds(&gpu, &set);
     assert_eq!(seeds.len(), capacity as usize);
-    assert!(seeds.windows(2).all(|w| w[0] < w[1]), "seeds are not ascending after the clamp");
+    assert!(
+        seeds.windows(2).all(|w| w[0] < w[1]),
+        "seeds are not ascending after the clamp"
+    );
 }
 
 /// **The spawn accumulator's fractional carry, asserted as a rate rather than
@@ -432,7 +477,8 @@ proc plain {
   fragment { color = vec4(1.0, 1.0, 1.0, 1.0); }
 }
 "#;
-    let mut set = Set::build(&gpu.device, &gpu.queue, &compile(l1), &compile(l4), 64, 1).expect("pair");
+    let mut set =
+        Set::build(&gpu.device, &gpu.queue, &compile(l1), &compile(l4), 64, 1).expect("pair");
     set.resize(&gpu.device, WIDTH, HEIGHT);
 
     let dt = 1.0f32 / 60.0;
@@ -485,8 +531,16 @@ fn the_same_seed_and_the_same_ticks_reproduce_the_same_frame_with_spawn_and_kill
         b.live_count(&gpu.device, &gpu.queue),
         "two runs of the same record stream disagree about how many elements exist"
     );
-    assert_eq!(live_seeds(&gpu, &a), live_seeds(&gpu, &b), "the live sets differ");
-    assert_eq!(frame(&gpu, &mut a, 1), frame(&gpu, &mut b, 1), "the same record stream produced two images");
+    assert_eq!(
+        live_seeds(&gpu, &a),
+        live_seeds(&gpu, &b),
+        "the live sets differ"
+    );
+    assert_eq!(
+        frame(&gpu, &mut a, 1),
+        frame(&gpu, &mut b, 1),
+        "the same record stream produced two images"
+    );
 }
 
 /// Substepping must not change the simulation, only the frame count — and
@@ -520,8 +574,15 @@ fn two_frames_of_one_step_land_where_one_frame_of_two_steps_does_with_spawning()
     }
 
     let split_seeds = live_seeds(&gpu, &split);
-    assert!(!split_seeds.is_empty(), "nothing is alive, so this proves nothing");
-    assert_eq!(split_seeds, live_seeds(&gpu, &merged), "the live sets diverged under substepping");
+    assert!(
+        !split_seeds.is_empty(),
+        "nothing is alive, so this proves nothing"
+    );
+    assert_eq!(
+        split_seeds,
+        live_seeds(&gpu, &merged),
+        "the live sets diverged under substepping"
+    );
     assert_eq!(
         split.live_count(&gpu.device, &gpu.queue),
         merged.live_count(&gpu.device, &gpu.queue),
@@ -559,8 +620,15 @@ fn substepping_leaves_the_rendered_frame_alone_where_time_agrees_exactly() {
     let mut merged = build(&gpu, &src, 4096);
     let merged_frame = frame(&gpu, &mut merged, 2);
 
-    assert_eq!(split.time(), merged.time(), "the premise of this test is that `t` agrees");
-    assert!(split.live_count(&gpu.device, &gpu.queue) > 100, "spawning is not active");
+    assert_eq!(
+        split.time(),
+        merged.time(),
+        "the premise of this test is that `t` agrees"
+    );
+    assert!(
+        split.live_count(&gpu.device, &gpu.queue) > 100,
+        "spawning is not active"
+    );
     assert_eq!(split_frame, merged_frame, "substepping changed the image");
 }
 
@@ -605,7 +673,8 @@ proc plain {
   fragment { color = vec4(1.0, 1.0, 1.0, 1.0); }
 }
 "#;
-    let mut set = Set::build(&gpu.device, &gpu.queue, &compile(l1), &compile(l4), 4096, 1).expect("pair");
+    let mut set =
+        Set::build(&gpu.device, &gpu.queue, &compile(l1), &compile(l4), 4096, 1).expect("pair");
     set.resize(&gpu.device, WIDTH, HEIGHT);
 
     for _ in 0..4 {
@@ -613,7 +682,10 @@ proc plain {
     }
     // Half the range is the batch that just died one unit to the right of
     // the origin, half is the batch just spawned at it.
-    assert!(set.live_count(&gpu.device, &gpu.queue) > 100, "the emitter is not running");
+    assert!(
+        set.live_count(&gpu.device, &gpu.queue) > 100,
+        "the emitter is not running"
+    );
 
     let pixels = frame(&gpu, &mut set, 1);
     // The origin is dead centre; the corpses are a world unit along +x,

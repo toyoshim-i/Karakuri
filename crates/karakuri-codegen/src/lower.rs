@@ -120,7 +120,10 @@ pub fn lower_expr(expr: &TExpr, resolver: &dyn Resolver, req: &mut Requirements)
         }
         TExprKind::Swizzle { value, components } => {
             let v = lower_expr(value, resolver, req);
-            let letters: String = components.iter().map(|&c| b"xyzw"[c as usize] as char).collect();
+            let letters: String = components
+                .iter()
+                .map(|&c| b"xyzw"[c as usize] as char)
+                .collect();
             format!("{v}.{letters}")
         }
     }
@@ -137,7 +140,13 @@ fn lower_lit(lit: Lit) -> String {
     }
 }
 
-fn lower_binary(op: BinOp, lhs: &TExpr, rhs: &TExpr, resolver: &dyn Resolver, req: &mut Requirements) -> String {
+fn lower_binary(
+    op: BinOp,
+    lhs: &TExpr,
+    rhs: &TExpr,
+    resolver: &dyn Resolver,
+    req: &mut Requirements,
+) -> String {
     let l = lower_expr(lhs, resolver, req);
     let r = lower_expr(rhs, resolver, req);
 

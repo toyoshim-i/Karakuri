@@ -626,9 +626,7 @@ impl Ambient {
             // per-element one a ray through the fragment is not a thing a
             // vertex has. Offering them where they mean nothing would be one
             // more way to write a procedure that compiles and is wrong.
-            Ambient::Eye | Ambient::Ray => {
-                kind == Kind::L4 && block == BlockKind::Fragment
-            }
+            Ambient::Eye | Ambient::Ray => kind == Kind::L4 && block == BlockKind::Fragment,
         }
     }
 }

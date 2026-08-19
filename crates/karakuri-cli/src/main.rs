@@ -27,8 +27,8 @@ mod mix;
 mod render;
 mod scratch;
 mod session;
-mod tempo_source;
 mod setfile;
+mod tempo_source;
 mod watch;
 
 use std::fmt::Write as _;
@@ -42,8 +42,7 @@ use karakuri_engine::swap::Event;
 use karakuri_engine::transport::{Sync, Transport};
 use karakuri_engine::{
     Binding, Blend, Deck, Gpu, HotSwap, Mask, MaskKind, ParamWrite, Present, Residency, Set,
-    Signals,
-    TonemapOp, DEFAULT_BUDGET_MS,
+    Signals, TonemapOp, DEFAULT_BUDGET_MS,
 };
 use karakuri_midi::Action;
 use karakuri_signal::NoiseConfig;
@@ -99,9 +98,21 @@ const FADE_BEATS: [f64; 4] = [4.0, 2.0, 8.0, 0.0];
 const MASK_SHAPES: [(MaskKind, f32, &str); 6] = [
     (MaskKind::None, 0.0, "off — `c` needs a shape"),
     (MaskKind::Linear, 0.0, "linear, left to right"),
-    (MaskKind::Linear, std::f32::consts::FRAC_PI_2, "linear, bottom to top"),
-    (MaskKind::Linear, std::f32::consts::FRAC_PI_4, "linear, diagonal"),
-    (MaskKind::Linear, -std::f32::consts::FRAC_PI_4, "linear, the other diagonal"),
+    (
+        MaskKind::Linear,
+        std::f32::consts::FRAC_PI_2,
+        "linear, bottom to top",
+    ),
+    (
+        MaskKind::Linear,
+        std::f32::consts::FRAC_PI_4,
+        "linear, diagonal",
+    ),
+    (
+        MaskKind::Linear,
+        -std::f32::consts::FRAC_PI_4,
+        "linear, the other diagonal",
+    ),
     (MaskKind::Radial, 0.0, "an iris"),
 ];
 
@@ -665,7 +676,10 @@ pub fn op_wire_name(op: TonemapOp) -> &'static str {
 /// one spelling function. `None` for a name this build does not have, which is
 /// the caller's to report against [`op_wire_names`].
 pub fn parse_op(name: &str) -> Option<TonemapOp> {
-    TONEMAPS.iter().copied().find(|op| op_wire_name(*op) == name)
+    TONEMAPS
+        .iter()
+        .copied()
+        .find(|op| op_wire_name(*op) == name)
 }
 
 /// Every wire spelling, for an error message that says what was available.
@@ -929,15 +943,15 @@ fn parse_bind(value: &str) -> Result<Binding, String> {
         };
         match name.trim() {
             "layer" => {
-                layer = Some(
-                    layer_named(v).ok_or_else(|| {
-                        bad(&format!("`layer={v}` — expected L1, L2, L3, L4 or Field"))
-                    })?,
-                )
+                layer = Some(layer_named(v).ok_or_else(|| {
+                    bad(&format!("`layer={v}` — expected L1, L2, L3, L4 or Field"))
+                })?)
             }
             "index" => {
                 index = Some(v.parse::<u32>().map_err(|_| {
-                    bad(&format!("`index={v}` — expected a node number, 0 for the first"))
+                    bad(&format!(
+                        "`index={v}` — expected a node number, 0 for the first"
+                    ))
                 })?)
             }
             "key" => key = Some(v.to_string()),
@@ -978,11 +992,10 @@ fn parse_bind(value: &str) -> Result<Binding, String> {
             }
             "noise.octaves" => {
                 noise_given = true;
-                noise_octaves = Some(
-                    v.parse::<u32>().map_err(|_| {
+                noise_octaves =
+                    Some(v.parse::<u32>().map_err(|_| {
                         bad(&format!("`noise.octaves={v}` — expected a whole number"))
-                    })?,
-                );
+                    })?);
             }
             other => {
                 return Err(bad(&format!(
@@ -1097,7 +1110,9 @@ fn layer_named(name: &str) -> Option<karakuri_ir::Kind> {
 /// narrowing case look like the exception.
 fn parse_publish(value: &str) -> Result<karakuri_engine::set::Published, String> {
     let bad = || {
-        format!("`--publish {value}` — expected `name=key[LOW..HIGH]` or `name=L4:0:key[LOW..HIGH]`")
+        format!(
+            "`--publish {value}` — expected `name=key[LOW..HIGH]` or `name=L4:0:key[LOW..HIGH]`"
+        )
     };
     let (name, rest) = value.split_once('=').ok_or_else(bad)?;
     if name.is_empty() {
@@ -1217,12 +1232,13 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                 let parts: Vec<&str> = value.split(',').collect();
                 match parts.split_first() {
                     Some((l1, l4s))
-                        if !l1.is_empty() && !l4s.is_empty() && l4s.iter().all(|p| !p.is_empty()) =>
+                        if !l1.is_empty()
+                            && !l4s.is_empty()
+                            && l4s.iter().all(|p| !p.is_empty()) =>
                     {
-                        args_out.sets.push((
-                            PathBuf::from(*l1),
-                            l4s.iter().map(PathBuf::from).collect(),
-                        ))
+                        args_out
+                            .sets
+                            .push((PathBuf::from(*l1), l4s.iter().map(PathBuf::from).collect()))
                     }
                     _ => {
                         return Err(format!(
@@ -1261,9 +1277,8 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
             }
             "--tonemap" => {
                 let value = value_for("--tonemap", &mut it)?;
-                args_out.look.op = parse_op(&value).ok_or_else(|| {
-                    format!("`--tonemap {value}` — expected {}", op_wire_names())
-                })?;
+                args_out.look.op = parse_op(&value)
+                    .ok_or_else(|| format!("`--tonemap {value}` — expected {}", op_wire_names()))?;
             }
             "--exposure" => {
                 let value = value_for("--exposure", &mut it)?;
@@ -1277,11 +1292,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                 // reached by nudging a key mean the same range.
                 match value.parse::<f32>() {
                     Ok(v) if v.is_finite() && v > 0.0 => args_out.look.exposure = v,
-                    _ => {
-                        return Err(format!(
-                            "`--exposure {value}` — expected a positive number"
-                        ))
-                    }
+                    _ => return Err(format!("`--exposure {value}` — expected a positive number")),
                 }
             }
             "--mcp" => args_out.mcp = Some(number_for("--mcp", "a port number", &mut it)?),
@@ -1360,9 +1371,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
             }
             // An unknown option used to become a path, so `--wtach` looked
             // like a `.kir` that did not exist and the error blamed the file.
-            other if other.starts_with('-') => {
-                return Err(format!("unknown option `{other}`"))
-            }
+            other if other.starts_with('-') => return Err(format!("unknown option `{other}`")),
             _ => positional.push(PathBuf::from(arg)),
         }
     }
@@ -1407,8 +1416,9 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         );
     }
     if args_out.load_set.is_some() && args_out.save_set.is_some() {
-        return Err("--load-set and --save-set in one run: it would rewrite what it just read"
-            .to_string());
+        return Err(
+            "--load-set and --save-set in one run: it would rewrite what it just read".to_string(),
+        );
     }
     // An offscreen run is a function of its inputs — that is why it never
     // watches files either. Accepting `--audio-in` here and quietly ignoring it
@@ -1568,7 +1578,8 @@ fn capacity_for(args: &Args, l1: &karakuri_ir::typed::Checked) -> u32 {
     if args.capacity_given {
         return args.capacity;
     }
-    l1.capacity.map_or(args.capacity, |declared| declared.default)
+    l1.capacity
+        .map_or(args.capacity, |declared| declared.default)
 }
 
 /// The same question asked once per source, which is the only form the engine
@@ -1742,7 +1753,9 @@ fn replay_session(args: &Args, id: &str) {
         // The file's number when it recorded one, and otherwise the
         // procedure's own declared default — never the flag's, which is a
         // general default beating a specific declaration that meant it.
-        &[loaded.capacity.unwrap_or_else(|| capacity_for(args, &loaded.l1))],
+        &[loaded
+            .capacity
+            .unwrap_or_else(|| capacity_for(args, &loaded.l1))],
         &mut vec![false; loaded.bindings.len()],
         &loaded.params,
         &loaded.bindings,
@@ -1958,11 +1971,7 @@ fn rebuild(
 /// `audio::apply_tempo` — because that is the whole point of the arrangement:
 /// what drove the engine live and what drives it on replay are the same
 /// function, so they cannot come apart.
-fn apply_replayed(
-    deck: &mut Deck,
-    look: &mut Look,
-    record: &karakuri_store::record::Record,
-) {
+fn apply_replayed(deck: &mut Deck, look: &mut Look, record: &karakuri_store::record::Record) {
     // The two the signal bus takes, through the same decoders the live path
     // uses. `audio` is what makes a replay reproduce what the room sounded
     // like: without it a binding to `energy` would replay at the confidence
@@ -2267,7 +2276,13 @@ fn main() {
         if let Some(loaded) = &loaded {
             let placed: Result<Vec<PathBuf>, String> =
                 std::iter::once((&loaded.l1.name, &loaded.l1_src))
-                    .chain(loaded.l4s.iter().map(|c| &c.name).zip(loaded.l4_srcs.iter()))
+                    .chain(
+                        loaded
+                            .l4s
+                            .iter()
+                            .map(|c| &c.name)
+                            .zip(loaded.l4_srcs.iter()),
+                    )
                     .map(|(name, src)| scratch::place(&root, name, src))
                     .collect();
             match placed {
@@ -2380,7 +2395,13 @@ fn main() {
             );
             std::process::exit(1);
         }
-        procs.push(Material { l1s, l2s, l3, field, l4s });
+        procs.push(Material {
+            l1s,
+            l2s,
+            l3,
+            field,
+            l4s,
+        });
     }
 
     // Saving is a one-shot: it writes what the flags say and stops, on the same
@@ -2528,48 +2549,40 @@ fn build_deck(
                 // One worker and one watcher per slot, over that slot's own
                 // two files. That is what makes "the slot whose files changed"
                 // the thing that rebuilds: no slot can see another's edit.
-                HotSwap::new(
-                    &gpu.device,
-                    &gpu.queue,
-                    set,
-                    args.budget_ms,
-                    {
-                        let layering = if args.merge.contains(&slot) {
-                            karakuri_engine::set::Layering::Composite
-                        } else {
-                            karakuri_engine::set::Layering::Overdraw
-                        };
-                        let watcher = watch::Watch::new(
-                            slot,
-                            args.sets[slot].0.clone(),
-                            args.sets[slot].1.clone(),
-                            layering,
-                            capacity_for(args, &l1[0]),
-                            seed_for(slot),
-                            args.overrides.clone(),
-                            args.published.clone(),
-                            args.bindings.clone(),
-                        );
-                        // **Only when a session is being recorded.** Without
-                        // one there is nothing to name and no store to name it
-                        // in, and the watcher does no I/O it did not do before.
-                        // The history is kept whether or not a session is
-                        // being recorded: the two answer different questions —
-                        // see `Watch::snapshots`. One `Shared` across every
-                        // slot, because it is also what the launch-time seed
-                        // wrote into.
-                        let watcher = match &snapshots {
-                            Some(shared) => watcher.snapshotting_to(shared.clone()),
-                            None => watcher,
-                        };
-                        Box::new(match &recording {
-                            Some((store, tx)) => {
-                                watcher.recording_to(store.clone(), tx.clone())
-                            }
-                            None => watcher,
-                        })
-                    },
-                )
+                HotSwap::new(&gpu.device, &gpu.queue, set, args.budget_ms, {
+                    let layering = if args.merge.contains(&slot) {
+                        karakuri_engine::set::Layering::Composite
+                    } else {
+                        karakuri_engine::set::Layering::Overdraw
+                    };
+                    let watcher = watch::Watch::new(
+                        slot,
+                        args.sets[slot].0.clone(),
+                        args.sets[slot].1.clone(),
+                        layering,
+                        capacity_for(args, &l1[0]),
+                        seed_for(slot),
+                        args.overrides.clone(),
+                        args.published.clone(),
+                        args.bindings.clone(),
+                    );
+                    // **Only when a session is being recorded.** Without
+                    // one there is nothing to name and no store to name it
+                    // in, and the watcher does no I/O it did not do before.
+                    // The history is kept whether or not a session is
+                    // being recorded: the two answer different questions —
+                    // see `Watch::snapshots`. One `Shared` across every
+                    // slot, because it is also what the launch-time seed
+                    // wrote into.
+                    let watcher = match &snapshots {
+                        Some(shared) => watcher.snapshotting_to(shared.clone()),
+                        None => watcher,
+                    };
+                    Box::new(match &recording {
+                        Some((store, tx)) => watcher.recording_to(store.clone(), tx.clone()),
+                        None => watcher,
+                    })
+                })
             } else {
                 HotSwap::fixed(set)
             }
@@ -2661,13 +2674,24 @@ fn build(
     // Asserted rather than zipped and hoped for: `zip` on a short list drops a
     // whole geometry, and a Set silently missing its second source is the same
     // picture as a Set that was never given one.
-    assert_eq!(l1s.len(), capacities.len(), "one capacity per geometry source");
+    assert_eq!(
+        l1s.len(),
+        capacities.len(),
+        "one capacity per geometry source"
+    );
     let sources: Vec<(&karakuri_ir::typed::Checked, u32)> =
         l1s.iter().zip(capacities.iter().copied()).collect();
     match Set::build_many(
-        &gpu.device, &gpu.queue, &sources, &deform, l3, field, &draw, layering, seed,
-    )
-    {
+        &gpu.device,
+        &gpu.queue,
+        &sources,
+        &deform,
+        l3,
+        field,
+        &draw,
+        layering,
+        seed,
+    ) {
         Ok(mut set) => {
             // **The `camera` record, and only when nothing else produces one.**
             // An L3 writes the camera state every frame, so an orbit assigned
@@ -3149,12 +3173,7 @@ impl ApplicationHandler for App {
         // are all at a tenth effect for some other reason.
         let audio = match &self.args.audio_in {
             Some(selector) => {
-                match audio::Audio::open(
-                    selector,
-                    self.args.latency_offset_ms,
-                    DT,
-                    self.args.bpm,
-                ) {
+                match audio::Audio::open(selector, self.args.latency_offset_ms, DT, self.args.bpm) {
                     Ok(audio) => {
                         eprintln!(
                             "audio in: {} at {} Hz — energy, onset and band0..7 are measured now, \
@@ -3179,15 +3198,13 @@ impl ApplicationHandler for App {
         // without it would look exactly like a run whose surface is plugged in
         // and doing nothing.
         let midi = match &self.args.midi_in {
-            Some(selector) => {
-                match midi::Surface::open(selector, self.args.midi_map.as_deref()) {
-                    Ok(surface) => Some(surface),
-                    Err(e) => {
-                        eprintln!("karakuri-cli: {e}");
-                        std::process::exit(2);
-                    }
+            Some(selector) => match midi::Surface::open(selector, self.args.midi_map.as_deref()) {
+                Ok(surface) => Some(surface),
+                Err(e) => {
+                    eprintln!("karakuri-cli: {e}");
+                    std::process::exit(2);
                 }
-            }
+            },
             None => None,
         };
 
@@ -3709,8 +3726,11 @@ impl Live {
         // One record per node: the L1, then each renderer in draw order. The
         // index is what says which renderer, and it is 0 for the first — so a
         // slot with one renderer writes exactly the two lines it always did.
-        let named = std::iter::once((Layer::L1, 0, l1))
-            .chain(l4s.into_iter().enumerate().map(|(i, h)| (Layer::L4, i as u32, h)));
+        let named = std::iter::once((Layer::L1, 0, l1)).chain(
+            l4s.into_iter()
+                .enumerate()
+                .map(|(i, h)| (Layer::L4, i as u32, h)),
+        );
         for (layer, index, hash) in named {
             self.record_only(karakuri_store::record::Record::Procedure {
                 slot: slot as u8,
@@ -3772,7 +3792,10 @@ impl Live {
             return;
         };
         if next == current {
-            eprintln!("slot {slot}: {} is the only mode this material takes", next.name());
+            eprintln!(
+                "slot {slot}: {} is the only mode this material takes",
+                next.name()
+            );
         }
         for reason in &refused {
             eprintln!("  skipped {reason}");
@@ -3887,7 +3910,9 @@ impl Live {
                 };
                 eprintln!("latency offset {ms:+.0} ms — {sense}");
             }
-            None => eprintln!("no audio input — the latency offset only means something with --audio-in"),
+            None => eprintln!(
+                "no audio input — the latency offset only means something with --audio-in"
+            ),
         }
     }
 
@@ -4138,7 +4163,10 @@ impl Live {
                 self.deck.gain(slot),
                 self.deck.slot(slot).set().time()
             ),
-            None => eprintln!("preview off — showing the mix of {} live", self.deck.live_slots()),
+            None => eprintln!(
+                "preview off — showing the mix of {} live",
+                self.deck.live_slots()
+            ),
         }
     }
 
@@ -4267,9 +4295,9 @@ impl Live {
                 // allows — but a session recorded against one Set and replayed
                 // against another is exactly where it can, and a slot silently
                 // left free would be a performance replayed wrong.
-                if let Err(refusal) =
-                    self.deck
-                        .set_transport(slot, sync, anchor_bpm, offset_beats)
+                if let Err(refusal) = self
+                    .deck
+                    .set_transport(slot, sync, anchor_bpm, offset_beats)
                 {
                     eprintln!("slot {slot}: {} sync refused — {refusal}", sync.name());
                 }
@@ -4592,7 +4620,8 @@ impl Live {
                 // music's tempo, shown only when the estimate behind it is
                 // worth anything. It moves nothing by itself — `.` does, and
                 // this is what tells a performer to consider pressing it.
-                if a.half_tempo_hint && a.estimate_confidence >= karakuri_audio::lock::GATE_CONFIDENCE
+                if a.half_tempo_hint
+                    && a.estimate_confidence >= karakuri_audio::lock::GATE_CONFIDENCE
                 {
                     " x2?"
                 } else {
@@ -4706,10 +4735,16 @@ mod tests {
         .expect("compiles");
 
         let args = parse(&[]).expect("parses");
-        assert_eq!(capacities_for(&args, &[small.clone(), large.clone()]), vec![32768, 131072]);
+        assert_eq!(
+            capacities_for(&args, &[small.clone(), large.clone()]),
+            vec![32768, 131072]
+        );
         // Order is not what decides it, which is the half a first-one-wins
         // implementation gets right by accident half the time.
-        assert_eq!(capacities_for(&args, &[large.clone(), small.clone()]), vec![131072, 32768]);
+        assert_eq!(
+            capacities_for(&args, &[large.clone(), small.clone()]),
+            vec![131072, 32768]
+        );
 
         // `--capacity` still overrides all of them: the operator asking for a
         // number is asking about the Set, not about one file in it.
@@ -4724,7 +4759,9 @@ mod tests {
         assert_eq!(parse(&[]).expect("parses").midi_in, None);
         assert_eq!(parse(&[]).expect("parses").midi_map, None);
         assert_eq!(
-            parse(&["--midi-in", "nanoKONTROL"]).expect("parses").midi_in,
+            parse(&["--midi-in", "nanoKONTROL"])
+                .expect("parses")
+                .midi_in,
             Some("nanoKONTROL".to_string())
         );
         // An empty selector is "the first port there is", which is a real
@@ -4749,8 +4786,7 @@ mod tests {
     /// loaded, checked and silently unused.
     #[test]
     fn a_midi_map_with_no_port_is_refused() {
-        let message =
-            parse(&["--midi-map", "surface.map"]).expect_err("a map with nothing to map");
+        let message = parse(&["--midi-map", "surface.map"]).expect_err("a map with nothing to map");
         assert!(message.contains("--midi-in"), "{message}");
         assert!(parse(&["--midi-map", "surface.map", "--midi-in", ""]).is_ok());
     }
@@ -5022,9 +5058,18 @@ mod tests {
     /// be trying to say.
     #[test]
     fn a_half_written_param_address_fails() {
-        for bad in ["L4:exposure=2.5", "L4:x:exposure=2.5", "L9:0:exposure=2.5", ":0:e=1", "=2.5"] {
+        for bad in [
+            "L4:exposure=2.5",
+            "L4:x:exposure=2.5",
+            "L9:0:exposure=2.5",
+            ":0:e=1",
+            "=2.5",
+        ] {
             let err = parse(&["--param", bad]).unwrap_err();
-            assert!(err.contains("--param"), "`{bad}` was accepted or misreported: {err}");
+            assert!(
+                err.contains("--param"),
+                "`{bad}` was accepted or misreported: {err}"
+            );
         }
     }
 
@@ -5034,10 +5079,16 @@ mod tests {
     fn a_bind_can_address_one_renderer_and_defaults_to_all_of_them() {
         let all = parse(&["--bind", "layer=L4,key=exposure,signal=beat,range=0..1"])
             .expect("should parse");
-        assert_eq!(all.bindings[0].index, None, "a bind with no index is the layer's");
+        assert_eq!(
+            all.bindings[0].index, None,
+            "a bind with no index is the layer's"
+        );
 
-        let one = parse(&["--bind", "layer=L4,index=2,key=exposure,signal=beat,range=0..1"])
-            .expect("should parse");
+        let one = parse(&[
+            "--bind",
+            "layer=L4,index=2,key=exposure,signal=beat,range=0..1",
+        ])
+        .expect("should parse");
         assert_eq!(one.bindings[0].index, Some(2));
 
         let err = parse(&["--bind", "layer=L4,index=x,key=e,signal=beat,range=0..1"]).unwrap_err();
@@ -5203,10 +5254,13 @@ mod tests {
 
     #[test]
     fn bind_defaults_the_curve_and_the_noise_generator_but_nothing_else() {
-        let plain = parse(&["--bind", "layer=L4,key=hue,signal=beat,range=0..1"])
-            .expect("should parse");
+        let plain =
+            parse(&["--bind", "layer=L4,key=hue,signal=beat,range=0..1"]).expect("should parse");
         assert_eq!(plain.bindings[0].curve, Curve::Lin);
-        assert_eq!(plain.bindings[0].noise, None, "only a noise signal gets one");
+        assert_eq!(
+            plain.bindings[0].noise, None,
+            "only a noise signal gets one"
+        );
 
         let noise = parse(&["--bind", "layer=L1,key=spawn_rate,signal=noise,range=0..1"])
             .expect("should parse");
@@ -5288,8 +5342,14 @@ mod tests {
             ),
             ("layer=L4,key=hue,signal=beat,range=0-1", "LOW..HIGH"),
             ("layer=L4,key=hue,signal=beat,range=low..high", "LOW..HIGH"),
-            ("layer=L4,key=hue,signal=beat,curv=lin,range=0..1", "unknown field `curv`"),
-            ("layer=L4,key=hue,signal=beat,range=0..1,noise.rate=2", "needs `signal=noise`"),
+            (
+                "layer=L4,key=hue,signal=beat,curv=lin,range=0..1",
+                "unknown field `curv`",
+            ),
+            (
+                "layer=L4,key=hue,signal=beat,range=0..1,noise.rate=2",
+                "needs `signal=noise`",
+            ),
             (
                 "layer=L1,key=r,signal=noise,range=0..1,noise.rate=fast",
                 "cycles per beat",
@@ -5315,7 +5375,10 @@ mod tests {
     fn binding_bpm_is_refused_and_names_the_signal_to_use_instead() {
         let err = parse(&["--bind", "layer=L1,key=radius,signal=bpm,range=1..5"]).unwrap_err();
         assert!(err.contains("bpm"), "{err}");
-        assert!(err.contains("beat"), "the refusal does not say what to use: {err}");
+        assert!(
+            err.contains("beat"),
+            "the refusal does not say what to use: {err}"
+        );
 
         // The two that do carry the tempo in the range a binding needs are
         // still accepted, or the refusal above would just be a ban on tempo.
@@ -5552,7 +5615,14 @@ mod value_tests {
         for args in [
             vec!["--render", "out.png", "--size", "1920x1080"],
             vec!["--seq", "frames", "--size", "1920x1080"],
-            vec!["--replay", "s", "--render", "out.png", "--size", "1920x1080"],
+            vec![
+                "--replay",
+                "s",
+                "--render",
+                "out.png",
+                "--size",
+                "1920x1080",
+            ],
         ] {
             let err = parse(&args).unwrap_or_else(|| panic!("{args:?} was accepted"));
             assert!(err.contains("no window"), "{args:?} -> {err}");
@@ -5598,7 +5668,14 @@ mod value_tests {
         for args in [
             vec!["--tempo-source", "helper", "--render", "out.png"],
             vec!["--tempo-source", "helper", "--seq", "frames/"],
-            vec!["--tempo-source", "helper", "--replay", "a", "--render", "out.png"],
+            vec![
+                "--tempo-source",
+                "helper",
+                "--replay",
+                "a",
+                "--render",
+                "out.png",
+            ],
         ] {
             let err = parse(&args).unwrap_or_else(|| panic!("{args:?} was accepted"));
             assert!(err.contains("--tempo-source"), "{args:?} -> {err}");
@@ -5619,7 +5696,14 @@ mod value_tests {
         for args in [
             vec!["--render", "out.png", "--record-session", "s"],
             vec!["--seq", "frames", "--record-session", "s"],
-            vec!["--replay", "a", "--render", "out.png", "--record-session", "s"],
+            vec![
+                "--replay",
+                "a",
+                "--render",
+                "out.png",
+                "--record-session",
+                "s",
+            ],
         ] {
             let err = parse(&args).unwrap_or_else(|| panic!("{args:?} was accepted"));
             assert!(err.contains("--record-session"), "{args:?} -> {err}");
@@ -5673,9 +5757,19 @@ mod value_tests {
     /// flag rather than blaming whatever came before it.
     #[test]
     fn a_flag_with_nothing_after_it_says_which_flag() {
-        for flag in ["--render", "--seq", "--frames", "--size", "--set", "--exposure"] {
+        for flag in [
+            "--render",
+            "--seq",
+            "--frames",
+            "--size",
+            "--set",
+            "--exposure",
+        ] {
             let err = parse(&[flag]).unwrap_or_else(|| panic!("`{flag}` alone was accepted"));
-            assert!(err.contains(flag) && err.contains("needs a value"), "{flag} -> {err}");
+            assert!(
+                err.contains(flag) && err.contains("needs a value"),
+                "{flag} -> {err}"
+            );
         }
     }
 
@@ -5693,6 +5787,9 @@ mod value_tests {
     #[test]
     fn a_negative_number_still_reads_as_a_value() {
         let err = parse(&["--exposure", "-1.5"]).expect("a negative exposure was accepted");
-        assert!(err.contains("positive"), "rejected for the wrong reason: {err}");
+        assert!(
+            err.contains("positive"),
+            "rejected for the wrong reason: {err}"
+        );
     }
 }

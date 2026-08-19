@@ -82,13 +82,17 @@ proc flat_sprite {{
 
 fn compile(src: &str) -> Checked {
     let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
+    let checked =
+        karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     checked
 }
 
 fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
+    errs.iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn try_build(gpu: &Gpu, l1: &str, l4: &str) -> Result<Set, SetError> {
@@ -125,7 +129,11 @@ fn draw(gpu: &Gpu, set: &mut Set) -> Vec<[f32; 4]> {
                 rows_per_image: Some(H),
             },
         },
-        wgpu::Extent3d { width: W, height: H, depth_or_array_layers: 1 },
+        wgpu::Extent3d {
+            width: W,
+            height: H,
+            depth_or_array_layers: 1,
+        },
     );
     gpu.queue.submit([encoder.finish()]);
 
@@ -186,7 +194,11 @@ fn covered(px: &[[f32; 4]]) -> Vec<usize> {
 /// The same, with the threshold named — a sweep down to an opacity of 0.002 has
 /// to look below the coverage that counts as "anything at all" at 0.5.
 fn covered_above(px: &[[f32; 4]], floor: f32) -> Vec<usize> {
-    px.iter().enumerate().filter(|(_, t)| t[3] > floor).map(|(i, _)| i).collect()
+    px.iter()
+        .enumerate()
+        .filter(|(_, t)| t[3] > floor)
+        .map(|(i, _)| i)
+        .collect()
 }
 
 /// **The blend mode does not change what a texel is covered by.** Two sprites of
@@ -212,10 +224,7 @@ fn the_blend_mode_does_not_change_what_a_texel_is_covered_by() {
     let a = draw(&gpu, &mut additive);
     let w = draw(&gpu, &mut weighted);
 
-    let overlap: Vec<usize> = covered(&a)
-        .into_iter()
-        .filter(|&i| a[i][3] > 0.7)
-        .collect();
+    let overlap: Vec<usize> = covered(&a).into_iter().filter(|&i| a[i][3] > 0.7).collect();
     assert!(
         !overlap.is_empty(),
         "the fixture's sprites do not overlap, so there is nothing to tell the modes apart"
@@ -297,9 +306,17 @@ fn a_lone_sprite_resolves_to_what_additive_accumulates_at_every_opacity() {
 
     for alpha in [0.5, 0.05, 0.005, 0.003, 0.002] {
         let mut additive = build(&gpu, &sprite_l4("additive"));
-        assert_eq!(additive.set_param("alpha", alpha), 1, "the param must be declared for the write to mean anything");
+        assert_eq!(
+            additive.set_param("alpha", alpha),
+            1,
+            "the param must be declared for the write to mean anything"
+        );
         let mut weighted = build(&gpu, &sprite_l4("weighted"));
-        assert_eq!(weighted.set_param("alpha", alpha), 1, "the param must be declared for the write to mean anything");
+        assert_eq!(
+            weighted.set_param("alpha", alpha),
+            1,
+            "the param must be declared for the write to mean anything"
+        );
         let a = draw(&gpu, &mut additive);
         let w = draw(&gpu, &mut weighted);
 
@@ -359,9 +376,17 @@ fn an_alpha_above_one_is_clamped_under_weighted_and_not_under_additive() {
     let gpu = Gpu::headless().expect("no GPU available");
 
     let mut bright = build(&gpu, &sprite_l4("additive"));
-    assert_eq!(bright.set_param("alpha", 2.0), 1, "the param must be declared for the write to mean anything");
+    assert_eq!(
+        bright.set_param("alpha", 2.0),
+        1,
+        "the param must be declared for the write to mean anything"
+    );
     let mut normal = build(&gpu, &sprite_l4("additive"));
-    assert_eq!(normal.set_param("alpha", 1.0), 1, "the param must be declared for the write to mean anything");
+    assert_eq!(
+        normal.set_param("alpha", 1.0),
+        1,
+        "the param must be declared for the write to mean anything"
+    );
     let bright = brightest(&draw(&gpu, &mut bright));
     let normal = brightest(&draw(&gpu, &mut normal));
     assert!(
@@ -370,14 +395,23 @@ fn an_alpha_above_one_is_clamped_under_weighted_and_not_under_additive() {
     );
 
     let mut over = build(&gpu, &sprite_l4("weighted"));
-    assert_eq!(over.set_param("alpha", 2.0), 1, "the param must be declared for the write to mean anything");
+    assert_eq!(
+        over.set_param("alpha", 2.0),
+        1,
+        "the param must be declared for the write to mean anything"
+    );
     let mut unit = build(&gpu, &sprite_l4("weighted"));
-    assert_eq!(unit.set_param("alpha", 1.0), 1, "the param must be declared for the write to mean anything");
+    assert_eq!(
+        unit.set_param("alpha", 1.0),
+        1,
+        "the param must be declared for the write to mean anything"
+    );
     let over = draw(&gpu, &mut over);
     let unit = draw(&gpu, &mut unit);
 
     assert!(
-        over.iter().all(|t| t.iter().all(|c| c.is_finite() && *c >= -0.001)),
+        over.iter()
+            .all(|t| t.iter().all(|c| c.is_finite() && *c >= -0.001)),
         "a weighted frame at alpha 2.0 has negative or non-finite light in it"
     );
     for i in covered(&unit) {
@@ -403,7 +437,11 @@ fn an_untouched_texel_resolves_to_transparent_black() {
     let px = draw(&gpu, &mut set);
 
     let empty = at(&px, 1, 1);
-    assert_eq!(empty, [0.0, 0.0, 0.0, 0.0], "the corner is not empty: {empty:?}");
+    assert_eq!(
+        empty,
+        [0.0, 0.0, 0.0, 0.0],
+        "the corner is not empty: {empty:?}"
+    );
     assert!(
         px.iter().all(|t| t.iter().all(|c| c.is_finite())),
         "the resolve put a NaN or an infinity in the frame"
@@ -439,8 +477,15 @@ fn the_accumulation_targets_follow_a_resize_and_cover_what_additive_covers() {
 
     let control = covered(&draw(&gpu, &mut control));
     let weighted = covered(&draw(&gpu, &mut round_trip));
-    assert!(control.len() > 100, "the control covered {} texels", control.len());
-    assert_eq!(control, weighted, "the two modes did not cover the same texels");
+    assert!(
+        control.len() > 100,
+        "the control covered {} texels",
+        control.len()
+    );
+    assert_eq!(
+        control, weighted,
+        "the two modes did not cover the same texels"
+    );
 }
 
 /// Two strokes that land on **the same screen line** while running through depth
@@ -523,7 +568,11 @@ proc flat_strand {{
 #[test]
 fn a_weighted_stroke_is_weighted_along_its_length() {
     let gpu = Gpu::headless().expect("no GPU available");
-    let stationary = karakuri_engine::Orbit { speed: 0.0, height: 0.0, ..Default::default() };
+    let stationary = karakuri_engine::Orbit {
+        speed: 0.0,
+        height: 0.0,
+        ..Default::default()
+    };
 
     let mut set = try_build(&gpu, CROSSING_STRANDS_L1, &strand_l4("weighted")).expect("a pair");
     set.camera = stationary;
@@ -539,13 +588,21 @@ fn a_weighted_stroke_is_weighted_along_its_length() {
     let a = draw(&gpu, &mut control);
 
     let lit = covered(&a);
-    assert!(lit.len() > 200, "the strands cover only {} texels", lit.len());
+    assert!(
+        lit.len() > 200,
+        "the strands cover only {} texels",
+        lit.len()
+    );
     let x = |i: &usize| (i % W as usize) as u32;
     let (left, right) = (
         lit.iter().map(x).min().expect("a covered texel"),
         lit.iter().map(x).max().expect("a covered texel"),
     );
-    assert!(right - left > 20, "the strands run only {} texels across", right - left);
+    assert!(
+        right - left > 20,
+        "the strands run only {} texels across",
+        right - left
+    );
 
     // A quarter in from each end, so neither sample is on a cap.
     let quarter = (right - left) / 4;

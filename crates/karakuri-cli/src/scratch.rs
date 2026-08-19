@@ -97,8 +97,8 @@ pub fn materialise(
             }
             let name = unique_name(path, &mut taken);
             let target = dir.join(&name);
-            let source = std::fs::read(path.as_path())
-                .map_err(|e| format!("{}: {e}", path.display()))?;
+            let source =
+                std::fs::read(path.as_path()).map_err(|e| format!("{}: {e}", path.display()))?;
             std::fs::write(&target, &source).map_err(|e| format!("{}: {e}", target.display()))?;
             copied.insert(path.clone(), target.clone());
             *path = target;
@@ -154,7 +154,13 @@ pub fn place(store_root: &Path, name: &str, source: &str) -> Result<PathBuf, Str
 fn sanitize(name: &str) -> String {
     let cleaned: String = name
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     if cleaned.is_empty() {
         "procedure".to_string()
@@ -186,9 +192,20 @@ mod tests {
 
         let dir = materialise(&store, &mut sets).expect("materialise");
 
-        assert!(sets[0].0.starts_with(&dir), "L1 still points at {:?}", sets[0].0);
-        assert!(sets[0].1[0].starts_with(&dir), "L4 still points at {:?}", sets[0].1[0]);
-        assert_eq!(std::fs::read_to_string(&sets[0].0).expect("read"), "original l1");
+        assert!(
+            sets[0].0.starts_with(&dir),
+            "L1 still points at {:?}",
+            sets[0].0
+        );
+        assert!(
+            sets[0].1[0].starts_with(&dir),
+            "L4 still points at {:?}",
+            sets[0].1[0]
+        );
+        assert_eq!(
+            std::fs::read_to_string(&sets[0].0).expect("read"),
+            "original l1"
+        );
 
         // And writing through the deck's path leaves the preset alone, which is
         // the whole point rather than a consequence worth assuming.
@@ -226,7 +243,10 @@ mod tests {
 
         materialise(&store, &mut sets).expect("materialise");
 
-        assert_ne!(sets[0].0, sets[1].0, "two different sources became one file");
+        assert_ne!(
+            sets[0].0, sets[1].0,
+            "two different sources became one file"
+        );
         assert_eq!(std::fs::read_to_string(&sets[0].0).expect("read"), "first");
         assert_eq!(std::fs::read_to_string(&sets[1].0).expect("read"), "second");
     }
@@ -242,7 +262,10 @@ mod tests {
 
         assert!(path.starts_with(store.join(DIR)), "{}", path.display());
         assert_eq!(path.file_name().expect("name"), "beat_strands.kir");
-        assert_eq!(std::fs::read_to_string(&path).expect("read"), "proc beat_strands {}");
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("read"),
+            "proc beat_strands {}"
+        );
     }
 
     /// And a name out of a Set file cannot walk out of the scratch.
@@ -252,7 +275,11 @@ mod tests {
         let store = tmp.path().join("store");
         let path = place(&store, "../../etc/passwd", "x").expect("place");
 
-        assert!(path.starts_with(store.join(DIR)), "{} escaped", path.display());
+        assert!(
+            path.starts_with(store.join(DIR)),
+            "{} escaped",
+            path.display()
+        );
         assert!(!path.to_string_lossy().contains(".."), "{}", path.display());
     }
 
@@ -270,7 +297,10 @@ mod tests {
         materialise(&store, &mut sets).expect("materialise");
 
         assert_eq!(sets[0].0, placed, "the placed procedure was moved");
-        assert_eq!(std::fs::read_to_string(&placed).expect("read"), "from the store");
+        assert_eq!(
+            std::fs::read_to_string(&placed).expect("read"),
+            "from the store"
+        );
     }
 
     /// A source that is not there is a diagnostic, not a scratch file holding

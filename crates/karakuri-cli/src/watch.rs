@@ -84,7 +84,10 @@ pub struct Watch {
     builds: u64,
     /// Where to record what was built, when a session is being recorded.
     /// `None` and nothing here reads or writes a store at all.
-    recording: Option<(std::sync::Arc<karakuri_store::store::Store>, std::sync::mpsc::Sender<Built>)>,
+    recording: Option<(
+        std::sync::Arc<karakuri_store::store::Store>,
+        std::sync::mpsc::Sender<Built>,
+    )>,
     /// Which slot this rebuilds. Carried only so that the diagnostics this
     /// prints — from a worker thread, interleaved with every other slot's — say
     /// which of the four they are about.
@@ -390,7 +393,11 @@ impl Source for Watch {
         let label = format!(
             "{} + {}",
             l1.name,
-            addressed.iter().map(|(.., name)| name.as_str()).collect::<Vec<_>>().join(" + ")
+            addressed
+                .iter()
+                .map(|(.., name)| name.as_str())
+                .collect::<Vec<_>>()
+                .join(" + ")
         );
         // **Unique across the whole run**, because that is what it is for: the
         // caller matches an outcome back to the source that produced it, and

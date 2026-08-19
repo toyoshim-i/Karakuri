@@ -1016,9 +1016,11 @@ impl Deck {
         Frame {
             deck: self,
             queue,
-            encoder: Some(device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("deck frame"),
-            })),
+            encoder: Some(
+                device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("deck frame"),
+                }),
+            ),
             rendered: false,
         }
     }
@@ -1204,7 +1206,9 @@ impl Deck {
         offset_beats: f64,
     ) -> Result<(), crate::transport::Refusal> {
         self.sync_allowed(slot, sync)?;
-        self.slots[slot].transport.set(sync, anchor_bpm, offset_beats);
+        self.slots[slot]
+            .transport
+            .set(sync, anchor_bpm, offset_beats);
         Ok(())
     }
 
@@ -1216,11 +1220,7 @@ impl Deck {
     /// swap that replaces closed-form material with accumulating material can
     /// therefore make the mode a slot is *already in* unavailable; nothing here
     /// resolves that, and whatever wires swapping to this owes it.
-    pub fn sync_allowed(
-        &self,
-        slot: usize,
-        sync: Sync,
-    ) -> Result<(), crate::transport::Refusal> {
+    pub fn sync_allowed(&self, slot: usize, sync: Sync) -> Result<(), crate::transport::Refusal> {
         let set = self.slots[slot].swap.set();
         Transport::allows(sync, set.is_closed_form(), set.reads_beats())
     }
@@ -1317,9 +1317,8 @@ impl Deck {
         // `t == 0` is "has not stepped": `t` is `steps_taken * dt` and advances
         // through `Set::prepare` alone, so a Set at zero is one a rewind cannot
         // take anything away from.
-        let measurable = |slot: &Slot| {
-            slot.swap.measured_cost().is_none() && slot.swap.set().time() == 0.0
-        };
+        let measurable =
+            |slot: &Slot| slot.swap.measured_cost().is_none() && slot.swap.set().time() == 0.0;
         if !self.slots.iter().any(measurable) {
             // Before the probe, not after: `Probe::new` allocates a 720p target
             // and spends half a second calibrating, and a deck with nothing to
@@ -1879,8 +1878,14 @@ impl Frame<'_> {
             // and a shape is a thing done *to* the material.
             edges.push(match preview {
                 Some(shown) if shown == i => Input::unity(),
-                Some(_) => Input { live: false, ..slot.edge() },
-                None => Input { live: slot.effective == Residency::Live, ..slot.edge() },
+                Some(_) => Input {
+                    live: false,
+                    ..slot.edge()
+                },
+                None => Input {
+                    live: slot.effective == Residency::Live,
+                    ..slot.edge()
+                },
             });
         }
         self.deck.composite.write_uniform(self.queue, &edges);
@@ -1959,4 +1964,3 @@ fn make_slot_target(
     let view = texture.create_view(&Default::default());
     (texture, view)
 }
-

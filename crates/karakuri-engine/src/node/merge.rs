@@ -53,7 +53,11 @@ impl Merge {
         let (targets, views) = allocate(device, inputs, width, height);
         let refs: Vec<&wgpu::TextureView> = views.iter().collect();
         let composite = Composite::new(device, &refs);
-        Merge { targets, views, composite }
+        Merge {
+            targets,
+            views,
+            composite,
+        }
     }
 
     /// Where input `i` draws. **The renderer clears it**, which is what makes
@@ -107,11 +111,15 @@ fn allocate(
                 // pipeline is linear and HDR end to end and the one encode
                 // happens in the present pass.
                 format: Present::HDR_FORMAT,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             })
         })
         .collect();
-    let views = targets.iter().map(|t| t.create_view(&Default::default())).collect();
+    let views = targets
+        .iter()
+        .map(|t| t.create_view(&Default::default()))
+        .collect();
     (targets, views)
 }

@@ -17,7 +17,9 @@
 
 use karakuri_ir::builtin::Builtin;
 use karakuri_ir::typed::{Checked, TBlock, TExpr, TExprKind, TStmt, Target};
-use karakuri_ir::{Ambient, Attr, BinOp, Blend, BlockKind, Kind, Lit, Output, Param, Span, Topology, Ty};
+use karakuri_ir::{
+    Ambient, Attr, BinOp, Blend, BlockKind, Kind, Lit, Output, Param, Span, Topology, Ty,
+};
 
 fn span() -> Span {
     Span::EMPTY
@@ -48,7 +50,15 @@ fn param(name: &str, ty: Ty) -> TExpr {
 }
 
 fn bin(op: BinOp, lhs: TExpr, rhs: TExpr, ty: Ty) -> TExpr {
-    TExpr::new(ty, span(), TExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) })
+    TExpr::new(
+        ty,
+        span(),
+        TExprKind::Binary {
+            op,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs),
+        },
+    )
 }
 
 fn call(func: Builtin, args: Vec<TExpr>, ty: Ty) -> TExpr {
@@ -60,23 +70,45 @@ fn construct(ty: Ty, args: Vec<TExpr>) -> TExpr {
 }
 
 fn let_(name: &str, value: TExpr) -> TStmt {
-    TStmt::Let { name: name.to_string(), value, span: span() }
+    TStmt::Let {
+        name: name.to_string(),
+        value,
+        span: span(),
+    }
 }
 
 fn assign_attr(a: Attr, value: TExpr) -> TStmt {
-    TStmt::Assign { target: Target::Attr(a), value, span: span() }
+    TStmt::Assign {
+        target: Target::Attr(a),
+        value,
+        span: span(),
+    }
 }
 
 fn assign_output(o: Output, value: TExpr) -> TStmt {
-    TStmt::Assign { target: Target::Output(o), value, span: span() }
+    TStmt::Assign {
+        target: Target::Output(o),
+        value,
+        span: span(),
+    }
 }
 
 fn param_decl(name: &str, ty: Ty, min: f32, max: f32) -> Param {
-    Param { name: name.to_string(), ty, min, max, default: dummy_default(), span: span() }
+    Param {
+        name: name.to_string(),
+        ty,
+        min,
+        max,
+        default: dummy_default(),
+        span: span(),
+    }
 }
 
 fn dummy_default() -> karakuri_ir::Expr {
-    karakuri_ir::Expr::Lit { value: Lit::Float(0.0), span: span() }
+    karakuri_ir::Expr::Lit {
+        value: Lit::Float(0.0),
+        span: span(),
+    }
 }
 
 /// Shaped like the ir-spec's `drift_shell` L1 example.
@@ -91,12 +123,24 @@ fn drift_shell() -> Checked {
             // the generated uniform binding's name, and `v` is what the
             // element block below separately calls its own `let`. Neither
             // may capture anything this crate emits.
-            let_("u", call(Builtin::Hash1, vec![ambient(Ambient::Seed, Ty::Uint)], Ty::Float)),
+            let_(
+                "u",
+                call(
+                    Builtin::Hash1,
+                    vec![ambient(Ambient::Seed, Ty::Uint)],
+                    Ty::Float,
+                ),
+            ),
             let_(
                 "v",
                 call(
                     Builtin::Hash1,
-                    vec![bin(BinOp::Add, ambient(Ambient::Seed, Ty::Uint), lit_u(1000), Ty::Uint)],
+                    vec![bin(
+                        BinOp::Add,
+                        ambient(Ambient::Seed, Ty::Uint),
+                        lit_u(1000),
+                        Ty::Uint,
+                    )],
                     Ty::Float,
                 ),
             ),
@@ -104,7 +148,11 @@ fn drift_shell() -> Checked {
                 Attr::Position,
                 bin(
                     BinOp::Mul,
-                    call(Builtin::SpherePoint, vec![local("u", Ty::Float), local("v", Ty::Float)], Ty::Vec3),
+                    call(
+                        Builtin::SpherePoint,
+                        vec![local("u", Ty::Float), local("v", Ty::Float)],
+                        Ty::Vec3,
+                    ),
                     param("radius", Ty::Float),
                     Ty::Vec3,
                 ),
@@ -121,7 +169,16 @@ fn drift_shell() -> Checked {
             bin(BinOp::Mul, attr(Attr::Position), lit_f(0.3), Ty::Vec3),
             construct(
                 Ty::Vec3,
-                vec![lit_f(0.0), bin(BinOp::Mul, ambient(Ambient::T, Ty::Float), lit_f(0.1), Ty::Float), lit_f(0.0)],
+                vec![
+                    lit_f(0.0),
+                    bin(
+                        BinOp::Mul,
+                        ambient(Ambient::T, Ty::Float),
+                        lit_f(0.1),
+                        Ty::Float,
+                    ),
+                    lit_f(0.0),
+                ],
             ),
             Ty::Vec3,
         )],
@@ -131,7 +188,12 @@ fn drift_shell() -> Checked {
     let new_v = bin(
         BinOp::Add,
         bin(BinOp::Mul, attr(Attr::Velocity), lit_f(0.96), Ty::Vec3),
-        bin(BinOp::Mul, local("flow", Ty::Vec3), ambient(Ambient::Dt, Ty::Float), Ty::Vec3),
+        bin(
+            BinOp::Mul,
+            local("flow", Ty::Vec3),
+            ambient(Ambient::Dt, Ty::Float),
+            Ty::Vec3,
+        ),
         Ty::Vec3,
     );
     let element = TBlock {
@@ -146,16 +208,31 @@ fn drift_shell() -> Checked {
                 bin(
                     BinOp::Add,
                     attr(Attr::Position),
-                    bin(BinOp::Mul, local("v", Ty::Vec3), ambient(Ambient::Dt, Ty::Float), Ty::Vec3),
+                    bin(
+                        BinOp::Mul,
+                        local("v", Ty::Vec3),
+                        ambient(Ambient::Dt, Ty::Float),
+                        Ty::Vec3,
+                    ),
                     Ty::Vec3,
                 ),
             ),
             assign_attr(
                 Attr::Age,
-                bin(BinOp::Add, attr(Attr::Age), ambient(Ambient::Dt, Ty::Float), Ty::Float),
+                bin(
+                    BinOp::Add,
+                    attr(Attr::Age),
+                    ambient(Ambient::Dt, Ty::Float),
+                    Ty::Float,
+                ),
             ),
             TStmt::If {
-                cond: bin(BinOp::Gt, attr(Attr::Age), param("lifetime", Ty::Float), Ty::Bool),
+                cond: bin(
+                    BinOp::Gt,
+                    attr(Attr::Age),
+                    param("lifetime", Ty::Float),
+                    Ty::Bool,
+                ),
                 then: vec![TStmt::Kill { span: span() }],
                 els: vec![],
                 span: span(),
@@ -203,24 +280,41 @@ fn soft_points() -> Checked {
         call(Builtin::Length, vec![attr(Attr::Velocity)], Ty::Float),
         Ty::Float,
     );
-    let clamped = call(Builtin::Clamp, vec![speed_term, lit_f(0.0), lit_f(1.0)], Ty::Float);
+    let clamped = call(
+        Builtin::Clamp,
+        vec![speed_term, lit_f(0.0), lit_f(1.0)],
+        Ty::Float,
+    );
     let point_size = bin(
         BinOp::Mul,
         param("point_scale", Ty::Float),
-        bin(BinOp::Add, lit_f(0.3), bin(BinOp::Mul, lit_f(0.7), clamped, Ty::Float), Ty::Float),
+        bin(
+            BinOp::Add,
+            lit_f(0.3),
+            bin(BinOp::Mul, lit_f(0.7), clamped, Ty::Float),
+            Ty::Float,
+        ),
         Ty::Float,
     );
     let vertex = TBlock {
         kind: BlockKind::Vertex,
         span: span(),
-        stmts: vec![assign_output(Output::Clip, clip), assign_output(Output::PointSize, point_size)],
+        stmts: vec![
+            assign_output(Output::Clip, clip),
+            assign_output(Output::PointSize, point_size),
+        ],
     };
 
     let d = call(
         Builtin::Length,
         vec![bin(
             BinOp::Sub,
-            bin(BinOp::Mul, ambient(Ambient::PointCoord, Ty::Vec2), lit_f(2.0), Ty::Vec2),
+            bin(
+                BinOp::Mul,
+                ambient(Ambient::PointCoord, Ty::Vec2),
+                lit_f(2.0),
+                Ty::Vec2,
+            ),
             construct(Ty::Vec2, vec![lit_f(1.0)]),
             Ty::Vec2,
         )],
@@ -229,7 +323,14 @@ fn soft_points() -> Checked {
     let a = call(
         Builtin::Pow,
         vec![
-            call(Builtin::Max, vec![lit_f(0.0), bin(BinOp::Sub, lit_f(1.0), local("d", Ty::Float), Ty::Float)], Ty::Float),
+            call(
+                Builtin::Max,
+                vec![
+                    lit_f(0.0),
+                    bin(BinOp::Sub, lit_f(1.0), local("d", Ty::Float), Ty::Float),
+                ],
+                Ty::Float,
+            ),
             param("falloff", Ty::Float),
         ],
         Ty::Float,
@@ -237,18 +338,47 @@ fn soft_points() -> Checked {
     let hue_jitter = bin(
         BinOp::Add,
         param("hue", Ty::Float),
-        bin(BinOp::Mul, call(Builtin::Hash1, vec![ambient(Ambient::Seed, Ty::Uint)], Ty::Float), lit_f(0.05), Ty::Float),
+        bin(
+            BinOp::Mul,
+            call(
+                Builtin::Hash1,
+                vec![ambient(Ambient::Seed, Ty::Uint)],
+                Ty::Float,
+            ),
+            lit_f(0.05),
+            Ty::Float,
+        ),
         Ty::Float,
     );
-    let c = call(Builtin::HsvToRgb, vec![construct(Ty::Vec3, vec![hue_jitter, lit_f(0.7), lit_f(1.0)])], Ty::Vec3);
+    let c = call(
+        Builtin::HsvToRgb,
+        vec![construct(
+            Ty::Vec3,
+            vec![hue_jitter, lit_f(0.7), lit_f(1.0)],
+        )],
+        Ty::Vec3,
+    );
     let color = construct(
         Ty::Vec4,
-        vec![bin(BinOp::Mul, local("c", Ty::Vec3), param("exposure", Ty::Float), Ty::Vec3), local("a", Ty::Float)],
+        vec![
+            bin(
+                BinOp::Mul,
+                local("c", Ty::Vec3),
+                param("exposure", Ty::Float),
+                Ty::Vec3,
+            ),
+            local("a", Ty::Float),
+        ],
     );
     let fragment = TBlock {
         kind: BlockKind::Fragment,
         span: span(),
-        stmts: vec![let_("d", d), let_("a", a), let_("c", c), assign_output(Output::Color, color)],
+        stmts: vec![
+            let_("d", d),
+            let_("a", a),
+            let_("c", c),
+            assign_output(Output::Color, color),
+        ],
     };
 
     Checked {
@@ -296,10 +426,27 @@ fn soft_points() -> Checked {
 /// broken any of them.
 fn shadowing_locals_l1() -> Checked {
     let adversarial_lets = [
-        "u", "hash1", "seed", "prev_position", "next_age", "i", "out", "slot", "gid", "sphere_point",
-        "curl", "birth_frac", "counts", "dest", "step_args",
+        "u",
+        "hash1",
+        "seed",
+        "prev_position",
+        "next_age",
+        "i",
+        "out",
+        "slot",
+        "gid",
+        "sphere_point",
+        "curl",
+        "birth_frac",
+        "counts",
+        "dest",
+        "step_args",
     ];
-    let mut spawn_stmts: Vec<TStmt> = adversarial_lets.iter().enumerate().map(|(n, name)| let_(name, lit_f(n as f32))).collect();
+    let mut spawn_stmts: Vec<TStmt> = adversarial_lets
+        .iter()
+        .enumerate()
+        .map(|(n, name)| let_(name, lit_f(n as f32)))
+        .collect();
     spawn_stmts.push(assign_attr(
         Attr::Position,
         bin(
@@ -307,8 +454,21 @@ fn shadowing_locals_l1() -> Checked {
             call(
                 Builtin::SpherePoint,
                 vec![
-                    call(Builtin::Hash1, vec![ambient(Ambient::Seed, Ty::Uint)], Ty::Float),
-                    call(Builtin::Hash1, vec![bin(BinOp::Add, ambient(Ambient::Seed, Ty::Uint), lit_u(7), Ty::Uint)], Ty::Float),
+                    call(
+                        Builtin::Hash1,
+                        vec![ambient(Ambient::Seed, Ty::Uint)],
+                        Ty::Float,
+                    ),
+                    call(
+                        Builtin::Hash1,
+                        vec![bin(
+                            BinOp::Add,
+                            ambient(Ambient::Seed, Ty::Uint),
+                            lit_u(7),
+                            Ty::Uint,
+                        )],
+                        Ty::Float,
+                    ),
                 ],
                 Ty::Vec3,
             ),
@@ -317,17 +477,40 @@ fn shadowing_locals_l1() -> Checked {
         ),
     ));
     spawn_stmts.push(assign_attr(Attr::Age, lit_f(0.0)));
-    let spawn = TBlock { kind: BlockKind::Spawn, span: span(), stmts: spawn_stmts };
+    let spawn = TBlock {
+        kind: BlockKind::Spawn,
+        span: span(),
+        stmts: spawn_stmts,
+    };
 
     let more_adversarial_lets = [
-        "t", "dt", "capacity", "range", "survivors", "spawn_count", "seed_base", "mod_f32", "alive",
+        "t",
+        "dt",
+        "capacity",
+        "range",
+        "survivors",
+        "spawn_count",
+        "seed_base",
+        "mod_f32",
+        "alive",
     ];
-    let mut element_stmts: Vec<TStmt> =
-        more_adversarial_lets.iter().enumerate().map(|(n, name)| let_(name, lit_f(n as f32))).collect();
-    element_stmts.push(assign_attr(Attr::Age, bin(BinOp::Rem, attr(Attr::Age), lit_f(1.0), Ty::Float)));
+    let mut element_stmts: Vec<TStmt> = more_adversarial_lets
+        .iter()
+        .enumerate()
+        .map(|(n, name)| let_(name, lit_f(n as f32)))
+        .collect();
+    element_stmts.push(assign_attr(
+        Attr::Age,
+        bin(BinOp::Rem, attr(Attr::Age), lit_f(1.0), Ty::Float),
+    ));
     element_stmts.push(assign_attr(
         Attr::Position,
-        bin(BinOp::Add, attr(Attr::Position), call(Builtin::Curl, vec![attr(Attr::Position)], Ty::Vec3), Ty::Vec3),
+        bin(
+            BinOp::Add,
+            attr(Attr::Position),
+            call(Builtin::Curl, vec![attr(Attr::Position)], Ty::Vec3),
+            Ty::Vec3,
+        ),
     ));
     element_stmts.push(TStmt::If {
         cond: bin(BinOp::Gt, attr(Attr::Age), lit_f(1.0), Ty::Bool),
@@ -335,7 +518,11 @@ fn shadowing_locals_l1() -> Checked {
         els: vec![],
         span: span(),
     });
-    let element = TBlock { kind: BlockKind::Element, span: span(), stmts: element_stmts };
+    let element = TBlock {
+        kind: BlockKind::Element,
+        span: span(),
+        stmts: element_stmts,
+    };
 
     Checked {
         name: "shadowing_locals_l1".to_string(),
@@ -367,10 +554,22 @@ fn shadowing_locals_l1() -> Checked {
 /// `corner_of`).
 fn shadowing_locals_l4() -> Checked {
     let vertex_adversarial = [
-        "u", "seed", "elem", "in", "out", "corner", "corner_idx", "attr_position", "elements", "alive",
+        "u",
+        "seed",
+        "elem",
+        "in",
+        "out",
+        "corner",
+        "corner_idx",
+        "attr_position",
+        "elements",
+        "alive",
     ];
-    let mut vertex_stmts: Vec<TStmt> =
-        vertex_adversarial.iter().enumerate().map(|(n, name)| let_(name, lit_f(n as f32))).collect();
+    let mut vertex_stmts: Vec<TStmt> = vertex_adversarial
+        .iter()
+        .enumerate()
+        .map(|(n, name)| let_(name, lit_f(n as f32)))
+        .collect();
     vertex_stmts.push(assign_output(
         Output::Clip,
         bin(
@@ -380,26 +579,50 @@ fn shadowing_locals_l4() -> Checked {
             Ty::Vec4,
         ),
     ));
-    vertex_stmts.push(assign_output(Output::PointSize, param("point_scale", Ty::Float)));
-    let vertex = TBlock { kind: BlockKind::Vertex, span: span(), stmts: vertex_stmts };
+    vertex_stmts.push(assign_output(
+        Output::PointSize,
+        param("point_scale", Ty::Float),
+    ));
+    let vertex = TBlock {
+        kind: BlockKind::Vertex,
+        span: span(),
+        stmts: vertex_stmts,
+    };
 
     let fragment_adversarial = ["point_coord", "hash1", "hsv_to_rgb", "corner_of"];
-    let mut fragment_stmts: Vec<TStmt> =
-        fragment_adversarial.iter().enumerate().map(|(n, name)| let_(name, lit_f(n as f32))).collect();
+    let mut fragment_stmts: Vec<TStmt> = fragment_adversarial
+        .iter()
+        .enumerate()
+        .map(|(n, name)| let_(name, lit_f(n as f32)))
+        .collect();
     fragment_stmts.push(let_(
         "c",
         call(
             Builtin::HsvToRgb,
-            vec![construct(Ty::Vec3, vec![param("hue", Ty::Float), lit_f(0.7), lit_f(1.0)])],
+            vec![construct(
+                Ty::Vec3,
+                vec![param("hue", Ty::Float), lit_f(0.7), lit_f(1.0)],
+            )],
             Ty::Vec3,
         ),
     ));
-    fragment_stmts.push(let_("a", call(Builtin::Length, vec![ambient(Ambient::PointCoord, Ty::Vec2)], Ty::Float)));
+    fragment_stmts.push(let_(
+        "a",
+        call(
+            Builtin::Length,
+            vec![ambient(Ambient::PointCoord, Ty::Vec2)],
+            Ty::Float,
+        ),
+    ));
     fragment_stmts.push(assign_output(
         Output::Color,
         construct(Ty::Vec4, vec![local("c", Ty::Vec3), local("a", Ty::Float)]),
     ));
-    let fragment = TBlock { kind: BlockKind::Fragment, span: span(), stmts: fragment_stmts };
+    let fragment = TBlock {
+        kind: BlockKind::Fragment,
+        span: span(),
+        stmts: fragment_stmts,
+    };
 
     Checked {
         name: "shadowing_locals_l4".to_string(),
@@ -413,7 +636,10 @@ fn shadowing_locals_l4() -> Checked {
         amplify: None,
         pairs: false,
         blend: Some(Blend::Additive),
-        params: vec![param_decl("point_scale", Ty::Float, 0.5, 40.0), param_decl("hue", Ty::Float, 0.0, 1.0)],
+        params: vec![
+            param_decl("point_scale", Ty::Float, 0.5, 40.0),
+            param_decl("hue", Ty::Float, 0.0, 1.0),
+        ],
         emit: vec![],
         consumes: vec![Attr::Position],
         blocks: vec![vertex, fragment],
@@ -435,15 +661,24 @@ fn shadowing_locals_l4() -> Checked {
 /// something would reach for: a particle `array`, a `loop` count, a `switch`
 /// threshold.
 fn reserved_word_params_l1() -> Checked {
-    let names = ["array", "struct", "loop", "switch", "fn", "discard", "const", "override", "ptr", "sampler"];
-    let params = names.iter().map(|n| param_decl(n, Ty::Float, 0.0, 1.0)).collect();
+    let names = [
+        "array", "struct", "loop", "switch", "fn", "discard", "const", "override", "ptr", "sampler",
+    ];
+    let params = names
+        .iter()
+        .map(|n| param_decl(n, Ty::Float, 0.0, 1.0))
+        .collect();
 
     let sum = names
         .iter()
         .map(|n| param(n, Ty::Float))
         .reduce(|acc, p| bin(BinOp::Add, acc, p, Ty::Float))
         .expect("at least one reserved-word param");
-    let element = TBlock { kind: BlockKind::Element, span: span(), stmts: vec![assign_attr(Attr::Age, sum)] };
+    let element = TBlock {
+        kind: BlockKind::Element,
+        span: span(),
+        stmts: vec![assign_attr(Attr::Age, sum)],
+    };
 
     Checked {
         name: "reserved_word_params".to_string(),
@@ -489,16 +724,26 @@ fn assert_layout_matches_text(source: &str, layout: &karakuri_codegen::layout::U
 /// built so its `consumes` is a subset of some L1 fixture's `emit`, and this
 /// derives the layout that L1 side would have produced.
 fn layout_for(l1: &Checked) -> karakuri_codegen::layout::ElementLayout {
-    karakuri_codegen::layout::generate_element_layout(&l1.emit, karakuri_codegen::layout::Synthetic::NONE, &[])
+    karakuri_codegen::layout::generate_element_layout(
+        &l1.emit,
+        karakuri_codegen::layout::Synthetic::NONE,
+        &[],
+    )
 }
 
 fn validate(source: &str) {
     let module = naga::front::wgsl::parse_str(source).unwrap_or_else(|e| {
-        panic!("WGSL failed to parse:\n{}\n\n---- source ----\n{source}", e.emit_to_string(source))
+        panic!(
+            "WGSL failed to parse:\n{}\n\n---- source ----\n{source}",
+            e.emit_to_string(source)
+        )
     });
-    naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
-        .validate(&module)
-        .unwrap_or_else(|e| panic!("WGSL failed validation: {e}\n\n---- source ----\n{source}"));
+    naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    )
+    .validate(&module)
+    .unwrap_or_else(|e| panic!("WGSL failed validation: {e}\n\n---- source ----\n{source}"));
 }
 
 #[test]
@@ -566,7 +811,11 @@ fn l1_locals_cannot_shadow_generated_identifiers() {
 
 #[test]
 fn l4_locals_cannot_shadow_generated_identifiers() {
-    let shader = karakuri_codegen::generate_l4(&shadowing_locals_l4(), &layout_for(&shadowing_locals_l1()), None);
+    let shader = karakuri_codegen::generate_l4(
+        &shadowing_locals_l4(),
+        &layout_for(&shadowing_locals_l1()),
+        None,
+    );
     validate(&shader.source);
 }
 
@@ -589,13 +838,19 @@ fn reordered_subset_l4() -> Checked {
         span: span(),
         stmts: vec![
             assign_output(Output::Clip, clip),
-            assign_output(Output::PointSize, bin(BinOp::Add, attr(Attr::Age), lit_f(1.0), Ty::Float)),
+            assign_output(
+                Output::PointSize,
+                bin(BinOp::Add, attr(Attr::Age), lit_f(1.0), Ty::Float),
+            ),
         ],
     };
     let fragment = TBlock {
         kind: BlockKind::Fragment,
         span: span(),
-        stmts: vec![assign_output(Output::Color, construct(Ty::Vec4, vec![lit_f(1.0)]))],
+        stmts: vec![assign_output(
+            Output::Color,
+            construct(Ty::Vec4, vec![lit_f(1.0)]),
+        )],
     };
 
     Checked {
@@ -634,7 +889,13 @@ fn consumes_nothing_l4() -> Checked {
         kind: BlockKind::Vertex,
         span: span(),
         stmts: vec![
-            assign_output(Output::Clip, construct(Ty::Vec4, vec![lit_f(0.0), lit_f(0.0), lit_f(0.0), lit_f(1.0)])),
+            assign_output(
+                Output::Clip,
+                construct(
+                    Ty::Vec4,
+                    vec![lit_f(0.0), lit_f(0.0), lit_f(0.0), lit_f(1.0)],
+                ),
+            ),
             assign_output(Output::PointSize, lit_f(4.0)),
         ],
     };
@@ -643,7 +904,14 @@ fn consumes_nothing_l4() -> Checked {
         span: span(),
         stmts: vec![assign_output(
             Output::Color,
-            construct(Ty::Vec4, vec![call(Builtin::Hash1, vec![ambient(Ambient::Seed, Ty::Uint)], Ty::Float)]),
+            construct(
+                Ty::Vec4,
+                vec![call(
+                    Builtin::Hash1,
+                    vec![ambient(Ambient::Seed, Ty::Uint)],
+                    Ty::Float,
+                )],
+            ),
         )],
     };
 
@@ -677,7 +945,8 @@ fn consumes_nothing_l4() -> Checked {
 /// byte identity must hold regardless of what a paired L4 happens to read.
 #[test]
 fn l4_consuming_a_reordered_subset_compiles_and_validates() {
-    let shader = karakuri_codegen::generate_l4(&reordered_subset_l4(), &layout_for(&drift_shell()), None);
+    let shader =
+        karakuri_codegen::generate_l4(&reordered_subset_l4(), &layout_for(&drift_shell()), None);
     validate(&shader.source);
 }
 
@@ -685,7 +954,8 @@ fn l4_consuming_a_reordered_subset_compiles_and_validates() {
 /// `soft_points`, which emits nothing.
 #[test]
 fn l4_consuming_nothing_compiles_and_validates() {
-    let shader = karakuri_codegen::generate_l4(&consumes_nothing_l4(), &layout_for(&drift_shell()), None);
+    let shader =
+        karakuri_codegen::generate_l4(&consumes_nothing_l4(), &layout_for(&drift_shell()), None);
     validate(&shader.source);
 }
 
@@ -699,7 +969,10 @@ fn emits_every_attribute_l1() -> Checked {
     let element = TBlock {
         kind: BlockKind::Element,
         span: span(),
-        stmts: karakuri_ir::Attr::ALL.into_iter().map(|a| assign_attr(a, zero_expr(a.ty()))).collect(),
+        stmts: karakuri_ir::Attr::ALL
+            .into_iter()
+            .map(|a| assign_attr(a, zero_expr(a.ty())))
+            .collect(),
     };
 
     Checked {
@@ -743,8 +1016,14 @@ fn zero_expr(ty: Ty) -> TExpr {
 fn l1_emitting_every_attribute_compiles_and_validates() {
     let checked = emits_every_attribute_l1();
     let shader = karakuri_codegen::generate_l1(&checked, &[], None);
-    assert_eq!(shader.element_layout.slots.len(), 2 + karakuri_ir::Attr::ALL.len());
-    assert_eq!(shader.element_layout.stride, (2 + karakuri_ir::Attr::ALL.len() as u32) * 16);
+    assert_eq!(
+        shader.element_layout.slots.len(),
+        2 + karakuri_ir::Attr::ALL.len()
+    );
+    assert_eq!(
+        shader.element_layout.stride,
+        (2 + karakuri_ir::Attr::ALL.len() as u32) * 16
+    );
     validate(&shader.source);
 }
 
@@ -758,12 +1037,18 @@ fn l4_consuming_every_attribute_compiles_and_validates() {
     let vertex = TBlock {
         kind: BlockKind::Vertex,
         span: span(),
-        stmts: vec![assign_output(Output::Clip, clip), assign_output(Output::PointSize, lit_f(1.0))],
+        stmts: vec![
+            assign_output(Output::Clip, clip),
+            assign_output(Output::PointSize, lit_f(1.0)),
+        ],
     };
     let fragment = TBlock {
         kind: BlockKind::Fragment,
         span: span(),
-        stmts: vec![assign_output(Output::Color, construct(Ty::Vec4, vec![lit_f(1.0)]))],
+        stmts: vec![assign_output(
+            Output::Color,
+            construct(Ty::Vec4, vec![lit_f(1.0)]),
+        )],
     };
     let l4 = Checked {
         name: "consumes_every_attribute".to_string(),
@@ -801,8 +1086,14 @@ fn l4_consuming_every_attribute_compiles_and_validates() {
 #[test]
 fn l1_and_paired_l4_declare_byte_identical_element_structs() {
     fn element_struct_text(source: &str) -> &str {
-        let start = source.find("struct Element {").expect("no Element struct in source");
-        let end = source[start..].find("};").expect("unterminated Element struct") + start + 2;
+        let start = source
+            .find("struct Element {")
+            .expect("no Element struct in source");
+        let end = source[start..]
+            .find("};")
+            .expect("unterminated Element struct")
+            + start
+            + 2;
         &source[start..end]
     }
 
@@ -832,10 +1123,17 @@ fn fs() -> @location(0) f32 {
     return vec3<f32>(1.0, 2.0, 3.0);
 }
 ";
-    let module = naga::front::wgsl::parse_str(broken).expect("this fixture is syntactically valid WGSL");
-    let result = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
-        .validate(&module);
-    assert!(result.is_err(), "expected a return-type mismatch to fail validation");
+    let module =
+        naga::front::wgsl::parse_str(broken).expect("this fixture is syntactically valid WGSL");
+    let result = naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    )
+    .validate(&module);
+    assert!(
+        result.is_err(),
+        "expected a return-type mismatch to fail validation"
+    );
 }
 
 /// `soft_points` with a second endpoint: the same procedure, made a line
@@ -854,7 +1152,12 @@ fn soft_streaks() -> Checked {
         construct(
             Ty::Vec4,
             vec![
-                bin(BinOp::Sub, attr(Attr::Position), attr(Attr::Velocity), Ty::Vec3),
+                bin(
+                    BinOp::Sub,
+                    attr(Attr::Position),
+                    attr(Attr::Velocity),
+                    Ty::Vec3,
+                ),
                 lit_f(1.0),
             ],
         ),
@@ -895,14 +1198,30 @@ fn each_topology_emits_its_own_placement_and_not_the_others() {
     let points = karakuri_codegen::generate_l4(&soft_points(), &layout, None).source;
     let lines = karakuri_codegen::generate_l4(&soft_streaks(), &layout, None).source;
 
-    assert!(points.contains("ndc_offset"), "the points shader lost the sprite offset");
-    assert!(!points.contains("half_vp"), "the points shader is expanding a segment");
-    assert!(lines.contains("half_vp"), "the lines shader is not expanding a segment");
-    assert!(!lines.contains("ndc_offset"), "the lines shader is still offsetting around a point");
+    assert!(
+        points.contains("ndc_offset"),
+        "the points shader lost the sprite offset"
+    );
+    assert!(
+        !points.contains("half_vp"),
+        "the points shader is expanding a segment"
+    );
+    assert!(
+        lines.contains("half_vp"),
+        "the lines shader is not expanding a segment"
+    );
+    assert!(
+        !lines.contains("ndc_offset"),
+        "the lines shader is still offsetting around a point"
+    );
 
     // The fragment stage is topology-blind: same entry point, same varyings.
     let fs = |s: &str| s[s.find("@fragment").expect("a fragment stage")..].to_string();
-    assert_eq!(fs(&points), fs(&lines), "the topology reached the fragment stage");
+    assert_eq!(
+        fs(&points),
+        fs(&lines),
+        "the topology reached the fragment stage"
+    );
 }
 
 /// `soft_points` under the other blend mode. A *modification* of the points
@@ -970,7 +1289,11 @@ fn a_weighted_fullscreen_l4_compiles_and_validates() {
     let shader = karakuri_codegen::generate_l4(&l4, &layout_for(&drift_shell()), None);
     validate(&shader.source);
     assert!(
-        !shader.uniform_layout.fields.iter().any(|f| f.name == "depth_range"),
+        !shader
+            .uniform_layout
+            .fields
+            .iter()
+            .any(|f| f.name == "depth_range"),
         "a frame is not at a depth, so there is nothing for a range to normalise it against"
     );
 }
@@ -996,19 +1319,37 @@ fn each_blend_mode_emits_its_own_fragment_epilogue_and_not_the_others() {
     let additive = karakuri_codegen::generate_l4(&soft_points(), &layout, None);
     let weighted = karakuri_codegen::generate_l4(&soft_glass(), &layout, None);
 
-    assert!(weighted.source.contains("@location(1) reveal"), "no revealage target");
-    assert!(weighted.source.contains("view_depth"), "no depth to weigh by");
+    assert!(
+        weighted.source.contains("@location(1) reveal"),
+        "no revealage target"
+    );
+    assert!(
+        weighted.source.contains("view_depth"),
+        "no depth to weigh by"
+    );
     assert!(
         weighted.source.contains("cam.depth_range"),
         "no camera planes to measure the depth against"
     );
-    assert!(weighted.camera_group.is_some(), "nothing to read those planes from");
+    assert!(
+        weighted.camera_group.is_some(),
+        "nothing to read those planes from"
+    );
 
     // Not `@location(1)`: an additive shader has one of those already, for its
     // first varying. What it must not have is a fragment output struct.
-    assert!(!additive.source.contains("FsOut"), "the additive shader grew a second target");
-    assert!(!additive.source.contains("reveal"), "the additive shader accumulates revealage");
-    assert!(!additive.source.contains("view_depth"), "the additive shader carries a depth nothing reads");
+    assert!(
+        !additive.source.contains("FsOut"),
+        "the additive shader grew a second target"
+    );
+    assert!(
+        !additive.source.contains("reveal"),
+        "the additive shader accumulates revealage"
+    );
+    assert!(
+        !additive.source.contains("view_depth"),
+        "the additive shader carries a depth nothing reads"
+    );
     assert!(
         !additive.source.contains("cam.depth_range"),
         "the additive shader weighs a fragment by its depth"
@@ -1031,7 +1372,6 @@ fn each_blend_mode_emits_its_own_fragment_epilogue_and_not_the_others() {
     );
 }
 
-
 // ---------------------------------------------------------------------------
 // L3 — the camera
 // ---------------------------------------------------------------------------
@@ -1041,7 +1381,12 @@ fn each_blend_mode_emits_its_own_fragment_epilogue_and_not_the_others() {
 fn sweep() -> Checked {
     let angle = bin(
         BinOp::Mul,
-        bin(BinOp::Mul, ambient(Ambient::T, Ty::Float), param("speed", Ty::Float), Ty::Float),
+        bin(
+            BinOp::Mul,
+            ambient(Ambient::T, Ty::Float),
+            param("speed", Ty::Float),
+            Ty::Float,
+        ),
         lit_f(std::f32::consts::TAU),
         Ty::Float,
     );
@@ -1121,14 +1466,27 @@ fn every_camera_output_is_written_whether_or_not_the_block_assigned_it() {
     }
     // And the block's own assignment lands on the local, not on the buffer, so
     // a block that writes `eye` twice writes the buffer once.
-    assert_eq!(src.matches("cam.eye").count(), 1, "the eye is stored more than once:\n{src}");
-    assert!(src.contains("_eye ="), "the block's assignment did not reach a local:\n{src}");
+    assert_eq!(
+        src.matches("cam.eye").count(),
+        1,
+        "the eye is stored more than once:\n{src}"
+    );
+    assert!(
+        src.contains("_eye ="),
+        "the block's assignment did not reach a local:\n{src}"
+    );
 
     // A third of pi, and 0.1 to 100 — see `karakuri_engine::camera::Orbit`'s
     // `Default`. `up` is `+y`, which is the only one of the four that a wrong
     // value would show as a picture rather than as no picture.
-    assert!(src.contains("_up     = vec3<f32>(0.0, 1.0, 0.0)"), "up is not +y:\n{src}");
-    assert!(src.contains("_fov_y  = 1.0471976"), "the field of view is not a third of pi:\n{src}");
+    assert!(
+        src.contains("_up     = vec3<f32>(0.0, 1.0, 0.0)"),
+        "up is not +y:\n{src}"
+    );
+    assert!(
+        src.contains("_fov_y  = 1.0471976"),
+        "the field of view is not a third of pi:\n{src}"
+    );
     assert!(src.contains("_near   = 0.1"), "{src}");
     assert!(src.contains("_far    = 100.0"), "{src}");
 }
@@ -1141,18 +1499,31 @@ fn every_camera_output_is_written_whether_or_not_the_block_assigned_it() {
 fn a_camera_shader_dispatches_one_invocation_over_nothing() {
     let src = karakuri_codegen::generate_l3(&sweep(), None).source;
     assert!(src.contains("@workgroup_size(1)"), "{src}");
-    assert!(!src.contains("global_invocation_id"), "a camera indexed something:\n{src}");
-    assert!(!src.contains("counts"), "a camera read a live range:\n{src}");
+    assert!(
+        !src.contains("global_invocation_id"),
+        "a camera indexed something:\n{src}"
+    );
+    assert!(
+        !src.contains("counts"),
+        "a camera read a live range:\n{src}"
+    );
 }
 
 /// The uniform carries the clock and the params, and nothing per element.
 #[test]
 fn a_camera_uniform_carries_the_clock_and_its_params() {
     let shader = karakuri_codegen::generate_l3(&sweep(), None);
-    let names: Vec<&str> = shader.uniform_layout.fields.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(names, vec!["t", "beats", "dt", "seed_salt", "radius", "speed"]);
+    let names: Vec<&str> = shader
+        .uniform_layout
+        .fields
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
+    assert_eq!(
+        names,
+        vec!["t", "beats", "dt", "seed_salt", "radius", "speed"]
+    );
 }
-
 
 /// **Two blocks, one function, and a local name may appear in both.**
 ///
@@ -1177,7 +1548,14 @@ proc collides {
 "#;
     let parsed = karakuri_ir::parse(src).expect("parses");
     let checked = karakuri_ir::check::check(&parsed).expect("checks");
-    let shader = karakuri_codegen::generate_l2(&checked, &[Attr::Position, Attr::Age], karakuri_codegen::layout::Synthetic::NONE, &[], None, None);
+    let shader = karakuri_codegen::generate_l2(
+        &checked,
+        &[Attr::Position, Attr::Age],
+        karakuri_codegen::layout::Synthetic::NONE,
+        &[],
+        None,
+        None,
+    );
     validate(&shader.source);
 }
 
@@ -1185,9 +1563,11 @@ proc collides {
 // Amplification: an L2 whose output count differs from its input's.
 // ---------------------------------------------------------------------------
 
-fn compiled_l2(src: &str, upstream: &[Attr], synthetic: karakuri_codegen::layout::Synthetic)
-    -> karakuri_codegen::L2Shader
-{
+fn compiled_l2(
+    src: &str,
+    upstream: &[Attr],
+    synthetic: karakuri_codegen::layout::Synthetic,
+) -> karakuri_codegen::L2Shader {
     let parsed = karakuri_ir::parse(src).expect("parses");
     let checked = karakuri_ir::check::check(&parsed).expect("checks");
     karakuri_codegen::generate_l2(&checked, upstream, synthetic, &[], None, None)
@@ -1207,10 +1587,17 @@ proc mirror {
 /// own — so it gets its own trip through naga.
 #[test]
 fn an_amplifying_l2_lowers_to_valid_wgsl() {
-    let shader = compiled_l2(MIRROR, &[Attr::Position], karakuri_codegen::layout::Synthetic::NONE);
+    let shader = compiled_l2(
+        MIRROR,
+        &[Attr::Position],
+        karakuri_codegen::layout::Synthetic::NONE,
+    );
     validate(&shader.source);
     assert_eq!(shader.amplify, Some(4));
-    assert!(shader.synthetic.copy, "the node that amplified is where `copy` starts existing");
+    assert!(
+        shader.synthetic.copy,
+        "the node that amplified is where `copy` starts existing"
+    );
     assert!(
         shader.element_layout.slots.iter().any(|s| s.name == "copy"),
         "the output carries the index: {:?}",
@@ -1224,8 +1611,16 @@ fn an_amplifying_l2_lowers_to_valid_wgsl() {
 /// observable half of that.
 #[test]
 fn only_an_amplifying_l2_binds_a_liveness_buffer_to_write() {
-    let amplifying = compiled_l2(MIRROR, &[Attr::Position], karakuri_codegen::layout::Synthetic::NONE);
-    assert!(amplifying.source.contains("dst_alive"), "{}", amplifying.source);
+    let amplifying = compiled_l2(
+        MIRROR,
+        &[Attr::Position],
+        karakuri_codegen::layout::Synthetic::NONE,
+    );
+    assert!(
+        amplifying.source.contains("dst_alive"),
+        "{}",
+        amplifying.source
+    );
 
     let plain = compiled_l2(
         r#"
@@ -1251,7 +1646,11 @@ proc plain {
 fn a_second_amplifier_composes_the_copy_index_rather_than_replacing_it() {
     // The first has nothing above it, so it starts the numbering from the
     // loop variable alone.
-    let first = compiled_l2(MIRROR, &[Attr::Position], karakuri_codegen::layout::Synthetic::NONE);
+    let first = compiled_l2(
+        MIRROR,
+        &[Attr::Position],
+        karakuri_codegen::layout::Synthetic::NONE,
+    );
     assert!(
         first.source.contains("vec4<u32>(0u * 4u + _c"),
         "a first amplifier numbers from nothing: {}",
@@ -1296,8 +1695,16 @@ proc plain {
         karakuri_codegen::layout::Synthetic { copy: true },
     );
     validate(&plain.source);
-    assert!(plain.source.contains("dst[i].copy = src[i].copy;"), "{}", plain.source);
-    assert!(!plain.source.contains("dst_alive"), "it did not amplify: {}", plain.source);
+    assert!(
+        plain.source.contains("dst[i].copy = src[i].copy;"),
+        "{}",
+        plain.source
+    );
+    assert!(
+        !plain.source.contains("dst_alive"),
+        "it did not amplify: {}",
+        plain.source
+    );
 }
 
 /// Where nothing upstream amplified, `copy` is `0u` rather than a read of a
@@ -1371,12 +1778,20 @@ proc tinted {
     let amplified = karakuri_codegen::layout::generate_element_layout(
         &[Attr::Position],
         karakuri_codegen::layout::Synthetic { copy: true },
-       &[],
+        &[],
     );
     let shader = karakuri_codegen::generate_l4(&checked, &amplified, None);
     validate(&shader.source);
-    assert!(shader.source.contains("let copy = elements[elem].copy.x;"), "{}", shader.source);
-    assert!(shader.source.contains("@interpolate(flat) copy: u32"), "{}", shader.source);
+    assert!(
+        shader.source.contains("let copy = elements[elem].copy.x;"),
+        "{}",
+        shader.source
+    );
+    assert!(
+        shader.source.contains("@interpolate(flat) copy: u32"),
+        "{}",
+        shader.source
+    );
 }
 
 /// **The same L4 over geometry no amplifier touched still compiles**, and reads
@@ -1409,12 +1824,20 @@ proc tinted {
     let plain = karakuri_codegen::layout::generate_element_layout(
         &[Attr::Position],
         karakuri_codegen::layout::Synthetic::NONE,
-       &[],
+        &[],
     );
     let shader = karakuri_codegen::generate_l4(&checked, &plain, None);
     validate(&shader.source);
-    assert!(shader.source.contains("let copy = 0u;"), "{}", shader.source);
-    assert!(!shader.source.contains("elements[elem].copy"), "{}", shader.source);
+    assert!(
+        shader.source.contains("let copy = 0u;"),
+        "{}",
+        shader.source
+    );
+    assert!(
+        !shader.source.contains("elements[elem].copy"),
+        "{}",
+        shader.source
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1597,8 +2020,14 @@ proc plain {
     );
     let src = karakuri_codegen::generate_l4(&plain, &layout, Some(&field)).source;
     validate(&src);
-    assert!(!src.contains("_field_at"), "the function is not here: {src}");
-    assert!(!src.contains("field_radius"), "and neither are its params: {src}");
+    assert!(
+        !src.contains("_field_at"),
+        "the function is not here: {src}"
+    );
+    assert!(
+        !src.contains("field_radius"),
+        "and neither are its params: {src}"
+    );
 }
 
 /// **The clock is the caller's own spelling**, passed at the call site. An L1
@@ -1622,7 +2051,10 @@ proc gen {
 "#,
     );
     let src = karakuri_codegen::generate_l1(&l1, &[], Some(&field)).source;
-    assert!(src.contains("step_args.t"), "an L1 passes its per-substep clock: {src}");
+    assert!(
+        src.contains("step_args.t"),
+        "an L1 passes its per-substep clock: {src}"
+    );
 
     let layout = karakuri_codegen::layout::generate_element_layout(
         &[Attr::Position],
@@ -1643,5 +2075,8 @@ proc marcher {
 "#,
     );
     let src = karakuri_codegen::generate_l4(&full, &layout, Some(&field)).source;
-    assert!(src.contains("_field_at(") && src.contains("u.t"), "and a renderer passes `u.t`: {src}");
+    assert!(
+        src.contains("_field_at(") && src.contains("u.t"),
+        "and a renderer passes `u.t`: {src}"
+    );
 }

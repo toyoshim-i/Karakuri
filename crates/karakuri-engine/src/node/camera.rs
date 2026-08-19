@@ -149,9 +149,18 @@ impl Camera {
             label: Some("camera derive"),
             layout: &derive_bgl,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: state.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: derived.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 2, resource: canvas.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: state.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: derived.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: canvas.as_entire_binding(),
+                },
             ],
         });
         let derive_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -186,11 +195,23 @@ impl Camera {
         let read_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("camera"),
             layout: &read_bgl,
-            entries: &[wgpu::BindGroupEntry { binding: 0, resource: derived.as_entire_binding() }],
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: derived.as_entire_binding(),
+            }],
         });
 
         let proc = l3.map(|l3| Producer::build(device, l3, &state, field));
-        Camera { state, derived, canvas, derive, derive_bg, read_bgl, read_bg, proc }
+        Camera {
+            state,
+            derived,
+            canvas,
+            derive,
+            derive_bg,
+            read_bgl,
+            read_bg,
+            proc,
+        }
     }
 
     /// The params this node declares, or nothing when the camera is the
@@ -460,7 +481,11 @@ mod tests {
     }
 
     fn vec3_at(bytes: &[u8], at: usize) -> [f32; 3] {
-        [f32_at(bytes, at), f32_at(bytes, at + 4), f32_at(bytes, at + 8)]
+        [
+            f32_at(bytes, at),
+            f32_at(bytes, at + 4),
+            f32_at(bytes, at + 8),
+        ]
     }
 
     fn close(a: f32, b: f32, what: &str) {
@@ -503,7 +528,11 @@ mod tests {
         // row `r` of column `c` — the order both `Mat4` and WGSL store one in.
         for (c, col) in state.view_proj(aspect).iter().enumerate() {
             for (r, want) in col.iter().enumerate() {
-                close(*want, f32_at(&bytes, (c * 4 + r) * 4), &format!("view_proj[{c}][{r}]"));
+                close(
+                    *want,
+                    f32_at(&bytes, (c * 4 + r) * 4),
+                    &format!("view_proj[{c}][{r}]"),
+                );
             }
         }
 
@@ -589,7 +618,11 @@ proc two {
         };
         for (c, col) in want.view_proj(aspect).iter().enumerate() {
             for (r, v) in col.iter().enumerate() {
-                close(*v, f32_at(&bytes, (c * 4 + r) * 4), &format!("view_proj[{c}][{r}]"));
+                close(
+                    *v,
+                    f32_at(&bytes, (c * 4 + r) * 4),
+                    &format!("view_proj[{c}][{r}]"),
+                );
             }
         }
         let range = want.depth_range();
@@ -664,7 +697,11 @@ proc six {
         };
         for (c, col) in want.view_proj(aspect).iter().enumerate() {
             for (r, v) in col.iter().enumerate() {
-                close(*v, f32_at(&bytes, (c * 4 + r) * 4), &format!("view_proj[{c}][{r}]"));
+                close(
+                    *v,
+                    f32_at(&bytes, (c * 4 + r) * 4),
+                    &format!("view_proj[{c}][{r}]"),
+                );
             }
         }
         // The projection carries `fov_y` and the planes; the basis is what
@@ -720,9 +757,17 @@ proc six {
         // Twice as wide a canvas halves the horizontal scale of the projection
         // and doubles the ray basis's `right` — the same field of view spread
         // over more pixels either way.
-        close(f32_at(&square, 0) * 0.5, f32_at(&wide, 0), "view_proj[0][0]");
+        close(
+            f32_at(&square, 0) * 0.5,
+            f32_at(&wide, 0),
+            "view_proj[0][0]",
+        );
         for i in 0..3 {
-            close(vec3_at(&square, 96)[i] * 2.0, vec3_at(&wide, 96)[i], "right");
+            close(
+                vec3_at(&square, 96)[i] * 2.0,
+                vec3_at(&wide, 96)[i],
+                "right",
+            );
         }
         // And nothing else: the eye, the direction, the vertical half-angle and
         // the depth range are the camera's own.

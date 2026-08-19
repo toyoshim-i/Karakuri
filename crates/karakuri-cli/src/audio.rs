@@ -293,7 +293,9 @@ impl Audio {
     /// same record as everything else.
     pub fn tap(&mut self, signals: &mut Signals, at: Instant, since_start: Instant) -> Record {
         let seconds = at.duration_since(since_start).as_secs_f64();
-        let correction = self.lock.tap(seconds, self.output_lag(), signals.oscillator());
+        let correction = self
+            .lock
+            .tap(seconds, self.output_lag(), signals.oscillator());
         let record = tempo_record(&correction);
         apply_tempo(signals, &record);
         self.last.locked = self.lock.locked();
@@ -337,10 +339,7 @@ pub enum Grid {
 
 /// Clamp the operator's offset into [`LATENCY_OFFSET_RANGE`].
 fn clamped_latency(ms: f32) -> f32 {
-    ms.clamp(
-        *LATENCY_OFFSET_RANGE.start(),
-        *LATENCY_OFFSET_RANGE.end(),
-    )
+    ms.clamp(*LATENCY_OFFSET_RANGE.start(), *LATENCY_OFFSET_RANGE.end())
 }
 
 /// A measured frame into an existing [`Record::Audio`], **reusing its band
@@ -553,7 +552,10 @@ mod tests {
         // confidence — which leaves the parameter alone by arithmetic rather
         // than by falling through.
         let measured = audio_frame(&audio_record(&AudioFrame::nothing(8))).expect("a frame");
-        assert_eq!(measured.provides("energy").expect("claimed").confidence, 0.0);
+        assert_eq!(
+            measured.provides("energy").expect("claimed").confidence,
+            0.0
+        );
     }
 
     /// A correction reaches the oscillator only through the record, so a replay

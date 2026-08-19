@@ -6,7 +6,7 @@
 use karakuri_ir::ast::{Attr, BinOp, BlockKind, Kind, Output, Topology, Ty};
 use karakuri_ir::check::check;
 use karakuri_ir::parse::parse;
-use karakuri_ir::typed::{Checked, Target, TExprKind, TStmt};
+use karakuri_ir::typed::{Checked, TExprKind, TStmt, Target};
 
 /// Parse then check, panicking with rendered diagnostics if either stage
 /// unexpectedly fails. Used for fixtures this test expects to be valid.
@@ -14,13 +14,19 @@ fn check_ok(src: &str) -> Checked {
     let proc = parse(src).unwrap_or_else(|errs| {
         panic!(
             "expected source to parse:\n{}",
-            errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
+            errs.iter()
+                .map(|e| e.render(src))
+                .collect::<Vec<_>>()
+                .join("\n")
         )
     });
     check(&proc).unwrap_or_else(|errs| {
         panic!(
             "expected source to check clean:\n{}",
-            errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
+            errs.iter()
+                .map(|e| e.render(src))
+                .collect::<Vec<_>>()
+                .join("\n")
         )
     })
 }
@@ -32,7 +38,10 @@ fn check_err(src: &str) -> Vec<karakuri_ir::error::IrError> {
     let proc = parse(src).unwrap_or_else(|errs| {
         panic!(
             "expected source to parse (it should fail *checking*, not parsing):\n{}",
-            errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
+            errs.iter()
+                .map(|e| e.render(src))
+                .collect::<Vec<_>>()
+                .join("\n")
         )
     });
     check(&proc).expect_err("expected the check pass to reject this source")
@@ -51,7 +60,10 @@ fn drift_shell_checks_clean_with_expected_shape() {
     assert_eq!(checked.kind, Kind::L1);
     assert_eq!(checked.topology, Some(Topology::Points));
     assert_eq!(checked.capacity.map(|c| c.default), Some(262144));
-    assert_eq!(checked.emit, vec![Attr::Position, Attr::Velocity, Attr::Age]);
+    assert_eq!(
+        checked.emit,
+        vec![Attr::Position, Attr::Velocity, Attr::Age]
+    );
     assert!(checked.consumes.is_empty());
     assert!(checked.cost.is_none(), "cost estimation has not run yet");
 
@@ -82,7 +94,9 @@ fn drift_shell_checks_clean_with_expected_shape() {
     // `if age > lifetime { kill(); }` — condition is `bool`, `then` is a
     // single `kill()`, `els` is empty.
     match &element.stmts[5] {
-        TStmt::If { cond, then, els, .. } => {
+        TStmt::If {
+            cond, then, els, ..
+        } => {
             assert_eq!(cond.ty, Ty::Bool);
             assert!(matches!(then.as_slice(), [TStmt::Kill { .. }]));
             assert!(els.is_empty());
@@ -103,7 +117,10 @@ fn soft_points_checks_clean_with_expected_shape() {
     // and this one does not — see `an_l4_that_assigns_clip_b_is_inferred_to_draw_lines`.
     assert_eq!(checked.topology, Some(Topology::Points));
     assert!(checked.capacity.is_none());
-    assert_eq!(checked.consumes, vec![Attr::Position, Attr::Velocity, Attr::Age]);
+    assert_eq!(
+        checked.consumes,
+        vec![Attr::Position, Attr::Velocity, Attr::Age]
+    );
     assert!(checked.emit.is_empty());
     // The L4 side of `consumes ⊆ emit` is a cross-proc (Set-composition)
     // question this pass cannot answer alone — see the module docs on
@@ -163,7 +180,9 @@ fn var_accum_checks_clean_with_expected_shape() {
                 assert_eq!(value.ty, Ty::Vec3);
                 match &value.kind {
                     TExprKind::Binary { op, .. } => assert_eq!(*op, BinOp::Add),
-                    other => panic!("expected compound assignment to desugar to a binary op, got {other:?}"),
+                    other => panic!(
+                        "expected compound assignment to desugar to a binary op, got {other:?}"
+                    ),
                 }
             }
             other => panic!("expected an assignment, got {other:?}"),
@@ -216,7 +235,8 @@ proc bad {
 "#;
     let errs = check_err(src);
     assert!(
-        errs.iter().any(|e| e.message.contains("int") && e.message.contains("float")),
+        errs.iter()
+            .any(|e| e.message.contains("int") && e.message.contains("float")),
         "expected a diagnostic about mixing `int` and `float`, got: {errs:?}"
     );
 }
@@ -263,8 +283,9 @@ proc unlawful {
 "#;
     let errs = check_err(src);
     assert!(
-        errs.iter().any(|e| e.hint.as_deref().unwrap_or_default().contains("bind")
-            && e.hint.as_deref().unwrap_or_default().contains("param")),
+        errs.iter()
+            .any(|e| e.hint.as_deref().unwrap_or_default().contains("bind")
+                && e.hint.as_deref().unwrap_or_default().contains("param")),
         "expected a hint pointing at `param` + `bind`, got: {errs:?}"
     );
 }
@@ -479,8 +500,9 @@ proc no_source {
 "#,
     );
     assert!(
-        errs.iter().any(|e| e.message.contains("velocity")
-            && e.message.contains("derived from `position`")),
+        errs.iter().any(
+            |e| e.message.contains("velocity") && e.message.contains("derived from `position`")
+        ),
         "expected the rule's source to be named, got: {errs:?}"
     );
 }
@@ -506,11 +528,14 @@ proc bad {
 "#;
     let errs = check_err(src);
     assert!(
-        errs.iter().any(|e| e.message.contains("normal") && e.message.contains("not emitted")),
+        errs.iter()
+            .any(|e| e.message.contains("normal") && e.message.contains("not emitted")),
         "expected a diagnostic about `normal` not being emitted, got: {errs:?}"
     );
     assert!(
-        !errs.iter().any(|e| e.message.contains("normal") && e.message.contains("not implemented")),
+        !errs
+            .iter()
+            .any(|e| e.message.contains("normal") && e.message.contains("not implemented")),
         "`normal` has no derivation rule in the spec, so it should not get the \"not \
          implemented\" wording — got: {errs:?}"
     );
@@ -660,7 +685,8 @@ proc wrong_rate {
 "#;
     let errs = check_err(src);
     assert!(
-        errs.iter().any(|e| e.message.contains("`spawn_rate` must be a `float`")),
+        errs.iter()
+            .any(|e| e.message.contains("`spawn_rate` must be a `float`")),
         "expected a type diagnostic for `spawn_rate`, got: {errs:?}"
     );
 }
@@ -1320,7 +1346,8 @@ proc dots {
     for src in [l1, l3, l4] {
         let errs = check_err(src);
         assert!(
-            errs.iter().any(|e| e.message.contains("`amplify` is L2 only")),
+            errs.iter()
+                .any(|e| e.message.contains("`amplify` is L2 only")),
             "expected `amplify` to be refused, got: {errs:?}"
         );
     }
@@ -1348,7 +1375,8 @@ proc mirror {{
         );
         let errs = check_err(&src);
         assert!(
-            errs.iter().any(|e| e.message.contains("at least 2") && e.message.contains(expected)),
+            errs.iter()
+                .any(|e| e.message.contains("at least 2") && e.message.contains(expected)),
             "expected `amplify {factor}` to be refused as {expected}, got: {errs:?}"
         );
     }
@@ -1658,9 +1686,16 @@ proc peek {
 }
 "#;
     let errs = check_err(src);
-    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    let rendered = errs
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(rendered.contains("velocity"), "{rendered}");
-    assert!(rendered.contains("consumes"), "the hint does not offer `consumes`: {rendered}");
+    assert!(
+        rendered.contains("consumes"),
+        "the hint does not offer `consumes`: {rendered}"
+    );
 }
 
 /// **`kill()` is refused, and the reason is structural rather than a
@@ -1681,7 +1716,11 @@ proc cull {
 }
 "#;
     let errs = check_err(src);
-    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    let rendered = errs
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(rendered.contains("kill()"), "{rendered}");
     assert!(
         rendered.contains("compaction") || rendered.contains("Fade it out"),
@@ -1709,8 +1748,15 @@ proc bad {{
 "#
         );
         let errs = check_err(&src);
-        let rendered = errs.iter().map(|e| e.render(&src)).collect::<Vec<_>>().join("\n");
-        assert!(rendered.contains(field), "`{field}` was not named: {rendered}");
+        let rendered = errs
+            .iter()
+            .map(|e| e.render(&src))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            rendered.contains(field),
+            "`{field}` was not named: {rendered}"
+        );
     }
 }
 
@@ -1725,7 +1771,11 @@ proc empty {
 }
 "#;
     let errs = check_err(src);
-    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    let rendered = errs
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(rendered.contains("deform"), "{rendered}");
 }
 
@@ -1805,8 +1855,15 @@ proc half {{
             if missing == "eye" { "target" } else { "eye" }
         );
         let errs = check_err(&src);
-        let rendered = errs.iter().map(|e| e.render(&src)).collect::<Vec<_>>().join("\n");
-        assert!(rendered.contains(missing), "`{missing}` was not required: {rendered}");
+        let rendered = errs
+            .iter()
+            .map(|e| e.render(&src))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            rendered.contains(missing),
+            "`{missing}` was not required: {rendered}"
+        );
     }
 }
 
@@ -1844,7 +1901,11 @@ proc follow {
 }
 "#;
     let errs = check_err(src);
-    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    let rendered = errs
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(rendered.contains("position"), "{rendered}");
     assert!(
         rendered.contains("reduction") || rendered.contains("element zero"),
@@ -1867,9 +1928,16 @@ proc follow {
 }
 "#;
     let errs = check_err(src);
-    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    let rendered = errs
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(rendered.contains("consume"), "{rendered}");
-    assert!(rendered.contains("ir-spec"), "the hint does not point at where this is decided: {rendered}");
+    assert!(
+        rendered.contains("ir-spec"),
+        "the hint does not point at where this is decided: {rendered}"
+    );
 }
 
 /// **`seed` is not available**, which is the one ambient an L3 loses relative to
@@ -1886,7 +1954,11 @@ proc noisy {
 }
 "#;
     let errs = check_err(src);
-    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    let rendered = errs
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(rendered.contains("seed"), "{rendered}");
 }
 
@@ -1930,8 +2002,15 @@ proc bad {{
 "#
         );
         let errs = check_err(&src);
-        let rendered = errs.iter().map(|e| e.render(&src)).collect::<Vec<_>>().join("\n");
-        assert!(rendered.contains(field), "`{field}` was not named: {rendered}");
+        let rendered = errs
+            .iter()
+            .map(|e| e.render(&src))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            rendered.contains(field),
+            "`{field}` was not named: {rendered}"
+        );
     }
 }
 
@@ -1944,7 +2023,11 @@ proc empty {
 }
 "#;
     let errs = check_err(src);
-    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    let rendered = errs
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(rendered.contains("camera"), "{rendered}");
 }
 
@@ -1964,9 +2047,16 @@ proc confused {
 }
 "#;
     let errs = check_err(src);
-    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    let rendered = errs
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(rendered.contains("camera"), "{rendered}");
-    assert!(rendered.contains("L3"), "the diagnostic does not say where it belongs: {rendered}");
+    assert!(
+        rendered.contains("L3"),
+        "the diagnostic does not say where it belongs: {rendered}"
+    );
 }
 
 /// And a camera output cannot be written from a stage that has no camera to
@@ -1986,7 +2076,11 @@ proc march {
 }
 "#;
     let errs = check_err(src);
-    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    let rendered = errs
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(rendered.contains("eye"), "{rendered}");
 }
 
@@ -2051,7 +2145,11 @@ proc shadowed {{
 "#
         );
         let errs = check_err(&src);
-        let rendered = errs.iter().map(|e| e.render(&src)).collect::<Vec<_>>().join("\n");
+        let rendered = errs
+            .iter()
+            .map(|e| e.render(&src))
+            .collect::<Vec<_>>()
+            .join("\n");
         assert!(rendered.contains("far"), "{rendered}");
         assert!(rendered.contains("shadows"), "{rendered}");
     }
@@ -2075,7 +2173,11 @@ proc grounded {
 }
 "#;
     let errs = check_err(src);
-    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    let rendered = errs
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(rendered.contains("ambient"), "{rendered}");
 }
 
@@ -2111,7 +2213,11 @@ proc confused {{
 "#
         );
         let errs = check_err(&src);
-        let rendered = errs.iter().map(|e| e.render(&src)).collect::<Vec<_>>().join("\n");
+        let rendered = errs
+            .iter()
+            .map(|e| e.render(&src))
+            .collect::<Vec<_>>()
+            .join("\n");
         assert!(rendered.contains(name), "{rendered}");
         assert!(
             rendered.contains("vertex"),
@@ -2183,7 +2289,11 @@ proc silent {
 }
 "#;
     let errs = check_err(src);
-    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    let rendered = errs
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(rendered.contains("strength"), "{rendered}");
 }
 
@@ -2208,7 +2318,11 @@ proc widen {
 }
 "#;
     let errs = check_err(src);
-    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    let rendered = errs
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(rendered.contains("tint"), "{rendered}");
     assert!(
         rendered.contains("consumes"),
@@ -2233,9 +2347,16 @@ proc sneaky {
 }
 "#;
     let errs = check_err(src);
-    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    let rendered = errs
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(rendered.contains("position"), "{rendered}");
-    assert!(rendered.contains("deform"), "the hint does not offer the block that can: {rendered}");
+    assert!(
+        rendered.contains("deform"),
+        "the hint does not offer the block that can: {rendered}"
+    );
 }
 
 /// **`weight` is a name the layer gives a meaning to**, on the same terms
@@ -2253,7 +2374,11 @@ proc odd {
 }
 "#;
     let errs = check_err(src);
-    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    let rendered = errs
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(rendered.contains("weight"), "{rendered}");
     assert!(rendered.contains("float"), "{rendered}");
 }
@@ -2288,7 +2413,11 @@ proc shadowed {
 }
 "#;
     let errs = check_err(src);
-    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    let rendered = errs
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(rendered.contains("strength"), "{rendered}");
 }
 
@@ -2307,9 +2436,16 @@ proc confused {
 }
 "#;
     let errs = check_err(src);
-    let rendered = errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n");
+    let rendered = errs
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(rendered.contains("mask"), "{rendered}");
-    assert!(rendered.contains("L2"), "the diagnostic does not say where it belongs: {rendered}");
+    assert!(
+        rendered.contains("L2"),
+        "the diagnostic does not say where it belongs: {rendered}"
+    );
 }
 
 /// **A derived attribute is carried state, and `closed_form` has to see it.**
@@ -2343,7 +2479,10 @@ proc bare {
 }
 "#,
     );
-    assert!(bare.closed_form, "nothing is read back, so `t` alone decides the state");
+    assert!(
+        bare.closed_form,
+        "nothing is read back, so `t` alone decides the state"
+    );
 
     for attr in ["velocity", "age"] {
         let src = format!(
@@ -2466,7 +2605,10 @@ proc blob {
 fn a_field_checks_clean_and_carries_no_geometry() {
     let checked = check_ok(BLOB);
     assert_eq!(checked.kind, Kind::Field);
-    assert_eq!(checked.topology, None, "a field is a function, not geometry");
+    assert_eq!(
+        checked.topology, None,
+        "a field is a function, not geometry"
+    );
     assert!(checked.emit.is_empty() && checked.consumes.is_empty());
     assert_eq!(checked.params.len(), 1);
     assert!(checked.block(BlockKind::Field).is_some());
@@ -2538,7 +2680,10 @@ proc peeks {
     );
     assert!(
         errs.iter().any(|e| e.message.contains("position")
-            && e.hint.as_deref().unwrap_or_default().contains("function of space")),
+            && e.hint
+                .as_deref()
+                .unwrap_or_default()
+                .contains("function of space")),
         "expected a diagnostic explaining a field has no element, got: {errs:?}"
     );
 }
@@ -2598,7 +2743,10 @@ proc jitter {
     );
     assert!(
         errs.iter().any(|e| e.message.contains("seed")
-            && e.hint.as_deref().unwrap_or_default().contains("function of space")),
+            && e.hint
+                .as_deref()
+                .unwrap_or_default()
+                .contains("function of space")),
         "expected `seed` to be refused with a field's own reason, got: {errs:?}"
     );
 }
@@ -2674,7 +2822,10 @@ proc lattice {
   }
 }
 "#;
-    assert!(check_ok(lattice).is_static(), "nothing spawns and nothing dies");
+    assert!(
+        check_ok(lattice).is_static(),
+        "nothing spawns and nothing dies"
+    );
 
     // The same procedure, killing. Every element is live at frame zero and not
     // after it, so the old sentence was true and the answer was wrong.
@@ -2701,7 +2852,10 @@ proc fountain {
   element { position = position; }
 }
 "#;
-    assert!(!check_ok(spawning).is_static(), "and a `spawn` block allocates");
+    assert!(
+        !check_ok(spawning).is_static(),
+        "and a `spawn` block allocates"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -2738,7 +2892,10 @@ fn a_pairing_l2_checks_clean_and_carries_its_declaration() {
             _ => false,
         })
     };
-    assert!(reads_other(&deform.stmts), "`other.position` is a paired read");
+    assert!(
+        reads_other(&deform.stmts),
+        "`other.position` is a paired read"
+    );
 }
 
 /// **`other` means nothing without the declaration**, and the diagnostic says
@@ -2760,7 +2917,8 @@ fn other_is_refused_in_an_l2_that_does_not_pair() {
 fn other_reads_only_what_the_node_consumes() {
     let errs = check_err(&MORPH.replace("other.position", "other.tint"));
     assert!(
-        errs.iter().any(|e| e.message.contains("tint") && e.message.contains("not consumed")),
+        errs.iter()
+            .any(|e| e.message.contains("tint") && e.message.contains("not consumed")),
         "expected `other.tint` to need `tint` in `consumes`, got: {errs:?}"
     );
 }
@@ -2800,7 +2958,8 @@ proc dots {
     for src in [l1, l4] {
         let errs = check_err(src);
         assert!(
-            errs.iter().any(|e| e.message.contains("`pairs` is L2 only")),
+            errs.iter()
+                .any(|e| e.message.contains("`pairs` is L2 only")),
             "expected `pairs` to be refused, got: {errs:?}"
         );
     }
@@ -2826,7 +2985,8 @@ proc shadow {
 "#,
     );
     assert!(
-        errs.iter().any(|e| e.message.contains("`other` is reserved")),
+        errs.iter()
+            .any(|e| e.message.contains("`other` is reserved")),
         "expected `other` to be reserved, got: {errs:?}"
     );
 }

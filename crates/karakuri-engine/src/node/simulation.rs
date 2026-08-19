@@ -2,7 +2,8 @@
 
 use karakuri_codegen::generate_l1;
 use karakuri_codegen::layout::{
-    binding, counts, group, step_args, ElementLayout, UniformLayout, VERTICES_PER_ELEMENT, WORKGROUP_SIZE,
+    binding, counts, group, step_args, ElementLayout, UniformLayout, VERTICES_PER_ELEMENT,
+    WORKGROUP_SIZE,
 };
 use karakuri_ir::typed::Checked;
 
@@ -179,7 +180,10 @@ impl Simulation {
                     mapped_at_creation: false,
                 })
             };
-            Pair { a: make("a"), b: make("b") }
+            Pair {
+                a: make("a"),
+                b: make("b"),
+            }
         };
         let element_buf = make_pair("element", element_buffer_size);
         let alive_buf = make_pair("alive", alive_buffer_size);
@@ -208,15 +212,17 @@ impl Simulation {
         });
 
         // -- bind group layouts -------------------------------------------
-        let storage_entry = |binding_num: u32, read_only: bool, vis: wgpu::ShaderStages| wgpu::BindGroupLayoutEntry {
-            binding: binding_num,
-            visibility: vis,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Storage { read_only },
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
+        let storage_entry = |binding_num: u32, read_only: bool, vis: wgpu::ShaderStages| {
+            wgpu::BindGroupLayoutEntry {
+                binding: binding_num,
+                visibility: vis,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }
         };
         // `prev`/`next` bind the element buffer and the alive buffer
         // together, at the fixed numbers `layout::binding` publishes. L4
@@ -253,7 +259,11 @@ impl Simulation {
             storage_entry(binding::COUNTS, true, wgpu::ShaderStages::COMPUTE),
         ];
         if shader.compacted {
-            uniform_entries.push(storage_entry(binding::DEST, true, wgpu::ShaderStages::COMPUTE));
+            uniform_entries.push(storage_entry(
+                binding::DEST,
+                true,
+                wgpu::ShaderStages::COMPUTE,
+            ));
         }
         let uniform_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("L1 uniforms"),
@@ -345,8 +355,14 @@ impl Simulation {
                 label: Some(label),
                 layout: bgl,
                 entries: &[
-                    wgpu::BindGroupEntry { binding: binding::ELEMENT, resource: elem.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: binding::ALIVE, resource: alive.as_entire_binding() },
+                    wgpu::BindGroupEntry {
+                        binding: binding::ELEMENT,
+                        resource: elem.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: binding::ALIVE,
+                        resource: alive.as_entire_binding(),
+                    },
                 ],
             })
         };
@@ -437,7 +453,11 @@ impl Simulation {
         queue.write_buffer(&self.element_buf.b, 0, &elements);
         queue.write_buffer(&self.alive_buf.a, 0, &alive);
         queue.write_buffer(&self.alive_buf.b, 0, &alive);
-        queue.write_buffer(&self.counts, 0, &initial_counts(self.capacity, self.has_spawn));
+        queue.write_buffer(
+            &self.counts,
+            0,
+            &initial_counts(self.capacity, self.has_spawn),
+        );
     }
 
     /// Back to exactly what [`Simulation::build`] left. See [`Set::rewind`],
@@ -665,7 +685,11 @@ impl Simulation {
     pub(crate) fn live_count(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> u32 {
         let bytes = read_buffer(device, queue, &self.counts, counts::SIZE);
         let at = counts::RANGE as usize;
-        u32::from_le_bytes(bytes[at..at + 4].try_into().expect("counts buffer is 48 bytes"))
+        u32::from_le_bytes(
+            bytes[at..at + 4]
+                .try_into()
+                .expect("counts buffer is 48 bytes"),
+        )
     }
 
     /// The raw bytes of the element buffer a reader is currently reading,
@@ -699,9 +723,12 @@ fn initial_state(capacity: u32, has_spawn: bool, layout: &ElementLayout) -> (Vec
         let birth_frac_offset = layout.offset_of("birth_frac") as usize;
         for i in 0..capacity as usize {
             let base = i * stride;
-            elements[base + seed_offset..base + seed_offset + 4].copy_from_slice(&(i as u32).to_le_bytes());
-            elements[base + birth_frac_offset..base + birth_frac_offset + 4].copy_from_slice(&1.0f32.to_le_bytes());
-            alive[i * ALIVE_STRIDE as usize..i * ALIVE_STRIDE as usize + 4].copy_from_slice(&1u32.to_le_bytes());
+            elements[base + seed_offset..base + seed_offset + 4]
+                .copy_from_slice(&(i as u32).to_le_bytes());
+            elements[base + birth_frac_offset..base + birth_frac_offset + 4]
+                .copy_from_slice(&1.0f32.to_le_bytes());
+            alive[i * ALIVE_STRIDE as usize..i * ALIVE_STRIDE as usize + 4]
+                .copy_from_slice(&1u32.to_le_bytes());
         }
     }
 
@@ -736,7 +763,12 @@ fn initial_counts(capacity: u32, has_spawn: bool) -> Vec<u8> {
 
 /// Copies `len` bytes off the GPU and blocks until they arrive. Every caller
 /// is a stall by construction — see [`Simulation::live_count`].
-pub(super) fn read_buffer(device: &wgpu::Device, queue: &wgpu::Queue, buffer: &wgpu::Buffer, len: u64) -> Vec<u8> {
+pub(super) fn read_buffer(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    buffer: &wgpu::Buffer,
+    len: u64,
+) -> Vec<u8> {
     let staging = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("set readback"),
         size: len,
@@ -789,7 +821,11 @@ mod tests {
     /// erroring."
     #[test]
     fn no_spawn_block_seeds_every_slot_with_its_index_and_marks_it_alive() {
-        let layout = karakuri_codegen::layout::generate_element_layout(&[karakuri_ir::Attr::Position, karakuri_ir::Attr::Age], karakuri_codegen::layout::Synthetic::NONE, &[]);
+        let layout = karakuri_codegen::layout::generate_element_layout(
+            &[karakuri_ir::Attr::Position, karakuri_ir::Attr::Age],
+            karakuri_codegen::layout::Synthetic::NONE,
+            &[],
+        );
         let stride = layout.stride as usize;
         let capacity = 8u32;
         let (elements, alive) = initial_state(capacity, false, &layout);
@@ -798,8 +834,16 @@ mod tests {
         assert_eq!(alive.len(), capacity as usize * ALIVE_STRIDE as usize);
 
         for i in 0..capacity as usize {
-            assert_eq!(seed_at(&elements, stride, &layout, i), i as u32, "seed at slot {i}");
-            assert_eq!(birth_frac_at(&elements, stride, &layout, i), 1.0, "birth_frac at slot {i}");
+            assert_eq!(
+                seed_at(&elements, stride, &layout, i),
+                i as u32,
+                "seed at slot {i}"
+            );
+            assert_eq!(
+                birth_frac_at(&elements, stride, &layout, i),
+                1.0,
+                "birth_frac at slot {i}"
+            );
             assert_eq!(alive_at(&alive, i), 1, "alive flag at slot {i}");
         }
     }
@@ -811,12 +855,24 @@ mod tests {
     /// make dead slots read as live the moment the range grew past them.
     #[test]
     fn spawn_block_leaves_every_slot_zeroed() {
-        let layout = karakuri_codegen::layout::generate_element_layout(&[karakuri_ir::Attr::Position, karakuri_ir::Attr::Age], karakuri_codegen::layout::Synthetic::NONE, &[]);
+        let layout = karakuri_codegen::layout::generate_element_layout(
+            &[karakuri_ir::Attr::Position, karakuri_ir::Attr::Age],
+            karakuri_codegen::layout::Synthetic::NONE,
+            &[],
+        );
         let stride = layout.stride as usize;
         let capacity = 8u32;
         let (elements, alive) = initial_state(capacity, true, &layout);
 
-        assert_eq!(elements, vec![0u8; capacity as usize * stride], "spawn-block elements must start zeroed");
-        assert_eq!(alive, vec![0u8; capacity as usize * ALIVE_STRIDE as usize], "spawn-block alive flags must start zeroed");
+        assert_eq!(
+            elements,
+            vec![0u8; capacity as usize * stride],
+            "spawn-block elements must start zeroed"
+        );
+        assert_eq!(
+            alive,
+            vec![0u8; capacity as usize * ALIVE_STRIDE as usize],
+            "spawn-block alive flags must start zeroed"
+        );
     }
 }
