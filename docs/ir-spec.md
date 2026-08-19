@@ -57,9 +57,25 @@ procedures evaluate it, so it needs no buffer, no pass and no position in the ch
 [The `field` block](#the-field-block).
 
 Each brings its own header rules, and a declaration belonging to another layer is refused
-where it is written rather than ignored: `capacity` and `topology` are L1's, `amplify` is
-L2's, `blend` is L4's, `emit` belongs to procedures that write elements. An L3 declares none
-of them — it produces a viewpoint, and what is drawn with it is the renderer's business.
+where it is written rather than ignored: `capacity` and `topology` are L1's, `amplify` and
+`pairs` are L2's, `blend` is L4's, `emit` belongs to procedures that write elements. An L3
+declares none of them — it produces a viewpoint, and what is drawn with it is the
+renderer's business. `amplify` and `pairs` are refused *together* on one procedure: one node
+cannot both take two geometries and return several copies of each.
+
+**Each kind also has a declaration and a block it cannot do without**, and the refusal is by
+name at the header rather than by a missing symbol later:
+
+| Kind | Must declare | Must have |
+|---|---|---|
+| L1 | `capacity`, `topology` | `element` |
+| L2 | — | `deform` |
+| L3 | — | `camera` |
+| L4 | `blend` | `fragment` |
+| Field | — | `field` |
+
+A block declared twice is refused, on the terms every duplicate is: two `element` blocks are
+two answers to one question and picking either is picking silently.
 
 ### capacity / topology (L1 only)
 
@@ -155,6 +171,14 @@ exactly two sources and they are paired in `--set` order. **This is the system's
 fan-in, and it deliberately brings no general notation for one** — naming several is what a
 real fan-in notation is for, and it arrives with the thing that needs it.
 
+**Five things are refused where a pairing Set is built**, because none of them is a property
+of the file: exactly two sources, the pairing node *first* in the chain (so its second input
+is a source rather than whatever reached its position), both sources static, both the same
+size, and the far source able to supply whatever the chain derives — a chain that consumes
+`velocity` needs it on both sides, and the far source's element struct is built with the same
+derived slots as the near one or `other.position` reads from the middle of the element
+before it.
+
 **The correspondence is the slot index**, which is the same element in both sources only
 while neither compacts. So both sources must be *static*: no `spawn` block and no `kill()`,
 which `Checked::is_static` answers and which is why that predicate had to start asking about
@@ -202,10 +226,15 @@ param <name> : <type> [<min>, <max>] = <default>
   normalization basis for signal binding, and the basis for incremental revision: an
   instruction like "a little slower" can only be translated into a value by something that
   knows what the range is. Without one, every revision falls back to regenerating code.
-- **Every name the language already gives meaning to is reserved.** A `param` may not be
-  called `position`, `size`, `tint` or any other attribute; nor `seed`, `t`, `dt`,
-  `capacity`, `camera` or `point_coord`; nor `clip`, `clip_b`, `point_size` or `color`; nor
-  `id`.
+- **Every name the language already gives meaning to is reserved, and how widely depends on
+  the name.** Reserved in every layer: `id`, `other`, every attribute (`position`, `size`,
+  `tint`, …) and every ambient (`seed`, `copy`, `point`, `t`, `beats`, `dt`, `capacity`,
+  `camera`, `point_coord`, `eye`, `ray`). Reserved in the layer that *writes* it: a stage
+  output — `clip`, `clip_b`, `point_size` and `color` in an L4, `target`, `up`, `fov_y`,
+  `near` and `far` in an L3, `strength` in an L2's `mask`, `distance` in a `field`. So
+  `param color : vec3` is accepted on an L1, which declares no `color` output, and refused
+  on the L4 that would have to write one — the collision is with the *lowering's* name for
+  the output, and an L1 has no such name.
   Params, attributes, ambients and stage outputs share one scope inside a block, and the
   lowering packs params and ambients into one uniform struct — `param t : float` would
   collide with the ambient `t` in the generated WGSL, silently, at a point far from the
@@ -244,6 +273,12 @@ attribute it feeds. A Set nobody asks `age` in pays nothing for `age`.
 
 Within one procedure the useful check is narrower: an attribute is readable or writable
 only if that procedure declares it, since only a declared attribute gets a buffer pair.
+
+**Which layers may declare which.** `emit` belongs to the layers that write elements — L1
+and L2 — and is refused on an L3, an L4 and a field, each with its own reason: a camera and
+a field have no element, and a renderer draws what reaches it and stores nothing.
+`consumes` is refused on an L3 and a field for the same reason and is accepted everywhere
+an element is read.
 
 Available attributes:
 
@@ -314,14 +349,21 @@ The only implicit values readable inside a block:
 | `capacity` | `uint` | allocated element count, set per Set | L1 |
 | `t` | `float` | simulation seconds since Set start | all |
 | `beats` | `float` | musical position on the session's tempo grid, at the instant `t` names | all |
-| `dt` | `float` | fixed simulation step. Scaled on an element's first update — see [Spawn timing](#spawn-timing) | L1 |
+| `dt` | `float` | fixed simulation step. Scaled on an element's first update — see [Spawn timing](#spawn-timing) | L1, L3 |
+| `copy` | `uint` | which copy of an amplified element this is, `0` where nothing upstream amplified — see [`amplify`](#amplify-l2-only) | L2, L4 |
+| `point` | `vec3` | the position a field is being asked about. The one input a field has | `field` block |
 | `camera` | `mat4` | view-projection matrix | L4 |
 | `point_coord` | `vec2` | 0..1 across the primitive: within the sprite under `points`, along-by-across the stroke under `lines`, across the frame under `fullscreen` | L4 fragment |
 | `eye` | `vec3` | the camera's world-space position. `fullscreen` only | L4 fragment |
 | `ray` | `vec3` | unit direction from `eye` through this fragment. `fullscreen` only | L4 fragment |
 
-`seed` is readable in every block as well, but it is a carried attribute rather than an
-ambient value — see [Element identity](#element-identity).
+`seed` is readable as well, but it is a carried attribute rather than an ambient value —
+see [Element identity](#element-identity). It is available **wherever there is an element**,
+which is every block except three: a `camera` block, which runs once a frame over nothing;
+a fullscreen L4, which covers the frame and draws no element; and a `field` block, which is
+handed a `point` and is spliced into callers that may have no element at all. Each of those
+three is a refusal with its own sentence, and each was added after a `.kir` that read `seed`
+there compiled to WGSL naming a value nothing declared.
 
 ### `beats`, and why it is not a signal
 
@@ -415,13 +457,12 @@ the nondeterministic quantity has been moved onto the record stream, which is th
 engine state is meant to be mutated through. Adding substepping later is then an engine
 change alone — no format change, no determinism argument to reopen.
 
-**Substepping landed and the record did not.** `steps` is no longer always 1: it is derived
-per frame and capped at 4, and the engine advances by that count. What has not been built
-is the emission — nothing constructs a `Record::Tick`, so the value goes to the engine as a
-number. The determinism argument above survives that intact, because what it rests on is
-the engine advancing by a **step count** rather than by a duration, and that is what it
-does. The record is a serialisation of a quantity that already exists in the right shape;
-`README.md`'s Invariants list what else is in the same position.
+**Substepping landed, and so did the record.** `steps` is no longer always 1: it is derived
+per frame from real time, capped at 4, and written as the `tick` that closes each frame in a
+recorded session — `--replay` then reads the number back rather than deriving it again,
+which is the whole of why a replay is frame-exact on a machine that runs at a different
+speed. The determinism argument above is what it rests on: the engine advances by a **step
+count** and never by a duration.
 
 - `t` is `steps_taken * dt`, where `steps_taken` is the whole number of steps the session
   has advanced. **Computed from the count, not accumulated into a running sum** — a float
@@ -469,7 +510,7 @@ var <name> = <expr>;          // mutable local
 <name> += <expr>;             // also -= *= /=, var only
 <attr> = <expr>;              // write to an attribute
 if <cond> { ... } else { ... }
-for i in <start>..<end> { ... }   // both are integer literals
+for i in <start>..<end> { ... }   // both are signed integer literals
 kill();                       // L1 element block only
 ```
 
@@ -484,8 +525,11 @@ kill();                       // L1 element block only
 - Assigning to a name that was never declared is an error, not a declaration.
 - `let`, `var`, and the loop variable may not shadow a param, an attribute, or an ambient
   value.
-- Loop bounds are integer literals, not expressions. Constant bounds are what makes cost
-  estimation possible, and a literal is the only form the check pass need not reason about.
+- Loop bounds are signed integer literals, not expressions. Constant bounds are what makes
+  cost estimation possible, and a literal is the only form the check pass need not reason
+  about. `for i in -3..3` is well formed; a range that does not ascend — `for i in 4..0` —
+  is accepted and runs zero times, which is what the lowering does with it and what the
+  cost estimate charges for it.
 - Nested loops multiply into the cost estimate.
 - Statements are terminated by `;`. **Header declarations are not terminated at all** — one
   ends where the next declaration or block begins. That is a real ambiguity and worth
@@ -680,6 +724,7 @@ mask    { ... }      // L2: where the deformation applies. Optional
 camera  { ... }      // L3: produce this frame's camera
 vertex  { ... }      // L4: once per element
 fragment{ ... }      // L4: once per rasterised fragment
+field   { ... }      // Field: the signed distance at `point`
 ```
 
 **A block name belongs to exactly one layer**, and a block in the wrong kind of procedure is
@@ -694,6 +739,9 @@ partition rather than a menu.
 param spawn_rate : float [0.0, 40000.0] = 8000.0
 ```
 
+It must be a `float`, and a `spawn` block with no `spawn_rate` is refused — a rate the
+engine reads by name has to be there and has to be one number.
+
 If a procedure declares no `spawn` block, all `capacity` elements are live from frame zero
 and `element` alone drives them. This is the simplest form and a good default. Emitted
 attributes are zero-initialized before the first frame — the frame-zero `element` pass
@@ -706,7 +754,7 @@ proc twist {
   kind L2
 
   // Read by the lowering, on the same terms `spawn_rate` is read by the
-  // engine. Optional; absent is 1.0.
+  // engine. Optional; absent is 1.0, and it must be a `float`.
   param weight : float [0.0, 1.0] = 0.6
 
   consumes position, age
@@ -852,9 +900,11 @@ new syntactic category. There is no user-defined function here; there is one mor
 more block, one more ambient and one more output, which is the shape L2 and L3 already
 established.
 
-**One per Set**, on the same terms as the camera. Several would need naming, naming is
-fan-in, and `docs/roadmap.md` says fan-in arrives with multiple L1 sources and brings its
-notation with it.
+**One per Set**, on the same terms as the camera. Several would need naming, and naming is
+fan-in. Fan-in has since arrived twice — two sources in a Set, and a pairing L2 that reads
+both — and neither brought a notation: which two geometries a `pairs` node takes is `--set`
+order. So this is now waiting on a debt rather than on a feature, which is the shape
+`docs/roadmap.md` records under "Naming what a Set holds".
 
 #### Evaluating one
 
@@ -1257,6 +1307,17 @@ This is a common source of confusion. State it in the generation prompt.
 `abs floor ceil round fract mod min max clamp mix step smoothstep sign`
 `sqrt pow exp log exp2 log2`
 
+**Componentwise over one type, which is narrower than GLSL.** Where GLSL lets a scalar stand
+in for a vector — `mix(a, b, 0.5)` with `a` and `b` `vec3`, or `clamp(v, 0.0, 1.0)` — this
+language requires every argument to resolve to the same type and refuses the mixed form by
+name: ``mix` expects every argument to be the same type; found `vec3` and `float``. Widen it
+at the call: `mix(a, b, vec3(k))`, `clamp(v, vec3(0.0), vec3(1.0))`. This applies to `mod`,
+`min`, `max`, `clamp`, `mix`, `step`, `smoothstep`, `pow` and `atan2`.
+
+One rule and no exceptions is what makes it worth the extra characters: a language where
+*some* positions broadcast is one where an author has to remember which, and where a wrong
+guess is a shader that compiles.
+
 ### Trigonometry
 
 `sin cos tan asin acos atan atan2`
@@ -1294,7 +1355,13 @@ op_union(float, float) -> float
 op_smooth_union(float, float, float) -> float
 op_subtract(float, float) -> float
 op_intersect(float, float) -> float
+
+field(vec3) -> float                  // the Set's field, at a point
 ```
+
+`field` is the one builtin that is not a function of its arguments alone: it evaluates the
+`kind Field` procedure in the same Set, and a Set with no field refuses a procedure that
+calls it. See [Evaluating one](#evaluating-one).
 
 ### Transform
 
@@ -1534,8 +1601,9 @@ known. The total-cost decision lives there, not in the artifact.
   declared it — which it had to become, since every L4 in `examples/` declares `exposure`
   and a Set holding two renderers would otherwise have had one. A `param` record carrying a
   bare name reaches **every node that declares it**, which is the useful default: one knob,
-  both renderers. Setting two of them *apart* needs an address these records do not yet
-  carry — `layer` plus an `index` defaulting to 0, the way `procedure` already does it.
+  both renderers. Setting two of them *apart* is `layer` plus an optional `index`, which
+  both records now carry the way `procedure` does — `--param L4:1:exposure=2.0`,
+  `--bind index=1`.
 - Unknown `t` values are ignored, for forward compatibility.
 - **`gain`, `opacity`, `blend`, `mask`, `transition`, `preview`, `residency`, `look`,
   `canvas`, `procedure` and `transport` are not in this list and must never be.** They are the session's
@@ -1543,22 +1611,31 @@ known. The total-cost decision lives there, not in the artifact.
   Set renders at whatever size it is handed, so a Set file that carried one would resize
   every *other* Set in the deck by being loaded.
 
-**Implemented, and the engine obeys it.** `karakuri-cli`'s `--save-set` writes one of
-these and puts both `.kir` sources in the store as content-addressed artifacts;
-`--load-set` reads it back and builds from it, resolving each `slot` by hash or from
-inlined `src` records when the file is bundled. A run driven by a Set file renders the
-same frame as the run whose flags wrote it.
+**Implemented, and the engine obeys it.** `karakuri-cli`'s `--save-set` writes one of these
+and puts the slot's `.kir` sources in the store as content-addressed artifacts; `--load-set`
+reads it back and builds from it, resolving each `slot` by hash or from inlined `src` records
+when the file is bundled. A run driven by a Set file renders the same frame as the run whose
+flags wrote it.
+
+**What it will not save is a chain.** A Set file names an L1 and its renderers, so a slot
+holding an L2, an L3, a `kind Field` or a second L1 is refused by name rather than saved
+short — and `--record-session` refuses it for the same reason, since a session head is a Set
+file. The format needs a way to name those nodes before it can carry them, which is the same
+naming this document defers twice above.
 
 `--bind` survives as a way of *writing* a `bind` record rather than as a path beside one:
 the flag parses its fields into a `Record::Bind` and hands it to the same decoder a Set
 file uses, so a command line and a file cannot mean different things by the same fields.
 
-**Three places this format is finer than the engine**, all of them reported on load rather
-than dropped: `seed`, `capacity` and `param` are keyed by layer while the engine holds one
-seed, one capacity and one flat parameter map per Set; a `param` may be a vector while the
-engine's map holds `f32`; and `camera` carries two of the six fields the engine's orbit
-has. Each is a disagreement between the format and the engine rather than a gap in the
-loader, and settling them is the format's business and the engine's, not the reader's.
+**Two places this format is finer than the engine**, both reported on load rather than
+dropped: a `param` may be a vector while the engine's map holds `f32`, and `camera` carries
+two of the six fields the engine's orbit has. Each is a disagreement between the format and
+the engine rather than a gap in the loader, and settling them is the format's business and
+the engine's, not the reader's.
+
+There used to be a third — `seed`, `capacity` and `param` keyed by layer against an engine
+that held one of each per Set. The engine caught up: params are per *node*, the salt is per
+*source*, and each source runs at its own capacity.
 
 The *session* records are further along: `audio` and `tempo` per frame, and `gain`,
 `opacity`, `blend`, `preview`, `residency`, `look` and `transport` per key press, are each
@@ -2137,9 +2214,8 @@ which is the shape that survives the thing this milestone is for. Fusion is then
 optimisation the graph compiler may apply, in the place the roadmap already puts it, rather
 than the only implementation there is.
 
-**`emit` and `consumes` are both L2 declarations**, where today the checker allows `emit` on
-L1 only and `consumes` on L4 only. An L2's `emit` widens what is available *downstream of
-it* rather than what its L1 wrote — the derived buffer is the L2's, not the L1's — so an L2
+**`emit` and `consumes` are both L2 declarations.** An L2's `emit` widens what is available
+*downstream of it* rather than what its L1 wrote — the derived buffer is the L2's, not the L1's — so an L2
 may emit an attribute no L1 in the library produces. Composition becomes a chain check: each
 node's `consumes` must be a subset of what is available at its position.
 
@@ -2543,7 +2619,7 @@ in the pass that already runs. A rule needing a reduction or a scan would need a
 do not, and inventing one for them would put a position in the chain that has to be
 explained.
 
-### Multiple L1 sources, and `source` — M3
+### Multiple L1 sources — built, and `source` — deferred
 
 Merging several geometry sources into one Set raises the question the removal of `id` left
 open: how two sources avoid colliding identities. `seed` is a monotone ordinal from a
@@ -2636,7 +2712,16 @@ sources — and note that `copy`'s slot is allocated only where something amplif
 packing saves nothing on a chain that has no amplifier in it and everything it saves is on
 the chains that do.
 
-**Decided, not built.** Nothing assigns a `source` today because nothing merges.
+**The merging is built and `source` is not.** `--set a.kir,b.kir,renderer.kir` builds two
+sources in one Set, each at its own capacity, each with its own salt, and the chain runs per
+source. What does not exist is the attribute: nothing carries a `source` value, so nothing
+downstream can mask on one, and the two ways to tell sources apart today are the salt (which
+differs by construction) and writing different attributes in different chains.
+
+**And the salt is derived rather than assigned**, which is the provisional half of the
+paragraph below: it is `hash(set_salt, ordinal)`, so reordering `--set` changes which
+geometry gets which randomness. Assigning it needs a stable name for a source, and a source
+has no name — see `docs/roadmap.md`, "Naming what a Set holds".
 
 **The two salting rules compose, and are on different axes.** Amplification requires
 `hash1(seed)` to give every copy of one element the *same* value, which is what makes eight
@@ -2652,7 +2737,7 @@ nothing breaks sources together because nothing should.
 source works unchanged against five. An L4 that branches on `source` is coupled to a
 particular Set's composition and stops being reusable.
 
-### Combining two sources — M3
+### Combining two sources — built
 
 Three things get called "mixing two sources" and only one of them needs anything new.
 
@@ -2660,20 +2745,23 @@ Three things get called "mixing two sources" and only one of them needs anything
 |---|---|---|
 | Crossfade | draw both, blend opacity | Nothing here. Two Sets and the L5 mixer |
 | Dissolve | hide one source's elements progressively | Nothing here. An L2 mask on `source` writing `size` or `tint` |
-| Interpolation | pair elements and blend their attributes | **A cross-source read**, which the IR does not have |
+| Interpolation | pair elements and blend their attributes | **A cross-source read** — `pairs` and `other.<attr>`, [above](#pairs-l2-only) |
 
 Interpolation is the only real addition, and it is not a count change — it is an
 element-wise operation that needs to read *another source's* element at the corresponding
 index. `seed` provides the correspondence: element 5 of source A pairs with element 5 of
 source B, which is exactly what per-source zero-based seeds buy.
 
-It fights compaction, though: two sources kill independently, so after compaction the
+It fought compaction, and the restriction below is what shipped: two sources kill independently, so after compaction the
 paired elements sit at different slot indices and the correspondence needs a seed-to-slot
 lookup. **Restricted to sources that are static — no `spawn`, no `kill()`, therefore no
 compaction, therefore `seed` is the slot index — it is a direct indexed read and costs
-nothing.** That restriction is statically checkable and covers lattices and shells, which
-is most of what anyone wants to interpolate. Dynamic sources can wait for a correspondence
-structure.
+nothing.** That restriction is statically checkable, is what `Checked::is_static` answers,
+and covers lattices and shells, which is most of what anyone wants to interpolate. Dynamic
+sources can wait for a correspondence structure.
+
+`examples/morph.kir` is the worked one: a lattice and a sphere of the same size, one fader
+between them.
 
 ### L2 amplification — built
 
@@ -2770,8 +2858,7 @@ elements than one workgroup covers sees neither mistake.
   choice of distribution fixes, so the engine scales an element's first `dt` by its birth
   fraction instead. See [Spawn timing](#spawn-timing).
 - **Substepping.** The step count is a `tick` record, not a measurement — emitted from real
-  time when live, read back verbatim on replay. v0.2 always writes `steps: 1`, so adding
-  substepping later touches the engine and nothing else. Capped at 4. See
+  time when live, read back verbatim on replay. Capped at 4. See
   [On `dt` and simulation time](#on-dt-and-simulation-time).
 - **Sorting.** Not depth sorting — weighted blended OIT, which is order independent and so
   cannot conflict with compaction. `blend additive` was declared in the L4 header from the
