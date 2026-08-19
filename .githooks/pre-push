@@ -1,0 +1,23 @@
+#!/bin/sh
+# The real gate: formatting, clippy, and every test.
+#
+# On push rather than on commit, because it takes minutes. A commit is a unit of
+# work in progress; a push is the point where somebody else — or tomorrow — has
+# to be able to build this.
+#
+# The tests need a GPU. There is no skip: a test that passes by not running is
+# worse than one that fails, which is what every GPU test in this workspace says
+# for itself, and a gate that quietly checks nothing is the same claim one level
+# up.
+set -e
+
+echo "pre-push: cargo fmt --check"
+cargo fmt --check
+
+echo "pre-push: cargo clippy --workspace --all-targets"
+cargo clippy --quiet --workspace --all-targets -- -D warnings
+
+echo "pre-push: cargo test --workspace"
+cargo test --quiet --workspace
+
+echo "pre-push: ok"
