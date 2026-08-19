@@ -591,11 +591,14 @@ Each source runs at the capacity *it* declares, and `--capacity` overrides all o
 `--param L1:1:spawn_rate=…` addresses the second source; a bare `--param spawn_rate=…`
 reaches both.
 
-**What a second source does not have is a name**, and three surfaces stop there because of
-it. A slot with two geometries cannot be rebuilt under `--watch` — it starts fine and then
-every save prints a refusal and changes nothing. It cannot be written as a Set file or
-recorded into a session. And MCP reaches its first geometry and its renderers and not the
-second. Editing a second geometry live is a text editor and a restart today.
+**Every node in a slot has a name**, written or derived: `--set near=lattice_shell.kir,
+far=sphere_shell.kir,morph.kir,soft_points.kir` names the two geometries, and a `--set` that
+names nothing gets each node named after its procedure — a second use of one procedure
+becomes `lattice_shell-2`. The run prints the list it settled on.
+
+A slot with two geometries rebuilds under `--watch` like any other, and MCP reaches every
+node in it. **What is still short is the Set file**: a slot holding a chain or a second
+geometry cannot be saved or recorded, because the format names an L1 and its renderers.
 
 Two sources and two renderers under `--merge` is **two pipelines composited, published as one
 control**:

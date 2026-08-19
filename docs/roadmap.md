@@ -1652,7 +1652,7 @@ no name:**
 
 | | Where it shows |
 |---|---|
-| A slot with two geometries cannot be rebuilt under `--watch` | It starts, then every save prints a refusal and changes nothing |
+| ~~A slot with two geometries cannot be rebuilt under `--watch`~~ | **Closed.** Every node of a slot rebuilds, and each geometry at the capacity it declares |
 | A slot holding a chain or a second geometry cannot be saved as a Set file | `--save-set` refuses it, and `--record-session` with it |
 | ~~MCP reaches an L1 and the renderers and no other node~~ | **Closed.** A model reads and writes every node at `(slot, layer, index)` |
 | One `kind Field` per Set, one L3 per Set | Refused at build, with "several would need naming" as the reason |
@@ -1660,8 +1660,9 @@ no name:**
 | A source's salt is derived from `--set` order rather than assigned | Reordering changes which geometry gets which randomness |
 
 The first three are the sharp ones, because they are surfaces that *already exist* and stop
-working the moment a Set holds what M3 taught it to hold — one of them is closed already. The
-rest are features that were capped at one rather than designed for several.
+working the moment a Set holds what M3 taught it to hold. Two of the three are closed; what is
+left of them is the Set file. The rest are features that were capped at one rather than
+designed for several.
 
 **What it is, concretely.** Names for nodes, written where they are used rather than in the
 `.kir` — on the terms HTML gives an `id`, since a procedure used twice is two nodes. The

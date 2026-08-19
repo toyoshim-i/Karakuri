@@ -346,6 +346,14 @@ impl Demo {
 /// working tree rather than under `$HOME`: a session's material belongs beside
 /// the session, and a global store shared by every run is a decision an
 /// operator should make rather than inherit.
+/// Every node of one slot's build: the layer it was sorted onto, its index
+/// within that layer, and the hash of the source it was compiled from.
+type Nodes = Vec<(&'static str, u32, karakuri_store::hash::Hash)>;
+
+/// Elements per geometry where nothing else says — neither `--capacity` nor the
+/// procedure's own `capacity` declaration.
+pub const DEFAULT_CAPACITY: u32 = 262144;
+
 const DEFAULT_STORE: &str = ".karakuri";
 
 /// One press of the scrub keys, in beats. A quarter beat — a sixteenth of a bar
@@ -1109,13 +1117,7 @@ fn parse_bind(value: &str) -> Result<Binding, String> {
     }
 
     let record = Record::Bind {
-        layer: match layer {
-            karakuri_ir::Kind::L1 => Layer::L1,
-            karakuri_ir::Kind::L2 => Layer::L2,
-            karakuri_ir::Kind::L3 => Layer::L3,
-            karakuri_ir::Kind::L4 => Layer::L4,
-            karakuri_ir::Kind::Field => Layer::Field,
-        },
+        layer: record_layer(layer),
         index,
         key,
         signal,
@@ -1156,6 +1158,21 @@ const NOISE_KINDS: [&str; 4] = ["white", "value", "perlin", "fbm"];
 /// disagreement was silent: `--param L2:…` was refused as a malformed address
 /// while `--bind layer=L2` was refused with a sentence saying L2 did not exist
 /// yet, both long after it did.
+/// A layer as the record vocabulary spells it.
+///
+/// **Exhaustive on purpose.** A sixth `Kind` stops compiling here rather than
+/// falling to a default, which is what the two places that used to map this by
+/// hand could not promise.
+fn record_layer(kind: karakuri_ir::Kind) -> Layer {
+    match kind {
+        karakuri_ir::Kind::L1 => Layer::L1,
+        karakuri_ir::Kind::L2 => Layer::L2,
+        karakuri_ir::Kind::L3 => Layer::L3,
+        karakuri_ir::Kind::L4 => Layer::L4,
+        karakuri_ir::Kind::Field => Layer::Field,
+    }
+}
+
 fn layer_named(name: &str) -> Option<karakuri_ir::Kind> {
     Some(match name {
         "L1" => karakuri_ir::Kind::L1,
@@ -2759,7 +2776,7 @@ fn build_deck(
                         args.sets[slot].0.path.clone(),
                         args.sets[slot].1.iter().map(|n| n.path.clone()).collect(),
                         layering,
-                        capacity_for(args, &l1[0]),
+                        args.capacity_given.then_some(args.capacity),
                         seed_for(slot),
                         args.overrides.clone(),
                         args.published.clone(),
@@ -3221,8 +3238,11 @@ struct Live {
     /// The procedure each slot is recorded as playing, and the one before it.
     /// The second is what a rollback restores, and the only way to name it: a
     /// rollback brings back a Set the stream never named again.
-    playing: Vec<Option<(karakuri_store::hash::Hash, Vec<karakuri_store::hash::Hash>)>>,
-    previous: Vec<Option<(karakuri_store::hash::Hash, Vec<karakuri_store::hash::Hash>)>>,
+    /// What each slot is playing, as one entry per node — the address a
+    /// `procedure` record names, so a slot holding a chain and two geometries
+    /// records a line for each rather than an L1 and some renderers.
+    playing: Vec<Option<Nodes>>,
+    previous: Vec<Option<Nodes>>,
     /// The MCP server's half of the channel, when `--mcp` asked for one. Told
     /// what the swap machinery said, and nothing else — see [`crate::mcp`].
     mcp: Option<mcp::Reporter>,
@@ -3933,7 +3953,7 @@ impl Live {
                     return;
                 };
                 self.previous[slot] = self.playing[slot].take();
-                self.playing[slot] = Some((built.l1, built.l4s));
+                self.playing[slot] = Some(built.nodes);
                 self.playing[slot].clone()
             }
             None => {
@@ -3942,20 +3962,19 @@ impl Live {
                 restored
             }
         };
-        let Some((l1, l4s)) = pair else {
+        let Some(nodes) = pair else {
             // A rollback to the procedure the run started with, which the head
             // already names. Nothing changed that the stream does not say.
             return;
         };
-        // One record per node: the L1, then each renderer in draw order. The
-        // index is what says which renderer, and it is 0 for the first — so a
-        // slot with one renderer writes exactly the two lines it always did.
-        let named = std::iter::once((Layer::L1, 0, l1)).chain(
-            l4s.into_iter()
-                .enumerate()
-                .map(|(i, h)| (Layer::L4, i as u32, h)),
-        );
-        for (layer, index, hash) in named {
+        // One record per node, each at the address the watcher gave it — so a
+        // slot with one renderer writes exactly the two lines it always did,
+        // and a slot with a chain and two geometries writes a line for each.
+        for (layer, index, hash) in nodes {
+            let Some(layer) = layer_named(layer).map(record_layer) else {
+                eprintln!("  a node on layer `{layer}` is not in the record vocabulary");
+                continue;
+            };
             self.record_only(karakuri_store::record::Record::Procedure {
                 slot: slot as u8,
                 layer,
