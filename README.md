@@ -310,12 +310,21 @@ There is exactly one assumption to prove:
 One Set, slots hardcoded, no UI. Local oscillator and synthesized signals only. L1 for
 geometry and L4 for rendering, nothing else.
 
-**That assumption is proved and V1 is closed.** Work has moved to M2, whose goal is to play
-a real set on this and survive; the first slice of it — several Sets on a deck, an L5 mix,
-a tone mapper, and a meter to set the faders by — is in the table below alongside V1's own
-parts. What is still absent, and why, stays in
-[docs/roadmap.md](docs/roadmap.md) rather than being listed here: agents, audio, L2 and L3,
-priming, the budget governor, the node editor.
+**That assumption is proved and V1 is closed**, and two milestones have closed on top of it.
+M2 made it playable — a deck, an L5 mix, tone mapping, audio and a beat grid, MIDI,
+transitions, Set files and session replay. M3 made it deep: **every layer in the model is now
+an IR `kind` with a node behind it**, so a Set is a chain rather than a pair — several
+geometries, deformations that stack and mask and amplify and pair, a camera written as a
+procedure, several renderers, and a signed distance field any of them can call.
+
+Work has moved to M4, which is the library at scale, and it opens with the one thing M3
+left: **the nodes in a Set have no names.** That is what caps a field and a camera at one
+apiece, what leaves `--set` order deciding which geometry a morph reads, and what stops a
+Set file, a hot-swap rebuild and the MCP surface from reaching past a slot's first geometry.
+
+The table below is what exists, part by part. What is still absent, and why, stays in
+[docs/roadmap.md](docs/roadmap.md) rather than being listed here: agents, the library,
+the node editor.
 
 ### Status
 
@@ -357,8 +366,8 @@ worth stating exactly:
   `HotSwap` driven on its own — which is still what the CLI does — keeps the weaker
   property above.
 - **It transfers no state.** A new procedure means new buffers, so the incoming Set starts
-  cold: `t` at zero, nothing primed. Warming a Set out of sight before it is shown is M2's
-  Priming, and no partial version of it is done here.
+  cold: `t` at zero, nothing primed. Warming a Set out of sight before it is shown is
+  priming, which the deck does and this does not.
 - **It is reversible for a window.** The outgoing Set is kept alive — and unstepped, so its
   `t` stands still — through eight warmup frames and thirty measured ones. If the median
   frame interval over those thirty exceeds the budget, the candidate is dropped and the
@@ -405,8 +414,8 @@ The budget defaults to 20 ms: one 60 Hz frame plus slack, 60 Hz being the rate `
 **That default does not generalise to a faster display, and this one is faster.** On the
 120 Hz panel it was developed on, steady state is 8.3 ms and a frame rate cut in half reads
 as 16.7 ms, which the default does not catch. `--budget-ms` is the operator's answer; a
-budget derived from the display rather than from a constant belongs with M2's budget
-governor, alongside the decision about whether GPU timestamps can be trusted at all. That decision is a **ratio against a second measurement of the same submission**, not a constant: a fixed floor was what let an adapter's meaningless 0.095 ms reading through, and it is checked on every measurement rather than once, because the adapter that produced it passed calibration and lied afterwards.
+budget derived from the display rather than from a constant belongs with the budget
+governor and is not built, alongside the decision about whether GPU timestamps can be trusted at all. That decision is a **ratio against a second measurement of the same submission**, not a constant: a fixed floor was what let an adapter's meaningless 0.095 ms reading through, and it is checked on every measurement rather than once, because the adapter that produced it passed calibration and lied afterwards.
 
 | | |
 |---|---|
