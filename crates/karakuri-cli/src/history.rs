@@ -161,19 +161,36 @@ pub fn seed(shared: &Shared, sets: &[(PathBuf, Vec<PathBuf>)]) {
         return;
     };
     for (slot, (l1, l4s)) in sets.iter().enumerate() {
-        // Every renderer, each under its own index — the whole stack, because
-        // the history is a place an operator walks back through and a renderer
-        // missing from it cannot be walked back to.
-        for (layer, index, path) in [("L1", 0, l1)]
-            .into_iter()
-            .chain(l4s.iter().enumerate().map(|(i, p)| ("L4", i, p)))
-        {
+        // Every file, each under its own layer and its own index within that
+        // layer — the whole stack, because the history is a place an operator
+        // walks back through and a node missing from it cannot be walked back
+        // to.
+        //
+        // **The layer is read off the file, not off the position.** Everything
+        // after the first path used to be filed as `L4`, which was right while
+        // a slot was a pair and became wrong without a word when `--set`
+        // learned to spell a chain: an L2's starting version landed as
+        // `..._slot0_L4_swirl_warp.kir`, under a name the watcher does not use
+        // for its later versions — so the chain an operator walks back through
+        // began at the second edit.
+        let mut counts: std::collections::HashMap<&'static str, usize> =
+            std::collections::HashMap::new();
+        for (positional, path) in std::iter::once(l1).chain(l4s.iter()).enumerate() {
             let Ok(source) = std::fs::read(path) else {
                 // Unreadable here means the compile is about to fail and say so
                 // against the path the operator gave. Not this module's to
                 // report twice.
                 continue;
             };
+            // The same text scan `declared_name` is and for the same reason:
+            // this runs before anything is compiled. A file that declares no
+            // `kind` will not compile either, so the position it was given in
+            // is as good an answer as any.
+            let layer = declared_kind(&source)
+                .unwrap_or(if positional == 0 { "L1" } else { "L4" });
+            let index = counts.entry(layer).or_insert(0);
+            let (layer, index) = (layer, *index);
+            *counts.get_mut(layer).expect("just inserted") += 1;
             // The name a `.kir` declares, before it has been parsed — the
             // history is written for a person reading file names, and waiting
             // for the check pass would mean seeding after the first compile,
@@ -184,6 +201,36 @@ pub fn seed(shared: &Shared, sets: &[(PathBuf, Vec<PathBuf>)]) {
             }
         }
     }
+}
+
+/// The word after `kind`, scanned out of the source text, as the history spells
+/// a layer.
+///
+/// Deliberately not a parse, for the reason [`declared_name`] gives: this runs
+/// before anything is compiled, and a file that does not compile still needs a
+/// name to be found again under.
+fn declared_kind(source: &[u8]) -> Option<&'static str> {
+    let text = std::str::from_utf8(source).ok()?;
+    for line in text.lines() {
+        let Some(rest) = line.trim_start().strip_prefix("kind") else {
+            continue;
+        };
+        // `kind L1` and not `kindly`, which is the whole of what the space
+        // buys — and the first token after it, so a trailing comment is not
+        // part of the answer.
+        if !rest.starts_with(char::is_whitespace) {
+            continue;
+        }
+        return match rest.trim_start().split(char::is_whitespace).next()? {
+            "L1" => Some("L1"),
+            "L2" => Some("L2"),
+            "L3" => Some("L3"),
+            "L4" => Some("L4"),
+            "Field" => Some("Field"),
+            _ => None,
+        };
+    }
+    None
 }
 
 /// The identifier after `proc`, scanned out of the source text.
@@ -393,6 +440,44 @@ mod tests {
         assert_eq!(names.len(), 2, "{names:?}");
         assert!(names.iter().any(|n| n.contains("field_one")), "{names:?}");
         assert!(names.iter().any(|n| n.contains("draw_one")), "{names:?}");
+    }
+
+    /// **A chain's starting version is filed under the layer its file
+    /// declares.** Every path after the first was filed as `L4`, so an L2's
+    /// first snapshot landed under a name the watcher does not use for the
+    /// later ones — and the chain an operator walks back through began at the
+    /// second edit, with the version the run started from unreachable under
+    /// any name they would think to look for.
+    #[test]
+    fn a_seeded_chain_is_filed_under_the_layer_its_file_declares() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let write = |name: &str, body: &str| {
+            let path = tmp.path().join(name);
+            std::fs::write(&path, body).expect("write");
+            path
+        };
+        let l1 = write("a.kir", "proc gen {\n  kind L1\n}");
+        let l2 = write("b.kir", "proc warp {\n  kind L2\n}");
+        let fld = write("c.kir", "proc blob {\n  kind Field\n}");
+        let near = write("d.kir", "proc near {\n  kind L4\n}");
+        let far = write("e.kir", "proc far {\n  kind L4\n}");
+
+        let shared = Snapshots::shared(tmp.path());
+        seed(&shared, &[(l1, vec![l2, fld, near, far])]);
+
+        let names: Vec<String> = files(&tmp.path().join(DIR))
+            .iter()
+            .map(|p| p.file_name().expect("name").to_string_lossy().to_string())
+            .collect();
+        let has = |part: &str| names.iter().any(|n| n.contains(part));
+        assert_eq!(names.len(), 5, "{names:?}");
+        assert!(has("L1_gen"), "{names:?}");
+        assert!(has("L2_warp"), "{names:?}");
+        assert!(has("Field_blob"), "{names:?}");
+        // And the index counts within a layer, so the second renderer is the
+        // one that carries a number — not the second file.
+        assert!(has("L4_near"), "{names:?}");
+        assert!(has("L41_far"), "{names:?}");
     }
 
     /// And the seed shares the dedup with the watcher, or the first rebuild
