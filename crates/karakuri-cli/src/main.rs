@@ -308,7 +308,7 @@ impl Demo {
     /// a watcher handed a one-slot deck sees the script cycle a preview between
     /// the mix and the only thing in it. Overridden the moment any `--set` is
     /// given, so this supplies a scene rather than imposing one.
-    fn deck(self) -> Vec<(PathBuf, Vec<PathBuf>)> {
+    fn deck(self) -> Vec<(Named, Vec<Named>)> {
         match self {
             Demo::Transport => Vec::new(),
             // **Two slots, and it has to stay two.** A stack — one slot with
@@ -327,15 +327,15 @@ impl Demo {
             // is the plain way to ask for a stack and needs no demonstration.
             Demo::Lines => vec![
                 (
-                    "examples/drift_shell.kir".into(),
+                    Named::bare("examples/drift_shell.kir"),
                     vec![
-                        "examples/soft_points.kir".into(),
-                        "examples/drift_streaks.kir".into(),
+                        Named::bare("examples/soft_points.kir"),
+                        Named::bare("examples/drift_streaks.kir"),
                     ],
                 ),
                 (
-                    "examples/drift_shell.kir".into(),
-                    vec!["examples/drift_streaks.kir".into()],
+                    Named::bare("examples/drift_shell.kir"),
+                    vec![Named::bare("examples/drift_streaks.kir")],
                 ),
             ],
         }
@@ -691,6 +691,79 @@ pub fn op_wire_names() -> String {
         .join(", ")
 }
 
+/// A `.kir` named on the command line, with the name the operator gave it.
+///
+/// **A name belongs to the *use*, not to the procedure** — see `docs/ir-spec.md`,
+/// "Naming a source, on the terms HTML gives an `id`". The same lattice twice is
+/// one `proc` name and two nodes, so the name is written where the file is
+/// spelled and travels with that mention of it.
+///
+/// `None` is a path written bare. Something still has to address that node, so a
+/// name is derived from the procedure once it has compiled, and from the moment
+/// it is recorded — derived or written — it *is* the address.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Named {
+    name: Option<String>,
+    path: PathBuf,
+}
+
+impl Named {
+    fn bare(path: impl Into<PathBuf>) -> Named {
+        Named {
+            name: None,
+            path: path.into(),
+        }
+    }
+
+    /// `name=path`, or a bare path.
+    ///
+    /// **The separator is `=` and not `:`**, which `--param` and `--publish`
+    /// already use to mean "a layer and an index follow". `=` is not a path
+    /// character anywhere, where `:` is one on Windows.
+    fn parse(spelled: &str) -> Result<Named, String> {
+        let Some((name, path)) = spelled.split_once('=') else {
+            return Ok(Named::bare(spelled));
+        };
+        check_node_name(name)?;
+        if path.is_empty() {
+            return Err(format!("`{spelled}` — a name with no file after it"));
+        }
+        Ok(Named {
+            name: Some(name.to_string()),
+            path: PathBuf::from(path),
+        })
+    }
+}
+
+/// What a node may be called.
+///
+/// **Refused rather than mangled**, because a name is an address: something
+/// silently renamed is something a mask or a `--param` written against it stops
+/// finding, and the author is the only one who can pick the replacement.
+fn check_node_name(name: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("a node name cannot be empty".to_string());
+    }
+    // **The layer spellings are reserved**, so that `--param near:radius=1` and
+    // `--param L4:0:exposure=1` can never be the same sentence about different
+    // things. The two forms are told apart by counting colons, and a node called
+    // `L4` would make that count a lie.
+    if layer_named(name).is_some() {
+        return Err(format!(
+            "`{name}` is a layer, so it cannot also be a node's name — a `--param` is told              which of the two it names by the shape of what follows"
+        ));
+    }
+    if let Some(bad) = name
+        .chars()
+        .find(|c| !c.is_ascii_alphanumeric() && *c != '_' && *c != '-')
+    {
+        return Err(format!(
+            "`{name}` cannot be a node name: `{bad}` is not allowed. Letters, digits, `_` and `-`"
+        ));
+    }
+    Ok(())
+}
+
 #[cfg_attr(test, derive(Debug))]
 struct Args {
     /// `--param name=value`, applied after each Set is built, to every Set. A
@@ -718,7 +791,7 @@ struct Args {
     /// the renderers drawn over it in list order — see `Set::build_many`. One
     /// renderer is the ordinary case; several is one simulation drawn several
     /// ways, which costs a draw pass apiece and no extra memory.
-    sets: Vec<(PathBuf, Vec<PathBuf>)>,
+    sets: Vec<(Named, Vec<Named>)>,
     capacity: u32,
     /// Whether `--capacity` was *typed*. Without it a procedure's own declared
     /// default is used — see [`capacity_for`].
@@ -1236,14 +1309,21 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                             && !l4s.is_empty()
                             && l4s.iter().all(|p| !p.is_empty()) =>
                     {
-                        args_out
-                            .sets
-                            .push((PathBuf::from(*l1), l4s.iter().map(PathBuf::from).collect()))
+                        // **Each part may carry a name** — `near=lattice.kir`.
+                        // A name is what everything downstream addresses the
+                        // node by; see `Named`.
+                        let head = Named::parse(l1)?;
+                        let rest: Vec<Named> = l4s
+                            .iter()
+                            .map(|p| Named::parse(p))
+                            .collect::<Result<_, _>>()?;
+                        args_out.sets.push((head, rest))
                     }
                     _ => {
                         return Err(format!(
                             "`--set {value}` — expected `L1.kir,L4.kir`, or \
-                             `L1.kir,L4.kir,L4.kir` for several renderers over one geometry"
+                             `L1.kir,L4.kir,L4.kir` for several renderers over one geometry. \
+                             Any part may be written `name=file.kir`"
                         ))
                     }
                 }
@@ -1380,9 +1460,10 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
     // simply the last slot: `--set a,b c.kir d.kir` is a deck of two.
     match positional.len() {
         0 => {}
-        2 => args_out
-            .sets
-            .push((positional[0].clone(), vec![positional[1].clone()])),
+        2 => args_out.sets.push((
+            Named::bare(positional[0].clone()),
+            vec![Named::bare(positional[1].clone())],
+        )),
         n => {
             return Err(format!(
                 "{n} file argument(s) — a Set is an L1 and an L4, so give two, or use --set"
@@ -1401,8 +1482,8 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
         match args_out.demo.map(Demo::deck).filter(|d| !d.is_empty()) {
             Some(deck) => args_out.sets = deck,
             None => args_out.sets.push((
-                "examples/drift_shell.kir".into(),
-                vec!["examples/soft_points.kir".into()],
+                Named::bare("examples/drift_shell.kir"),
+                vec![Named::bare("examples/soft_points.kir")],
             )),
         }
     }
@@ -1645,6 +1726,88 @@ struct Material {
     /// The field, or `None`. At most one per slot, on the camera's terms.
     field: Option<karakuri_ir::typed::Checked>,
     l4s: Vec<karakuri_ir::typed::Checked>,
+    /// What each of those is called, in the same per-layer shape.
+    names: Names,
+}
+
+/// A name for every node of a slot, in the shape the procedures themselves are
+/// passed in.
+///
+/// **Per layer rather than one list in node order**, because the node order is
+/// the engine's — `slot_of` and `nodes_of` decide it — and a caller that
+/// reproduced it here would be a second place for a fact this project has
+/// already been bitten by twice.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Names {
+    l1s: Vec<String>,
+    l2s: Vec<String>,
+    l3: Option<String>,
+    l4s: Vec<String>,
+    field: Option<String>,
+}
+
+impl Names {
+    fn all(&self) -> impl Iterator<Item = &String> {
+        self.l1s
+            .iter()
+            .chain(&self.l2s)
+            .chain(&self.l3)
+            .chain(&self.l4s)
+            .chain(&self.field)
+    }
+
+    /// **Unique within a slot**, which is the scope a name resolves in: a Set is
+    /// what holds the nodes, so two slots may each have a `near` and neither is
+    /// ambiguous.
+    ///
+    /// Refused rather than disambiguated. A derived name is disambiguated
+    /// where it is derived — that is what `-2` is for — so a collision reaching
+    /// here is two *written* names, and picking one for the author would leave
+    /// a `--param` pointing at whichever the tie-break preferred.
+    fn check_unique(&self) -> Result<(), String> {
+        let mut seen: Vec<&str> = Vec::new();
+        for name in self.all() {
+            if seen.contains(&name.as_str()) {
+                return Err(format!(
+                    "two nodes are both called `{name}` — a name addresses one node in a slot"
+                ));
+            }
+            seen.push(name);
+        }
+        Ok(())
+    }
+}
+
+/// The name a node answers to: what the operator wrote, or one derived from the
+/// procedure.
+///
+/// **A derived name is a real name from the moment it is recorded.** The
+/// specification's objection to deriving identity is about a value moving under
+/// a later edit; a derived name that is then written down cannot move, and the
+/// document says so — "where it came from stops mattering once it is recorded".
+///
+/// The derivation is the procedure's own name, which is a *type* name and
+/// therefore collides when one procedure is used twice — so the caller
+/// disambiguates. Two `lattice_shell`s are `lattice_shell` and
+/// `lattice_shell-2`, which is what `scratch` already does to two files with one
+/// basename, for the same reason.
+fn node_name(
+    named: &Named,
+    checked: &karakuri_ir::typed::Checked,
+    taken: &mut Vec<String>,
+) -> String {
+    if let Some(written) = &named.name {
+        taken.push(written.clone());
+        return written.clone();
+    }
+    let mut candidate = checked.name.clone();
+    let mut at = 1;
+    while taken.contains(&candidate) {
+        at += 1;
+        candidate = format!("{}-{at}", checked.name);
+    }
+    taken.push(candidate.clone());
+    candidate
 }
 
 /// **Render a recorded session.** The material comes from the stream's head and
@@ -2135,8 +2298,8 @@ fn session_head(
         store,
         &material,
         setfile::Saving {
-            l1_path: l1,
-            l4_paths: l4s,
+            l1_path: &l1.path,
+            l4_paths: &l4s.iter().map(|n| n.path.clone()).collect::<Vec<_>>(),
             capacity: args.capacity,
             params: &args.overrides,
             bindings: &args.bindings,
@@ -2175,8 +2338,8 @@ fn save_set(args: &Args, id: &str) {
         &store,
         id,
         setfile::Saving {
-            l1_path: l1,
-            l4_paths: l4s,
+            l1_path: &l1.path,
+            l4_paths: &l4s.iter().map(|n| n.path.clone()).collect::<Vec<_>>(),
             capacity: args.capacity,
             params: &args.overrides,
             bindings: &args.bindings,
@@ -2286,14 +2449,26 @@ fn main() {
                     .map(|(name, src)| scratch::place(&root, name, src))
                     .collect();
             match placed {
-                Ok(paths) => args.sets.insert(0, (paths[0].clone(), paths[1..].to_vec())),
+                Ok(paths) => args.sets.insert(
+                    0,
+                    (
+                        Named::bare(paths[0].clone()),
+                        paths[1..].iter().cloned().map(Named::bare).collect(),
+                    ),
+                ),
                 Err(e) => {
                     eprintln!("karakuri-cli: {e}");
                     std::process::exit(1);
                 }
             }
         }
-        match scratch::materialise(&root, &mut args.sets) {
+        match scratch::materialise(
+            &root,
+            args.sets
+                .iter_mut()
+                .flat_map(|(l1, l4s)| std::iter::once(l1).chain(l4s.iter_mut()))
+                .map(|n| &mut n.path),
+        ) {
             Ok(dir) => eprintln!(
                 "scratch: {} — the deck runs from copies here, so the files you named are \
                  not written to. Point an editor at these",
@@ -2308,7 +2483,17 @@ fn main() {
         // records what replaced the original; without this, what it replaced was
         // never written down and the first edit is the one that cannot be undone.
         let shared = history::Snapshots::shared(&args.store);
-        history::seed(&shared, &args.sets);
+        history::seed(
+            &shared,
+            args.sets.iter().enumerate().map(|(slot, (l1, l4s))| {
+                (
+                    slot,
+                    std::iter::once(l1.path.as_path())
+                        .chain(l4s.iter().map(|n| n.path.as_path()))
+                        .collect(),
+                )
+            }),
+        );
         snapshots = Some(shared);
     }
 
@@ -2319,24 +2504,46 @@ fn main() {
     // point: one path, so a loaded Set can be watched and rewritten.
     if let Some(loaded) = loaded.filter(|_| !editable) {
         eprintln!("  slot 0: set `{}`", loaded.id);
+        // **The names a Set file recorded**, once it records them. Until then a
+        // loaded Set's nodes are named after their procedures, which is what a
+        // bare `--set` gets too.
+        let mut taken: Vec<String> = Vec::new();
+        let mut derive =
+            |c: &karakuri_ir::typed::Checked| node_name(&Named::bare(""), c, &mut taken);
+        let names = Names {
+            l1s: vec![derive(&loaded.l1)],
+            l4s: loaded.l4s.iter().map(&mut derive).collect(),
+            ..Names::default()
+        };
         procs.push(Material {
             l1s: vec![loaded.l1],
             l2s: Vec::new(),
             l3: None,
             field: None,
             l4s: loaded.l4s,
+            names,
         });
     }
     for (slot, (l1, rest)) in args.sets.iter().enumerate() {
-        let named: Vec<String> = rest.iter().map(|p| p.display().to_string()).collect();
-        eprintln!("  slot {slot}: {} + {}", l1.display(), named.join(" + "));
-        let load = |path: &PathBuf| match compile::load(path) {
+        let named: Vec<String> = rest.iter().map(|p| p.path.display().to_string()).collect();
+        eprintln!(
+            "  slot {slot}: {} + {}",
+            l1.path.display(),
+            named.join(" + ")
+        );
+        let load = |named: &Named| match compile::load(&named.path) {
             Ok(checked) => checked,
             Err(report) => {
                 eprintln!("{report}");
                 std::process::exit(1);
             }
         };
+        // **A name per node, in the same per-layer shape the engine takes its
+        // procedures in.** Not one flat list in node order: that order is the
+        // engine's, and a caller that reproduced it would be the second place a
+        // fact this project has already been bitten by lives.
+        let mut names = Names::default();
+        let mut taken: Vec<String> = Vec::new();
         // **Sorted by the `kind` each file declares**, keeping list order within
         // a kind. A second L1 is refused rather than silently ignored: a slot
         // simulates with one geometry, and a run that quietly dropped the
@@ -2346,14 +2553,22 @@ fn main() {
         // its own hash salt, its own compaction — and the renderers draw all of
         // them. See `docs/ir-spec.md`, "Multiple L1 sources".
         let mut l1s = vec![load(l1)];
+        names.l1s.push(node_name(l1, &l1s[0], &mut taken));
         let mut l2s = Vec::new();
         let mut l3: Option<karakuri_ir::typed::Checked> = None;
         let mut field: Option<karakuri_ir::typed::Checked> = None;
         let mut l4s = Vec::new();
         for (path, checked) in rest.iter().zip(rest.iter().map(load)) {
+            let name = node_name(path, &checked, &mut taken);
             match checked.kind {
-                karakuri_ir::Kind::L2 => l2s.push(checked),
-                karakuri_ir::Kind::L4 => l4s.push(checked),
+                karakuri_ir::Kind::L2 => {
+                    names.l2s.push(name);
+                    l2s.push(checked)
+                }
+                karakuri_ir::Kind::L4 => {
+                    names.l4s.push(name);
+                    l4s.push(checked)
+                }
                 // **One camera per slot**, refused rather than last-one-wins for
                 // the same reason a second L1 is: a Set is a grouping around one
                 // viewpoint, and a run that quietly dropped one of two would be
@@ -2363,11 +2578,14 @@ fn main() {
                     eprintln!(
                         "slot {slot}: {} is a second L3 — a slot looks from one camera, and \
                          compositing two viewpoints is what an L5 is for",
-                        path.display()
+                        path.path.display()
                     );
                     std::process::exit(1);
                 }
-                karakuri_ir::Kind::L3 => l3 = Some(checked),
+                karakuri_ir::Kind::L3 => {
+                    names.l3 = Some(name);
+                    l3 = Some(checked)
+                }
                 // **One field per slot**, refused rather than last-one-wins on
                 // exactly the camera's terms: several would need naming, and
                 // naming is fan-in.
@@ -2375,33 +2593,60 @@ fn main() {
                     eprintln!(
                         "slot {slot}: {} is a second `kind Field` — a slot evaluates one \
                          field, and naming several is the notation fan-in brings with it",
-                        path.display()
+                        path.path.display()
                     );
                     std::process::exit(1);
                 }
-                karakuri_ir::Kind::Field => field = Some(checked),
+                karakuri_ir::Kind::Field => {
+                    names.field = Some(name);
+                    field = Some(checked)
+                }
                 // **A second L1 is a second source**, not a mistake. Each one
                 // simulates independently — its own `seed` from zero, its own
                 // hash salt, its own compaction — and the renderers draw all of
                 // them. See `docs/ir-spec.md`, "Multiple L1 sources".
-                karakuri_ir::Kind::L1 => l1s.push(checked),
+                karakuri_ir::Kind::L1 => {
+                    names.l1s.push(name);
+                    l1s.push(checked)
+                }
             }
         }
         if l4s.is_empty() {
             eprintln!(
                 "slot {slot}: nothing here draws — {} names no L4, and a Set with no \
                  renderer has no frame to give",
-                l1.display()
+                l1.path.display()
             );
             std::process::exit(1);
         }
+        if let Err(e) = names.check_unique() {
+            eprintln!("slot {slot}: {e}");
+            std::process::exit(1);
+        }
+
         procs.push(Material {
             l1s,
             l2s,
             l3,
             field,
             l4s,
+            names,
         });
+        // **What the slot's nodes are called**, printed because a derived name
+        // is one nobody wrote and everything else addresses the node by. Read
+        // off the `Material` rather than the local, so the field a later surface
+        // will resolve against is the one shown here.
+        eprintln!(
+            "  slot {slot} nodes: {}",
+            procs
+                .last()
+                .expect("just pushed")
+                .names
+                .all()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
 
     // Saving is a one-shot: it writes what the flags say and stops, on the same
@@ -2557,8 +2802,8 @@ fn build_deck(
                     };
                     let watcher = watch::Watch::new(
                         slot,
-                        args.sets[slot].0.clone(),
-                        args.sets[slot].1.clone(),
+                        args.sets[slot].0.path.clone(),
+                        args.sets[slot].1.iter().map(|n| n.path.clone()).collect(),
                         layering,
                         capacity_for(args, &l1[0]),
                         seed_for(slot),
@@ -3158,9 +3403,9 @@ impl ApplicationHandler for App {
                 eprintln!(
                     "  watching slot {slot}: {} and {} — a save recompiles that slot in the \
                      background and swaps it when ready, budget {:.1} ms",
-                    l1.display(),
+                    l1.path.display(),
                     l4s.iter()
-                        .map(|p| p.display().to_string())
+                        .map(|p| p.path.display().to_string())
                         .collect::<Vec<_>>()
                         .join(" and "),
                     self.args.budget_ms
@@ -3234,7 +3479,18 @@ impl ApplicationHandler for App {
         // exactly like one whose client is connected and idle.
         let mcp = match self.args.mcp {
             Some(port) => {
-                let slots = mcp::Slots(self.args.sets.clone());
+                let slots = mcp::Slots(
+                    self.args
+                        .sets
+                        .iter()
+                        .map(|(l1, l4s)| {
+                            (
+                                l1.path.clone(),
+                                l4s.iter().map(|n| n.path.clone()).collect(),
+                            )
+                        })
+                        .collect(),
+                );
                 match mcp::serve(port, slots, self.args.watch) {
                     Ok(reporter) => {
                         // The port bound rather than the one asked for: `--mcp 0`
@@ -4867,7 +5123,7 @@ mod tests {
         let store = karakuri_store::store::Store::open(dir.path()).expect("store");
 
         let mut args = parse(&[]).expect("parses");
-        args.sets = vec![(l1, vec![l4])];
+        args.sets = vec![(Named::bare(l1), vec![Named::bare(l4)])];
         args.store = dir.path().to_path_buf();
 
         let head = session_head(&args, &store, "a_set");
@@ -4882,14 +5138,123 @@ mod tests {
         assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
     }
 
+    /// **Any part of a `--set` may carry a name.** A name addresses the node
+    /// from every surface that can reach one, and it is written where the file
+    /// is spelled because it belongs to the *use* — the same lattice twice is
+    /// one `proc` name and two nodes.
+    #[test]
+    fn a_set_may_name_any_of_its_files() {
+        let args = parse(&["--set", "near=a.kir,far=b.kir,c.kir"]).expect("parses");
+        assert_eq!(
+            args.sets,
+            vec![(
+                Named {
+                    name: Some("near".to_string()),
+                    path: PathBuf::from("a.kir")
+                },
+                vec![
+                    Named {
+                        name: Some("far".to_string()),
+                        path: PathBuf::from("b.kir")
+                    },
+                    Named::bare("c.kir"),
+                ]
+            )]
+        );
+    }
+
+    /// **Every node has a name whether or not one was written**, because a
+    /// node nothing can address is a node nothing can point a mask, a `--param`
+    /// or a rebuild at. An unwritten one is derived from the procedure — which
+    /// is a *type* name, so two uses of one procedure collide and the second is
+    /// disambiguated, exactly as `scratch` does to two files with one basename.
+    #[test]
+    fn an_unnamed_node_is_named_after_its_procedure_and_a_second_use_is_told_apart() {
+        let checked = |name: &str| {
+            let src = format!(
+                "proc {name} {{ kind L1 capacity [4096, 8192] = 4096 topology points \
+                 emit position element {{ position = vec3(0.0); }} }}"
+            );
+            compile::check(&src).expect("compiles")
+        };
+        let lattice = checked("lattice_shell");
+        let mut taken = Vec::new();
+        assert_eq!(
+            node_name(&Named::bare("a.kir"), &lattice, &mut taken),
+            "lattice_shell"
+        );
+        assert_eq!(
+            node_name(&Named::bare("b.kir"), &lattice, &mut taken),
+            "lattice_shell-2"
+        );
+        assert_eq!(
+            node_name(&Named::bare("c.kir"), &lattice, &mut taken),
+            "lattice_shell-3"
+        );
+
+        // A written name is taken as written and never disambiguated: it is an
+        // address the author chose, and moving it would break whatever was
+        // pointed at it.
+        let written = Named {
+            name: Some("near".to_string()),
+            path: PathBuf::from("d.kir"),
+        };
+        assert_eq!(node_name(&written, &lattice, &mut taken), "near");
+    }
+
+    /// **Two written names that collide are refused rather than resolved.** A
+    /// derived one is disambiguated where it is derived; a collision that
+    /// reaches here is two names an author wrote, and picking one for them
+    /// would leave a `--param` pointing at whichever the tie-break preferred.
+    #[test]
+    fn two_nodes_cannot_share_a_name() {
+        let names = Names {
+            l1s: vec!["near".to_string()],
+            l4s: vec!["near".to_string()],
+            ..Names::default()
+        };
+        let e = names.check_unique().expect_err("refused");
+        assert!(e.contains("both called `near`"), "{e}");
+
+        // And the scope is the slot, because a Set is what holds the nodes.
+        let fine = Names {
+            l1s: vec!["near".to_string()],
+            l4s: vec!["draw".to_string()],
+            ..Names::default()
+        };
+        assert!(fine.check_unique().is_ok());
+    }
+
+    /// **A layer spelling cannot be a node's name**, because `--param` tells the
+    /// two forms apart by what follows the first colon. A node called `L4` would
+    /// make `--param L4:0:x` ambiguous with a node named `L4` holding a param
+    /// called `0`.
+    #[test]
+    fn a_node_name_is_refused_where_it_would_be_read_as_something_else() {
+        for bad in ["L1", "L4", "Field"] {
+            let e = parse(&["--set", &format!("{bad}=a.kir,b.kir")]).expect_err("refused");
+            assert!(e.contains("is a layer"), "{e}");
+        }
+        // A name is an address, so what may be in one is narrow and the
+        // refusal names the character rather than quietly rewriting it: a
+        // silently renamed node is one a `--param` written against it stops
+        // finding.
+        let e = parse(&["--set", "a b=a.kir,b.kir"]).expect_err("refused");
+        assert!(e.contains("not allowed"), "{e}");
+        let e = parse(&["--set", "=a.kir,b.kir"]).expect_err("refused");
+        assert!(e.contains("empty"), "{e}");
+        let e = parse(&["--set", "near=,b.kir"]).expect_err("refused");
+        assert!(e.contains("no file after it"), "{e}");
+    }
+
     #[test]
     fn no_arguments_is_the_default_pair() {
         let args = parse(&[]).expect("should parse");
         assert_eq!(
             args.sets,
             vec![(
-                PathBuf::from("examples/drift_shell.kir"),
-                vec![PathBuf::from("examples/soft_points.kir")],
+                Named::bare("examples/drift_shell.kir"),
+                vec![Named::bare("examples/soft_points.kir")],
             )]
         );
     }
@@ -4913,15 +5278,15 @@ mod tests {
             args.sets,
             vec![
                 (
-                    PathBuf::from("examples/drift_shell.kir"),
+                    Named::bare("examples/drift_shell.kir"),
                     vec![
-                        PathBuf::from("examples/soft_points.kir"),
-                        PathBuf::from("examples/drift_streaks.kir"),
+                        Named::bare("examples/soft_points.kir"),
+                        Named::bare("examples/drift_streaks.kir"),
                     ],
                 ),
                 (
-                    PathBuf::from("examples/drift_shell.kir"),
-                    vec![PathBuf::from("examples/drift_streaks.kir")],
+                    Named::bare("examples/drift_shell.kir"),
+                    vec![Named::bare("examples/drift_streaks.kir")],
                 ),
             ],
             "the preview has to have more than one slot to cycle between"
@@ -4942,7 +5307,7 @@ mod tests {
         let args = parse(&["--demo", "lines", "a.kir", "b.kir"]).expect("should parse");
         assert_eq!(
             args.sets,
-            vec![(PathBuf::from("a.kir"), vec![PathBuf::from("b.kir")])]
+            vec![(Named::bare("a.kir"), vec![Named::bare("b.kir")])]
         );
     }
 
@@ -4956,8 +5321,8 @@ mod tests {
         assert_eq!(
             args.sets,
             vec![(
-                PathBuf::from("examples/drift_shell.kir"),
-                vec![PathBuf::from("examples/soft_points.kir")],
+                Named::bare("examples/drift_shell.kir"),
+                vec![Named::bare("examples/soft_points.kir")],
             )]
         );
     }
@@ -4981,7 +5346,7 @@ mod tests {
         let args = parse(&["a.kir", "b.kir"]).expect("should parse");
         assert_eq!(
             args.sets,
-            vec![(PathBuf::from("a.kir"), vec![PathBuf::from("b.kir")])]
+            vec![(Named::bare("a.kir"), vec![Named::bare("b.kir")])]
         );
     }
 
@@ -5003,8 +5368,8 @@ mod tests {
         assert_eq!(
             args.sets,
             vec![
-                (PathBuf::from("a.kir"), vec![PathBuf::from("b.kir")]),
-                (PathBuf::from("c.kir"), vec![PathBuf::from("d.kir")]),
+                (Named::bare("a.kir"), vec![Named::bare("b.kir")]),
+                (Named::bare("c.kir"), vec![Named::bare("d.kir")]),
             ]
         );
     }
@@ -5109,8 +5474,8 @@ mod tests {
         assert_eq!(
             args.sets,
             vec![(
-                PathBuf::from("a.kir"),
-                vec![PathBuf::from("b.kir"), PathBuf::from("c.kir")],
+                Named::bare("a.kir"),
+                vec![Named::bare("b.kir"), Named::bare("c.kir")],
             )],
             "the first path is the geometry and the rest are renderers, in draw order"
         );
