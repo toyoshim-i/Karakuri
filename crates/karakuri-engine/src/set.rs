@@ -51,8 +51,8 @@ use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
 
 use crate::binding::{Binding, ParamWrite, Signals, CONTROL_PREFIX};
-use crate::mix::Input;
 use crate::camera::Orbit;
+use crate::mix::Input;
 use crate::node::{Deform, Renderer, Simulation};
 use crate::video_source::VideoSource;
 
@@ -211,7 +211,11 @@ pub enum SetError {
          hint: both sides of a pairing carry the same attributes — emit the source attribute \
          in both, or stop consuming `{attr}`"
     )]
-    PairingDerivation { l2: String, l1: String, attr: String },
+    PairingDerivation {
+        l2: String,
+        l1: String,
+        attr: String,
+    },
     /// A pairing L2 over two sources of different sizes.
     #[error(
         "`{l2}` pairs two geometries of {a} and {b} elements\n\
@@ -282,7 +286,11 @@ pub enum SetError {
          hint: drop `--merge` for this slot and they overdraw instead, which has no limit — \
          or split them across Sets, which is what a deck is"
     )]
-    TooManyInputs { l1: String, count: usize, max: usize },
+    TooManyInputs {
+        l1: String,
+        count: usize,
+        max: usize,
+    },
     /// A Set with no renderer.
     ///
     /// A `Set` is a [`VideoSource`], and a video source with nothing to draw has
@@ -688,8 +696,7 @@ impl Set {
         seed_salt: u32,
     ) -> Result<Set, SetError> {
         device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let built =
-            Set::build_inner(device, queue, l1s, l2s, l3, field, l4s, layering, seed_salt);
+        let built = Set::build_inner(device, queue, l1s, l2s, l3, field, l4s, layering, seed_salt);
         // **Popped on every path**, which is why the body is a second function
         // rather than this one: it returns early in a dozen places, and a scope
         // left on the stack would catch the *next* build's errors and report
@@ -706,7 +713,9 @@ impl Set {
             // exist, and every handle naming it is one wgpu will refuse again
             // at the first draw — silently, since by then nothing is watching.
             (Ok(_), Some(e)) => Err(SetError::Invalid {
-                proc: l1s.first().map_or_else(String::new, |(p, _)| p.name.clone()),
+                proc: l1s
+                    .first()
+                    .map_or_else(String::new, |(p, _)| p.name.clone()),
                 detail: e.to_string(),
             }),
             (Ok(set), None) => Ok(set),
@@ -729,7 +738,9 @@ impl Set {
             return Err(SetError::NoGeometry);
         };
         if l4s.is_empty() {
-            return Err(SetError::NoRenderer { l1: first_l1.name.clone() });
+            return Err(SetError::NoRenderer {
+                l1: first_l1.name.clone(),
+            });
         }
         if layering == Layering::Composite && l4s.len() > crate::deck::MAX_SLOTS {
             return Err(SetError::TooManyInputs {
@@ -744,7 +755,10 @@ impl Set {
         let pairing = l2s.iter().position(|n| n.pairs);
         if let Some(at) = pairing {
             if at != 0 {
-                return Err(SetError::PairingNotFirst { l2: l2s[at].name.clone(), at });
+                return Err(SetError::PairingNotFirst {
+                    l2: l2s[at].name.clone(),
+                    at,
+                });
             }
             if l1s.len() != 2 {
                 return Err(SetError::PairingArity {
@@ -825,8 +839,12 @@ impl Set {
             let per_evaluation = karakuri_ir::cost::estimate(f)
                 .map(|c| c.ops_per_evaluation)
                 .unwrap_or(0);
-            for caller in
-                l1s.iter().map(|(l1, _)| l1).chain(l2s.iter()).chain(l3.iter()).chain(l4s.iter())
+            for caller in l1s
+                .iter()
+                .map(|(l1, _)| l1)
+                .chain(l2s.iter())
+                .chain(l3.iter())
+                .chain(l4s.iter())
             {
                 if let Err(errs) = karakuri_ir::cost::check_with_field(caller, per_evaluation) {
                     return Err(SetError::FieldTooExpensive {
@@ -852,7 +870,9 @@ impl Set {
                 .chain(l4s.iter())
                 .find(|n| karakuri_ir::cost::estimate(n).is_ok_and(|c| c.field_calls.any()));
             if let Some(caller) = caller {
-                return Err(SetError::NoField { caller: caller.name.clone() });
+                return Err(SetError::NoField {
+                    caller: caller.name.clone(),
+                });
             }
         }
 
@@ -860,7 +880,11 @@ impl Set {
         // edge fan-out and needs no rule.
         if let Some(l3) = l3 {
             if l3.kind != Kind::L3 {
-                return Err(SetError::WrongKind { slot: "L3", expected: Kind::L3, actual: l3.kind });
+                return Err(SetError::WrongKind {
+                    slot: "L3",
+                    expected: Kind::L3,
+                    actual: l3.kind,
+                });
             }
         }
         let camera_node = crate::node::Camera::build(device, l3, field_shader);
@@ -920,10 +944,15 @@ impl Set {
                 // `prev` means everywhere else in its own block.
                 for node in std::iter::once(&l1).chain(l2s.iter()).chain(l4s.iter()) {
                     for &attr in &node.consumes {
-                        if seen.contains(&attr) || derived.contains(&attr) || emitted.contains(&attr) {
+                        if seen.contains(&attr)
+                            || derived.contains(&attr)
+                            || emitted.contains(&attr)
+                        {
                             continue;
                         }
-                        let Some(rule) = attr.derivation() else { continue };
+                        let Some(rule) = attr.derivation() else {
+                            continue;
+                        };
                         // **The source has to be on the element the L1 writes.** A
                         // rule reading `position` cannot run over geometry that has
                         // no position, and deriving from something an L2 adds later
@@ -1053,7 +1082,9 @@ impl Set {
                 if only.blend == Some(karakuri_ir::Blend::Weighted)
                     && only.topology == Some(karakuri_ir::Topology::Fullscreen)
                 {
-                    return Err(SetError::WeightedFullscreen { l4: only.name.clone() });
+                    return Err(SetError::WeightedFullscreen {
+                        l4: only.name.clone(),
+                    });
                 }
             }
 
@@ -1142,9 +1173,10 @@ impl Set {
                     // position, which is why a pairing L2 has to be first in
                     // the chain — refused above if it is not.
                     let paired = paired.as_ref().filter(|_| l2.pairs);
-                    let other = paired.map(|(emits, sim): &(Vec<karakuri_ir::Attr>, Simulation)| {
-                        (emits.as_slice(), sim.geometry())
-                    });
+                    let other =
+                        paired.map(|(emits, sim): &(Vec<karakuri_ir::Attr>, Simulation)| {
+                            (emits.as_slice(), sim.geometry())
+                        });
                     Deform::build(
                         device,
                         l2,
@@ -1225,7 +1257,10 @@ impl Set {
         // The same walk, so a node's values and its ranges cannot end up at
         // different indices — the defect this file has already paid for twice.
         let declared = |node: &Checked| -> HashMap<String, [f32; 2]> {
-            node.params.iter().map(|p| (p.name.clone(), [p.min, p.max])).collect()
+            node.params
+                .iter()
+                .map(|p| (p.name.clone(), [p.min, p.max]))
+                .collect()
         };
         let ranges = l1s
             .iter()
@@ -1373,7 +1408,10 @@ impl Set {
         // **Summed**, because a Set's population is all of it. The paired
         // geometry is *not* counted: it feeds the pairing node and is never
         // drawn, so counting it would report twice the material anyone can see.
-        self.sources.iter().map(|s| s.sim.live_count(device, queue)).sum()
+        self.sources
+            .iter()
+            .map(|s| s.sim.live_count(device, queue))
+            .sum()
     }
 
     /// The raw bytes of the element buffer the renderer is currently reading,
@@ -1545,7 +1583,11 @@ impl Set {
             // instantiated once per source and the procedures are shared, so an
             // address names the procedure and the Set writes it to every
             // instance — the first source's list is every procedure's list.
-            Kind::L2 => self.sources[0].deforms.iter().map(|d| d.param_names()).collect(),
+            Kind::L2 => self.sources[0]
+                .deforms
+                .iter()
+                .map(|d| d.param_names())
+                .collect(),
             Kind::L3 => match self.camera_node.node_count() {
                 0 => Vec::new(),
                 _ => vec![self.camera_node.param_names()],
@@ -1559,7 +1601,11 @@ impl Set {
                 true => Vec::new(),
                 false => vec![&self.field_declared],
             },
-            Kind::L4 => self.sources[0].renderers.iter().map(|r| r.param_names()).collect(),
+            Kind::L4 => self.sources[0]
+                .renderers
+                .iter()
+                .map(|r| r.param_names())
+                .collect(),
         };
         let found = names.iter().enumerate().any(|(at, n)| {
             binding.covers(at)
@@ -1577,8 +1623,9 @@ impl Set {
         // addressed binding is pushed later — which is the same "the last one
         // attached wins" rule a repeated binding already follows, applied to a
         // narrower target.
-        self.bindings
-            .retain(|b| b.layer != binding.layer || b.key != binding.key || b.index != binding.index);
+        self.bindings.retain(|b| {
+            b.layer != binding.layer || b.key != binding.key || b.index != binding.index
+        });
         self.bindings.push(binding);
         Bound::Yes
     }
@@ -1625,9 +1672,7 @@ impl Set {
             // as reaching none, which is the answer a name no procedure declares
             // already gets.
             Kind::L3 => self.l1_count + self.procedures(Kind::L2),
-            Kind::L4 => {
-                self.l1_count + self.procedures(Kind::L2) + self.camera_node.node_count()
-            }
+            Kind::L4 => self.l1_count + self.procedures(Kind::L2) + self.camera_node.node_count(),
             // **Last, and it addresses a node that does not exist.** A field
             // has no pass and no buffers — it lowers into whoever evaluates it —
             // so what the slot points at is a parameter map and nothing else.
@@ -1847,7 +1892,11 @@ impl Set {
         // and a `param` record both come through — so a wildcard control means
         // exactly what a bare name means everywhere else, and an addressed one
         // means exactly what an addressed `--param` does.
-        self.write_param(&ParamWrite { at: control.at, key: control.key, value: clamped }) > 0
+        self.write_param(&ParamWrite {
+            at: control.at,
+            key: control.key,
+            value: clamped,
+        }) > 0
     }
 
     /// A published control's position in `[0, 1]`, which is what a binding's
@@ -1975,7 +2024,9 @@ impl Set {
             })
             .collect();
         addressed.into_iter().flat_map(move |(layer, index, slot)| {
-            self.params[slot].iter().map(move |(k, v)| (layer, index, k.as_str(), *v))
+            self.params[slot]
+                .iter()
+                .map(move |(k, v)| (layer, index, k.as_str(), *v))
         })
     }
 
@@ -2209,7 +2260,8 @@ impl Set {
         // Which producer gets written is the node's decision and not this
         // one's: a Set hands down the frame and the built-in's six numbers, and
         // an L3 uses the first while the orbit uses the second.
-        self.camera_node.write_canvas(queue, self.viewport[0] / self.viewport[1]);
+        self.camera_node
+            .write_canvas(queue, self.viewport[0] / self.viewport[1]);
         if let Some(merge) = &self.merge {
             merge.write_uniform(queue, &self.edges);
         }
@@ -2236,9 +2288,7 @@ impl Set {
                 viewport: self.viewport,
                 field_params,
                 field_value: &|name: &str| field_value(field_values, name),
-                param: &|name: &str| {
-                    params.and_then(|p| effective(bindings, p, Kind::L3, 0, name))
-                },
+                param: &|name: &str| params.and_then(|p| effective(bindings, p, Kind::L3, 0, name)),
             };
             let fallback = self.camera.state(t);
             self.camera_node.prepare(queue, &view, dt, &fallback);
@@ -2270,16 +2320,16 @@ impl Set {
             // differ in colour by default rather than by being arranged to.
             let salt = source.salt;
             for (at, (renderer, params)) in source.renderers.iter_mut().zip(params).enumerate() {
-            let view = crate::node::View {
-                t,
-                beats,
-                seed_salt: salt,
-                viewport,
-                field_params,
-                field_value: &|name: &str| field_value(field_values, name),
-                param: &|name: &str| effective(bindings, params, Kind::L4, at, name),
-            };
-            renderer.write_uniforms(queue, &view);
+                let view = crate::node::View {
+                    t,
+                    beats,
+                    seed_salt: salt,
+                    viewport,
+                    field_params,
+                    field_value: &|name: &str| field_value(field_values, name),
+                    param: &|name: &str| effective(bindings, params, Kind::L4, at, name),
+                };
+                renderer.write_uniforms(queue, &view);
             }
         }
     }
@@ -2316,16 +2366,16 @@ impl Set {
         for source in &mut self.sources {
             let salt = source.salt;
             for (at, (node, params)) in source.deforms.iter_mut().zip(params).enumerate() {
-            let view = crate::node::View {
-                t,
-                beats,
-                seed_salt: salt,
-                viewport,
-                field_params,
-                field_value: &|name: &str| field_value(field_values, name),
-                param: &|name: &str| effective(bindings, params, Kind::L2, at, name),
-            };
-            node.write_uniforms(queue, &view, dt, capacity);
+                let view = crate::node::View {
+                    t,
+                    beats,
+                    seed_salt: salt,
+                    viewport,
+                    field_params,
+                    field_value: &|name: &str| field_value(field_values, name),
+                    param: &|name: &str| effective(bindings, params, Kind::L2, at, name),
+                };
+                node.write_uniforms(queue, &view, dt, capacity);
             }
         }
     }
@@ -2493,7 +2543,12 @@ impl Set {
         // not excuse the simulation if another reads them all. `all` on an empty
         // list would be vacuously true, which is why an empty list is refused at
         // build rather than handled here.
-        let steps = if self.sources.iter().flat_map(|s| &s.renderers).all(|r| r.is_fullscreen()) {
+        let steps = if self
+            .sources
+            .iter()
+            .flat_map(|s| &s.renderers)
+            .all(|r| r.is_fullscreen())
+        {
             0
         } else {
             steps
@@ -2656,13 +2711,9 @@ impl Set {
             let (parity, counts) = (source.sim.parity(), self.output_counts(source));
             for (i, renderer) in source.renderers.iter().enumerate() {
                 match merge {
-                    None => renderer.draw(
-                        encoder,
-                        target,
-                        parity,
-                        counts,
-                        source_at == 0 && i == 0,
-                    ),
+                    None => {
+                        renderer.draw(encoder, target, parity, counts, source_at == 0 && i == 0)
+                    }
                     Some(merge) => {
                         renderer.draw(encoder, merge.target(i), parity, counts, source_at == 0)
                     }
@@ -2694,7 +2745,6 @@ impl VideoSource for Set {
         self.draw(encoder, target);
     }
 }
-
 
 /// A source's hash salt, from the Set's and the source's ordinal.
 ///
@@ -2744,9 +2794,19 @@ fn field_value(map: Option<&HashMap<String, f32>>, key: &str) -> Option<f32> {
 fn default_scalar(p: &karakuri_ir::Param) -> Option<f32> {
     use karakuri_ir::{Expr, Lit, UnOp};
     match &p.default {
-        Expr::Lit { value: Lit::Float(v), .. } => Some(*v),
-        Expr::Unary { op: UnOp::Neg, value, .. } => match value.as_ref() {
-            Expr::Lit { value: Lit::Float(v), .. } => Some(-v),
+        Expr::Lit {
+            value: Lit::Float(v),
+            ..
+        } => Some(*v),
+        Expr::Unary {
+            op: UnOp::Neg,
+            value,
+            ..
+        } => match value.as_ref() {
+            Expr::Lit {
+                value: Lit::Float(v),
+                ..
+            } => Some(-v),
             _ => None,
         },
         _ => None,
@@ -2805,8 +2865,16 @@ proc signed_defaults {
                     .expect("the param is declared"),
             )
         };
-        assert_eq!(of("drift"), Some(-0.35), "a negative default was read as an absence");
-        assert_eq!(of("plain"), Some(0.25), "a positive default stopped being read");
+        assert_eq!(
+            of("drift"),
+            Some(-0.35),
+            "a negative default was read as an absence"
+        );
+        assert_eq!(
+            of("plain"),
+            Some(0.25),
+            "a positive default stopped being read"
+        );
     }
 
     /// End-to-end smoke test that a procedure *with* a `spawn` block builds
@@ -2857,7 +2925,8 @@ proc probe_l4 {
 "#;
         let compile = |src: &str| -> Checked {
             let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("parse: {e:?}"));
-            let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("check: {e:?}"));
+            let checked =
+                karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("check: {e:?}"));
             karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("cost: {e:?}"));
             checked
         };
@@ -2865,7 +2934,11 @@ proc probe_l4 {
         let l4 = compile(l4_src);
         let set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, 8, 1).expect("compatible pair");
 
-        assert_eq!(set.live_count(&gpu.device, &gpu.queue), 0, "a spawn-block procedure starts empty");
+        assert_eq!(
+            set.live_count(&gpu.device, &gpu.queue),
+            0,
+            "a spawn-block procedure starts empty"
+        );
     }
 
     /// **Every field of a derived `Counts` means what its name says**, including
@@ -2883,13 +2956,16 @@ proc probe_l4 {
     /// to say something only a test wants to know.
     #[test]
     fn an_amplifiers_derived_counts_multiply_every_element_count_and_no_other_field() {
-        let Some(gpu) = Gpu::headless().ok() else { return };
+        let Some(gpu) = Gpu::headless().ok() else {
+            return;
+        };
         const FACTOR: u32 = 4;
         const CAPACITY: u32 = 64;
 
         let compile = |src: &str| -> Checked {
             let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("parse: {e:?}"));
-            let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("check: {e:?}"));
+            let checked =
+                karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("check: {e:?}"));
             karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("cost: {e:?}"));
             checked
         };

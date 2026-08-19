@@ -118,13 +118,17 @@ proc dots {
 
 fn compile(src: &str) -> Checked {
     let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
+    let checked =
+        karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     checked
 }
 
 fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
+    errs.iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn build(gpu: &Gpu, l2s: &[&str]) -> Set {
@@ -177,7 +181,10 @@ fn centre_y(gpu: &Gpu, set: &mut Set) -> f32 {
             weight += f64::from(t[0]);
         }
     }
-    assert!(weight > 0.0, "nothing was drawn, so there is no position to measure");
+    assert!(
+        weight > 0.0,
+        "nothing was drawn, so there is no position to measure"
+    );
     (sum / weight) as f32
 }
 
@@ -205,7 +212,11 @@ fn frame(gpu: &Gpu, set: &mut Set) -> Vec<f32> {
                 rows_per_image: Some(H),
             },
         },
-        wgpu::Extent3d { width: W, height: H, depth_or_array_layers: 1 },
+        wgpu::Extent3d {
+            width: W,
+            height: H,
+            depth_or_array_layers: 1,
+        },
     );
     gpu.queue.submit([encoder.finish()]);
 
@@ -321,7 +332,11 @@ fn each_deformation_holds_its_own_parameters() {
         .filter(|(layer, _, name, _)| *layer == karakuri_ir::Kind::L2 && *name == "amount")
         .map(|(_, index, _, value)| (index, value))
         .collect();
-    assert_eq!(declared.len(), 2, "the two deformations did not get a map each");
+    assert_eq!(
+        declared.len(),
+        2,
+        "the two deformations did not get a map each"
+    );
 
     let plain = centre_y(&gpu, &mut build(&gpu, &[&one, &two]));
     assert!(
@@ -371,20 +386,39 @@ proc tinted_dots {
     let l4 = compile(tinted);
     let l1 = compile(STILL);
 
-    Set::build_many(&gpu.device, &gpu.queue,
-        &[(&l1, CAPACITY)], &[&l2], None,
-        None, &[&l4], Layering::Overdraw, 7)
-        .expect("the renderer consumes what the deformation emits");
+    Set::build_many(
+        &gpu.device,
+        &gpu.queue,
+        &[(&l1, CAPACITY)],
+        &[&l2],
+        None,
+        None,
+        &[&l4],
+        Layering::Overdraw,
+        7,
+    )
+    .expect("the renderer consumes what the deformation emits");
 
     // The same renderer without the deformation has nowhere to read `tint`
     // from, and the error has to name it.
-    let err = Set::build_many(&gpu.device, &gpu.queue,
-        &[(&l1, CAPACITY)], &[], None,
-        None, &[&l4], Layering::Overdraw, 7)
-        .err()
-        .expect("`tint` is not available without the deformation that emits it");
+    let err = Set::build_many(
+        &gpu.device,
+        &gpu.queue,
+        &[(&l1, CAPACITY)],
+        &[],
+        None,
+        None,
+        &[&l4],
+        Layering::Overdraw,
+        7,
+    )
+    .err()
+    .expect("`tint` is not available without the deformation that emits it");
     let message = err.to_string();
-    assert!(message.contains("tint"), "the diagnostic does not name what was missing: {message}");
+    assert!(
+        message.contains("tint"),
+        "the diagnostic does not name what was missing: {message}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -479,7 +513,10 @@ proc lift_one {
     let masked = centre_y(&gpu, &mut build_over(&gpu, PAIR, &[one], 2));
 
     let step = plain - all;
-    assert!(step > 2.0, "the unmasked deformation did not reach the frame");
+    assert!(
+        step > 2.0,
+        "the unmasked deformation did not reach the frame"
+    );
     assert!(
         ((plain - masked) - step * 0.5).abs() < step * 0.15,
         "the mask moved the centroid {} texels where half of {step} was due — it let \
@@ -585,10 +622,10 @@ proc paint {{
         let mut set = Set::build_many(
             &gpu.device,
             &gpu.queue,
-        &[(&compile(STILL), CAPACITY)],
+            &[(&compile(STILL), CAPACITY)],
             &[&l2],
             None,
-        None,
+            None,
             &[&l4],
             Layering::Overdraw,
             7,
@@ -601,11 +638,17 @@ proc paint {{
             height: 0.0,
             ..Default::default()
         };
-        frame(&gpu, &mut set).chunks_exact(4).map(|t| t[0]).fold(0.0f32, f32::max)
+        frame(&gpu, &mut set)
+            .chunks_exact(4)
+            .map(|t| t[0])
+            .fold(0.0f32, f32::max)
     };
 
     let full = brightness(&paint("", "1.0"));
-    assert!(full > 0.5, "the deformation's own attribute never reached the frame: {full}");
+    assert!(
+        full > 0.5,
+        "the deformation's own attribute never reached the frame: {full}"
+    );
 
     // The mask alone. Half the strength is half the way from the zero the
     // pass-through left to the white the body wrote.
@@ -688,10 +731,17 @@ proc half_paint {
         ..Default::default()
     };
 
-    let brightest =
-        |set: &mut Set| frame(&gpu, set).chunks_exact(4).map(|t| t[0]).fold(0.0f32, f32::max);
+    let brightest = |set: &mut Set| {
+        frame(&gpu, set)
+            .chunks_exact(4)
+            .map(|t| t[0])
+            .fold(0.0f32, f32::max)
+    };
     let first = brightest(&mut set);
-    assert!(first > 0.1, "the added attribute never reached the frame: {first}");
+    assert!(
+        first > 0.1,
+        "the added attribute never reached the frame: {first}"
+    );
     let mut last = first;
     for _ in 0..19 {
         last = brightest(&mut set);
@@ -731,7 +781,10 @@ proc lift {{
     let over = centre_y(&gpu, &mut build(&gpu, &[&lift("2.5")]));
     let under = centre_y(&gpu, &mut build(&gpu, &[&lift("0.0 - 1.5")]));
 
-    assert!(plain - full > 2.0, "the deformation did not reach the frame");
+    assert!(
+        plain - full > 2.0,
+        "the deformation did not reach the frame"
+    );
     assert!(
         (over - full).abs() < 0.25,
         "a strength of 2.5 put the material at {over} where 1.0 gives {full} — the \

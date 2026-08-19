@@ -608,7 +608,8 @@ mod tests {
     /// The wire line the spec prints, parsed and written back.
     #[test]
     fn a_mask_round_trips_through_the_line_the_spec_prints() {
-        let line = r#"{"t":"mask","slot":1,"kind":"linear","angle":0.0,"position":0.5,"softness":0.1}"#;
+        let line =
+            r#"{"t":"mask","slot":1,"kind":"linear","angle":0.0,"position":0.5,"softness":0.1}"#;
         let rec = round_trip(line);
         assert_eq!(
             rec,
@@ -714,7 +715,10 @@ mod tests {
 
     #[test]
     fn tick_round_trips() {
-        assert_eq!(round_trip(r#"{"t":"tick","steps":1}"#), Record::Tick { steps: 1 });
+        assert_eq!(
+            round_trip(r#"{"t":"tick","steps":1}"#),
+            Record::Tick { steps: 1 }
+        );
     }
 
     #[test]
@@ -750,7 +754,7 @@ mod tests {
             rec,
             Record::Bind {
                 layer: Layer::L1,
-            index: None,
+                index: None,
                 key: "turbulence".into(),
                 signal: "energy".into(),
                 curve: "pow2".into(),

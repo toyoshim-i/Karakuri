@@ -96,7 +96,14 @@ impl Deform {
         input: &Geometry<'_>,
         capacity: u32,
     ) -> Result<Deform, SetError> {
-        let shader = generate_l2(l2, upstream, synthetic, derived, other.map(|(a, _)| a), field);
+        let shader = generate_l2(
+            l2,
+            upstream,
+            synthetic,
+            derived,
+            other.map(|(a, _)| a),
+            field,
+        );
         // **The output capacity, and it is what everything below this node is
         // sized and dispatched against.** Saturating rather than wrapping: the
         // checker caps a single factor, a Set caps its own capacity, and a chain
@@ -178,7 +185,10 @@ impl Deform {
         // very buffer its input came with.
         // **The paired geometry joins the input group**, because that is what
         // it is: a second input edge, read and never written.
-        let mut src_entries = vec![storage(binding::ELEMENT, true), storage(binding::ALIVE, true)];
+        let mut src_entries = vec![
+            storage(binding::ELEMENT, true),
+            storage(binding::ALIVE, true),
+        ];
         if other.is_some() {
             src_entries.push(storage(binding::OTHER, true));
         }
@@ -187,7 +197,10 @@ impl Deform {
             entries: &src_entries,
         });
         let dst_entries: Vec<wgpu::BindGroupLayoutEntry> = if shader.amplify.is_some() {
-            vec![storage(binding::ELEMENT, false), storage(binding::ALIVE, false)]
+            vec![
+                storage(binding::ELEMENT, false),
+                storage(binding::ALIVE, false),
+            ]
         } else {
             vec![storage(binding::ELEMENT, false)]
         };
@@ -227,8 +240,14 @@ impl Deform {
             label: Some("L2 uniforms"),
             layout: &uniform_bgl,
             entries: &[
-                wgpu::BindGroupEntry { binding: binding::UNIFORM, resource: uniforms.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: binding::COUNTS, resource: input.counts.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: binding::UNIFORM,
+                    resource: uniforms.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: binding::COUNTS,
+                    resource: input.counts.as_entire_binding(),
+                },
             ],
         });
         let bind_src = |label: &str, parity: usize| {
@@ -306,8 +325,14 @@ impl Deform {
                 label: Some("amplify counts"),
                 layout: &bgl,
                 entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: input.counts.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: counts.as_entire_binding() },
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: input.counts.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: counts.as_entire_binding(),
+                    },
                 ],
             });
             let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -323,7 +348,13 @@ impl Deform {
                 compilation_options: Default::default(),
                 cache: None,
             });
-            Amplified { factor, alive, counts, derive, derive_bg }
+            Amplified {
+                factor,
+                alive,
+                counts,
+                derive,
+                derive_bg,
+            }
         });
 
         Ok(Deform {
@@ -382,7 +413,11 @@ impl Deform {
     /// whoever made them.** The elements are this node's own and are rewritten
     /// each frame, so there is nothing for a parity to choose between; the
     /// liveness is the L1's and passes through every deformation untouched.
-    pub(crate) fn geometry<'a>(&'a self, alive: [&'a wgpu::Buffer; 2], counts: &'a wgpu::Buffer) -> Geometry<'a> {
+    pub(crate) fn geometry<'a>(
+        &'a self,
+        alive: [&'a wgpu::Buffer; 2],
+        counts: &'a wgpu::Buffer,
+    ) -> Geometry<'a> {
         // **An amplifier answers with its own liveness and its own counts**, and
         // that is the one place the doc above stops being the whole story: the
         // flags it hands on are still the L1's decision, re-indexed onto a
@@ -417,7 +452,13 @@ impl Deform {
     /// at the instant the simulation reached, which is the same instant a
     /// renderer draws at — not the per-substep sequence a simulation walks.
     /// The camera and the viewport in that struct are simply unread here.
-    pub(crate) fn write_uniforms(&mut self, queue: &wgpu::Queue, view: &View<'_>, dt: f32, capacity: u32) {
+    pub(crate) fn write_uniforms(
+        &mut self,
+        queue: &wgpu::Queue,
+        view: &View<'_>,
+        dt: f32,
+        capacity: u32,
+    ) {
         let mut p = self.scratch.pack(&self.uniform_layout);
         p.f32("t", view.t)
             .f32("beats", view.beats)
@@ -465,7 +506,12 @@ impl Deform {
         pass.dispatch_workgroups(1, 1, 1);
     }
 
-    pub(crate) fn record(&self, encoder: &mut wgpu::CommandEncoder, parity: usize, counts_buf: &wgpu::Buffer) {
+    pub(crate) fn record(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        parity: usize,
+        counts_buf: &wgpu::Buffer,
+    ) {
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("deform"),
             timestamp_writes: None,

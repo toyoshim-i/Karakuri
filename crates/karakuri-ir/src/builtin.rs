@@ -217,9 +217,11 @@ mod tests {
         // and a domain with no `Same` position would never be consulted.
         for b in Builtin::ALL {
             let sig = b.signature();
-            let generic = sig.args.iter().chain([&sig.ret]).any(|s| {
-                matches!(s, Shape::Same | Shape::Scalar)
-            });
+            let generic = sig
+                .args
+                .iter()
+                .chain([&sig.ret])
+                .any(|s| matches!(s, Shape::Same | Shape::Scalar));
             assert_eq!(
                 generic,
                 sig.domain != Domain::None,

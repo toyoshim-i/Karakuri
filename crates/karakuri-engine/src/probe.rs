@@ -516,8 +516,7 @@ impl Probe {
     /// The check bites exactly where a wrong answer is dangerous, which is
     /// expensive material measured as nearly free.
     fn plausible(gpu_ns: f64, host_ns: f64) -> bool {
-        host_ns < Self::PLAUSIBILITY_FLOOR_NS
-            || gpu_ns * Self::PLAUSIBILITY_RATIO >= host_ns
+        host_ns < Self::PLAUSIBILITY_FLOOR_NS || gpu_ns * Self::PLAUSIBILITY_RATIO >= host_ns
     }
 
     /// Bracket a deliberately heavy `render` pass through [`Probe::bracket`]
@@ -651,8 +650,7 @@ fn fs() -> @location(0) vec4<f32> {{
                 .checked_sub(begin)
                 .map(|delta| delta as f64 * f64::from(gpu.period_ns))
                 .is_some_and(|delta_ns| {
-                    delta_ns >= Self::CALIBRATION_MIN_NS
-                        && Self::plausible(delta_ns, host_ns)
+                    delta_ns >= Self::CALIBRATION_MIN_NS && Self::plausible(delta_ns, host_ns)
                 });
             if !believable {
                 return false;
@@ -883,6 +881,9 @@ mod tests {
         // and entirely normal.
         assert!(Probe::plausible(50_000.0, 1_000_000.0));
         // The floor is where that stops being excused.
-        assert!(!Probe::plausible(50_000.0, Probe::PLAUSIBILITY_FLOOR_NS * 2.0));
+        assert!(!Probe::plausible(
+            50_000.0,
+            Probe::PLAUSIBILITY_FLOOR_NS * 2.0
+        ));
     }
 }

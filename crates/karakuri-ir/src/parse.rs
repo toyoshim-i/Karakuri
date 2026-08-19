@@ -519,7 +519,10 @@ impl Parser {
     fn parse_amplify(&mut self) -> AmplifyDecl {
         let start = self.advance().span; // "amplify"
         let factor = self.parse_u32_literal();
-        AmplifyDecl { factor, span: start.join(self.prev_span()) }
+        AmplifyDecl {
+            factor,
+            span: start.join(self.prev_span()),
+        }
     }
 
     fn parse_capacity(&mut self) -> CapacityDecl {

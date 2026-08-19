@@ -202,7 +202,8 @@ impl Analyzer {
         for (i, sample) in block.iter().enumerate() {
             self.spectrum[i] = Complex::new(sample * self.window[i], 0.0);
         }
-        self.fft.process_with_scratch(&mut self.spectrum, &mut self.scratch);
+        self.fft
+            .process_with_scratch(&mut self.spectrum, &mut self.scratch);
 
         // Parseval, with the window's power gain divided out and the one-sided
         // spectrum's missing half put back, so that `magnitude[k]` is the RMS
@@ -672,7 +673,9 @@ mod tests {
         ] {
             let bands = band_bins(rate as f32);
             assert!(
-                bands.iter().all(|(low, high)| *high <= BLOCK / 2 + 1 && *low >= 1),
+                bands
+                    .iter()
+                    .all(|(low, high)| *high <= BLOCK / 2 + 1 && *low >= 1),
                 "band edges left the spectrum at {rate} Hz: {bands:?}"
             );
             for (i, (low, high)) in bands.iter().enumerate() {

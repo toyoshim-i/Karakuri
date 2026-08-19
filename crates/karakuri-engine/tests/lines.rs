@@ -95,13 +95,17 @@ proc sprite {{
 
 fn compile(src: &str) -> Checked {
     let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
+    let checked =
+        karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     checked
 }
 
 fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
+    errs.iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// RGBA f32 per texel, row-major, after one step of `l1` drawn by `l4`.
@@ -135,7 +139,11 @@ fn draw(gpu: &Gpu, l1: &str, l4: &str) -> Vec<[f32; 4]> {
                 rows_per_image: Some(H),
             },
         },
-        wgpu::Extent3d { width: W, height: H, depth_or_array_layers: 1 },
+        wgpu::Extent3d {
+            width: W,
+            height: H,
+            depth_or_array_layers: 1,
+        },
     );
     gpu.queue.submit([encoder.finish()]);
 
@@ -209,7 +217,11 @@ fn a_segment_covers_exactly_the_rectangle_its_endpoints_and_width_describe() {
     let px = draw(&gpu, L1, &segment_l4(-0.5, 0.5, 0.0, 8.0, 1.0, 1.0));
     let cells = covered(&px);
 
-    assert_eq!(bounds(&cells), (64, 191, 124, 131), "the segment is not where its endpoints put it");
+    assert_eq!(
+        bounds(&cells),
+        (64, 191, 124, 131),
+        "the segment is not where its endpoints put it"
+    );
     assert_eq!(cells.len(), 128 * 8, "the rectangle has holes or spills");
 }
 
@@ -223,12 +235,28 @@ fn a_segment_covers_exactly_the_rectangle_its_endpoints_and_width_describe() {
 #[test]
 fn width_is_pixels_across_the_segment_and_nothing_along_it() {
     let gpu = Gpu::headless().expect("no GPU available");
-    let thin = bounds(&covered(&draw(&gpu, L1, &segment_l4(-0.5, 0.5, 0.0, 8.0, 1.0, 1.0))));
-    let thick = bounds(&covered(&draw(&gpu, L1, &segment_l4(-0.5, 0.5, 0.0, 24.0, 1.0, 1.0))));
+    let thin = bounds(&covered(&draw(
+        &gpu,
+        L1,
+        &segment_l4(-0.5, 0.5, 0.0, 8.0, 1.0, 1.0),
+    )));
+    let thick = bounds(&covered(&draw(
+        &gpu,
+        L1,
+        &segment_l4(-0.5, 0.5, 0.0, 24.0, 1.0, 1.0),
+    )));
 
-    assert_eq!((thin.0, thin.1), (thick.0, thick.1), "width changed the segment's length");
+    assert_eq!(
+        (thin.0, thin.1),
+        (thick.0, thick.1),
+        "width changed the segment's length"
+    );
     assert_eq!(thin.3 - thin.2 + 1, 8, "8 pixels of width is not 8 rows");
-    assert_eq!(thick.3 - thick.2 + 1, 24, "24 pixels of width is not 24 rows");
+    assert_eq!(
+        thick.3 - thick.2 + 1,
+        24,
+        "24 pixels of width is not 24 rows"
+    );
 }
 
 /// `point_coord.x` runs from `clip` to `clip_b`, not the other way and not
@@ -244,13 +272,22 @@ fn point_coord_runs_along_the_segment_from_clip_to_clip_b() {
 
     let head = at(&px, 64, 128)[1];
     let tail = at(&px, 191, 128)[1];
-    assert!(head < 0.02, "point_coord.x at the `clip` end is {head}, not ~0");
-    assert!(tail > 0.98, "point_coord.x at the `clip_b` end is {tail}, not ~1");
+    assert!(
+        head < 0.02,
+        "point_coord.x at the `clip` end is {head}, not ~0"
+    );
+    assert!(
+        tail > 0.98,
+        "point_coord.x at the `clip_b` end is {tail}, not ~1"
+    );
 
     // And a stroke drawn the other way round reports the reverse, which is
     // what says the coordinate follows the endpoints rather than the screen.
     let flipped = draw(&gpu, L1, &segment_l4(0.5, -0.5, 0.0, 8.0, 1.0, 1.0));
-    assert!(at(&flipped, 64, 128)[1] > 0.98, "reversing the endpoints did not reverse point_coord.x");
+    assert!(
+        at(&flipped, 64, 128)[1] > 0.98,
+        "reversing the endpoints did not reverse point_coord.x"
+    );
 }
 
 /// `point_coord.y` runs across the segment, spanning its full width.
@@ -261,8 +298,14 @@ fn point_coord_runs_across_the_segment_edge_to_edge() {
 
     let near = at(&px, 128, 124)[2];
     let far = at(&px, 128, 131)[2];
-    assert!((near - far).abs() > 0.8, "point_coord.y barely moves across the stroke: {near} to {far}");
-    assert!(near.min(far) < 0.1 && near.max(far) > 0.9, "point_coord.y does not reach both edges");
+    assert!(
+        (near - far).abs() > 0.8,
+        "point_coord.y barely moves across the stroke: {near} to {far}"
+    );
+    assert!(
+        near.min(far) < 0.1 && near.max(far) > 0.9,
+        "point_coord.y does not reach both edges"
+    );
 }
 
 /// The expansion divides by `w` to work in pixels and multiplies by it again
@@ -275,7 +318,11 @@ fn the_same_segment_at_two_clip_depths_draws_the_same_pixels() {
     let near = draw(&gpu, L1, &segment_l4(-0.5, 0.5, 0.0, 8.0, 1.0, 1.0));
     let far = draw(&gpu, L1, &segment_l4(-0.5, 0.5, 0.0, 8.0, 4.0, 4.0));
 
-    assert_eq!(covered(&near), covered(&far), "w cancelled incorrectly: the depth moved the stroke");
+    assert_eq!(
+        covered(&near),
+        covered(&far),
+        "w cancelled incorrectly: the depth moved the stroke"
+    );
 }
 
 /// A segment that **straddles** the eye is dropped rather than drawn through
@@ -298,8 +345,14 @@ fn a_segment_straddling_the_eye_is_dropped_and_the_same_one_in_front_is_not() {
     let front = draw(&gpu, L1, &segment_l4(-0.5, 0.5, 0.0, 8.0, 1.0, 1.0));
     let straddling = draw(&gpu, L1, &segment_l4(-0.5, 0.5, 0.0, 8.0, 1.0, -1.0));
 
-    assert!(!covered(&front).is_empty(), "the control drew nothing, so the fixture is broken");
-    assert!(covered(&straddling).is_empty(), "a segment straddling the eye reached the screen");
+    assert!(
+        !covered(&front).is_empty(),
+        "the control drew nothing, so the fixture is broken"
+    );
+    assert!(
+        covered(&straddling).is_empty(),
+        "a segment straddling the eye reached the screen"
+    );
 }
 
 /// The control for the whole file: the same L1, the same width, the same
@@ -311,6 +364,10 @@ fn an_l4_without_clip_b_still_draws_a_square_sprite() {
     let gpu = Gpu::headless().expect("no GPU available");
     let cells = covered(&draw(&gpu, L1, &sprite_l4(0.0, 0.0, 8.0)));
 
-    assert_eq!(bounds(&cells), (124, 131, 124, 131), "a sprite is no longer its point_size square");
+    assert_eq!(
+        bounds(&cells),
+        (124, 131, 124, 131),
+        "a sprite is no longer its point_size square"
+    );
     assert_eq!(cells.len(), 8 * 8, "the sprite is not solid");
 }

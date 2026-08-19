@@ -126,7 +126,10 @@ fn time_advances_by_steps_not_by_a_clock() {
     points.prepare(&gpu.queue, 3);
     let after_four = points.time();
 
-    assert!((after_four - after_one * 4.0).abs() < 1e-6, "steps must be linear");
+    assert!(
+        (after_four - after_one * 4.0).abs() < 1e-6,
+        "steps must be linear"
+    );
     // Two frames of one step and one frame of two steps must land in the same
     // place, which is what makes a tick record replayable.
     let mut other = Points::new(&gpu.device, 64, 1);

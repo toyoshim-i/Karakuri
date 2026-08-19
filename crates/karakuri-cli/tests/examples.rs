@@ -51,10 +51,17 @@ fn every_example_parses_checks_and_costs() {
     );
 
     for path in files {
-        let name = path.file_name().expect("a file name").to_string_lossy().to_string();
+        let name = path
+            .file_name()
+            .expect("a file name")
+            .to_string_lossy()
+            .to_string();
         let src = std::fs::read_to_string(&path).expect("read");
         let render = |errs: &[karakuri_ir::IrError]| {
-            errs.iter().map(|e| e.render(&src)).collect::<Vec<_>>().join("\n")
+            errs.iter()
+                .map(|e| e.render(&src))
+                .collect::<Vec<_>>()
+                .join("\n")
         };
 
         let parsed = karakuri_ir::parse(&src)
@@ -124,7 +131,12 @@ fn the_pairs_the_docs_offer_compose() {
         // `late_bloom.kir`'s does, and it is the one with two modulators in it:
         // a chain is where an L2 being stateless stops being a claim and starts
         // being the thing that lets the pair be written in either order.
-        &["drift_shell.kir", "swirl_warp.kir", "late_bloom.kir", "soft_points.kir"][..],
+        &[
+            "drift_shell.kir",
+            "swirl_warp.kir",
+            "late_bloom.kir",
+            "soft_points.kir",
+        ][..],
         // `kaleidoscope.kir`'s own header offers this one, and it is the only
         // chain here that changes the element count.
         &["drift_shell.kir", "kaleidoscope.kir", "soft_points.kir"][..],
@@ -135,7 +147,12 @@ fn the_pairs_the_docs_offer_compose() {
         // it. The loop below takes every L1 it finds with that L1's own declared
         // capacity, which is what makes this line a test of more than the sort:
         // a pairing Set is refused unless both sources are the same size.
-        &["lattice_shell.kir", "sphere_shell.kir", "morph.kir", "soft_points.kir"][..],
+        &[
+            "lattice_shell.kir",
+            "sphere_shell.kir",
+            "morph.kir",
+            "soft_points.kir",
+        ][..],
     ] {
         let compiled: Vec<karakuri_ir::typed::Checked> = chain
             .iter()

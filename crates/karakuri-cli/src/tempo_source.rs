@@ -614,9 +614,7 @@ mod tests {
             "an unknown message type must be skippable, not fatal"
         );
         assert_eq!(
-            round_trip(
-                r#"{"t":"grid","bpm":128.0,"beat":1.0,"clock_us":1,"confidence":0.9}"#
-            ),
+            round_trip(r#"{"t":"grid","bpm":128.0,"beat":1.0,"clock_us":1,"confidence":0.9}"#),
             Message::Grid {
                 bpm: 128.0,
                 beat: 1.0,
@@ -656,7 +654,10 @@ mod tests {
             panic!("a future version was accepted");
         };
         let said = refusal.to_string();
-        assert!(said.contains(&format!("v{}", PROTOCOL_VERSION + 1)), "{said}");
+        assert!(
+            said.contains(&format!("v{}", PROTOCOL_VERSION + 1)),
+            "{said}"
+        );
         assert!(said.contains(&format!("v{PROTOCOL_VERSION}")), "{said}");
 
         assert_eq!(
@@ -876,9 +877,7 @@ mod runner_tests {
     fn a_single_clock_step_does_not_latch_the_offset() {
         let far_ahead = 3_600_000_000_i64;
         let mut lines = String::from("echo '{\"t\":\"hello\",\"v\":1,\"source\":\"fake\"}'\n");
-        lines.push_str(
-            "echo '{\"t\":\"grid\",\"bpm\":120.0,\"beat\":0.0,\"clock_us\":0}'\n",
-        );
+        lines.push_str("echo '{\"t\":\"grid\",\"bpm\":120.0,\"beat\":0.0,\"clock_us\":0}'\n");
         // The liar, once.
         lines.push_str(&format!(
             "echo '{{\"t\":\"grid\",\"bpm\":120.0,\"beat\":1.0,\"clock_us\":{far_ahead}}}'\n"
@@ -1012,7 +1011,11 @@ mod runner_tests {
             panic!("the first anchor did not align");
         };
         assert_eq!(bpm, 120.0);
-        assert!((7.0 + shift - 0.25).abs() < 1e-9, "landed at {}", 7.0 + shift);
+        assert!(
+            (7.0 + shift - 0.25).abs() < 1e-9,
+            "landed at {}",
+            7.0 + shift
+        );
         // 1024.25 mod 1024 is 0.25, and 1024 is a multiple of four — so the
         // bar phase is the room's even though the number is not.
         assert!(

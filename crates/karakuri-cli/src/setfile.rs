@@ -135,8 +135,11 @@ pub fn binding_from_record(record: &Record) -> Result<Binding, String> {
     let bad = |what: String| format!("bind {}={key}: {what}", layer_name(*layer));
 
     let kind = kind_of(*layer);
-    let curve = Curve::parse(curve)
-        .ok_or_else(|| bad(format!("curve `{curve}` — expected lin, pow2, sqrt or smooth")))?;
+    let curve = Curve::parse(curve).ok_or_else(|| {
+        bad(format!(
+            "curve `{curve}` — expected lin, pow2, sqrt or smooth"
+        ))
+    })?;
 
     if signal == "bpm" {
         return Err(bad(
@@ -323,7 +326,9 @@ pub struct Saving<'a> {
 fn refuse_unsavable(paths: &[std::path::PathBuf]) -> Result<(), String> {
     for path in paths {
         let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let Ok(proc) = karakuri_ir::parse(&src) else { continue };
+        let Ok(proc) = karakuri_ir::parse(&src) else {
+            continue;
+        };
         if proc.kind != Kind::L4 {
             return Err(format!(
                 "{} is a `kind {}`, and a Set file carries an L1 and its renderers\n\
@@ -366,7 +371,10 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
             .map_err(|e| format!("{}: {e}", path.display()))
     };
     let l1_hash = put(l1_path)?;
-    let l4_hashes = l4_paths.iter().map(|p| put(p)).collect::<Result<Vec<_>, _>>()?;
+    let l4_hashes = l4_paths
+        .iter()
+        .map(|p| put(p))
+        .collect::<Result<Vec<_>, _>>()?;
 
     let mut lines = vec![
         Line::new(Record::Set {
@@ -556,7 +564,11 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                 // the note says exactly which parameter will not move.
                 Err(message) => notes.push(format!("{message} — skipped")),
             },
-            Record::Camera { kind, radius, speed } => {
+            Record::Camera {
+                kind,
+                radius,
+                speed,
+            } => {
                 if kind != "orbit" {
                     notes.push(format!(
                         "camera kind `{kind}` is not one this engine has; using an orbit"
@@ -702,7 +714,12 @@ proc points {
 "#;
 
     /// A store with the two procedures written out beside it, and the paths.
-    fn fixture() -> (tempfile::TempDir, Store, std::path::PathBuf, std::path::PathBuf) {
+    fn fixture() -> (
+        tempfile::TempDir,
+        Store,
+        std::path::PathBuf,
+        std::path::PathBuf,
+    ) {
         let dir = tempfile::tempdir().expect("tempdir");
         let l1 = dir.path().join("l1.kir");
         let l4 = dir.path().join("l4.kir");
@@ -715,8 +732,7 @@ proc points {
     /// A Set with nothing but its material and whatever bindings are given.
     /// `Orbit::default()` is not `const`, so this is the one place a test names
     /// its fields; `LazyLock` keeps that to one place rather than one per call.
-    static DEFAULT_CAMERA: std::sync::LazyLock<Orbit> =
-        std::sync::LazyLock::new(Orbit::default);
+    static DEFAULT_CAMERA: std::sync::LazyLock<Orbit> = std::sync::LazyLock::new(Orbit::default);
 
     fn plain<'a>(
         l1: &'a std::path::Path,
@@ -770,7 +786,10 @@ proc points {
         assert_eq!(loaded.capacity, Some(65_536));
         assert_eq!(loaded.params, params);
         assert_eq!(loaded.seed, Some(4242));
-        assert_eq!(loaded.camera.map(|c| (c.radius, c.speed)), Some((11.5, 0.42)));
+        assert_eq!(
+            loaded.camera.map(|c| (c.radius, c.speed)),
+            Some((11.5, 0.42))
+        );
         assert_eq!(loaded.bindings.len(), 1);
         let back = &loaded.bindings[0];
         assert_eq!(back.layer, Kind::L1);
@@ -779,7 +798,11 @@ proc points {
         assert_eq!(back.curve, Curve::Pow2);
         assert_eq!(back.range, [0.5, 3.0]);
         // And the procedures themselves came back through the store, compiled.
-        assert!(loaded.notes.is_empty(), "unexpected notes: {:?}", loaded.notes);
+        assert!(
+            loaded.notes.is_empty(),
+            "unexpected notes: {:?}",
+            loaded.notes
+        );
     }
 
     /// **The material is resolved by hash out of the store**, which is what
@@ -812,7 +835,10 @@ proc points {
         // Bundle it: every slot's source inlined, line by line, as `src`.
         let mut bundled = Vec::new();
         for line in &lines {
-            if let Record::Slot { proc_hash, layer, .. } = line.record() {
+            if let Record::Slot {
+                proc_hash, layer, ..
+            } = line.record()
+            {
                 let src = match layer {
                     Layer::L1 => L1,
                     _ => L4,
@@ -925,7 +951,12 @@ proc points {
     #[test]
     fn an_unusable_binding_is_named_and_the_rest_of_the_set_still_loads() {
         let (_dir, store, l1, l4) = fixture();
-        save(&store, "s1", plain(&l1, std::slice::from_ref(&l4), &[a_binding()])).expect("save");
+        save(
+            &store,
+            "s1",
+            plain(&l1, std::slice::from_ref(&l4), &[a_binding()]),
+        )
+        .expect("save");
         let mut lines = store.read_set("s1").expect("read");
         lines.push(Line::new(Record::Bind {
             layer: Layer::L1,

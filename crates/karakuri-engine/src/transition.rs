@@ -160,7 +160,11 @@ impl Transition {
             // before it begins, and for an infinite one, which is a fade that
             // never arrives. Both are arithmetic rather than intent, and a cut
             // is the reading that is not a surprise.
-            beats: if beats.is_finite() { beats.max(0.0) } else { 0.0 },
+            beats: if beats.is_finite() {
+                beats.max(0.0)
+            } else {
+                0.0
+            },
             curve,
         }
     }

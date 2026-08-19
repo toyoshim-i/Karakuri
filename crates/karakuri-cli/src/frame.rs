@@ -330,8 +330,7 @@ mod tests {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: FORMAT,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::COPY_SRC,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
                 view_formats: &[],
             });
             let view = target.create_view(&Default::default());
@@ -573,7 +572,8 @@ mod tests {
         let ms = |n: u64| start + std::time::Duration::from_millis(n);
 
         let mut drew_every_frame = Clock::new(start);
-        let both = u32::from(drew_every_frame.steps(ms(16))) + u32::from(drew_every_frame.steps(ms(32)));
+        let both =
+            u32::from(drew_every_frame.steps(ms(16))) + u32::from(drew_every_frame.steps(ms(32)));
 
         // The same thirty-two milliseconds, with the frame at 16 ms abandoned:
         // `steps` is not called, so `last` does not move.

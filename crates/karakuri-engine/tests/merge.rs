@@ -71,7 +71,10 @@ fn compile(src: &str) -> Checked {
 }
 
 fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
+    errs.iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// **Not square, deliberately.** The merge's targets are frame-sized and
@@ -132,7 +135,11 @@ fn frame(gpu: &Gpu, set: &mut Set) -> Vec<f32> {
                 rows_per_image: Some(H),
             },
         },
-        wgpu::Extent3d { width: W, height: H, depth_or_array_layers: 1 },
+        wgpu::Extent3d {
+            width: W,
+            height: H,
+            depth_or_array_layers: 1,
+        },
     );
     gpu.queue.submit([encoder.finish()]);
 
@@ -189,7 +196,12 @@ fn a_merge_of_one_input_hands_the_material_on_unchanged() {
         .zip(&composited)
         .filter(|(a, b)| a.to_bits() != b.to_bits())
         .count();
-    assert_eq!(differing, 0, "{differing} of {} channels differ", over.len());
+    assert_eq!(
+        differing,
+        0,
+        "{differing} of {} channels differ",
+        over.len()
+    );
 }
 
 /// **Additive renderers agree either way**, which is what says the node is
@@ -230,14 +242,26 @@ fn an_inputs_own_fader_reaches_only_that_input() {
     let mut set = build(&gpu, &two, Layering::Composite);
     let full = frame(&gpu, &mut set);
     let (warm, cool) = (total(&full, 0), total(&full, 2));
-    assert!(warm > 1.0 && cool > 1.0, "both renderers must reach the frame first");
+    assert!(
+        warm > 1.0 && cool > 1.0,
+        "both renderers must reach the frame first"
+    );
 
     assert!(
-        set.set_input(1, Input { opacity: 0.0, ..Input::unity() }),
+        set.set_input(
+            1,
+            Input {
+                opacity: 0.0,
+                ..Input::unity()
+            }
+        ),
         "this Set draws with two renderers"
     );
     let muted = frame(&gpu, &mut set);
-    assert!(total(&muted, 2) < cool * 0.01, "the silenced input still reached the mix");
+    assert!(
+        total(&muted, 2) < cool * 0.01,
+        "the silenced input still reached the mix"
+    );
     assert!(
         (total(&muted, 0) - warm).abs() < warm * 0.01,
         "silencing one input moved the other"
@@ -245,7 +269,13 @@ fn an_inputs_own_fader_reaches_only_that_input() {
 
     // And half is half: a fader's middle is the middle, which an on/off test
     // cannot see.
-    assert!(set.set_input(1, Input { opacity: 0.5, ..Input::unity() }));
+    assert!(set.set_input(
+        1,
+        Input {
+            opacity: 0.5,
+            ..Input::unity()
+        }
+    ));
     let half = total(&frame(&gpu, &mut set), 2);
     assert!(
         (half - cool * 0.5).abs() < cool * 0.05,
@@ -300,7 +330,7 @@ fn compositing_refuses_more_renderers_than_an_l5_can_fold() {
         Set::build_many(
             &gpu.device,
             &gpu.queue,
-        &[(&compile(GRID), 16)],
+            &[(&compile(GRID), 16)],
             &[],
             None,
             None,
@@ -321,5 +351,8 @@ fn compositing_refuses_more_renderers_than_an_l5_can_fold() {
     // And the same five overdraw without complaint.
     let mut set = build(&gpu, &five, Layering::Overdraw);
     let px = frame(&gpu, &mut set);
-    assert!(total(&px, 0) > 1.0, "five renderers drew nothing when overdrawing");
+    assert!(
+        total(&px, 0) > 1.0,
+        "five renderers drew nothing when overdrawing"
+    );
 }

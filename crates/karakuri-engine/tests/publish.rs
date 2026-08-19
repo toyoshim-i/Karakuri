@@ -72,7 +72,10 @@ fn compile(src: &str) -> Checked {
 }
 
 fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
+    errs.iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn build(gpu: &Gpu) -> Set {
@@ -104,7 +107,12 @@ fn control(name: &str, layer: Kind, index: u32, key: &str, range: [f32; 2]) -> P
 /// The wildcard form: every node that declares the key, which is what the
 /// default interface is made of.
 fn every(name: &str, key: &str, range: [f32; 2]) -> Published {
-    Published { name: name.to_string(), at: None, key: key.to_string(), range }
+    Published {
+        name: name.to_string(),
+        at: None,
+        key: key.to_string(),
+        range,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +137,10 @@ fn a_set_with_no_interface_publishes_every_control_it_declares() {
     // of them said it still looks like itself at.
     assert_eq!(
         all,
-        vec![every("exposure", "exposure", [0.0, 4.0]), every("radius", "radius", [0.5, 8.0])]
+        vec![
+            every("exposure", "exposure", [0.0, 4.0]),
+            every("radius", "radius", [0.5, 8.0])
+        ]
     );
 
     // And it moves both, exactly as `--param exposure=` does.
@@ -171,7 +182,10 @@ fn a_published_range_must_be_inside_the_declared_one() {
     let err = set
         .publish(control("size", Kind::L1, 0, "radius", [0.1, 4.0]))
         .expect_err("0.1 is below the declared 0.5");
-    assert!(matches!(err, PublishError::RangeNotASubset { .. }), "{err:?}");
+    assert!(
+        matches!(err, PublishError::RangeNotASubset { .. }),
+        "{err:?}"
+    );
     assert!(err.to_string().contains("narrows"), "{err}");
 
     // And nothing was published, so a refusal leaves the Set as it was rather
@@ -201,14 +215,18 @@ fn publishing_refuses_a_control_that_is_not_there_and_a_name_that_is() {
         .expect_err("this Set holds no deformations");
     assert!(matches!(err, PublishError::NoSuchControl { .. }), "{err:?}");
 
-    set.publish(control("level", Kind::L4, 0, "exposure", [0.0, 2.0])).expect("first");
+    set.publish(control("level", Kind::L4, 0, "exposure", [0.0, 2.0]))
+        .expect("first");
     // And an addressed control is checked against *that* node's declaration:
     // `far` declares `[0, 4]`, so publishing it over `[0, 8]` is refused even
     // though its sibling would allow it.
     let err = set
         .publish(control("hot", Kind::L4, 1, "exposure", [0.0, 8.0]))
         .expect_err("renderer 1 declares [0, 4]");
-    assert!(matches!(err, PublishError::RangeNotASubset { .. }), "{err:?}");
+    assert!(
+        matches!(err, PublishError::RangeNotASubset { .. }),
+        "{err:?}"
+    );
     let err = set
         .publish(control("level", Kind::L4, 1, "exposure", [0.0, 2.0]))
         .expect_err("`level` is taken");
@@ -222,16 +240,27 @@ fn publishing_refuses_a_control_that_is_not_there_and_a_name_that_is() {
 fn a_published_control_writes_the_param_it_names_and_is_clamped_to_its_range() {
     let gpu = Gpu::headless().expect("no GPU available");
     let mut set = build(&gpu);
-    set.publish(control("size", Kind::L1, 0, "radius", [1.0, 4.0])).expect("published");
+    set.publish(control("size", Kind::L1, 0, "radius", [1.0, 4.0]))
+        .expect("published");
 
     assert!(set.set_published("size", 3.0));
     assert_eq!(set.published_value("size"), Some(3.0));
     assert_eq!(set.param("radius"), Some(3.0), "the param itself moved");
 
-    assert!(set.set_published("size", 7.5), "a write past the published top is still a write");
-    assert_eq!(set.published_value("size"), Some(4.0), "clamped to what the Set offered");
+    assert!(
+        set.set_published("size", 7.5),
+        "a write past the published top is still a write"
+    );
+    assert_eq!(
+        set.published_value("size"),
+        Some(4.0),
+        "clamped to what the Set offered"
+    );
 
-    assert!(!set.set_published("radius", 2.0), "the internal name is not on the console");
+    assert!(
+        !set.set_published("radius", 2.0),
+        "the internal name is not on the console"
+    );
 }
 
 /// **Publishing decides what is shown, never what is reachable.** A `param`
@@ -244,7 +273,8 @@ fn an_unpublished_control_is_still_reachable_by_address() {
     let mut set = build(&gpu);
     // An interface of exactly one control, so the two `exposure`s are both off
     // the console.
-    set.publish(control("size", Kind::L1, 0, "radius", [1.0, 4.0])).expect("published");
+    set.publish(control("size", Kind::L1, 0, "radius", [1.0, 4.0]))
+        .expect("published");
     assert_eq!(set.published().len(), 1);
 
     assert!(set.set_param_at(Kind::L4, 1, "exposure", 0.25));
@@ -274,7 +304,8 @@ fn an_unpublished_control_is_still_reachable_by_address() {
 fn one_published_control_drives_several_internal_ones_through_their_own_ranges() {
     let gpu = Gpu::headless().expect("no GPU available");
     let mut set = build(&gpu);
-    set.publish(control("blend", Kind::L1, 0, "radius", [1.0, 3.0])).expect("published");
+    set.publish(control("blend", Kind::L1, 0, "radius", [1.0, 3.0]))
+        .expect("published");
 
     let bind = |index: u32, range: [f32; 2]| {
         Binding::new(Kind::L4, "exposure", "control:blend", Curve::Lin, range).at(index)
@@ -296,21 +327,45 @@ fn one_published_control_drives_several_internal_ones_through_their_own_ranges()
     // second at its own top.
     set.set_published("blend", 1.0);
     set.prepare(&gpu.queue, 1, &Signals::default());
-    assert!((exposure(&set, 0) - 0.0).abs() < 1e-4, "{}", exposure(&set, 0));
-    assert!((exposure(&set, 1) - 2.0).abs() < 1e-4, "{}", exposure(&set, 1));
+    assert!(
+        (exposure(&set, 0) - 0.0).abs() < 1e-4,
+        "{}",
+        exposure(&set, 0)
+    );
+    assert!(
+        (exposure(&set, 1) - 2.0).abs() < 1e-4,
+        "{}",
+        exposure(&set, 1)
+    );
 
     // Top of it, and the two have swapped.
     set.set_published("blend", 3.0);
     set.prepare(&gpu.queue, 1, &Signals::default());
-    assert!((exposure(&set, 0) - 2.0).abs() < 1e-4, "{}", exposure(&set, 0));
-    assert!((exposure(&set, 1) - 0.0).abs() < 1e-4, "{}", exposure(&set, 1));
+    assert!(
+        (exposure(&set, 0) - 2.0).abs() < 1e-4,
+        "{}",
+        exposure(&set, 0)
+    );
+    assert!(
+        (exposure(&set, 1) - 0.0).abs() < 1e-4,
+        "{}",
+        exposure(&set, 1)
+    );
 
     // And the middle is the middle, which is what says the position is mapped
     // rather than thresholded.
     set.set_published("blend", 2.0);
     set.prepare(&gpu.queue, 1, &Signals::default());
-    assert!((exposure(&set, 0) - 1.0).abs() < 1e-3, "{}", exposure(&set, 0));
-    assert!((exposure(&set, 1) - 1.0).abs() < 1e-3, "{}", exposure(&set, 1));
+    assert!(
+        (exposure(&set, 0) - 1.0).abs() < 1e-3,
+        "{}",
+        exposure(&set, 0)
+    );
+    assert!(
+        (exposure(&set, 1) - 1.0).abs() < 1e-3,
+        "{}",
+        exposure(&set, 1)
+    );
 }
 
 /// **A binding on a control nothing publishes is refused.**
@@ -328,10 +383,17 @@ fn one_published_control_drives_several_internal_ones_through_their_own_ranges()
 fn a_binding_on_a_control_nothing_publishes_is_refused() {
     let gpu = Gpu::headless().expect("no GPU available");
     let mut set = build(&gpu);
-    set.publish(control("twist", Kind::L1, 0, "radius", [1.0, 4.0])).expect("published");
+    set.publish(control("twist", Kind::L1, 0, "radius", [1.0, 4.0]))
+        .expect("published");
 
     let bind = |name: &str| {
-        Binding::new(Kind::L4, "exposure", format!("control:{name}"), Curve::Lin, [0.0, 2.0])
+        Binding::new(
+            Kind::L4,
+            "exposure",
+            format!("control:{name}"),
+            Curve::Lin,
+            [0.0, 2.0],
+        )
     };
     // **And it says which of the two it missed.** The param is fine — it is
     // the control that is not there — and a refusal that says "no L4 parameter
@@ -343,10 +405,19 @@ fn a_binding_on_a_control_nothing_publishes_is_refused() {
         "a misspelt control was accepted, or reported as a missing param"
     );
     assert_eq!(
-        set.bind(Binding::new(Kind::L4, "no_such_param", "control:twist", Curve::Lin, [0.0, 1.0])),
+        set.bind(Binding::new(
+            Kind::L4,
+            "no_such_param",
+            "control:twist",
+            Curve::Lin,
+            [0.0, 1.0]
+        )),
         Bound::NoSuchParam,
         "a published control does not make an undeclared param bindable"
     );
     assert!(set.bindings().is_empty(), "the refusal still attached it");
-    assert!(set.bind(bind("twist")).attached(), "the control that is there");
+    assert!(
+        set.bind(bind("twist")).attached(),
+        "the control that is there"
+    );
 }

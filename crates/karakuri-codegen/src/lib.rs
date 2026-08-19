@@ -172,15 +172,25 @@ mod tests {
             value: TExpr::new(
                 Ty::Vec3,
                 span(),
-                TExprKind::Construct { args: vec![lit_f(1.0), lit_f(2.0), lit_f(3.0)] },
+                TExprKind::Construct {
+                    args: vec![lit_f(1.0), lit_f(2.0), lit_f(3.0)],
+                },
             ),
             span: span(),
         };
         // Reads `position` again *after* writing it above. Must still read
         // the previous frame's buffer, not the value just assigned.
-        let reread = TStmt::Let { name: "again".to_string(), value: attr_read(Attr::Position), span: span() };
+        let reread = TStmt::Let {
+            name: "again".to_string(),
+            value: attr_read(Attr::Position),
+            span: span(),
+        };
 
-        p.blocks.push(TBlock { kind: BlockKind::Element, stmts: vec![assign_position, reread], span: span() });
+        p.blocks.push(TBlock {
+            kind: BlockKind::Element,
+            stmts: vec![assign_position, reread],
+            span: span(),
+        });
         p
     }
 
@@ -191,9 +201,15 @@ mod tests {
         // `prev[i]`, never a reference to a local that captured the write.
         // Read and write index are separate expressions precisely because
         // compaction makes them different slots.
-        assert!(shader.source.contains("next[out].position ="), "{}", shader.source);
         assert!(
-            shader.source.contains("let usr_again = prev[i].position.xyz;"),
+            shader.source.contains("next[out].position ="),
+            "{}",
+            shader.source
+        );
+        assert!(
+            shader
+                .source
+                .contains("let usr_again = prev[i].position.xyz;"),
             "expected the re-read to reference prev[i].position, got:\n{}",
             shader.source
         );
@@ -206,8 +222,15 @@ mod tests {
     #[test]
     fn a_static_procedure_neither_binds_nor_reads_the_destination_indices() {
         let shader = generate_l1(&read_after_write_proc(), &[], None);
-        assert!(!shader.compacted, "no spawn block and no kill() is a static procedure");
-        assert!(!shader.source.contains("dest"), "static `element` must not touch dest:\n{}", shader.source);
+        assert!(
+            !shader.compacted,
+            "no spawn block and no kill() is a static procedure"
+        );
+        assert!(
+            !shader.source.contains("dest"),
+            "static `element` must not touch dest:\n{}",
+            shader.source
+        );
         assert!(
             !shader.source.contains("prev_alive[i]"),
             "static `element` has no dead elements to skip:\n{}",
@@ -222,7 +245,10 @@ mod tests {
     #[test]
     fn a_kill_anywhere_in_the_element_block_makes_a_procedure_compacted() {
         let mut p = read_after_write_proc();
-        let element = p.blocks.last_mut().expect("the fixture has an element block");
+        let element = p
+            .blocks
+            .last_mut()
+            .expect("the fixture has an element block");
         element.stmts.push(TStmt::If {
             cond: TExpr::new(Ty::Bool, span(), TExprKind::Lit(Lit::Bool(true))),
             then: vec![TStmt::For {
@@ -237,11 +263,26 @@ mod tests {
         });
 
         let shader = generate_l1(&p, &[], None);
-        assert!(shader.compacted, "a kill() inside an if inside a for still kills");
+        assert!(
+            shader.compacted,
+            "a kill() inside an if inside a for still kills"
+        );
         assert!(!shader.has_spawn, "no spawn block was added");
-        assert!(shader.source.contains("let out = dest[i];"), "{}", shader.source);
-        assert!(shader.source.contains("if prev_alive[i] == 0u { return; }"), "{}", shader.source);
-        assert!(shader.source.contains("next[out].position ="), "{}", shader.source);
+        assert!(
+            shader.source.contains("let out = dest[i];"),
+            "{}",
+            shader.source
+        );
+        assert!(
+            shader.source.contains("if prev_alive[i] == 0u { return; }"),
+            "{}",
+            shader.source
+        );
+        assert!(
+            shader.source.contains("next[out].position ="),
+            "{}",
+            shader.source
+        );
     }
 
     /// A block calling `fbm(position, 3)` — the octave count must be
@@ -263,8 +304,16 @@ mod tests {
                 ],
             },
         );
-        let assign = TStmt::Assign { target: Target::Attr(Attr::Age), value: call, span: span() };
-        p.blocks.push(TBlock { kind: BlockKind::Element, stmts: vec![assign], span: span() });
+        let assign = TStmt::Assign {
+            target: Target::Attr(Attr::Age),
+            value: call,
+            span: span(),
+        };
+        p.blocks.push(TBlock {
+            kind: BlockKind::Element,
+            stmts: vec![assign],
+            span: span(),
+        });
         p
     }
 
@@ -274,15 +323,28 @@ mod tests {
         // Exactly one `perlin` helper definition, plus exactly three call
         // sites from unrolling `fbm(position, 3)` — counting bare
         // `"perlin("` would also match the helper's own `fn perlin(`.
-        assert_eq!(shader.source.matches("fn perlin(").count(), 1, "{}", shader.source);
+        assert_eq!(
+            shader.source.matches("fn perlin(").count(),
+            1,
+            "{}",
+            shader.source
+        );
         assert_eq!(
             shader.source.matches("perlin(prev[i].position").count(),
             3,
             "fbm(_, 3) should unroll to exactly three perlin() call sites:\n{}",
             shader.source
         );
-        assert!(!shader.source.contains("fbm("), "no call to fbm() should survive lowering:\n{}", shader.source);
-        assert!(!shader.source.contains("for "), "an unrolled fbm should need no runtime loop:\n{}", shader.source);
+        assert!(
+            !shader.source.contains("fbm("),
+            "no call to fbm() should survive lowering:\n{}",
+            shader.source
+        );
+        assert!(
+            !shader.source.contains("for "),
+            "an unrolled fbm should need no runtime loop:\n{}",
+            shader.source
+        );
     }
 
     /// `%` on a float attribute must route through the `mod_f32` helper
@@ -294,27 +356,59 @@ mod tests {
         let rem = TExpr::new(
             Ty::Float,
             span(),
-            TExprKind::Binary { op: BinOp::Rem, lhs: Box::new(attr_read(Attr::Age)), rhs: Box::new(lit_f(1.0)) },
+            TExprKind::Binary {
+                op: BinOp::Rem,
+                lhs: Box::new(attr_read(Attr::Age)),
+                rhs: Box::new(lit_f(1.0)),
+            },
         );
-        let assign = TStmt::Assign { target: Target::Attr(Attr::Age), value: rem, span: span() };
-        p.blocks.push(TBlock { kind: BlockKind::Element, stmts: vec![assign], span: span() });
+        let assign = TStmt::Assign {
+            target: Target::Attr(Attr::Age),
+            value: rem,
+            span: span(),
+        };
+        p.blocks.push(TBlock {
+            kind: BlockKind::Element,
+            stmts: vec![assign],
+            span: span(),
+        });
         p
     }
 
     #[test]
     fn mod_helper_appears_only_when_percent_is_used_on_a_float() {
         let with_rem = generate_l1(&float_rem_proc(), &[], None);
-        assert!(with_rem.source.contains("fn mod_f32("), "{}", with_rem.source);
-        assert!(with_rem.source.contains("mod_f32(prev[i].age.x, 1.0)"), "{}", with_rem.source);
+        assert!(
+            with_rem.source.contains("fn mod_f32("),
+            "{}",
+            with_rem.source
+        );
+        assert!(
+            with_rem.source.contains("mod_f32(prev[i].age.x, 1.0)"),
+            "{}",
+            with_rem.source
+        );
 
         // A procedure that never uses `%` on a float must not carry the
         // helper at all.
         let mut p = empty_checked("no_mod", Kind::L1);
         p.emit = vec![Attr::Age];
-        let assign = TStmt::Assign { target: Target::Attr(Attr::Age), value: lit_f(1.0), span: span() };
-        p.blocks.push(TBlock { kind: BlockKind::Element, stmts: vec![assign], span: span() });
+        let assign = TStmt::Assign {
+            target: Target::Attr(Attr::Age),
+            value: lit_f(1.0),
+            span: span(),
+        };
+        p.blocks.push(TBlock {
+            kind: BlockKind::Element,
+            stmts: vec![assign],
+            span: span(),
+        });
         let without_rem = generate_l1(&p, &[], None);
-        assert!(!without_rem.source.contains("mod_f32"), "{}", without_rem.source);
+        assert!(
+            !without_rem.source.contains("mod_f32"),
+            "{}",
+            without_rem.source
+        );
     }
 
     #[test]
@@ -329,20 +423,36 @@ mod tests {
             span(),
             TExprKind::Binary {
                 op: BinOp::Rem,
-                lhs: Box::new(TExpr::new(Ty::Uint, span(), TExprKind::Ambient(Ambient::Seed))),
+                lhs: Box::new(TExpr::new(
+                    Ty::Uint,
+                    span(),
+                    TExprKind::Ambient(Ambient::Seed),
+                )),
                 rhs: Box::new(TExpr::new(Ty::Uint, span(), TExprKind::Lit(Lit::Uint(512)))),
             },
         );
-        let let_stmt = TStmt::Let { name: "bucket".to_string(), value: rem, span: span() };
+        let let_stmt = TStmt::Let {
+            name: "bucket".to_string(),
+            value: rem,
+            span: span(),
+        };
         let assign = TStmt::Assign {
             target: Target::Attr(Attr::Age),
             value: lit_f(0.0),
             span: span(),
         };
         p.emit = vec![Attr::Age];
-        p.blocks.push(TBlock { kind: BlockKind::Element, stmts: vec![let_stmt, assign], span: span() });
+        p.blocks.push(TBlock {
+            kind: BlockKind::Element,
+            stmts: vec![let_stmt, assign],
+            span: span(),
+        });
         let shader = generate_l1(&p, &[], None);
-        assert!(shader.source.contains("let usr_bucket = (seed % 512u);"), "{}", shader.source);
+        assert!(
+            shader.source.contains("let usr_bucket = (seed % 512u);"),
+            "{}",
+            shader.source
+        );
         assert!(!shader.source.contains("mod_"), "{}", shader.source);
     }
 
@@ -350,24 +460,64 @@ mod tests {
     fn uniform_struct_total_size_is_sixteen_byte_aligned() {
         let mut p = empty_checked("params", Kind::L1);
         p.params = vec![
-            Param { name: "radius".to_string(), ty: Ty::Float, min: 0.0, max: 1.0, default: dummy_expr(), span: span() },
-            Param { name: "glow".to_string(), ty: Ty::Vec3, min: 0.0, max: 1.0, default: dummy_expr(), span: span() },
+            Param {
+                name: "radius".to_string(),
+                ty: Ty::Float,
+                min: 0.0,
+                max: 1.0,
+                default: dummy_expr(),
+                span: span(),
+            },
+            Param {
+                name: "glow".to_string(),
+                ty: Ty::Vec3,
+                min: 0.0,
+                max: 1.0,
+                default: dummy_expr(),
+                span: span(),
+            },
         ];
         p.emit = vec![Attr::Age];
-        let assign = TStmt::Assign { target: Target::Attr(Attr::Age), value: lit_f(0.0), span: span() };
-        p.blocks.push(TBlock { kind: BlockKind::Element, stmts: vec![assign], span: span() });
+        let assign = TStmt::Assign {
+            target: Target::Attr(Attr::Age),
+            value: lit_f(0.0),
+            span: span(),
+        };
+        p.blocks.push(TBlock {
+            kind: BlockKind::Element,
+            stmts: vec![assign],
+            span: span(),
+        });
 
         let shader = generate_l1(&p, &[], None);
-        assert_eq!(shader.uniform_layout.total_size % 16, 0, "{:#?}", shader.uniform_layout);
+        assert_eq!(
+            shader.uniform_layout.total_size % 16,
+            0,
+            "{:#?}",
+            shader.uniform_layout
+        );
         // The padded size must be large enough to hold every field, not
         // merely a multiple of 16 by accident.
-        let last_end = shader.uniform_layout.fields.iter().map(|f| f.offset + f.size).max().unwrap_or(0);
+        let last_end = shader
+            .uniform_layout
+            .fields
+            .iter()
+            .map(|f| f.offset + f.size)
+            .max()
+            .unwrap_or(0);
         assert!(shader.uniform_layout.total_size >= last_end);
-        assert!(shader.source.contains("_pad"), "expected an explicit trailing pad field:\n{}", shader.source);
+        assert!(
+            shader.source.contains("_pad"),
+            "expected an explicit trailing pad field:\n{}",
+            shader.source
+        );
     }
 
     fn dummy_expr() -> karakuri_ir::Expr {
-        karakuri_ir::Expr::Lit { value: Lit::Float(0.0), span: span() }
+        karakuri_ir::Expr::Lit {
+            value: Lit::Float(0.0),
+            span: span(),
+        }
     }
 
     /// An L4 fixture matching the ir-spec's `soft_points` shape closely
@@ -386,19 +536,32 @@ mod tests {
                 span(),
                 TExprKind::Binary {
                     op: BinOp::Mul,
-                    lhs: Box::new(TExpr::new(Ty::Mat4, span(), TExprKind::Ambient(Ambient::Camera))),
+                    lhs: Box::new(TExpr::new(
+                        Ty::Mat4,
+                        span(),
+                        TExprKind::Ambient(Ambient::Camera),
+                    )),
                     rhs: Box::new(TExpr::new(
                         Ty::Vec4,
                         span(),
-                        TExprKind::Construct { args: vec![attr_read(Attr::Position), lit_f(1.0)] },
+                        TExprKind::Construct {
+                            args: vec![attr_read(Attr::Position), lit_f(1.0)],
+                        },
                     )),
                 },
             ),
             span: span(),
         };
-        let point_size =
-            TStmt::Assign { target: Target::Output(Output::PointSize), value: lit_f(6.0), span: span() };
-        let vertex = TBlock { kind: BlockKind::Vertex, stmts: vec![clip, point_size], span: span() };
+        let point_size = TStmt::Assign {
+            target: Target::Output(Output::PointSize),
+            value: lit_f(6.0),
+            span: span(),
+        };
+        let vertex = TBlock {
+            kind: BlockKind::Vertex,
+            stmts: vec![clip, point_size],
+            span: span(),
+        };
 
         let hsv = TExpr::new(
             Ty::Vec3,
@@ -408,20 +571,34 @@ mod tests {
                 args: vec![TExpr::new(
                     Ty::Vec3,
                     span(),
-                    TExprKind::Construct { args: vec![lit_f(0.5), lit_f(0.7), lit_f(1.0)] },
+                    TExprKind::Construct {
+                        args: vec![lit_f(0.5), lit_f(0.7), lit_f(1.0)],
+                    },
                 )],
             },
         );
-        let color_rgb = TStmt::Let { name: "c".to_string(), value: hsv, span: span() };
+        let color_rgb = TStmt::Let {
+            name: "c".to_string(),
+            value: hsv,
+            span: span(),
+        };
         let alpha = TExpr::new(
             Ty::Float,
             span(),
             TExprKind::Builtin {
                 func: Builtin::Length,
-                args: vec![TExpr::new(Ty::Vec2, span(), TExprKind::Ambient(Ambient::PointCoord))],
+                args: vec![TExpr::new(
+                    Ty::Vec2,
+                    span(),
+                    TExprKind::Ambient(Ambient::PointCoord),
+                )],
             },
         );
-        let alpha_let = TStmt::Let { name: "a".to_string(), value: alpha, span: span() };
+        let alpha_let = TStmt::Let {
+            name: "a".to_string(),
+            value: alpha,
+            span: span(),
+        };
         let color = TStmt::Assign {
             target: Target::Output(Output::Color),
             value: TExpr::new(
@@ -436,8 +613,11 @@ mod tests {
             ),
             span: span(),
         };
-        let fragment =
-            TBlock { kind: BlockKind::Fragment, stmts: vec![color_rgb, alpha_let, color], span: span() };
+        let fragment = TBlock {
+            kind: BlockKind::Fragment,
+            stmts: vec![color_rgb, alpha_let, color],
+            span: span(),
+        };
 
         p.blocks = vec![vertex, fragment];
         p
@@ -445,10 +625,17 @@ mod tests {
 
     #[test]
     fn l4_quad_expansion_and_hsv_to_rgb_wiring() {
-        let elements = crate::layout::generate_element_layout(&[Attr::Position], crate::layout::Synthetic::NONE, &[]);
+        let elements = crate::layout::generate_element_layout(
+            &[Attr::Position],
+            crate::layout::Synthetic::NONE,
+            &[],
+        );
         let shader = generate_l4(&l4_proc(), &elements, None);
         let src = &shader.source;
-        assert!(src.contains("@builtin(vertex_index) corner_idx: u32"), "{src}");
+        assert!(
+            src.contains("@builtin(vertex_index) corner_idx: u32"),
+            "{src}"
+        );
         assert!(src.contains("@builtin(instance_index) elem: u32"), "{src}");
         assert!(src.contains("fn hsv_to_rgb("), "{src}");
         // hsv_to_rgb must end by converting sRGB->linear, not linear->sRGB —

@@ -192,7 +192,10 @@ impl Compaction {
         substeps: u32,
     ) -> Compaction {
         assert!(capacity >= 1, "compaction requires a non-zero capacity");
-        assert!(substeps >= 1, "at least one substep's advance bind group is needed");
+        assert!(
+            substeps >= 1,
+            "at least one substep's advance bind group is needed"
+        );
         let wg = WORKGROUP_SIZE;
 
         // The level pyramid: level_sizes[0] is `capacity`, and each further
@@ -276,11 +279,19 @@ impl Compaction {
         });
         let bgl_inplace = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("compaction scan_inplace"),
-            entries: &[storage_entry(5, false), storage_entry(6, false), uniform_entry(7)],
+            entries: &[
+                storage_entry(5, false),
+                storage_entry(6, false),
+                uniform_entry(7),
+            ],
         });
         let bgl_add_offsets = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("compaction add_offsets"),
-            entries: &[storage_entry(8, false), storage_entry(9, true), uniform_entry(10)],
+            entries: &[
+                storage_entry(8, false),
+                storage_entry(9, true),
+                uniform_entry(10),
+            ],
         });
         let bgl_finalize = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("compaction finalize"),
@@ -291,16 +302,41 @@ impl Compaction {
             entries: &[storage_entry(13, false), uniform_entry(14)],
         });
 
-        let pipeline_from_alive =
-            make_pipeline(device, &shader, &bgl_from_alive, "scan_from_alive", "compaction scan_from_alive");
-        let pipeline_inplace =
-            make_pipeline(device, &shader, &bgl_inplace, "scan_inplace", "compaction scan_inplace");
-        let pipeline_add_offsets =
-            make_pipeline(device, &shader, &bgl_add_offsets, "add_offsets", "compaction add_offsets");
-        let pipeline_finalize =
-            make_pipeline(device, &shader, &bgl_finalize, "finalize", "compaction finalize");
-        let pipeline_advance =
-            make_pipeline(device, &shader, &bgl_advance, "advance", "compaction advance");
+        let pipeline_from_alive = make_pipeline(
+            device,
+            &shader,
+            &bgl_from_alive,
+            "scan_from_alive",
+            "compaction scan_from_alive",
+        );
+        let pipeline_inplace = make_pipeline(
+            device,
+            &shader,
+            &bgl_inplace,
+            "scan_inplace",
+            "compaction scan_inplace",
+        );
+        let pipeline_add_offsets = make_pipeline(
+            device,
+            &shader,
+            &bgl_add_offsets,
+            "add_offsets",
+            "compaction add_offsets",
+        );
+        let pipeline_finalize = make_pipeline(
+            device,
+            &shader,
+            &bgl_finalize,
+            "finalize",
+            "compaction finalize",
+        );
+        let pipeline_advance = make_pipeline(
+            device,
+            &shader,
+            &bgl_advance,
+            "advance",
+            "compaction advance",
+        );
 
         let bg_level0 = std::array::from_fn(|parity| {
             device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -352,7 +388,10 @@ impl Compaction {
         let bg_finalize = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("compaction finalize"),
             layout: &bgl_finalize,
-            entries: &[buffer_entry(11, &sums[num_levels - 1]), buffer_entry(12, counts_buf)],
+            entries: &[
+                buffer_entry(11, &sums[num_levels - 1]),
+                buffer_entry(12, counts_buf),
+            ],
         });
 
         let bg_advance: Vec<wgpu::BindGroup> = (0..substeps)

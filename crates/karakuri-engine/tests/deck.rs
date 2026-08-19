@@ -33,8 +33,8 @@ use std::time::{Duration, Instant};
 
 use karakuri_engine::binding::Curve;
 use karakuri_engine::deck::{Blend, Deck, Mask, MaskKind, Residency};
-use karakuri_engine::transition::{Control, Transition};
 use karakuri_engine::swap::{Event, HotSwap, Request};
+use karakuri_engine::transition::{Control, Transition};
 use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
 use karakuri_ir::typed::Checked;
 
@@ -820,7 +820,10 @@ fn a_wipe_is_a_transition_carrying_a_masks_front() {
     }
     // Monotone and strictly moving, which a jump would not be.
     for pair in fronts.windows(2) {
-        assert!(pair[1] > pair[0], "the front went backwards or stood still: {fronts:?}");
+        assert!(
+            pair[1] > pair[0],
+            "the front went backwards or stood still: {fronts:?}"
+        );
     }
     assert_eq!(deck.mask(1).position(), 1.0, "the wipe did not finish");
     // The shape survived: a move carries the position and leaves the kind
@@ -869,7 +872,11 @@ fn a_scheduled_fade_is_a_function_of_the_beat_count() {
     }
     // Exactly at silence, and the transition gone rather than still writing.
     assert_eq!(deck.opacity(0), 0.0);
-    assert_eq!(deck.transitions_on(0).count(), 0, "a finished fade is still scheduled");
+    assert_eq!(
+        deck.transitions_on(0).count(),
+        0,
+        "a finished fade is still scheduled"
+    );
 }
 
 /// **A hand on the fader wins.**
@@ -886,7 +893,15 @@ fn moving_a_control_by_hand_cancels_the_transition_moving_it() {
     deck.set_signals(Signals::new(120.0, 1));
 
     let start = deck.signals().oscillator().beats();
-    deck.schedule(Transition::new(0, Control::Opacity, 1.0, 0.0, start, 8.0, Curve::Lin));
+    deck.schedule(Transition::new(
+        0,
+        Control::Opacity,
+        1.0,
+        0.0,
+        start,
+        8.0,
+        Curve::Lin,
+    ));
     for _ in 0..30 {
         frame(&gpu, &mut deck, &present, 1);
     }
@@ -907,15 +922,35 @@ fn moving_a_control_by_hand_cancels_the_transition_moving_it() {
     // And the other control's transition is untouched by the wrong fader:
     // cancelling has to be per control, or a gain move would stop an opacity
     // fade and an operator would never find out why.
-    deck.schedule(Transition::new(0, Control::Gain, 1.0, 0.0, start, 8.0, Curve::Lin));
+    deck.schedule(Transition::new(
+        0,
+        Control::Gain,
+        1.0,
+        0.0,
+        start,
+        8.0,
+        Curve::Lin,
+    ));
     deck.set_opacity(0, 0.5);
-    assert_eq!(deck.transitions_on(0).count(), 1, "the gain fade was cancelled too");
+    assert_eq!(
+        deck.transitions_on(0).count(),
+        1,
+        "the gain fade was cancelled too"
+    );
 
     // **The gain half of the rule, which this test claimed and did not check.**
     // `[`, `]` and `\` all end in `set_gain`, so a gain fade that kept writing
     // after one of them would be a control fighting the hand on it.
     let start = deck.signals().oscillator().beats();
-    deck.schedule(Transition::new(0, Control::Gain, 1.0, 0.0, start, 8.0, Curve::Lin));
+    deck.schedule(Transition::new(
+        0,
+        Control::Gain,
+        1.0,
+        0.0,
+        start,
+        8.0,
+        Curve::Lin,
+    ));
     for _ in 0..30 {
         frame(&gpu, &mut deck, &present, 1);
     }
@@ -944,7 +979,15 @@ fn moving_a_control_by_hand_cancels_the_transition_moving_it() {
 fn scheduling_a_move_onto_a_slot_that_is_not_there_is_refused_at_the_call() {
     let gpu = Gpu::headless().expect("no GPU available");
     let mut deck = deck_of(&gpu, &[SEED_A]);
-    deck.schedule(Transition::new(3, Control::Opacity, 1.0, 0.0, 0.0, 4.0, Curve::Lin));
+    deck.schedule(Transition::new(
+        3,
+        Control::Opacity,
+        1.0,
+        0.0,
+        0.0,
+        4.0,
+        Curve::Lin,
+    ));
 }
 
 /// **The composite sees this frame's fader, not the last one's.**
@@ -988,7 +1031,15 @@ fn a_scheduled_cut_lands_on_the_frame_it_was_scheduled_for() {
     // instant is already past by the time the transition is read — which is
     // the frame it is due on, and the frame the composite has to see it on.
     let cut_at = deck.signals().oscillator().beats();
-    deck.schedule(Transition::new(1, Control::Opacity, 1.0, 0.0, cut_at, 0.0, Curve::Lin));
+    deck.schedule(Transition::new(
+        1,
+        Control::Opacity,
+        1.0,
+        0.0,
+        cut_at,
+        0.0,
+        Curve::Lin,
+    ));
     frame(&gpu, &mut deck, &present, 1);
     let scheduled = readback(&gpu, present.hdr_texture());
 
@@ -1019,8 +1070,24 @@ fn a_scheduled_move_is_clamped_the_way_a_manual_one_is() {
     deck.set_signals(Signals::new(120.0, 1));
     let start = deck.signals().oscillator().beats();
 
-    deck.schedule(Transition::new(0, Control::Opacity, 1.0, 4.0, start, 0.0, Curve::Lin));
-    deck.schedule(Transition::new(0, Control::Gain, 1.0, -3.0, start, 0.0, Curve::Lin));
+    deck.schedule(Transition::new(
+        0,
+        Control::Opacity,
+        1.0,
+        4.0,
+        start,
+        0.0,
+        Curve::Lin,
+    ));
+    deck.schedule(Transition::new(
+        0,
+        Control::Gain,
+        1.0,
+        -3.0,
+        start,
+        0.0,
+        Curve::Lin,
+    ));
     frame(&gpu, &mut deck, &present, 1);
 
     assert_eq!(deck.opacity(0), 1.0, "a scheduled fader passed 1.0");
@@ -1046,8 +1113,24 @@ fn a_crossfade_is_two_moves_sharing_a_start_and_a_length() {
     }
 
     let start = deck.signals().oscillator().beats();
-    deck.schedule(Transition::new(0, Control::Opacity, 1.0, 0.0, start, 4.0, Curve::Smooth));
-    deck.schedule(Transition::new(1, Control::Opacity, 0.0, 1.0, start, 4.0, Curve::Smooth));
+    deck.schedule(Transition::new(
+        0,
+        Control::Opacity,
+        1.0,
+        0.0,
+        start,
+        4.0,
+        Curve::Smooth,
+    ));
+    deck.schedule(Transition::new(
+        1,
+        Control::Opacity,
+        0.0,
+        1.0,
+        start,
+        4.0,
+        Curve::Smooth,
+    ));
 
     // Two beats: halfway, where both are somewhere in the middle.
     for _ in 0..60 {
@@ -1067,7 +1150,10 @@ fn a_crossfade_is_two_moves_sharing_a_start_and_a_length() {
     }
     assert_eq!(deck.opacity(0), 0.0);
     assert_eq!(deck.opacity(1), 1.0);
-    assert_eq!(deck.transitions_on(0).count() + deck.transitions_on(1).count(), 0);
+    assert_eq!(
+        deck.transitions_on(0).count() + deck.transitions_on(1).count(),
+        0
+    );
 }
 
 /// **An audition shows the slot's own target, bit for bit, at unity.**
@@ -1106,7 +1192,10 @@ fn an_audition_shows_that_slots_own_target_and_ignores_the_faders() {
         "the audition is not slot 1's own target — a fader, another slot, or a \
          resample reached it"
     );
-    assert!(lit(&own) > 100, "slot 1 drew nothing, so this test compares two black frames");
+    assert!(
+        lit(&own) > 100,
+        "slot 1 drew nothing, so this test compares two black frames"
+    );
 
     // And the mix is still there to go back to: turning the preview off shows
     // something the audition did not.
@@ -1166,7 +1255,10 @@ fn an_audition_draws_an_allocated_slot_without_stepping_it() {
     deck.set_residency(1, Residency::Allocated);
     let parked_steps = steps_taken(deck.slot(1).set());
     let parked_t = deck.slot(1).set().time();
-    assert!(parked_steps > 0, "the slot never warmed, so it has nothing to draw");
+    assert!(
+        parked_steps > 0,
+        "the slot never warmed, so it has nothing to draw"
+    );
 
     deck.set_preview(Some(1));
     for _ in 0..30 {
@@ -1438,7 +1530,8 @@ fn over_hides_what_is_under_it_and_add_does_not() {
     }
 
     assert_eq!(
-        misses, 0,
+        misses,
+        0,
         "`over` is not `A*(1 - coverage)`: {misses} of {} colour channels disagree, \
          worst by {worst}",
         added.len()
@@ -1503,7 +1596,8 @@ fn max_takes_the_larger_of_two_layers_rather_than_their_sum() {
     }
 
     assert_eq!(
-        misses, 0,
+        misses,
+        0,
         "`max` is not the per-channel maximum: {misses} of {} colour channels disagree, \
          worst by {worst}",
         maxed.len()
@@ -1734,7 +1828,8 @@ fn opacity_moves_the_mix_at_settings_between_zero_and_one() {
     let half_gain = colour(&add_run(GAIN * HALF, 1.0));
     let full = colour(&add_run(GAIN, 1.0));
     assert_ne!(
-        full, half_gain,
+        full,
+        half_gain,
         "gain {GAIN} and gain {} render the same colours, so the comparison below is \
          vacuous",
         GAIN * HALF
@@ -1793,7 +1888,8 @@ fn opacity_moves_the_mix_at_settings_between_zero_and_one() {
         }
     }
     assert_eq!(
-        misses, 0,
+        misses,
+        0,
         "under `over`, a fader at {HALF} is not `A*(1 - {HALF}*coverage)`: {misses} of {} \
          colour channels disagree, worst by {worst}",
         bare.len()
@@ -1837,7 +1933,8 @@ fn opacity_moves_the_mix_at_settings_between_zero_and_one() {
         }
     }
     assert_eq!(
-        misses, 0,
+        misses,
+        0,
         "under `max`, a fader at {HALF} is not halfway to the maximum: {misses} of {} \
          colour channels disagree, worst by {worst}",
         halfway.len()
@@ -1981,7 +2078,10 @@ fn each_live_slot_renders_into_its_own_target() {
     let first = readback(&gpu, deck.slot_target(0));
     let second = readback(&gpu, deck.slot_target(1));
 
-    assert!(lit(&first) > 100 && lit(&second) > 100, "a slot drew nothing");
+    assert!(
+        lit(&first) > 100 && lit(&second) > 100,
+        "a slot drew nothing"
+    );
     assert_ne!(
         first, second,
         "two slots at different seeds hold the same target contents"
@@ -2114,7 +2214,8 @@ fn gain_is_linear_and_applied_before_the_composite() {
     }
 
     assert_eq!(
-        before_misses, 0,
+        before_misses,
+        0,
         "the mix is not 2*A + B: {before_misses} of {} channels disagree, worst by {worst}",
         mixed.len()
     );
@@ -2335,7 +2436,11 @@ fn a_swap_in_one_slot_leaves_the_other_slot_alone() {
         neighbour_live_before,
         "the swap disturbed the neighbouring slot's element buffers"
     );
-    assert_eq!(deck.live_slots(), 2, "the swap changed which slots are live");
+    assert_eq!(
+        deck.live_slots(),
+        2,
+        "the swap changed which slots are live"
+    );
     assert!(
         deck.events(1).next().is_none(),
         "the untouched slot reported an event"
@@ -2400,12 +2505,12 @@ fn an_off_air_slot_is_not_judged_against_its_neighbours_frames() {
 
     let verdict = |deck: &mut Deck| -> Option<String> {
         deck.events(1).find_map(|e| match e {
-            Event::Accepted { label, median_ms, .. } => {
-                Some(format!("Accepted `{label}` at {median_ms:.3} ms"))
-            }
-            Event::RolledBack { label, median_ms, .. } => {
-                Some(format!("RolledBack `{label}` at {median_ms:.3} ms"))
-            }
+            Event::Accepted {
+                label, median_ms, ..
+            } => Some(format!("Accepted `{label}` at {median_ms:.3} ms")),
+            Event::RolledBack {
+                label, median_ms, ..
+            } => Some(format!("RolledBack `{label}` at {median_ms:.3} ms")),
             _ => None,
         })
     };
@@ -2578,7 +2683,12 @@ fn the_cost_of_a_slot_and_of_the_composite_are_measured_and_reported() {
 fn a_mix_target_of_the_wrong_size_is_refused() {
     let gpu = Gpu::headless().expect("no GPU available");
     let mut deck = deck_of(&gpu, &[1]);
-    let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba8UnormSrgb, WIDTH, HEIGHT);
+    let present = Present::new(
+        &gpu.device,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        WIDTH,
+        HEIGHT,
+    );
 
     // The deck moves, the target does not — the direction a window resize
     // takes if only one of the two handlers is wired.

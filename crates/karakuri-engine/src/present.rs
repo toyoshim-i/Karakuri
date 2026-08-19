@@ -253,8 +253,14 @@ impl Present {
         if (width, height) == (self.width, self.height) {
             return;
         }
-        let (hdr, view, bind_group) =
-            Self::make_target(device, &self.layout, &self.sampler, &self.tonemap, width, height);
+        let (hdr, view, bind_group) = Self::make_target(
+            device,
+            &self.layout,
+            &self.sampler,
+            &self.tonemap,
+            width,
+            height,
+        );
         self.hdr = hdr;
         self.hdr_view = view;
         self.bind_group = bind_group;

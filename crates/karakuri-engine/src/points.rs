@@ -209,7 +209,12 @@ impl Points {
 }
 
 impl VideoSource for Points {
-    fn render(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, _steps: u8) {
+    fn render(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        _steps: u8,
+    ) {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("points"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {

@@ -444,10 +444,17 @@ pub fn render(req: &Requirements) -> String {
 
     let need_hash1 = uses(|x| x.is_seeded()) || b.contains(&Builtin::Hash1);
     let need_lattice = uses(|x| {
-        matches!(x, Builtin::ValueNoise | Builtin::Perlin | Builtin::Simplex | Builtin::Fbm | Builtin::Curl)
+        matches!(
+            x,
+            Builtin::ValueNoise | Builtin::Perlin | Builtin::Simplex | Builtin::Fbm | Builtin::Curl
+        )
     });
-    let need_gradient =
-        uses(|x| matches!(x, Builtin::Perlin | Builtin::Simplex | Builtin::Fbm | Builtin::Curl));
+    let need_gradient = uses(|x| {
+        matches!(
+            x,
+            Builtin::Perlin | Builtin::Simplex | Builtin::Fbm | Builtin::Curl
+        )
+    });
     let need_perlin = need_gradient; // everything that needs the gradient lattice calls perlin for it
 
     if need_hash1 {

@@ -130,7 +130,10 @@ struct L4Resolver {
 
 impl L4Resolver {
     fn new(block: L4Block) -> L4Resolver {
-        L4Resolver { block, camera_used: std::cell::Cell::new(false) }
+        L4Resolver {
+            block,
+            camera_used: std::cell::Cell::new(false),
+        }
     }
 }
 
@@ -210,7 +213,13 @@ fn output_local(o: Output) -> &'static str {
     }
 }
 
-fn emit_stmts(stmts: &[TStmt], resolver: &L4Resolver, req: &mut Requirements, indent: usize, out: &mut String) {
+fn emit_stmts(
+    stmts: &[TStmt],
+    resolver: &L4Resolver,
+    req: &mut Requirements,
+    indent: usize,
+    out: &mut String,
+) {
     let pad = "    ".repeat(indent);
     for stmt in stmts {
         match stmt {
@@ -225,12 +234,20 @@ fn emit_stmts(stmts: &[TStmt], resolver: &L4Resolver, req: &mut Requirements, in
             TStmt::Assign { target, value, .. } => {
                 let v = lower_expr(value, resolver, req);
                 match target {
-                    Target::Local(name) => out.push_str(&format!("{pad}{} = {v};\n", mangle_local(name))),
-                    Target::Output(o) => out.push_str(&format!("{pad}{} = {v};\n", output_local(*o))),
-                    Target::Attr(a) => unreachable!("L4 never assigns attribute {a:?}, only reads it"),
+                    Target::Local(name) => {
+                        out.push_str(&format!("{pad}{} = {v};\n", mangle_local(name)))
+                    }
+                    Target::Output(o) => {
+                        out.push_str(&format!("{pad}{} = {v};\n", output_local(*o)))
+                    }
+                    Target::Attr(a) => {
+                        unreachable!("L4 never assigns attribute {a:?}, only reads it")
+                    }
                 }
             }
-            TStmt::If { cond, then, els, .. } => {
+            TStmt::If {
+                cond, then, els, ..
+            } => {
                 let c = lower_expr(cond, resolver, req);
                 out.push_str(&format!("{pad}if {c} {{\n"));
                 emit_stmts(then, resolver, req, indent + 1, out);
@@ -242,9 +259,17 @@ fn emit_stmts(stmts: &[TStmt], resolver: &L4Resolver, req: &mut Requirements, in
                     out.push_str(&format!("{pad}}}\n"));
                 }
             }
-            TStmt::For { var, start, end, body, .. } => {
+            TStmt::For {
+                var,
+                start,
+                end,
+                body,
+                ..
+            } => {
                 let v = mangle_local(var);
-                out.push_str(&format!("{pad}for (var {v}: i32 = {start}; {v} < {end}; {v} = {v} + 1) {{\n"));
+                out.push_str(&format!(
+                    "{pad}for (var {v}: i32 = {start}; {v} < {end}; {v} = {v} + 1) {{\n"
+                ));
                 emit_stmts(body, resolver, req, indent + 1, out);
                 out.push_str(&format!("{pad}}}\n"));
             }
@@ -284,7 +309,9 @@ fn scan_stmts(stmts: &[TStmt], seed: &mut bool, copy: &mut bool, attrs: &mut Has
             TStmt::Let { value, .. } | TStmt::Var { value, .. } | TStmt::Assign { value, .. } => {
                 scan_expr(value, seed, copy, attrs)
             }
-            TStmt::If { cond, then, els, .. } => {
+            TStmt::If {
+                cond, then, els, ..
+            } => {
                 scan_expr(cond, seed, copy, attrs);
                 scan_stmts(then, seed, copy, attrs);
                 scan_stmts(els, seed, copy, attrs);
@@ -358,7 +385,10 @@ struct Identity {
 fn derived_binding(attr: Attr) -> String {
     match attr.derivation() {
         Some(karakuri_ir::Derivation::SinceBirth) => {
-            format!("    let {} = u.t - elements[elem].birth_t.x;\n", attr.name())
+            format!(
+                "    let {} = u.t - elements[elem].birth_t.x;\n",
+                attr.name()
+            )
         }
         other => unreachable!("{:?} is not synthesised at the read site", other),
     }
@@ -370,11 +400,15 @@ fn write_vsout_struct(out: &mut String, id: Identity, attrs_used: &[Attr], depth
     out.push_str("    @location(0) point_coord: vec2<f32>,\n");
     let mut loc = 1;
     if id.seed {
-        out.push_str(&format!("    @location({loc}) @interpolate(flat) seed: u32,\n"));
+        out.push_str(&format!(
+            "    @location({loc}) @interpolate(flat) seed: u32,\n"
+        ));
         loc += 1;
     }
     if id.copy {
-        out.push_str(&format!("    @location({loc}) @interpolate(flat) copy: u32,\n"));
+        out.push_str(&format!(
+            "    @location({loc}) @interpolate(flat) copy: u32,\n"
+        ));
         loc += 1;
     }
     for &a in attrs_used {
@@ -537,7 +571,8 @@ fn vs(@builtin(vertex_index) i: u32) -> VsOut {
 /// aspect ratio — see `camera::State::basis` — so this is an interpolation and a
 /// normalize rather than a projection. Everything about *which* projection is
 /// on the engine's side of the seam, where the camera is.
-const FULLSCREEN_RAY: &str = "    let _ndc = vec2<f32>(in.point_coord.x * 2.0 - 1.0, 1.0 - in.point_coord.y * 2.0);
+const FULLSCREEN_RAY: &str =
+    "    let _ndc = vec2<f32>(in.point_coord.x * 2.0 - 1.0, 1.0 - in.point_coord.y * 2.0);
     let ray = normalize(cam.fwd + cam.right * _ndc.x + cam.up * _ndc.y);
 ";
 
@@ -725,7 +760,11 @@ pub fn generate_l4(
     elements: &ElementLayout,
     field: Option<&crate::field::FieldShader>,
 ) -> L4Shader {
-    assert_eq!(checked.kind, Kind::L4, "generate_l4 called on a non-L4 procedure");
+    assert_eq!(
+        checked.kind,
+        Kind::L4,
+        "generate_l4 called on a non-L4 procedure"
+    );
     // Inferred by the check pass from whether `vertex` assigns `clip_b`. It is
     // **the L4's own answer and the only one that reaches lowering** — the
     // paired L1's declaration is never read, here or anywhere, and the two are
@@ -790,7 +829,12 @@ pub fn generate_l4(
         copy: copy_used,
         has_copy_slot: elements.has_slot("copy"),
     };
-    let attrs_used: Vec<Attr> = checked.consumes.iter().copied().filter(|a| attrs_used_set.contains(a)).collect();
+    let attrs_used: Vec<Attr> = checked
+        .consumes
+        .iter()
+        .copied()
+        .filter(|a| attrs_used_set.contains(a))
+        .collect();
 
     let mut req = Requirements::default();
 
@@ -810,8 +854,8 @@ pub fn generate_l4(
     // does: a fragment's weight is normalised against the planes it was
     // projected with, and that is the same camera whether or not the procedure
     // ever mentioned one.
-    let camera_group =
-        (vertex.camera_used.get() || fragment.camera_used.get() || weighted).then_some(CAMERA_GROUP);
+    let camera_group = (vertex.camera_used.get() || fragment.camera_used.get() || weighted)
+        .then_some(CAMERA_GROUP);
 
     let mut src = String::new();
     layout::write_uniform_struct(&mut src, &uniform_layout, uniform_pad_f32);
@@ -872,7 +916,9 @@ const FULLSCREEN_CAMERA_GROUP: u32 = group::ATTRS;
 
 fn write_camera_binding(out: &mut String, at: u32) {
     out.push_str(layout::camera::WGSL);
-    out.push_str(&format!("\n@group({at}) @binding(0) var<uniform> cam: Camera;\n\n"));
+    out.push_str(&format!(
+        "\n@group({at}) @binding(0) var<uniform> cam: Camera;\n\n"
+    ));
 }
 
 /// The whole of a [`Topology::Fullscreen`] shader.

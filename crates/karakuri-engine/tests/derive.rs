@@ -108,13 +108,17 @@ proc {name} {{
 
 fn compile(src: &str) -> Checked {
     let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
+    let checked =
+        karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     checked
 }
 
 fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
+    errs.iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn build(gpu: &Gpu, l1: &str, l4: &str) -> Set {
@@ -130,7 +134,10 @@ fn build_chain(
     let compiled: Vec<Checked> = l2s.iter().map(|s| compile(s)).collect();
     let l2_refs: Vec<&Checked> = compiled.iter().collect();
     let l1 = compile(l1);
-    let capacity = l1.capacity.expect("an L1 declares a capacity range").default;
+    let capacity = l1
+        .capacity
+        .expect("an L1 declares a capacity range")
+        .default;
     let mut set = Set::build_many(
         &gpu.device,
         &gpu.queue,
@@ -165,7 +172,10 @@ fn centre_y(gpu: &Gpu, set: &mut Set, frames: u32) -> f32 {
             weight += f64::from(t[0]);
         }
     }
-    assert!(weight > 0.0, "nothing was drawn, so there is no position to measure");
+    assert!(
+        weight > 0.0,
+        "nothing was drawn, so there is no position to measure"
+    );
     (sum / weight) as f32
 }
 
@@ -191,7 +201,11 @@ fn frame(gpu: &Gpu, set: &mut Set) -> Vec<f32> {
                 rows_per_image: Some(H),
             },
         },
-        wgpu::Extent3d { width: W, height: H, depth_or_array_layers: 1 },
+        wgpu::Extent3d {
+            width: W,
+            height: H,
+            depth_or_array_layers: 1,
+        },
     );
     gpu.queue.submit([encoder.finish()]);
     let slice = readback.slice(..);
@@ -307,7 +321,11 @@ fn a_derived_age_is_measured_from_the_spawn_instant() {
 #[test]
 fn a_derived_velocity_matches_one_the_procedure_writes() {
     let gpu = Gpu::headless().expect("a GPU");
-    let l4 = reader("by_speed", "position, velocity", "length(velocity) * 4.0 - 1.0");
+    let l4 = reader(
+        "by_speed",
+        "position, velocity",
+        "length(velocity) * 4.0 - 1.0",
+    );
 
     let mut anchored = build(
         &gpu,
@@ -366,7 +384,11 @@ fn a_derivations_slot_exists_only_where_something_consumes_it() {
     let stride = |s: &Set| s.element_layout().stride;
     assert_eq!(stride(&aged), stride(&plain) + 16, "`birth_t`");
     assert_eq!(stride(&moving), stride(&plain) + 16, "`velocity`");
-    assert_eq!(stride(&both), stride(&plain) + 32, "one slot each, not one between them");
+    assert_eq!(
+        stride(&both),
+        stride(&plain) + 32,
+        "one slot each, not one between them"
+    );
 }
 
 /// **An attribute somebody emits is never derived**, wherever in the chain the
@@ -493,7 +515,10 @@ proc derives {
 "#;
     let mut a = build(&gpu, anchored, &l4);
     let mut d = build(&gpu, derived, &l4);
-    let (ay, dy) = (centre_y(&gpu, &mut a, FRAMES), centre_y(&gpu, &mut d, FRAMES));
+    let (ay, dy) = (
+        centre_y(&gpu, &mut a, FRAMES),
+        centre_y(&gpu, &mut d, FRAMES),
+    );
     assert!(
         (ay - dy).abs() < 1.5,
         "an L1's own accumulated age put the sprite at row {ay} and a derived one at {dy}"

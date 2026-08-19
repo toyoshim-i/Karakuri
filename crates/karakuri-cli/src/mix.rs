@@ -56,16 +56,30 @@ use crate::{op_wire_name, op_wire_names, Look};
 #[derive(Clone, Copy, PartialEq)]
 #[cfg_attr(test, derive(Debug))]
 pub enum Change {
-    Gain { slot: usize, value: f32 },
+    Gain {
+        slot: usize,
+        value: f32,
+    },
     /// The fader. Separate from `Gain` because the blend mode makes them
     /// separate — see [`Blend`].
-    Opacity { slot: usize, value: f32 },
-    Blend { slot: usize, mode: Blend },
-    Mask { slot: usize, mask: Mask },
+    Opacity {
+        slot: usize,
+        value: f32,
+    },
+    Blend {
+        slot: usize,
+        mode: Blend,
+    },
+    Mask {
+        slot: usize,
+        mask: Mask,
+    },
     /// Which slot the output is showing, or `None` for the mix. Not a mix
     /// control; see [`Record::Preview`] for why it is in the stream anyway and
     /// for when it will stop being.
-    Preview { slot: Option<usize> },
+    Preview {
+        slot: Option<usize>,
+    },
     /// A scheduled move. Carried as its parts rather than as a
     /// `karakuri_engine::Transition`, because building one needs the value the
     /// control is at *now* and that is the applier's to read, not the decoder's.
@@ -77,7 +91,10 @@ pub enum Change {
         beats: f64,
         curve: Curve,
     },
-    Residency { slot: usize, level: Residency },
+    Residency {
+        slot: usize,
+        level: Residency,
+    },
     Look(Look),
     /// What a slot's clock does with the session's. Carried as a value rather
     /// than applied as a mode change, because the record says all three and a
@@ -193,11 +210,7 @@ pub fn transport_record(slot: usize, transport: &Transport) -> Record {
 /// the engine's and has no iterator, so this is the list — and
 /// [`residency_wire_name`] below is the exhaustive match that stops a level
 /// from reaching the wire without a name.
-pub const LEVELS: [Residency; 3] = [
-    Residency::Live,
-    Residency::Priming,
-    Residency::Allocated,
-];
+pub const LEVELS: [Residency; 3] = [Residency::Live, Residency::Priming, Residency::Allocated];
 
 /// The wire spelling of a residency level. Lower case and stable; the status
 /// line's `LIVE`/`prim`/`park` are a different vocabulary for a different
@@ -418,7 +431,6 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -429,7 +441,13 @@ mod tests {
     #[test]
     fn every_mix_record_survives_the_json_between() {
         let cases = [
-            (gain_record(2, 0.75), Change::Gain { slot: 2, value: 0.75 }),
+            (
+                gain_record(2, 0.75),
+                Change::Gain {
+                    slot: 2,
+                    value: 0.75,
+                },
+            ),
             (
                 opacity_record(0, 0.25),
                 Change::Opacity {
@@ -455,10 +473,7 @@ mod tests {
                     curve: Curve::Smooth,
                 },
             ),
-            (
-                preview_record(Some(2)),
-                Change::Preview { slot: Some(2) },
-            ),
+            (preview_record(Some(2)), Change::Preview { slot: Some(2) }),
             (preview_record(None), Change::Preview { slot: None }),
             (
                 blend_record(3, Blend::Over),
@@ -616,12 +631,16 @@ mod tests {
                 exposure: 1.0,
                 white_point: 4.0,
             };
-            let Some(Change::Look(decoded)) =
-                change(&look_record(&look), 1).expect("built here")
+            let Some(Change::Look(decoded)) = change(&look_record(&look), 1).expect("built here")
             else {
                 panic!("a look record did not decode as a look");
             };
-            assert_eq!(decoded.op, op, "{} did not survive its wire name", op_wire_name(op));
+            assert_eq!(
+                decoded.op,
+                op,
+                "{} did not survive its wire name",
+                op_wire_name(op)
+            );
         }
     }
 

@@ -64,13 +64,17 @@ proc dots {
 
 fn compile(src: &str) -> Checked {
     let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
+    let checked =
+        karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     checked
 }
 
 fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
+    errs.iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn build(gpu: &Gpu, l1s: &[&str]) -> Set {
@@ -153,7 +157,11 @@ fn frame(gpu: &Gpu, set: &mut Set) -> Vec<f32> {
                 rows_per_image: Some(H),
             },
         },
-        wgpu::Extent3d { width: W, height: H, depth_or_array_layers: 1 },
+        wgpu::Extent3d {
+            width: W,
+            height: H,
+            depth_or_array_layers: 1,
+        },
     );
     gpu.queue.submit([encoder.finish()]);
     let slice = readback.slice(..);
@@ -184,7 +192,10 @@ fn f16(bits: u16) -> f32 {
 /// Total light in the frame — proportional to how many elements drew, under
 /// `blend additive`, whether or not they overlap.
 fn total(gpu: &Gpu, set: &mut Set) -> f64 {
-    frame(gpu, set).chunks_exact(4).map(|t| f64::from(t[0] + t[1] + t[2])).sum()
+    frame(gpu, set)
+        .chunks_exact(4)
+        .map(|t| f64::from(t[0] + t[1] + t[2]))
+        .sum()
 }
 
 // ---------------------------------------------------------------------------
@@ -353,7 +364,12 @@ fn two_pipelines_merge_and_publish_as_one_control() {
     let one_src = lattice("one", 0.0);
     let two_src = lattice("two", 0.0);
 
-    let mut set = build_with(&gpu, &[&one_src, &two_src], &[LIT, HALO], Layering::Composite);
+    let mut set = build_with(
+        &gpu,
+        &[&one_src, &two_src],
+        &[LIT, HALO],
+        Layering::Composite,
+    );
     set.publish(karakuri_engine::set::Published {
         name: "level".to_string(),
         at: None,
@@ -374,8 +390,14 @@ fn two_pipelines_merge_and_publish_as_one_control() {
 
     assert!(set.set_param_at(karakuri_ir::Kind::L4, 0, "exposure", 0.0));
     let one = total(&gpu, &mut set);
-    assert!(one < both * 0.9, "silencing one renderer takes light out: {one} of {both}");
-    assert!(one > both * 0.05, "and leaves the other lit: {one} of {both}");
+    assert!(
+        one < both * 0.9,
+        "silencing one renderer takes light out: {one} of {both}"
+    );
+    assert!(
+        one > both * 0.05,
+        "and leaves the other lit: {one} of {both}"
+    );
 
     assert!(set.set_param_at(karakuri_ir::Kind::L4, 1, "exposure", 0.0));
     let none = total(&gpu, &mut set);
@@ -466,9 +488,18 @@ fn a_pairing_l2_morphs_between_two_sources() {
     let mut just_far = build(&gpu, &[&far]);
     let (n, f) = (centre_x(&mut just_near), centre_x(&mut just_far));
 
-    assert!((at_zero - n).abs() < 1.5, "k=0 is the near source: {at_zero} against {n}");
-    assert!((at_one - f).abs() < 1.5, "k=1 is the paired source: {at_one} against {f}");
-    assert!((n - f).abs() > 8.0, "the two sources are far enough apart to tell apart");
+    assert!(
+        (at_zero - n).abs() < 1.5,
+        "k=0 is the near source: {at_zero} against {n}"
+    );
+    assert!(
+        (at_one - f).abs() < 1.5,
+        "k=1 is the paired source: {at_one} against {f}"
+    );
+    assert!(
+        (n - f).abs() > 8.0,
+        "the two sources are far enough apart to tell apart"
+    );
 
     // And the middle is between them, so `k` is a dial rather than a switch.
     assert!(set.set_param_at(karakuri_ir::Kind::L2, 0, "k", 0.5));
@@ -497,7 +528,11 @@ fn the_paired_geometry_is_never_drawn_on_its_own() {
         (a - b).abs() < b * 0.05,
         "a morph at k=0 holds one lattice's worth of light, not two: {a} against {b}"
     );
-    assert_eq!(paired.capacity(), alone.capacity(), "and allocates one lattice to be drawn");
+    assert_eq!(
+        paired.capacity(),
+        alone.capacity(),
+        "and allocates one lattice to be drawn"
+    );
 }
 
 /// **Pairing is by slot index, so a source that compacts cannot be paired.**
@@ -530,7 +565,9 @@ fn a_pairing_l2_states_what_it_needs() {
     let gpu = Gpu::headless().expect("a GPU");
     let near = lattice_at("near", -1.2);
 
-    let err = build_paired(&gpu, &[&near], MORPH).err().expect("one source is not two");
+    let err = build_paired(&gpu, &[&near], MORPH)
+        .err()
+        .expect("one source is not two");
     assert!(err.to_string().contains("this Set has 1"), "{err}");
 }
 
@@ -601,10 +638,12 @@ fn both_sides_of_a_pairing_share_the_element_struct() {
 
     // Consumes an attribute nothing emits, so the chain derives it and every
     // element gains a slot for what the rule reads.
-    let aged = DOTS.replace("consumes position, tint", "consumes position, tint, age").replace(
-        "    color = vec4(tint, 1.0);",
-        "    color = vec4(tint, 1.0) * (1.0 + age * 0.0);",
-    );
+    let aged = DOTS
+        .replace("consumes position, tint", "consumes position, tint, age")
+        .replace(
+            "    color = vec4(tint, 1.0);",
+            "    color = vec4(tint, 1.0) * (1.0 + age * 0.0);",
+        );
 
     let compiled: Vec<Checked> = [&near, &far].iter().map(|s| compile(s)).collect();
     let sources: Vec<(&Checked, u32)> = compiled.iter().map(|c| (c, 64)).collect();

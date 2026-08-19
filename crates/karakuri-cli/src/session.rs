@@ -46,8 +46,8 @@
 use std::io::Write;
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError};
 
-use karakuri_store::ndjson::Line;
 use karakuri_signal::measured::MAX_BANDS;
+use karakuri_store::ndjson::Line;
 use karakuri_store::record::Record;
 use karakuri_store::store::Store;
 
@@ -107,8 +107,7 @@ impl Recorder {
             .append_session(id)
             .map_err(|e| format!("session `{id}`: {e}"))?;
         for line in head {
-            writeln!(file, "{}", line.as_str())
-                .map_err(|e| format!("session `{id}`: {e}"))?;
+            writeln!(file, "{}", line.as_str()).map_err(|e| format!("session `{id}`: {e}"))?;
         }
 
         let (to_writer, from_frames) = std::sync::mpsc::sync_channel::<Vec<Record>>(QUEUE);
@@ -429,7 +428,11 @@ mod tests {
             Line::new(Record::Tick { steps: 2 }),
         ]);
 
-        assert_eq!(session.head.len(), 2, "the set and the param before the tick");
+        assert_eq!(
+            session.head.len(),
+            2,
+            "the set and the param before the tick"
+        );
         assert_eq!(session.frames.len(), 2);
         assert!(session.frames[0].before.is_empty());
         assert_eq!(session.frames[0].steps, 1);

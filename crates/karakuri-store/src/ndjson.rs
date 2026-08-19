@@ -42,9 +42,14 @@ impl Line {
     }
 
     fn parse(raw: &str, line_no: usize) -> Result<Line, StoreError> {
-        let record: Record = serde_json::from_str(raw)
-            .map_err(|source| StoreError::Record { line: line_no, source })?;
-        Ok(Line { record, raw: raw.to_string() })
+        let record: Record = serde_json::from_str(raw).map_err(|source| StoreError::Record {
+            line: line_no,
+            source,
+        })?;
+        Ok(Line {
+            record,
+            raw: raw.to_string(),
+        })
     }
 
     /// The parsed record.
@@ -116,7 +121,10 @@ mod tests {
 
     #[test]
     fn new_line_serialises_immediately() {
-        let line = Line::new(Record::Seed { stream: Layer::L1, value: 7 });
+        let line = Line::new(Record::Seed {
+            stream: Layer::L1,
+            value: 7,
+        });
         assert_eq!(line.as_str(), r#"{"t":"seed","stream":"L1","value":7}"#);
     }
 }

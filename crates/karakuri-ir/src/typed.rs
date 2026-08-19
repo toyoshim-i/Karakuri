@@ -17,7 +17,9 @@
 //!   code generation has one case instead of two and the "compound assignment
 //!   is for locals only" rule is enforced in exactly one place.
 
-use crate::ast::{Ambient, Attr, BinOp, Blend, BlockKind, CapacityDecl, Kind, Lit, Output, Param, Topology, Ty};
+use crate::ast::{
+    Ambient, Attr, BinOp, Blend, BlockKind, CapacityDecl, Kind, Lit, Output, Param, Topology, Ty,
+};
 use crate::builtin::Builtin;
 use crate::span::Span;
 

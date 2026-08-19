@@ -59,7 +59,11 @@ pub const ENTRY: &str = "produce";
 
 /// Generate the compute shader for one L3.
 pub fn generate_l3(checked: &Checked, field: Option<&crate::field::FieldShader>) -> L3Shader {
-    assert_eq!(checked.kind, Kind::L3, "generate_l3 called on a non-L3 procedure");
+    assert_eq!(
+        checked.kind,
+        Kind::L3,
+        "generate_l3 called on a non-L3 procedure"
+    );
 
     let mut b = UniformLayoutBuilder::new();
     b.field("t", "f32");
@@ -133,7 +137,11 @@ pub fn generate_l3(checked: &Checked, field: Option<&crate::field::FieldShader>)
     src.push('\n');
     src.push_str(&entry(&body));
 
-    L3Shader { source: src, uniform_layout, uniform_pad_f32 }
+    L3Shader {
+        source: src,
+        uniform_layout,
+        uniform_pad_f32,
+    }
 }
 
 /// The local each camera output accumulates into before the entry point writes
@@ -151,7 +159,9 @@ fn output_local(o: Output) -> &'static str {
         Output::FovY => "_fov_y",
         Output::Near => "_near",
         Output::Far => "_far",
-        other => unreachable!("{other:?} is not a camera output and cannot appear in a checked camera block"),
+        other => unreachable!(
+            "{other:?} is not a camera output and cannot appear in a checked camera block"
+        ),
     }
 }
 
@@ -159,7 +169,10 @@ struct L3Resolver;
 
 impl Resolver for L3Resolver {
     fn read_attr(&self, attr: karakuri_ir::Attr) -> String {
-        unreachable!("`{}` cannot appear in a checked camera block: an L3 has no element", attr.name())
+        unreachable!(
+            "`{}` cannot appear in a checked camera block: an L3 has no element",
+            attr.name()
+        )
     }
 
     fn read_seed(&self) -> String {
@@ -214,7 +227,9 @@ fn emit_stmts(stmts: &[TStmt], req: &mut Requirements, indent: usize, out: &mut 
                     }
                 }
             }
-            TStmt::If { cond, then, els, .. } => {
+            TStmt::If {
+                cond, then, els, ..
+            } => {
                 let c = lower_expr(cond, &L3Resolver, req);
                 out.push_str(&format!("{pad}if {c} {{\n"));
                 emit_stmts(then, req, indent + 1, out);
@@ -226,7 +241,13 @@ fn emit_stmts(stmts: &[TStmt], req: &mut Requirements, indent: usize, out: &mut 
                     out.push_str(&format!("{pad}}}\n"));
                 }
             }
-            TStmt::For { var, start, end, body, .. } => {
+            TStmt::For {
+                var,
+                start,
+                end,
+                body,
+                ..
+            } => {
                 let v = mangle_local(var);
                 out.push_str(&format!(
                     "{pad}for (var {v}: i32 = {start}; {v} < {end}; {v} = {v} + 1) {{\n"

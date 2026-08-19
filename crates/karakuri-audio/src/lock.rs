@@ -811,7 +811,11 @@ mod tests {
         assert!(session.lock.locked());
 
         // Seven consistent disagreeing revisions: one short of RELOCK_EVIDENCE.
-        session.run(0.25 * (RELOCK_EVIDENCE - 1) as f32, Some((100.0, 0.9)), true);
+        session.run(
+            0.25 * (RELOCK_EVIDENCE - 1) as f32,
+            Some((100.0, 0.9)),
+            true,
+        );
         assert!(
             (session.oscillator.bpm() - 87.0).abs() < 1.0,
             "the run re-acquired before the key was pressed, so this proves nothing"
@@ -861,7 +865,10 @@ mod tests {
         let mut lock = BeatLock::new();
         assert!(lock.octave(2.0, &oscillator).is_none(), "348 bpm was taken");
         assert_eq!(lock.reason(), None);
-        assert!(lock.octave(0.5, &oscillator).is_some(), "87 bpm was refused");
+        assert!(
+            lock.octave(0.5, &oscillator).is_some(),
+            "87 bpm was refused"
+        );
 
         let slow = Oscillator::new(90.0);
         assert!(lock.octave(0.5, &slow).is_none(), "45 bpm was taken");

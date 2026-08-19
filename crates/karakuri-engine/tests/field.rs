@@ -66,13 +66,17 @@ proc lens {
 
 fn compile(src: &str) -> Checked {
     let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
+    let checked =
+        karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     checked
 }
 
 fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
+    errs.iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn build(gpu: &Gpu, field: Option<&str>, l4: &str) -> Result<Set, SetError> {
@@ -121,7 +125,11 @@ fn covered(gpu: &Gpu, set: &mut Set) -> usize {
                 rows_per_image: Some(H),
             },
         },
-        wgpu::Extent3d { width: W, height: H, depth_or_array_layers: 1 },
+        wgpu::Extent3d {
+            width: W,
+            height: H,
+            depth_or_array_layers: 1,
+        },
     );
     gpu.queue.submit([encoder.finish()]);
     let slice = readback.slice(..);
@@ -158,8 +166,14 @@ fn a_marcher_draws_a_field_it_does_not_contain() {
     let gpu = Gpu::headless().expect("a GPU");
     let mut set = build(&gpu, Some(BALL), LENS).expect("a Set with a field");
     let hit = covered(&gpu, &mut set);
-    assert!(hit > 100, "the marcher should have found the sphere, and covered {hit} texels");
-    assert!(hit < (W * H) as usize, "and should not have filled the frame");
+    assert!(
+        hit > 100,
+        "the marcher should have found the sphere, and covered {hit} texels"
+    );
+    assert!(
+        hit < (W * H) as usize,
+        "and should not have filled the frame"
+    );
 }
 
 /// **The field's own `param` is an operator's to ride**, addressed by its kind
@@ -190,7 +204,9 @@ fn a_fields_param_reaches_every_caller() {
 #[test]
 fn a_caller_with_no_field_is_refused_rather_than_fatal() {
     let gpu = Gpu::headless().expect("a GPU");
-    let err = build(&gpu, None, LENS).err().expect("nothing provides `field(p)`");
+    let err = build(&gpu, None, LENS)
+        .err()
+        .expect("nothing provides `field(p)`");
     let text = err.to_string();
     assert!(text.contains("lens") && text.contains("field"), "{text}");
 }
@@ -218,7 +234,10 @@ proc heavy {
 }
 "#;
     let cost = karakuri_ir::cost::estimate(&compile(heavy)).expect("a field has no ceiling");
-    assert!(cost.ops_per_evaluation > 0, "the field costs something per evaluation");
+    assert!(
+        cost.ops_per_evaluation > 0,
+        "the field costs something per evaluation"
+    );
 
     let err = build(&gpu, Some(heavy), LENS)
         .err()
@@ -297,7 +316,8 @@ fn a_fields_param_reaches_every_operator_surface() {
             "energy",
             karakuri_engine::Curve::Lin,
             [0.3, 2.0],
-        )).attached(),
+        ))
+        .attached(),
         "a signal has to be attachable to a field's param"
     );
 

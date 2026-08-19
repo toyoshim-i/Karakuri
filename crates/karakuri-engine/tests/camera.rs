@@ -71,23 +71,34 @@ proc dot {
 
 fn compile(src: &str) -> Checked {
     let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
+    let checked =
+        karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     checked
 }
 
 fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
+    errs.iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// A Set of one element and one renderer, at `w` by `h`, seen from `camera`.
 fn build(gpu: &Gpu, w: u32, h: u32, camera: Orbit) -> Set {
     let l4 = compile(DOT);
-    let mut set =
-        Set::build_many(&gpu.device, &gpu.queue,
-        &[(&compile(MARK), 1)], &[], None,
-        None, &[&l4], Layering::Overdraw, 7)
-            .expect("one L1 and one L4");
+    let mut set = Set::build_many(
+        &gpu.device,
+        &gpu.queue,
+        &[(&compile(MARK), 1)],
+        &[],
+        None,
+        None,
+        &[&l4],
+        Layering::Overdraw,
+        7,
+    )
+    .expect("one L1 and one L4");
     set.resize(&gpu.device, w, h);
     set.camera = camera;
     set
@@ -96,7 +107,12 @@ fn build(gpu: &Gpu, w: u32, h: u32, camera: Orbit) -> Set {
 /// The camera these tests measure against: **still**, so a frame is a frame and
 /// not a moment in a sweep.
 fn pinned() -> Orbit {
-    Orbit { radius: 5.0, speed: 0.0, height: 0.0, ..Default::default() }
+    Orbit {
+        radius: 5.0,
+        speed: 0.0,
+        height: 0.0,
+        ..Default::default()
+    }
 }
 
 /// Brightness-weighted mean column and row of the lit texels, in texels.
@@ -111,7 +127,10 @@ fn centroid(gpu: &Gpu, set: &mut Set, w: u32, h: u32) -> (f32, f32) {
             weight += f64::from(t[0]);
         }
     }
-    assert!(weight > 0.0, "nothing was drawn, so there is nowhere to measure");
+    assert!(
+        weight > 0.0,
+        "nothing was drawn, so there is nowhere to measure"
+    );
     ((sx / weight) as f32, (sy / weight) as f32)
 }
 
@@ -139,7 +158,11 @@ fn frame(gpu: &Gpu, set: &mut Set, w: u32, h: u32) -> Vec<f32> {
                 rows_per_image: Some(h),
             },
         },
-        wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
     );
     gpu.queue.submit([encoder.finish()]);
 
@@ -192,7 +215,10 @@ fn moving_the_camera_moves_the_material() {
 
     let far = offset(5.0);
     let near = offset(3.0);
-    assert!(far.abs() > 4.0, "the material is on the centre column; nothing to measure");
+    assert!(
+        far.abs() > 4.0,
+        "the material is on the centre column; nothing to measure"
+    );
     // Two thirds the distance, so five thirds the offset — asserted as a
     // direction and a lower bound rather than a ratio, since what is under test
     // is that the camera arrives at all.
@@ -216,7 +242,15 @@ fn a_turning_camera_keeps_turning() {
     // Thirty frames at sixty steps a second is half a second; at a quarter
     // revolution a second that is an eighth of a turn, which swings the material
     // a good way across the frame without carrying it off the edge.
-    let mut set = build(&gpu, W, H, Orbit { speed: 0.25, ..pinned() });
+    let mut set = build(
+        &gpu,
+        W,
+        H,
+        Orbit {
+            speed: 0.25,
+            ..pinned()
+        },
+    );
 
     let first = centroid(&gpu, &mut set, W, H).0;
     let mut last = first;
@@ -247,7 +281,10 @@ fn the_canvas_shape_reaches_the_projection() {
     let wide = centroid(&gpu, &mut build(&gpu, W, 64, pinned()), W, 64).0 - W as f32 / 2.0;
     let square = centroid(&gpu, &mut build(&gpu, W, 128, pinned()), W, 128).0 - W as f32 / 2.0;
 
-    assert!(wide.abs() > 4.0, "the material is on the centre column; nothing to measure");
+    assert!(
+        wide.abs() > 4.0,
+        "the material is on the centre column; nothing to measure"
+    );
     assert!(
         (square - 2.0 * wide).abs() < 0.25 * wide.abs(),
         "at aspect 2 the material sits {wide} texels from the centre and at aspect 1 \
@@ -338,7 +375,10 @@ fn a_camera_procedure_produces_the_view() {
     let far = offset(5.0);
     let near = offset(3.0);
 
-    assert!(far.abs() > 4.0, "the material is on the centre column; nothing to measure");
+    assert!(
+        far.abs() > 4.0,
+        "the material is on the centre column; nothing to measure"
+    );
     assert!(
         near.abs() > far.abs() * 1.3,
         "closing the camera's own `dist` from 5 to 3 moved the material from {far} texels off \
@@ -366,7 +406,10 @@ fn a_cameras_parameters_are_addressed_as_a_nodes() {
     );
 
     let far = centroid(&gpu, &mut set, W, H).0 - W as f32 / 2.0;
-    assert!(set.set_param_at(karakuri_ir::Kind::L3, 0, "dist", 3.0), "the camera declares `dist`");
+    assert!(
+        set.set_param_at(karakuri_ir::Kind::L3, 0, "dist", 3.0),
+        "the camera declares `dist`"
+    );
     let near = centroid(&gpu, &mut set, W, H).0 - W as f32 / 2.0;
     assert!(
         near.abs() > far.abs() * 1.3,
@@ -403,7 +446,10 @@ fn a_camera_does_not_shift_the_parameters_a_renderer_reads() {
     let built_in = peak(None);
     let procedure = peak(Some(&sweep(5.0)));
 
-    assert!(built_in > 0.5, "the renderer's own default never reached the frame: {built_in}");
+    assert!(
+        built_in > 0.5,
+        "the renderer's own default never reached the frame: {built_in}"
+    );
     assert!(
         (procedure - built_in).abs() < 0.01,
         "with a camera procedure the renderer drew at {procedure}, and without one at \
@@ -425,7 +471,12 @@ fn an_orbit_assigned_beside_a_camera_procedure_reaches_nothing() {
     let before = centroid(&gpu, &mut set, W, H);
     // A camera nowhere near the procedure's, and pointed from above rather than
     // level, so anything of it that leaked would move the material a long way.
-    set.camera = Orbit { radius: 20.0, height: 18.0, speed: 0.0, ..Default::default() };
+    set.camera = Orbit {
+        radius: 20.0,
+        height: 18.0,
+        speed: 0.0,
+        ..Default::default()
+    };
     let after = centroid(&gpu, &mut set, W, H);
 
     assert!(
@@ -454,17 +505,29 @@ fn an_address_past_a_layers_last_node_reaches_nothing() {
     let gpu = Gpu::headless().expect("no GPU available");
     let mut set = with_camera(&gpu, None, GAIN_DOT, 64, 64);
 
-    assert_eq!(set.param("gain"), Some(1.0), "the renderer's declared default");
+    assert_eq!(
+        set.param("gain"),
+        Some(1.0),
+        "the renderer's declared default"
+    );
     assert!(
         !set.set_param_at(karakuri_ir::Kind::L3, 0, "gain", 0.0),
         "a Set with no camera has no L3 node to address"
     );
-    assert_eq!(set.param("gain"), Some(1.0), "the L3 address reached the renderer");
+    assert_eq!(
+        set.param("gain"),
+        Some(1.0),
+        "the L3 address reached the renderer"
+    );
     assert!(
         !set.set_param_at(karakuri_ir::Kind::L4, 1, "gain", 0.0),
         "this Set draws with one renderer, so index 1 addresses nothing"
     );
-    assert_eq!(set.param("gain"), Some(1.0), "an out-of-range renderer address wrote anyway");
+    assert_eq!(
+        set.param("gain"),
+        Some(1.0),
+        "an out-of-range renderer address wrote anyway"
+    );
     // And the address that does exist still works, so the bound is a bound and
     // not a refusal.
     assert!(set.set_param_at(karakuri_ir::Kind::L4, 0, "gain", 0.25));
@@ -514,7 +577,14 @@ proc mixed {
 
     // And the scalar beside it still arrives, so the filter is a filter rather
     // than a node that gave up on its params.
-    assert!(peak > 0.5, "the scalar param never reached the frame: {peak}");
+    assert!(
+        peak > 0.5,
+        "the scalar param never reached the frame: {peak}"
+    );
     assert_eq!(set.param("gain"), Some(1.0));
-    assert_eq!(set.param("centre"), None, "a vector param has no scalar value to hold");
+    assert_eq!(
+        set.param("centre"),
+        None,
+        "a vector param has no scalar value to hold"
+    );
 }

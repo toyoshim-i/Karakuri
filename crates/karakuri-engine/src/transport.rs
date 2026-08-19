@@ -507,7 +507,10 @@ mod tests {
         // arranged, so a Set that could be given no other mode still runs.
         for closed_form in [true, false] {
             for reads_beats in [true, false] {
-                assert_eq!(Transport::allows(Sync::Free, closed_form, reads_beats), Ok(()));
+                assert_eq!(
+                    Transport::allows(Sync::Free, closed_form, reads_beats),
+                    Ok(())
+                );
             }
         }
     }
@@ -528,10 +531,16 @@ mod tests {
     fn the_anchor_cannot_be_zero_or_nan() {
         let mut t = Transport::default();
         t.engage(Sync::Tempo, 0.0);
-        assert_eq!(t.anchor_bpm(), *karakuri_signal::oscillator::BPM_RANGE.start());
+        assert_eq!(
+            t.anchor_bpm(),
+            *karakuri_signal::oscillator::BPM_RANGE.start()
+        );
         t.engage(Sync::Tempo, f32::NAN);
         assert!(t.anchor_bpm().is_finite());
         t.set_anchor_bpm(f32::INFINITY);
-        assert_eq!(t.anchor_bpm(), *karakuri_signal::oscillator::BPM_RANGE.end());
+        assert_eq!(
+            t.anchor_bpm(),
+            *karakuri_signal::oscillator::BPM_RANGE.end()
+        );
     }
 }

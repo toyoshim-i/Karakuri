@@ -72,13 +72,24 @@ fn warm_up(gpu: &Gpu, set: &mut Set, present: &Present) {
 /// `Rgba8UnormSrgb` target and writes it as a PNG. The sRGB encode happens on
 /// this write, in hardware, exactly once — the same path `karakuri-cli`'s
 /// `--render` takes.
-fn capture(gpu: &Gpu, present: &Present, op: TonemapOp, exposure: f32, white_point: f32, path: &Path) {
+fn capture(
+    gpu: &Gpu,
+    present: &Present,
+    op: TonemapOp,
+    exposure: f32,
+    white_point: f32,
+    path: &Path,
+) {
     present.set_tonemap(&gpu.queue, op, exposure, white_point);
 
     let format = wgpu::TextureFormat::Rgba8UnormSrgb;
     let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("tonemap compare target"),
-        size: wgpu::Extent3d { width: WIDTH, height: HEIGHT, depth_or_array_layers: 1 },
+        size: wgpu::Extent3d {
+            width: WIDTH,
+            height: HEIGHT,
+            depth_or_array_layers: 1,
+        },
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
@@ -89,7 +100,11 @@ fn capture(gpu: &Gpu, present: &Present, op: TonemapOp, exposure: f32, white_poi
     let view = target.create_view(&Default::default());
 
     let bytes_per_row = WIDTH * 4;
-    assert_eq!(bytes_per_row % 256, 0, "width {WIDTH} gives a row that is not 256-aligned");
+    assert_eq!(
+        bytes_per_row % 256,
+        0,
+        "width {WIDTH} gives a row that is not 256-aligned"
+    );
     let readback = gpu.device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("tonemap compare readback"),
         size: u64::from(bytes_per_row * HEIGHT),
@@ -109,7 +124,11 @@ fn capture(gpu: &Gpu, present: &Present, op: TonemapOp, exposure: f32, white_poi
                 rows_per_image: Some(HEIGHT),
             },
         },
-        wgpu::Extent3d { width: WIDTH, height: HEIGHT, depth_or_array_layers: 1 },
+        wgpu::Extent3d {
+            width: WIDTH,
+            height: HEIGHT,
+            depth_or_array_layers: 1,
+        },
     );
     gpu.queue.submit([encoder.finish()]);
 
@@ -179,10 +198,17 @@ fn material_exposure_sweep(gpu: &Gpu, l1: &Checked, l4: &Checked, out_dir: &Path
             "soft_points.kir declares `param exposure` and spark_fountain.kir does not"
         );
 
-        let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba8UnormSrgb, WIDTH, HEIGHT);
+        let present = Present::new(
+            &gpu.device,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
+            WIDTH,
+            HEIGHT,
+        );
         warm_up(gpu, &mut set, &present);
 
-        let path = out_dir.join(format!("spark_fountain_material_exposure_{material_exposure:.2}.png"));
+        let path = out_dir.join(format!(
+            "spark_fountain_material_exposure_{material_exposure:.2}.png"
+        ));
         capture(gpu, &present, OP, TONEMAP_EXPOSURE, 4.0, &path);
         eprintln!("{}", path.display());
     }
@@ -211,7 +237,12 @@ fn main() {
             .unwrap_or_else(|e| panic!("{scene_name} + soft_points: {e}"));
         set.resize(&gpu.device, WIDTH, HEIGHT);
 
-        let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba8UnormSrgb, WIDTH, HEIGHT);
+        let present = Present::new(
+            &gpu.device,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
+            WIDTH,
+            HEIGHT,
+        );
         warm_up(&gpu, &mut set, &present);
 
         operator_grid(&gpu, &present, &out_dir, scene_name);
@@ -223,7 +254,9 @@ fn main() {
 
     material_exposure_sweep(
         &gpu,
-        spark_fountain_l1.as_ref().expect("spark_fountain was compiled above"),
+        spark_fountain_l1
+            .as_ref()
+            .expect("spark_fountain was compiled above"),
         &l4,
         &out_dir,
     );

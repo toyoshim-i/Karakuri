@@ -195,19 +195,26 @@ proc dots {
 
 fn compile(src: &str) -> Checked {
     let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
+    let checked =
+        karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     checked
 }
 
 fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
+    errs.iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn build(gpu: &Gpu, l1: &str, l2s: &[&str]) -> Set {
     // The Set's capacity is the L1's own declared default; what an amplifier
     // allocates is that times its factor, and nothing here has to say so.
-    let capacity = compile(l1).capacity.expect("an L1 declares a capacity range").default;
+    let capacity = compile(l1)
+        .capacity
+        .expect("an L1 declares a capacity range")
+        .default;
     let l2: Vec<Checked> = l2s.iter().map(|s| compile(s)).collect();
     let l2_refs: Vec<&Checked> = l2.iter().collect();
     let l4 = compile(DOTS);
@@ -251,8 +258,14 @@ fn bands(gpu: &Gpu, set: &mut Set) -> usize {
             lit[i / W as usize] = true;
         }
     }
-    assert!(lit.iter().any(|&b| b), "nothing was drawn, so there are no bands to count");
-    lit.iter().enumerate().filter(|&(y, &on)| on && (y == 0 || !lit[y - 1])).count()
+    assert!(
+        lit.iter().any(|&b| b),
+        "nothing was drawn, so there are no bands to count"
+    );
+    lit.iter()
+        .enumerate()
+        .filter(|&(y, &on)| on && (y == 0 || !lit[y - 1]))
+        .count()
 }
 
 /// Total brightness in the frame, after one frame.
@@ -311,7 +324,11 @@ fn render_frame(gpu: &Gpu, set: &mut Set, step: bool) -> Vec<f32> {
                 rows_per_image: Some(H),
             },
         },
-        wgpu::Extent3d { width: W, height: H, depth_or_array_layers: 1 },
+        wgpu::Extent3d {
+            width: W,
+            height: H,
+            depth_or_array_layers: 1,
+        },
     );
     gpu.queue.submit([encoder.finish()]);
 
@@ -546,7 +563,10 @@ fn an_amplified_set_draws_without_having_been_stepped() {
 
     let one = draw_only(&gpu, &mut plain);
     let four = draw_only(&gpu, &mut amplified);
-    assert!(one > 0.0, "the unamplified Set draws its initial state without a step");
+    assert!(
+        one > 0.0,
+        "the unamplified Set draws its initial state without a step"
+    );
     assert!(
         (four - one * 4.0).abs() < one * 0.05,
         "and the amplified one draws four copies of it: {four} against {one}"

@@ -109,7 +109,11 @@ impl Snapshots {
         proc_name: &str,
         source: &[u8],
     ) -> Result<Option<PathBuf>, String> {
-        if self.last.get(&(slot, layer, index)).is_some_and(|s| s == source) {
+        if self
+            .last
+            .get(&(slot, layer, index))
+            .is_some_and(|s| s == source)
+        {
             return Ok(None);
         }
         let now = chrono::Local::now();
@@ -124,7 +128,11 @@ impl Snapshots {
         // name a one-renderer run has ever written is the name it still writes.
         // A file is read by a person looking for what they changed, and a `_0`
         // on every L4 of every ordinary run is noise in the way of that.
-        let at = if index == 0 { String::new() } else { format!("{index}") };
+        let at = if index == 0 {
+            String::new()
+        } else {
+            format!("{index}")
+        };
         let name = format!("{stamp}_slot{slot}_{layer}{at}_{}.kir", sanitize(proc_name));
         let path = dir.join(name);
         std::fs::write(&path, source).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -142,7 +150,13 @@ impl Snapshots {
 fn sanitize(name: &str) -> String {
     let cleaned: String = name
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     if cleaned.is_empty() {
         "unnamed".to_string()
@@ -186,8 +200,7 @@ pub fn seed(shared: &Shared, sets: &[(PathBuf, Vec<PathBuf>)]) {
             // this runs before anything is compiled. A file that declares no
             // `kind` will not compile either, so the position it was given in
             // is as good an answer as any.
-            let layer = declared_kind(&source)
-                .unwrap_or(if positional == 0 { "L1" } else { "L4" });
+            let layer = declared_kind(&source).unwrap_or(if positional == 0 { "L1" } else { "L4" });
             let index = counts.entry(layer).or_insert(0);
             let (layer, index) = (layer, *index);
             *counts.get_mut(layer).expect("just inserted") += 1;
@@ -243,7 +256,10 @@ fn declared_name(source: &[u8]) -> Option<String> {
     for line in text.lines() {
         let line = line.trim_start();
         if let Some(rest) = line.strip_prefix("proc ") {
-            let name = rest.trim_start().split(|c: char| c.is_whitespace() || c == '{').next()?;
+            let name = rest
+                .trim_start()
+                .split(|c: char| c.is_whitespace() || c == '{')
+                .next()?;
             if !name.is_empty() {
                 return Some(name.to_string());
             }
@@ -306,9 +322,15 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let mut snaps = Snapshots::new(tmp.path());
 
-        assert!(snaps.record(0, "L1", 0, "field", b"same").expect("record").is_some());
+        assert!(snaps
+            .record(0, "L1", 0, "field", b"same")
+            .expect("record")
+            .is_some());
         assert!(
-            snaps.record(0, "L1", 0, "field", b"same").expect("record").is_none(),
+            snaps
+                .record(0, "L1", 0, "field", b"same")
+                .expect("record")
+                .is_none(),
             "an identical source was written a second time"
         );
         assert_eq!(files(tmp.path()).len(), 1);
@@ -322,13 +344,22 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let mut snaps = Snapshots::new(tmp.path());
 
-        assert!(snaps.record(0, "L1", 0, "field", b"same").expect("record").is_some());
+        assert!(snaps
+            .record(0, "L1", 0, "field", b"same")
+            .expect("record")
+            .is_some());
         assert!(
-            snaps.record(1, "L1", 0, "field", b"same").expect("record").is_some(),
+            snaps
+                .record(1, "L1", 0, "field", b"same")
+                .expect("record")
+                .is_some(),
             "slot 1's first snapshot was skipped because slot 0 had the same source"
         );
         assert!(
-            snaps.record(0, "L4", 0, "field", b"same").expect("record").is_some(),
+            snaps
+                .record(0, "L4", 0, "field", b"same")
+                .expect("record")
+                .is_some(),
             "the L4 chain was skipped because the L1 chain had the same source"
         );
         assert_eq!(files(tmp.path()).len(), 3);
@@ -351,17 +382,29 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let mut snaps = Snapshots::new(tmp.path());
 
-        assert!(snaps.record(0, "L4", 0, "sprites", b"first").expect("record").is_some());
+        assert!(snaps
+            .record(0, "L4", 0, "sprites", b"first")
+            .expect("record")
+            .is_some());
         assert!(
-            snaps.record(0, "L4", 1, "strokes", b"second").expect("record").is_some(),
+            snaps
+                .record(0, "L4", 1, "strokes", b"second")
+                .expect("record")
+                .is_some(),
             "the second renderer's first snapshot was skipped as the first renderer's"
         );
         assert!(
-            snaps.record(0, "L4", 1, "strokes", b"second").expect("record").is_none(),
+            snaps
+                .record(0, "L4", 1, "strokes", b"second")
+                .expect("record")
+                .is_none(),
             "the second renderer's unchanged source was written again"
         );
         assert!(
-            snaps.record(0, "L4", 0, "sprites", b"first").expect("record").is_none(),
+            snaps
+                .record(0, "L4", 0, "sprites", b"first")
+                .expect("record")
+                .is_none(),
             "the first renderer looked changed because the second had written since"
         );
         assert_eq!(files(tmp.path()).len(), 2);
@@ -376,11 +419,22 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let mut snaps = Snapshots::new(tmp.path());
 
-        let first = snaps.record(0, "L4", 0, "sprites", b"a").expect("record").expect("written");
-        let second = snaps.record(0, "L4", 1, "strokes", b"b").expect("record").expect("written");
-        let name = |p: &std::path::Path| p.file_name().expect("named").to_string_lossy().to_string();
+        let first = snaps
+            .record(0, "L4", 0, "sprites", b"a")
+            .expect("record")
+            .expect("written");
+        let second = snaps
+            .record(0, "L4", 1, "strokes", b"b")
+            .expect("record")
+            .expect("written");
+        let name =
+            |p: &std::path::Path| p.file_name().expect("named").to_string_lossy().to_string();
 
-        assert!(name(&first).contains("_L4_"), "the first renderer grew an index: {}", name(&first));
+        assert!(
+            name(&first).contains("_L4_"),
+            "the first renderer grew an index: {}",
+            name(&first)
+        );
         assert!(
             name(&second).contains("_L41_"),
             "the second renderer is not distinguishable from the first: {}",
@@ -399,15 +453,25 @@ mod tests {
             .expect("record")
             .expect("new");
 
-        let name = path.file_name().expect("a name").to_string_lossy().to_string();
+        let name = path
+            .file_name()
+            .expect("a name")
+            .to_string_lossy()
+            .to_string();
         assert!(name.contains("slot2"), "{name}");
         assert!(name.contains("L4"), "{name}");
         assert!(name.contains("beat_strokes"), "{name}");
         assert!(name.ends_with(".kir"), "{name}");
 
         // Nested a directory per day, which is what makes `rm -rf` the cleanup.
-        let rel = path.strip_prefix(tmp.path().join(DIR)).expect("under the history root");
-        assert_eq!(rel.components().count(), 4, "expected YYYY/MM/DD/name, got {rel:?}");
+        let rel = path
+            .strip_prefix(tmp.path().join(DIR))
+            .expect("under the history root");
+        assert_eq!(
+            rel.components().count(),
+            4,
+            "expected YYYY/MM/DD/name, got {rel:?}"
+        );
 
         // And the day is the operator's day, not UTC's — the whole reason the
         // dependency is here.
@@ -496,11 +560,17 @@ mod tests {
 
         let mut snapshots = shared.lock().expect("lock");
         assert!(
-            snapshots.record(0, "L1", 0, "field_one", b"proc field_one {}").expect("record").is_none(),
+            snapshots
+                .record(0, "L1", 0, "field_one", b"proc field_one {}")
+                .expect("record")
+                .is_none(),
             "the untouched L1 was written a second time"
         );
         assert!(
-            snapshots.record(0, "L4", 0, "draw_one", b"proc draw_one { edited }").expect("record").is_some(),
+            snapshots
+                .record(0, "L4", 0, "draw_one", b"proc draw_one { edited }")
+                .expect("record")
+                .is_some(),
             "the edited L4 was skipped"
         );
     }

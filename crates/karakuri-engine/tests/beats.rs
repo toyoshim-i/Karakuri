@@ -453,11 +453,7 @@ fn a_tempo_correction_does_not_jump_the_grid() {
     // One frame at 126 bpm is 0.035 of a beat, so the ring turned by that much
     // and no more. Compared against a whole extra turn — the shape a
     // discontinuity would take — by asking that most pixels agree.
-    let same = before
-        .iter()
-        .zip(&after)
-        .filter(|(a, b)| a == b)
-        .count();
+    let same = before.iter().zip(&after).filter(|(a, b)| a == b).count();
     assert!(
         same * 100 / before.len() > 90,
         "the frame after a tempo correction shares only {}% of its pixels with the one \

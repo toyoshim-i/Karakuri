@@ -33,7 +33,10 @@ fn compile(src: &str) -> Result<Checked, String> {
     // zeroes beside a `96 bytes/element` it does not use was a line that read
     // as a measurement and was not one.
     if proc.kind == karakuri_ir::Kind::Field {
-        eprintln!("  {} — {} ops/evaluation", proc.name, cost.ops_per_evaluation);
+        eprintln!(
+            "  {} — {} ops/evaluation",
+            proc.name, cost.ops_per_evaluation
+        );
     } else {
         eprintln!(
             "  {} — {} ops/element, {} ops/spawn, {} bytes/element",

@@ -365,7 +365,10 @@ impl std::fmt::Display for Report {
             }
         )?;
         if self.over_budget {
-            write!(f, " — OVER: live slots exceed the budget, priming suspended")?;
+            write!(
+                f,
+                " — OVER: live slots exceed the budget, priming suspended"
+            )?;
         } else if !self.committed_known() {
             // Said in words as well as in the "+N unmeasured" above, because
             // the two facts are different: that one is a count, this one is

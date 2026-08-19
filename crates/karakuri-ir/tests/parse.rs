@@ -359,7 +359,13 @@ proc strands {
 }
 "#;
     let proc = parse(src).unwrap_or_else(|errs| {
-        panic!("{}", errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n"))
+        panic!(
+            "{}",
+            errs.iter()
+                .map(|e| e.render(src))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
     });
     assert_eq!(proc.topology, Some(Topology::Lines));
 }
@@ -384,7 +390,10 @@ proc guessed {
 "#;
     let errs = parse(src).expect_err("`triangles` is not a topology");
     let hints: String = errs.iter().filter_map(|e| e.hint.clone()).collect();
-    assert!(hints.contains("points") && hints.contains("lines"), "hint was: {hints}");
+    assert!(
+        hints.contains("points") && hints.contains("lines"),
+        "hint was: {hints}"
+    );
 }
 
 /// `blend weighted` is a distinct value and not a spelling of `additive`.
@@ -412,7 +421,13 @@ proc glassy {
 }
 "#;
     let proc = parse(src).unwrap_or_else(|errs| {
-        panic!("{}", errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n"))
+        panic!(
+            "{}",
+            errs.iter()
+                .map(|e| e.render(src))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
     });
     assert_eq!(proc.blend, Some(karakuri_ir::ast::Blend::Weighted));
 }

@@ -20,8 +20,8 @@
 
 use karakuri_engine::binding::{Binding, Curve};
 use karakuri_engine::{Gpu, Present, Set, SetError, Signals, VideoSource};
-use karakuri_ir::Kind;
 use karakuri_ir::typed::Checked;
+use karakuri_ir::Kind;
 
 const W: u32 = 64;
 const H: u32 = 64;
@@ -110,13 +110,17 @@ proc {name} {{
 
 fn compile(src: &str) -> Checked {
     let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
+    let checked =
+        karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e, src)));
     checked
 }
 
 fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter().map(|e| e.render(src)).collect::<Vec<_>>().join("\n")
+    errs.iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// A Set over [`PAIR_L1`] with `l4s` as its renderers, in draw order.
@@ -127,16 +131,34 @@ fn build(gpu: &Gpu, l4s: &[&str]) -> Set {
 fn try_build(gpu: &Gpu, l1: &str, l4s: &[&str]) -> Result<Set, SetError> {
     let compiled: Vec<Checked> = l4s.iter().map(|s| compile(s)).collect();
     let refs: Vec<&Checked> = compiled.iter().collect();
-    Set::build_many(&gpu.device, &gpu.queue,
-        &[(&compile(l1), 2)], &[], None, None, &refs, karakuri_engine::set::Layering::Overdraw, 3)
+    Set::build_many(
+        &gpu.device,
+        &gpu.queue,
+        &[(&compile(l1), 2)],
+        &[],
+        None,
+        None,
+        &refs,
+        karakuri_engine::set::Layering::Overdraw,
+        3,
+    )
 }
 
 fn build_over(gpu: &Gpu, l1: &str, l4s: &[&str]) -> Set {
     let compiled: Vec<Checked> = l4s.iter().map(|s| compile(s)).collect();
     let refs: Vec<&Checked> = compiled.iter().collect();
-    let mut set = Set::build_many(&gpu.device, &gpu.queue,
-        &[(&compile(l1), 2)], &[], None, None, &refs, karakuri_engine::set::Layering::Overdraw, 3)
-        .expect("one L1 and however many renderers over it");
+    let mut set = Set::build_many(
+        &gpu.device,
+        &gpu.queue,
+        &[(&compile(l1), 2)],
+        &[],
+        None,
+        None,
+        &refs,
+        karakuri_engine::set::Layering::Overdraw,
+        3,
+    )
+    .expect("one L1 and however many renderers over it");
     set.resize(&gpu.device, W, H);
     set
 }
@@ -165,7 +187,11 @@ fn draw(gpu: &Gpu, set: &mut Set) -> Vec<[f32; 4]> {
                 rows_per_image: Some(H),
             },
         },
-        wgpu::Extent3d { width: W, height: H, depth_or_array_layers: 1 },
+        wgpu::Extent3d {
+            width: W,
+            height: H,
+            depth_or_array_layers: 1,
+        },
     );
     gpu.queue.submit([encoder.finish()]);
 
@@ -214,7 +240,10 @@ const GREEN: (f32, f32, f32) = (0.0, 1.0, 0.0);
 /// The two renderers used throughout: different colours, different sizes, and
 /// **different defaults for the one param name they share**.
 fn pair() -> (String, String) {
-    (sprite("red", RED, 9.0, 1.0), sprite("green", GREEN, 17.0, 0.25))
+    (
+        sprite("red", RED, 9.0, 1.0),
+        sprite("green", GREEN, 17.0, 0.25),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +282,10 @@ fn a_stack_of_two_renderers_composes_what_each_of_them_draws_alone() {
 
     let (sr, sg) = (channel_sums(&red), channel_sums(&green));
     let total = channel_sums(&stacked);
-    assert!(sr[0] > 1.0 && sg[1] > 1.0, "a lone renderer drew nothing to compare against");
+    assert!(
+        sr[0] > 1.0 && sg[1] > 1.0,
+        "a lone renderer drew nothing to compare against"
+    );
     // Measured in coverage, not in colour: the two declare `exposure` at
     // different defaults, so their colour sums say nothing about their areas.
     assert!(
@@ -325,13 +357,23 @@ fn a_second_renderer_costs_a_pass_and_not_a_simulation() {
 
     // The material moved at all, or the comparison is between two zeroes.
     let layout = one.element_layout();
-    let (stride, at) = (layout.stride as usize, layout.offset_of("position") as usize);
+    let (stride, at) = (
+        layout.stride as usize,
+        layout.offset_of("position") as usize,
+    );
     let x_of = |bytes: &[u8], i: usize| {
         let o = i * stride + at;
-        f32::from_le_bytes(bytes[o..o + 4].try_into().expect("four bytes of position.x"))
+        f32::from_le_bytes(
+            bytes[o..o + 4]
+                .try_into()
+                .expect("four bytes of position.x"),
+        )
     };
     let single = one.read_elements(&gpu.device, &gpu.queue);
-    assert!(x_of(&single, 0) > 0.01, "the material did not accumulate, so nothing is under test");
+    assert!(
+        x_of(&single, 0) > 0.01,
+        "the material did not accumulate, so nothing is under test"
+    );
 
     assert_eq!(
         single,
@@ -427,7 +469,10 @@ fn one_name_declared_by_two_renderers_is_two_values_each_reaching_its_own() {
     let base = channel_sums(&draw(&gpu, &mut plain));
     let raised = channel_sums(&draw(&gpu, &mut brighter));
     for (i, (name, factor)) in [("r", 2.0 / 1.0), ("g", 2.0 / 0.25)].iter().enumerate() {
-        assert!(base[i] > 1.0, "channel {name} drew nothing at its default exposure");
+        assert!(
+            base[i] > 1.0,
+            "channel {name} drew nothing at its default exposure"
+        );
         assert!(
             (raised[i] - factor * base[i]).abs() <= 0.02 * factor * base[i],
             "channel {name}: `exposure = 2.0` gave {} where {factor} times {} was due — \
@@ -468,7 +513,8 @@ fn a_binding_blends_from_a_node_that_declares_the_name_not_the_first_one() {
             "nothing_measures_this",
             Curve::Lin,
             [0.0, 100.0]
-        )).attached(),
+        ))
+        .attached(),
         "`spread` is declared by one of this Set's renderers"
     );
     set.prepare(&gpu.queue, 1, &Signals::default());
@@ -537,7 +583,10 @@ fn a_weighted_node_in_a_stack_composites_over_what_is_under_it() {
     let red_over_veil = draw(&gpu, &mut build(&gpu, &[&over, &under]));
 
     let (a, b) = (channel_sums(&veil_over_red), channel_sums(&red_over_veil));
-    assert!(red_alone[0] > 1.0, "the material under the veil drew nothing");
+    assert!(
+        red_alone[0] > 1.0,
+        "the material under the veil drew nothing"
+    );
 
     // Drawn second, the veil covers most of the red — and **leaves the rest**.
     // `over` at alpha 0.94 keeps 6% of what is under it, and the lower bound is
@@ -657,7 +706,10 @@ fn a_set_with_no_renderer_is_refused() {
         matches!(err, SetError::NoRenderer { .. }),
         "the wrong diagnostic for an empty stack: {err}"
     );
-    assert!(err.to_string().contains("pair"), "the message does not name the L1: {err}");
+    assert!(
+        err.to_string().contains("pair"),
+        "the message does not name the L1: {err}"
+    );
 }
 
 /// **The addressed write is what a bare name cannot do: set two renderers'
@@ -710,7 +762,10 @@ fn an_address_past_the_end_of_the_stack_is_refused() {
     let mut set = build(&gpu, &[&a, &b]);
 
     assert!(set.set_param_at(Kind::L4, 1, "exposure", 2.0));
-    assert!(!set.set_param_at(Kind::L4, 2, "exposure", 2.0), "there is no third renderer");
+    assert!(
+        !set.set_param_at(Kind::L4, 2, "exposure", 2.0),
+        "there is no third renderer"
+    );
     assert!(!set.set_param_at(Kind::L4, 0, "nothing_declares_this", 2.0));
     // The L1 is one node, so only 0 addresses it — and `pair`'s L1 declares no
     // `exposure`, which is what makes this a claim about the address rather
@@ -719,10 +774,23 @@ fn an_address_past_the_end_of_the_stack_is_refused() {
 
     // A binding is addressed on the same terms.
     let bind_at = |i: u32| {
-        Binding::new(Kind::L4, "exposure", "nothing_measures_this", Curve::Lin, [0.0, 8.0]).at(i)
+        Binding::new(
+            Kind::L4,
+            "exposure",
+            "nothing_measures_this",
+            Curve::Lin,
+            [0.0, 8.0],
+        )
+        .at(i)
     };
-    assert!(set.bind(bind_at(1)).attached(), "renderer 1 declares `exposure`");
-    assert!(!set.bind(bind_at(9)).attached(), "there is no tenth renderer to bind into");
+    assert!(
+        set.bind(bind_at(1)).attached(),
+        "renderer 1 declares `exposure`"
+    );
+    assert!(
+        !set.bind(bind_at(9)).attached(),
+        "there is no tenth renderer to bind into"
+    );
 }
 
 /// **An addressed binding blends from the node it names**, which is the half of
@@ -742,9 +810,16 @@ fn two_addressed_bindings_on_one_name_blend_from_their_own_nodes() {
     for i in 0..2 {
         assert!(
             set.bind(
-                Binding::new(Kind::L4, "exposure", "nothing_measures_this", Curve::Lin, [0.0, 8.0])
-                    .at(i)
-            ).attached(),
+                Binding::new(
+                    Kind::L4,
+                    "exposure",
+                    "nothing_measures_this",
+                    Curve::Lin,
+                    [0.0, 8.0]
+                )
+                .at(i)
+            )
+            .attached(),
             "renderer {i} declares `exposure`"
         );
     }

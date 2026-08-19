@@ -7,8 +7,12 @@ use karakuri_store::{project, Hash, Layer, Line, Record, Store, StoreError, Valu
 use tempfile::tempdir;
 
 fn param(layer: Layer, key: &str, value: f32) -> Record {
-    Record::Param { layer,
-            index: None, key: key.into(), value: Value::Scalar(value) }
+    Record::Param {
+        layer,
+        index: None,
+        key: key.into(),
+        value: Value::Scalar(value),
+    }
 }
 
 #[test]
@@ -87,11 +91,24 @@ fn set_file_round_trips() {
 
     let proc_hash = Hash::of(b"proc p { kind L1 }");
     let lines = vec![
-        Line::new(Record::Set { id: "drift_01".into(), v: 1 }),
-        Line::new(Record::Slot { layer: Layer::L1, index: 0, proc_hash }),
-        Line::new(Record::Capacity { layer: Layer::L1, value: 524288 }),
+        Line::new(Record::Set {
+            id: "drift_01".into(),
+            v: 1,
+        }),
+        Line::new(Record::Slot {
+            layer: Layer::L1,
+            index: 0,
+            proc_hash,
+        }),
+        Line::new(Record::Capacity {
+            layer: Layer::L1,
+            value: 524288,
+        }),
         Line::new(param(Layer::L1, "radius", 2.4)),
-        Line::new(Record::Seed { stream: Layer::L1, value: 19274 }),
+        Line::new(Record::Seed {
+            stream: Layer::L1,
+            value: 19274,
+        }),
     ];
 
     store.write_set("drift_01", &lines).unwrap();
@@ -108,7 +125,10 @@ fn session_stream_round_trips_including_ticks() {
     let store = Store::open(dir.path()).unwrap();
 
     let lines = vec![
-        Line::new(Record::Set { id: "drift_01".into(), v: 1 }),
+        Line::new(Record::Set {
+            id: "drift_01".into(),
+            v: 1,
+        }),
         Line::new(Record::Tick { steps: 1 }),
         Line::new(Record::Tick { steps: 1 }),
         Line::new(param(Layer::L1, "radius", 2.6)),
@@ -122,7 +142,10 @@ fn session_stream_round_trips_including_ticks() {
     let expected: Vec<_> = lines.iter().map(|l| l.record().clone()).collect();
     assert_eq!(records, expected);
 
-    let tick_count = records.iter().filter(|r| matches!(r, Record::Tick { .. })).count();
+    let tick_count = records
+        .iter()
+        .filter(|r| matches!(r, Record::Tick { .. }))
+        .count();
     assert_eq!(tick_count, 3);
 }
 
@@ -173,7 +196,10 @@ fn unknown_records_survive_a_read_write_round_trip() {
     assert_eq!(lines[1].record(), &Record::Unknown);
     // The unknown line's original text is preserved verbatim, not
     // reduced to `{"t":"unknown"}`.
-    assert_eq!(lines[1].as_str(), r#"{"t":"phrase","at":4.0,"marker":"drop"}"#);
+    assert_eq!(
+        lines[1].as_str(),
+        r#"{"t":"phrase","at":4.0,"marker":"drop"}"#
+    );
 
     // Writing it back must not drop or corrupt the unknown line.
     store.write_set("with_unknown", &lines).unwrap();
@@ -187,7 +213,10 @@ fn write_set_rejects_a_tick() {
     let store = Store::open(dir.path()).unwrap();
 
     let lines = vec![
-        Line::new(Record::Set { id: "drift_01".into(), v: 1 }),
+        Line::new(Record::Set {
+            id: "drift_01".into(),
+            v: 1,
+        }),
         Line::new(Record::Tick { steps: 1 }),
     ];
 
@@ -207,8 +236,15 @@ fn save_session_as_set_projects_and_persists() {
 
     let proc_hash = Hash::of(b"proc p { kind L1 }");
     let session = vec![
-        Line::new(Record::Set { id: "drift_01".into(), v: 1 }),
-        Line::new(Record::Slot { layer: Layer::L1, index: 0, proc_hash }),
+        Line::new(Record::Set {
+            id: "drift_01".into(),
+            v: 1,
+        }),
+        Line::new(Record::Slot {
+            layer: Layer::L1,
+            index: 0,
+            proc_hash,
+        }),
         Line::new(param(Layer::L1, "radius", 2.0)),
         Line::new(Record::Tick { steps: 1 }),
         Line::new(Record::Tick { steps: 1 }),

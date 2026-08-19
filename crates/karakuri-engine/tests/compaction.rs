@@ -5,7 +5,7 @@
 //! check that the multi-pass WGSL actually computes the exclusive prefix
 //! sum the module doc promises.
 
-use karakuri_codegen::layout::{counts, step_args, WORKGROUP_SIZE, VERTICES_PER_ELEMENT};
+use karakuri_codegen::layout::{counts, step_args, VERTICES_PER_ELEMENT, WORKGROUP_SIZE};
 use karakuri_engine::{Compaction, Gpu};
 
 /// The buffers a `Compaction` borrows but does not own — in the engine they
@@ -57,7 +57,11 @@ impl Fixture {
             let at = at as usize;
             bytes[at..at + 4].copy_from_slice(&v.to_le_bytes());
         };
-        put(&mut initial, counts::ELEM_XYZ, capacity.div_ceil(WORKGROUP_SIZE));
+        put(
+            &mut initial,
+            counts::ELEM_XYZ,
+            capacity.div_ceil(WORKGROUP_SIZE),
+        );
         put(&mut initial, counts::ELEM_XYZ + 4, 1);
         put(&mut initial, counts::ELEM_XYZ + 8, 1);
         put(&mut initial, counts::RANGE, capacity);
@@ -92,7 +96,8 @@ impl Fixture {
     /// Uploads `alive` (one flag per element), matching the engine's dense
     /// `array<u32>` alive layout: no padding, one `u32` per element.
     fn upload_alive(&self, gpu: &Gpu, alive: &[u32]) {
-        gpu.queue.write_buffer(&self.alive, 0, bytemuck::cast_slice(alive));
+        gpu.queue
+            .write_buffer(&self.alive, 0, bytemuck::cast_slice(alive));
     }
 
     /// One step's worth of scan, plus the `advance` that rolls the survivor
@@ -286,12 +291,18 @@ fn surviving_destinations_are_strictly_increasing() {
         let d = dest[i];
         assert!(d < live_count, "destination {d} out of range at index {i}");
         if let Some(prev) = last_dest {
-            assert!(d > prev, "destinations not strictly increasing at index {i}: {prev} -> {d}");
+            assert!(
+                d > prev,
+                "destinations not strictly increasing at index {i}: {prev} -> {d}"
+            );
         }
         last_dest = Some(d);
         survivors_seen += 1;
     }
-    assert_eq!(survivors_seen, live_count, "every survivor must get a distinct destination");
+    assert_eq!(
+        survivors_seen, live_count,
+        "every survivor must get a distinct destination"
+    );
 }
 
 // --- the counts buffer: what each pass is and is not allowed to write ---
@@ -322,8 +333,16 @@ fn indirect_args_workgroup_count_covers_the_live_count() {
         expected_live.div_ceil(WORKGROUP_SIZE),
         "workgroup count must cover the range exactly"
     );
-    assert_eq!(count_at(&words, counts::DRAW), VERTICES_PER_ELEMENT, "vertex count is fixed");
-    assert_eq!(count_at(&words, counts::DRAW + 4), expected_live, "instance count follows the range");
+    assert_eq!(
+        count_at(&words, counts::DRAW),
+        VERTICES_PER_ELEMENT,
+        "vertex count is fixed"
+    );
+    assert_eq!(
+        count_at(&words, counts::DRAW + 4),
+        expected_live,
+        "instance count follows the range"
+    );
 }
 
 /// The one ordering constraint that is easy to get wrong and silent when it
@@ -349,8 +368,16 @@ fn finalize_leaves_the_pre_scan_range_alone() {
     gpu.queue.submit([encoder.finish()]);
 
     let words = read_counts(&gpu, &fixture);
-    assert_eq!(count_at(&words, counts::SURVIVORS), 400, "the scan must report the survivors");
-    assert_eq!(count_at(&words, counts::RANGE), capacity, "`range` is `advance`'s to write, not `finalize`'s");
+    assert_eq!(
+        count_at(&words, counts::SURVIVORS),
+        400,
+        "the scan must report the survivors"
+    );
+    assert_eq!(
+        count_at(&words, counts::RANGE),
+        capacity,
+        "`range` is `advance`'s to write, not `finalize`'s"
+    );
     assert_eq!(
         count_at(&words, counts::ELEM_XYZ),
         capacity.div_ceil(WORKGROUP_SIZE),
@@ -434,8 +461,10 @@ fn full_capacity_scan_gpu_timestamp() {
         slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
         gpu.device.poll(wgpu::PollType::Wait).expect("poll");
         let data = slice.get_mapped_range();
-        let ticks: Vec<u64> =
-            data.chunks_exact(8).map(|b| u64::from_le_bytes(b.try_into().unwrap())).collect();
+        let ticks: Vec<u64> = data
+            .chunks_exact(8)
+            .map(|b| u64::from_le_bytes(b.try_into().unwrap()))
+            .collect();
         drop(data);
         readback.unmap();
 
@@ -451,7 +480,10 @@ fn full_capacity_scan_gpu_timestamp() {
         SAMPLES - 1,
     );
 
-    assert!(median_ns.is_finite() && median_ns >= 0.0, "median_ns = {median_ns}");
+    assert!(
+        median_ns.is_finite() && median_ns >= 0.0,
+        "median_ns = {median_ns}"
+    );
 }
 
 // --- previous live range, not whole capacity ---
@@ -492,5 +524,8 @@ fn a_second_scan_ignores_stale_data_past_the_previous_live_count() {
     // If the scan had (wrongly) covered the whole capacity, this would be
     // 300. Restricted to the previous live range (200), the newly-alive
     // [500, 600) entries are outside it and must not be counted.
-    assert_eq!(live_after_second, 200, "scan must ignore flags past the previous live range");
+    assert_eq!(
+        live_after_second, 200,
+        "scan must ignore flags past the previous live range"
+    );
 }

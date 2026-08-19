@@ -131,14 +131,18 @@ mod tests {
     #[test]
     fn a_message_this_engine_has_no_use_for_is_none_rather_than_a_near_miss() {
         for bytes in [
-            &[0xe0, 0, 64][..],  // pitch bend
-            &[0xa0, 60, 64][..], // polyphonic aftertouch
-            &[0xc0, 5][..],      // program change
-            &[0xd0, 64][..],     // channel aftertouch
-            &[0xf8][..],         // clock
+            &[0xe0, 0, 64][..],      // pitch bend
+            &[0xa0, 60, 64][..],     // polyphonic aftertouch
+            &[0xc0, 5][..],          // program change
+            &[0xd0, 64][..],         // channel aftertouch
+            &[0xf8][..],             // clock
             &[0xf0, 0x7e, 0xf7][..], // sysex
         ] {
-            assert_eq!(Message::parse(bytes), None, "{bytes:?} was read as something");
+            assert_eq!(
+                Message::parse(bytes),
+                None,
+                "{bytes:?} was read as something"
+            );
         }
     }
 

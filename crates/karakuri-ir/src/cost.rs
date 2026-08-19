@@ -132,9 +132,12 @@ fn storage_bytes(checked: &Checked) -> u32 {
     if checked.kind == crate::ast::Kind::Field {
         return 0;
     }
-    checked.emit.iter().fold(ALWAYS_ALLOCATED_BYTES, |total, attr| {
-        total + align16(native_bytes(attr.ty())) * 2
-    })
+    checked
+        .emit
+        .iter()
+        .fold(ALWAYS_ALLOCATED_BYTES, |total, attr| {
+            total + align16(native_bytes(attr.ty())) * 2
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -314,9 +317,9 @@ fn stmts_cost(
     hot: &mut Option<HotSpot>,
     calls: &mut u64,
 ) -> u64 {
-    stmts
-        .iter()
-        .fold(0u64, |total, s| total.saturating_add(stmt_cost(s, mult, block, hot, calls)))
+    stmts.iter().fold(0u64, |total, s| {
+        total.saturating_add(stmt_cost(s, mult, block, hot, calls))
+    })
 }
 
 fn stmt_cost(
@@ -330,7 +333,9 @@ fn stmt_cost(
         TStmt::Let { value, .. } | TStmt::Var { value, .. } | TStmt::Assign { value, .. } => {
             1u64.saturating_add(expr_cost(value, mult, block, hot, calls))
         }
-        TStmt::If { cond, then, els, .. } => {
+        TStmt::If {
+            cond, then, els, ..
+        } => {
             let cond_cost = expr_cost(cond, mult, block, hot, calls);
             let then_cost = stmts_cost(then, mult, block, hot, calls);
             let els_cost = stmts_cost(els, mult, block, hot, calls);
@@ -338,9 +343,13 @@ fn stmt_cost(
             // above), but the total only counts the pricier one plus the
             // test: on a GPU both are usually executed by every lane anyway,
             // so the skipped arm in scalar code is not free here.
-            cond_cost.saturating_add(1).saturating_add(then_cost.max(els_cost))
+            cond_cost
+                .saturating_add(1)
+                .saturating_add(then_cost.max(els_cost))
         }
-        TStmt::For { start, end, body, .. } => {
+        TStmt::For {
+            start, end, body, ..
+        } => {
             let iterations = loop_iterations(*start, *end);
             // The multiplier that reaches any builtin *inside* this loop
             // grows for hot-spot tracking, but the body is walked once — its
@@ -381,7 +390,9 @@ fn expr_cost(
         | TExprKind::Attr(_)
         | TExprKind::Other(_)
         | TExprKind::Ambient(_) => 1,
-        TExprKind::Unary { value, .. } => 1u64.saturating_add(expr_cost(value, mult, block, hot, calls)),
+        TExprKind::Unary { value, .. } => {
+            1u64.saturating_add(expr_cost(value, mult, block, hot, calls))
+        }
         TExprKind::Binary { lhs, rhs, .. } => 1u64
             .saturating_add(expr_cost(lhs, mult, block, hot, calls))
             .saturating_add(expr_cost(rhs, mult, block, hot, calls)),
@@ -403,16 +414,17 @@ fn expr_cost(
                     span: expr.span,
                 });
             }
-            let args_cost = args
-                .iter()
-                .fold(0u64, |total, a| total.saturating_add(expr_cost(a, mult, block, hot, calls)));
+            let args_cost = args.iter().fold(0u64, |total, a| {
+                total.saturating_add(expr_cost(a, mult, block, hot, calls))
+            });
             weight.saturating_add(args_cost)
         }
-        TExprKind::Construct { args } => 1u64.saturating_add(
-            args.iter()
-                .fold(0u64, |total, a| total.saturating_add(expr_cost(a, mult, block, hot, calls))),
-        ),
-        TExprKind::Swizzle { value, .. } => 1u64.saturating_add(expr_cost(value, mult, block, hot, calls)),
+        TExprKind::Construct { args } => 1u64.saturating_add(args.iter().fold(0u64, |total, a| {
+            total.saturating_add(expr_cost(a, mult, block, hot, calls))
+        })),
+        TExprKind::Swizzle { value, .. } => {
+            1u64.saturating_add(expr_cost(value, mult, block, hot, calls))
+        }
     }
 }
 
@@ -514,8 +526,7 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
         ops_per_fragment,
         ops_per_evaluation,
         field_calls,
-        bytes_per_element: storage_bytes(checked)
-            .saturating_mul(checked.amplify.unwrap_or(1)),
+        bytes_per_element: storage_bytes(checked).saturating_mul(checked.amplify.unwrap_or(1)),
     };
 
     for (measured, ceiling, unit) in [
@@ -556,9 +567,24 @@ pub fn check_with_field(caller: &Checked, per_evaluation: u64) -> IrResult<()> {
     let cost = estimate(caller)?;
     let calls = cost.field_calls;
     for (own, count, ceiling, unit) in [
-        (cost.ops_per_element, calls.per_element, MAX_OPS_PER_ELEMENT, "ops/element"),
-        (cost.ops_per_spawn, calls.per_spawn, MAX_OPS_PER_SPAWN, "ops/spawn"),
-        (cost.ops_per_fragment, calls.per_fragment, fragment_ceiling(caller), "ops/fragment"),
+        (
+            cost.ops_per_element,
+            calls.per_element,
+            MAX_OPS_PER_ELEMENT,
+            "ops/element",
+        ),
+        (
+            cost.ops_per_spawn,
+            calls.per_spawn,
+            MAX_OPS_PER_SPAWN,
+            "ops/spawn",
+        ),
+        (
+            cost.ops_per_fragment,
+            calls.per_fragment,
+            fragment_ceiling(caller),
+            "ops/fragment",
+        ),
     ] {
         if count == 0 {
             continue;

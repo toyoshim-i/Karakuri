@@ -149,7 +149,10 @@ fn a_candidate_that_does_not_fit_at_full_rate_is_slowed_rather_than_parked() {
 fn priming_slots_are_admitted_in_index_order_against_a_shrinking_headroom() {
     let report = Governor::new(20.0).decide(&[live(10.0), priming(8.0), priming(8.0)]);
 
-    assert_eq!(report.decisions[1].prime_one_in, 1, "the first one fits whole");
+    assert_eq!(
+        report.decisions[1].prime_one_in, 1,
+        "the first one fits whole"
+    );
     assert_eq!(report.decisions[1].reason, Reason::Fits);
     // 2 ms left after the first; 8/4 is 2, which fits exactly.
     assert_eq!(report.decisions[2].prime_one_in, 4);
@@ -162,8 +165,7 @@ fn priming_slots_are_admitted_in_index_order_against_a_shrinking_headroom() {
     let cheaper_first = Governor::new(20.0).decide(&[live(10.0), priming(4.0), priming(8.0)]);
     assert_eq!(cheaper_first.decisions[1].prime_one_in, 1);
     assert_eq!(
-        cheaper_first.decisions[2].prime_one_in,
-        2,
+        cheaper_first.decisions[2].prime_one_in, 2,
         "6 ms of headroom takes an 8 ms candidate at one frame in two"
     );
 }
@@ -176,7 +178,10 @@ fn priming_slots_are_admitted_in_index_order_against_a_shrinking_headroom() {
 fn live_slots_over_the_budget_are_warned_about_and_left_alone() {
     let report = Governor::new(16.0).decide(&[live(12.0), live(12.0), priming(1.0)]);
 
-    assert!(report.over_budget, "24 ms of Live against a 16 ms budget is not flagged");
+    assert!(
+        report.over_budget,
+        "24 ms of Live against a 16 ms budget is not flagged"
+    );
     assert!(report.headroom_ms().is_some_and(|h| h < 0.0));
     for i in 0..2 {
         assert_eq!(
@@ -561,7 +566,12 @@ fn a_closed_form_set_is_recognised_through_the_deck() {
     let gpu = Gpu::headless().expect("no GPU available");
 
     let verdict = |l1: &str| {
-        let mut deck = Deck::new(&gpu.device, vec![swap_of(&gpu, l1, 1, Some(1.0))], WIDTH, HEIGHT);
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![swap_of(&gpu, l1, 1, Some(1.0))],
+            WIDTH,
+            HEIGHT,
+        );
         deck.set_compute_budget_ms(1000.0);
         deck.set_residency(0, Residency::Priming);
         deck.govern().decisions[0].reason
@@ -688,7 +698,10 @@ fn a_parked_slot_primes_again_by_itself_when_the_deck_empties() {
 
     assert_eq!(deck.govern().decisions[1].reason, Reason::NoHeadroom);
     assert_eq!(deck.residency(1), Residency::Allocated);
-    assert!(deck.is_parked(1), "a refused request reads as a slot nobody asked about");
+    assert!(
+        deck.is_parked(1),
+        "a refused request reads as a slot nobody asked about"
+    );
     assert_eq!(deck.parked_slots(), 1);
     assert_eq!(
         deck.requested_residency(1),
@@ -760,13 +773,20 @@ fn a_transient_over_budget_pass_cancels_nothing() {
     // The heavy Set goes on air: 34 ms committed against 16.
     deck.set_residency(3, Residency::Live);
     let during = deck.govern();
-    assert!(during.over_budget, "34 ms of Live against 16 ms was not flagged");
+    assert!(
+        during.over_budget,
+        "34 ms of Live against 16 ms was not flagged"
+    );
     assert_eq!(
         deck.priming_slots(),
         0,
         "priming continued on a deck whose Live slots are already over budget"
     );
-    assert_eq!(deck.parked_slots(), 2, "the requests were cancelled, not parked");
+    assert_eq!(
+        deck.parked_slots(),
+        2,
+        "the requests were cancelled, not parked"
+    );
     for slot in [1, 2] {
         assert_eq!(deck.requested_residency(slot), Residency::Priming);
     }
@@ -811,10 +831,7 @@ fn measuring_the_live_slots_is_what_lets_an_unmeasured_deck_prime() {
     // the deck it is asking to prime on.
     let mut deck = Deck::new(
         &gpu.device,
-        vec![
-            swap_of(&gpu, L1, 1, None),
-            swap_of(&gpu, L1, 2, Some(1.0)),
-        ],
+        vec![swap_of(&gpu, L1, 1, None), swap_of(&gpu, L1, 2, Some(1.0))],
         WIDTH,
         HEIGHT,
     );
@@ -844,7 +861,10 @@ fn measuring_the_live_slots_is_what_lets_an_unmeasured_deck_prime() {
 
     let admitted = deck.govern();
     assert!(admitted.committed_known());
-    assert!(admitted.committed_ms > 0.0, "a measured Set was recorded as free");
+    assert!(
+        admitted.committed_ms > 0.0,
+        "a measured Set was recorded as free"
+    );
     assert!(admitted.headroom_ms().is_some());
     assert_eq!(
         admitted.decisions[1].reason,

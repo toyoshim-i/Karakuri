@@ -57,7 +57,9 @@ impl FromStr for Hash {
     type Err = HashParseError;
 
     fn from_str(s: &str) -> Result<Hash, HashParseError> {
-        let hex = s.strip_prefix("sha256:").ok_or(HashParseError::MissingPrefix)?;
+        let hex = s
+            .strip_prefix("sha256:")
+            .ok_or(HashParseError::MissingPrefix)?;
         if hex.len() != 64 {
             return Err(HashParseError::BadLength(hex.len()));
         }
@@ -101,8 +103,17 @@ mod tests {
 
     #[test]
     fn rejects_malformed_addresses() {
-        assert_eq!("deadbeef".parse::<Hash>(), Err(HashParseError::MissingPrefix));
-        assert_eq!("sha256:ab".parse::<Hash>(), Err(HashParseError::BadLength(2)));
-        assert_eq!("sha256:".to_string().parse::<Hash>(), Err(HashParseError::BadLength(0)));
+        assert_eq!(
+            "deadbeef".parse::<Hash>(),
+            Err(HashParseError::MissingPrefix)
+        );
+        assert_eq!(
+            "sha256:ab".parse::<Hash>(),
+            Err(HashParseError::BadLength(2))
+        );
+        assert_eq!(
+            "sha256:".to_string().parse::<Hash>(),
+            Err(HashParseError::BadLength(0))
+        );
     }
 }

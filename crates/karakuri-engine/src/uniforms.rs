@@ -189,7 +189,9 @@ mod tests {
         let layout = layout();
         let mut scratch = UniformScratch::new(&layout);
         let mut p = scratch.pack(&layout);
-        p.f32("t", 1.5).u32("capacity", 7).vec3("glow", [1.0, 2.0, 3.0]);
+        p.f32("t", 1.5)
+            .u32("capacity", 7)
+            .vec3("glow", [1.0, 2.0, 3.0]);
         let bytes = p.finish();
 
         assert_eq!(bytes.len(), layout.total_size as usize);
@@ -198,7 +200,10 @@ mod tests {
         // vec3 aligns to 16, so it cannot follow the u32 at byte 8.
         let at = layout.fields[2].offset as usize;
         assert_eq!(at, 16);
-        assert_eq!(f32::from_le_bytes(bytes[at..at + 4].try_into().unwrap()), 1.0);
+        assert_eq!(
+            f32::from_le_bytes(bytes[at..at + 4].try_into().unwrap()),
+            1.0
+        );
     }
 
     /// The whole point of reusing the storage: the second frame's bytes must
@@ -212,18 +217,25 @@ mod tests {
         let mut scratch = UniformScratch::new(&layout);
 
         let mut p = scratch.pack(&layout);
-        p.f32("t", 1.5).u32("capacity", 7).vec3("glow", [1.0, 2.0, 3.0]);
+        p.f32("t", 1.5)
+            .u32("capacity", 7)
+            .vec3("glow", [1.0, 2.0, 3.0]);
         let first: Vec<u8> = p.finish().to_vec();
 
         let mut p = scratch.pack(&layout);
-        p.f32("t", 2.5).u32("capacity", 9).vec3("glow", [4.0, 5.0, 6.0]);
+        p.f32("t", 2.5)
+            .u32("capacity", 9)
+            .vec3("glow", [4.0, 5.0, 6.0]);
         let second = p.finish();
 
         assert_ne!(first.as_slice(), second);
         assert_eq!(f32::from_le_bytes(second[0..4].try_into().unwrap()), 2.5);
         assert_eq!(u32::from_le_bytes(second[4..8].try_into().unwrap()), 9);
         let at = layout.fields[2].offset as usize;
-        assert_eq!(f32::from_le_bytes(second[at..at + 4].try_into().unwrap()), 4.0);
+        assert_eq!(
+            f32::from_le_bytes(second[at..at + 4].try_into().unwrap()),
+            4.0
+        );
     }
 
     /// And the bookkeeping resets with it: a field written on the first frame
@@ -236,7 +248,9 @@ mod tests {
         let mut scratch = UniformScratch::new(&layout);
 
         let mut p = scratch.pack(&layout);
-        p.f32("t", 1.5).u32("capacity", 7).vec3("glow", [1.0, 2.0, 3.0]);
+        p.f32("t", 1.5)
+            .u32("capacity", 7)
+            .vec3("glow", [1.0, 2.0, 3.0]);
         let _ = p.finish();
 
         let mut p = scratch.pack(&layout);

@@ -1107,9 +1107,9 @@ fn run_worker(
                     let signal = binding.signal.clone();
                     match set.bind(binding) {
                         crate::set::Bound::Yes => {}
-                        crate::set::Bound::NoSuchParam => eprintln!(
-                            "  no {layer:?} parameter named `{key}` to bind, ignoring"
-                        ),
+                        crate::set::Bound::NoSuchParam => {
+                            eprintln!("  no {layer:?} parameter named `{key}` to bind, ignoring")
+                        }
                         crate::set::Bound::NoSuchControl => eprintln!(
                             "  `{signal}` is not published by this Set, so `{layer:?} {key}` \
                              is not bound"
@@ -1178,13 +1178,14 @@ fn run_worker(
             let _ = device.poll(wgpu::PollType::Wait);
         }
 
-        if out.send(Built {
-            id,
-            label,
-            result,
-            cost,
-        })
-        .is_err()
+        if out
+            .send(Built {
+                id,
+                label,
+                result,
+                cost,
+            })
+            .is_err()
         {
             // The render thread is gone.
             break;
