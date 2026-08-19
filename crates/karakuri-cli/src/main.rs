@@ -374,10 +374,13 @@ usage:
   karakuri-cli [options] [L1.kir L4.kir]
 
 sets — one deck slot each, composited in the order given, at most 4:
-  --set L1.kir,L4.kir   name one slot. Repeat for more slots. Every path after
-                        the first is sorted by the `kind` it declares: an L2
-                        deforms the geometry, an L4 draws it. Order within a
-                        kind is the order given
+  --set L1.kir,L4.kir   name one slot. Repeat for more slots. Every path is
+                        sorted by the `kind` it declares: another L1 is a
+                        second geometry, an L2 deforms, an L3 is the camera, a
+                        `kind Field` is a shape the others can call, an L4
+                        draws. Order within a kind is the order given. One
+                        camera and one field per slot; a slot with two
+                        geometries cannot be rebuilt under --watch
   L1.kir L4.kir         the same thing, positionally, for one pair. Given
                         alongside --set it becomes the last slot
   (nothing)             examples/drift_shell.kir + examples/soft_points.kir
@@ -392,7 +395,9 @@ options:
   --size WxH            the preview window only (default 1280x720). The window
                         fits the canvas into itself and has no say in it.
                         Refused with --render, --seq or --replay
-  --capacity N          elements per Set (default 262144)
+  --capacity N          elements per geometry, overriding every source. Without
+                        it each L1 runs at the default its own `capacity`
+                        declaration names, and 262144 where a file names none
   --param name=value    a uniform write, applied to every Set, and within one
                         to every node declaring that name
   --param L4:1:name=value
@@ -411,6 +416,14 @@ options:
                         layer, key, signal and range are required.
                         signal=bpm is refused: a tempo is not a [0,1] signal
                         and the binding would never move — bind beat or bar
+  --publish NAME=SPEC   put one control on the console, over a param or a
+                        node's param: `level=exposure[0..2]` or
+                        `level=L4:0:exposure[0..2]`. Repeat for more. An
+                        interface that publishes nothing publishes everything,
+                        so the first --publish is what narrows the console
+  --merge N             composite slot N's renderers into one image before it
+                        reaches the mix, instead of overdrawing them. The slot
+                        then takes per-renderer gain, opacity, blend and mask
   --bpm N               the tempo the local oscillator free-runs at
                         (default 120). With --audio-in this is where the grid
                         starts and what it falls back to; a tracked tempo
@@ -918,7 +931,7 @@ fn parse_bind(value: &str) -> Result<Binding, String> {
             "layer" => {
                 layer = Some(
                     layer_named(v).ok_or_else(|| {
-                        bad(&format!("`layer={v}` — expected L1, L2, L3 or L4"))
+                        bad(&format!("`layer={v}` — expected L1, L2, L3, L4 or Field"))
                     })?,
                 )
             }
