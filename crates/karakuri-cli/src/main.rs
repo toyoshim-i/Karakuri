@@ -1739,20 +1739,24 @@ struct Material {
 /// already been bitten by twice.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct Names {
-    l1s: Vec<String>,
-    l2s: Vec<String>,
+    l1s: Vec<Option<String>>,
+    l2s: Vec<Option<String>>,
     l3: Option<String>,
-    l4s: Vec<String>,
+    l4s: Vec<Option<String>>,
     field: Option<String>,
 }
 
 impl Names {
-    fn all(&self) -> impl Iterator<Item = &String> {
+    /// Every name that was actually written, which is the only thing worth
+    /// checking for a collision: a derived one is disambiguated where it is
+    /// derived, in `Set::build_many`.
+    fn written(&self) -> impl Iterator<Item = &String> {
         self.l1s
             .iter()
-            .chain(&self.l2s)
+            .flatten()
+            .chain(self.l2s.iter().flatten())
             .chain(&self.l3)
-            .chain(&self.l4s)
+            .chain(self.l4s.iter().flatten())
             .chain(&self.field)
     }
 
@@ -1766,7 +1770,7 @@ impl Names {
     /// a `--param` pointing at whichever the tie-break preferred.
     fn check_unique(&self) -> Result<(), String> {
         let mut seen: Vec<&str> = Vec::new();
-        for name in self.all() {
+        for name in self.written() {
             if seen.contains(&name.as_str()) {
                 return Err(format!(
                     "two nodes are both called `{name}` — a name addresses one node in a slot"
@@ -1776,38 +1780,6 @@ impl Names {
         }
         Ok(())
     }
-}
-
-/// The name a node answers to: what the operator wrote, or one derived from the
-/// procedure.
-///
-/// **A derived name is a real name from the moment it is recorded.** The
-/// specification's objection to deriving identity is about a value moving under
-/// a later edit; a derived name that is then written down cannot move, and the
-/// document says so — "where it came from stops mattering once it is recorded".
-///
-/// The derivation is the procedure's own name, which is a *type* name and
-/// therefore collides when one procedure is used twice — so the caller
-/// disambiguates. Two `lattice_shell`s are `lattice_shell` and
-/// `lattice_shell-2`, which is what `scratch` already does to two files with one
-/// basename, for the same reason.
-fn node_name(
-    named: &Named,
-    checked: &karakuri_ir::typed::Checked,
-    taken: &mut Vec<String>,
-) -> String {
-    if let Some(written) = &named.name {
-        taken.push(written.clone());
-        return written.clone();
-    }
-    let mut candidate = checked.name.clone();
-    let mut at = 1;
-    while taken.contains(&candidate) {
-        at += 1;
-        candidate = format!("{}-{at}", checked.name);
-    }
-    taken.push(candidate.clone());
-    candidate
 }
 
 /// **Render a recorded session.** The material comes from the stream's head and
@@ -1913,6 +1885,9 @@ fn replay_session(args: &Args, id: &str) {
         // renderers. Overdraw is what every Set was before an L5 could be
         // nested, so it is what a file that cannot say reads as.
         karakuri_engine::set::Layering::Overdraw,
+        // A Set file records no names yet, so every node is called what its
+        // procedure declares.
+        &Names::default(),
         // The file's number when it recorded one, and otherwise the
         // procedure's own declared default — never the flag's, which is a
         // general default beating a specific declaration that meant it.
@@ -2118,6 +2093,7 @@ fn rebuild(
         None,
         &l4s,
         karakuri_engine::set::Layering::Overdraw,
+        &Names::default(),
         &capacities_for(args, std::slice::from_ref(&l1)),
         &mut vec![false; args.bindings.len()],
         &args.overrides,
@@ -2507,14 +2483,7 @@ fn main() {
         // **The names a Set file recorded**, once it records them. Until then a
         // loaded Set's nodes are named after their procedures, which is what a
         // bare `--set` gets too.
-        let mut taken: Vec<String> = Vec::new();
-        let mut derive =
-            |c: &karakuri_ir::typed::Checked| node_name(&Named::bare(""), c, &mut taken);
-        let names = Names {
-            l1s: vec![derive(&loaded.l1)],
-            l4s: loaded.l4s.iter().map(&mut derive).collect(),
-            ..Names::default()
-        };
+        let names = Names::default();
         procs.push(Material {
             l1s: vec![loaded.l1],
             l2s: Vec::new(),
@@ -2543,7 +2512,6 @@ fn main() {
         // engine's, and a caller that reproduced it would be the second place a
         // fact this project has already been bitten by lives.
         let mut names = Names::default();
-        let mut taken: Vec<String> = Vec::new();
         // **Sorted by the `kind` each file declares**, keeping list order within
         // a kind. A second L1 is refused rather than silently ignored: a slot
         // simulates with one geometry, and a run that quietly dropped the
@@ -2553,13 +2521,13 @@ fn main() {
         // its own hash salt, its own compaction — and the renderers draw all of
         // them. See `docs/ir-spec.md`, "Multiple L1 sources".
         let mut l1s = vec![load(l1)];
-        names.l1s.push(node_name(l1, &l1s[0], &mut taken));
+        names.l1s.push(l1.name.clone());
         let mut l2s = Vec::new();
         let mut l3: Option<karakuri_ir::typed::Checked> = None;
         let mut field: Option<karakuri_ir::typed::Checked> = None;
         let mut l4s = Vec::new();
         for (path, checked) in rest.iter().zip(rest.iter().map(load)) {
-            let name = node_name(path, &checked, &mut taken);
+            let name = path.name.clone();
             match checked.kind {
                 karakuri_ir::Kind::L2 => {
                     names.l2s.push(name);
@@ -2583,7 +2551,7 @@ fn main() {
                     std::process::exit(1);
                 }
                 karakuri_ir::Kind::L3 => {
-                    names.l3 = Some(name);
+                    names.l3 = name;
                     l3 = Some(checked)
                 }
                 // **One field per slot**, refused rather than last-one-wins on
@@ -2598,7 +2566,7 @@ fn main() {
                     std::process::exit(1);
                 }
                 karakuri_ir::Kind::Field => {
-                    names.field = Some(name);
+                    names.field = name;
                     field = Some(checked)
                 }
                 // **A second L1 is a second source**, not a mistake. Each one
@@ -2632,21 +2600,6 @@ fn main() {
             l4s,
             names,
         });
-        // **What the slot's nodes are called**, printed because a derived name
-        // is one nobody wrote and everything else addresses the node by. Read
-        // off the `Material` rather than the local, so the field a later surface
-        // will resolve against is the one shown here.
-        eprintln!(
-            "  slot {slot} nodes: {}",
-            procs
-                .last()
-                .expect("just pushed")
-                .names
-                .all()
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
     }
 
     // Saving is a one-shot: it writes what the flags say and stops, on the same
@@ -2772,6 +2725,7 @@ fn build_deck(
                 } else {
                     karakuri_engine::set::Layering::Overdraw
                 },
+                &material.names,
                 &capacities_for(args, l1),
                 &mut attached,
                 &args.overrides,
@@ -2899,6 +2853,8 @@ fn build(
     field: Option<&karakuri_ir::typed::Checked>,
     l4s: &[karakuri_ir::typed::Checked],
     layering: karakuri_engine::set::Layering,
+    // What each node is called — see `Names`.
+    names: &Names,
     // One per entry in `l1s`, in the same order — see `capacities_for`.
     capacities: &[u32],
     // Set to `true` for each binding that attached, and left alone otherwise.
@@ -2936,8 +2892,20 @@ fn build(
         &draw,
         layering,
         seed,
+        karakuri_engine::set::NodeNames {
+            l1s: &names.l1s,
+            l2s: &names.l2s,
+            l3: names.l3.as_deref(),
+            l4s: &names.l4s,
+            field: names.field.as_deref(),
+        },
     ) {
         Ok(mut set) => {
+            // **What the slot's nodes ended up called**, read off the Set
+            // rather than worked out here: a name nobody wrote is derived in
+            // `build_many`, and deriving it a second time to print it is the
+            // shape this repository keeps finding wrong.
+            eprintln!("  nodes: {}", set.node_names().join(", "));
             // **The `camera` record, and only when nothing else produces one.**
             // An L3 writes the camera state every frame, so an orbit assigned
             // here would be overwritten before the first draw — silently, which
@@ -5163,54 +5131,16 @@ mod tests {
         );
     }
 
-    /// **Every node has a name whether or not one was written**, because a
-    /// node nothing can address is a node nothing can point a mask, a `--param`
-    /// or a rebuild at. An unwritten one is derived from the procedure — which
-    /// is a *type* name, so two uses of one procedure collide and the second is
-    /// disambiguated, exactly as `scratch` does to two files with one basename.
-    #[test]
-    fn an_unnamed_node_is_named_after_its_procedure_and_a_second_use_is_told_apart() {
-        let checked = |name: &str| {
-            let src = format!(
-                "proc {name} {{ kind L1 capacity [4096, 8192] = 4096 topology points \
-                 emit position element {{ position = vec3(0.0); }} }}"
-            );
-            compile::check(&src).expect("compiles")
-        };
-        let lattice = checked("lattice_shell");
-        let mut taken = Vec::new();
-        assert_eq!(
-            node_name(&Named::bare("a.kir"), &lattice, &mut taken),
-            "lattice_shell"
-        );
-        assert_eq!(
-            node_name(&Named::bare("b.kir"), &lattice, &mut taken),
-            "lattice_shell-2"
-        );
-        assert_eq!(
-            node_name(&Named::bare("c.kir"), &lattice, &mut taken),
-            "lattice_shell-3"
-        );
-
-        // A written name is taken as written and never disambiguated: it is an
-        // address the author chose, and moving it would break whatever was
-        // pointed at it.
-        let written = Named {
-            name: Some("near".to_string()),
-            path: PathBuf::from("d.kir"),
-        };
-        assert_eq!(node_name(&written, &lattice, &mut taken), "near");
-    }
-
-    /// **Two written names that collide are refused rather than resolved.** A
-    /// derived one is disambiguated where it is derived; a collision that
-    /// reaches here is two names an author wrote, and picking one for them
-    /// would leave a `--param` pointing at whichever the tie-break preferred.
+    /// **Two written names that collide are refused rather than resolved**, and
+    /// this is the *early* refusal — the one that names the slot, before a GPU
+    /// is asked for anything. `Set::build_many` refuses the same thing again
+    /// where every node is in hand, which is where a derived name could also
+    /// collide with a written one.
     #[test]
     fn two_nodes_cannot_share_a_name() {
         let names = Names {
-            l1s: vec!["near".to_string()],
-            l4s: vec!["near".to_string()],
+            l1s: vec![Some("near".to_string())],
+            l4s: vec![Some("near".to_string())],
             ..Names::default()
         };
         let e = names.check_unique().expect_err("refused");
@@ -5218,8 +5148,8 @@ mod tests {
 
         // And the scope is the slot, because a Set is what holds the nodes.
         let fine = Names {
-            l1s: vec!["near".to_string()],
-            l4s: vec!["draw".to_string()],
+            l1s: vec![Some("near".to_string())],
+            l4s: vec![Some("draw".to_string())],
             ..Names::default()
         };
         assert!(fine.check_unique().is_ok());

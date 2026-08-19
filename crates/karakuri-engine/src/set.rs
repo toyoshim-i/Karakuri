@@ -91,6 +91,13 @@ pub enum Layering {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SetError {
+    /// **Two nodes answering to one name.** Refused rather than disambiguated:
+    /// a name is an address, so choosing one of the two for the author would
+    /// leave whatever was written against it pointing at the winner of a
+    /// tie-break. A name derived from a procedure is disambiguated where it is
+    /// derived; a collision reaching here is two names somebody wrote.
+    #[error("two nodes are both called `{name}` — a name addresses one node in a Set")]
+    DuplicateNodeName { name: String },
     #[error("slot {slot} needs a {expected:?} procedure, got {actual:?}")]
     WrongKind {
         slot: &'static str,
@@ -457,6 +464,15 @@ pub struct Set {
     /// and "the second geometry" is not something any of them can say. See
     /// `docs/roadmap.md`, "Naming what a Set holds".
     sources: Vec<Source>,
+    /// **What each node is called**, in node order — the same order [`Set::params`]
+    /// and `ranges` are in, and for the same reason: one walk decides it.
+    ///
+    /// Every node has one. A name the caller wrote where it wrote one, and the
+    /// procedure's own declared name everywhere else — which is a *type* name
+    /// and collides when one procedure is used twice, so a caller that cares
+    /// disambiguates before handing them over. What arrives here is refused if
+    /// two are the same.
+    names: Vec<String>,
     /// **How many L1 *procedures* the Set was built from**, which is not
     /// `sources.len()` when the chain pairs: two procedures become one source
     /// with two simulations in it. `params` and `ranges` are per procedure and
@@ -588,6 +604,36 @@ pub enum PublishError {
     DuplicateName(String),
 }
 
+/// What a caller calls each node of a Set it is building.
+///
+/// **Per layer, in the same shape the procedures themselves are passed in.** The
+/// node *order* belongs to [`Set::build_many`] — `slot_of` and `nodes_of` decide
+/// it — so a caller that laid names out in that order would be a second place
+/// for a fact this file has already had wrong twice.
+///
+/// **Only what was written.** A `None` — or an entry past the end — is a node
+/// nobody named, and [`Set::build_many`] derives one for it from the procedure,
+/// disambiguating against every name already taken. Deriving in a caller as well
+/// would be two places for one fact; ask [`Set::node_names`] for what a node
+/// ended up called.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NodeNames<'a> {
+    pub l1s: &'a [Option<String>],
+    pub l2s: &'a [Option<String>],
+    pub l3: Option<&'a str>,
+    pub l4s: &'a [Option<String>],
+    pub field: Option<&'a str>,
+}
+
+/// The first value that appears twice, if any.
+fn first_duplicate(names: &[String]) -> Option<String> {
+    names
+        .iter()
+        .enumerate()
+        .find(|(at, name)| names[..*at].contains(name))
+        .map(|(_, name)| name.clone())
+}
+
 /// What became of a [`Set::bind`].
 ///
 /// **Two ways to fail, and they are different mistakes.** A binding names a
@@ -642,6 +688,9 @@ impl Set {
             &[l4],
             Layering::Overdraw,
             seed_salt,
+            // A pair names nothing, so both nodes are called what their
+            // procedures are.
+            NodeNames::default(),
         )
     }
 
@@ -694,9 +743,12 @@ impl Set {
         l4s: &[&Checked],
         layering: Layering,
         seed_salt: u32,
+        names: NodeNames<'_>,
     ) -> Result<Set, SetError> {
         device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let built = Set::build_inner(device, queue, l1s, l2s, l3, field, l4s, layering, seed_salt);
+        let built = Set::build_inner(
+            device, queue, l1s, l2s, l3, field, l4s, layering, seed_salt, names,
+        );
         // **Popped on every path**, which is why the body is a second function
         // rather than this one: it returns early in a dozen places, and a scope
         // left on the stack would catch the *next* build's errors and report
@@ -733,6 +785,7 @@ impl Set {
         l4s: &[&Checked],
         layering: Layering,
         seed_salt: u32,
+        names: NodeNames<'_>,
     ) -> Result<Set, SetError> {
         let Some(&(first_l1, _)) = l1s.first() else {
             return Err(SetError::NoGeometry);
@@ -1270,8 +1323,69 @@ impl Set {
             .chain(l4s.iter().map(|n| declared(n)))
             .chain(field.map(declared))
             .collect();
+        // **The third walk, and the reason it is a walk and not a list the
+        // caller handed over already in order.** A name arrives per layer,
+        // because the node *order* is this function's own — `slot_of` and
+        // `nodes_of` decide it — and a caller that laid the names out in node
+        // order would be the second place that fact lives. This file has paid
+        // for that twice.
+        //
+        // A procedure's own declared name where nothing named the node, so
+        // every node has one: a node nothing can address is a node nothing can
+        // point a mask, a `--param` or a rebuild at.
+        let given = |at: usize, from: &[Option<String>]| from.get(at).cloned().flatten();
+        let wanted: Vec<(Option<String>, &Checked)> = l1s
+            .iter()
+            .enumerate()
+            .map(|(at, (l1, _))| (given(at, names.l1s), *l1))
+            .chain(
+                l2s.iter()
+                    .enumerate()
+                    .map(|(at, n)| (given(at, names.l2s), *n)),
+            )
+            .chain(l3.map(|n| (names.l3.map(str::to_string), n)))
+            .chain(
+                l4s.iter()
+                    .enumerate()
+                    .map(|(at, n)| (given(at, names.l4s), *n)),
+            )
+            .chain(field.map(|n| (names.field.map(str::to_string), n)))
+            .collect();
+        // **Every written name is taken first, and the rest are derived
+        // against what is already taken.** Doing it in one pass would let a
+        // derived `lens` claim the name a written one further down the list
+        // asked for, and the written one is the address somebody chose.
+        let mut taken: Vec<String> = wanted.iter().filter_map(|(n, _)| n.clone()).collect();
+        if let Some(dup) = first_duplicate(&taken) {
+            return Err(SetError::DuplicateNodeName { name: dup });
+        }
+        let names: Vec<String> = wanted
+            .into_iter()
+            .map(|(name, node)| match name {
+                Some(written) => written,
+                // **Derived here and nowhere else.** A procedure's name is a
+                // *type* name — two renderers over one field are two nodes and
+                // one `proc lens` — so the second use is told apart the way
+                // `scratch` tells two files with one basename apart. Deriving
+                // it in a caller as well would be the second place a fact
+                // lives, which is the shape this file has been wrong about
+                // twice; a caller that wants to know what a node ended up
+                // called asks [`Set::node_names`].
+                None => {
+                    let mut candidate = node.name.clone();
+                    let mut at = 1;
+                    while taken.contains(&candidate) {
+                        at += 1;
+                        candidate = format!("{}-{at}", node.name);
+                    }
+                    taken.push(candidate.clone());
+                    candidate
+                }
+            })
+            .collect();
 
         let set = Set {
+            names,
             seed_salt,
             steps_taken: 0,
             dt: DT,
@@ -1628,6 +1742,29 @@ impl Set {
         });
         self.bindings.push(binding);
         Bound::Yes
+    }
+
+    /// **What each node is called**, in node order.
+    pub fn node_names(&self) -> &[String] {
+        &self.names
+    }
+
+    /// The node a name addresses, as the `(layer, index)` every other surface
+    /// in this system uses.
+    ///
+    /// **A name is an alias and the position is the address** — the same shape
+    /// [`Published`] already gives a parameter, and for the same reason: an
+    /// alias can be chosen, changed and recorded without anything underneath it
+    /// moving. So this resolves and hands back the pair rather than becoming a
+    /// second way to reach a node.
+    pub fn node_named(&self, name: &str) -> Option<(Kind, u32)> {
+        let at = self.names.iter().position(|n| n == name)?;
+        Kind::ALL.into_iter().find_map(|kind| {
+            let range = self.nodes_of(kind);
+            range
+                .contains(&at)
+                .then(|| (kind, (at - range.start) as u32))
+        })
     }
 
     /// **Where a layer's nodes start in [`Set::params`].**
@@ -3027,6 +3164,7 @@ proc dots {
             &[&l4],
             Layering::Overdraw,
             1,
+            NodeNames::default(),
         )
         .expect("a chain of one L1, one amplifying L2 and one L4");
 

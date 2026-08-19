@@ -2373,6 +2373,7 @@ fn a_swap_in_one_slot_leaves_the_other_slot_alone() {
     let neighbour_live_before = deck.slot(1).set().live_count(&gpu.device, &gpu.queue);
 
     tx.send(Request {
+        names: karakuri_engine::swap::RequestNames::default(),
         id: 1,
         l1s: vec![(compile(L1), SWAPPED)],
         l2s: Vec::new(),
@@ -2488,6 +2489,7 @@ fn an_off_air_slot_is_not_judged_against_its_neighbours_frames() {
     deck.set_residency(1, Residency::Allocated);
 
     tx.send(Request {
+        names: karakuri_engine::swap::RequestNames::default(),
         id: 1,
         l1s: vec![(compile(L1), SWAPPED)],
         l2s: Vec::new(),
