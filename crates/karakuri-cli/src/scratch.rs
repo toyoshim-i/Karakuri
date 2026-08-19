@@ -65,9 +65,13 @@ pub const DIR: &str = "scratch";
 /// Existing scratch files are overwritten and the rest of the directory is left
 /// alone. Not cleared: an operator may have put something here, and deleting a
 /// directory whose name we chose is a bad way to find that out.
-pub fn materialise(
+/// **Takes the paths rather than the slots**, because what a slot is has grown a
+/// name beside each path and this module has no business knowing that. Every
+/// path in every slot, in any order — the dedup is keyed by the source path, so
+/// order decides only which of two identical sources keeps the plain basename.
+pub fn materialise<'a>(
     store_root: &Path,
-    sets: &mut [(PathBuf, Vec<PathBuf>)],
+    paths: impl Iterator<Item = &'a mut PathBuf>,
 ) -> Result<PathBuf, String> {
     let dir = store_root.join(DIR);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -79,8 +83,8 @@ pub fn materialise(
     // material, which is the one failure this whole module exists to prevent.
     let mut taken: Vec<String> = Vec::new();
 
-    for (l1, l4s) in sets.iter_mut() {
-        for path in std::iter::once(l1).chain(l4s.iter_mut()) {
+    {
+        for path in paths {
             // Already the working copy — a Set loaded from the store, placed
             // here by `place` before this ran. Copying it onto itself would at
             // best be a no-op and at worst rename it out from under the deck
@@ -188,9 +192,14 @@ mod tests {
         let store = tmp.path().join("store");
         let l1 = write(&tmp.path().join("presets"), "field.kir", "original l1");
         let l4 = write(&tmp.path().join("presets"), "draw.kir", "original l4");
-        let mut sets = vec![(l1.clone(), vec![l4.clone()])];
+        let mut sets = [(l1.clone(), vec![l4.clone()])];
 
-        let dir = materialise(&store, &mut sets).expect("materialise");
+        let dir = materialise(
+            &store,
+            sets.iter_mut()
+                .flat_map(|(l1, l4s)| std::iter::once(l1).chain(l4s.iter_mut())),
+        )
+        .expect("materialise");
 
         assert!(
             sets[0].0.starts_with(&dir),
@@ -222,9 +231,14 @@ mod tests {
         let l1 = write(tmp.path(), "field.kir", "l1");
         let a = write(tmp.path(), "a.kir", "a");
         let b = write(tmp.path(), "b.kir", "b");
-        let mut sets = vec![(l1.clone(), vec![a]), (l1.clone(), vec![b])];
+        let mut sets = [(l1.clone(), vec![a]), (l1.clone(), vec![b])];
 
-        materialise(&store, &mut sets).expect("materialise");
+        materialise(
+            &store,
+            sets.iter_mut()
+                .flat_map(|(l1, l4s)| std::iter::once(l1).chain(l4s.iter_mut())),
+        )
+        .expect("materialise");
 
         assert_eq!(sets[0].0, sets[1].0, "the shared L1 became two files");
         assert_ne!(sets[0].1, sets[1].1, "two different L4s became one file");
@@ -239,9 +253,14 @@ mod tests {
         let one = write(&tmp.path().join("one"), "field.kir", "first");
         let two = write(&tmp.path().join("two"), "field.kir", "second");
         let l4 = write(tmp.path(), "draw.kir", "l4");
-        let mut sets = vec![(one, vec![l4.clone()]), (two, vec![l4])];
+        let mut sets = [(one, vec![l4.clone()]), (two, vec![l4])];
 
-        materialise(&store, &mut sets).expect("materialise");
+        materialise(
+            &store,
+            sets.iter_mut()
+                .flat_map(|(l1, l4s)| std::iter::once(l1).chain(l4s.iter_mut())),
+        )
+        .expect("materialise");
 
         assert_ne!(
             sets[0].0, sets[1].0,
@@ -292,9 +311,14 @@ mod tests {
         let store = tmp.path().join("store");
         let placed = place(&store, "loaded", "from the store").expect("place");
         let l4 = write(tmp.path(), "draw.kir", "l4");
-        let mut sets = vec![(placed.clone(), vec![l4])];
+        let mut sets = [(placed.clone(), vec![l4])];
 
-        materialise(&store, &mut sets).expect("materialise");
+        materialise(
+            &store,
+            sets.iter_mut()
+                .flat_map(|(l1, l4s)| std::iter::once(l1).chain(l4s.iter_mut())),
+        )
+        .expect("materialise");
 
         assert_eq!(sets[0].0, placed, "the placed procedure was moved");
         assert_eq!(
@@ -312,9 +336,14 @@ mod tests {
         let store = tmp.path().join("store");
         let missing = tmp.path().join("nope.kir");
         let l4 = write(tmp.path(), "draw.kir", "l4");
-        let mut sets = vec![(missing, vec![l4])];
+        let mut sets = [(missing, vec![l4])];
 
-        let err = materialise(&store, &mut sets).expect_err("the source is not there");
+        let err = materialise(
+            &store,
+            sets.iter_mut()
+                .flat_map(|(l1, l4s)| std::iter::once(l1).chain(l4s.iter_mut())),
+        )
+        .expect_err("the source is not there");
         assert!(err.contains("nope.kir"), "{err}");
     }
 }

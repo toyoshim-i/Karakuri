@@ -170,11 +170,11 @@ fn sanitize(name: &str) -> String {
 ///
 /// Reported and never fatal, on the same terms as every other snapshot: a
 /// history that could not be written must not stop a run from starting.
-pub fn seed(shared: &Shared, sets: &[(PathBuf, Vec<PathBuf>)]) {
+pub fn seed<'a>(shared: &Shared, sets: impl Iterator<Item = (usize, Vec<&'a Path>)>) {
     let Ok(mut snapshots) = shared.lock() else {
         return;
     };
-    for (slot, (l1, l4s)) in sets.iter().enumerate() {
+    for (slot, paths) in sets {
         // Every file, each under its own layer and its own index within that
         // layer — the whole stack, because the history is a place an operator
         // walks back through and a node missing from it cannot be walked back
@@ -189,7 +189,7 @@ pub fn seed(shared: &Shared, sets: &[(PathBuf, Vec<PathBuf>)]) {
         // began at the second edit.
         let mut counts: std::collections::HashMap<&'static str, usize> =
             std::collections::HashMap::new();
-        for (positional, path) in std::iter::once(l1).chain(l4s.iter()).enumerate() {
+        for (positional, path) in paths.into_iter().enumerate() {
             let Ok(source) = std::fs::read(path) else {
                 // Unreadable here means the compile is about to fail and say so
                 // against the path the operator gave. Not this module's to
@@ -495,7 +495,10 @@ mod tests {
         std::fs::write(&l4, "proc draw_one {\n  kind L4\n}").expect("write");
 
         let shared = Snapshots::shared(tmp.path());
-        seed(&shared, &[(l1, vec![l4])]);
+        seed(
+            &shared,
+            std::iter::once((0, vec![l1.as_path(), l4.as_path()])),
+        );
 
         let names: Vec<String> = files(&tmp.path().join(DIR))
             .iter()
@@ -527,7 +530,19 @@ mod tests {
         let far = write("e.kir", "proc far {\n  kind L4\n}");
 
         let shared = Snapshots::shared(tmp.path());
-        seed(&shared, &[(l1, vec![l2, fld, near, far])]);
+        seed(
+            &shared,
+            std::iter::once((
+                0,
+                vec![
+                    l1.as_path(),
+                    l2.as_path(),
+                    fld.as_path(),
+                    near.as_path(),
+                    far.as_path(),
+                ],
+            )),
+        );
 
         let names: Vec<String> = files(&tmp.path().join(DIR))
             .iter()
@@ -556,7 +571,10 @@ mod tests {
         std::fs::write(&l4, "proc draw_one {}").expect("write");
 
         let shared = Snapshots::shared(tmp.path());
-        seed(&shared, &[(l1, vec![l4])]);
+        seed(
+            &shared,
+            std::iter::once((0, vec![l1.as_path(), l4.as_path()])),
+        );
 
         let mut snapshots = shared.lock().expect("lock");
         assert!(
