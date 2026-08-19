@@ -30,9 +30,12 @@
 //!
 //! ## Three places the format is finer than the engine
 //!
-//! The Set file keys `seed`, `capacity` and `param` by **layer**; the engine
-//! holds one seed, one capacity, and one flat parameter map per Set. A `param`
-//! may also be a vector, and the engine's map holds `f32`.
+//! The Set file keys `seed` and `capacity` by **node** — a layer and an index,
+//! so two geometries can run at two capacities under two salts — and keys
+//! `param` by a layer and an optional index. This loader builds one geometry
+//! and hands the engine one seed, one capacity and one flat parameter map, so
+//! it takes node 0's and says what it left behind. A `param` may also be a
+//! vector, and the engine's map holds `f32`.
 //!
 //! None of that is resolved here and none of it is silently dropped. Loading
 //! reports what it could not carry — see [`Loaded::notes`] — because a Set file
@@ -384,6 +387,12 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
         Line::new(Record::Slot {
             layer: Layer::L1,
             index: 0,
+            // **Nothing here can write a name yet.** The record carries one so
+            // that a Set file can say which source a mask points at; the
+            // authoring surfaces that would name a node are M4's, and an
+            // absent name is written as nothing, so a file this build saves is
+            // byte for byte the file it saved before the field existed.
+            name: None,
             proc_hash: l1_hash,
         }),
         // On L1, because that is the layer whose element buffers it sizes. The
@@ -391,6 +400,9 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
         // the module doc.
         Line::new(Record::Capacity {
             layer: Layer::L1,
+            // The first geometry's, because this run builds one. The record
+            // can address a second and nothing here has a second to address.
+            index: 0,
             value: capacity,
         }),
     ];
@@ -403,6 +415,7 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
             Line::new(Record::Slot {
                 layer: Layer::L4,
                 index: index as u32,
+                name: None,
                 proc_hash,
             }),
         );
@@ -444,6 +457,9 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
     }));
     lines.push(Line::new(Record::Seed {
         stream: Layer::L1,
+        // One seed, and it salts the one geometry this run built. A per-source
+        // salt is expressible in the record now and is still derived here.
+        index: 0,
         value: u64::from(seed),
     }));
 
@@ -496,46 +512,87 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             Record::Slot {
                 layer,
                 index,
+                name,
                 proc_hash,
-            } => match layer {
-                Layer::L1 => {
-                    slots.insert("L1", *proc_hash);
+            } => {
+                // **A name is read, reported, and goes no further.** Nothing
+                // this build loads points at a node by name, so carrying one
+                // into `Loaded` would be inventing a use for it; dropping it
+                // in silence is the half-applying this module refuses. The
+                // file keeps the name either way — a load is not a rewrite.
+                if let Some(name) = name {
+                    notes.push(format!(
+                        "slot `{name}` was loaded without its name: nothing this build \
+                         points at a node by name yet"
+                    ));
                 }
-                // **Placed by index, not appended.** A second L4 `slot` record
-                // is a second renderer over the same geometry rather than a
-                // correction of the first — and the index says which, so the
-                // records need not arrive in order and the projection can fold
-                // them without one. A file from before stacks existed carries
-                // one L4 at index 0 and lands where it always did.
-                Layer::L4 => {
-                    let at = *index as usize;
-                    if l4_slots.len() <= at {
-                        l4_slots.resize(at + 1, None);
+                match layer {
+                    // **The index is honoured here, and it used to be dropped.**
+                    // Two `slot L1` lines both landed in the one entry and the
+                    // second silently replaced the first, while the L4 arm below
+                    // caught the identical mistake and said so. A file naming two
+                    // geometries is one this loader cannot build — but it is a
+                    // file that said something, and what it said is now reported.
+                    Layer::L1 if *index != 0 => notes.push(format!(
+                        "slot L1 index {index} was skipped: this loader builds one \
+                         geometry and it is index 0"
+                    )),
+                    Layer::L1 => {
+                        if slots.insert("L1", *proc_hash).is_some() {
+                            notes.push(
+                                "two L1 slots both claim index 0; the later one is used"
+                                    .to_string(),
+                            );
+                        }
                     }
-                    if l4_slots[at].is_some() {
-                        notes.push(format!(
-                            "two L4 slots both claim index {at}; the later one is used"
-                        ));
+                    // **Placed by index, not appended.** A second L4 `slot` record
+                    // is a second renderer over the same geometry rather than a
+                    // correction of the first — and the index says which, so the
+                    // records need not arrive in order and the projection can fold
+                    // them without one. A file from before stacks existed carries
+                    // one L4 at index 0 and lands where it always did.
+                    Layer::L4 => {
+                        let at = *index as usize;
+                        if l4_slots.len() <= at {
+                            l4_slots.resize(at + 1, None);
+                        }
+                        if l4_slots[at].is_some() {
+                            notes.push(format!(
+                                "two L4 slots both claim index {at}; the later one is used"
+                            ));
+                        }
+                        l4_slots[at] = Some(*proc_hash);
                     }
-                    l4_slots[at] = Some(*proc_hash);
+                    // **A Set file records an L1 and its renderers**, and a chain and
+                    // a camera are spelled on the command line. Not a statement
+                    // about what a Set can hold — it holds both — but about what
+                    // this format has a slot for.
+                    other => notes.push(format!(
+                        "slot {} was skipped: a Set file records an L1 and its renderers",
+                        layer_name(*other)
+                    )),
                 }
-                // **A Set file records an L1 and its renderers**, and a chain and
-                // a camera are spelled on the command line. Not a statement
-                // about what a Set can hold — it holds both — but about what
-                // this format has a slot for.
-                other => notes.push(format!(
-                    "slot {} was skipped: a Set file records an L1 and its renderers",
-                    layer_name(*other)
-                )),
-            },
+            }
             Record::Src { hash, line, s } => {
                 inlined.entry(*hash).or_default().insert(*line, s.clone());
             }
-            Record::Capacity { layer, value } => match layer {
-                Layer::L1 => capacity = Some(*value),
-                other => notes.push(format!(
+            // **Keyed by the node now, and the engine here still holds one.**
+            // A capacity addressed at a second geometry is a value the format
+            // can express and this loader has nowhere to put — reported rather
+            // than applied to the first, which would resize the wrong source.
+            Record::Capacity {
+                layer,
+                index,
+                value,
+            } => match (*layer, *index) {
+                (Layer::L1, 0) => capacity = Some(*value),
+                (Layer::L1, at) => notes.push(format!(
+                    "capacity on L1 index {at} was skipped: this loader builds one \
+                     geometry and the capacity it takes is index 0's"
+                )),
+                (other, _) => notes.push(format!(
                     "capacity on {} was skipped: a Set has one capacity and it is L1's",
-                    layer_name(*other)
+                    layer_name(other)
                 )),
             },
             Record::Param {
@@ -584,11 +641,21 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                     ..Orbit::default()
                 });
             }
-            Record::Seed { stream, value } => match stream {
-                Layer::L1 => seed = Some(*value as u32),
-                other => notes.push(format!(
+            // The same, one field along: a per-source salt is expressible and
+            // this loader carries the first source's.
+            Record::Seed {
+                stream,
+                index,
+                value,
+            } => match (*stream, *index) {
+                (Layer::L1, 0) => seed = Some(*value as u32),
+                (Layer::L1, at) => notes.push(format!(
+                    "seed on L1 index {at} was skipped: this loader builds one geometry \
+                     and the seed it takes is index 0's"
+                )),
+                (other, _) => notes.push(format!(
                     "seed on {} was skipped: a Set is salted from one seed and it is L1's",
-                    layer_name(*other)
+                    layer_name(other)
                 )),
             },
             // Not a Set file's, and each for its own reason — see
@@ -727,6 +794,17 @@ proc points {
         std::fs::write(&l4, L4).expect("write l4");
         let store = Store::open(dir.path().join("store")).expect("store");
         (dir, store, l1, l4)
+    }
+
+    /// A Set file's text, through the file reader — so the bytes a test writes
+    /// out are genuinely parsed, rather than hand-built into records that could
+    /// not have been written. The file is gone by the time this returns; the
+    /// lines are in memory.
+    fn parsed(text: &str) -> Vec<Line> {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("hand_written.set.ndjson");
+        std::fs::write(&path, text).expect("write");
+        karakuri_store::ndjson::read(&path).expect("a hand-written Set file parses")
     }
 
     /// A Set with nothing but its material and whatever bindings are given.
@@ -893,12 +971,7 @@ proc points {
 "#,
             hashes[0], hashes[1]
         );
-        // Through the file reader, so the bytes above are genuinely parsed
-        // rather than hand-built into records that could not have been written.
-        let dir = tempfile::tempdir().expect("tempdir");
-        let path = dir.path().join("old.set.ndjson");
-        std::fs::write(&path, text).expect("write");
-        let lines = karakuri_store::ndjson::read(&path).expect("an old-style file still parses");
+        let lines = parsed(&text);
 
         let loaded = from_lines(&store, "old", &lines).expect("an old-style file still loads");
         assert_eq!(
@@ -922,10 +995,12 @@ proc points {
         let mut lines = store.read_set("s1").expect("read");
         lines.push(Line::new(Record::Seed {
             stream: Layer::L4,
+            index: 0,
             value: 7,
         }));
         lines.push(Line::new(Record::Capacity {
             layer: Layer::L4,
+            index: 0,
             value: 128,
         }));
         lines.push(Line::new(Record::Param {
@@ -1006,6 +1081,81 @@ proc points {
         };
         let err = binding_from_record(&octaves).expect_err("white has no octaves");
         assert!(err.contains("fbm"), "{err}");
+    }
+
+    /// **Two `slot L1` lines are two geometries, and this loader builds one.**
+    ///
+    /// The index used to be destructured and thrown away on this arm: both
+    /// lines landed in the same entry, the second silently replaced the first,
+    /// and a file describing two sources loaded as one with nothing said —
+    /// while the L4 arm beside it caught the identical mistake and reported it.
+    /// What a loader cannot carry it has to say, which is the whole of `notes`.
+    #[test]
+    fn two_l1_slots_are_reported_rather_than_one_silently_replacing_the_other() {
+        let (_dir, store, l1, l4) = fixture();
+        let put = |bytes: &[u8]| store.put_artifact(bytes).expect("put");
+        let first = put(&std::fs::read(&l1).expect("read"));
+        // A second geometry, distinguishable from the first by name so that
+        // "the later one is used" is checked rather than asserted.
+        let second = put(L1.replace("proc ring", "proc ring_two").as_bytes());
+        let renderer = put(&std::fs::read(&l4).expect("read"));
+        let lines = parsed(&format!(
+            r#"{{"t":"set","id":"two","v":1}}
+{{"t":"slot","layer":"L1","proc":"{first}"}}
+{{"t":"slot","layer":"L1","proc":"{second}"}}
+{{"t":"slot","layer":"L1","index":1,"proc":"{second}"}}
+{{"t":"slot","layer":"L4","proc":"{renderer}"}}
+"#
+        ));
+
+        let loaded = from_lines(&store, "two", &lines).expect("load");
+        let notes = loaded.notes.join("\n");
+        assert!(
+            notes.contains("two L1 slots both claim index 0"),
+            "a second geometry replaced the first in silence; notes were {notes:?}"
+        );
+        assert!(
+            notes.contains("slot L1 index 1"),
+            "a geometry at index 1 was dropped in silence; notes were {notes:?}"
+        );
+        // The later of the colliding pair is what was built, which is what the
+        // note promises and the only reading under which the note is true.
+        assert_eq!(loaded.l1.name, "ring_two");
+    }
+
+    /// **A name is reported rather than dropped, and the Set still loads.**
+    ///
+    /// A `slot` carries a name so that something can point at the node — a mask
+    /// naming the source it applies to. Nothing this build loads points at a
+    /// node by name, so the name reaches `notes` and stops there. It stays in
+    /// the file: a load is not a rewrite, and the note says what this run did
+    /// not use rather than what the file may not say.
+    #[test]
+    fn a_name_this_build_cannot_use_is_reported_and_the_set_still_loads() {
+        let (_dir, store, l1, l4) = fixture();
+        let put = |path: &std::path::Path| {
+            store
+                .put_artifact(&std::fs::read(path).expect("read"))
+                .expect("put")
+        };
+        let (geometry, renderer) = (put(&l1), put(&l4));
+        let lines = parsed(&format!(
+            r#"{{"t":"set","id":"named","v":1}}
+{{"t":"slot","layer":"L1","name":"veil","proc":"{geometry}"}}
+{{"t":"slot","layer":"L4","proc":"{renderer}"}}
+"#
+        ));
+
+        let loaded = from_lines(&store, "named", &lines).expect("a named slot still loads");
+        assert_eq!(
+            loaded.l1.name, "ring",
+            "the material is unaffected by the name"
+        );
+        let notes = loaded.notes.join("\n");
+        assert!(
+            notes.contains("veil"),
+            "the name went nowhere and was not reported; notes were {notes:?}"
+        );
     }
 
     /// A `bind` record and a `Binding` are the same thing in two shapes, and

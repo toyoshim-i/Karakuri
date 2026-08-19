@@ -121,8 +121,13 @@ mod tests {
 
     #[test]
     fn new_line_serialises_immediately() {
+        // The `index` a seed gained addresses the node it salts, and 0 is
+        // written as nothing — so this assertion is the same bytes it always
+        // was, which is the whole claim the field's `skip_serializing_if`
+        // makes, seen from the layer that writes the lines out.
         let line = Line::new(Record::Seed {
             stream: Layer::L1,
+            index: 0,
             value: 7,
         });
         assert_eq!(line.as_str(), r#"{"t":"seed","stream":"L1","value":7}"#);

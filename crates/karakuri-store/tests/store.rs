@@ -98,15 +98,18 @@ fn set_file_round_trips() {
         Line::new(Record::Slot {
             layer: Layer::L1,
             index: 0,
+            name: None,
             proc_hash,
         }),
         Line::new(Record::Capacity {
             layer: Layer::L1,
+            index: 0,
             value: 524288,
         }),
         Line::new(param(Layer::L1, "radius", 2.4)),
         Line::new(Record::Seed {
             stream: Layer::L1,
+            index: 0,
             value: 19274,
         }),
     ];
@@ -243,6 +246,7 @@ fn save_session_as_set_projects_and_persists() {
         Line::new(Record::Slot {
             layer: Layer::L1,
             index: 0,
+            name: None,
             proc_hash,
         }),
         Line::new(param(Layer::L1, "radius", 2.0)),

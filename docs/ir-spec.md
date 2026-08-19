@@ -1580,7 +1580,7 @@ known. The total-cost decision lives there, not in the artifact.
 - **A `slot` may carry a `name`**, which is what a mask points at when a Set has more than
   one source — `{"t":"slot","layer":"L1","index":1,"name":"veil","proc":"…"}`. Optional and
   absent by default: an unnamed source is unreferenceable, on the terms HTML gives an `id`.
-  Unique within the file. See "Multiple L1 sources, and `source`". **Not built.**
+  Unique within the file. See "Multiple L1 sources".
 - **`param` and `bind` may carry an `index`**, which addresses one node of the layer —
   `{"t":"param","layer":"L4","index":1,"key":"exposure","value":0.9}`. **Absent is a
   wildcard, not node 0**: it reaches every node declaring the key, which is what a bare name
@@ -1591,7 +1591,12 @@ known. The total-cost decision lives there, not in the artifact.
 - **`seed` is keyed by node, not only by layer** — `{"t":"seed","stream":"L1","index":1,…}`
   salts the second source. Absent means 0, so a file naming one source per layer reads as it
   always did. The value is also what that source's `source` attribute carries, since the
-  discriminator and the salt are one value. **Not built.**
+  discriminator and the salt are one value — the attribute is not built, and the record now
+  carries the address.
+- **`capacity` is keyed by node too** — `{"t":"capacity","layer":"L1","index":1,"value":…}`
+  sizes the second geometry. Absent means 0 rather than a wildcard, on the `slot` rule and
+  not the `param` one: it names exactly one node, and a Set that held one geometry had only
+  node 0 to size, so no file written before the address existed is retargeted by it.
 - **Several `slot` records on `L4` is a stack**: one geometry with a renderer apiece, drawn
   in the order the records appear. It needed no new record to say so — a second one is a
   second renderer rather than a correction of the first. A file with one reads exactly as it
