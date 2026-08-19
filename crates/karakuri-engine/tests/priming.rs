@@ -580,7 +580,7 @@ fn the_priming_rate_does_not_change_the_signal_a_warming_set_reads() {
                 "beat",
                 Curve::Lin,
                 [0.0, 8.0]
-            )),
+            )).attached(),
             "`speed` is a declared L1 param of CREEP"
         );
         let mut deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], WIDTH, HEIGHT);
@@ -650,7 +650,7 @@ fn warming_at_full_rate_reads_the_same_signal_as_being_on_air() {
             "beat",
             Curve::Lin,
             [0.0, 8.0]
-        )));
+        )).attached());
         let mut deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], WIDTH, HEIGHT);
         deck.set_signals(Signals::new(120.0, u64::from(SEED_A)));
         deck.set_residency(0, residency);

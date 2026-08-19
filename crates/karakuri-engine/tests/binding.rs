@@ -220,7 +220,7 @@ fn a_beat_binding_moves_a_param_in_time_with_the_deck_oscillator() {
             "beat",
             Curve::Lin,
             [1.0, 5.0]
-        )),
+        )).attached(),
         "`radius` is a declared L1 param"
     );
     let (mut deck, present) = deck_of(&gpu, vec![set], 1);
@@ -284,7 +284,7 @@ fn a_bound_param_reaches_the_shader_by_the_same_path_a_param_override_takes() {
         let mut set = build(&gpu);
         assert_eq!(set.set_param("spawn_rate", RATE), 1, "the param must be declared for the write to mean anything");
         assert_eq!(set.set_param(key, manual), 1, "the param must be declared for the write to mean anything");
-        assert!(set.bind(Binding::new(layer, key, "beat", Curve::Lin, [value, value])));
+        assert!(set.bind(Binding::new(layer, key, "beat", Curve::Lin, [value, value])).attached());
         set
     };
     let set_to = |key: &str, value: f32| {
@@ -354,7 +354,7 @@ fn a_binding_reaches_the_spawn_accumulator_and_not_only_the_uniform() {
         "beat",
         Curve::Lin,
         [3000.0, 3000.0]
-    )));
+    )).attached());
     let (mut deck, present) = deck_of(&gpu, vec![bound], 5);
     for _ in 0..30 {
         frame(&gpu, &mut deck, &present, 1);
@@ -385,7 +385,7 @@ fn a_manual_value_is_kept_and_blended_from_rather_than_overwritten() {
         "energy",
         Curve::Lin,
         [0.0, 1.0]
-    )));
+    )).attached());
     let (mut deck, present) = deck_of(&gpu, vec![set], 2);
 
     for _ in 0..10 {
@@ -420,7 +420,7 @@ fn a_signal_with_no_provider_leaves_the_param_where_it_was_put() {
         "mic_level",
         Curve::Pow2,
         [100.0, 200.0]
-    )));
+    )).attached());
     let (mut deck, present) = deck_of(&gpu, vec![set], 3);
 
     for _ in 0..20 {
@@ -459,14 +459,14 @@ fn the_same_ticks_and_seed_reproduce_a_noise_binding_bit_for_bit() {
                 rate: 0.5,
                 stream: 3,
             }),
-        );
+        ).attached();
         set.bind(Binding::new(
             Kind::L4,
             "hue",
             "bar",
             Curve::Smooth,
             [0.0, 1.0],
-        ));
+        )).attached();
         let (mut deck, present) = deck_of(&gpu, vec![set], seed);
         let mut out = Vec::new();
         for steps in ticks {
@@ -496,7 +496,7 @@ fn every_live_slot_reads_the_same_session_phase() {
                 "beat",
                 Curve::Pow2,
                 [1.0, 5.0]
-            )));
+            )).attached());
             set
         })
         .collect();
@@ -555,7 +555,7 @@ fn the_session_clock_advances_by_the_same_clamped_steps_the_slots_do() {
             "beat",
             Curve::Lin,
             [1.0, 5.0]
-        )));
+        )).attached());
         set
     };
 
@@ -660,7 +660,7 @@ fn a_param_name_two_nodes_declare_is_two_values_one_per_node() {
                 "nothing_measures_this",
                 Curve::Lin,
                 [0.0, 100.0]
-            )),
+            )).attached(),
             "`radius` is declared on {layer:?}"
         );
     }
@@ -737,7 +737,7 @@ fn binding_a_param_the_layer_does_not_declare_is_refused() {
         "beat",
         Curve::Lin,
         [0.0, 1.0]
-    )));
+    )).attached());
     // `hue` is L4's, so an L1 binding to it must not attach.
     assert!(!set.bind(Binding::new(
         Kind::L1,
@@ -745,14 +745,14 @@ fn binding_a_param_the_layer_does_not_declare_is_refused() {
         "beat",
         Curve::Lin,
         [0.0, 1.0]
-    )));
+    )).attached());
     assert!(set.bind(Binding::new(
         Kind::L4,
         "hue",
         "beat",
         Curve::Lin,
         [0.0, 1.0]
-    )));
+    )).attached());
     assert_eq!(set.bindings().len(), 1);
 
     // A second binding on the same param replaces the first rather than
@@ -763,7 +763,7 @@ fn binding_a_param_the_layer_does_not_declare_is_refused() {
         "bar",
         Curve::Sqrt,
         [0.0, 1.0]
-    )));
+    )).attached());
     assert_eq!(set.bindings().len(), 1);
     assert_eq!(set.bindings()[0].signal, "bar");
 }
@@ -931,7 +931,7 @@ fn a_measured_signal_reaches_the_uniform_a_param_override_would_write() {
         "energy",
         Curve::Lin,
         [0.5, 8.0]
-    )));
+    )).attached());
     let (mut deck, present) = deck_of(&gpu, vec![set], u64::from(SEED));
 
     frame(&gpu, &mut deck, &present, 1);

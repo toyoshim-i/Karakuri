@@ -297,7 +297,7 @@ fn a_fields_param_reaches_every_operator_surface() {
             "energy",
             karakuri_engine::Curve::Lin,
             [0.3, 2.0],
-        )),
+        )).attached(),
         "a signal has to be attachable to a field's param"
     );
 

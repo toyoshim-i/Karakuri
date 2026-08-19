@@ -1104,8 +1104,16 @@ fn run_worker(
                 // first frame after a swap blending from the `.kir` default.
                 for binding in request.bindings {
                     let (layer, key) = (binding.layer, binding.key.clone());
-                    if !set.bind(binding) {
-                        eprintln!("  no {layer:?} parameter named `{key}` to bind, ignoring");
+                    let signal = binding.signal.clone();
+                    match set.bind(binding) {
+                        crate::set::Bound::Yes => {}
+                        crate::set::Bound::NoSuchParam => eprintln!(
+                            "  no {layer:?} parameter named `{key}` to bind, ignoring"
+                        ),
+                        crate::set::Bound::NoSuchControl => eprintln!(
+                            "  `{signal}` is not published by this Set, so `{layer:?} {key}` \
+                             is not bound"
+                        ),
                     }
                 }
                 set

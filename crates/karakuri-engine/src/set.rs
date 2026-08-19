@@ -574,6 +574,32 @@ pub enum PublishError {
     DuplicateName(String),
 }
 
+/// What became of a [`Set::bind`].
+///
+/// **Two ways to fail, and they are different mistakes.** A binding names a
+/// param and, when its source is a published control, a control — so it can
+/// miss on either, and the sentence that helps points at the one it missed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bound {
+    /// Attached, and riding from the next frame.
+    Yes,
+    /// No node this binding covers declares a scalar param by that name.
+    NoSuchParam,
+    /// A `control:` source naming something this Set's interface does not
+    /// publish. The param exists; the thing that was to drive it does not.
+    NoSuchControl,
+}
+
+impl Bound {
+    /// Whether the binding is riding. For callers that only need the yes/no —
+    /// a test asserting the param was there, mostly. A caller that *reports*
+    /// wants the variant, because "which one" is the whole content of the
+    /// message.
+    pub fn attached(self) -> bool {
+        self == Bound::Yes
+    }
+}
+
 impl Set {
     /// Compile two checked procedures into a runnable Set.
     ///
@@ -1465,7 +1491,12 @@ impl Set {
     /// Allocates, so not on the render thread. A binding arrives with a Set
     /// (from a Set file, from `--bind`, or from a rebuild's `Request`), and
     /// all three are off the frame path.
-    pub fn bind(&mut self, binding: Binding) -> bool {
+    ///
+    /// **The two ways to fail are different mistakes**, which is why this
+    /// answers with a reason rather than a `bool`. A caller that collapses
+    /// them reports a misspelt *control* as a missing *parameter*, and sends
+    /// whoever reads it to look at the wrong half of their command line.
+    pub fn bind(&mut self, binding: Binding) -> Bound {
         // Both checks: a node's map holds only its scalar params — a vector one
         // is declared but has no value here — and a binding produces one float.
         //
@@ -1488,7 +1519,7 @@ impl Set {
         // needs anyway: publish, then bind.
         if let Some(name) = binding.signal.strip_prefix(CONTROL_PREFIX) {
             if !self.published().iter().any(|p| p.name == name) {
-                return false;
+                return Bound::NoSuchControl;
             }
         }
         let range = self.nodes_of(binding.layer);
@@ -1532,7 +1563,7 @@ impl Set {
                     .is_some_and(|map| declares(n, map))
         });
         if !found {
-            return false;
+            return Bound::NoSuchParam;
         }
         // At most one per (layer, index, param). A wildcard and an addressed
         // binding on one name are two bindings and the addressed one wins for
@@ -1543,7 +1574,7 @@ impl Set {
         self.bindings
             .retain(|b| b.layer != binding.layer || b.key != binding.key || b.index != binding.index);
         self.bindings.push(binding);
-        true
+        Bound::Yes
     }
 
     /// **Where a layer's nodes start in [`Set::params`].**
