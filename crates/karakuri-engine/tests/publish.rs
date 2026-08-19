@@ -15,7 +15,7 @@
 //!   twenty other numbers left where the author put them.
 
 use karakuri_engine::binding::{Binding, Curve};
-use karakuri_engine::set::{Layering, PublishError, Published};
+use karakuri_engine::set::{Bound, Layering, PublishError, Published};
 use karakuri_engine::{Gpu, Set, Signals};
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
@@ -281,8 +281,8 @@ fn one_published_control_drives_several_internal_ones_through_their_own_ranges()
     };
     // One renderer rises with the knob and the other falls: a crossfade, spelled
     // as two bindings that share a source.
-    assert!(set.bind(bind(0, [0.0, 2.0])));
-    assert!(set.bind(bind(1, [2.0, 0.0])));
+    assert!(set.bind(bind(0, [0.0, 2.0])).attached());
+    assert!(set.bind(bind(1, [2.0, 0.0])).attached());
 
     let exposure = |set: &Set, index: u32| {
         set.bindings()
@@ -333,7 +333,20 @@ fn a_binding_on_a_control_nothing_publishes_is_refused() {
     let bind = |name: &str| {
         Binding::new(Kind::L4, "exposure", format!("control:{name}"), Curve::Lin, [0.0, 2.0])
     };
-    assert!(!set.bind(bind("twst")), "a misspelt control was accepted");
+    // **And it says which of the two it missed.** The param is fine — it is
+    // the control that is not there — and a refusal that says "no L4 parameter
+    // named `exposure`" sends whoever reads it to the wrong half of their
+    // command line.
+    assert_eq!(
+        set.bind(bind("twst")),
+        Bound::NoSuchControl,
+        "a misspelt control was accepted, or reported as a missing param"
+    );
+    assert_eq!(
+        set.bind(Binding::new(Kind::L4, "no_such_param", "control:twist", Curve::Lin, [0.0, 1.0])),
+        Bound::NoSuchParam,
+        "a published control does not make an undeclared param bindable"
+    );
     assert!(set.bindings().is_empty(), "the refusal still attached it");
-    assert!(set.bind(bind("twist")), "the control that is there");
+    assert!(set.bind(bind("twist")).attached(), "the control that is there");
 }

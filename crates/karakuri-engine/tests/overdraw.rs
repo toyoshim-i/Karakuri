@@ -468,7 +468,7 @@ fn a_binding_blends_from_a_node_that_declares_the_name_not_the_first_one() {
             "nothing_measures_this",
             Curve::Lin,
             [0.0, 100.0]
-        )),
+        )).attached(),
         "`spread` is declared by one of this Set's renderers"
     );
     set.prepare(&gpu.queue, 1, &Signals::default());
@@ -721,8 +721,8 @@ fn an_address_past_the_end_of_the_stack_is_refused() {
     let bind_at = |i: u32| {
         Binding::new(Kind::L4, "exposure", "nothing_measures_this", Curve::Lin, [0.0, 8.0]).at(i)
     };
-    assert!(set.bind(bind_at(1)), "renderer 1 declares `exposure`");
-    assert!(!set.bind(bind_at(9)), "there is no tenth renderer to bind into");
+    assert!(set.bind(bind_at(1)).attached(), "renderer 1 declares `exposure`");
+    assert!(!set.bind(bind_at(9)).attached(), "there is no tenth renderer to bind into");
 }
 
 /// **An addressed binding blends from the node it names**, which is the half of
@@ -744,7 +744,7 @@ fn two_addressed_bindings_on_one_name_blend_from_their_own_nodes() {
             set.bind(
                 Binding::new(Kind::L4, "exposure", "nothing_measures_this", Curve::Lin, [0.0, 8.0])
                     .at(i)
-            ),
+            ).attached(),
             "renderer {i} declares `exposure`"
         );
     }

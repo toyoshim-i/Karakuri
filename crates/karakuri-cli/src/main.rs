@@ -1730,6 +1730,7 @@ fn replay_session(args: &Args, id: &str) {
         // procedure's own declared default — never the flag's, which is a
         // general default beating a specific declaration that meant it.
         &[loaded.capacity.unwrap_or_else(|| capacity_for(args, &loaded.l1))],
+        &mut vec![false; loaded.bindings.len()],
         &loaded.params,
         &loaded.bindings,
         // **A Set file does not record an interface yet**, on the same terms it
@@ -1929,6 +1930,7 @@ fn rebuild(
         &l4s,
         karakuri_engine::set::Layering::Overdraw,
         &capacities_for(args, std::slice::from_ref(&l1)),
+        &mut vec![false; args.bindings.len()],
         &args.overrides,
         &args.bindings,
         &[],
@@ -2465,7 +2467,10 @@ fn build_deck(
     // edited — see `history`.
     snapshots: Option<history::Shared>,
 ) -> Deck {
-    let swaps = procs
+    // One flag per binding, shared across every slot: a binding names a layer
+    // and a param, and a deck of four slots is four chances for it to land.
+    let mut attached = vec![false; args.bindings.len()];
+    let swaps: Vec<_> = procs
         .iter()
         .enumerate()
         .map(|(slot, material)| {
@@ -2489,6 +2494,7 @@ fn build_deck(
                     karakuri_engine::set::Layering::Overdraw
                 },
                 &capacities_for(args, l1),
+                &mut attached,
                 &args.overrides,
                 &args.bindings,
                 &args.published,
@@ -2568,7 +2574,11 @@ fn build_deck(
     // The confidence is the part worth printing — a binding to an invented
     // signal moving a tenth of the way is the system working, and an operator
     // who does not know that reads it as a broken binding.
-    for binding in &args.bindings {
+    // **Only the ones that attached.** Describing a binding that landed
+    // nowhere told an operator it "decides that param outright" one line after
+    // saying it was ignored, which is the failure the confidence display had
+    // and had fixed — reappearing one step further along.
+    for (binding, _) in args.bindings.iter().zip(&attached).filter(|(_, on)| **on) {
         eprintln!("  {}", describe(binding, deck.signals()));
     }
     deck
@@ -2620,6 +2630,10 @@ fn build(
     layering: karakuri_engine::set::Layering,
     // One per entry in `l1s`, in the same order — see `capacities_for`.
     capacities: &[u32],
+    // Set to `true` for each binding that attached, and left alone otherwise.
+    // One flag per binding, and a caller building several slots ORs them: a
+    // binding is worth describing if it attached *anywhere*.
+    attached: &mut [bool],
     overrides: &[ParamWrite],
     bindings: &[Binding],
     published: &[karakuri_engine::set::Published],
@@ -2667,10 +2681,21 @@ fn build(
                     eprintln!("  `{name}` is not published: {e}");
                 }
             }
-            for binding in bindings {
+            for (at, binding) in bindings.iter().enumerate() {
                 let (layer, key) = (binding.layer, binding.key.clone());
-                if !set.bind(binding.clone()) {
-                    eprintln!("  no {layer:?} parameter named `{key}` to bind, ignoring");
+                match set.bind(binding.clone()) {
+                    karakuri_engine::set::Bound::Yes => attached[at] = true,
+                    karakuri_engine::set::Bound::NoSuchParam => {
+                        eprintln!("  no {layer:?} parameter named `{key}` to bind, ignoring");
+                    }
+                    // **The other half of the same sentence.** This used to
+                    // print the line above, which sends whoever reads it to
+                    // look at the param — and the param is fine.
+                    karakuri_engine::set::Bound::NoSuchControl => eprintln!(
+                        "  `{}` is not published by this Set, so {layer:?} `{key}` is \
+                         not bound",
+                        binding.signal
+                    ),
                 }
             }
             set
