@@ -56,11 +56,11 @@ V1 implements L1 and L4 inside a single Set. The full model:
 
 | Layer | Role | Milestone |
 |---|---|---|
-| L0 | Signal bus. Synthesized values from M1; audio and tempo landed in M2, MIDI has not | M1 / M2 |
-| L1 | Geometry generation. Vertices, particles, SDF builtins used inline. **"Used inline" is aspirational**: the SDF builtins compile, and no example uses one, because the shape they describe has nothing to draw it. The first-class `Field` type is M3 | M1 |
+| L0 | Signal bus. Synthesized values from M1; audio, tempo and MIDI landed in M2 | M1 / M2 |
+| L1 | Geometry generation. Vertices, particles, SDF builtins used inline. Built, and `kind Field` made the SDF builtins reachable: `examples/melt_blob.kir` is a shape and nothing else, `examples/field_march.kir` marches one | M1 / M3 |
 | L2 | Deformation and motion. Time-axis modulation, physics | M3 |
 | L3 | Camera and space. Viewpoint, motion grammars | M3 |
-| L4 | Render and material. Raster, raymarch, splatting | M1 for sprites, M3 for segments; raymarch and splatting are unbuilt |
+| L4 | Render and material. Raster, raymarch, splatting | M1 for sprites, M3 for segments and for raymarch — a fullscreen L4 with `eye` and `ray`. Splatting is unbuilt |
 | L5 | Composite. Set mixing, transitions, post, output routing | M2 |
 
 Orthogonal to the layers:
@@ -93,16 +93,30 @@ expects to need later. No LLM call is ever on a path that a frame waits for.
 What makes procedures reusable across arbitrary combinations. Introduced properly in M3.
 
 ```
-L1 : ()                  -> Geometry | Field
-L2 : Geometry            -> Geometry      // endomorphism, therefore stackable
-L3 : ()                  -> Camera
-L4 : (Geometry, Camera)  -> Texture + AOVs
+L1    : ()                  -> Geometry
+L2    : Geometry            -> Geometry   // and two variants that break this, below
+L3    : ()                  -> Camera
+L4    : (Geometry, Camera)  -> Texture
+Field : vec3                -> float      // a file and no node: spliced into its callers
 ```
 
 `Geometry` is not monolithic. It declares topology, an attribute set, a count mode, and a
 spatial domain. Compatibility is a subset check on attributes, with automatic adapters
-where a derivation rule exists. This declaration-plus-adapter layer is what lets almost
-any L2 in the library sit on almost any L1.
+where a derivation rule exists — `age` and `velocity` are the two that exist. This
+declaration-plus-adapter layer is what lets almost any L2 in the library sit on almost any
+L1.
+
+**Two declarations break L2's endomorphism, on its two different axes**, and that is why the
+line above no longer states it flatly. `amplify N` breaks it on the *count* axis — one
+element in, `N` out — and `pairs` breaks it on the *arity* axis, taking two geometries and
+returning one. Both stay in the same slot position, because what a `deform` writes is decided
+before it runs. Stackability survives for the plain kind, which is the kind a library is
+mostly made of.
+
+`Field` is the mirror of L5's argument: a `kind` says what a procedure *lowers to*, an L5 has
+no `kind` because the compositing is fixed and there is nothing to lower, and a field has
+*only* code to lower — so it has a file and no node. AOVs were once written into L4's return
+and are not built; nothing in the workspace produces one.
 
 ### Multiplicity within a layer
 
@@ -113,15 +127,18 @@ Each layer composes differently, and each needs its own semantics.
   identities.** Identity is `seed`, a monotone spawn ordinal from one counter that resets at
   Set start, so two sources either share it and interleave — and the second one's `seed` no
   longer starts at zero, which breaks every structured layout — or hold one each and collide.
-  **Answered and closed**: `docs/ir-spec.md`, "Multiple L1 sources, and `source`". Each
-  source counts from zero, an implicit `source` attribute makes identity the pair, and the
-  hash salt moves from per *layer* to per *source* so two identical grids differ in colour by
-  default. The part that took longest was the `source` value itself: **assigned once and
-  recorded, never derived**, because every derivation fails on a case this system has — graph
-  edits move a position, a `.kir` edit moves a content hash under `--watch`, and a declared
-  procedure name collides for the same lattice used twice. A source that something wants to
-  mask on carries a **name**, written where it is used and not in the `.kir`, on the terms
-  HTML gives an `id`; an unnamed source is simply unreferenceable. Decided, not built.
+  **Answered, and half built**: `docs/ir-spec.md`, "Multiple L1 sources". Each source counts
+  from zero, and the hash salt moved from per *layer* to per *source*, so two identical grids
+  differ in colour by default. `--set a.kir,b.kir,renderer.kir` builds two sources in one
+  Set, each at its own capacity, each with its own chain.
+
+  **What is not built is the identity.** There is no `source` attribute — nothing carries
+  one, so nothing downstream can mask on one. And the salt is **derived** from the source's
+  ordinal where the design says it must be **assigned and recorded**, because every
+  derivation fails on a case this system has: graph edits move a position, a `.kir` edit
+  moves a content hash under `--watch`, and a declared procedure name collides for the same
+  lattice used twice. Today reordering `--set` changes which geometry gets which randomness.
+  Both wait on the same thing — a source has no name. See "Naming what a Set holds".
 - **L2 multiple** — chain. Order matters. Each modulator carries a weight and a mask, and
   masks are attribute-based: only elements where `seed % 3 == 0`, only inside a region,
   only where `age > 0.7`. This is the largest single source of expressive range in the
@@ -140,12 +157,13 @@ Each layer composes differently, and each needs its own semantics.
   pass. This is the cheapest visual variety per unit of GPU time in the whole system, and it
   is the payoff for being primitive-centric.
 
-  **Half of this arrived early and the expensive half did not.** `topology lines` means one
-  L1 can be paired with a sprite renderer and a stroke renderer, and nothing in the language
-  or the pairing rules objects — `examples/drift_shell.kir` has both. But a Set owns its
-  element buffers, so putting that L1 in two slots steps it twice: today the marginal cost
-  is a whole second simulation, not one draw pass. **Sharing the geometry is what is left**,
-  and it is the part that needs a Set to stop being the unit that owns everything.
+  **Built.** A Set holds a list of renderers over one geometry — `--set L1.kir,L4.kir,L4.kir`
+  — the first clears the target and the rest load it, and the marginal cost is one draw pass
+  as promised. `drift_shell + soft_points + drift_streaks` is one cloud drawn as sprites and
+  as segments, from one simulation. What is *not* shared is geometry across **slots**: the
+  same L1 in two slots is still two simulations, because a Set owns its element buffers. That
+  is a different want — two independently faded copies of one cloud — and nothing has needed
+  it yet.
 
 ---
 
@@ -292,7 +310,7 @@ procedure that could not be afforded. Because the hint carried the *why*, the mo
 concluded that integrating a streamline per element was incompatible with the cost model at
 all, and switched to an analytic curve with curl displacement — same per-element cost,
 continuous strands. **Hints were written to be kind to a human and turned out to be the
-specification an LLM reads.** Fifty-eight of them exist; that number should grow, and every
+specification an LLM reads.** Seventy-two of them exist; that number should grow, and every
 one should say why rather than what.
 
 The result also moderates this milestone's own complaint about a single topology. Denied a
@@ -499,7 +517,8 @@ fine alone and is unreadable next to lights.
   classification produces no diagnostic it can only ever be wrong silently, which is why it
   is deliberately conservative: strict-wrong costs a warm-up nobody needed, permissive-wrong
   is a scrub that renders garbage.
-- ~~L5 mixer.~~ **Done for gain, opacity and blend; masks are not built.** This bullet said
+- ~~L5 mixer.~~ **Done for gain, opacity, blend and masks; a mask read from a texture is
+  not built.** This bullet said
   gain and opacity were "indistinguishable under additive blending, and blend modes and
   masks are what would separate them", and blend modes duly separated them: every mode
   composites as `acc <- mix(acc, f(acc, gain * src), opacity)`, so gain is the level the
@@ -646,7 +665,8 @@ fine alone and is unreadable next to lights.
   What is not built: a transition that is not a fade. A wipe wants a mask and a stutter
   wants a clock the transport does not offer, so both are the next bullet's and the
   transport's rather than this one's
-- `VideoSource` interface with `color` required and AOVs optional
+- ~~`VideoSource` interface with `color` required~~ — **built**, and it is the seam the probe
+  measures through. AOVs are not built and nothing produces one
 - ~~Audio input. Spectrum, energy, onset detection, tempo estimation~~ **Done**, plus beat
   tracking with latency compensation. Analysis runs in the driver's callback rather than on
   the frame path. Two records carry it — `audio` per frame and `tempo` for corrections — on
@@ -681,8 +701,9 @@ fine alone and is unreadable next to lights.
   layer, since a Set holds several renderers. The engine held one flat map, so an L1 and an
   L4 declaring one name shared a value; `Set::build` refused the collision, which was
   correct and was not the answer — a Set whose two procedures both want a `hue` is not an
-  error. What is left is the *external* half: a `--param` and a `param` record still carry a
-  bare name, which reaches every node declaring it
+  error. The *external* half closed in M3: `--param L4:1:exposure=2.0` and `--bind index=1`
+  address one node, and both records carry an optional `index`. A bare name still reaches
+  every node declaring it, which is the useful default rather than the remaining gap
 - ~~PLL correction of the local oscillator against external tempo~~ **Done**, and shaped by
   what it is for: tempo is stable except at a track change, so the grid is **predicted, not
   chased**. A locked grid free-runs and takes a slow trim; a single disagreeing estimate
@@ -690,7 +711,8 @@ fine alone and is unreadable next to lights.
   correction **leads** by the analysis lag plus the output lag, because a loop that merely
   tracks shows its beat late by both, consistently — which reads as wrong rather than as
   noise
-- Ableton Link as a passive peer that never proposes a tempo
+- ~~Ableton Link as a passive peer that never proposes a tempo~~ — **built and verified**,
+  out of process behind `--tempo-source`. See `docs/plugins.md`
 - ~~MIDI control surface on a dedicated controller, not the DJ controller.~~ **Done for
   input**, and it turned out to be the first real test of an invariant rather than a feature
   of its own. `README.md` says the record stream is the sole mutation path, and the reason
@@ -853,27 +875,34 @@ material for since it can rebuild a Set from records.
 a `kind` behind it, and a Set holds a chain of them. That is the half of this milestone that
 makes the library worth having, and it is done.
 
-**Nothing from the Adds list below is outstanding.** Cross-source interpolation was the last,
-and it landed as a pairing L2 — `pairs` on the header, `other.<attr>` for the paired element,
-and a Set that holds exactly two sources when the chain begins with one. Multiple L1 sources
-landed before it, and the nested L5's motivating case landed with those — "two pipelines, one
-knob" was waiting on nothing but a Set able to hold two geometries, and it now renders and is
+**Every item on the Adds list below has landed except the graph compiler, and three named
+things are outstanding underneath them.** Cross-source interpolation was the last to land,
+as a pairing L2 — `pairs` on the header, `other.<attr>` for the paired element, and a Set
+that holds exactly two sources when the chain begins with one. Multiple L1 sources landed
+before it, and the nested L5's motivating case landed with those — "two pipelines, one knob"
+was waiting on nothing but a Set able to hold two geometries, and it now renders and is
 tested: two sources, two renderers, two composited targets, and one published control that
 moves all four instances.
 
-**Slot interface contracts landed as the attribute derivation** and **`Field` landed as a
-kind**; both are struck below. The **graph compiler** stays deferred on its own argument,
-two hundred lines above: its authoring half waits on the fan-in that multiple sources bring,
-and its fusion half is an optimisation over a materialising implementation that is already
-correct.
+The three that are outstanding, each recorded where it belongs and repeated here because a
+milestone summary that hides them is the thing this paragraph exists to prevent:
 
-**Two corrections to the sentence this replaces.** It called multiple L1 sources *"decided in
-full"*; the spec has seven questions it does not answer, and the sharpest is that masking on
-a source is specified to be written against a *name* while every worked example writes an
-ordinal, which is the spelling the same section rejects. And it paired `Field` with the graph
-compiler as one item, where the prose two hundred lines above already splits them: fusion has
-nothing to fuse until `Field` exists, and is in any case classified as an optimisation over a
-materialising implementation that is already correct.
+- **A source's salt is derived and not assigned**, so reordering `--set` changes which
+  geometry gets which randomness. Under "L1 multiple".
+- **How a mask names a source**, and with it the `source` attribute, which does not exist.
+- **What an L3 points at** — a reduction or element zero — which the checker refuses by name
+  and which needs addressing the language does not have.
+
+All three are the same missing thing, and it now has a section of its own: "Naming what a
+Set holds", below.
+
+**Slot interface contracts landed as the attribute derivation** and **`Field` landed as a
+kind**; both are struck below. The **graph compiler is split in two and scheduled
+separately** — see "Naming what a Set holds" for the authoring half, which is now the first
+work of M4, and "Deferred by decision" for fusion, which is parked with a trigger.
+
+**A correction to the sentence this replaces.** It called multiple L1 sources *"decided in
+full"*, and they are not: what shipped is the merging, not the identity.
 
 **L2 amplification is built**, and it is struck from the list below.
 
@@ -891,7 +920,8 @@ all address a node rather than a layer, and a Set can now say which of those a c
 **L3 is built, edge first.** `L4 : (Geometry, Camera) -> Texture` makes a camera an input
 *edge*, and it is one: the six numbers a camera *is* go into a GPU buffer, a compute pass
 derives the `view_proj`, ray basis and `depth_range` a renderer reads, and every L4 binds the
-result. Nothing about a camera is on the host any more. The producer is either the built-in
+result. Nothing about a camera is *derived* on the host any more — the six numbers still
+live there and are uploaded, and everything computed from them moved onto the GPU. The producer is either the built-in
 orbit, host-written, or a `.kir` with a `camera` block, which is a second compute pass writing
 the same buffer.
 
@@ -972,7 +1002,7 @@ renderer.
 
 **Nothing remains.** The vocabulary no longer runs ahead of the engine: `sd_sphere`,
 `sd_box`, `sd_torus`, `sd_plane` and the four CSG operators have a renderer now, and
-`examples/field_march.kir` uses six of the eight. `Topology` has three values, `Blend` has
+`examples/field_march.kir` uses five of the eight. `Topology` has three values, `Blend` has
 two, and neither enum is a promise any more.
 
 - ~~**A fullscreen L4.**~~ **Built.** An L4 with no `vertex` block covers the frame and
@@ -1129,9 +1159,9 @@ A Set file says a stack as **several `slot` records on `L4`**, in draw order, an
 new record to say it. A session stream says it as several `procedure` records carrying an
 `index` — absent when 0, so a stream written before stacks existed replays byte for byte.
 
-Two places still reach only the first renderer and say so where they do: the edit history
-and the MCP surface, both keyed by (slot, layer), which is the same missing address the
-params have. Naming a renderer is one piece of work that closes all three.
+Both are closed: the edit history and the MCP surface are keyed by `(slot, layer, index)`,
+which is the address the params grew at the same time. What is *not* addressable is a node
+with no ordinal to be found by — a second geometry — which is the head of M4.
 
 **Built: several renderers over one geometry.** `Set::build_many` takes the L4s in draw
 order and they run in that order over the one attachment — the first clears, the rest load —
@@ -1152,10 +1182,12 @@ reads no attribute does not excuse the simulation if another reads them all.
 element buffers, counts, compaction, the spawn accumulator, pipelines and bind groups on one
 side; pipeline, uniform, accumulation targets and its own bind groups on the other — with
 `Geometry` the edge between them, resolved once at build time from the node that offers it
-rather than assembled by the Set out of buffers it reached into. `set.rs` went from 1557
-lines to 927, and what is left is the grouping: camera, parameter values and bindings,
-viewport, clock, and which nodes run in what order. **One node of each kind still**, so
-nothing an author can see has changed.
+rather than assembled by the Set out of buffers it reached into. `set.rs` halved on the day —
+1557 lines to 927 — and what was left was the grouping: camera, parameter values and
+bindings, viewport, clock, and which nodes run in what order. It is larger than either
+number now, and what grew is the grouping's own business: lists, chains, sources and the
+refusals that go with them. **One node of each kind still**, on the day, so nothing an author
+could see had changed.
 
 **Three places still reach into a node, and naming them is naming what the list changes.**
 `Set::draw` reads the simulation's parity and counts buffer; `Set::step` asks the renderer
@@ -1182,7 +1214,8 @@ injections *passed*.
 This repository tests almost everything by **comparing one run against another**: same record
 stream, same image; primed then live, same as always live; two frames of one step, same as
 one frame of two. That is the right shape for an invariance claim, and it is structurally
-blind to anything that moves *both* sides equally. Two such defects passed all 43 suites:
+blind to anything that moves *both* sides equally. Two such defects passed every suite then
+in the repository:
 
 - **Shift every substep's `t` by one whole `dt`** — every procedure in the system reads a
   clock a frame out, and every comparison shifts with it. Closed by
@@ -1220,12 +1253,17 @@ a target apiece. See `docs/ir-spec.md`, "Overdraw and compositing are different 
 
 **What a Set file and a command line look like.** **No new syntax at all.**
 `--set drift_shell.kir,soft_points.kir,drift_streaks.kir` already parses; every file declares
-its own `kind`, so the loader can require exactly one L1 and read list order as order within
-a kind. The edges are *inferred* while the graph is a star — every L4 reads the only L1 —
-and the moment that stops being true they have to be spelled. Inferring them now is not a
-shortcut being taken; it is that there is exactly one edge set consistent with the nodes, so
-writing them down would be a second place for the same fact. When fan-in arrives it brings
-the notation with it.
+its own `kind`, so the loader reads list order as order within a kind. The edges are
+*inferred* while the graph is a star — every L4 reads the only L1 — and the moment that stops
+being true they have to be spelled. Inferring them was not a shortcut being taken; it is that
+there was exactly one edge set consistent with the nodes, so writing them down would have been
+a second place for the same fact.
+
+**That moment has passed.** A Set can hold two L1s, and a pairing L2 reads two of them, so
+there is no longer exactly one consistent edge set — which two geometries a `pairs` node takes
+is decided by `--set` order and written nowhere. This paragraph promised that "when fan-in
+arrives it brings the notation with it"; fan-in arrived twice and brought none, and the debt
+is now the first item of M4. See "Naming what a Set holds".
 
 **How a param is addressed.** Under the hierarchy framing this was "layer and position";
 under nodes it is simply **the node**, which is the same key with a name that will still be
@@ -1294,8 +1332,11 @@ than against one being taught to.
   that goes over any geometry emitting `position`, which is the argument for the layer
   existing rather than folding the same maths into the L1 and needing a second `.kir` to
   have it without.
-- ~~**L3 as an IR `kind` with its own node.**~~ **Built**, and both questions this list held
-  about it are answered. A camera belongs
+- ~~**L3 as an IR `kind` with its own node.**~~ **Built, except what it can point at**, which
+  is decided and refused rather than implemented: the checker rejects reading geometry from a
+  `camera` block by name, with "that addressing is specified in `docs/ir-spec.md` but not
+  built" as the hint. It needs the same naming M4 opens with — pointing at something is
+  addressing it. A camera belongs
   to an **L4**, not to a Set or a deck: `L4 : (Geometry, Camera) -> Texture` makes it an input
   edge, so two renderers on one camera is one viewpoint drawn twice and two renderers on two
   cameras is a Set that composites two scenes. And an L3 is a `.kir` procedure rather than the
@@ -1309,7 +1350,9 @@ than against one being taught to.
   time: a live element at index 0 has nothing alive before it, so it stays there until it
   dies, which makes index 0 *the oldest living element* rather than an arbitrary slot. Nothing
   is declared and nothing is checked; an L1 that expects to be looked at can make that element
-  a leader, and one that does not still offers its oldest survivor
+  a leader, and one that does not still offers its oldest survivor. **That much is the
+  design.** What exists is the camera as an edge, a `camera` block, and a refusal where the
+  targeting would go
 - ~~**A Set declares what it publishes.**~~ **Built**, and it is the other half of the console
   being a real layer. Today every `param` of every procedure reaches the desk, flat and by name — nine
   controls for a pair, twenty-five for a graph, most of them authoring decisions the author
@@ -1336,9 +1379,10 @@ than against one being taught to.
   performance happens)
 - **Multiple L1 sources**, and the `source` attribute that keeps their identities apart. Per
   source `seed` counters starting at zero so structured layouts survive, and a per-source
-  hash salt so randomness differs without structure differing. **The ownership is built and
-  nothing yet builds a second source**: a Set holds a *list* of sources, each one a
-  simulation and the chain over it, and the list is always one long.
+  hash salt so randomness differs without structure differing. **Built**: a Set holds a
+  *list* of sources, each one a simulation and the chain over it, and
+  `--set a.kir,b.kir,renderer.kir` fills it. The `source` attribute is not built and has no
+  value to carry — see the salt paragraph below.
 
   **The chain is per source rather than the geometry being concatenated**, and two things
   force that. Two sources kill independently, so compaction is each source's own and there is
@@ -1365,12 +1409,13 @@ than against one being taught to.
   reordered; derived from the ordinal, it gives the picture the spec asks for — two identical
   grids in different colours by default — and not the stability. Reordering `--set` changes
   which colour is which. Assigning it wants a Set file able to carry sources, and one carries
-  an L1 and its renderers.
+  an L1 and its renderers. **Outstanding, and scheduled** — head of M4.
 
   Still open for the same reason: **how a mask names a source.** The spec says a name resolved
   where the Set is built, and every worked example writes an ordinal — which is the spelling
   the same section rejects. Nothing reads `source` yet, so nothing is wrong today; what is
-  missing is the half that makes two sources treatable *differently*
+  missing is the half that makes two sources treatable *differently*. **Outstanding, and
+  scheduled** — same item
 - ~~**L2 amplification**~~ — **built.** `amplify <factor>` on an L2 header, `copy` readable
   as the index of the copy being made, and `examples/kaleidoscope.kir` for the picture. Three
   things it turned out to need that the paragraph this replaces did not mention, and all
@@ -1393,8 +1438,12 @@ than against one being taught to.
   before that was noticed, which is the argument for injecting them
 - **Cross-source interpolation**, restricted to static sources where `seed` is the slot index
   and the paired read is a direct one. **The language half is built**: `pairs` on an L2
-  header, `other.<attr>` for the paired element, and every path that could reach one refuses
-  it by name until the node that takes two exists.
+  header, `other.<attr>` for the paired element. **And the engine half**: the pairing node binds
+  the second geometry as a third input buffer and reads `other[i]` at the same slot index, and
+  `examples/morph.kir` slides a lattice onto a sphere on one fader. Five preconditions are
+  refused where the Set is built, because none of them is a property of one file — two
+  sources, the pairing node first in the chain, both static, both the same size, and the far
+  source able to supply what the chain derives.
 
   **It needed no new syntactic category.** `other.position` reaches the checker as a swizzle
   — `expr . ident` is the grammar — so deciding it there costs one header keyword and one
@@ -1426,7 +1475,7 @@ than against one being taught to.
   **The contract is the element layout, subsumed rather than sat beside**, which is what the
   note further down asked for. `generate_element_layout` no longer takes `emit` alone: it
   takes what the *Set* decided, so a slot can exist that no procedure named, and an
-  `ElementLayout` now answers `offers` — as a slot, or as a derivation — rather than only
+  `ElementLayout` now answers what it holds — as a slot, or as a derivation — rather than only
   listing fields.
 
   **Three things the design paragraph got wrong, all in the same direction.** It said
@@ -1462,7 +1511,9 @@ than against one being taught to.
   no node. A consumer evaluates it as `field(p)`, and one per Set is the same restriction the
   camera already has — several would need naming, and naming is fan-in.
 - Graph compiler. Node graph as authoring representation, render graph as execution
-  representation, with fusion of `Field` chains into single shaders
+  representation, with fusion of `Field` chains into single shaders. **Split and rescheduled
+  rather than done**: the authoring half opens M4 as "Naming what a Set holds", and fusion is
+  deferred with a trigger. Neither is M3's any more
 - ~~`blend weighted` (weighted blended OIT) alongside `blend additive`~~ — **built**
 
 **Demands on earlier work**
@@ -1505,6 +1556,46 @@ than against one being taught to.
 
 **Goal:** finding the right thing among two thousand artifacts is faster than generating a
 new one.
+
+#### Naming what a Set holds
+
+**This is the graph compiler's authoring half, rescheduled out of M3, and it is the first
+work of this milestone rather than a nicety inside it.** A library of Sets you cannot save is
+not a library, and that is exactly where this lands.
+
+**Its stated precondition has arrived and inverted into a debt.** The condition was "wait for
+the fan-in that multiple sources bring". Fan-in arrived twice in M3 — two geometries in a
+Set, and a pairing L2 that reads both — and neither brought a notation. So the edges of the
+graph are no longer inferable: which two geometries a `pairs` node takes is `--set` order,
+written nowhere, and reordering the command line silently changes the picture.
+
+**What is capped, blocked or quietly broken today, all of it for the same reason — a node has
+no name:**
+
+| | Where it shows |
+|---|---|
+| A slot with two geometries cannot be rebuilt under `--watch` | It starts, then every save prints a refusal and changes nothing |
+| A slot holding a chain or a second geometry cannot be saved as a Set file | `--save-set` refuses it, and `--record-session` with it |
+| MCP reaches an L1 and the renderers and no other node | An L2, an L3, a field and a second geometry are all unreachable to a model |
+| One `kind Field` per Set, one L3 per Set | Refused at build, with "several would need naming" as the reason |
+| A mask cannot say which source it applies to | The `source` attribute does not exist |
+| A source's salt is derived from `--set` order rather than assigned | Reordering changes which geometry gets which randomness |
+
+The first three are the sharp ones, because they are surfaces that *already exist* and stop
+working the moment a Set holds what M3 taught it to hold. The rest are features that were
+capped at one rather than designed for several.
+
+**What it is, concretely.** Names for nodes, written where they are used rather than in the
+`.kir` — on the terms HTML gives an `id`, since a procedure used twice is two nodes — and
+edges spelled rather than inferred. That is one notation, and every row above is a
+consequence of having it. The execution side needs nothing new: the render graph a compiler
+would target already exists in miniature, because a node owns its buffers, pipelines and
+uniforms and names its inputs.
+
+What it is *not* is fusion. That half is deferred with a trigger — see "Deferred by
+decision".
+
+#### Procedures a model can read
 
 **A slice of this was scheduled long before the rest — procedures a model can read — and is
 now deferred on evidence rather than on cost.**
@@ -1606,7 +1697,9 @@ retrofitting it into decisions already made.
 
 **Adds**
 
-- Node editor for the graph model introduced in M3
+- Node editor. Waits on the authoring notation at the head of M4 — M3 introduced node
+  *ownership* and deliberately not a graph model, so there is nothing to edit until nodes
+  have names
 - Parameter surfaces with MIDI learn and signal binding UI. **What they show is decided in
   M3** — a Set declares which of its controls it publishes, so this surface renders an
   interface rather than inventing one. Without that it would be twenty-five knobs per slot
@@ -1687,7 +1780,11 @@ knowing a chorus arrives in 32 bars is enough time to generate, compile, and pri
 
 **Demands on earlier work**
 
-- The Set lifecycle must already be schedulable by absolute time, not just triggered
+- The Set lifecycle must already be schedulable by absolute time, not just triggered.
+  **Undischarged by two closed milestones, and deliberately**: a transition schedules on beat
+  count and nothing else, which is what makes a fade reproduce on a machine at a different
+  frame rate and follow a tempo change mid-fade. Absolute time is a second axis rather than a
+  correction, and it arrives with whatever needs it
 - Signal confidence must already drive transition policy, since these sources are
   unofficial reverse-engineered integrations that will break
 
@@ -1701,7 +1798,10 @@ Not milestones. These degrade silently if not defended at every step.
 
 ### Live safety
 
-- No allocation or compilation on the render thread, ever
+- No allocation or compilation on the render thread, ever. **Defended structurally and
+  asserted by proxy**, where the audio thread has a counting global allocator behind it: the
+  render path's claim rests on where allocation is *possible*, not on a harness that would
+  catch it
 - Watchdog on new pipelines with automatic rollback
 - The show continues when the generation API is unavailable. This becomes meaningful once
   there is a pool to fall back on, so it is a promise from M4 onward rather than from M1
@@ -1718,14 +1818,45 @@ seeds — breaks all four at once.
 ### Performance discipline
 
 Per-element cost is the artifact's intrinsic property; total cost is a function of capacity.
-Metadata records the former. Any change touching the frame path comes with a GPU timestamp
-measurement.
+Metadata records the former. Any change touching the frame path comes with a measurement.
+
+**"GPU timestamp" is what that used to say, and it is honoured in labelled substitute.** The
+probe asks for timestamps, proves them with a calibration workload, and reports which
+instrument it actually used — `GpuTimestamp` or `HostWallClock` — because this crate's own
+development machine advertises the feature and lies. So the rule is a measurement that names
+its instrument, and the headline frame-path numbers in this repository came from a host
+clock and say so.
 
 ---
 
 ## Deferred by decision
 
 Designed, understood, deliberately not scheduled.
+
+**Fusion — the graph compiler's other half.** Folding a chain of stateless stages into one
+shader at codegen. The language already makes it legal rather than merely plausible: an L2's
+statelessness is *structural*, since every generated `deform` overwrites its output from its
+input before the block runs, so there is no previous value left to accumulate onto. Nothing
+has to change in the language for this. It is an optimisation over a materialising
+implementation that is already correct.
+
+**It is deferred on a measurement and against an argument, not on cost.**
+
+The argument is that fusion is a trade and not a win: it costs no memory and **pays the
+stage's cost once per reader**, so a heavy deformation read by three renderers costs three
+times. Materialising pays once however many nodes read it — which is the shape M3 just spent
+a milestone building. Fusion makes the multi-renderer case *worse*.
+
+The measurement is that nothing is near a budget. A stage is one compute pass and one
+read-write of the element buffer; at 262144 elements and a 96-byte stride that is about
+50 MB a frame, or 3 GB/s at sixty — a few percent of a modern part's bandwidth — and the
+longest chain anything ships is two stages. There is nothing here to reclaim yet.
+
+**What would revive it**, written down so this is an observation and not a mood: a probe
+measurement putting a Set over budget where the cost is in a chain of stateless stages with
+**one reader**. `probe.rs` already measures at real capacity with real parameters and the
+governor already acts on the number, so the instrument to notice this exists — it does not
+need building first, and this item does not need scheduling until it fires.
 
 **External shader source compatibility.** Shadertoy-style material does not fit the
 primitive-centric model directly: it is a single fullscreen fragment shader, with no
@@ -1760,18 +1891,19 @@ choose, and changing one is a redesign rather than an edit. The reasoning behind
 - Element identity is `seed`, a monotone spawn ordinal carried per element. There is no
   `id`: a buffer slot index stops being an identity the moment compaction moves elements.
 - `seed` is an ordinal, not a random number. Randomness comes from the hash builtins, which
-  are salted per layer from the seed stream — so re-seeding a Set changes its randomness
-  without touching anything structural.
+  are salted **per source** from the seed stream — so re-seeding a Set changes its randomness
+  without touching anything structural, and two geometries built from the same procedure do
+  not draw the same dust. This said *per layer* until a Set could hold two geometries;
+  changing it was the redesign this section warns that changing one of these is.
 
 **Time**
 
 - `t` is simulation time, never wall clock. It advances by `steps * dt` where `steps` comes
   from a `tick` record: emitted from real time when live, read back verbatim on replay.
-  Nothing in the engine measures anything. **The emission is not built** — `steps` reaches
-  the engine as a number and no `Record::Tick` is constructed outside tests. What the
-  invariant rests on is already true: the engine advances by a step count and never by a
-  duration, so the record serialises a quantity that exists rather than one that has to be
-  invented. `README.md`'s Invariants list what else is in this position.
+  Nothing in the engine measures anything, and the record is written and read back: a
+  recorded session closes each frame with a `tick`, and `--replay` takes the step count from
+  it rather than deriving it again — which is why a replay is frame-exact on a machine that
+  runs at a different speed.
 - Two tick histories reaching the same elapsed time are the same point in the session.
   Substepping exists so that state at a given time does not depend on frame rate, so
   nothing downstream may distinguish them.
@@ -1788,14 +1920,19 @@ choose, and changing one is a redesign rather than an edit. The reasoning behind
 **The IR surface**
 
 - The signal bus is unreachable from IR. External values arrive as a `param` with a `bind`
-  record, which is what keeps every external coupling declarative and adjustable.
+  record, which is what keeps every external coupling declarative and adjustable. **`beats`
+  is the one exception and is deliberate**: it reaches IR as an ambient with no `param` and
+  no `bind`, because what follows a tempo is not a parameter value but the passage of time,
+  and a binding writes one number where a clock has to move everything the procedure does.
 - Every name the language gives meaning to is reserved against params and locals:
-  attributes, ambients, stage outputs, `id`. Generated WGSL additionally mangles all
-  IR-derived identifiers, so a procedure cannot capture a generated name whatever it is
+  attributes, ambients, `id`, `other`, and — within the layer that writes it — stage
+  outputs. Generated WGSL additionally mangles all IR-derived identifiers, so a procedure cannot capture a generated name whatever it is
   called.
 - One `t` value means one record shape, across every file. A decoder dispatches on `t`
   alone, and every ndjson decoder does.
-- `capacity` is a Set-level dial with a range declared by the artifact, passed as a uniform.
+- `capacity` is a **per-source** dial with a range declared by the artifact, passed as a
+  uniform. It was Set-level while a Set held one geometry; each source now runs at the default
+  its own procedure declares, and `--capacity` overrides every source at once.
   It is not part of a procedure's identity — otherwise the library multiplies by every size
   anyone wanted.
 - Spawn timing is engine-side. No ambient exposes the birth fraction: an exposed one is
@@ -1807,7 +1944,8 @@ choose, and changing one is a redesign rather than an edit. The reasoning behind
   structural change produces a new value and a record, which is what makes replay work.
   Whether the engine rebuilds the instance or updates it in place is an implementation
   choice, and it may update in place whenever the change needs no reallocation and no
-  recompilation. Editing in the background is therefore fast without punching a hole in the
+  recompilation. In practice only parameter values take that path today: a `bind` change
+  needs neither and still rebuilds, because a rebuild restates the whole slot. Editing in the background is therefore fast without punching a hole in the
   record stream. "Never mutate a live Set in place" reads as a weaker claim than the rule
   it belongs to; the rule is about values.
 - The cheapest correct answer to a revision request is usually not regeneration. Try the
@@ -1855,9 +1993,13 @@ choose, and changing one is a redesign rather than an edit. The reasoning behind
 |---|---|
 | `README.md` | What exists, how to run it, and the invariants in force |
 | `docs/ir-spec.md` | The IR: grammar, semantics, lowering, record formats |
+| `docs/manual.md` | How to play it: every flag, every key, and what each does |
+| `docs/plugins.md` | The out-of-process boundary, and why those two things are outside it |
 | This file | Milestones, their demands on earlier work, and the settled decisions above |
 
-Neither of the other two should restate this one, and this one should not restate them.
+None of the others should restate this one, and this one should not restate them. The two
+that overlap most are the README and the manual, and the line between them is audience: the
+README says what exists, the manual says how to use it.
 
 ---
 
@@ -1866,3 +2008,4 @@ Neither of the other two should restate this one, and this one should not restat
 1. `README.md` — invariants, then V1 scope
 2. `docs/ir-spec.md` — the whole thing before writing any parser code
 3. This document — the **Demands on earlier work** sections only, during M1
+4. `docs/manual.md` — when there is something to run
