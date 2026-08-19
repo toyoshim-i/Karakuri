@@ -133,7 +133,17 @@ impl Slots {
                 1 => format!("slot {slot} has one L4 and `index` is {index}"),
                 n => format!("slot {slot} draws with {n} renderers, so `index` is 0-{}", n - 1),
             }),
-            other => Err(format!("no layer `{other}`: a slot holds L1 and L4")),
+            // **Two layers, where a slot can hold five.** An L2, an L3 and a
+            // `kind Field` are all real nodes in a slot and none of them is
+            // reachable from here — a rewrite is addressed as
+            // `(slot, layer, index)` and this surface was built when those were
+            // the only two layers there were. Said plainly rather than left as
+            // "no layer", which reads as a typo.
+            other => Err(format!(
+                "no layer `{other}` here: this surface reads and writes a slot's L1 and its \
+                 renderers. A slot may also hold an L2, an L3 or a `kind Field`, and those \
+                 are edited in the files, with `--watch` picking them up"
+            )),
         }
     }
 }
@@ -687,8 +697,9 @@ fn write_procedure(args: &Value, state: &State) -> Result<String, String> {
             "compiled and written to slot {slot} {layer}.{shared} It is being built on a \
              worker thread and will swap in at a frame boundary; call `swap_outcome` to \
              find out whether it landed or was rolled back for cost.\n\n\
-             **This replaced the file on disk and there is no backup.** If you did not read \
-             it first, the previous version is gone."
+             This replaced the file on disk. The version it replaced is in the run's edit \
+             history under `<store>/history/`, where every version that compiled is kept — \
+             so it can be got back, but not from here."
         )
     } else {
         format!(
@@ -1250,7 +1261,12 @@ proc probe_l4 {
         );
         assert!(!failed, "{said}");
         assert!(said.contains("also slot 1"), "the other slot was not named: {said}");
-        assert!(said.contains("no backup"), "the destruction was not named: {said}");
+        // **Where the version it replaced went.** This said "there is no
+        // backup" while `--watch` was snapshotting every version that compiled
+        // into the edit history — and it is the text a model reads, so the one
+        // surface that could have told it the file was recoverable said the
+        // opposite.
+        assert!(said.contains("history"), "where the old version went: {said}");
     }
 
     /// The tools and resources a client is offered are the ones that answer.
@@ -1468,8 +1484,11 @@ mod tests {
         let past_the_end = slots.path(2, "L1", 0).expect_err("slot 2 does not exist");
         assert!(past_the_end.contains("0-1"), "{past_the_end}");
 
+        // **And it says what a slot may hold that this surface cannot reach.**
+        // "no layer `L2`" reads as a typo, and an L2 is a real node in a real
+        // slot — just not one addressable from here.
         let no_such_layer = slots.path(0, "L2", 0).expect_err("there is no L2 here");
-        assert!(no_such_layer.contains("L1 and L4"), "{no_such_layer}");
+        assert!(no_such_layer.contains("--watch"), "{no_such_layer}");
     }
 
     /// **A renderer is addressed by index, and an index past the stack is
