@@ -437,11 +437,17 @@ pub struct Set {
 
     /// **The geometry sources, and the chain over each** — see [`Source`].
     ///
-    /// **At least one, and today exactly one.** The list is the structure a
-    /// second source needs; nothing yet builds a Set with more, and every path
-    /// below is written against the list rather than against its first entry —
-    /// so accepting one is a change where the sources are *made* and nowhere
-    /// else.
+    /// **At least one, and more than one is reachable**: `--set a.kir,b.kir,
+    /// renderer.kir` builds two, and a pairing chain builds one source holding
+    /// two simulations. Writing every path below against the list rather than
+    /// against its first entry is what made accepting a second one a change
+    /// where the sources are *made* and nowhere else.
+    ///
+    /// **What a second source still has is no name**, which is why the
+    /// surfaces around the engine stop at one: a hot-swap rebuild, a Set file,
+    /// an MCP edit and the edit history all address a slot by layer and index,
+    /// and "the second geometry" is not something any of them can say. See
+    /// `docs/roadmap.md`, "Naming what a Set holds".
     sources: Vec<Source>,
     /// **How many L1 *procedures* the Set was built from**, which is not
     /// `sources.len()` when the chain pairs: two procedures become one source
