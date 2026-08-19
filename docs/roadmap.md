@@ -1572,12 +1572,40 @@ than against one being taught to.
   doubles VRAM per element against what it needs. That bill comes due at M2's deck, where
   the constraint is how many Sets fit resident, and it is one function in `layout.rs`.
 
-  **Two milestones later it is still 16 bytes, and the bill never came.** Four resident Sets
-  at 262144 elements have not run a machine out of memory, so nothing forced it — and a
-  deformation chain now allocates a whole element buffer per amplifying stage, which pushes
-  in the same direction without having pushed hard enough either. Left undone deliberately
-  rather than forgotten: it is `generate_element_layout` and the offsets that read it, and
-  the thing that will schedule it is a Set that does not fit, not a milestone boundary.
+  **Two milestones later it is still 16 bytes, and both halves of that sentence need
+  correcting.**
+
+  *"Doubles VRAM"* overstates it. A `vec3` is 16-byte aligned in `std430` whatever the
+  layout does, so the recoverable waste is the scalars: `seed`, `birth_frac` and `copy` take
+  a full slot each to hold four bytes, and `size` and `age` could ride in the `.w` of the
+  vector above them. For `drift_shell` — `emit position, velocity, tint` — that is 5 slots
+  to 4, **80 bytes to 64, a fifth**. For a procedure emitting six attributes it is nearer
+  two fifths. Worth having, and not a factor of two.
+
+  *"The bill comes due at M2's deck"* was measured against the wrong machine, and this
+  document has made that mistake once before — see **Performance discipline**, where the
+  same development machine's GPU timestamps are already recorded as unrepresentative. The
+  numbers, so that a target can be held against them rather than a feeling:
+
+  | | |
+  |---|---|
+  | One slot, `drift_shell` at 262144, no chain | **57.8 MiB** — 40 element, 2 alive, 15.8 render target |
+  | A deck of four of those | **231 MiB** |
+  | The same L1 at its declared maximum, 1048576 | 160 MiB of element buffer alone |
+  | One `amplify 6` stage on it | **+120 MiB**, single-buffered, per frame |
+  | One `amplify 64` stage on it | **+1.25 GiB** |
+
+  So the element layout is not what decides whether a deck fits at the default capacity;
+  **amplification is**, because it multiplies the same stride the layout would narrow. A
+  fifth off an amplified chain is a fifth off the largest allocation in the system, which is
+  the argument for doing it that "four Sets fit here" hid.
+
+  **And it is scheduled, on a principle rather than on a threshold** — see "What a machine's
+  size is allowed to decide", below. Sixteen bytes holding four is not a trade that buys
+  anything at any capacity on any machine; it is slack, and slack is tightened because it is
+  slack. Waiting for a Set that does not fit would be waiting for a *rich* machine to notice
+  something a small one pays for every frame. It is `generate_element_layout` and the offsets
+  that read it, and it is the second item of M4.
 - **An L4 is now compiled against a specific L1's element layout**, since both declare the
   same struct over the same buffer. That is the slot interface contract arriving early and
   informally. When the contract becomes a real declaration, it should subsume this rather
@@ -1644,6 +1672,27 @@ uniforms and names its inputs.
 
 What it is *not* is fusion. That half is deferred with a trigger — see "Deferred by
 decision".
+
+#### Narrowing the element slot
+
+**Second, and independent of the naming above.** Every per-element slot is a padded 16
+bytes: `seed`, `birth_frac` and `copy` each hold four bytes in one, and `size` and `age`
+could ride in the `.w` of the vector above them. `drift_shell` goes from 5 slots to 4 —
+80 bytes to 64, a fifth — and a procedure emitting six attributes from 8 to 5.
+
+**A fifth off the element stride is a fifth off the largest allocation in the system**,
+because an amplifying stage multiplies exactly that number: one `amplify 6` on a Set at
+262144 elements is 120 MiB of derived buffer, and an `amplify 64` is 1.25 GiB. The layout is
+where that multiplication starts.
+
+It is scheduled on the principle in "What a machine's size is allowed to decide" rather than
+on a budget: those bytes buy nothing at any capacity on any machine. `vec3` alignment is
+what stops it being more — a `vec3` occupies 16 bytes in `std430` whatever the layout says,
+so the recoverable part is the scalars and nothing else. That is worth knowing before
+starting: the ceiling on this work is a fifth to two fifths, not a half.
+
+`generate_element_layout` decides the offsets and everything else reads them, which is what
+makes this one function and a lot of tests rather than a redesign.
 
 #### Procedures a model can read
 
@@ -1870,6 +1919,36 @@ seeds — breaks all four at once.
 Per-element cost is the artifact's intrinsic property; total cost is a function of capacity.
 Metadata records the former. Any change touching the frame path comes with a measurement.
 
+**The machine this is developed on is not the baseline, and saying so is a rule rather than
+a caveat.** It has been wrong twice in the same direction. Its GPU timestamps advertise a
+feature it does not deliver, which is why the probe calibrates instead of trusting a flag.
+And it has enough memory that no VRAM figure this project has produced has ever been
+uncomfortable — which was then used, once, as evidence that a memory question could wait.
+A number measured here is a number from a rich machine: it bounds nothing.
+
+**Development is a desktop and a performance is probably a laptop.** Those are different
+machines with different thermal limits and different memory, and the second one is the one
+that matters — rehearsal and the night itself run on the same box, and which box that is
+belongs to whoever is playing.
+
+#### What a machine's size is allowed to decide
+
+**No hard limit, and no ceiling chosen here.** A rich machine should be allowed to spend
+what it has: more capacity, more slots resident, longer chains. Capping that to make a small
+machine's experience the only experience would be this project choosing against its own
+operator.
+
+**What is not allowed is waste that a bigger machine merely hides.** The two are easy to
+confuse and the test between them is simple: *does spending it buy anything?* Capacity buys
+elements. A resident Set buys an instant transition. Sixteen bytes holding a four-byte
+`seed` buys nothing at any size, so it is not a budget question and does not wait for one —
+it is tightened because it is slack, and the argument is theoretical rather than measured.
+
+**4 GiB of dedicated VRAM is the reference for "does this fit"**, and it is a reference and
+not a cap: it is the number a design is checked against, the machine a default has to be
+comfortable on, and the size at which a refusal must carry a sentence rather than a driver
+error. Above it, the operator's machine decides.
+
 **"GPU timestamp" is what that used to say, and it is honoured in labelled substitute.** The
 probe asks for timestamps, proves them with a calibration workload, and reports which
 instrument it actually used — `GpuTimestamp` or `HostWallClock` — because this crate's own
@@ -1980,6 +2059,14 @@ choose, and changing one is a redesign rather than an edit. The reasoning behind
   called.
 - One `t` value means one record shape, across every file. A decoder dispatches on `t`
   alone, and every ndjson decoder does.
+- **A machine's size decides what an operator may spend, never what the engine wastes.** No
+  ceiling is chosen here: more memory buys more capacity, more resident Sets and longer
+  chains, and capping that would make the smallest machine's experience the only one. Slack
+  that buys nothing at any size is a different thing and is tightened on sight. 4 GiB of
+  dedicated VRAM is the reference a design is checked against — the size a default has to be
+  comfortable on, not a limit anything is held to. The development machine is not that
+  reference and is not evidence about it; a performance is likelier a laptop than the desktop
+  this is written on.
 - `capacity` is a **per-source** dial with a range declared by the artifact, passed as a
   uniform. It was Set-level while a Set held one geometry; each source now runs at the default
   its own procedure declares, and `--capacity` overrides every source at once.
