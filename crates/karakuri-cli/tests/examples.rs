@@ -125,6 +125,17 @@ fn the_pairs_the_docs_offer_compose() {
         // a chain is where an L2 being stateless stops being a claim and starts
         // being the thing that lets the pair be written in either order.
         &["drift_shell.kir", "swirl_warp.kir", "late_bloom.kir", "soft_points.kir"][..],
+        // `kaleidoscope.kir`'s own header offers this one, and it is the only
+        // chain here that changes the element count.
+        &["drift_shell.kir", "kaleidoscope.kir", "soft_points.kir"][..],
+        // `field_lens.kir`'s does: a marcher containing no shape, and a shape
+        // that is nothing else. Neither builds without the other.
+        &["drift_shell.kir", "melt_blob.kir", "field_lens.kir"][..],
+        // `morph.kir`'s does, and it is the only one with **two geometries** in
+        // it. The loop below takes every L1 it finds with that L1's own declared
+        // capacity, which is what makes this line a test of more than the sort:
+        // a pairing Set is refused unless both sources are the same size.
+        &["lattice_shell.kir", "sphere_shell.kir", "morph.kir", "soft_points.kir"][..],
     ] {
         let compiled: Vec<karakuri_ir::typed::Checked> = chain
             .iter()
@@ -137,15 +148,19 @@ fn the_pairs_the_docs_offer_compose() {
             })
             .collect();
         let by = |kind| compiled.iter().filter(move |c| c.kind == kind);
-        let l1 = by(karakuri_ir::Kind::L1).next().expect("a chain starts with an L1");
+        // **Every** L1, each at the capacity its own file declares — which is
+        // what the command line does, and what a pairing chain needs two of.
+        let sources: Vec<(&karakuri_ir::typed::Checked, u32)> = by(karakuri_ir::Kind::L1)
+            .map(|l1| (l1, l1.capacity.expect("an L1 declares a capacity").default))
+            .collect();
+        assert!(!sources.is_empty(), "a chain starts with an L1");
         let l2s: Vec<&karakuri_ir::typed::Checked> = by(karakuri_ir::Kind::L2).collect();
         let l3 = by(karakuri_ir::Kind::L3).next();
         let l4s: Vec<&karakuri_ir::typed::Checked> = by(karakuri_ir::Kind::L4).collect();
-        let capacity = l1.capacity.expect("an L1 declares a capacity").default;
         karakuri_engine::Set::build_many(
             &gpu.device,
             &gpu.queue,
-        &[(l1, capacity)],
+            &sources,
             &l2s,
             l3,
             by(karakuri_ir::Kind::Field).next(),
