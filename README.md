@@ -144,7 +144,9 @@ hint: the signal bus is not readable from IR — declare `param energy` and atta
 ## Stack
 
 - Rust + wgpu 26 (WGSL), winit
-- No UI for now. V1 is a CLI plus a window
+- No UI for now. V1 is a CLI plus a window, and **the CLI is scaffolding rather than the
+  destination** — the end state is a GUI application, so the command line is deliberately an
+  auxiliary way to reach what the records already carry
 - Audio input exists — spectrum, energy, onset, and a beat grid that corrects the local
   oscillator. External sync exists out of process: `--tempo-source` runs a separate program
   that reports where the beat is, and the first one is Ableton Link. See `docs/plugins.md`

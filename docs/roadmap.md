@@ -1664,13 +1664,31 @@ working the moment a Set holds what M3 taught it to hold. The rest are features 
 capped at one rather than designed for several.
 
 **What it is, concretely.** Names for nodes, written where they are used rather than in the
-`.kir` — on the terms HTML gives an `id`, since a procedure used twice is two nodes — and
-edges spelled rather than inferred. That is one notation, and every row above is a
-consequence of having it. The execution side needs nothing new: the render graph a compiler
-would target already exists in miniature, because a node owns its buffers, pipelines and
-uniforms and names its inputs.
+`.kir` — on the terms HTML gives an `id`, since a procedure used twice is two nodes. The
+execution side needs nothing new: the render graph a compiler would target already exists in
+miniature, because a node owns its buffers, pipelines and uniforms and names its inputs.
 
-What it is *not* is fusion. That half is deferred with a trigger — see "Deferred by
+**Identity first, edges second, and they are scheduled apart.** Naming a node and recording
+it closes every row in the table above; spelling the *edges* — which two geometries a `pairs`
+node takes, which source a mask applies to, and the `source` attribute a mask would read — is
+a second design with a fork of its own in it, since a `.kir` cannot name a node without
+coupling the procedure to one Set. The three sharp rows are all identity, so identity is
+what M4 opens with.
+
+**A name lives in a Set file, and the command line can write one.** The file is where a use
+is recorded, so it is where the name belongs, and the GUI M5 builds writes it there. The
+command line gets a spelling anyway — it is the only authoring surface that exists today, and
+a name has to be writable before a file can be saved carrying one. It overrides a loaded
+file's name on the rule `--param` already follows beside `--load-set`. See `docs/ir-spec.md`,
+"Naming a source, on the terms HTML gives an `id`", where this replaces a stated *preference*
+whose reasoning the code had falsified.
+
+**Two records have to move with it**, and they are the reason this is not only a parser
+change: `Record::Capacity` and `Record::Seed` carry a `layer` and no index, so two geometries
+at different capacities and a per-source salt are both inexpressible in the format however
+they are spelled on the way in.
+
+What this is *not* is fusion. That half is deferred with a trigger — see "Deferred by
 decision".
 
 #### ~~Narrowing the element slot~~ — built
