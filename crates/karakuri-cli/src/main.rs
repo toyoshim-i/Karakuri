@@ -1558,6 +1558,21 @@ fn capacity_for(args: &Args, l1: &karakuri_ir::typed::Checked) -> u32 {
     l1.capacity.map_or(args.capacity, |declared| declared.default)
 }
 
+/// The same question asked once per source, which is the only form the engine
+/// accepts — `Set::build_many` takes `(procedure, capacity)` pairs precisely
+/// because each source declares its own range.
+///
+/// **It was asked once and answered for everybody.** The build resolved
+/// `capacity_for(args, &l1[0])` and handed that one number to every source, so
+/// a second geometry ran at the first one's count with nothing printed: a grid
+/// written for 512 x 256 samples and declared at 131072 drew 32768 of them
+/// because it was loaded beside a cube. Nothing refused it either — the number
+/// came from a declaration, so it was inside somebody's range, just not the
+/// range of the procedure it was applied to.
+fn capacities_for(args: &Args, l1s: &[karakuri_ir::typed::Checked]) -> Vec<u32> {
+    l1s.iter().map(|l1| capacity_for(args, l1)).collect()
+}
+
 /// Refuse a canvas the GPU cannot make a texture of, by name.
 ///
 /// **Not in `extent`**, because the number it is checked against is the
@@ -1711,7 +1726,10 @@ fn replay_session(args: &Args, id: &str) {
         // renderers. Overdraw is what every Set was before an L5 could be
         // nested, so it is what a file that cannot say reads as.
         karakuri_engine::set::Layering::Overdraw,
-        loaded.capacity.unwrap_or(args.capacity),
+        // The file's number when it recorded one, and otherwise the
+        // procedure's own declared default — never the flag's, which is a
+        // general default beating a specific declaration that meant it.
+        &[loaded.capacity.unwrap_or_else(|| capacity_for(args, &loaded.l1))],
         &loaded.params,
         &loaded.bindings,
         // **A Set file does not record an interface yet**, on the same terms it
@@ -1910,7 +1928,7 @@ fn rebuild(
         None,
         &l4s,
         karakuri_engine::set::Layering::Overdraw,
-        args.capacity,
+        &capacities_for(args, std::slice::from_ref(&l1)),
         &args.overrides,
         &args.bindings,
         &[],
@@ -2171,8 +2189,15 @@ fn load_set(args: &mut Args, id: &str) -> setfile::Loaded {
     for note in &loaded.notes {
         eprintln!("  {note}");
     }
+    // **`capacity_given` too, or the number is read and then discarded.** It
+    // is what makes `capacity_for` stop falling back to the procedure's own
+    // declared default — and a Set file that recorded a capacity is somebody
+    // having said so as much as `--capacity` is. Without it, `--capacity 100000
+    // --save-set x` followed by `--load-set x` ran at whatever the `.kir`
+    // declared, which falsifies the one promise a Set file makes.
     if let Some(capacity) = loaded.capacity {
         args.capacity = capacity;
+        args.capacity_given = true;
     }
     // Appended rather than replacing: a `--param` or `--bind` given alongside
     // `--load-set` is the operator overriding the file, and the later value is
@@ -2463,7 +2488,7 @@ fn build_deck(
                 } else {
                     karakuri_engine::set::Layering::Overdraw
                 },
-                capacity_for(args, &l1[0]),
+                &capacities_for(args, l1),
                 &args.overrides,
                 &args.bindings,
                 &args.published,
@@ -2593,7 +2618,8 @@ fn build(
     field: Option<&karakuri_ir::typed::Checked>,
     l4s: &[karakuri_ir::typed::Checked],
     layering: karakuri_engine::set::Layering,
-    capacity: u32,
+    // One per entry in `l1s`, in the same order — see `capacities_for`.
+    capacities: &[u32],
     overrides: &[ParamWrite],
     bindings: &[Binding],
     published: &[karakuri_engine::set::Published],
@@ -2603,10 +2629,14 @@ fn build(
     let deform: Vec<&karakuri_ir::typed::Checked> = l2s.iter().collect();
     let draw: Vec<&karakuri_ir::typed::Checked> = l4s.iter().collect();
     // **Each source at the capacity it declares**, and `--capacity` overrides
-    // all of them. One number cannot serve two L1s with different ranges, and
-    // the pair travels together so a length mismatch is not expressible.
+    // all of them — one number cannot serve two L1s with different ranges.
+    //
+    // Asserted rather than zipped and hoped for: `zip` on a short list drops a
+    // whole geometry, and a Set silently missing its second source is the same
+    // picture as a Set that was never given one.
+    assert_eq!(l1s.len(), capacities.len(), "one capacity per geometry source");
     let sources: Vec<(&karakuri_ir::typed::Checked, u32)> =
-        l1s.iter().map(|l1| (l1, capacity)).collect();
+        l1s.iter().zip(capacities.iter().copied()).collect();
     match Set::build_many(
         &gpu.device, &gpu.queue, &sources, &deform, l3, field, &draw, layering, seed,
     )
@@ -4614,6 +4644,39 @@ mod tests {
         // shape this CLI was fixed for once already.
         assert!(parse(&["--audio-in", "--watch"]).is_err());
         assert!(parse(&["--audio-in"]).is_err());
+    }
+
+    /// **Each source runs at the capacity its own procedure declares.** The
+    /// build asked `capacity_for` once, about the first L1, and handed the
+    /// answer to every source — so a grid declared at 131072 ran at 32768
+    /// because it was loaded beside a cube that declared that.
+    ///
+    /// Nothing could have caught it downstream: the number came from a real
+    /// declaration, so it was inside *somebody's* range, and the picture is a
+    /// grid with fewer points in it, which is a thing a grid can be.
+    #[test]
+    fn every_source_runs_at_the_capacity_it_declares() {
+        let small = compile::check(
+            "proc small { kind L1 capacity [4096, 262144] = 32768 topology points \
+             emit position element { position = vec3(0.0); } }",
+        )
+        .expect("compiles");
+        let large = compile::check(
+            "proc large { kind L1 capacity [4096, 1048576] = 131072 topology points \
+             emit position element { position = vec3(0.0); } }",
+        )
+        .expect("compiles");
+
+        let args = parse(&[]).expect("parses");
+        assert_eq!(capacities_for(&args, &[small.clone(), large.clone()]), vec![32768, 131072]);
+        // Order is not what decides it, which is the half a first-one-wins
+        // implementation gets right by accident half the time.
+        assert_eq!(capacities_for(&args, &[large.clone(), small.clone()]), vec![131072, 32768]);
+
+        // `--capacity` still overrides all of them: the operator asking for a
+        // number is asking about the Set, not about one file in it.
+        let forced = parse(&["--capacity", "8192"]).expect("parses");
+        assert_eq!(capacities_for(&forced, &[small, large]), vec![8192, 8192]);
     }
 
     // -- midi ------------------------------------------------------------
