@@ -51,6 +51,7 @@
 use std::io::{BufRead, Read, Write};
 use std::sync::mpsc;
 
+use karakuri_ir::Kind;
 use serde_json::{json, Value};
 
 /// What the render loop tells the server about, over a channel.
@@ -108,7 +109,31 @@ impl Reporter {
 pub struct Slots(pub Vec<(std::path::PathBuf, Vec<std::path::PathBuf>)>);
 
 impl Slots {
-    fn path(&self, slot: usize, layer: &str, index: usize) -> Result<&std::path::PathBuf, String> {
+    /// A slot's files, each under the layer and the index the rest of this
+    /// program addresses it by.
+    ///
+    /// **The layer is read off the file, not off its position.** The first path
+    /// is the slot's L1 — that is what `main.rs` loads it as, before it has
+    /// looked at a `kind` at all — and every later one is on the layer its own
+    /// `kind` line names, at its position *within that layer*, keeping file
+    /// order. That is the rule `history::seed` files snapshots under and the
+    /// rule the startup path sorts a `--set` chain by, and it is
+    /// [`crate::history::declared_kind`] here rather than a second scanner:
+    /// two readers of a `kind` line would be two answers to what layer a file
+    /// is on, and the layer a version is filed under has to be the layer an
+    /// agent addresses it by.
+    ///
+    /// A text scan and not a parse, for that function's reason: this surface
+    /// works without compiling anything, and **a file that does not compile
+    /// must still be addressable** — it is the one a model most needs to read.
+    /// One that cannot be read, or that declares no `kind`, is counted as a
+    /// renderer, which is what `history::seed` makes of it and what the compile
+    /// is about to refuse it as.
+    ///
+    /// Read on every call rather than worked out once at startup. The files are
+    /// a handful and nothing here is on a frame path, and a layout cached
+    /// beside a directory `--watch` is editing is a layout that can be wrong.
+    fn nodes(&self, slot: usize) -> Result<Vec<(Kind, usize, &std::path::PathBuf)>, String> {
         let pair = self
             .0
             .get(slot)
@@ -120,33 +145,122 @@ impl Slots {
                 0 => format!("no slot {slot}: this deck holds none"),
                 n => format!("no slot {slot}: this deck holds 0-{}", n - 1),
             })?;
-        match layer.to_ascii_uppercase().as_str() {
-            // The L1 is one node, so only 0 addresses it — and saying so beats
-            // ignoring an index a caller took the trouble to write.
-            "L1" if index == 0 => Ok(&pair.0),
-            "L1" => Err(format!(
-                "slot {slot} has one L1 and `index` is {index}: a Set simulates with one \
-                 geometry and draws it with as many renderers as it likes"
-            )),
-            "L4" => pair.1.get(index).ok_or_else(|| match pair.1.len() {
-                0 => format!("slot {slot} has no L4: a Set needs at least one renderer"),
-                1 => format!("slot {slot} has one L4 and `index` is {index}"),
-                n => format!(
-                    "slot {slot} draws with {n} renderers, so `index` is 0-{}",
-                    n - 1
-                ),
-            }),
-            // **Two layers, where a slot can hold five.** An L2, an L3 and a
-            // `kind Field` are all real nodes in a slot and none of them is
-            // reachable from here — a rewrite is addressed as
-            // `(slot, layer, index)` and this surface was built when those were
-            // the only two layers there were. Said plainly rather than left as
-            // "no layer", which reads as a typo.
-            other => Err(format!(
-                "no layer `{other}` here: this surface reads and writes a slot's L1 and its \
-                 renderers. A slot may also hold an L2, an L3 or a `kind Field`, and those \
-                 are edited in the files, with `--watch` picking them up"
-            )),
+        let mut nodes = vec![(Kind::L1, 0, &pair.0)];
+        // The next free index per layer, which the head has already taken one
+        // of: a `--set` chain naming a second `kind L1` is a second source, and
+        // it is L1 number 1 rather than the beginning of a fresh count.
+        let mut next: Vec<(Kind, usize)> = vec![(Kind::L1, 1)];
+        for path in &pair.1 {
+            let layer = std::fs::read(path)
+                .ok()
+                .and_then(|source| crate::history::declared_kind(&source))
+                .and_then(layer_named)
+                .unwrap_or(Kind::L4);
+            let index = match next.iter_mut().find(|(held, _)| *held == layer) {
+                Some((_, free)) => {
+                    let index = *free;
+                    *free += 1;
+                    index
+                }
+                None => {
+                    next.push((layer, 1));
+                    0
+                }
+            };
+            nodes.push((layer, index, path));
+        }
+        Ok(nodes)
+    }
+
+    /// The file one `(slot, layer, index)` address names.
+    fn path(&self, slot: usize, layer: Kind, index: usize) -> Result<&std::path::PathBuf, String> {
+        let nodes = self.nodes(slot)?;
+        if let Some((_, _, path)) = nodes.iter().find(|(l, i, _)| *l == layer && *i == index) {
+            return Ok(*path);
+        }
+        // **What the slot holds, rather than "no such node".** An index past
+        // the end and a layer this slot does not use are different mistakes,
+        // and a model told which one it made can fix its own call — the same
+        // reason the checker's diagnostics come back through here instead of
+        // going to a terminal nobody is watching.
+        let name = layer_name(layer);
+        Err(match nodes.iter().filter(|(l, _, _)| *l == layer).count() {
+            0 => format!("slot {slot} holds no {name}: {}", absent(layer)),
+            1 => format!("slot {slot} holds one {name} and `index` is {index}"),
+            n => format!(
+                "slot {slot} holds {n} {name} nodes, so `index` is 0-{}",
+                n - 1
+            ),
+        })
+    }
+}
+
+/// Every layer a slot's files can be on, in the order they compose.
+///
+/// **One list, so the enum a client is handed, the address this resolves and
+/// the `kind` a written source must declare cannot disagree.** They did: the
+/// schema offered `L1` and `L4` alone for as long as a slot could hold five
+/// kinds of node, so the most interesting material in the language — the
+/// deformations, the camera, the field — was in the files and unreachable from
+/// the one surface built for editing them.
+const LAYERS: [Kind; 5] = [Kind::L1, Kind::L2, Kind::L3, Kind::L4, Kind::Field];
+
+/// A layer as a client writes it, in the compiler's own `Kind`.
+///
+/// Case-folded because `l1` is what a model tends to type and refusing it
+/// teaches nobody anything. `Field` is spelled as `--param` and `--bind` spell
+/// it, which is as the `kind` line does.
+fn layer_named(name: &str) -> Option<Kind> {
+    Some(match name.to_ascii_uppercase().as_str() {
+        "L1" => Kind::L1,
+        "L2" => Kind::L2,
+        "L3" => Kind::L3,
+        "L4" => Kind::L4,
+        "FIELD" => Kind::Field,
+        _ => return None,
+    })
+}
+
+/// The name back again, for a schema and for a sentence.
+///
+/// Exhaustive on purpose: a sixth `Kind` should not compile until somebody has
+/// decided what this surface calls it and whether [`LAYERS`] offers it.
+fn layer_name(layer: Kind) -> &'static str {
+    match layer {
+        Kind::L1 => "L1",
+        Kind::L2 => "L2",
+        Kind::L3 => "L3",
+        Kind::L4 => "L4",
+        Kind::Field => "Field",
+    }
+}
+
+/// The layers, as a client is told them in a refusal.
+fn layer_list() -> String {
+    LAYERS
+        .iter()
+        .map(|layer| layer_name(*layer))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// What it means for a slot to hold none of a layer, which is a different thing
+/// for each of them: three are optional and two cannot be missing.
+fn absent(layer: Kind) -> &'static str {
+    match layer {
+        // Unreachable, because a slot's first path is its L1 whatever it says.
+        // Written out anyway: the arm that cannot happen is the one that stops
+        // saying so quietly when the shape around it changes.
+        Kind::L1 => "which cannot happen — a slot's first file is its geometry",
+        Kind::L2 => {
+            "a deformation is optional, and one is added by naming its file in the same \
+             `--set` chain"
+        }
+        Kind::L3 => "a camera is optional, and a slot without one looks from the built-in orbit",
+        Kind::L4 => "a Set needs at least one renderer",
+        Kind::Field => {
+            "a `kind Field` is optional, and is code the other procedures evaluate rather \
+             than a node of its own"
         }
     }
 }
@@ -529,26 +643,34 @@ fn error(id: &Value, code: i32, message: &str) -> Value {
 // -- tools -----------------------------------------------------------------
 
 fn tools() -> Value {
+    // The layers, from [`LAYERS`] rather than written out beside it. A client
+    // is offered exactly what [`layer_named`] accepts and what [`Slots::path`]
+    // resolves, because it is the same list — the drift this closes is the one
+    // that left three of a slot's five layers unaddressable while the files
+    // were sitting right there.
+    let layers: Vec<&str> = LAYERS.iter().map(|layer| layer_name(*layer)).collect();
     json!([
         {
             "name": "read_procedure",
             "description":
-                "The source of one deck slot's procedure. `layer` is L1 (what the elements \
-                 are and how they move) or L4 (how they are drawn). Read before writing: \
-                 the edit is usually small, and what is already there is the best guide to \
-                 the language.",
+                "The source of one node of one deck slot. `layer` says which: L1 is what \
+                 the elements are and how they move, L2 a deformation applied to them, L3 \
+                 the camera, L4 how they are drawn, and Field a distance function the \
+                 others evaluate. Read before writing: the edit is usually small, and what \
+                 is already there is the best guide to the language.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "slot": { "type": "integer", "description": "deck slot, from 0" },
-                    "layer": { "type": "string", "enum": ["L1", "L4"] },
+                    "layer": { "type": "string", "enum": layers },
                     "index": {
                         "type": "integer",
                         "description":
-                            "which renderer, from 0. A slot simulates with one L1 and draws \
-                             it with as many L4s as it likes — the same cloud as sprites and \
-                             as strokes is one slot with two. Omit for the first, and for L1, \
-                             which is always one.",
+                            "which node of that layer, from 0, in the order the slot's files \
+                             were named. A slot draws with as many L4s as it likes — the same \
+                             cloud as sprites and as strokes is one slot with two — and may \
+                             simulate with more than one L1; it holds at most one L3 and one \
+                             Field, whose index is 0. Omit for the first.",
                     },
                 },
                 "required": ["slot", "layer"],
@@ -568,10 +690,14 @@ fn tools() -> Value {
                 "type": "object",
                 "properties": {
                     "slot": { "type": "integer" },
-                    "layer": { "type": "string", "enum": ["L1", "L4"] },
+                    "layer": { "type": "string", "enum": layers },
                     "index": {
                         "type": "integer",
-                        "description": "which renderer, from 0. Omit for the first.",
+                        "description":
+                            "which node of that layer, from 0. Omit for the first. The \
+                             source's own `kind` line must name the same layer as this \
+                             address, which is what stops a deformation being written over \
+                             a renderer.",
                     },
                     "source": { "type": "string", "description": "the whole procedure" },
                 },
@@ -620,27 +746,40 @@ fn call_tool(request: &Value, state: &mut State) -> Result<Value, String> {
 /// there is no such thing as rewriting every renderer at once with one source
 /// — where a `param` addresses a *value*, and one value reaching every
 /// declaration is both meaningful and the useful default.
-fn slot_layer_index(args: &Value) -> Result<(usize, String, usize), String> {
+///
+/// It defaults for a second reason now that every layer is addressable: a slot
+/// holds at most one L3 and at most one `kind Field`, so on those two layers 0
+/// is not a convenience but the only address there is, and a client that omits
+/// it has said everything there was to say.
+///
+/// **The layer is parsed here into the compiler's own `Kind`** and travels as
+/// one from here on, so the layer this resolves a file for and the layer a
+/// written source is checked against are the same value rather than two
+/// readings of one string.
+fn slot_layer_index(args: &Value) -> Result<(usize, Kind, usize), String> {
     let slot = args
         .get("slot")
         .and_then(Value::as_u64)
         .ok_or("`slot` is required and is a number")? as usize;
-    let layer = args
+    let named = args
         .get("layer")
         .and_then(Value::as_str)
-        .ok_or("`layer` is required and is \"L1\" or \"L4\"")?;
+        .ok_or_else(|| format!("`layer` is required and is one of {}", layer_list()))?;
+    let layer = layer_named(named)
+        .ok_or_else(|| format!("no layer `{named}`: a slot's nodes are {}", layer_list()))?;
     let index = match args.get("index") {
         None => 0,
         Some(v) => v
             .as_u64()
-            .ok_or("`index` is a number: which renderer, from 0")? as usize,
+            .ok_or("`index` is a number: which node of that layer, from 0")?
+            as usize,
     };
-    Ok((slot, layer.to_string(), index))
+    Ok((slot, layer, index))
 }
 
 fn read_procedure(args: &Value, state: &State) -> Result<String, String> {
     let (slot, layer, index) = slot_layer_index(args)?;
-    let path = state.slots.path(slot, &layer, index)?;
+    let path = state.slots.path(slot, layer, index)?;
     std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
@@ -650,20 +789,24 @@ fn write_procedure(args: &Value, state: &State) -> Result<String, String> {
         .get("source")
         .and_then(Value::as_str)
         .ok_or("`source` is required")?;
-    let path = state.slots.path(slot, &layer, index)?.clone();
+    let path = state.slots.path(slot, layer, index)?.clone();
+    let name = layer_name(layer);
 
     // **Checked before it is written, and the diagnostics are handed back.**
     // Writing first and letting the watcher report would put the compiler's
     // answer on a terminal the model cannot see.
     let checked = crate::compile::check(source)?;
-    let expected = match layer.to_ascii_uppercase().as_str() {
-        "L1" => karakuri_ir::Kind::L1,
-        _ => karakuri_ir::Kind::L4,
-    };
-    if checked.kind != expected {
+    // **The address and the source have to agree**, and the comparison is now
+    // between two `Kind`s rather than between a string and a guess. The guess
+    // was `L1`, or `L4` for everything else, which made this refusal answer
+    // about a layer nobody had named: a `kind L2` sent to a slot's L2 was
+    // turned away for not being a renderer, which is a refusal about a mistake
+    // the caller had not made.
+    if checked.kind != layer {
         return Err(format!(
-            "this is a {:?} procedure and slot {slot}'s {layer} is a {expected:?} — \
-             the two layers are not interchangeable",
+            "this is a {:?} procedure and it was addressed to slot {slot}'s {name} — \
+             the two layers are not interchangeable, and what a file is is the `kind` \
+             line inside it",
             checked.kind
         ));
     }
@@ -673,16 +816,17 @@ fn write_procedure(args: &Value, state: &State) -> Result<String, String> {
     // to three slots — so naming one slot was reporting a third of what
     // happened. Anything skipped or widened is said with a count.
     //
-    // **Every renderer of every other slot**, not just its first: a slot draws
-    // with a list now, and a file shared with the third renderer of slot 2 is
-    // shared exactly as much as one shared with its first.
+    // **Every node of every other slot**, whatever layer it is on: the scan
+    // walked an L1 and a list of renderers, which is the shape a slot had
+    // before it could hold a deformation chain — so one `swirl_warp.kir` given
+    // to two slots was a write that silently changed both and named one.
     let also: Vec<String> = (0..state.slots.0.len())
         .filter(|other| *other != slot)
         .filter(|other| {
-            let renderers = state.slots.0[*other].1.len().max(1);
-            std::iter::once(("L1", 0))
-                .chain((0..renderers).map(|i| ("L4", i)))
-                .any(|(l, i)| state.slots.path(*other, l, i).is_ok_and(|p| *p == path))
+            state
+                .slots
+                .nodes(*other)
+                .is_ok_and(|nodes| nodes.iter().any(|(_, _, held)| **held == path))
         })
         .map(|other| other.to_string())
         .collect();
@@ -697,9 +841,12 @@ fn write_procedure(args: &Value, state: &State) -> Result<String, String> {
             also.join(", ")
         )
     };
+    // Named as an address rather than as a layer, because two renderers or two
+    // sources are only told apart by the index — the same `layer:index:`
+    // `--param` writes.
     Ok(if state.watching {
         format!(
-            "compiled and written to slot {slot} {layer}.{shared} It is being built on a \
+            "compiled and written to slot {slot} {name}:{index}.{shared} It is being built on a \
              worker thread and will swap in at a frame boundary; call `swap_outcome` to \
              find out whether it landed or was rolled back for cost.\n\n\
              This replaced the file on disk. The version it replaced is in the run's edit \
@@ -708,7 +855,7 @@ fn write_procedure(args: &Value, state: &State) -> Result<String, String> {
         )
     } else {
         format!(
-            "compiled and written to slot {slot} {layer}.{shared} **This run was started \
+            "compiled and written to slot {slot} {name}:{index}.{shared} **This run was started \
              without `--watch`, so nothing will pick it up** — the file has changed and the \
              screen has not. It replaced the file on disk and there is no backup."
         )
@@ -964,6 +1111,85 @@ proc probe_l4 {
 }
 "#;
 
+    /// **The other three layers, and a second source.** A slot is not a pair:
+    /// it can hold deformations between the geometry and the renderers, one
+    /// camera, one `kind Field`, and more than one L1 — and every one of them
+    /// was a file this surface could not name. Written out for the reason the
+    /// pair above is, and minimal for the same one.
+    const PROBE_L2: &str = r#"
+proc probe_warp {
+  kind L2
+
+  consumes position
+
+  deform {
+    position = vec3(position.x, position.y * 1.5, position.z);
+  }
+}
+"#;
+
+    const PROBE_L3: &str = r#"
+proc probe_camera {
+  kind L3
+
+  camera {
+    eye    = vec3(0.0, 2.0, 9.0);
+    target = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#;
+
+    const PROBE_FIELD: &str = r#"
+proc probe_blob {
+  kind Field
+
+  field {
+    distance = sd_sphere(point, 1.0);
+  }
+}
+"#;
+
+    const PROBE_L1_B: &str = r#"
+proc probe_source_b {
+  kind     L1
+  topology points
+  capacity [1, 64] = 8
+
+  emit position
+
+  element {
+    position = vec3(1.0, 0.0, 0.0);
+  }
+}
+"#;
+
+    /// A slot holding one of everything, in a file order that is deliberately
+    /// not the order the layers compose in.
+    ///
+    /// **The second L1 comes last and the renderer is in the middle**, because
+    /// an index that came from a file's position rather than from its place
+    /// within its own layer passes any fixture where the two agree.
+    fn start_chain() -> Server {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let write = |name: &str, source: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, source).expect("fixture");
+            path
+        };
+        let head = write("l1.kir", PROBE_L1);
+        let rest = vec![
+            write("warp.kir", PROBE_L2),
+            write("l4.kir", PROBE_L4),
+            write("camera.kir", PROBE_L3),
+            write("blob.kir", PROBE_FIELD),
+            write("l1_b.kir", PROBE_L1_B),
+        ];
+        let reporter = serve(0, Slots(vec![(head, rest)]), true).expect("serve");
+        let port = reporter.port();
+        std::mem::forget(reporter);
+        Server { port, dir }
+    }
+
     fn start(watching: bool) -> Server {
         let dir = tempfile::tempdir().expect("tempdir");
         let l1 = dir.path().join("l1.kir");
@@ -1075,6 +1301,121 @@ proc probe_l4 {
             on_disk.contains("Edited over the wire."),
             "the write did not reach the file"
         );
+    }
+
+    /// **Every node a slot holds is reachable, at the address the rest of this
+    /// program already spells it by.**
+    ///
+    /// This surface reached the L1 and the renderers and nothing else, so the
+    /// material a model could neither see nor edit was exactly the material
+    /// this language is most interesting about: the deformation between the
+    /// two, the camera, the field the renderers evaluate, and a second
+    /// simulation source. Each address is checked against the *name* the file
+    /// declares rather than against its position, because a resolver that had
+    /// them one place out would still hand back a procedure.
+    #[test]
+    fn every_node_of_a_slot_can_be_read_at_its_own_address() {
+        let server = start_chain();
+        for (layer, index, expected) in [
+            ("L1", 0, "proc probe_l1"),
+            ("L2", 0, "proc probe_warp"),
+            ("L3", 0, "proc probe_camera"),
+            ("Field", 0, "proc probe_blob"),
+            ("L4", 0, "proc probe_l4"),
+            // The second source, which is an L1 in the chain rather than the
+            // head — so its index is 1 and the head keeps 0.
+            ("L1", 1, "proc probe_source_b"),
+        ] {
+            let (failed, source) = call(
+                server.port,
+                "read_procedure",
+                json!({"slot":0,"layer":layer,"index":index}),
+            );
+            assert!(!failed, "{layer}:{index} could not be read: {source}");
+            assert!(
+                source.contains(expected),
+                "{layer}:{index} read back the wrong file, which said: {}",
+                source.lines().find(|l| l.starts_with("proc")).unwrap_or("")
+            );
+        }
+    }
+
+    /// **A deformation, a camera and a field are written as themselves.**
+    ///
+    /// The layer a write was checked against was `L1` or, for everything else,
+    /// `L4` — so a `kind L2` sent to a slot's L2 was refused for not being a
+    /// renderer, which is a refusal about a mistake nobody made. Both halves
+    /// are asserted here: the writes that must land, and the one that must not.
+    #[test]
+    fn a_deformation_a_camera_and_a_field_are_written_as_themselves() {
+        let server = start_chain();
+        for (layer, file, source) in [
+            ("L2", "warp.kir", PROBE_L2),
+            ("L3", "camera.kir", PROBE_L3),
+            ("Field", "blob.kir", PROBE_FIELD),
+        ] {
+            let edited = format!("// Edited over the wire.\n{source}");
+            let (failed, said) = call(
+                server.port,
+                "write_procedure",
+                json!({"slot":0,"layer":layer,"source":edited}),
+            );
+            assert!(!failed, "a {layer} could not be written: {said}");
+            let on_disk = std::fs::read_to_string(server.dir.path().join(file)).expect("read back");
+            assert!(
+                on_disk.contains("Edited over the wire."),
+                "the {layer} write did not reach {file}"
+            );
+        }
+
+        // And the refusal is still honest: the source has to declare the layer
+        // it was addressed to, whichever layer that is.
+        let (failed, said) = call(
+            server.port,
+            "write_procedure",
+            json!({"slot":0,"layer":"L4","source":PROBE_L2}),
+        );
+        assert!(failed, "a deformation was written over a renderer");
+        assert!(said.contains("not interchangeable"), "{said}");
+    }
+
+    /// **The schema offers every layer a slot can hold**, because a layer a
+    /// client is not told about is one it will not ask for — the enum said
+    /// `L1` and `L4` for as long as a slot could hold five kinds of node.
+    #[test]
+    fn the_advertised_layers_are_every_layer_a_slot_can_hold() {
+        let server = start_chain();
+        let (_, listed) = post(
+            server.port,
+            &json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}).to_string(),
+        );
+        let listed: Value = serde_json::from_str(&listed).expect("json");
+        let tools = listed["result"]["tools"].as_array().expect("tools");
+        let expected = json!(["L1", "L2", "L3", "L4", "Field"]);
+        for name in ["read_procedure", "write_procedure"] {
+            let tool = tools
+                .iter()
+                .find(|t| t["name"] == json!(name))
+                .unwrap_or_else(|| panic!("`{name}` is not advertised"));
+            assert_eq!(
+                tool["inputSchema"]["properties"]["layer"]["enum"], expected,
+                "`{name}` offers a client the wrong layers"
+            );
+        }
+
+        // And what is advertised is what answers: every advertised layer
+        // resolves to something on a slot that holds one of each.
+        for layer in expected.as_array().expect("layers") {
+            let (failed, said) = call(
+                server.port,
+                "read_procedure",
+                json!({"slot":0,"layer":layer}),
+            );
+            assert!(
+                !failed,
+                "`{layer}` is advertised and does not resolve: {said}"
+            );
+        }
     }
 
     /// A procedure that does not compile never reaches the disk, and what comes
@@ -1320,6 +1661,44 @@ proc probe_l4 {
         );
     }
 
+    /// **A file shared as anything but a renderer is shared exactly as much.**
+    ///
+    /// The scan behind that sentence walked an L1 and a list of renderers,
+    /// which is the shape a slot had before it could hold a deformation chain
+    /// — so one `swirl_warp.kir` given to two slots was a write that changed
+    /// both and named one, and the count a model is handed is only worth
+    /// having if it is the whole count.
+    #[test]
+    fn a_write_names_the_other_slots_it_reached_on_any_layer() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let write = |name: &str, source: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, source).expect("fixture");
+            path
+        };
+        let l1 = write("l1.kir", PROBE_L1);
+        let warp = write("warp.kir", PROBE_L2);
+        let l4 = write("l4.kir", PROBE_L4);
+        let shared = Slots(vec![
+            (l1.clone(), vec![warp.clone(), l4.clone()]),
+            (l1, vec![warp, l4]),
+        ]);
+        let reporter = serve(0, shared, true).expect("serve");
+        let port = reporter.port();
+        std::mem::forget(reporter);
+
+        let (failed, said) = call(
+            port,
+            "write_procedure",
+            json!({"slot":0,"layer":"L2","source":PROBE_L2}),
+        );
+        assert!(!failed, "{said}");
+        assert!(
+            said.contains("also slot 1"),
+            "the slot sharing this deformation was not named: {said}"
+        );
+    }
+
     /// The tools and resources a client is offered are the ones that answer.
     #[test]
     fn everything_advertised_can_be_called() {
@@ -1412,11 +1791,31 @@ proc probe_l4 {
 mod tests {
     use super::*;
 
+    /// Two slots of a head and one more file, and **none of these paths
+    /// exists**.
+    ///
+    /// That is deliberate rather than lazy. A layer is read off a file's own
+    /// `kind` line, and a file that cannot be read counts as a renderer — the
+    /// fallback [`Slots::nodes`] shares with `history::seed`, asserted in
+    /// [`an_unreadable_file_is_counted_as_a_renderer`] and relied on here, so
+    /// these two slots are the L1-and-one-renderer pair they read as.
     fn slots() -> Slots {
         Slots(vec![
             ("a/l1.kir".into(), vec!["a/l4.kir".into()]),
             ("b/l1.kir".into(), vec!["b/l4.kir".into()]),
         ])
+    }
+
+    /// Writes `name` declaring `kind`, and **nothing that would compile**.
+    ///
+    /// A layer is scanned out of the text rather than parsed, so that this
+    /// surface works on a file the checker would refuse — which is the file a
+    /// model most needs to be able to read. A fixture that compiled would not
+    /// say so.
+    fn declaring(dir: &std::path::Path, name: &str, kind: &str) -> std::path::PathBuf {
+        let path = dir.join(name);
+        std::fs::write(&path, format!("kind {kind}\nnot a procedure at all\n")).expect("fixture");
+        path
     }
 
     /// The text under one `# ` heading of the rendered vocabulary.
@@ -1539,30 +1938,142 @@ mod tests {
         }
     }
 
-    /// A slot is a number and a layer is one of two names. **No path crosses
-    /// the protocol**: a client may be on another machine through an `ssh -L`,
+    /// A slot is a number and a layer is one of five. **No path crosses the
+    /// protocol**: a client may be on another machine through an `ssh -L`,
     /// where a path means nothing — and a tool that took one would invite a
     /// model to write anywhere on the render machine's disk.
     #[test]
     fn a_slot_a_layer_and_a_renderer_resolve_and_anything_else_is_refused() {
         let slots = slots();
         assert_eq!(
-            slots.path(1, "L4", 0).expect("slot 1 L4"),
+            slots.path(1, Kind::L4, 0).expect("slot 1 L4"),
             &std::path::PathBuf::from("b/l4.kir")
         );
         assert_eq!(
-            slots.path(0, "l1", 0).expect("case does not matter"),
+            slots.path(0, Kind::L1, 0).expect("slot 0 L1"),
             &std::path::PathBuf::from("a/l1.kir")
         );
 
-        let past_the_end = slots.path(2, "L1", 0).expect_err("slot 2 does not exist");
+        let past_the_end = slots
+            .path(2, Kind::L1, 0)
+            .expect_err("slot 2 does not exist");
         assert!(past_the_end.contains("0-1"), "{past_the_end}");
 
-        // **And it says what a slot may hold that this surface cannot reach.**
-        // "no layer `L2`" reads as a typo, and an L2 is a real node in a real
-        // slot — just not one addressable from here.
-        let no_such_layer = slots.path(0, "L2", 0).expect_err("there is no L2 here");
-        assert!(no_such_layer.contains("--watch"), "{no_such_layer}");
+        // **A layer this slot does not use is a different answer from a layer
+        // this surface cannot reach**, and it used to give the second: "no
+        // layer `L2` here" was true of the surface and false of the language.
+        // Every layer resolves now, so what is left to say is that this
+        // particular slot has none — with what a slot holds one for, because a
+        // model that reads that can decide whether to ask for a different slot.
+        let none_held = slots.path(0, Kind::L2, 0).expect_err("this slot has no L2");
+        assert!(none_held.contains("holds no L2"), "{none_held}");
+        assert!(none_held.contains("optional"), "{none_held}");
+    }
+
+    /// **The index counts within a layer, keeping file order** — the rule
+    /// `history::seed` files a snapshot under, so an address that reaches the
+    /// second renderer here reaches the second renderer's versions there.
+    ///
+    /// The fixture interleaves the layers on purpose. Counting a file's
+    /// position in the slot instead would hand back a real procedure at every
+    /// address and the wrong one at most of them, which is the failure that
+    /// reads as the language being confusing rather than as a resolver being
+    /// wrong.
+    #[test]
+    fn a_node_is_indexed_within_its_own_layer() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let at = dir.path();
+        let head = declaring(at, "head.kir", "L1");
+        let warp_a = declaring(at, "warp_a.kir", "L2");
+        let sprites = declaring(at, "sprites.kir", "L4");
+        let warp_b = declaring(at, "warp_b.kir", "L2");
+        let strokes = declaring(at, "strokes.kir", "L4");
+        let source_b = declaring(at, "source_b.kir", "L1");
+        let camera = declaring(at, "camera.kir", "L3");
+        let blob = declaring(at, "blob.kir", "Field");
+        let slots = Slots(vec![(
+            head.clone(),
+            vec![
+                warp_a.clone(),
+                sprites.clone(),
+                warp_b.clone(),
+                strokes.clone(),
+                source_b.clone(),
+                camera.clone(),
+                blob.clone(),
+            ],
+        )]);
+
+        for (layer, index, expected) in [
+            (Kind::L1, 0, &head),
+            (Kind::L2, 0, &warp_a),
+            (Kind::L4, 0, &sprites),
+            (Kind::L2, 1, &warp_b),
+            (Kind::L4, 1, &strokes),
+            // **The head keeps L1 0**, so a second source is 1 — a chain that
+            // names another geometry is another source, not a fresh count.
+            (Kind::L1, 1, &source_b),
+            (Kind::L3, 0, &camera),
+            (Kind::Field, 0, &blob),
+        ] {
+            let name = layer_name(layer);
+            assert_eq!(
+                slots
+                    .path(0, layer, index)
+                    .unwrap_or_else(|e| panic!("{name}:{index}: {e}")),
+                expected,
+                "{name}:{index} resolved to the wrong file"
+            );
+        }
+
+        let past = slots
+            .path(0, Kind::L2, 2)
+            .expect_err("there is no third L2");
+        assert!(past.contains("0-1"), "the range is not named: {past}");
+        // One camera per slot, so 0 is the only address there is and an index
+        // that is not 0 is worth saying rather than folding.
+        let two_cameras = slots
+            .path(0, Kind::L3, 1)
+            .expect_err("a slot looks from one camera");
+        assert!(two_cameras.contains("one L3"), "{two_cameras}");
+    }
+
+    /// **A file that cannot be read is counted as a renderer**, which is what
+    /// `history::seed` makes of one and what the compile is about to refuse it
+    /// as. Guessing nothing at all would make a slot's whole chain
+    /// unaddressable the moment one file in it went missing.
+    #[test]
+    fn an_unreadable_file_is_counted_as_a_renderer() {
+        let missing = Slots(vec![(
+            "nowhere/l1.kir".into(),
+            vec!["nowhere/gone.kir".into()],
+        )]);
+        assert_eq!(
+            missing.path(0, Kind::L4, 0).expect("counted as a renderer"),
+            &std::path::PathBuf::from("nowhere/gone.kir")
+        );
+    }
+
+    /// **A layer is parsed once, and a name this language does not have comes
+    /// back with the ones it does.** A model that is told which five there are
+    /// can fix its own call, which is the same reason the checker's
+    /// diagnostics come back through this surface at all.
+    #[test]
+    fn a_layer_this_language_does_not_have_is_refused_with_the_list() {
+        let refused =
+            slot_layer_index(&json!({ "slot": 0, "layer": "L9" })).expect_err("there is no L9");
+        assert!(refused.contains("L1, L2, L3, L4, Field"), "{refused}");
+
+        // Case does not matter: `l1` and `field` are what a model tends to
+        // type, and refusing them teaches nobody anything.
+        assert_eq!(
+            slot_layer_index(&json!({ "slot": 0, "layer": "l1" })).expect("l1"),
+            (0, Kind::L1, 0)
+        );
+        assert_eq!(
+            slot_layer_index(&json!({ "slot": 3, "layer": "field", "index": 0 })).expect("field"),
+            (3, Kind::Field, 0)
+        );
     }
 
     /// **A renderer is addressed by index, and an index past the stack is
@@ -1583,27 +2094,28 @@ mod tests {
         )]);
 
         assert_eq!(
-            stacked.path(0, "L4", 1).expect("the second renderer"),
+            stacked.path(0, Kind::L4, 1).expect("the second renderer"),
             &std::path::PathBuf::from("a/strokes.kir")
         );
         // Omitting it is 0, which is what every call written before stacks
         // existed means and what a slot with one renderer always means.
         assert_eq!(
-            stacked.path(0, "L4", 0).expect("the first renderer"),
+            stacked.path(0, Kind::L4, 0).expect("the first renderer"),
             &std::path::PathBuf::from("a/sprites.kir")
         );
 
         let past = stacked
-            .path(0, "L4", 2)
+            .path(0, Kind::L4, 2)
             .expect_err("there is no third renderer");
         assert!(past.contains("0-1"), "the range is not named: {past}");
 
-        // The L1 is one node, so an index on it is a mistake worth saying —
-        // quietly ignoring it would let a model believe it had addressed
-        // something.
+        // This slot holds one geometry, so an index on it is a mistake worth
+        // saying — quietly ignoring it would let a model believe it had
+        // addressed something. A slot *may* hold a second source; naming one
+        // is what makes it addressable, and this fixture names none.
         let l1_indexed = stacked
-            .path(0, "L1", 1)
-            .expect_err("a Set simulates with one L1");
+            .path(0, Kind::L1, 1)
+            .expect_err("this slot has one source");
         assert!(l1_indexed.contains("one L1"), "{l1_indexed}");
     }
 
