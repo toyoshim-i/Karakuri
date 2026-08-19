@@ -2,10 +2,15 @@
 //! dropped and the state folded down" (`docs/ir-spec.md`, Session stream
 //! format).
 //!
-//! Folding is last-write-wins per layer and key, where "key" depends on the
-//! record type — a [`Record::Param`] is keyed by `(layer, key)`, a
-//! [`Record::Capacity`] by `layer` alone, [`Record::Camera`] is a
-//! singleton, and so on. The result keeps each key at the position of its
+//! Folding is last-write-wins per address and key, where "key" depends on the
+//! record type — a [`Record::Param`] is keyed by `(layer, index, key)`, a
+//! [`Record::Capacity`] and a [`Record::Seed`] by the node they address,
+//! [`Record::Camera`] is a singleton, and so on. **What a record says about a
+//! node is folded; which node it says it about is what it is folded by**, so a
+//! [`Record::Slot`]'s `name` is on the value side of that line and its
+//! `(layer, index)` is on the key side.
+//!
+//! The result keeps each key at the position of its
 //! *first* occurrence in the session but with its *last* value — the same
 //! semantics as repeatedly `.insert()`-ing into an ordered map. That keeps
 //! the projection stable: appending one more edit to a session changes at
@@ -30,11 +35,11 @@ use crate::record::{Layer, Record};
 enum Key {
     Set,
     Slot(Layer, u32),
-    Capacity(Layer),
+    Capacity(Layer, u32),
     Param(Layer, Option<u32>, String),
     Bind(Layer, Option<u32>, String),
     Camera,
-    Seed(Layer),
+    Seed(Layer, u32),
     Src(Hash, u32),
     /// An unfoldable line (currently only `Record::Unknown`), identified by
     /// its position in the input so it never coalesces with another.
@@ -66,8 +71,18 @@ enum Key {
 fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
     match record {
         Record::Set { .. } => Some(Key::Set),
+        // Keyed by the node's **address and not by its name**: a `slot`
+        // record says which node it is about with `(layer, index)`, and the
+        // name is one of the things it says about it. So a session that named
+        // a node and then renamed it folds to one node with its later name,
+        // where a fold keyed by the name would keep both lines and describe
+        // two nodes that never existed.
         Record::Slot { layer, index, .. } => Some(Key::Slot(*layer, *index)),
-        Record::Capacity { layer, .. } => Some(Key::Capacity(*layer)),
+        // A node rather than a layer, so two geometries at two capacities
+        // survive the fold as the two facts they are. Keyed by layer alone
+        // they collapsed onto each other and the projection kept whichever
+        // line came last — a Set file that resizes the wrong source.
+        Record::Capacity { layer, index, .. } => Some(Key::Capacity(*layer, *index)),
         // Folded by the **address**, so a wildcard write and a write addressed
         // at one node are two facts rather than one overwriting the other —
         // which is what they are: "the Set's exposure" and "renderer 1's
@@ -79,7 +94,10 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
             layer, index, key, ..
         } => Some(Key::Bind(*layer, *index, key.clone())),
         Record::Camera { .. } => Some(Key::Camera),
-        Record::Seed { stream, .. } => Some(Key::Seed(*stream)),
+        // The same, and it is what a per-source salt *is*: two sources folded
+        // onto one seed is two geometries salted alike, which is the one thing
+        // salting exists to prevent.
+        Record::Seed { stream, index, .. } => Some(Key::Seed(*stream, *index)),
         Record::Src { hash, line, .. } => Some(Key::Src(*hash, *line)),
         Record::Tick { .. }
         | Record::Audio { .. }
@@ -299,6 +317,7 @@ mod tests {
         let session = vec![
             line(Record::Capacity {
                 layer: Layer::L1,
+                index: 0,
                 value: 65536,
             }),
             line(Record::Param {
@@ -309,6 +328,7 @@ mod tests {
             }),
             line(Record::Capacity {
                 layer: Layer::L1,
+                index: 0,
                 value: 524288,
             }),
         ];
@@ -319,6 +339,7 @@ mod tests {
             set[0].record(),
             &Record::Capacity {
                 layer: Layer::L1,
+                index: 0,
                 value: 524288
             }
         );
@@ -329,6 +350,170 @@ mod tests {
                 index: None,
                 key: "radius".into(),
                 value: Value::Scalar(2.0)
+            }
+        );
+    }
+
+    /// **Two geometries at two capacities are two records**, which is the whole
+    /// reason the record gained an address. Keyed by layer alone they folded
+    /// onto each other and the projection kept whichever line came last: a
+    /// session in which the operator resized the second source saved as a Set
+    /// file that resizes the first, and nothing anywhere said so.
+    #[test]
+    fn two_geometries_at_two_capacities_do_not_fold_together() {
+        let session = vec![
+            line(Record::Capacity {
+                layer: Layer::L1,
+                index: 0,
+                value: 65536,
+            }),
+            line(Record::Capacity {
+                layer: Layer::L1,
+                index: 1,
+                value: 4096,
+            }),
+            line(Record::Tick { steps: 1 }),
+            // The same node again, which *is* a correction — so the fold still
+            // has something to do and this is not a test that folding stopped.
+            line(Record::Capacity {
+                layer: Layer::L1,
+                index: 0,
+                value: 524288,
+            }),
+        ];
+        let set = project(&session);
+        assert_eq!(
+            set.len(),
+            2,
+            "one capacity per geometry: {:?}",
+            set.iter().map(|l| l.record()).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            set[0].record(),
+            &Record::Capacity {
+                layer: Layer::L1,
+                index: 0,
+                value: 524288
+            }
+        );
+        assert_eq!(
+            set[1].record(),
+            &Record::Capacity {
+                layer: Layer::L1,
+                index: 1,
+                value: 4096
+            }
+        );
+    }
+
+    /// **A salt belongs to a source**, and two sources salted alike is the one
+    /// thing salting exists to prevent: it is what makes two identical grids
+    /// differ in colour without being arranged to. A fold keyed by layer alone
+    /// gave the pair one seed record and so one randomness.
+    #[test]
+    fn each_source_keeps_its_own_salt() {
+        let session = vec![
+            line(Record::Seed {
+                stream: Layer::L1,
+                index: 0,
+                value: 19274,
+            }),
+            line(Record::Seed {
+                stream: Layer::L1,
+                index: 1,
+                value: 5,
+            }),
+            line(Record::Tick { steps: 1 }),
+            line(Record::Seed {
+                stream: Layer::L1,
+                index: 1,
+                value: 6,
+            }),
+        ];
+        let set = project(&session);
+        assert_eq!(
+            set.len(),
+            2,
+            "one salt per source: {:?}",
+            set.iter().map(|l| l.record()).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            set[0].record(),
+            &Record::Seed {
+                stream: Layer::L1,
+                index: 0,
+                value: 19274
+            }
+        );
+        // Re-seeded, folded onto itself, and still the second source's.
+        assert_eq!(
+            set[1].record(),
+            &Record::Seed {
+                stream: Layer::L1,
+                index: 1,
+                value: 6
+            }
+        );
+    }
+
+    /// **A node renamed is one node, not two.**
+    ///
+    /// The address is what a `slot` record is folded *by*; the name is one of
+    /// the things it says *about* the node it addresses, exactly as `proc` is.
+    /// So a session that named a source and then renamed it projects to one
+    /// line carrying the later name. A fold keyed by the name would leave a Set
+    /// file describing two sources that never existed at once — and would move
+    /// a name between nodes when two of them were called the same thing at
+    /// different times.
+    #[test]
+    fn renaming_a_node_folds_onto_it_rather_than_forking_it() {
+        let proc_hash = Hash::of(b"proc p { kind L1 }");
+        let session = vec![
+            line(Record::Slot {
+                layer: Layer::L1,
+                index: 0,
+                name: Some("near".into()),
+                proc_hash,
+            }),
+            line(Record::Tick { steps: 1 }),
+            line(Record::Slot {
+                layer: Layer::L1,
+                index: 0,
+                name: Some("veil".into()),
+                proc_hash,
+            }),
+            // A different node that was called what the first one used to be
+            // called. Two nodes, and no name is shared at any one instant.
+            line(Record::Slot {
+                layer: Layer::L1,
+                index: 1,
+                name: Some("near".into()),
+                proc_hash,
+            }),
+        ];
+        let set = project(&session);
+        assert_eq!(
+            set.len(),
+            2,
+            "a rename is not a second node: {:?}",
+            set.iter().map(|l| l.record()).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            set[0].record(),
+            &Record::Slot {
+                layer: Layer::L1,
+                index: 0,
+                name: Some("veil".into()),
+                proc_hash
+            }
+        );
+        assert_eq!(
+            set[1].record(),
+            &Record::Slot {
+                layer: Layer::L1,
+                index: 1,
+                name: Some("near".into()),
+                proc_hash
             }
         );
     }

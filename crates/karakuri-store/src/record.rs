@@ -39,7 +39,8 @@ pub enum Layer {
 
 /// `serde`'s `skip_serializing_if` wants a predicate by path, and `u32::is_zero`
 /// is unstable. One line so that an index of 0 — which is every record written
-/// before a slot could hold two renderers — leaves the stream exactly as it was.
+/// before a layer could hold more than one node, whether that is a slot's two
+/// renderers or a Set's two geometries — leaves the stream exactly as it was.
 fn is_zero(n: &u32) -> bool {
     *n == 0
 }
@@ -130,6 +131,32 @@ pub enum Record {
         /// fold has no order to appeal to.
         #[serde(default, skip_serializing_if = "is_zero")]
         index: u32,
+        /// **What this Set calls the node**, for whatever wants to point at it.
+        ///
+        /// On the terms HTML gives an `id`, and the analogy settles where it
+        /// lives: an `id` belongs to the element rather than to the tag, so a
+        /// name belongs to the *use* and is written here rather than in the
+        /// `.kir` — which is why one procedure loaded twice is two names and
+        /// not a collision. Absent is the ordinary case and costs nothing: an
+        /// unnamed node is simply unreferenceable, and **a name is a cost you
+        /// pay when you want to point at something**. See `docs/ir-spec.md`,
+        /// "Naming a source, on the terms HTML gives an `id`".
+        ///
+        /// **It is not part of the address.** `(layer, index)` says which node
+        /// the record is about and the name is one of the things it says about
+        /// that node, exactly as `proc` is — so a file naming one node twice
+        /// has named it twice and the later name wins, the way the later
+        /// `proc` does. Keying the fold by the name would turn one renamed
+        /// node into two that were never there; see `key_for` in
+        /// `project.rs`.
+        ///
+        /// Uniqueness within a Set is not this record's to enforce. It is
+        /// checked where every source is in hand, beside the composition
+        /// check — a duplicate name is a Set that will not build, not a line
+        /// that will not parse, and the vocabulary's job is to carry what a
+        /// file said.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
         #[serde(rename = "proc")]
         proc_hash: Hash,
     },
@@ -137,6 +164,23 @@ pub enum Record {
     /// the Set is rejected at build time.
     Capacity {
         layer: Layer,
+        /// **Which geometry of that layer**, on the same terms
+        /// [`Record::Slot`] uses it. A Set holds more than one source now,
+        /// each running at the default its own procedure declares, so a layer
+        /// alone cannot say which of them is being resized: two geometries at
+        /// two capacities were inexpressible in this format however they were
+        /// spelled on the way in — see `docs/roadmap.md`, "Naming what a Set
+        /// holds".
+        ///
+        /// **Absent is node 0, not a wildcard**, which is [`Record::Slot`]'s
+        /// rule rather than [`Record::Param`]'s: this record names one node,
+        /// and "every geometry at 524288" is not something a capacity has ever
+        /// said. It is also why honouring the field cannot retarget anything —
+        /// a Set that held one geometry had only node 0 to resize, so every
+        /// file ever written means what it always meant, and 0 is not written,
+        /// so it round-trips byte for byte.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        index: u32,
         value: u32,
     },
     Param {
@@ -189,10 +233,26 @@ pub enum Record {
         radius: f32,
         speed: f32,
     },
-    /// Salts the hash builtins for a layer, so re-seeding changes randomness
+    /// Salts the hash builtins for one node, so re-seeding changes randomness
     /// without touching anything structural.
     Seed {
         stream: Layer,
+        /// **Which node of that layer**, so that a salt can be *assigned*.
+        ///
+        /// The salt is what makes two identical grids differ in colour without
+        /// being arranged to, and today it is derived — `hash(set_salt,
+        /// ordinal)` — which `docs/ir-spec.md` calls provisional for one
+        /// reason: reordering `--set` changes which geometry gets which
+        /// randomness. A derived value cannot be recorded, because there is
+        /// nothing stable to record it against; an addressed one can, and this
+        /// is the address.
+        ///
+        /// Absent is node 0 on [`Record::Slot`]'s terms rather than
+        /// [`Record::Param`]'s — a seed salts the node it names — so a file
+        /// salting one source per layer reads as it always did and is written
+        /// back unchanged.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        index: u32,
         value: u64,
     },
     /// Inlined `.kir` source, for bundling an artifact with the Set that uses it.
@@ -697,20 +757,40 @@ mod tests {
     /// The same for `slot`, which gained the same field for the same reason —
     /// and needs it for one more: the projection folds a Set file's records by
     /// key, so several renderers keyed by layer alone would fold to the last.
+    ///
+    /// **And a slot may say what the Set calls the node**, which is what a mask
+    /// points at once a Set holds more than one source. A name is a cost paid
+    /// only where something points, so an unnamed node is the ordinary case and
+    /// has to leave the line it was absent from untouched: `"name":null` on
+    /// every slot record ever written is what the second assertion refuses.
     #[test]
-    fn a_slot_round_trips_and_an_absent_index_stays_absent() {
+    fn a_slot_round_trips_and_an_absent_index_or_name_stays_absent() {
         let hash = "sha256:9c1b04000000000000000000000000000000000000000000000000000000abcd";
         let old = format!(r#"{{"t":"slot","layer":"L4","proc":"{hash}"}}"#);
-        let Record::Slot { index, .. } = round_trip_verbatim(&old) else {
+        let Record::Slot { index, name, .. } = round_trip_verbatim(&old) else {
             panic!("not a slot");
         };
         assert_eq!(index, 0);
+        assert_eq!(
+            name, None,
+            "a slot from before names existed is unnamed, not named nothing"
+        );
 
         let stacked = format!(r#"{{"t":"slot","layer":"L4","index":2,"proc":"{hash}"}}"#);
         let Record::Slot { index, .. } = round_trip_verbatim(&stacked) else {
             panic!("not a slot");
         };
         assert_eq!(index, 2);
+
+        // The spec's own example of a named source, verbatim — so the field
+        // order is asserted here too, and a name written after `proc` would be
+        // a file this reader wrote and the specification did not print.
+        let named =
+            format!(r#"{{"t":"slot","layer":"L1","index":1,"name":"veil","proc":"{hash}"}}"#);
+        let Record::Slot { index, name, .. } = round_trip_verbatim(&named) else {
+            panic!("not a slot");
+        };
+        assert_eq!((index, name.as_deref()), (1, Some("veil")));
     }
 
     #[test]
@@ -721,13 +801,61 @@ mod tests {
         );
     }
 
+    /// **A capacity names a geometry, and `index` is what says which.**
+    ///
+    /// A Set holds more than one source, each at the default its own procedure
+    /// declares, so a layer alone stopped being able to say which of them is
+    /// being resized — two geometries at two capacities were inexpressible
+    /// however they were spelled on the way in. The line the specification
+    /// prints carries no index and is every capacity record ever written, so it
+    /// has to come back **byte for byte**; `round_trip` alone would not notice
+    /// `"index":0` appearing in all of them.
     #[test]
-    fn capacity_override_round_trips() {
+    fn a_capacity_addresses_a_geometry_and_an_absent_index_stays_absent() {
         assert_eq!(
-            round_trip(r#"{"t":"capacity","layer":"L1","value":524288}"#),
+            round_trip_verbatim(r#"{"t":"capacity","layer":"L1","value":524288}"#),
             Record::Capacity {
                 layer: Layer::L1,
+                index: 0,
                 value: 524288
+            }
+        );
+        // The thing that could not be said at all before: a second geometry,
+        // at its own capacity, in the same file as the first.
+        assert_eq!(
+            round_trip_verbatim(r#"{"t":"capacity","layer":"L1","index":1,"value":65536}"#),
+            Record::Capacity {
+                layer: Layer::L1,
+                index: 1,
+                value: 65536
+            }
+        );
+    }
+
+    /// **A seed names the node it salts.**
+    ///
+    /// The salt is derived from `--set` order today, which `docs/ir-spec.md`
+    /// calls provisional for exactly one reason: reordering the command line
+    /// changes which geometry gets which randomness. A derived value has
+    /// nothing stable to be recorded against — this is the address that lets it
+    /// be assigned instead, and the line the spec prints has to survive it
+    /// unchanged.
+    #[test]
+    fn a_seed_addresses_a_source_and_an_absent_index_stays_absent() {
+        assert_eq!(
+            round_trip_verbatim(r#"{"t":"seed","stream":"L1","value":19274}"#),
+            Record::Seed {
+                stream: Layer::L1,
+                index: 0,
+                value: 19274
+            }
+        );
+        assert_eq!(
+            round_trip_verbatim(r#"{"t":"seed","stream":"L1","index":1,"value":4}"#),
+            Record::Seed {
+                stream: Layer::L1,
+                index: 1,
+                value: 4
             }
         );
     }
