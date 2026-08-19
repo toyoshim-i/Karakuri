@@ -1673,26 +1673,33 @@ uniforms and names its inputs.
 What it is *not* is fusion. That half is deferred with a trigger — see "Deferred by
 decision".
 
-#### Narrowing the element slot
+#### ~~Narrowing the element slot~~ — built
 
-**Second, and independent of the naming above.** Every per-element slot is a padded 16
-bytes: `seed`, `birth_frac` and `copy` each hold four bytes in one, and `size` and `age`
-could ride in the `.w` of the vector above them. `drift_shell` goes from 5 slots to 4 —
-80 bytes to 64, a fifth — and a procedure emitting six attributes from 8 to 5.
+**39% off every element buffer across the geometries this repository ships**, and the same
+39% off the largest allocation in the system, because an amplifying stage multiplies exactly
+that number: one `amplify 6` on a Set at 262144 elements was 120 MiB of derived buffer.
+`drift_shell` went 80 bytes to 48, `lattice_shell` 64 to 48.
 
-**A fifth off the element stride is a fifth off the largest allocation in the system**,
-because an amplifying stage multiplies exactly that number: one `amplify 6` on a Set at
-262144 elements is 120 MiB of derived buffer, and an `amplify 64` is 1.25 GiB. The layout is
-where that multiplication starts.
+Every field used to be padded to a `vec4` so the stride was `(2 + emit.len()) * 16` with no
+per-attribute case analysis. Now each field is its own width at the offset WGSL's own
+placement rules give it, which does better than the estimate above — the estimate counted
+only the scalars *before* the attributes and missed that a `vec3` leaves four addressable
+bytes behind it, so `position, size` is one 16-byte block and `velocity, age` is another.
 
-It is scheduled on the principle in "What a machine's size is allowed to decide" rather than
-on a budget: those bytes buy nothing at any capacity on any machine. `vec3` alignment is
-what stops it being more — a `vec3` occupies 16 bytes in `std430` whatever the layout says,
-so the recoverable part is the scalars and nothing else. That is worth knowing before
-starting: the ceiling on this work is a fifth to two fifths, not a half.
+It was done on the principle in "What a machine's size is allowed to decide" rather than on a
+budget: those bytes bought nothing at any capacity on any machine.
 
-`generate_element_layout` decides the offsets and everything else reads them, which is what
-makes this one function and a lot of tests rather than a redesign.
+**What it cost is that something now has to know WGSL's layout rules**, where nothing did
+before. The host writes bytes at a published offset and the shader reads them through the
+struct, so a disagreement is not a compile error anywhere — it is an element reading the
+middle of the element before it. The align/size table is in one place, and the naga tests
+validate the emitted module rather than trusting the arithmetic.
+
+One test had to change its question rather than its number, and it is the interesting part:
+`a_derivations_slot_exists_only_where_something_consumes_it` measured the *stride* to prove a
+slot existed, which worked while every slot was sixteen bytes. `birth_t` is a `f32` that now
+lands in the four bytes `seed` and `birth_frac` leave — it is free — so the stride assertion
+would have read a slot that exists as a slot that does not.
 
 #### Procedures a model can read
 

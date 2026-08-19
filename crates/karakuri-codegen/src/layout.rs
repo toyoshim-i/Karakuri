@@ -17,10 +17,10 @@
 //! per-element state that lives in the *same* buffer as everything else of
 //! its own direction packs into one generated `Element` struct instead: one
 //! `vec4` slot per entry (`seed`, `birth_frac`, then `emit` in declaration
-//! order), 16 bytes each, so `stride = (2 + emit.len()) * 16` sizes the
-//! buffer with no per-attribute case analysis — see [`ElementSlot`] for why
-//! every slot is still a full `vec4` rather than its attribute's natural
-//! width.
+//! order), **each at its own width and at the offset WGSL's layout rules give
+//! it**. A `vec3` is 16-byte aligned and 12 bytes long, so a scalar declared
+//! after one lands in the four bytes it leaves: `position, size` is one
+//! 16-byte block rather than two.
 //!
 //! `alive` is the one exception: it leaves the struct entirely and becomes
 //! its own tight `array<u32>` buffer, 4 bytes per element, because the
@@ -312,41 +312,69 @@ struct StepArgs {
 ";
 }
 
-/// The WGSL element type an `Element` struct field is declared with. Every
-/// field uses one of these two, never the attribute's "natural" narrower
-/// type — see [`ElementSlot`] for why.
+/// The WGSL element type an `Element` struct field is declared with — the
+/// attribute's own width, and the alignment and size WGSL gives it.
+///
+/// **These are WGSL's numbers, not this crate's.** A layout that invented its
+/// own would be a second place for the same fact, and the two would disagree
+/// the first time a field type was added: the host writes bytes at
+/// [`ElementSlot::offset`] and the shader reads them through the struct, so a
+/// disagreement is not a compile error anywhere — it is an element reading the
+/// middle of the element before it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageElemTy {
-    /// `vec4<f32>`, 16 bytes.
-    Vec4F32,
-    /// `vec4<u32>`, 16 bytes.
-    Vec4U32,
+    U32,
+    F32,
+    Vec2F32,
+    Vec3F32,
 }
 
 impl StorageElemTy {
     pub fn wgsl_name(self) -> &'static str {
         match self {
-            StorageElemTy::Vec4F32 => "vec4<f32>",
-            StorageElemTy::Vec4U32 => "vec4<u32>",
+            StorageElemTy::U32 => "u32",
+            StorageElemTy::F32 => "f32",
+            StorageElemTy::Vec2F32 => "vec2<f32>",
+            StorageElemTy::Vec3F32 => "vec3<f32>",
+        }
+    }
+
+    /// **`vec3` is the one that surprises**: 16-byte aligned and 12 bytes long,
+    /// so the four bytes after one are addressable and a scalar declared next
+    /// lands in them for free. That is where most of what this layout saves
+    /// comes from — `position` followed by `size` costs 16 bytes, not 32.
+    pub fn align(self) -> u32 {
+        match self {
+            StorageElemTy::U32 | StorageElemTy::F32 => 4,
+            StorageElemTy::Vec2F32 => 8,
+            StorageElemTy::Vec3F32 => 16,
+        }
+    }
+
+    pub fn size(self) -> u32 {
+        match self {
+            StorageElemTy::U32 | StorageElemTy::F32 => 4,
+            StorageElemTy::Vec2F32 => 8,
+            StorageElemTy::Vec3F32 => 12,
         }
     }
 }
 
-/// One `vec4` field of the generated `Element` struct.
+/// One field of the generated `Element` struct, at its own width.
 ///
-/// Every field — including the two synthetic ones no procedure ever names —
-/// is `vec4<f32>` or `vec4<u32>` regardless of the attribute's own width.
-/// `position` (`vec3`) only needs 12 of its 16 bytes; `age` (`float`) only
-/// needs 4. The waste buys one property worth more than the bytes: every
-/// field has the same 16-byte size, so `(2 + emit.len()) * 16` is the
-/// stride of *every* `Element` buffer the engine allocates, with no
-/// per-attribute case analysis and no possibility of the naturally-narrower
-/// types (`vec2`, `float`, `u32`) producing a size the spec's "16-byte
-/// aligned" would not obviously cover. `vec3` already gets this for free
-/// from WGSL's own array-stride rule; this makes it uniform instead of an
-/// exception, and it is a deliberate choice to keep, not an oversight this
-/// task happens to touch — natural widths with computed offsets are a
-/// separate decision.
+/// **This was every field padded to a `vec4`**, so that the stride was
+/// `(2 + emit.len()) * 16` with no per-attribute case analysis. The case
+/// analysis is four lines of [`StorageElemTy`] and the padding was **39% of
+/// every element buffer** across the geometries this repository ships — and an
+/// amplifying stage multiplies exactly that number, so the same fraction comes
+/// off the largest allocation in the system.
+///
+/// What the uniform width bought was that nothing had to know WGSL's layout
+/// rules. Something does now, and the risk is real: the host writes bytes at
+/// [`ElementSlot::offset`] and the shader reads them through the struct, so a
+/// disagreement is not a compile error anywhere — it is an element reading the
+/// middle of the element before it. That is why the align/size table lives in
+/// one place and is asserted against a real WGSL module by the naga tests.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ElementSlot {
     /// The struct field name, and the WGSL identifier used everywhere the
@@ -362,9 +390,11 @@ pub struct ElementSlot {
     /// does.
     pub attr: Option<Attr>,
     pub elem_ty: StorageElemTy,
-    /// Byte offset of this field within one `Element` entry. Always
-    /// `index * 16`, published rather than left for a caller to recompute —
-    /// same reasoning as [`UniformField::offset`].
+    /// Byte offset of this field within one `Element` entry, by WGSL's own
+    /// placement rules — published rather than left for a caller to recompute,
+    /// same reasoning as [`UniformField::offset`], and now load-bearing rather
+    /// than merely convenient: it is no longer `index * 16` and there is no
+    /// second way to arrive at it.
     pub offset: u32,
 }
 
@@ -380,7 +410,9 @@ pub struct ElementLayout {
     /// carries, then `emit` in declaration order — see
     /// [`generate_element_layout`].
     pub slots: Vec<ElementSlot>,
-    /// `slots.len() as u32 * 16`.
+    /// The array stride: the struct's size rounded up to its own alignment,
+    /// which is the rule WGSL applies to `array<Element>`. **Not** a function
+    /// of the slot count.
     pub stride: u32,
     /// **Attributes readable here that have no slot**, synthesised at the read
     /// site from one that does.
@@ -414,10 +446,12 @@ impl ElementLayout {
 
 fn attr_elem_ty(attr: Attr) -> StorageElemTy {
     // Every declarable attribute (`Attr::ty`) is float, vec2, or vec3 — see
-    // `karakuri-ir/src/ast.rs`. None of them is ever uint, so `Vec4F32`
-    // covers all of them; only the synthetic `seed` slot needs `Vec4U32`.
+    // `karakuri-ir/src/ast.rs`. None of them is ever uint; only the synthetic
+    // `seed` and `copy` slots are.
     match attr.ty() {
-        Ty::Float | Ty::Vec2 | Ty::Vec3 => StorageElemTy::Vec4F32,
+        Ty::Float => StorageElemTy::F32,
+        Ty::Vec2 => StorageElemTy::Vec2F32,
+        Ty::Vec3 => StorageElemTy::Vec3F32,
         other => unreachable!(
             "attribute {} has non-float-family type {:?}",
             attr.name(),
@@ -450,6 +484,11 @@ pub struct Synthetic {
 /// **Named here rather than by the rule**, because a name is a WGSL identifier
 /// that appears in a generated struct and at every read of it, and the rule
 /// lives in a crate that emits no WGSL.
+/// The companion flag a *stored* derivation needs: whether this element has
+/// lived a whole step, and so whether the slot beside it holds a real
+/// difference or the distance from wherever `spawn` put it.
+pub const LIVED: &str = "velocity_lived";
+
 pub fn derivation_slot(attr: Attr) -> Option<(&'static str, Option<Attr>)> {
     use karakuri_ir::Derivation;
     match attr.derivation()? {
@@ -495,11 +534,9 @@ pub fn generate_element_layout(
     synthetic: Synthetic,
     derived: &[Attr],
 ) -> ElementLayout {
-    let seed = ("seed", None, StorageElemTy::Vec4U32);
-    let birth_frac = ("birth_frac", None, StorageElemTy::Vec4F32);
-    let copy = synthetic
-        .copy
-        .then_some(("copy", None, StorageElemTy::Vec4U32));
+    let seed = ("seed", None, StorageElemTy::U32);
+    let birth_frac = ("birth_frac", None, StorageElemTy::F32);
+    let copy = synthetic.copy.then_some(("copy", None, StorageElemTy::U32));
     // **A derivation's source slot, allocated because something asked for the
     // attribute it feeds.** This is the whole of what "the layout is the
     // compiled form of the contract" means in practice: `emit` no longer
@@ -509,25 +546,54 @@ pub fn generate_element_layout(
     let sources: Vec<(&'static str, Option<Attr>, StorageElemTy)> = derived
         .iter()
         .filter_map(|&attr| derivation_slot(attr))
-        .map(|(name, holds)| (name, holds, StorageElemTy::Vec4F32))
+        .flat_map(|(name, holds)| {
+            let held = holds.map_or(StorageElemTy::F32, attr_elem_ty);
+            // **The flag is its own field now, and it costs nothing.** A stored
+            // derivation needs to say whether this element has lived a whole
+            // step yet — an element's first update has no previous position to
+            // difference against, and a velocity computed from one is the whole
+            // spawn distance over one `dt`. That flag used to live in the `.w`
+            // of a padded `vec4`, which was free because the padding was there
+            // anyway. It is still free: `velocity` is a `vec3` and a `f32`
+            // declared after one lands in the four bytes WGSL leaves after it.
+            let flag = holds
+                .filter(|a| a.derivation().is_some_and(|d| d.is_stored()))
+                .map(|_| (LIVED, None, StorageElemTy::F32));
+            std::iter::once((name, holds, held)).chain(flag)
+        })
         .collect();
     let declared = emit
         .iter()
         .map(|&attr| (attr.name(), Some(attr), attr_elem_ty(attr)));
+    // **Declaration order, and WGSL's own placement rules over it.** No
+    // reordering to pack tighter: an author's `emit` order is the order the
+    // struct reads in, and a layout that sorted would make the offsets a
+    // function of something nobody wrote. It packs well anyway, because the
+    // interesting case is a `vec3` with a scalar after it — `position, size`
+    // is one 16-byte block rather than two.
+    let mut at = 0u32;
+    let mut align = 4u32;
     let slots: Vec<ElementSlot> = std::iter::once(seed)
         .chain(std::iter::once(birth_frac))
         .chain(copy)
         .chain(sources)
         .chain(declared)
-        .enumerate()
-        .map(|(i, (name, attr, elem_ty))| ElementSlot {
-            name,
-            attr,
-            elem_ty,
-            offset: i as u32 * 16,
+        .map(|(name, attr, elem_ty)| {
+            let offset = align_up(at, elem_ty.align());
+            at = offset + elem_ty.size();
+            align = align.max(elem_ty.align());
+            ElementSlot {
+                name,
+                attr,
+                elem_ty,
+                offset,
+            }
         })
         .collect();
-    let stride = slots.len() as u32 * 16;
+    // The array stride, which is the struct's size rounded up to its own
+    // alignment — the rule WGSL applies to `array<Element>` and therefore the
+    // one the host has to size a buffer by.
+    let stride = align_up(at, align);
     // **Only the rules a reader has to do arithmetic for.** Where the engine
     // stores the attribute itself the slot above already carries it, and
     // listing it here as well would make `offers` true twice and `is_stored`
@@ -806,22 +872,21 @@ mod tests {
         assert_eq!(layout.slots[0].name, "seed");
         assert_eq!(layout.slots[0].offset, 0);
         assert_eq!(layout.slots[1].name, "birth_frac");
-        assert_eq!(layout.slots[1].offset, 16);
+        assert_eq!(layout.slots[1].offset, 4);
         assert_eq!(layout.slots[2].attr, Some(Attr::Position));
-        assert_eq!(layout.slots[2].offset, 32);
+        assert_eq!(layout.slots[2].offset, 16);
+        // And `age` is a `f32` in the four bytes `position` leaves.
         assert_eq!(layout.slots[3].attr, Some(Attr::Age));
-        assert_eq!(layout.slots[3].offset, 48);
+        assert_eq!(layout.slots[3].offset, 28);
     }
 
     #[test]
-    fn element_layout_stride_is_two_plus_emit_len_times_sixteen() {
-        assert_eq!(
-            generate_element_layout(&[], Synthetic::NONE, &[]).stride,
-            32
-        );
+    fn element_layout_stride_follows_wgsl_placement() {
+        // Two scalars and nothing else: 8 bytes, aligned to 4.
+        assert_eq!(generate_element_layout(&[], Synthetic::NONE, &[]).stride, 8);
         assert_eq!(
             generate_element_layout(&[Attr::Position], Synthetic::NONE, &[]).stride,
-            48
+            32
         );
         assert_eq!(
             generate_element_layout(
@@ -830,53 +895,79 @@ mod tests {
                 &[]
             )
             .stride,
-            80
+            // seed(0) birth_frac(4) position(16..28) velocity(32..44)
+            // age(44..48) — 80 bytes under the padded layout, 48 here.
+            48
         );
     }
 
     /// **`copy` is allocated only where something upstream amplified**, which
     /// is the whole reason [`Synthetic`] exists as a parameter rather than the
-    /// slot being unconditional like the two above it: sixteen bytes on every
-    /// element of every Set is what unconditional costs, and a chain with no
-    /// amplifier in it has nothing to put there.
+    /// slot being unconditional like the two above it — and it is now free
+    /// besides, because `seed` and `birth_frac` leave eight bytes of the first
+    /// block unused and `copy` lands in four of them.
     #[test]
     fn the_copy_slot_is_allocated_only_when_something_amplified() {
         let plain = generate_element_layout(&[Attr::Position], Synthetic::NONE, &[]);
         assert!(!plain.slots.iter().any(|s| s.name == "copy"), "{plain:?}");
-        assert_eq!(plain.stride, 48);
+        assert_eq!(plain.stride, 32, "u32, f32, then a vec3 at 16");
 
         let amplified = generate_element_layout(&[Attr::Position], Synthetic { copy: true }, &[]);
         assert_eq!(amplified.slots[2].name, "copy");
         assert_eq!(amplified.slots[2].attr, None, "no procedure declares it");
-        assert_eq!(amplified.offset_of("copy"), 32);
-        assert_eq!(amplified.stride, 64, "one more sixteen-byte slot");
+        assert_eq!(amplified.offset_of("copy"), 8);
+        assert_eq!(amplified.stride, 32, "the copy index cost nothing");
         // **Before the declared attributes, with the other engine-written
         // slots**, so that the two offsets the engine writes directly do not
         // move when a procedure declares one more attribute.
         assert_eq!(amplified.offset_of("seed"), 0);
-        assert_eq!(amplified.offset_of("birth_frac"), 16);
-        assert_eq!(amplified.offset_of("position"), 48);
+        assert_eq!(amplified.offset_of("birth_frac"), 4);
+        assert_eq!(amplified.offset_of("position"), 16);
     }
 
     #[test]
     fn offset_of_finds_the_synthetic_slots() {
         let layout = generate_element_layout(&[Attr::Position], Synthetic::NONE, &[]);
         assert_eq!(layout.offset_of("seed"), 0);
-        assert_eq!(layout.offset_of("birth_frac"), 16);
-        assert_eq!(layout.offset_of("position"), 32);
+        assert_eq!(layout.offset_of("birth_frac"), 4);
+        assert_eq!(layout.offset_of("position"), 16);
     }
 
+    /// **A slot is its attribute's own width, and the offsets are WGSL's.**
+    /// Every field used to be a padded `vec4` so that the stride was
+    /// `slots.len() * 16` with no case analysis. The case analysis is four
+    /// lines and the padding was a fifth of every element buffer in the
+    /// system — and an amplifying stage multiplies exactly that number.
     #[test]
-    fn every_slot_is_sixteen_bytes_regardless_of_attribute_width() {
-        // The whole point of wrapping every field in vec4: no per-attribute
-        // case analysis is needed to compute a slot's size.
-        for attr in Attr::ALL {
-            let ty = attr_elem_ty(attr);
-            assert!(matches!(
-                ty,
-                StorageElemTy::Vec4F32 | StorageElemTy::Vec4U32
-            ));
-        }
+    fn a_scalar_after_a_vec3_lands_in_the_padding_that_vec3_leaves() {
+        // `position` is 12 bytes at 16-byte alignment, so 28..32 is
+        // addressable and `size` is placed there rather than at 32.
+        let layout = generate_element_layout(&[Attr::Position, Attr::Size], Synthetic::NONE, &[]);
+        assert_eq!(layout.offset_of("position"), 16);
+        assert_eq!(layout.offset_of("size"), 28);
+        assert_eq!(layout.stride, 32);
+
+        // The same emit list under the old padded layout was four slots of
+        // sixteen. This is the saving, stated as a number rather than as a
+        // property.
+        assert!(layout.stride < 4 * 16);
+    }
+
+    /// The stride is the struct's size rounded up to its own alignment, which
+    /// is the rule WGSL applies to `array<Element>` — so the host sizing a
+    /// buffer as `capacity * stride` and the shader indexing it agree.
+    #[test]
+    fn the_stride_is_the_struct_alignment_not_the_last_field_end() {
+        // seed(0..4), birth_frac(4..8), tint(16..28) — 28 rounded up to the
+        // vec3's 16-byte alignment.
+        let layout = generate_element_layout(&[Attr::Tint], Synthetic::NONE, &[]);
+        assert_eq!(layout.offset_of("tint"), 16);
+        assert_eq!(layout.stride, 32);
+
+        // With no vector at all the alignment is 4 and nothing is rounded.
+        let scalars = generate_element_layout(&[Attr::Size], Synthetic::NONE, &[]);
+        assert_eq!(scalars.offset_of("size"), 8);
+        assert_eq!(scalars.stride, 12);
     }
 
     #[test]
@@ -884,10 +975,10 @@ mod tests {
         let layout = generate_element_layout(&[Attr::Position, Attr::Tint], Synthetic::NONE, &[]);
         let mut out = String::new();
         write_element_struct(&mut out, &layout);
-        assert!(out.contains("seed: vec4<u32>,"), "{out}");
-        assert!(out.contains("birth_frac: vec4<f32>,"), "{out}");
-        assert!(out.contains("position: vec4<f32>,"), "{out}");
-        assert!(out.contains("tint: vec4<f32>,"), "{out}");
+        assert!(out.contains("seed: u32,"), "{out}");
+        assert!(out.contains("birth_frac: f32,"), "{out}");
+        assert!(out.contains("position: vec3<f32>,"), "{out}");
+        assert!(out.contains("tint: vec3<f32>,"), "{out}");
         // Declaration order must match `slots`, not merely contain them.
         let seed_at = out.find("seed:").unwrap();
         let birth_at = out.find("birth_frac:").unwrap();

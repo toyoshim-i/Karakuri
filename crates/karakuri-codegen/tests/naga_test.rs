@@ -1020,10 +1020,13 @@ fn l1_emitting_every_attribute_compiles_and_validates() {
         shader.element_layout.slots.len(),
         2 + karakuri_ir::Attr::ALL.len()
     );
-    assert_eq!(
-        shader.element_layout.stride,
-        (2 + karakuri_ir::Attr::ALL.len() as u32) * 16
-    );
+    // **Every attribute at once, which is the widest element the language can
+    // ask for**, and the number is asserted rather than derived so that a
+    // layout change has to come here and say what it did. The padded layout
+    // made this `(2 + ALL) * 16`; WGSL's own placement makes it this.
+    assert_eq!(shader.element_layout.stride, 96);
+    // And it is smaller than the layout it replaced, which is the whole point.
+    assert!(shader.element_layout.stride < (2 + karakuri_ir::Attr::ALL.len() as u32) * 16);
     validate(&shader.source);
 }
 
@@ -1652,7 +1655,7 @@ fn a_second_amplifier_composes_the_copy_index_rather_than_replacing_it() {
         karakuri_codegen::layout::Synthetic::NONE,
     );
     assert!(
-        first.source.contains("vec4<u32>(0u * 4u + _c"),
+        first.source.contains("dst[i].copy = 0u * 4u + _c;"),
         "a first amplifier numbers from nothing: {}",
         first.source
     );
@@ -1672,7 +1675,9 @@ proc again {
     );
     validate(&second.source);
     assert!(
-        second.source.contains("vec4<u32>(src[_e].copy.x * 3u + _c"),
+        second
+            .source
+            .contains("dst[i].copy = src[_e].copy * 3u + _c;"),
         "a second amplifier composes: {}",
         second.source
     );
@@ -1783,7 +1788,7 @@ proc tinted {
     let shader = karakuri_codegen::generate_l4(&checked, &amplified, None);
     validate(&shader.source);
     assert!(
-        shader.source.contains("let copy = elements[elem].copy.x;"),
+        shader.source.contains("let copy = elements[elem].copy;"),
         "{}",
         shader.source
     );

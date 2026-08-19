@@ -85,7 +85,7 @@ use crate::layout::{
 };
 use crate::lower::{lower_expr, mangle_local, Resolver};
 use crate::prelude::{self, Requirements};
-use crate::ty::{pad_to_vec4, wgsl_ty};
+use crate::ty::wgsl_ty;
 
 /// Generated L1 WGSL plus the layout the engine needs to drive it.
 #[derive(Debug, Clone)]
@@ -136,17 +136,12 @@ impl Resolver for L1Resolver {
                     // block that reads its own clock per substep has to read
                     // this one, or an age would jump by a whole frame inside a
                     // frame of several steps.
-                    format!("(step_args.t - prev[{}].birth_t.x)", self.read_idx)
+                    format!("(step_args.t - prev[{}].birth_t)", self.read_idx)
                 }
                 other => unreachable!("{other:?} is not synthesised at the read site"),
             };
         }
-        format!(
-            "prev[{}].{}.{}",
-            self.read_idx,
-            attr.name(),
-            crate::ty::attr_swizzle(attr.ty())
-        )
+        format!("prev[{}].{}", self.read_idx, attr.name())
     }
 
     fn read_seed(&self) -> String {
@@ -208,9 +203,8 @@ fn emit_stmts(
                         out.push_str(&format!("{pad}{} = {v};\n", mangle_local(name)))
                     }
                     Target::Attr(attr) => {
-                        let wrapped = pad_to_vec4(attr.ty(), "f32", &v);
                         out.push_str(&format!(
-                            "{pad}next[{}].{} = {wrapped};\n",
+                            "{pad}next[{}].{} = {v};\n",
                             resolver.write_idx,
                             attr.name()
                         ));
@@ -325,7 +319,7 @@ fn spawn_derivations(derived: &[Attr]) -> String {
     if derived.contains(&Attr::Age) {
         // **The instant, not a duration.** `age` is `t` minus this wherever it
         // is read, which is exact at any clock and needs nothing per frame.
-        out.push_str("    next[slot].birth_t = vec4<f32>(step_args.t, 0.0, 0.0, 0.0);\n");
+        out.push_str("    next[slot].birth_t = step_args.t;\n");
     }
     if derived.contains(&Attr::Velocity) {
         // **Zero, because a new element has no previous frame to differ from.**
@@ -333,11 +327,12 @@ fn spawn_derivations(derived: &[Attr]) -> String {
         // element held this slot before, which is a spawn that inherits the
         // motion of something that died.
         //
-        // `w` is the *lived a step* flag and stays 0 here; see
+        // `velocity_lived` is the *lived a step* flag and stays 0 here; see
         // `element_derivations`. A zeroed buffer says the same thing, which is
         // what makes a procedure with no `spawn` block get the same treatment
         // without anything writing it.
-        out.push_str("    next[slot].velocity = vec4<f32>(0.0, 0.0, 0.0, 0.0);\n");
+        out.push_str("    next[slot].velocity = vec3<f32>(0.0);\n");
+        out.push_str("    next[slot].velocity_lived = 0.0;\n");
     }
     out
 }
@@ -373,11 +368,12 @@ fn element_derivations(derived: &[Attr]) -> String {
         // Both are the same sentence — a difference against a state the element
         // was never in — so both get the same answer.
         out.push_str(
-            "    let _lived = prev[i].velocity.w > 0.5;\n\
+            "    let _lived = prev[i].velocity_lived > 0.5;\n\
              \x20   next[out].velocity = select(\n\
-             \x20       vec4<f32>(0.0, 0.0, 0.0, 1.0),\n\
-             \x20       vec4<f32>((next[out].position.xyz - prev[i].position.xyz) / max(_dt, 1e-9), 1.0),\n\
-             \x20       _lived);\n",
+             \x20       vec3<f32>(0.0),\n\
+             \x20       (next[out].position - prev[i].position) / max(_dt, 1e-9),\n\
+             \x20       _lived);\n\
+             \x20   next[out].velocity_lived = 1.0;\n",
         );
     }
     out
@@ -393,9 +389,9 @@ fn spawn(@builtin(global_invocation_id) gid: vec3<u32>) {{
     if slot >= u.capacity {{ return; }}
     let seed = step_args.seed_base + i;
     let birth_frac = (f32(i) + 0.5) / max(f32(step_args.spawn_count), 1.0);
-{body}    next[slot].seed = vec4<u32>(seed, 0u, 0u, 0u);
+{body}    next[slot].seed = seed;
     next_alive[slot] = 1u;
-    next[slot].birth_frac = vec4<f32>(birth_frac, 0.0, 0.0, 0.0);
+    next[slot].birth_frac = birth_frac;
 {derivations}}}
 
 "
@@ -425,12 +421,12 @@ fn element(@builtin(global_invocation_id) gid: vec3<u32>) {{
     let i = gid.x;
     if i >= counts.range {{ return; }}
 {skip_dead}    let out = {out};
-    let seed = prev[i].seed.x;
-    let _dt = u.dt * prev[i].birth_frac.x;
+    let seed = prev[i].seed;
+    let _dt = u.dt * prev[i].birth_frac;
     var _killed = false;
-{body}    next[out].seed = vec4<u32>(seed, 0u, 0u, 0u);
+{body}    next[out].seed = seed;
     next_alive[out] = select(1u, 0u, _killed);
-    next[out].birth_frac = vec4<f32>(1.0, 0.0, 0.0, 0.0);
+    next[out].birth_frac = 1.0;
 {derivations}}}
 "
     )
