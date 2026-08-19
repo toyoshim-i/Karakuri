@@ -71,11 +71,16 @@ pub struct Built {
     /// | n`**, so it names the slot as well and no two builds in a run share
     /// one.
     pub id: u64,
-    pub l1: karakuri_store::hash::Hash,
-    /// The renderers, in draw order — the whole stack, because a `Request`
-    /// restates the whole stack and a record of what played has to name what
-    /// was built.
-    pub l4s: Vec<karakuri_store::hash::Hash>,
+    /// Every node of the rebuilt slot, each with the address a `procedure`
+    /// record names it by — `(layer, index)`, the layer spelled the way the
+    /// record spells it.
+    ///
+    /// **The whole stack, not the one file that changed.** A rebuild restates
+    /// the slot, so a record of what played has to name every node in it; and
+    /// it is a list rather than an L1 and some renderers because a slot can
+    /// hold two geometries, a chain and a camera, all of which are procedures
+    /// somebody may have just edited.
+    pub nodes: Vec<(&'static str, u32, karakuri_store::hash::Hash)>,
 }
 
 pub struct Watch {
@@ -101,7 +106,14 @@ pub struct Watch {
     /// rebuild rather than read off the outgoing Set, for the reason
     /// `Request::bindings` gives.
     layering: karakuri_engine::set::Layering,
-    capacity: u32,
+    /// `--capacity` when it was given, and otherwise `None` — each geometry
+    /// then runs at the default its own `capacity` declaration names.
+    ///
+    /// **Not one resolved number.** A rebuild recompiles the files, so a
+    /// procedure's declared default is the *new* file's, and a slot with two
+    /// geometries has two of them. Resolving at startup and carrying the answer
+    /// would have pinned every later build to whatever the first one declared.
+    capacity: Option<u32>,
     seed_salt: u32,
     overrides: Vec<karakuri_engine::ParamWrite>,
     /// The interface, restated on every rebuild for the same reason the
@@ -141,7 +153,7 @@ impl Watch {
         l1: PathBuf,
         l4s: Vec<PathBuf>,
         layering: karakuri_engine::set::Layering,
-        capacity: u32,
+        capacity: Option<u32>,
         seed_salt: u32,
         overrides: Vec<karakuri_engine::ParamWrite>,
         published: Vec<karakuri_engine::set::Published>,
@@ -281,6 +293,7 @@ impl Source for Watch {
         // record can name the layer and the position it was built at, rather
         // than filing a camera under `L4` index 2.
         let mut addressed: Vec<(&'static str, usize, String)> = Vec::with_capacity(compiled.len());
+        let mut l1s = vec![l1];
         let mut l2s = Vec::new();
         let mut l3: Option<karakuri_ir::typed::Checked> = None;
         let mut field: Option<karakuri_ir::typed::Checked> = None;
@@ -325,21 +338,15 @@ impl Source for Watch {
                     addressed.push(("Field", 0, checked.name.clone()));
                     field = Some(checked);
                 }
-                // **A slot can be built with two geometries and cannot be
-                // *rebuilt* with them**, which is a gap rather than a rule:
-                // `--set a.kir,b.kir,renderer.kir` starts fine, and then every
-                // save prints this and changes nothing. What is missing is a
-                // name — a rebuild is addressed as `(slot, layer, index)`
-                // everywhere it is recorded, and so are the edit history and
-                // the session stream, and none of them can say "the second
-                // geometry". See `docs/roadmap.md`, "Naming what a Set holds".
+                // **A second geometry is a second source**, and rebuilding one
+                // needs nothing a first does not: the request already carries a
+                // list, and every place this build is recorded addresses a node
+                // as `(slot, layer, index)`. This used to refuse — a slot with
+                // two geometries started and then printed a refusal on every
+                // save, forever, with the picture frozen at its startup build.
                 karakuri_ir::Kind::L1 => {
-                    refuse(
-                        "a second L1 — a slot rebuilds with one geometry, so this slot is \
-                         not being watched. Run it without `--watch`, or edit one geometry \
-                         at a time",
-                    );
-                    return None;
+                    addressed.push(("L1", l1s.len(), checked.name.clone()));
+                    l1s.push(checked);
                 }
             }
         }
@@ -379,7 +386,7 @@ impl Source for Watch {
                         .zip(&l4_srcs)
                         .map(|((layer, index, name), src)| (*layer, *index, name, src));
                     for (layer, index, name, src) in
-                        [("L1", 0, &l1.name, &l1_src)].into_iter().chain(rest)
+                        [("L1", 0, &l1s[0].name, &l1_src)].into_iter().chain(rest)
                     {
                         if let Err(e) = snapshots.record(slot, layer, index, name, src.as_bytes()) {
                             eprintln!("slot {slot}: this version is not in the edit history: {e}");
@@ -392,7 +399,7 @@ impl Source for Watch {
 
         let label = format!(
             "{} + {}",
-            l1.name,
+            l1s[0].name,
             addressed
                 .iter()
                 .map(|(.., name)| name.as_str())
@@ -414,11 +421,21 @@ impl Source for Watch {
                 .collect();
             match stored {
                 Ok(hashes) => {
-                    let _ = tx.send(Built {
-                        id,
-                        l1: hashes[0],
-                        l4s: hashes[1..].to_vec(),
-                    });
+                    // **The head is the L1 the slot was named with, and every
+                    // later hash takes the address the sort gave its file.**
+                    // `addressed` and `l4_srcs` are both in file order, which
+                    // the sort deliberately did not disturb, so zipping the
+                    // hashes onto it names each node the way a `procedure`
+                    // record does.
+                    let nodes = std::iter::once(("L1", 0, hashes[0]))
+                        .chain(
+                            addressed
+                                .iter()
+                                .zip(&hashes[1..])
+                                .map(|((layer, index, _), hash)| (*layer, *index as u32, *hash)),
+                        )
+                        .collect();
+                    let _ = tx.send(Built { id, nodes });
                 }
                 Err(e) => eprintln!(
                     "slot {slot}: this build is not in the session's record: {e} — \
@@ -428,7 +445,19 @@ impl Source for Watch {
         }
         Some(Request {
             id,
-            l1s: vec![(l1, self.capacity)],
+            // **Each geometry at the capacity it declares**, and `--capacity`
+            // over all of them — the rule the startup path follows, asked again
+            // here because a rebuild recompiles the files and the declaration
+            // may have just changed.
+            l1s: l1s
+                .into_iter()
+                .map(|l1| {
+                    let capacity = self.capacity.unwrap_or_else(|| {
+                        l1.capacity.map_or(crate::DEFAULT_CAPACITY, |c| c.default)
+                    });
+                    (l1, capacity)
+                })
+                .collect(),
             l2s,
             l3,
             field,
@@ -457,7 +486,7 @@ mod tests {
             dir.join("a.kir"),
             vec![dir.join("b.kir")],
             karakuri_engine::set::Layering::Overdraw,
-            4096,
+            Some(4096),
             1,
             Vec::new(),
             Vec::new(),

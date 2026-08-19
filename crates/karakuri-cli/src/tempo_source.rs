@@ -823,7 +823,13 @@ mod runner_tests {
     fn a_source_that_dies_is_reported_once() {
         let (mut source, _dir) = fake("echo '{\"t\":\"hello\",\"v\":1,\"source\":\"fake\"}'\n");
         let mut said = Vec::new();
-        for _ in 0..250 {
+        // **Polled until the child is gone, not a fixed number of times.** How
+        // long a `sh` takes to print a line and exit is the machine's business,
+        // and a count that was ample alone failed once in a whole-workspace run
+        // where a dozen test binaries were competing for the same cores. The
+        // ceiling is a stall guard, not a timing assumption.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while source.ended().is_none() && std::time::Instant::now() < deadline {
             source.poll();
             if let Some(why) = source.unreported_end() {
                 said.push(why.to_string());
@@ -831,6 +837,14 @@ mod runner_tests {
             std::thread::sleep(std::time::Duration::from_millis(2));
         }
         assert!(source.ended().is_some(), "the source outlived its script");
+        // And then a caller that keeps polling — which is what a frame loop
+        // does — is not handed the news again, which is the whole subject.
+        for _ in 0..50 {
+            source.poll();
+            if let Some(why) = source.unreported_end() {
+                said.push(why.to_string());
+            }
+        }
         assert_eq!(said.len(), 1, "reported {said:?}");
         source.close();
     }
