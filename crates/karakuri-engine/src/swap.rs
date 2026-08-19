@@ -228,6 +228,15 @@ pub const POLL_INTERVAL: Duration = Duration::from_millis(50);
 /// Everything the worker needs to build one Set. Owned, not borrowed: the
 /// worker is on another thread and cannot hold anything belonging to the
 /// render loop.
+#[derive(Debug, Clone, Default)]
+pub struct RequestNames {
+    pub l1s: Vec<Option<String>>,
+    pub l2s: Vec<Option<String>>,
+    pub l3: Option<String>,
+    pub l4s: Vec<Option<String>>,
+    pub field: Option<String>,
+}
+
 pub struct Request {
     /// The caller's own name for this build, echoed back on every event about
     /// it.
@@ -289,6 +298,10 @@ pub struct Request {
     /// new value either way, and a `bind` record travels with it.
     pub bindings: Vec<Binding>,
     /// What a swap or rollback message calls this.
+    /// What each node of the rebuilt Set is called, in the same per-layer shape
+    /// the procedures are given in. Restated rather than carried over for the
+    /// reason `bindings` is.
+    pub names: RequestNames,
     pub label: String,
 }
 
@@ -1078,6 +1091,17 @@ fn run_worker(
                 &request.l4s.iter().collect::<Vec<_>>(),
                 request.layering,
                 request.seed_salt,
+                // **Restated by the request**, on the same terms its bindings
+                // and its interface are: a rebuild that took the names off the
+                // outgoing Set would depend on what happened to be live, and a
+                // request has to be reproducible from a record stream.
+                crate::set::NodeNames {
+                    l1s: &request.names.l1s,
+                    l2s: &request.names.l2s,
+                    l3: request.names.l3.as_deref(),
+                    l4s: &request.names.l4s,
+                    field: request.names.field.as_deref(),
+                },
             )
             .map(|mut set| {
                 for write in &request.params {

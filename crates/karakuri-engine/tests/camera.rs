@@ -97,6 +97,7 @@ fn build(gpu: &Gpu, w: u32, h: u32, camera: Orbit) -> Set {
         &[&l4],
         Layering::Overdraw,
         7,
+        karakuri_engine::set::NodeNames::default(),
     )
     .expect("one L1 and one L4");
     set.resize(&gpu.device, w, h);
@@ -351,6 +352,7 @@ fn with_camera(gpu: &Gpu, l3: Option<&str>, l4: &str, w: u32, h: u32) -> Set {
         &[&l4],
         Layering::Overdraw,
         7,
+        karakuri_engine::set::NodeNames::default(),
     )
     .expect("one L1, an optional camera, and one L4");
     set.resize(&gpu.device, w, h);

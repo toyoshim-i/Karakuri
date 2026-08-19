@@ -96,6 +96,7 @@ fn build_paired(gpu: &Gpu, l1s: &[&str], l2: &str) -> Result<Set, karakuri_engin
         &[&l4],
         Layering::Overdraw,
         7,
+        karakuri_engine::set::NodeNames::default(),
     )?;
     set.resize(&gpu.device, W, H);
     set.camera = karakuri_engine::camera::Orbit {
@@ -122,6 +123,7 @@ fn build_with(gpu: &Gpu, l1s: &[&str], l4s: &[&str], layering: Layering) -> Set 
         &draw_refs,
         layering,
         7,
+        karakuri_engine::set::NodeNames::default(),
     )
     .expect("several sources and some renderers");
     set.resize(&gpu.device, W, H);
@@ -659,6 +661,7 @@ fn both_sides_of_a_pairing_share_the_element_struct() {
         &[&l4],
         Layering::Overdraw,
         7,
+        karakuri_engine::set::NodeNames::default(),
     )
     .expect("two static sources and a derived attribute");
     set.resize(&gpu.device, W, H);
@@ -695,4 +698,140 @@ fn both_sides_of_a_pairing_share_the_element_struct() {
         (at_one - f).abs() < 1.5,
         "k=1 has to land on the far lattice: {at_one} against {f}"
     );
+}
+
+/// **Every node of a Set has a name, and a name resolves to the node the rest
+/// of this system addresses by position.** A name is an alias over
+/// `(layer, index)` — the same shape `Published` gives a parameter — so it can
+/// be chosen, recorded and changed without anything underneath it moving.
+#[test]
+fn a_name_resolves_to_the_node_it_addresses() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let near = compile(&lattice("near_grid", 0.0));
+    let far = compile(&lattice("far_grid", 0.5));
+    let draw = compile(DOTS);
+
+    let set = Set::build_many(
+        &gpu.device,
+        &gpu.queue,
+        &[(&near, 64), (&far, 64)],
+        &[],
+        None,
+        None,
+        &[&draw],
+        Layering::Overdraw,
+        0,
+        karakuri_engine::set::NodeNames {
+            l1s: &[Some("near".to_string()), None],
+            ..Default::default()
+        },
+    )
+    .expect("builds");
+
+    // What was written is what it is called; what was not is called after its
+    // procedure.
+    assert_eq!(
+        set.node_names(),
+        ["near", "far_grid", "dots"].map(String::from)
+    );
+    assert_eq!(set.node_named("near"), Some((karakuri_ir::Kind::L1, 0)));
+    assert_eq!(set.node_named("far_grid"), Some((karakuri_ir::Kind::L1, 1)));
+    assert_eq!(set.node_named("dots"), Some((karakuri_ir::Kind::L4, 0)));
+    assert_eq!(set.node_named("nothing_is_called_this"), None);
+}
+
+/// **Two uses of one procedure are two nodes**, so the derived name — which is
+/// the procedure's, and therefore a *type* name — collides and the second is
+/// told apart. Derived in the engine and nowhere else: a caller that derived
+/// too would be the second place the fact lives.
+#[test]
+fn a_procedure_used_twice_gives_its_second_node_a_different_name() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let grid = compile(&lattice("grid", 0.0));
+    let draw = compile(DOTS);
+
+    let set = Set::build_many(
+        &gpu.device,
+        &gpu.queue,
+        &[(&grid, 64), (&grid, 64)],
+        &[],
+        None,
+        None,
+        &[&draw, &draw],
+        Layering::Overdraw,
+        0,
+        karakuri_engine::set::NodeNames::default(),
+    )
+    .expect("builds");
+
+    assert_eq!(
+        set.node_names(),
+        ["grid", "grid-2", "dots", "dots-2"].map(String::from)
+    );
+    assert_eq!(set.node_named("grid-2"), Some((karakuri_ir::Kind::L1, 1)));
+    assert_eq!(set.node_named("dots-2"), Some((karakuri_ir::Kind::L4, 1)));
+}
+
+/// **Two *written* names that collide are refused**, where two derived ones are
+/// told apart. A written name is an address somebody chose, so picking one of
+/// the two for them would leave whatever was pointed at it following a
+/// tie-break.
+#[test]
+fn two_written_names_that_collide_are_refused() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let grid = compile(&lattice("grid", 0.0));
+    let draw = compile(DOTS);
+
+    let err = Set::build_many(
+        &gpu.device,
+        &gpu.queue,
+        &[(&grid, 64)],
+        &[],
+        None,
+        None,
+        &[&draw],
+        Layering::Overdraw,
+        0,
+        karakuri_engine::set::NodeNames {
+            l1s: &[Some("shape".to_string())],
+            l4s: &[Some("shape".to_string())],
+            ..Default::default()
+        },
+    );
+    let err = match err {
+        Err(e) => e,
+        Ok(_) => panic!("two nodes cannot share a name"),
+    };
+    assert!(format!("{err}").contains("both called `shape`"), "{err}");
+}
+
+/// **A written name is not stolen by a derived one that reaches it first.**
+/// `dots` is written on the *second* renderer, so the first — which would
+/// otherwise derive `dots` from its procedure — has to take `dots-2`.
+#[test]
+fn a_derived_name_never_takes_one_that_was_written() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let grid = compile(&lattice("grid", 0.0));
+    let draw = compile(DOTS);
+
+    let set = Set::build_many(
+        &gpu.device,
+        &gpu.queue,
+        &[(&grid, 64)],
+        &[],
+        None,
+        None,
+        &[&draw, &draw],
+        Layering::Overdraw,
+        0,
+        karakuri_engine::set::NodeNames {
+            l4s: &[None, Some("dots".to_string())],
+            ..Default::default()
+        },
+    )
+    .expect("builds");
+
+    assert_eq!(set.node_named("dots"), Some((karakuri_ir::Kind::L4, 1)));
+    // Node 0 is the geometry; node 1 is the renderer that had to give way.
+    assert_eq!(set.node_names()[1], "dots-2");
 }

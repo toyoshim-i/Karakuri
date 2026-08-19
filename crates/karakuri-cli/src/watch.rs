@@ -433,6 +433,10 @@ impl Source for Watch {
             l3,
             field,
             l4s,
+            // **Restated, like every other part of a request.** A rebuild that
+            // read the names off the outgoing Set would depend on what happened
+            // to be live, which is the property `bindings` gives its reason for.
+            names: karakuri_engine::swap::RequestNames::default(),
             layering: self.layering,
             seed_salt: self.seed_salt,
             params: self.overrides.clone(),
@@ -466,12 +470,17 @@ mod tests {
     /// out each restarts the visual from `t` zero for nothing.
     #[test]
     fn rewriting_identical_bytes_is_not_a_change() {
-        let dir = std::env::temp_dir().join("karakuri-watch-identical");
-        std::fs::create_dir_all(&dir).expect("temp dir");
+        // **A directory of its own, not a fixed name under `/tmp`.** Two runs
+        // of this suite at once — a `pre-push` hook beside a terminal, say —
+        // shared the fixed one, and each deleted the other's files mid-test.
+        // It failed once in a whole-workspace run and passed every time it was
+        // run alone, which is what that shape looks like from the outside.
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let dir = tmp.path();
         std::fs::write(dir.join("a.kir"), "proc a {}").expect("write");
         std::fs::write(dir.join("b.kir"), "proc b {}").expect("write");
 
-        let w = watch_on(&dir);
+        let w = watch_on(dir);
         let before = w.stamp();
         std::thread::sleep(Duration::from_millis(10));
         std::fs::write(dir.join("a.kir"), "proc a {}").expect("rewrite");
@@ -479,7 +488,6 @@ mod tests {
 
         std::fs::write(dir.join("a.kir"), "proc a { }").expect("edit");
         assert_ne!(before, w.stamp(), "a real edit read as unchanged");
-        std::fs::remove_dir_all(&dir).ok();
     }
 
     /// A missing file is stable rather than a change every interval, so
@@ -487,11 +495,9 @@ mod tests {
     /// path that is not there.
     #[test]
     fn a_missing_file_is_stable() {
-        let dir = std::env::temp_dir().join("karakuri-watch-missing");
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        let w = watch_on(&dir);
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let w = watch_on(tmp.path());
         assert_eq!(w.stamp(), [None, None]);
         assert_eq!(w.stamp(), w.stamp());
-        std::fs::remove_dir_all(&dir).ok();
     }
 }
