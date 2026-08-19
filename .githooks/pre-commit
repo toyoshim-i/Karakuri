@@ -1,0 +1,38 @@
+#!/bin/sh
+# Refuse a commit whose Rust is not what `cargo fmt` would write.
+#
+# **It checks the staged content, not the working tree.** Those differ whenever
+# something is half-finished on disk, and a hook that reads the disk either
+# blocks a good commit for an unrelated edit or passes a bad one that was fixed
+# after staging. What is being committed is what has to be right.
+#
+# Formatting only. Clippy and the tests are `pre-push`, because they take
+# minutes and a gate that costs minutes gets `--no-verify`d until it is not a
+# gate at all.
+set -e
+
+files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs')
+[ -n "$files" ] || exit 0
+
+bad=""
+for f in $files; do
+    # **Judged by output and not by exit code.** `rustfmt --check` reading stdin
+    # prints the diff and still exits 0 — which is not what it does for a named
+    # file, and is why the first version of this hook let an unformatted file
+    # straight through while looking like it had checked it.
+    #
+    # `--edition` matters too: without it rustfmt assumes 2015 and misparses
+    # `async` and `dyn`, so a clean file reads as an error.
+    if [ -n "$(git show ":$f" | rustfmt --edition 2021 --check 2>&1)" ]; then
+        bad="$bad $f"
+    fi
+done
+
+[ -n "$bad" ] || exit 0
+
+echo "not formatted:"
+for f in $bad; do echo "  $f"; done
+echo
+echo "run \`cargo fmt\`, stage the result, and commit again."
+echo "\`git commit --no-verify\` skips this, and there is no reason to."
+exit 1

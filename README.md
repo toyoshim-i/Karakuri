@@ -488,6 +488,12 @@ what it covers.
 - **Vertical slices, not layers.** Not "build the whole signal bus" but "get a triangle on
   screen, then never break it"
 - Keep it running. Do not commit a state that does not build
+- **The gates are hooks in the repository, not habits.** `git config core.hooksPath
+  .githooks` once per clone, and then a commit is refused if its Rust is not what
+  `cargo fmt` writes, and a push is refused unless the whole workspace formats, lints under
+  `-D warnings`, and passes every test. Formatting is on the commit because it costs a
+  second; the rest is on the push because it costs minutes, and a gate that costs minutes
+  gets skipped until it is not a gate
 - Before adding an abstraction, confirm it has at least two call sites
 - Any change touching performance comes with a GPU-timestamp measurement — **which does not
   currently work on the development machine.** On Apple M4 Pro via Metal, wgpu advertises
@@ -513,6 +519,9 @@ crates/
   karakuri-midi/      wire messages, and the operator's map of them
   karakuri-store/     content-addressed artifact store, ndjson I/O
   karakuri-cli/       V1 entry point
+.githooks/            pre-commit: `cargo fmt --check` on what is staged
+                      pre-push:   fmt, clippy and every test
+                      enable with `git config core.hooksPath .githooks`
 docs/
   ir-spec.md          the IR. Settled; open questions are empty
   manual.md           how to play it: flags, keys, and what each does
