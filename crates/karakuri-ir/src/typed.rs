@@ -26,10 +26,12 @@ use crate::span::Span;
 /// Holding one of these is the claim that the rules in `docs/ir-spec.md` hold
 /// of it: `consumes` is contained in `emit`, nothing reads the signal bus,
 /// and every emitted attribute and required stage output is assigned on
-/// every path. There is no derivation step: an unmet `consumes` is a plain
-/// rejection, whether caught here (a single procedure declaring both `emit`
-/// and `consumes` — see `check_consumes_emitted` in `check.rs`) or, for the
-/// ordinary L1/L4 pairing, at Set-composition time outside this crate.
+/// every path. What it is *not* is the claim that everything consumed is
+/// emitted: `age` and `velocity` are derived, and whether anybody in a chain
+/// emits a given attribute is a question no single procedure can answer. Both
+/// halves settle at Set-composition time, outside this crate; what settles
+/// here is the part one file can answer — see `check_consumes_emitted` in
+/// `check.rs`.
 #[derive(Debug, Clone)]
 pub struct Checked {
     pub name: String,
