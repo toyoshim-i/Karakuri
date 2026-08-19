@@ -2698,10 +2698,20 @@ Stated so a later reader can tell them from the parts above, which are forced.
   dense index with the salt kept beside it. One value does both jobs, and a collision breaks
   both at once — cheap to refuse at build, since every source is in hand there. Where a
   human reads it, display the Set-local ordinal instead.
-- **A name is written in a Set file and not on the command line.** `--set` stays one
-  comma-separated list of paths with no new syntax, so a source named on the command line is
-  simply unnamed and unaddressable. Anyone who needs to point at a source is already writing
-  a Set file.
+- **A name lives in a Set file. The command line can write one, and that is an auxiliary
+  path.** The first half is the one that matters: a name belongs to the *use*, and a Set file
+  is what a use is recorded as — so the record is where it lives, and the eventual GUI writes
+  it there. The command line gets a spelling anyway (`--set near=lattice.kir,…`, and the same
+  override rule `--param` already follows beside `--load-set`), because it is the only
+  authoring surface that exists today and a name has to be writable before a file can be
+  saved carrying one.
+
+  **The reasoning this bullet used to carry was falsified by the code.** It said "anyone who
+  needs to point at a source is already writing a Set file" — but a Set file refuses a chain
+  and a second geometry by name, so the people with two geometries are exactly the people who
+  *cannot* write one. Getting a name required a file and writing the file required a name.
+  Marking this a preference rather than a force is what let it be revisited without a
+  redesign, which is the whole reason that distinction is drawn.
 
 **Identity is therefore a triple**, not a pair: `source` from here, `seed` from the source
 that produced the element, and `copy` from any amplifying node above it — see
