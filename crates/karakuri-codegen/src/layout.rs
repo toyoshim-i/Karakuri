@@ -92,7 +92,7 @@
 //! Six vertices per instance (`@builtin(vertex_index)` 0..6), no vertex
 //! buffers: see the L4 module doc for the quad-expansion this exists for.
 
-use karakuri_ir::layout::{align_up, ElementLayout};
+use karakuri_ir::layout::{align_up, ElementLayout, StorageElemTy};
 
 /// Every compute entry point (`spawn`, `element`) uses this workgroup size.
 pub const WORKGROUP_SIZE: u32 = 64;
@@ -442,17 +442,29 @@ pub struct UniformLayout {
 /// layout function — only the types [`crate::l1`] and [`crate::l4`] put in a
 /// uniform struct appear here.
 ///
-/// **A second table beside [`karakuri_ir::layout::StorageElemTy`], and
-/// deliberately so**: that one is the *storage* address space, this one the
-/// *uniform* address space, and WGSL gives them different rules — a `mat4x4`
-/// never appears in an element and a `vec3` in a uniform struct is padded on
-/// terms of its own. The rounding they share is [`align_up`], imported rather
-/// than kept as a private twin here.
+/// **A second function beside [`karakuri_ir::layout::StorageElemTy`], but not a
+/// second table.** What justifies the function is its key and its coverage: a
+/// uniform field's type arrives here already spelled as a `&str` — from
+/// [`crate::ty::wgsl_ty`] or from a literal this crate chose — and three of the
+/// types it must place (`i32`, `vec4<f32>`, `mat4x4<f32>`) are ones no element
+/// ever holds, so that enum has no variant for them. Everything it *does* have
+/// a variant for is asked of it rather than restated: WGSL's `AlignOf` and
+/// `SizeOf` for scalars and vectors do not vary by address space, so a `vec3`
+/// is the same 16/12 here that it is in an element, and a copy of that row
+/// could only ever be a chance to disagree with it — the drift shape that
+/// moving the element rules into `karakuri-ir` existed to end.
+///
+/// What the uniform address space genuinely adds is a rule about *structs and
+/// arrays*, not about scalars: align 16, size a multiple of 16. That rule is
+/// not in this function at all — it is [`UniformLayoutBuilder::finish`]'s
+/// `align_up(_, 16)`, and the rounding it uses is [`align_up`] from the same
+/// module below, imported rather than kept as a private twin here.
 pub fn align_size(wgsl_ty: &str) -> (u32, u32) {
+    if let Some(elem) = StorageElemTy::from_wgsl_name(wgsl_ty) {
+        return (elem.align(), elem.size());
+    }
     match wgsl_ty {
-        "f32" | "u32" | "i32" => (4, 4),
-        "vec2<f32>" => (8, 8),
-        "vec3<f32>" => (16, 12),
+        "i32" => (4, 4),
         "vec4<f32>" => (16, 16),
         "mat4x4<f32>" => (16, 64),
         other => panic!("align_size: unhandled uniform field type {other}"),
@@ -628,6 +640,37 @@ mod tests {
                 "param_count={param_count}:\n{out}"
             );
         }
+    }
+
+    /// **One table, asked twice.** Every type [`StorageElemTy`] has a variant
+    /// for must place identically in a uniform struct and in an element,
+    /// because WGSL's `AlignOf`/`SizeOf` for scalars and vectors do not depend
+    /// on the address space — so a row of [`align_size`] that answered
+    /// differently from the element table would not be a second address
+    /// space's rule, it would be one of the two being wrong. This asserts the
+    /// delegation is still in place: a row copied back into the match below
+    /// with a number of its own fails here, which is the only place such a
+    /// copy is visible at all.
+    #[test]
+    fn align_size_defers_to_the_element_table_for_every_type_it_knows() {
+        for elem in StorageElemTy::ALL {
+            assert_eq!(
+                align_size(elem.wgsl_name()),
+                (elem.align(), elem.size()),
+                "{}",
+                elem.wgsl_name()
+            );
+        }
+    }
+
+    /// The other half of [`align_size`]'s job: the types no element holds, for
+    /// which there is no variant to defer to and this crate is the only owner.
+    #[test]
+    fn align_size_still_places_the_types_no_element_holds() {
+        assert!(StorageElemTy::from_wgsl_name("i32").is_none());
+        assert_eq!(align_size("i32"), (4, 4));
+        assert_eq!(align_size("vec4<f32>"), (16, 16));
+        assert_eq!(align_size("mat4x4<f32>"), (16, 64));
     }
 
     #[test]

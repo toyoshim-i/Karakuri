@@ -93,6 +93,39 @@ pub enum StorageElemTy {
 }
 
 impl StorageElemTy {
+    /// Every variant, so that a lookup *by* WGSL spelling can be a search over
+    /// this list instead of a second spelling table written backwards beside
+    /// [`StorageElemTy::wgsl_name`].
+    ///
+    /// **A variant missing from here fails loudly rather than quietly.**
+    /// [`StorageElemTy::from_wgsl_name`] answers `None` for it, and the caller
+    /// that asks — `karakuri-codegen`'s uniform table — panics naming the type
+    /// it could not place. That is the affordable failure: the unaffordable one
+    /// is a spelling that resolves to the wrong width, because nothing downstream
+    /// of a wrong width is a compile error.
+    pub const ALL: [StorageElemTy; 4] = [
+        StorageElemTy::U32,
+        StorageElemTy::F32,
+        StorageElemTy::Vec2F32,
+        StorageElemTy::Vec3F32,
+    ];
+
+    /// The variant a WGSL spelling names, or `None` for a type no element ever
+    /// holds and this enum therefore has no variant for.
+    ///
+    /// **The inverse of [`StorageElemTy::wgsl_name`], computed and not written**,
+    /// which is what keeps it from becoming the third copy of the same
+    /// correspondence. It exists because `karakuri-codegen` reaches this table
+    /// through a `&str`: a uniform field's type arrives already spelled, from
+    /// `karakuri_ir::Ty` or from a literal that crate chose, and asking here by
+    /// spelling is what lets its uniform layout share these numbers rather than
+    /// restate them.
+    pub fn from_wgsl_name(wgsl_ty: &str) -> Option<StorageElemTy> {
+        StorageElemTy::ALL
+            .into_iter()
+            .find(|t| t.wgsl_name() == wgsl_ty)
+    }
+
     pub fn wgsl_name(self) -> &'static str {
         match self {
             StorageElemTy::U32 => "u32",
