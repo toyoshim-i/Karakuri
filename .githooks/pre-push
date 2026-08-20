@@ -1,15 +1,40 @@
 #!/bin/sh
-# The real gate: formatting, clippy, and every test.
+# The full suite, on a tag push and on nothing else.
 #
-# On push rather than on commit, because it takes minutes. A commit is a unit of
-# work in progress; a push is the point where somebody else — or tomorrow — has
-# to be able to build this.
+# **A tag is the deploy; a branch push is not.** Pushing a branch is part of
+# working — backing up, moving between machines, opening something for review —
+# and a gate there asks "is this good" at a moment nobody was claiming it was.
+# Tagging is the moment somebody is claiming it, and the moment a release
+# pipeline would pick it up, so that is where everything runs.
+#
+# What guards the ordinary commit is `pre-commit`, which is fast on purpose. In
+# between, running the whole thing by hand is the right move whenever the answer
+# matters — before a tag, after a refactor, when something feels off:
+#
+#     cargo fmt --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace
 #
 # The tests need a GPU. There is no skip: a test that passes by not running is
 # worse than one that fails, which is what every GPU test in this workspace says
 # for itself, and a gate that quietly checks nothing is the same claim one level
 # up.
 set -e
+
+# The refs being pushed arrive on stdin, one line each. **Reading them is what
+# makes this selective** — the previous version took no input, so it could not
+# tell a tag from a branch and ran everything for both.
+tags=""
+while read -r local_ref local_sha _remote_ref _remote_sha; do
+    case "$local_ref" in
+        refs/tags/*) ;;
+        *) continue ;;
+    esac
+    # A tag deletion pushes the null sha and carries nothing to test.
+    case "$local_sha" in *[!0]*) tags="$tags ${local_ref#refs/tags/}" ;; esac
+done
+
+[ -n "$tags" ] || exit 0
+
+echo "pre-push: tag$tags — running the full suite"
 
 echo "pre-push: cargo fmt --check"
 cargo fmt --check

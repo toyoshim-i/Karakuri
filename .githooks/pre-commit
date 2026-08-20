@@ -1,14 +1,13 @@
 #!/bin/sh
-# Refuse a commit whose Rust is not what `cargo fmt` would write.
+# Refuse a commit whose Rust is not what `cargo fmt` would write. Nothing else.
 #
 # **It checks the staged content, not the working tree.** Those differ whenever
 # something is half-finished on disk, and a hook that reads the disk either
 # blocks a good commit for an unrelated edit or passes a bad one that was fixed
 # after staging. What is being committed is what has to be right.
 #
-# Formatting only. Clippy and the tests are `pre-push`, because they take
-# minutes and a gate that costs minutes gets `--no-verify`d until it is not a
-# gate at all.
+# Why formatting is the only thing here, and where the tests went, is at the
+# bottom of this file.
 set -e
 
 files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs')
@@ -28,11 +27,23 @@ for f in $files; do
     fi
 done
 
-[ -n "$bad" ] || exit 0
+if [ -n "$bad" ]; then
+    echo "not formatted:"
+    for f in $bad; do echo "  $f"; done
+    echo
+    echo "run \`cargo fmt\`, stage the result, and commit again."
+    echo "\`git commit --no-verify\` skips this, and there is no reason to."
+    exit 1
+fi
 
-echo "not formatted:"
-for f in $bad; do echo "  $f"; done
-echo
-echo "run \`cargo fmt\`, stage the result, and commit again."
-echo "\`git commit --no-verify\` skips this, and there is no reason to."
-exit 1
+# **No tests here, and that is a decision rather than an omission.** This
+# workspace has nearly nine hundred of them and most want a GPU, so running any
+# fixed subset on every commit spends minutes answering a question nobody asked
+# at a moment nobody chose. A commit is a git lifecycle event; it does not know
+# what changed in a way that tells you what is worth running.
+#
+# What replaces it is deliberate: whoever makes a change names the smallest
+# suite that answers it and runs that, and the whole thing runs once at a
+# boundary — before a tag, after a refactor, whenever the answer matters.
+# `pre-push` runs it for a tag; see there.
+exit 0
