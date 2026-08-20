@@ -81,6 +81,16 @@ pub const MAX_STEPS: u8 = 4;
 /// published one derived beside the allocation instead of from it, and it was a
 /// third of the real number by the time anybody measured — see the module doc
 /// on [`karakuri_ir::cost`].
+///
+/// **It is not what the node occupies in VRAM.** Everything not indexed by
+/// element is outside it: the render targets a renderer or a merge owns, every
+/// uniform block, the `counts` block, `step_args`, and the compaction scan's
+/// per-level length uniforms and block-sum pyramid — see `crate::compaction`,
+/// where the two the scan owns are described from the other end. Those are per
+/// node, per level or per pass rather than per element, so counting them would
+/// both answer a different question and stop the division being exact. A caller
+/// sizing a real allocation against a real device needs this and more; a caller
+/// asking what one more element costs wants exactly this.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ElementStorage {
     /// The sum of the real sizes of this node's per-element buffers.
@@ -96,10 +106,17 @@ impl ElementStorage {
     /// Bytes per element, exactly: every buffer counted is a whole multiple of
     /// [`ElementStorage::capacity`].
     ///
-    /// Zero capacity is unreachable through a built node — a `.kir` declares a
-    /// range and `Simulation::build` refuses anything outside it — but a
-    /// division is guarded anyway, because a panic on the *reporting* path is
-    /// the worst place for a Set to discover a capacity it should never have
+    /// Zero capacity is unreachable through a built node, and the guard is in
+    /// the checker rather than in the range test: stage 3 refuses an L1 whose
+    /// declared `capacity` minimum is below 1 — `karakuri_ir::check`,
+    /// "`capacity` minimum must be at least 1; a Set of no elements has nothing
+    /// to run" — so no range a build can be asked for contains zero.
+    /// `Simulation::build` refusing a capacity outside the declared range is
+    /// *not* what rules it out, because a range is only as strong as its own
+    /// minimum and one written `[0, …]` would admit it.
+    ///
+    /// The division is guarded anyway, because a panic on the *reporting* path
+    /// is the worst place for a Set to discover a capacity it should never have
     /// accepted.
     pub fn per_element(self) -> u64 {
         match self.capacity {
@@ -2109,10 +2126,17 @@ impl Set {
     /// gives a node instance an address, which nothing does yet — see
     /// `docs/roadmap.md`, "Naming what a Set holds".
     ///
-    /// **A renderer and a camera are absent rather than zero.** An L4 draws
-    /// from the buffer the node above it allocated and an L3 has no elements at
-    /// all, so a row for either would be a zero the reader has to work out the
-    /// meaning of — and charging one would count the same memory twice.
+    /// **A renderer, a camera and a merge are absent rather than zero.** An L4
+    /// draws from the buffer the node above it allocated, so charging it would
+    /// count the same memory twice; an L3 has no elements at all; and an L5
+    /// folds finished targets, which are not element storage under any reading
+    /// — see [`ElementStorage`] for what the figure excludes. A row for any of
+    /// them would be a zero the reader has to work out the meaning of.
+    ///
+    /// Those three and the two kinds walked below — the simulations, including
+    /// the far one a pairing Set holds, and the deforms — are every node kind a
+    /// [`Set`] has a field for, so a reader auditing this against the struct
+    /// finds nothing unaccounted for.
     pub fn element_storage(&self) -> Vec<ElementStorage> {
         self.sources
             .iter()
@@ -2129,9 +2153,17 @@ impl Set {
     /// The question the per-element figures exist to answer, and the first
     /// place it can be asked: `capacity` differs per node and an amplifier
     /// multiplies it for everything below, so no node — and no procedure —
-    /// knows what the Set as a whole is resident for. A deck that wants its own
-    /// total sums this over its slots, which is a sum over Sets rather than a
-    /// second walk of the nodes.
+    /// knows how much element storage the Set as a whole allocated. A deck that
+    /// wants its own total sums this over its slots, which is a sum over Sets
+    /// rather than a second walk of the nodes.
+    ///
+    /// **Element storage and not device memory**, on the terms
+    /// [`ElementStorage`] sets out: render targets, uniform blocks and
+    /// everything else not indexed by element are outside this sum, so it is a
+    /// floor on what the Set costs a device and never the figure to allocate
+    /// against. The word *residency* is deliberately not used for it — in this
+    /// project that names a slot's Live/Priming/Parked level, which is a
+    /// different question about a different thing.
     pub fn element_storage_bytes(&self) -> u64 {
         self.element_storage().iter().map(|e| e.bytes).sum()
     }

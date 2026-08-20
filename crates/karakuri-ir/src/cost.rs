@@ -46,9 +46,19 @@
 //! not a second expression that happens to agree with them, and a Set totals
 //! those over the capacities it was instantiated at — which is the question the
 //! number was always for, since `capacity` differs per node and an amplifier
-//! multiplies it downstream. Nothing is lost by its leaving: this pass rejects
-//! on `ops_per_element`, `ops_per_spawn` and `ops_per_fragment`, and there has
-//! never been a byte ceiling for such a figure to feed.
+//! multiplies it downstream.
+//!
+//! **What it totals is element storage and not device memory**, which is worth
+//! saying here because "the memory a Set needs" is what the figure reads as and
+//! is not what it is: render targets, uniform blocks, the counts block and the
+//! compaction scan's own buffers are all outside it, on the grounds that they
+//! are not indexed by element. `karakuri_engine::set::ElementStorage` lists
+//! them. Nothing here would have counted them either, so this is a limit the
+//! figure always had rather than one it acquired by moving.
+//!
+//! Nothing is lost by its leaving: this pass rejects on `ops_per_element`,
+//! `ops_per_spawn` and `ops_per_fragment`, and there has never been a byte
+//! ceiling for such a figure to feed.
 
 use crate::ast::{BlockKind, Lit};
 use crate::builtin::Builtin;

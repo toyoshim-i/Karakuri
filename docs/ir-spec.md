@@ -2646,6 +2646,16 @@ alternative, reusing a `t` for two different shapes in two different files, cann
 by a decoder that dispatches on `t` alone, which every ndjson reader does. It is not enough
 for the two vocabularies to be disjoint in practice; they have to be disjoint by name.
 
+**Unknown `t` values are ignored, and so is an unknown key inside a record whose `t` is
+known.** The Set file section above states the first rule for its own vocabulary; this is a
+separate list read by a separate decoder, so the rule is stated here rather than inherited by
+being nearby. The second half is the one a *removed* key needs — `perf` carried a
+`bytes_per_element` and does not any more, and a reader meeting one in a file written before
+that should pass over it exactly as it passes over a `t` it does not recognise. Ignoring
+costs nothing here because a metadata file is a derived artifact: the store regenerates it
+from the `.kir` plus a compile pass, so a key that still means something comes back on the
+next regeneration and a key that does not is gone on purpose.
+
 #### On `perf`
 
 The record takes a different shape per kind, because the two do not scale the same way.
@@ -2675,8 +2685,8 @@ intrinsic to a procedure, which is what keeps it here.
 
 **A record format is an authored thing in this project**, so this is a change to the
 vocabulary and not a value going missing. Nothing reads `perf` yet — the metadata file is
-M4 and does not exist — so there is nothing to migrate, and a decoder meeting the key in
-an older file should skip it as it skips any other it does not know.
+M4 and does not exist — so there is nothing to migrate, and a decoder meeting the key in an
+older file passes over it under the unknown-key rule stated above.
 
 **L4 is a measurement at reference conditions.** Point sprite cost is dominated by fill
 rate: `point_size` and resolution decide the overdraw, so it is not linear in element count

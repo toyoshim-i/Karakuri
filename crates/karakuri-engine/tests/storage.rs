@@ -12,10 +12,18 @@
 //! wrong in three ways at once that no per-procedure test could see: an L2 is
 //! sized from everything that reached it, an amplifier above a node widens
 //! every element below it, and a compacted L1 pays for a destination index the
-//! text of the procedure never mentions. Each of the four claims here is one of
-//! those, plus the total that only a Set can hold.
+//! text of the procedure never mentions. Each of the first four claims here is
+//! one of those, plus the total that only a Set can hold.
+//!
+//! **The last two are about the shapes a `Set` can take rather than about a
+//! node**, and they are here because `Set::element_storage` walks sources and
+//! their pairings itself: a Set over two geometries instantiates a chain per
+//! source, and a Set whose deform declares a geometry slot holds *two*
+//! simulations under one source. Neither walk is exercised by a single-source
+//! fixture, and each is a place a dropped iterator would still return a
+//! plausible list.
 
-use karakuri_engine::set::Layering;
+use karakuri_engine::set::{Edge, Layering};
 use karakuri_engine::{Gpu, Set};
 use karakuri_ir::typed::Checked;
 
@@ -99,6 +107,53 @@ proc fan {
 }
 "#;
 
+/// The same procedure again under a chosen name, at sixty-four elements.
+///
+/// **A name per source rather than one fixture used twice**, because a Set
+/// refuses two nodes called the same thing and an edge is written against the
+/// name — so a pairing fixture cannot be built out of one string at all. The
+/// emit list is [`STILL`]'s, so the stride below is the same 48 and the two
+/// sources differ in nothing that this file measures.
+fn source(name: &str) -> String {
+    format!(
+        r#"
+proc {name} {{
+  kind     L1
+  topology points
+  capacity [{PAIR_CAPACITY}, {PAIR_CAPACITY}] = {PAIR_CAPACITY}
+
+  emit position, tint
+
+  element {{
+    position = vec3(0.0, 0.0, 0.0);
+    tint     = vec3(1.0, 1.0, 1.0);
+  }}
+}}
+"#
+    )
+}
+
+/// An L2 that reads a second geometry through a declared slot.
+///
+/// **It emits nothing and amplifies nothing**, so every byte it is charged
+/// comes from the chain it sits in rather than from anything it says — which is
+/// the point: the far geometry it reads is a *simulation* with buffers of its
+/// own, and those are charged to the far simulation and not to this node. A
+/// figure that counted the pairing twice, or that charged the reader for what
+/// it reads, is what the test below refuses.
+const MORPH: &str = r#"
+proc morph {
+  kind L2
+  uses far : Geometry
+
+  consumes position
+
+  deform {
+    position = mix(position, far.position, vec3(0.5, 0.5, 0.5));
+  }
+}
+"#;
+
 /// Draws whatever reaches it. Nothing here measures a picture, but a Set is
 /// built with renderers and the L4 is what makes the fixture a real one.
 const DOTS: &str = r#"
@@ -135,17 +190,34 @@ fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
 }
 
 fn build(gpu: &Gpu, l1: &str, l2s: &[&str]) -> Set {
-    let capacity = compile(l1)
-        .capacity
-        .expect("an L1 declares a capacity range")
-        .default;
+    build_sources(gpu, &[l1], l2s, &[])
+}
+
+/// The same over several geometries, and with the edges that fill whatever
+/// geometry slot a deform declares.
+///
+/// Each source is built at the capacity its own procedure defaults to, which is
+/// the rule the single-source [`build`] already followed — a per-source
+/// capacity is exactly what makes the entries below a list rather than one
+/// figure times a count.
+fn build_sources(gpu: &Gpu, l1s: &[&str], l2s: &[&str], edges: &[Edge]) -> Set {
+    let l1: Vec<Checked> = l1s.iter().map(|s| compile(s)).collect();
+    let sources: Vec<(&Checked, u32)> = l1
+        .iter()
+        .map(|c| {
+            (
+                c,
+                c.capacity.expect("an L1 declares a capacity range").default,
+            )
+        })
+        .collect();
     let l2: Vec<Checked> = l2s.iter().map(|s| compile(s)).collect();
     let l2_refs: Vec<&Checked> = l2.iter().collect();
     let l4 = compile(DOTS);
     Set::build_many(
         &gpu.device,
         &gpu.queue,
-        &[(&compile(l1), capacity)],
+        &sources,
         &l2_refs,
         None,
         None,
@@ -153,9 +225,12 @@ fn build(gpu: &Gpu, l1: &str, l2s: &[&str]) -> Set {
         Layering::Overdraw,
         7,
         &[],
-        karakuri_engine::set::Wiring::default(),
+        karakuri_engine::set::Wiring {
+            edges,
+            ..Default::default()
+        },
     )
-    .expect("a chain of one L1, some L2s and one L4")
+    .expect("a chain of some L1s, some L2s and one L4")
 }
 
 /// The stride of `emit position, tint`, walked by hand from WGSL's placement
@@ -179,6 +254,11 @@ const FLAG: u64 = 4;
 const DEST_INDEX: u64 = 4;
 
 const CAPACITY: u64 = 8;
+
+/// What [`source`] declares. Not [`CAPACITY`]: the two are independent numbers
+/// and a fixture that shared one would let a wrong capacity on one side of the
+/// file be cancelled by the same wrong capacity on the other.
+const PAIR_CAPACITY: u64 = 64;
 
 /// **An L1 pays for two directions of everything.** It reads what it wrote last
 /// step, so the element buffer and the alive array each exist twice and swap.
@@ -312,4 +392,102 @@ fn a_sets_total_is_every_node_at_its_own_capacity() {
     // And the renderer contributes nothing at all rather than a row of zeroes:
     // it draws from the last deform's buffer, which is already counted.
     assert_eq!(nodes.iter().map(|n| n.bytes).sum::<u64>(), 4032);
+}
+
+/// **A Set over two sources instantiates the whole chain per source**, and the
+/// entries are per instance.
+///
+/// Two geometries emitting the same two attributes at the same capacity: the
+/// figures are equal on purpose, because the claim is about the *walk* and not
+/// about arithmetic that already has four tests above it. What a per-source
+/// walk gets wrong is the count of entries and the total, and both are stated
+/// here.
+///
+/// Each source is a static L1 with no `spawn` and no `kill()`, so each pays for
+/// two directions of the element buffer and the alive array and for nothing
+/// else: `2 * 64 * (48 + 4)` is 6656, twice.
+#[test]
+fn every_source_in_a_set_is_charged_for_its_own_chain() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let left = source("left");
+    let right = source("right");
+    let set = build_sources(&gpu, &[&left, &right], &[], &[]);
+
+    let nodes = set.element_storage();
+    assert_eq!(nodes.len(), 2, "one L1 per source, no deforms: {nodes:?}");
+    for node in &nodes {
+        assert_eq!(node.capacity, PAIR_CAPACITY as u32);
+        assert_eq!(node.bytes, 2 * PAIR_CAPACITY * (STRIDE + FLAG));
+        assert_eq!(node.per_element(), 2 * (STRIDE + FLAG), "2 * (48 + 4)");
+    }
+
+    // 6656 + 6656. The second source is the whole of the difference from a
+    // one-source Set, which is what a walk that stopped at the first would
+    // silently halve.
+    assert_eq!(
+        set.element_storage_bytes(),
+        2 * (2 * PAIR_CAPACITY * (STRIDE + FLAG))
+    );
+    assert_eq!(set.element_storage_bytes(), 13312, "6656 + 6656");
+}
+
+/// **A paired Set holds two simulations under one source, and the far one is
+/// charged once.**
+///
+/// `uses far : Geometry` collapses the source list: the two geometries become
+/// one `Source` with a near simulation, a far simulation and one chain over
+/// them — so the entries are three rather than the two a reader counting
+/// *sources* would expect, and the far side appears exactly once despite being
+/// read every frame by the node below it.
+///
+/// The far simulation is charged as a simulation, not as an input: `2 * 64 *
+/// (48 + 4)` is 6656, the same as the near one, because it is a full L1 with
+/// its own two directions. The deform pays `64 * 48` = 3072 — one buffer at the
+/// chain's stride, with no flags of its own, since it emits the elements that
+/// reached it under the flags they arrived with — and it pays nothing at all
+/// for reading `far.position`, which is somebody else's buffer.
+#[test]
+fn a_pairing_l2_charges_the_far_geometry_once_and_reads_it_free() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let near = source("near");
+    let far = source("far");
+    let set = build_sources(
+        &gpu,
+        &[&near, &far],
+        &[MORPH],
+        &[Edge {
+            node: "morph".to_string(),
+            slot: "far".to_string(),
+            to: "far".to_string(),
+        }],
+    );
+
+    let nodes = set.element_storage();
+    assert_eq!(
+        nodes.len(),
+        3,
+        "the near simulation, the far one it pairs with, and the deform: {nodes:?}"
+    );
+    assert_eq!(
+        nodes.iter().map(|n| n.capacity).collect::<Vec<_>>(),
+        vec![64, 64, 64],
+        "nothing amplifies, so every node runs at the geometry's own count"
+    );
+
+    let sim = 2 * PAIR_CAPACITY * (STRIDE + FLAG);
+    assert_eq!(nodes[0].bytes, sim, "the near geometry");
+    assert_eq!(nodes[1].bytes, sim, "the far geometry, counted once");
+    assert_eq!(nodes[2].bytes, PAIR_CAPACITY * STRIDE, "the deform");
+    assert_eq!(
+        nodes[2].per_element(),
+        STRIDE,
+        "one buffer at the chain's stride, and nothing for the far side it reads"
+    );
+
+    // 6656 + 6656 + 3072.
+    assert_eq!(
+        set.element_storage_bytes(),
+        2 * sim + PAIR_CAPACITY * STRIDE
+    );
+    assert_eq!(set.element_storage_bytes(), 16384, "6656 + 6656 + 3072");
 }

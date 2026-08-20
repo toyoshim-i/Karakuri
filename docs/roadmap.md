@@ -1782,14 +1782,57 @@ budget: those bytes bought nothing at any capacity on any machine.
 **What it cost is that something now has to know WGSL's layout rules**, where nothing did
 before. The host writes bytes at a published offset and the shader reads them through the
 struct, so a disagreement is not a compile error anywhere — it is an element reading the
-middle of the element before it. The align/size table is in one place, and the naga tests
-validate the emitted module rather than trusting the arithmetic.
+middle of the element before it. The align/size table is in one place, `karakuri-ir::layout`,
+and the naga tests assert it against a real WGSL module: they compile the emitted struct and
+compare the member offsets and array stride *naga* computed from its own rules against the
+ones the table gave.
+
+**Validating the module is the weaker check and would never have caught a wrong table.**
+Nothing emits an `@offset`, so a front end handed a wrong table recomputes the same offsets
+from the same declarations and agrees with itself, and `validate()` only ever asked whether
+the module parsed. Only reading back what naga's answer *was* can disagree.
 
 One test had to change its question rather than its number, and it is the interesting part:
 `a_derivations_slot_exists_only_where_something_consumes_it` measured the *stride* to prove a
 slot existed, which worked while every slot was sixteen bytes. `birth_t` is a `f32` that now
 lands in the four bytes `seed` and `birth_frac` leave — it is free — so the stride assertion
 would have read a slot that exists as a slot that does not.
+
+#### Surfacing what a Set holds in memory
+
+**The figure has an owner and no reader.** `Set::element_storage` reports what every node of
+a Set allocated, per node, off `wgpu::Buffer::size()` of the buffers that node created, and
+`Set::element_storage_bytes` totals a slot's worth of it — see "Narrowing the element slot"
+above for why it lives there rather than in stage 4. Grepping for it finds the two node
+impls that produce it and the tests that assert it, and nothing else. **No binary in this
+tree reports element storage at all.**
+
+**That is a regression, accepted rather than overlooked, and it is recorded here because a
+hole nobody wrote down gets rediscovered as a bug.** `karakuri-cli` printed a `bytes/element`
+beside its two op counts as it loaded a procedure, until the figure moved. That number was
+stage 4's, and stage 4 modelled a layout that had already changed underneath it:
+`drift_shell` was printed at 192 bytes an element where its buffers are 104. Correcting it
+was the obvious repair and it was the wrong one — a figure computed from one procedure is a
+*floor* for every kind rather than a measurement of any, since three of the layout's inputs
+are settled two stages later, and `kaleidoscope`'s floor is 96 against the 312 the engine
+allocates. **A floor published under a name that reads as a measurement fails in the
+dangerous direction**: a budget check that passes and an allocation that then does not. So
+an 85%-wrong number was replaced by no number, deliberately, and the capability is owed back.
+
+**What should read it is the metadata file this milestone already owes**, and one constraint
+decides the shape it can take there: bytes an element is not a property of a procedure, so it
+cannot be a key on `perf` — `docs/ir-spec.md`, "On `perf`", says why, and that reasoning does
+not weaken with a better estimator. It is a property of a *Set* at the capacities its nodes
+were instantiated at, so what can carry it is a record written against a saved Set, which
+`--save-set` already puts in the content-addressed store. Which record that is, and whether a
+deck-wide total is worth having beside a per-Set one, is undecided here on purpose: the
+figure is available to be read the moment something wants it, and inventing a surface for it
+before then is how the last wrong number got published.
+
+**The loader's silence is not part of the debt.** It holds one procedure and no Set, so it
+genuinely cannot know the chain the procedure will be allocated under; the comment beside the
+print in `crates/karakuri-cli/src/compile.rs` says so, so that two figures and no third reads
+as a decision rather than as a line somebody forgot to restore.
 
 #### Procedures a model can read
 
