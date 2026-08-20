@@ -398,8 +398,9 @@ sets — one deck slot each, composited in the order given, at most 4:
                         second geometry, an L2 deforms, an L3 is the camera, a
                         `kind Field` is a shape the others can call, an L4
                         draws. Order within a kind is the order given. One
-                        camera and one field per slot; a slot with two
-                        geometries cannot be rebuilt under --watch
+                        camera and one field per slot. Any part may be written
+                        `name=file.kir`, which is what an --edge points at; a
+                        part written bare is named after its procedure
   L1.kir L4.kir         the same thing, positionally, for one pair. Given
                         alongside --set it becomes the last slot
   (nothing)             examples/drift_shell.kir + examples/soft_points.kir
@@ -508,12 +509,15 @@ options:
   --tonemap OP          clamp | reinhard | aces | agx (default aces)
   --exposure V          output exposure, before the tone map (default 1.0)
   --store DIR           where artifacts and Set files live (default .karakuri)
-  --save-set ID         put both `.kir` files in the store, write the material
-                        as a Set file, and stop. The flags that were given —
-                        capacity, params, binds, bpm — are what it records
-  --load-set ID         take the material from a Set file rather than from two
-                        paths and the flags. Anything the file could not carry
-                        is printed rather than dropped in silence
+  --save-set ID         put every `.kir` of slot 0 in the store, write the
+                        material as a Set file, and stop. It records what the
+                        run was *drawing* rather than what the flags said: a
+                        capacity and a salt per geometry, the params, the binds,
+                        the camera, and an `edge` per bound slot
+  --load-set ID         take the material from a Set file rather than from paths
+                        and flags — the whole chain, names and edges included.
+                        A flag given beside it wins. Anything the file could not
+                        carry is printed rather than dropped in silence
   --record-session ID   write the timeline to sessions/ID.ndjson as it
                         happens: the Set's records, then a `tick` a frame and
                         every edit between them. The material goes at the head

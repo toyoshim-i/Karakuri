@@ -1791,6 +1791,25 @@ slot existed, which worked while every slot was sixteen bytes. `birth_t` is a `f
 lands in the four bytes `seed` and `birth_frac` leave — it is free — so the stride assertion
 would have read a slot that exists as a slot that does not.
 
+#### The cost estimator models a layout that no longer exists
+
+**`cost.rs` reports about 85% too much per-element storage.** It pads every
+attribute to sixteen bytes and charges the alive flag thirty-two, which is the layout an
+element had until slots took their attributes' own widths. `drift_shell` is reported at 192
+bytes an element and its buffers are 104.
+
+**It is a second copy of an arithmetic that lives in `karakuri-codegen::layout`, and it
+drifted the moment that one moved** — the same shape as the two kind-sorters, the two name
+derivations and the capacity that was resolved in two places. The copy exists for a reason:
+`karakuri-codegen` depends on `karakuri-ir` and not the reverse, so `cost.rs` cannot call the
+layout. **The fix is to move the placement rules down into `karakuri-ir` and have the
+lowering read them**, not to correct the numbers here and leave two copies that agree for a
+while.
+
+Nothing gates on the figure today, which is why nobody noticed: it is printed, and the spec
+writes it into a `perf` record nothing reads. **The metadata file below is what starts
+reading it**, so this belongs before that rather than after it.
+
 #### Procedures a model can read
 
 **A slice of this was scheduled long before the rest — procedures a model can read — and is
