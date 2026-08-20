@@ -2771,11 +2771,12 @@ counter that resets at Set start, so two sources either share it — and the sec
 `seed` no longer starts at zero, which breaks every structured layout — or hold one each
 and collide immediately.
 
-The resolution keeps `seed` zero-based per source and adds a fourth implicit attribute:
+The resolution keeps `seed` zero-based per source and adds a per-source value that says
+which source an element came from:
 
 | Name | Type | Notes |
 |---|---|---|
-| `source` | `uint` | which source produced this element. Implicit, carried, never declared |
+| `source` | `uint` | which source produced this element. A per-source uniform, never declared |
 
 - Each source counts its own `seed` from zero, so `seed % side` and every other structured
   layout works identically in every source.
@@ -2783,7 +2784,27 @@ The resolution keeps `seed` zero-based per source and adds a fourth implicit att
   differs between sources automatically while `seed % 512u` stays the same in both. Two
   grids of identical shape in different colours is then the default, not something to
   arrange.
-- `source` is what downstream layers mask on. It is an ordinary attribute for that purpose.
+- `source` is what downstream layers mask on.
+
+**It is a uniform, and not the fourth implicit attribute this section used to call it.** The
+row above read *"implicit, carried, never declared"* — a `uint` sitting on the element beside
+`seed` — and the code reached the other answer. What settles it was decided elsewhere and for
+other reasons: the chain is instantiated **per source** rather than the geometries being
+concatenated into one buffer, because two sources kill independently and so share no live
+range to compact into, and because two sources need not agree on what they `emit`. A chain
+instance therefore knows *statically* which source it is running over. A value that is the
+same for every element a given instance will ever touch is a uniform by definition, and
+carrying it on the element instead is a `u32` on every element of every merged Set — plus
+whatever alignment it drags behind it — spent restating a constant. `Source` in
+`crates/karakuri-engine/src/set.rs` keeps that reasoning beside the sources themselves.
+
+The salt is the half of this that already exists, and it is a uniform for exactly that
+reason. `Source::salt` holds one per geometry, `Set::prepare` writes it as `seed_salt` into
+every L4's uniform block and `write_l2_uniforms` into every L2's, and every generated module
+declares a `seed_salt: u32` field to receive it. So nothing is carried per element to make
+two identical grids differ in colour, and nothing needs to be carried per element to let a
+mask pick one of them out either: a comparison against a uniform is the same value in every
+lane, which is the branch a GPU costs least rather than the one it costs most.
 
 #### A `source` value is assigned and recorded, never derived
 
@@ -2836,7 +2857,7 @@ derived name claims the one a written name further down the list asked for. Two 
 names that collide are refused, where two derived ones are told apart — a written name is an
 address somebody chose.
 
-What is **not** built is `source` itself: nothing carries the value a mask would compare, so
+What is **not** built is `source` itself: nothing supplies the value a mask would compare, so
 naming a source and masking on one are still different distances away.
 
 A value nobody can write is a value nobody can mask on: `source == 0x8a3f21c4` is not
@@ -2863,10 +2884,18 @@ a stable internal address, and whatever the Set chose to call it on the outside.
 
 Stated so a later reader can tell them from the parts above, which are forced.
 
-- **The attribute carries the assigned value itself**, folded to 32 bits, rather than a
-  dense index with the salt kept beside it. One value does both jobs, and a collision breaks
+- **The value that identifies a source is the salt itself**, folded to 32 bits, rather than
+  a dense index with the salt kept beside it. One value does both jobs, and a collision breaks
   both at once — cheap to refuse at build, since every source is in hand there. Where a
   human reads it, display the Set-local ordinal instead.
+
+  **This bullet said "the *attribute* carries the assigned value", and the attribute turned
+  out to be a uniform.** The preference survives the move; half of what argued for it does
+  not. One value rather than two was four bytes off every element of every merged Set, which
+  is the kind of saving worth stating a preference about. Two `u32`s in a uniform block cost
+  nothing anyone could measure. What still holds it up is the other half — one value, one
+  collision, one thing to refuse at build — which was always the better half, and the
+  preference is now correspondingly cheap to reverse.
 - **A name lives in a Set file. The command line can write one, and that is an auxiliary
   path.** The first half is the one that matters: a name belongs to the *use*, and a Set file
   is what a use is recorded as — so the record is where it lives, and the eventual GUI writes
@@ -2884,20 +2913,38 @@ Stated so a later reader can tell them from the parts above, which are forced.
   Marking this a preference rather than a force is what let it be revisited without a
   redesign, which is the whole reason that distinction is drawn.
 
-**Identity is therefore a triple**, not a pair: `source` from here, `seed` from the source
-that produced the element, and `copy` from any amplifying node above it — see
-[L2 amplification](#l2-amplification--built). Three `uint`s of identity per element, none of
-which needs a full range, so packing `copy` alongside one of the others is available and is an
-engineering choice with no semantic consequence. Not made here because nothing yet counts
-sources — and note that `copy`'s slot is allocated only where something amplified, so the
-packing saves nothing on a chain that has no amplifier in it and everything it saves is on
-the chains that do.
+  **`source` becoming a uniform does not reach this bullet.** Where a name is *written* is a
+  question about authoring surfaces, and where a value is *carried* is a question about
+  buffers. The two are independent, and a name resolved where the Set is built resolves to
+  whatever the runtime holds the value in.
+
+**Identity is a triple, and at most two thirds of it is on the element.** `source` from
+here, `seed` from the source that produced the element, and `copy` from any amplifying node
+above it — see [L2 amplification](#l2-amplification--built). But `source` is the uniform
+above, read from the same block by every element the instance touches, and `copy`'s slot is
+allocated only where something upstream amplified. The per-element cost is therefore one
+`uint` on a plain chain and two on an amplified one, never three. That is also what the
+amplification section has said all along — *"identity downstream is the pair of the parent
+`seed` and that index"* — so the triple was the outlier, and it was the outlier because it
+counted a value that was never going to be per element.
+
+**Which retires the packing question rather than answering it.** This paragraph used to
+offer packing `copy` alongside one of the others: three `uint`s, none needing a full range,
+an engineering choice with no semantic consequence. Two of its three premises are gone.
+There is no third value to make room for, and `copy` is already free in the case that would
+have wanted the packing — `generate_element_layout` in `crates/karakuri-ir/src/layout.rs`
+lays `seed` and `birth_frac` in the first eight bytes of a block that any `vec3` attribute
+forces out to sixteen, so `copy` lands in padding the layout already had. A chain emitting
+`position` has a stride of 32 whether or not it amplified. Packing would save nothing there
+and would cost both values their plain reads. It would still save four bytes on a layout of
+nothing but scalars, which has no padding to absorb the slot — a case that does not carry an
+engineering choice on its own.
 
 **The merging is built and `source` is not.** `--set a.kir,b.kir,renderer.kir` builds two
 sources in one Set, each at its own capacity, each with its own salt, and the chain runs per
-source. What does not exist is the attribute: nothing carries a `source` value, so nothing
-downstream can mask on one, and the two ways to tell sources apart today are the salt (which
-differs by construction) and writing different attributes in different chains.
+source. What does not exist is the value: nothing exposes a `source` uniform to a procedure,
+so nothing downstream can mask on one, and the two ways to tell sources apart today are the
+salt (which differs by construction) and writing different attributes in different chains.
 
 **And the salt is assigned and recorded**, which was the provisional half and is no longer.
 `--save-set` writes one `seed` record per geometry carrying the value that source was running
@@ -3069,9 +3116,10 @@ nothing to look at.
 
 The last one standing was **how two merged geometries keep their identities apart**, carried
 in `docs/roadmap.md` since before there was a compiler. It is answered above under "Multiple
-L1 sources, and `source`": per-source zero-based `seed`, an implicit `source` attribute whose
-value is **assigned and recorded rather than derived**, a per-source hash salt that is the
-same value, and a name written where a source is used for anything that wants to mask on it.
+L1 sources, and `source`": per-source zero-based `seed`, a per-source `source` value — a
+uniform rather than the implicit attribute that section first called it — whose value is
+**assigned and recorded rather than derived**, a per-source hash salt that is the same value,
+and a name written where a source is used for anything that wants to mask on it.
 
 Two things about how it was reached are worth more than the answer. Every derivation anyone
 proposed — position among a node's inputs, position in the Set's list, the `.kir`'s content
