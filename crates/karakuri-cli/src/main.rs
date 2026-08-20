@@ -1846,6 +1846,15 @@ impl Names {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Placed {
     named: Named,
+    /// The name the procedure itself declares, which is not the name in
+    /// `named`: that one belongs to the *use* and is `None` for a bare path.
+    ///
+    /// **Read where the file was compiled, not scanned for again.** The edit
+    /// history files a version under the procedure's name and a session's
+    /// `procedure` record carries it, and both of them are looking at a node
+    /// this already knows the layer and index of — asking a second reader would
+    /// be a second answer to a question already settled here.
+    proc: String,
     layer: karakuri_ir::Kind,
     index: u32,
 }
@@ -1861,12 +1870,21 @@ impl Placed {
     }
 }
 
-/// **Compile one slot's files and sort them by the `kind` each declares**,
-/// keeping list order within a kind.
+/// **Sort one slot's compiled procedures by the `kind` each declares**, keeping
+/// list order within a kind.
 ///
-/// **The first path is the first source**, and every later `kind L1` is another
-/// one. Each simulates independently — its own `seed` from zero, its own hash
-/// salt, its own compaction — and the renderers draw all of them. See
+/// **The one place that answers "which layer is this file on, and which node of
+/// it".** Both ways into a slot come through here: [`sort_slot`] compiles from
+/// paths at startup, and [`crate::watch::Watch::poll`] compiles from text it has
+/// already read — it needs the bytes for the edit history and for the artifacts
+/// a session stores. Loading is the only thing they do differently, so the seam
+/// is after the compile and this takes procedures rather than paths. The two
+/// used to hold a copy each of this match, and they had already drifted: the
+/// rebuild still took its head for the L1 whatever the file declared.
+///
+/// **The first procedure is the first source**, and every later `kind L1` is
+/// another one. Each simulates independently — its own `seed` from zero, its own
+/// hash salt, its own compaction — and the renderers draw all of them. See
 /// `docs/ir-spec.md`, "Multiple L1 sources".
 ///
 /// The head is sorted by its declaration like everything after it. It used to
@@ -1875,22 +1893,20 @@ impl Placed {
 /// costing as soon as a Set file records the layer: an L2 written down as
 /// `slot L1` is a file that reads back as a Set nobody assembled.
 ///
-/// Fatal on the disagreements a slot cannot hold, and fatal here rather than at
-/// the build, because the file is what an operator can fix.
-fn sort_slot(slot: usize, l1: &Named, rest: &[Named]) -> (Material, Vec<Placed>) {
-    let named: Vec<String> = rest.iter().map(|p| p.path.display().to_string()).collect();
-    eprintln!(
-        "  slot {slot}: {} + {}",
-        l1.path.display(),
-        named.join(" + ")
-    );
-    let load = |named: &Named| match compile::load(&named.path) {
-        Ok(checked) => checked,
-        Err(report) => {
-            eprintln!("{report}");
-            std::process::exit(1);
-        }
-    };
+/// **`Err` is a sentence and not an exit**, because the two callers answer a
+/// refusal differently and that difference is the only reason there were ever
+/// two of these: a startup that cannot assemble its slot has nothing to run and
+/// stops, while a rebuild that cannot leaves the Set that *is* running alone.
+/// Each prefixes the slot it is about and decides.
+fn sort_compiled(
+    compiled: Vec<(Named, karakuri_ir::typed::Checked)>,
+) -> Result<(Material, Vec<Placed>), String> {
+    // Taken before the loop consumes the list. The "nothing draws" refusal
+    // names the file the slot was given, which is the one an operator looks at
+    // first — and by then it has been moved from.
+    let head = compiled
+        .first()
+        .map(|(named, _)| named.path.display().to_string());
     // **A name per node, in the same per-layer shape the engine takes its
     // procedures in.** Not one flat list in node order: that order is the
     // engine's, and a caller that reproduced it would be the second place a
@@ -1902,9 +1918,9 @@ fn sort_slot(slot: usize, l1: &Named, rest: &[Named]) -> (Material, Vec<Placed>)
     let mut field: Option<karakuri_ir::typed::Checked> = None;
     let mut l4s = Vec::new();
     let mut placed = Vec::new();
-    for path in std::iter::once(l1).chain(rest) {
-        let checked = load(path);
-        let name = path.name.clone();
+    for (named, checked) in compiled {
+        let name = named.name.clone();
+        let proc = checked.name.clone();
         let (layer, index) = match checked.kind {
             karakuri_ir::Kind::L2 => {
                 names.l2s.push(name);
@@ -1922,12 +1938,11 @@ fn sort_slot(slot: usize, l1: &Named, rest: &[Named]) -> (Material, Vec<Placed>)
             // playing something nobody asked for. Two viewpoints composited
             // is a graph, which is what an L5 is for.
             karakuri_ir::Kind::L3 if l3.is_some() => {
-                eprintln!(
-                    "slot {slot}: {} is a second L3 — a slot looks from one camera, and \
+                return Err(format!(
+                    "{} is a second L3 — a slot looks from one camera, and \
                      compositing two viewpoints is what an L5 is for",
-                    path.path.display()
-                );
-                std::process::exit(1);
+                    named.path.display()
+                ));
             }
             karakuri_ir::Kind::L3 => {
                 names.l3 = name;
@@ -1936,14 +1951,15 @@ fn sort_slot(slot: usize, l1: &Named, rest: &[Named]) -> (Material, Vec<Placed>)
             }
             // **One field per slot**, refused rather than last-one-wins on
             // exactly the camera's terms: several would need naming, and
-            // naming is fan-in.
+            // naming is fan-in. `field(p)` names the one by being the only one,
+            // so accepting two would build a slot that silently lost one of the
+            // files it was given.
             karakuri_ir::Kind::Field if field.is_some() => {
-                eprintln!(
-                    "slot {slot}: {} is a second `kind Field` — a slot evaluates one \
+                return Err(format!(
+                    "{} is a second `kind Field` — a slot evaluates one \
                      field, and naming several is the notation fan-in brings with it",
-                    path.path.display()
-                );
-                std::process::exit(1);
+                    named.path.display()
+                ));
             }
             karakuri_ir::Kind::Field => {
                 names.field = name;
@@ -1952,7 +1968,13 @@ fn sort_slot(slot: usize, l1: &Named, rest: &[Named]) -> (Material, Vec<Placed>)
             }
             // **A second L1 is a second source**, not a mistake. Each one
             // simulates independently — its own `seed` from zero, its own hash
-            // salt, its own compaction — and the renderers draw all of them.
+            // salt, its own compaction — and the renderers draw all of them,
+            // and rebuilding one needs nothing a first does not: a request
+            // carries a list, and every record of a build addresses a node as
+            // `(slot, layer, index)`. The rebuild's copy of this used to refuse
+            // — a slot with two geometries started, then printed a refusal on
+            // every save for the rest of the run with the picture frozen at its
+            // startup build.
             karakuri_ir::Kind::L1 => {
                 names.l1s.push(name);
                 l1s.push(checked);
@@ -1960,24 +1982,26 @@ fn sort_slot(slot: usize, l1: &Named, rest: &[Named]) -> (Material, Vec<Placed>)
             }
         };
         placed.push(Placed {
-            named: path.clone(),
+            named,
+            proc,
             layer,
             index: index as u32,
         });
     }
     if l4s.is_empty() {
-        eprintln!(
-            "slot {slot}: nothing here draws — {} names no L4, and a Set with no \
-             renderer has no frame to give",
-            l1.path.display()
-        );
-        std::process::exit(1);
+        return Err(match head {
+            Some(head) => format!(
+                "nothing here draws — {head} names no L4, and a Set with no \
+                 renderer has no frame to give"
+            ),
+            // Nothing at all to sort is the same refusal with no file to point
+            // at. Neither caller can reach it — a slot is spelled with a head —
+            // and answering it here is cheaper than making that a precondition.
+            None => "nothing here draws — a Set with no renderer has no frame to give".to_string(),
+        });
     }
-    if let Err(e) = names.check_unique() {
-        eprintln!("slot {slot}: {e}");
-        std::process::exit(1);
-    }
-    (
+    names.check_unique()?;
+    Ok((
         Material {
             l1s,
             l2s,
@@ -1987,7 +2011,40 @@ fn sort_slot(slot: usize, l1: &Named, rest: &[Named]) -> (Material, Vec<Placed>)
             names,
         },
         placed,
-    )
+    ))
+}
+
+/// **Compile one slot's files and sort them**, which is [`sort_compiled`] with
+/// the loading in front of it and the exit behind it.
+///
+/// Fatal on anything the sort refuses, and fatal here rather than at the build,
+/// because the file is what an operator can fix. A run that cannot assemble a
+/// slot has no picture to keep showing — which is exactly what the rebuild
+/// path, over the same sort, does instead.
+fn sort_slot(slot: usize, l1: &Named, rest: &[Named]) -> (Material, Vec<Placed>) {
+    let named: Vec<String> = rest.iter().map(|p| p.path.display().to_string()).collect();
+    eprintln!(
+        "  slot {slot}: {} + {}",
+        l1.path.display(),
+        named.join(" + ")
+    );
+    let compiled: Vec<(Named, karakuri_ir::typed::Checked)> = std::iter::once(l1)
+        .chain(rest)
+        .map(|named| match compile::load(&named.path) {
+            Ok(checked) => (named.clone(), checked),
+            Err(report) => {
+                eprintln!("{report}");
+                std::process::exit(1);
+            }
+        })
+        .collect();
+    match sort_compiled(compiled) {
+        Ok(sorted) => sorted,
+        Err(e) => {
+            eprintln!("slot {slot}: {e}");
+            std::process::exit(1);
+        }
+    }
 }
 
 /// **Render a recorded session.** The material comes from the stream's head and
@@ -5400,6 +5457,74 @@ mod tests {
             ["soft_points"]
         );
         assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
+    }
+
+    /// One slot's examples, compiled, as [`sort_compiled`] takes them.
+    fn compiled(files: &[&str]) -> Vec<(Named, karakuri_ir::typed::Checked)> {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+        files
+            .iter()
+            .map(|file| {
+                let path = root.join(file);
+                let checked = compile::load(&path).expect("the examples compile");
+                (Named::bare(path), checked)
+            })
+            .collect()
+    }
+
+    /// **A slot that cannot be assembled refuses with a sentence**, and the two
+    /// callers decide what to do about it — a startup prints it and stops, a
+    /// rebuild prints it and leaves the Set that is running alone. That
+    /// difference is the only thing the two paths do differently, and it is the
+    /// reason this sort was written twice before it was written once.
+    ///
+    /// The sentence names the file, because the file is what an operator can
+    /// fix; the slot is prefixed by whichever caller is reporting it.
+    #[test]
+    fn a_slot_refuses_a_second_camera_a_second_field_and_nothing_that_draws() {
+        // Matched rather than `expect_err`, which would want `Material` to be
+        // `Debug` — a derive on a production type to print something no test
+        // reaching here ever prints.
+        let refused = |files: &[&str]| match sort_compiled(compiled(files)) {
+            Err(e) => e,
+            Ok(_) => panic!("this slot cannot be assembled"),
+        };
+        let two_cameras = refused(&[
+            "drift_shell.kir",
+            "beat_jump.kir",
+            "beat_jump.kir",
+            "soft_points.kir",
+        ]);
+        assert!(two_cameras.contains("is a second L3"), "{two_cameras}");
+        assert!(two_cameras.contains("beat_jump.kir"), "{two_cameras}");
+        let two_fields = refused(&[
+            "drift_shell.kir",
+            "melt_blob.kir",
+            "melt_blob.kir",
+            "soft_points.kir",
+        ]);
+        assert!(
+            two_fields.contains("is a second `kind Field`"),
+            "{two_fields}"
+        );
+        let no_renderer = refused(&["drift_shell.kir", "swirl_warp.kir"]);
+        assert!(no_renderer.contains("nothing here draws"), "{no_renderer}");
+        // The file the slot was spelled with, which is the one an operator looks
+        // at first — and by the time this is said the list has been sorted past.
+        assert!(no_renderer.contains("drift_shell.kir"), "{no_renderer}");
+
+        // ...and one of each is a slot, so none of the above is a refusal of
+        // cameras and fields as such.
+        let one_of_each = sort_compiled(compiled(&[
+            "drift_shell.kir",
+            "beat_jump.kir",
+            "melt_blob.kir",
+            "soft_points.kir",
+        ]));
+        assert!(
+            one_of_each.is_ok(),
+            "one camera and one field is a slot, not a refusal"
+        );
     }
 
     /// **Any part of a `--set` may carry a name.** A name addresses the node
