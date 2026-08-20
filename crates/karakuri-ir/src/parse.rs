@@ -20,7 +20,7 @@
 
 use crate::ast::{
     AmplifyDecl, Attr, BinOp, Blend, Block, BlockKind, CapacityDecl, Expr, Kind, Lit, Param, Proc,
-    Stmt, Topology, Ty, UnOp, UsesDecl,
+    SlotTy, Stmt, Topology, Ty, UnOp, UsesDecl,
 };
 use crate::error::IrError;
 use crate::error::IrResult;
@@ -533,28 +533,35 @@ impl Parser {
     /// a `.kir` that named a node would be a procedure coupled to one Set, and
     /// it would stop being a library part. See [`UsesDecl`].
     ///
-    /// The type is checked here rather than carried, because there is exactly
-    /// one and a value with one variant is a value nobody reads. What the
-    /// declaration buys by writing it down anyway is room: a slot that takes a
-    /// camera or a field is the next thing this notation is for.
+    /// The type is carried rather than checked and dropped: there is one of
+    /// them today, and the rules downstream are about *which* one — an L3
+    /// refuses a geometry slot because an L3 makes no geometry, which is a
+    /// sentence that has to be able to stop being the only one. See [`SlotTy`].
     fn parse_uses(&mut self) -> Option<UsesDecl> {
         let start = self.advance().span; // "uses"
         let (name, name_span) =
             self.expect_ident("a name for the geometry this procedure takes")?;
         self.expect(TokKind::Colon, ":");
-        if let Some((ty, ty_span)) = self.expect_ident("`Geometry`") {
-            if ty != "Geometry" {
+        // **A refused type recovers as `Geometry`**, and a missing one too.
+        // Both have already reported, so neither reaches the check pass;
+        // carrying on with the one type there is lets the rest of the header
+        // be parsed and its own mistakes reported in the same run.
+        let ty = match self.expect_ident("`Geometry`") {
+            Some((spelling, ty_span)) => SlotTy::from_name(&spelling).unwrap_or_else(|| {
                 self.error_with_hint(
                     ty_span,
-                    format!("unknown input type `{ty}`"),
+                    format!("unknown input type `{spelling}`"),
                     "`Geometry` is the one thing a `uses` slot can be today — the elements of \
                      an L1, read beside the ones this node runs over",
                 );
-            }
-        }
+                SlotTy::Geometry
+            }),
+            None => SlotTy::Geometry,
+        };
         Some(UsesDecl {
             name,
             name_span,
+            ty,
             span: start.join(self.prev_span()),
         })
     }

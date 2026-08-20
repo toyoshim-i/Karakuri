@@ -712,14 +712,47 @@ pub struct AmplifyDecl {
 /// The type is `Geometry` and there is nothing else it can be yet. It is written
 /// anyway, and refused when it is anything else, because a slot that takes a
 /// camera or a field is the next thing this notation is for and a declaration
-/// with no type in it would have to grow one incompatibly.
+/// with no type in it would have to grow one incompatibly. It is *carried*
+/// rather than checked and dropped — see [`SlotTy`].
 #[derive(Debug, Clone)]
 pub struct UsesDecl {
     pub name: String,
     /// The name alone, so a refusal about what it collides with points at it
     /// rather than at the whole declaration.
     pub name_span: Span,
+    /// What the slot takes, as the header spelled it.
+    pub ty: SlotTy,
     pub span: Span,
+}
+
+/// **What a `uses` slot takes** — the type in `uses far : Geometry`.
+///
+/// One variant, because a Field slot and a Camera slot arrive with the work
+/// that binds them: a variant nothing constructs is a variant nothing checks,
+/// and an arm written ahead of the rule it stands for is a guess about a
+/// decision nobody has made.
+///
+/// **The value is what the rules are about.** "An L3 produces a viewpoint, not
+/// geometry" is a sentence about a *geometry* slot rather than about `uses`,
+/// and a checker matching on this says so — so the day a second variant exists,
+/// each such refusal grows an arm beside the one it has rather than being
+/// rewritten around a distinction it never drew.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SlotTy {
+    /// The elements of an L1, read beside the ones this node runs over.
+    Geometry,
+}
+
+impl SlotTy {
+    /// The spelling a header uses, on [`Attr::from_name`]'s terms: one place
+    /// that knows which words are types, so a second type is a line here and
+    /// nothing in the parser.
+    pub fn from_name(s: &str) -> Option<SlotTy> {
+        Some(match s {
+            "Geometry" => SlotTy::Geometry,
+            _ => return None,
+        })
+    }
 }
 
 /// One `proc`, which is one file and fills one slot.

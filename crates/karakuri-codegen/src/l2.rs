@@ -128,7 +128,8 @@ pub fn generate_l2(
     synthetic: Synthetic,
     derived: &[Attr],
     // What the **far** geometry emits, for an L2 that declares a `uses` slot.
-    // `None` for every other L2, and `Some` exactly when `checked.uses` —
+    // `None` for every other L2, and `Some` exactly when the procedure
+    // declares a geometry slot —
     // passed rather than derived because it is another source's list and this
     // procedure cannot know it.
     far: Option<&[Attr]>,
@@ -150,7 +151,7 @@ pub fn generate_l2(
     // attributes — each chain instance is compiled against the source it runs
     // over — so this is a second struct rather than a second view of the first.
     debug_assert_eq!(
-        checked.uses.is_some(),
+        checked.geometry_slot().is_some(),
         far.is_some(),
         "`{}` declares a geometry slot and was handed no geometry for it, or the reverse",
         checked.name
@@ -203,7 +204,7 @@ pub fn generate_l2(
     let (uniform_layout, uniform_pad_f32) = b.finish();
 
     let resolver = L2Resolver {
-        uses: checked.uses.is_some(),
+        uses: checked.geometry_slot().is_some(),
         has_copy: out_synthetic.copy,
         derived: out_layout.derived.clone(),
     };
@@ -336,7 +337,7 @@ pub fn generate_l2(
         element_layout: out_layout,
         emits,
         synthetic: out_synthetic,
-        uses: checked.uses.is_some(),
+        uses: checked.geometry_slot().is_some(),
         amplify: checked.amplify,
     }
 }

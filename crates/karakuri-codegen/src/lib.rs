@@ -141,7 +141,7 @@ mod tests {
             topology: Some(Topology::Points),
             capacity: None,
             amplify: None,
-            uses: None,
+            uses: Vec::new(),
             blend: None,
             params: Vec::new(),
             emit: Vec::new(),
