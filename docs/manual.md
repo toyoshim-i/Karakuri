@@ -666,9 +666,11 @@ decides nothing.
 back, so a morph is a Set you can keep.
 
 **What is not there yet is treating them differently.** A mask on which source an element
-came from wants a `source` attribute to compare, and nothing carries one — so until then the
-two are merged and drawn, and telling them apart is done by giving them different `.kir`
-files.
+came from wants a `source` value to compare, and nothing yet lets a procedure read one.
+Nothing has to be added to the elements for that: the value is the source's own hash salt —
+the same thing that gives it its own colours — and it is already in every procedure's
+uniform block. What is missing is the spelling that reads it. So until then the two are
+merged and drawn, and telling them apart is done by giving them different `.kir` files.
 
 ### A shape in a file of its own
 

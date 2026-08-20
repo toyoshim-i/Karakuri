@@ -132,16 +132,22 @@ Each layer composes differently, and each needs its own semantics.
   differ in colour by default. `--set a.kir,b.kir,renderer.kir` builds two sources in one
   Set, each at its own capacity, each with its own chain.
 
-  **What is not built is the identity.** There is no `source` attribute — nothing carries
-  one, so nothing downstream can mask on one. The **salt** is built: `--save-set` writes a
-  `seed` record per geometry carrying what that source was running at and `--load-set` gives
+  **What is not built is the identity.** Nothing exposes `source` to a procedure, so nothing
+  downstream can mask on one. **What is missing is a read rather than a thing to carry**,
+  which is a change from what this paragraph said: it read "there is no `source` attribute —
+  nothing carries one", and the spec has since retracted the attribute. A chain instance
+  knows statically which source it runs over, so `source` is a per-source *uniform*, and the
+  value it would hold is the salt. The **salt** is built: `--save-set` writes a `seed`
+  record per geometry carrying what that source was running at and `--load-set` gives
   each one back to the source its index names, which is the *assigned and recorded* the
   design asks for and the reason it asks for it — every derivation fails on a case this
   system has, since graph edits move a position, a `.kir` edit moves a content hash under
   `--watch`, and a declared procedure name collides for the same lattice used twice. A Set
   nothing has recorded still derives from the ordinal, which the spec licenses in the same
   breath: where a value came from stops mattering once it is recorded.
-  Both wait on the same thing — a source has no name. See "Naming what a Set holds".
+  So the value a mask would compare is assigned, recorded, and already resident in every
+  generated module as `seed_salt`. What is left is the read, and a mask that names a source
+  rather than spelling a number. See "Naming what a Set holds".
 - **L2 multiple** — chain. Order matters. Each modulator carries a weight and a mask, and
   masks are attribute-based: only elements where `seed % 3 == 0`, only inside a region,
   only where `age > 0.7`. This is the largest single source of expressive range in the
@@ -858,7 +864,7 @@ left implied:
   geometry, written by `--save-set` and read back by `--load-set`, so a saved Set keeps its
   colours whatever order its records are in. What it wanted was not the naming below but an
   address, and `seed` already had one.
-- **How a mask names a source**, and the `source` attribute it would read — M4, same item.
+- **How a mask names a source**, and the `source` uniform it would read — M4, same item.
 - **What an L3 points at**: a reduction, or element zero. Decided, refused by name in the
   checker, and waiting on the same naming — M4, same item.
 
@@ -1424,7 +1430,8 @@ than against one being taught to.
   `seed` counters starting at zero so structured layouts survive, and a per-source hash salt
   so randomness differs without structure differing. A Set holds a *list* of sources, each
   one a simulation and the chain over it, and `--set a.kir,b.kir,renderer.kir` fills it. The
-  `source` attribute is not built and has no value to carry — see the salt paragraph below.
+  `source` value is not exposed to any procedure, so nothing can mask on one; the value it
+  would carry is the salt, and that half is built — see the salt paragraph below.
 
   **The chain is per source rather than the geometry being concatenated**, and two things
   force that. Two sources kill independently, so compaction is each source's own and there is
@@ -1434,9 +1441,10 @@ than against one being taught to.
   hold both.
 
   What falls out is that **`source` need not be an element slot**, which the spec assumed it
-  would be. A chain instance knows statically which source it belongs to, so what varies with
-  the source is a *uniform* — and an element slot is four more bytes on every element of every
-  merged Set, plus whatever alignment it drags behind it. That is the third time in this milestone a per-element cost the spec took for
+  would be and has since stopped assuming. A chain instance knows statically which source it
+  belongs to, so what varies with the source is a *uniform* — and an element slot is four
+  more bytes on every element of every merged Set, plus whatever alignment it drags behind
+  it. That is the third time in this milestone a per-element cost the spec took for
   granted turned out to be avoidable, after `velocity`'s third buffer and the always-on
   derivation storage.
 
@@ -1572,7 +1580,10 @@ than against one being taught to.
 
 - The `blend` declaration must exist in the L4 header from M1, even with one legal value
 - Identity must already be per element and carried, not a slot index, or multiple sources
-  cannot be told apart at all
+  cannot be told apart at all. **Two thirds of it, in the end**: `seed` is per element and
+  `copy` is where something amplified, but `source` is a uniform — a chain instance knows
+  statically which source it runs over — so the half of this demand that was about telling
+  sources apart is answered off the element rather than on it
 - IR must be a real IR from M1, not a thin wrapper over WGSL, or fusion has nothing to work
   with
 - `capacity` must already be a Set-level value rather than baked into the artifact.
@@ -1702,7 +1713,7 @@ no name:**
 | ~~MCP reaches an L1 and the renderers and no other node~~ | **Closed.** A model reads and writes every node at `(slot, layer, index)` |
 | ~~Which geometry a node's second input takes is `--set` order~~ | **Closed.** `uses far : Geometry` declares a named slot and an `edge` binds it; an unbound slot is refused |
 | One `kind Field` per Set, one L3 per Set | The notation exists and this layer does not use it yet: `field(p)` names the one field by being the only one, so calling several needs the *call* to carry a name as well as the header |
-| A mask cannot say which source it applies to | The `source` attribute does not exist |
+| A mask cannot say which source it applies to | Nothing exposes the `source` uniform to a procedure. The value is the salt, which is assigned, recorded and already in every uniform block; the read is what is missing |
 | ~~A source's salt is derived from `--set` order rather than assigned~~ | **Closed.** A `seed` record per geometry, written by `--save-set` and read by `--load-set` |
 
 The first three are the sharp ones, because they are surfaces that *already exist* and stop
@@ -1742,7 +1753,7 @@ exactly one, use it" is the implicit rule being removed, and reinstating it unde
 spelling would cap the next fan-in at one the same way.
 
 **One edge is spelled and the rest follow the same shape**: which source a mask applies to
-and the `source` attribute it would read, several fields per Set, several cameras. Each needs
+and the `source` uniform it would read, several fields per Set, several cameras. Each needs
 the same two halves — a declaration on the procedure and a binding on the Set — and the one
 that shipped first is the one that had a working picture behind it, `examples/morph.kir`.
 
