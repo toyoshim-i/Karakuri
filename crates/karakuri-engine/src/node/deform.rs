@@ -1,14 +1,13 @@
 //! The L2 node: `Geometry -> Geometry`.
 
 use karakuri_codegen::generate_l2;
-use karakuri_codegen::layout::{
-    binding, counts, group, ElementLayout, Synthetic, UniformLayout, WORKGROUP_SIZE,
-};
+use karakuri_codegen::layout::{binding, counts, group, UniformLayout, WORKGROUP_SIZE};
+use karakuri_ir::layout::{ElementLayout, Synthetic, ALIVE_BYTES};
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Attr;
 
 use super::{Geometry, View};
-use crate::set::SetError;
+use crate::set::{ElementStorage, SetError};
 use crate::uniforms::UniformScratch;
 
 /// An L2 node: geometry in, geometry out.
@@ -37,6 +36,13 @@ pub(crate) struct Deform {
     /// The buffer `dst_bg` names, kept so the node can hand out its own
     /// [`Geometry`].
     elements: wgpu::Buffer,
+    /// **How many elements this node writes**, which is what reached it times
+    /// its own factor and not the Set's capacity — every node below an
+    /// amplifier is sized against the multiplied count. Kept because it is the
+    /// denominator of this node's per-element figure and nothing else here
+    /// holds it: [`Deform::amplify`] is one link of the product, not the
+    /// product.
+    out_capacity: u32,
     element_layout: ElementLayout,
     /// What this node's output carries: everything that reached it, plus its
     /// own `emit`. The next node in a chain widens this in turn.
@@ -209,7 +215,7 @@ impl Deform {
         let amplified_buffers = shader.amplify.map(|factor| {
             let alive = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(&format!("{} alive", l2.name)),
-                size: u64::from(out_capacity) * 4,
+                size: u64::from(out_capacity) * u64::from(ALIVE_BYTES),
                 usage: wgpu::BufferUsages::STORAGE,
                 mapped_at_creation: false,
             });
@@ -360,12 +366,39 @@ impl Deform {
             src_bg,
             dst_bg,
             elements,
+            out_capacity,
             element_layout: shader.element_layout,
             emits: shader.emits,
             synthetic: shader.synthetic,
             amplified,
             param_names: l2.params.iter().map(|p| p.name.clone()).collect(),
         })
+    }
+
+    /// **What this node allocated to hold elements** — see [`ElementStorage`]
+    /// for what counts and why the figure is read off the buffers.
+    ///
+    /// **One element buffer, never two.** An L2's output is rebuilt from its
+    /// input every frame and nothing reads back what it wrote, so there is no
+    /// second direction to pay for — the doubling is the L1's alone.
+    ///
+    /// **And an alive array only where it amplifies.** A deform that emits the
+    /// elements that reached it emits them under the flags they arrived with
+    /// and shares that buffer; an amplifier's outputs are new elements nothing
+    /// upstream has a flag for, so it owns one `factor` times as long. The
+    /// counts block it owns beside that is one block per node however large the
+    /// capacity, and is not part of a per-element figure.
+    ///
+    /// **The stride here is the chain's, not this procedure's.** What an L2
+    /// writes carries everything that reached it as well as its own `emit`, so
+    /// a node that names one attribute over an L1 that emits four is sized for
+    /// five. That is the input no per-procedure estimate can have and the whole
+    /// reason this figure is asked of the node.
+    pub(crate) fn element_storage(&self) -> ElementStorage {
+        ElementStorage {
+            bytes: self.elements.size() + self.amplified.as_ref().map_or(0, |a| a.alive.size()),
+            capacity: self.out_capacity,
+        }
     }
 
     /// How many elements this node's output holds per element reaching it — the

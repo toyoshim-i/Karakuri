@@ -27,11 +27,18 @@ fn compile(src: &str) -> Result<Checked, String> {
     let proc = karakuri_ir::parse(src).map_err(|e| render(&e, src))?;
     let checked = karakuri_ir::check::check(&proc).map_err(|e| render(&e, src))?;
     let cost = karakuri_ir::cost::estimate(&checked).map_err(|e| render(&e, src))?;
-    // **A field is reported on its own terms**, because none of the three
-    // figures beside it means anything for one: it has no elements to have a
-    // per-element cost, nothing to spawn, and no storage. Printing those three
-    // zeroes beside a `96 bytes/element` it does not use was a line that read
+    // **A field is reported on its own terms**, because neither figure beside
+    // it means anything for one: it has no elements to have a per-element cost
+    // and nothing to spawn. Printing those zeroes beside it was a line that read
     // as a measurement and was not one.
+    //
+    // **And no bytes/element from anything, because this is one procedure and
+    // a procedure does not decide the layout it is allocated under.** The
+    // struct the engine sizes a buffer by is built from everything that reached
+    // the node, plus whatever a downstream consumer asked to be carried — both
+    // properties of a Set, and there is no Set anywhere in this file. A built
+    // Set is what reports the figure now; see the module doc on
+    // `karakuri_ir::cost` for why nowhere earlier could.
     if proc.kind == karakuri_ir::Kind::Field {
         eprintln!(
             "  {} — {} ops/evaluation",
@@ -39,8 +46,8 @@ fn compile(src: &str) -> Result<Checked, String> {
         );
     } else {
         eprintln!(
-            "  {} — {} ops/element, {} ops/spawn, {} bytes/element",
-            proc.name, cost.ops_per_element, cost.ops_per_spawn, cost.bytes_per_element
+            "  {} — {} ops/element, {} ops/spawn",
+            proc.name, cost.ops_per_element, cost.ops_per_spawn
         );
     }
     Ok(checked)

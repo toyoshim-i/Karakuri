@@ -1479,8 +1479,13 @@ disc_point(float, float) -> vec2
   host writes bytes at a published offset and the shader reads them through the struct, so a
   disagreement is not a compile error anywhere — it is an element reading the middle of the
   element before it. The align/size table lives in one place,
-  `crates/karakuri-codegen/src/layout.rs`, and the naga tests validate the emitted module
-  rather than trusting the arithmetic
+  `crates/karakuri-ir/src/layout.rs` — the crate at the bottom of the dependency graph, so
+  that the lowering and the engine read one rule rather than each carrying a copy — and the
+  naga tests assert it against a real WGSL module: they compile the emitted struct and
+  compare the member offsets and array stride naga computed from its own rules against the
+  ones the table gave. Validating the module is the weaker check and would not catch a wrong
+  table, because nothing emits an `@offset` — a front end handed one recomputes the same
+  offsets from the same declarations and agrees with itself
 - Buffers swap at the end of every **step**, not every frame: what one substep wrote as
   "next" is the next substep's "prev", and after the last one it is what L4 reads
 
@@ -2618,7 +2623,7 @@ purely a source file that a human or an LLM can read and edit.
 {"t":"param_decl","key":"radius","type":"float","min":0.1,"max":8.0,"default":2.0}
 {"t":"capacity_decl","min":65536,"max":1048576,"default":262144}
 {"t":"emit","attrs":["position","velocity","age"]}
-{"t":"perf","kind":"L1","ns_per_element":0.9,"bytes_per_element":48}
+{"t":"perf","kind":"L1","ns_per_element":0.9}
 {"t":"tag","values":["organic","slow","volumetric"]}
 {"t":"preview","path":"previews/a3f2c1….mp4"}
 ```
@@ -2649,6 +2654,29 @@ The record takes a different shape per kind, because the two do not scale the sa
 linear and the cost at any `capacity` is a multiplication. That per-element figure is an
 intrinsic property of the procedure, which is exactly what an artifact should record —
 a total would be a property of a Set that happened to instantiate it.
+
+**The record carries no `bytes_per_element`, and its absence is a decision rather than a
+field nobody filled in.** How many bytes an element occupies is not a property of one
+procedure, so a per-procedure record cannot carry it: an L2's element struct is built from
+everything that reached it unioned with its own `emit`, the `copy` slot is contributed by
+whichever amplifier sits *above* it in the chain, and a derivation's stored slot exists only
+because something *downstream* named the attribute. None of the three is visible from a
+single `.kir`. What such a record could hold is therefore a floor — `kaleidoscope`'s was 96
+bytes an element against the 312 the engine allocates for it, and `swirl_warp`'s 8 against
+48 — and a floor at a third of the value, published under a name that reads as a
+measurement, is worse than nothing, because the record has no way to say which of the two it
+is.
+
+**The engine reports it instead, from the sizes of the buffers it created**: per node, and
+totalled over a Set. That is also where the question lives. `capacity` differs per node and
+an amplifier multiplies it downstream, so bytes resident is a property of the Set that
+instantiated the procedures and never of any one of them — where `ns_per_element` really is
+intrinsic to a procedure, which is what keeps it here.
+
+**A record format is an authored thing in this project**, so this is a change to the
+vocabulary and not a value going missing. Nothing reads `perf` yet — the metadata file is
+M4 and does not exist — so there is nothing to migrate, and a decoder meeting the key in
+an older file should skip it as it skips any other it does not know.
 
 **L4 is a measurement at reference conditions.** Point sprite cost is dominated by fill
 rate: `point_size` and resolution decide the overdraw, so it is not linear in element count

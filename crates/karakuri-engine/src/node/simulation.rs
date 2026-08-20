@@ -2,22 +2,15 @@
 
 use karakuri_codegen::generate_l1;
 use karakuri_codegen::layout::{
-    binding, counts, group, step_args, ElementLayout, UniformLayout, VERTICES_PER_ELEMENT,
-    WORKGROUP_SIZE,
+    binding, counts, group, step_args, UniformLayout, VERTICES_PER_ELEMENT, WORKGROUP_SIZE,
 };
+use karakuri_ir::layout::{ElementLayout, ALIVE_BYTES};
 use karakuri_ir::typed::Checked;
 
 use super::{Geometry, Tick};
 use crate::compaction::Compaction;
-use crate::set::{SetError, MAX_STEPS};
+use crate::set::{ElementStorage, SetError, MAX_STEPS};
 use crate::uniforms::UniformScratch;
-
-/// Bytes per element in the alive buffer: a dense `array<u32>`, one flag per
-/// element — see the layout contract for why this is the one piece of
-/// per-element state that lives outside the `Element` struct entirely: the
-/// compaction scan reads it as a plain array with no stride arithmetic, and
-/// packing it in would make the scan depend on a per-procedure struct size.
-const ALIVE_STRIDE: u64 = 4;
 
 /// The param the engine quantises spawning from. Named once so the uniform
 /// path and the accumulator cannot end up reading two different strings.
@@ -60,6 +53,14 @@ impl Pair {
         } else {
             &self.a
         }
+    }
+
+    /// What the pair costs, asked of the two buffers rather than remembered
+    /// from the one `size` they were created with. A remembered number is a
+    /// second expression that has to keep agreeing with a `create_buffer` call;
+    /// this is the call's own answer.
+    fn bytes(&self) -> u64 {
+        self.a.size() + self.b.size()
     }
 }
 
@@ -165,7 +166,7 @@ impl Simulation {
         // -- buffers ------------------------------------------------------
         let element_layout = shader.element_layout.clone();
         let element_buffer_size = u64::from(capacity) * u64::from(element_layout.stride);
-        let alive_buffer_size = u64::from(capacity) * ALIVE_STRIDE;
+        let alive_buffer_size = u64::from(capacity) * u64::from(ALIVE_BYTES);
         let make_pair = |label: &str, size: u64| {
             let make = |suffix: &str| {
                 device.create_buffer(&wgpu::BufferDescriptor {
@@ -438,6 +439,31 @@ impl Simulation {
             elements: [self.element_buf.prev(false), self.element_buf.prev(true)],
             alive: [self.alive_buf.prev(false), self.alive_buf.prev(true)],
             counts: &self.counts,
+        }
+    }
+
+    /// **What this node allocated to hold elements** — see [`ElementStorage`]
+    /// for what counts and why the figure is read off the buffers.
+    ///
+    /// **An L1 pays for two directions of everything.** It reads what it wrote
+    /// last step, so the element buffer and the alive array each exist twice
+    /// and swap; nothing further down the chain does, because nothing further
+    /// down reads its own previous output.
+    ///
+    /// **And a third buffer only where the live set can change.** The scan
+    /// writes one destination index per element, and a procedure with no
+    /// `spawn` and no `kill()` has no scan at all — it writes in place. That is
+    /// precisely the kind of term a figure taken from a procedure's text keeps
+    /// missing and a figure taken from the buffers cannot.
+    pub(crate) fn element_storage(&self) -> ElementStorage {
+        ElementStorage {
+            bytes: self.element_buf.bytes()
+                + self.alive_buf.bytes()
+                + self
+                    .compaction
+                    .as_ref()
+                    .map_or(0, |c| c.dest_buffer().size()),
+            capacity: self.capacity,
         }
     }
 
@@ -715,7 +741,7 @@ impl Simulation {
 fn initial_state(capacity: u32, has_spawn: bool, layout: &ElementLayout) -> (Vec<u8>, Vec<u8>) {
     let stride = layout.stride as usize;
     let mut elements = vec![0u8; capacity as usize * stride];
-    let mut alive = vec![0u8; capacity as usize * ALIVE_STRIDE as usize];
+    let mut alive = vec![0u8; capacity as usize * ALIVE_BYTES as usize];
 
     if !has_spawn {
         // Everything is alive, and nothing needs a birth-fraction
@@ -728,7 +754,7 @@ fn initial_state(capacity: u32, has_spawn: bool, layout: &ElementLayout) -> (Vec
                 .copy_from_slice(&(i as u32).to_le_bytes());
             elements[base + birth_frac_offset..base + birth_frac_offset + 4]
                 .copy_from_slice(&1.0f32.to_le_bytes());
-            alive[i * ALIVE_STRIDE as usize..i * ALIVE_STRIDE as usize + 4]
+            alive[i * ALIVE_BYTES as usize..i * ALIVE_BYTES as usize + 4]
                 .copy_from_slice(&1u32.to_le_bytes());
         }
     }
@@ -793,10 +819,10 @@ pub(super) fn read_buffer(
 #[cfg(test)]
 mod tests {
     //! Byte-level checks for `initial_state`, the pure function behind
-    //! `Simulation::initialize`'s interleaved write. The module doc on
-    //! `karakuri_codegen::layout` warns that getting the host-side write
-    //! wrong is silent — "a plausible-looking image with the wrong values
-    //! in it" — so this checks the exact bytes at the exact offsets
+    //! `Simulation::initialize`'s interleaved write. The doc on
+    //! `karakuri_ir::layout::ElementSlot` warns that getting the host-side
+    //! write wrong is silent — "an element reading the middle of the element
+    //! before it" — so this checks the exact bytes at the exact offsets
     //! `ElementLayout` publishes, independently of whatever `initialize`
     //! itself does, and needs no GPU to do it.
     use super::*;
@@ -812,7 +838,7 @@ mod tests {
     }
 
     fn alive_at(alive: &[u8], i: usize) -> u32 {
-        let off = i * ALIVE_STRIDE as usize;
+        let off = i * ALIVE_BYTES as usize;
         u32::from_le_bytes(alive[off..off + 4].try_into().unwrap())
     }
 
@@ -822,9 +848,9 @@ mod tests {
     /// erroring."
     #[test]
     fn no_spawn_block_seeds_every_slot_with_its_index_and_marks_it_alive() {
-        let layout = karakuri_codegen::layout::generate_element_layout(
+        let layout = karakuri_ir::layout::generate_element_layout(
             &[karakuri_ir::Attr::Position, karakuri_ir::Attr::Age],
-            karakuri_codegen::layout::Synthetic::NONE,
+            karakuri_ir::layout::Synthetic::NONE,
             &[],
         );
         let stride = layout.stride as usize;
@@ -832,7 +858,7 @@ mod tests {
         let (elements, alive) = initial_state(capacity, false, &layout);
 
         assert_eq!(elements.len(), capacity as usize * stride);
-        assert_eq!(alive.len(), capacity as usize * ALIVE_STRIDE as usize);
+        assert_eq!(alive.len(), capacity as usize * ALIVE_BYTES as usize);
 
         for i in 0..capacity as usize {
             assert_eq!(
@@ -856,9 +882,9 @@ mod tests {
     /// make dead slots read as live the moment the range grew past them.
     #[test]
     fn spawn_block_leaves_every_slot_zeroed() {
-        let layout = karakuri_codegen::layout::generate_element_layout(
+        let layout = karakuri_ir::layout::generate_element_layout(
             &[karakuri_ir::Attr::Position, karakuri_ir::Attr::Age],
-            karakuri_codegen::layout::Synthetic::NONE,
+            karakuri_ir::layout::Synthetic::NONE,
             &[],
         );
         let stride = layout.stride as usize;
@@ -872,7 +898,7 @@ mod tests {
         );
         assert_eq!(
             alive,
-            vec![0u8; capacity as usize * ALIVE_STRIDE as usize],
+            vec![0u8; capacity as usize * ALIVE_BYTES as usize],
             "spawn-block alive flags must start zeroed"
         );
     }

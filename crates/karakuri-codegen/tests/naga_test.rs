@@ -723,10 +723,10 @@ fn assert_layout_matches_text(source: &str, layout: &karakuri_codegen::layout::U
 /// one from `consumes` (see that function's doc) — every fixture below is
 /// built so its `consumes` is a subset of some L1 fixture's `emit`, and this
 /// derives the layout that L1 side would have produced.
-fn layout_for(l1: &Checked) -> karakuri_codegen::layout::ElementLayout {
-    karakuri_codegen::layout::generate_element_layout(
+fn layout_for(l1: &Checked) -> karakuri_ir::layout::ElementLayout {
+    karakuri_ir::layout::generate_element_layout(
         &l1.emit,
-        karakuri_codegen::layout::Synthetic::NONE,
+        karakuri_ir::layout::Synthetic::NONE,
         &[],
     )
 }
@@ -1554,7 +1554,7 @@ proc collides {
     let shader = karakuri_codegen::generate_l2(
         &checked,
         &[Attr::Position, Attr::Age],
-        karakuri_codegen::layout::Synthetic::NONE,
+        karakuri_ir::layout::Synthetic::NONE,
         &[],
         None,
         None,
@@ -1569,7 +1569,7 @@ proc collides {
 fn compiled_l2(
     src: &str,
     upstream: &[Attr],
-    synthetic: karakuri_codegen::layout::Synthetic,
+    synthetic: karakuri_ir::layout::Synthetic,
 ) -> karakuri_codegen::L2Shader {
     let parsed = karakuri_ir::parse(src).expect("parses");
     let checked = karakuri_ir::check::check(&parsed).expect("checks");
@@ -1593,7 +1593,7 @@ fn an_amplifying_l2_lowers_to_valid_wgsl() {
     let shader = compiled_l2(
         MIRROR,
         &[Attr::Position],
-        karakuri_codegen::layout::Synthetic::NONE,
+        karakuri_ir::layout::Synthetic::NONE,
     );
     validate(&shader.source);
     assert_eq!(shader.amplify, Some(4));
@@ -1617,7 +1617,7 @@ fn only_an_amplifying_l2_binds_a_liveness_buffer_to_write() {
     let amplifying = compiled_l2(
         MIRROR,
         &[Attr::Position],
-        karakuri_codegen::layout::Synthetic::NONE,
+        karakuri_ir::layout::Synthetic::NONE,
     );
     assert!(
         amplifying.source.contains("dst_alive"),
@@ -1634,7 +1634,7 @@ proc plain {
 }
 "#,
         &[Attr::Position],
-        karakuri_codegen::layout::Synthetic::NONE,
+        karakuri_ir::layout::Synthetic::NONE,
     );
     assert!(!plain.source.contains("dst_alive"), "{}", plain.source);
 }
@@ -1652,7 +1652,7 @@ fn a_second_amplifier_composes_the_copy_index_rather_than_replacing_it() {
     let first = compiled_l2(
         MIRROR,
         &[Attr::Position],
-        karakuri_codegen::layout::Synthetic::NONE,
+        karakuri_ir::layout::Synthetic::NONE,
     );
     assert!(
         first.source.contains("dst[i].copy = 0u * 4u + _c;"),
@@ -1697,7 +1697,7 @@ proc plain {
 }
 "#,
         &[Attr::Position],
-        karakuri_codegen::layout::Synthetic { copy: true },
+        karakuri_ir::layout::Synthetic { copy: true },
     );
     validate(&plain.source);
     assert!(
@@ -1726,7 +1726,7 @@ proc plain {
 }
 "#,
         &[Attr::Position],
-        karakuri_codegen::layout::Synthetic::NONE,
+        karakuri_ir::layout::Synthetic::NONE,
     );
     validate(&plain.source);
     assert!(plain.source.contains("f32(0u)"), "{}", plain.source);
@@ -1750,7 +1750,7 @@ proc masked {
 }
 "#,
         &[Attr::Position],
-        karakuri_codegen::layout::Synthetic::NONE,
+        karakuri_ir::layout::Synthetic::NONE,
     );
     validate(&shader.source);
 }
@@ -1780,9 +1780,9 @@ proc tinted {
 "#;
     let parsed = karakuri_ir::parse(src).expect("parses");
     let checked = karakuri_ir::check::check(&parsed).expect("checks");
-    let amplified = karakuri_codegen::layout::generate_element_layout(
+    let amplified = karakuri_ir::layout::generate_element_layout(
         &[Attr::Position],
-        karakuri_codegen::layout::Synthetic { copy: true },
+        karakuri_ir::layout::Synthetic { copy: true },
         &[],
     );
     let shader = karakuri_codegen::generate_l4(&checked, &amplified, None);
@@ -1826,9 +1826,9 @@ proc tinted {
 "#;
     let parsed = karakuri_ir::parse(src).expect("parses");
     let checked = karakuri_ir::check::check(&parsed).expect("checks");
-    let plain = karakuri_codegen::layout::generate_element_layout(
+    let plain = karakuri_ir::layout::generate_element_layout(
         &[Attr::Position],
-        karakuri_codegen::layout::Synthetic::NONE,
+        karakuri_ir::layout::Synthetic::NONE,
         &[],
     );
     let shader = karakuri_codegen::generate_l4(&checked, &plain, None);
@@ -1890,9 +1890,9 @@ fn compiled(src: &str) -> karakuri_ir::typed::Checked {
 #[test]
 fn a_spliced_field_validates_in_every_kind_of_caller() {
     let field = spliced();
-    let layout = karakuri_codegen::layout::generate_element_layout(
+    let layout = karakuri_ir::layout::generate_element_layout(
         &[Attr::Position],
-        karakuri_codegen::layout::Synthetic::NONE,
+        karakuri_ir::layout::Synthetic::NONE,
         &[],
     );
 
@@ -1930,7 +1930,7 @@ proc warp {
         &karakuri_codegen::generate_l2(
             &l2,
             &[Attr::Position],
-            karakuri_codegen::layout::Synthetic::NONE,
+            karakuri_ir::layout::Synthetic::NONE,
             &[],
             None,
             Some(&field),
@@ -2018,9 +2018,9 @@ proc plain {
 }
 "#,
     );
-    let layout = karakuri_codegen::layout::generate_element_layout(
+    let layout = karakuri_ir::layout::generate_element_layout(
         &[Attr::Position],
-        karakuri_codegen::layout::Synthetic::NONE,
+        karakuri_ir::layout::Synthetic::NONE,
         &[],
     );
     let src = karakuri_codegen::generate_l4(&plain, &layout, Some(&field)).source;
@@ -2061,9 +2061,9 @@ proc gen {
         "an L1 passes its per-substep clock: {src}"
     );
 
-    let layout = karakuri_codegen::layout::generate_element_layout(
+    let layout = karakuri_ir::layout::generate_element_layout(
         &[Attr::Position],
-        karakuri_codegen::layout::Synthetic::NONE,
+        karakuri_ir::layout::Synthetic::NONE,
         &[],
     );
     let full = compiled(
@@ -2084,4 +2084,209 @@ proc marcher {
         src.contains("_field_at(") && src.contains("u.t"),
         "and a renderer passes `u.t`: {src}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// The element layout, checked against a real WGSL front end's own arithmetic.
+//
+// **A wrong align/size table is not a compile error anywhere.** The host writes
+// bytes at `ElementSlot::offset` and the shader reads them through the struct —
+// so if the two disagree, nothing refuses to build and nothing logs: it is an
+// element reading the middle of the element before it, which reaches a screen
+// as plausible material with the wrong values in it.
+//
+// Validating the module cannot catch that on its own, and the claim that it
+// could was wrong for a specific reason: `write_element_struct` emits no
+// `@offset` attributes at all, so naga computes every offset from its own rules
+// and can never visibly disagree with ours. It agrees with itself. What is
+// needed is to ask naga what it computed and compare, which is what these do.
+// ---------------------------------------------------------------------------
+
+/// naga's own placement for one generated struct: each member's name and byte
+/// offset in declaration order, and the stride it gives `array<name>`.
+///
+/// **The array stride rather than the struct's span**, because the stride is
+/// the number the engine actually multiplies a capacity by. WGSL rounds a
+/// struct's size up to its own alignment to get it, so the two agree — and the
+/// caller asserts that they do, since a front end that disagreed with itself
+/// there would make every other assertion here meaningless.
+fn naga_placement(source: &str, name: &str) -> (Vec<(String, u32)>, u32, u32) {
+    let module = naga::front::wgsl::parse_str(source).unwrap_or_else(|e| {
+        panic!(
+            "WGSL failed to parse:\n{}\n\n---- source ----\n{source}",
+            e.emit_to_string(source)
+        )
+    });
+    let (handle, members, span) = module
+        .types
+        .iter()
+        .find_map(|(handle, ty)| match (&ty.name, &ty.inner) {
+            (Some(n), naga::TypeInner::Struct { members, span }) if n == name => {
+                Some((handle, members, *span))
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("no `struct {name}` in the emitted module:\n{source}"));
+    let stride = module
+        .types
+        .iter()
+        .find_map(|(_, ty)| match ty.inner {
+            naga::TypeInner::Array { base, stride, .. } if base == handle => Some(stride),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("`{name}` is never bound as an array:\n{source}"));
+    let placed = members
+        .iter()
+        .map(|m| {
+            (
+                m.name.clone().unwrap_or_else(|| "<unnamed>".to_string()),
+                m.offset,
+            )
+        })
+        .collect();
+    (placed, span, stride)
+}
+
+/// Every slot of `layout`, at the name and offset naga put it at, and the
+/// stride naga gives an array of it.
+fn assert_naga_agrees(source: &str, name: &str, layout: &karakuri_ir::layout::ElementLayout) {
+    let (placed, span, stride) = naga_placement(source, name);
+    let ours: Vec<(String, u32)> = layout
+        .slots
+        .iter()
+        .map(|s| (s.name.to_string(), s.offset))
+        .collect();
+    assert_eq!(
+        placed, ours,
+        "naga placed `{name}`'s members differently from `ElementLayout`:\n{source}"
+    );
+    assert_eq!(
+        stride, layout.stride,
+        "naga's `array<{name}>` stride is not `ElementLayout::stride`:\n{source}"
+    );
+    assert_eq!(
+        span, stride,
+        "a struct's span and its array stride must be the same number"
+    );
+}
+
+fn l1_emitting(emit: &str) -> karakuri_ir::typed::Checked {
+    let assignments: String = emit
+        .split(", ")
+        .map(|attr| match attr {
+            "position" | "velocity" | "normal" | "tint" => {
+                format!("    {attr} = vec3(0.0, 0.0, 0.0);\n")
+            }
+            "uv" => "    uv = vec2(0.0, 0.0);\n".to_string(),
+            other => format!("    {other} = 0.0;\n"),
+        })
+        .collect();
+    compiled(&format!(
+        r#"
+proc placed {{
+  kind     L1
+  topology points
+  capacity [1, 1] = 1
+
+  emit {emit}
+
+  element {{
+{assignments}  }}
+}}
+"#
+    ))
+}
+
+/// **The one case the whole saving comes from: a `vec3` followed by a scalar.**
+///
+/// `position` is 16-byte aligned and 12 bytes long, so 28..32 is addressable
+/// and `size` is placed there rather than at 32 — one 16-byte block for the
+/// pair rather than two. That is the packing rule this project relies on, and
+/// the assertion is that WGSL agrees it is a rule and not a hope: get it wrong
+/// and every element after the first reads four bytes into its predecessor.
+#[test]
+fn naga_agrees_a_scalar_lands_in_the_padding_a_vec3_leaves() {
+    let l1 = l1_emitting("position, size");
+    let shader = karakuri_codegen::generate_l1(&l1, &[], None);
+    validate(&shader.source);
+    assert_naga_agrees(&shader.source, "Element", &shader.element_layout);
+    // **And the number itself, because agreement is not enough on its own.**
+    // The struct's *text* is written from the same slots the offsets are, so a
+    // wrong element type — `size` declared as a `vec3` — moves the declaration
+    // and the offset together and naga agrees about the wrong thing. These two
+    // are what says which packing was agreed on.
+    assert_eq!(shader.element_layout.offset_of("size"), 28);
+    assert_eq!(shader.element_layout.stride, 32);
+}
+
+/// The same check across the shapes a real `emit` list takes: nothing but the
+/// two unconditional scalars, a lone vector, two vectors with a scalar closing
+/// the second's padding, and a `vec2` — the one alignment between 4 and 16.
+#[test]
+fn naga_agrees_with_the_element_layout_for_every_emit_shape() {
+    for emit in [
+        "position",
+        "position, velocity, age",
+        "position, uv, size",
+        "uv, age",
+        "position, normal, tint",
+    ] {
+        let l1 = l1_emitting(emit);
+        let shader = karakuri_codegen::generate_l1(&l1, &[], None);
+        validate(&shader.source);
+        assert_naga_agrees(&shader.source, "Element", &shader.element_layout);
+    }
+}
+
+/// **An L4 addresses the very buffer an L1 wrote**, under a struct it declares
+/// itself, so the two have to place every member identically — and this asks a
+/// front end rather than comparing the generator to itself.
+#[test]
+fn naga_agrees_with_the_element_layout_in_a_renderer() {
+    let layout = layout_for(&drift_shell());
+    let shader = karakuri_codegen::generate_l4(&soft_points(), &layout, None);
+    validate(&shader.source);
+    assert_naga_agrees(&shader.source, "Element", &layout);
+}
+
+/// **Both of an L2's structs, which are different shapes in one module.**
+///
+/// The output carries `copy` where the input does not, so the two disagree
+/// about everything after the first eight bytes — and a single struct checked
+/// twice would not notice a generator that emitted the input's shape under the
+/// output's name.
+#[test]
+fn naga_agrees_with_both_element_layouts_in_a_deform() {
+    let shader = compiled_l2(
+        MIRROR,
+        &[Attr::Position, Attr::Size],
+        karakuri_ir::layout::Synthetic::NONE,
+    );
+    validate(&shader.source);
+    let input = karakuri_ir::layout::generate_element_layout(
+        &[Attr::Position, Attr::Size],
+        karakuri_ir::layout::Synthetic::NONE,
+        &[],
+    );
+    assert_naga_agrees(&shader.source, "ElementIn", &input);
+    assert_naga_agrees(&shader.source, "ElementOut", &shader.element_layout);
+    assert!(
+        shader.element_layout.has_slot("copy"),
+        "an amplifier's output carries the copy index: {:?}",
+        shader.element_layout
+    );
+}
+
+/// **A derived attribute's stored slot is placed by the same rules**, and it is
+/// the one slot no `emit` list mentions: `velocity` exists here because a
+/// downstream consumer named it, with the `velocity_lived` flag beside it in
+/// the four bytes that `vec3` leaves. A slot nothing declares is exactly where
+/// a placement rule is easiest to get wrong unnoticed.
+#[test]
+fn naga_agrees_about_a_slot_no_procedure_declared() {
+    let l1 = l1_emitting("position");
+    let shader = karakuri_codegen::generate_l1(&l1, &[Attr::Velocity], None);
+    validate(&shader.source);
+    assert!(shader.element_layout.has_slot("velocity_lived"));
+    assert_naga_agrees(&shader.source, "Element", &shader.element_layout);
 }

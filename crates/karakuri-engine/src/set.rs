@@ -46,7 +46,7 @@
 
 use std::collections::HashMap;
 
-use karakuri_codegen::layout::ElementLayout;
+use karakuri_ir::layout::ElementLayout;
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
 
@@ -61,6 +61,53 @@ use crate::video_source::VideoSource;
 /// advisory: each substep needs its own spawn-count entry, and that array is
 /// sized once, at build time.
 pub const MAX_STEPS: u8 = 4;
+
+/// **What one node allocated to hold elements, and how many elements those
+/// bytes cover.**
+///
+/// **One entry per element** is the rule that decides what is counted. The
+/// element buffer, the alive array and the compaction scan's destination
+/// indices are all indexed by element, which is what makes them a per-element
+/// figure at all; the counts block, the uniform block and the scan's block-sum
+/// pyramid are not — there is one counts block per node whatever the capacity,
+/// and the pyramid is indexed by workgroup. Leaving those out is what keeps
+/// [`ElementStorage::per_element`] an exact division rather than a rounded one,
+/// and what keeps the number answering "what does one more element cost".
+///
+/// **Every byte here is read off a buffer rather than recomputed.** The fields
+/// are sums of `wgpu::Buffer::size()` over the buffers the node created, so
+/// there is no second expression beside the `create_buffer` call for anybody to
+/// keep in step. That is the whole reason the figure lives at this end: stage 4
+/// published one derived beside the allocation instead of from it, and it was a
+/// third of the real number by the time anybody measured — see the module doc
+/// on [`karakuri_ir::cost`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ElementStorage {
+    /// The sum of the real sizes of this node's per-element buffers.
+    pub bytes: u64,
+    /// **The element count those bytes cover, which is the node's own and not
+    /// the Set's.** An amplifier multiplies the capacity for everything below
+    /// it, so a node under one is sized — and reports — at the multiplied
+    /// count. This is exactly the input a per-procedure figure cannot have.
+    pub capacity: u32,
+}
+
+impl ElementStorage {
+    /// Bytes per element, exactly: every buffer counted is a whole multiple of
+    /// [`ElementStorage::capacity`].
+    ///
+    /// Zero capacity is unreachable through a built node — a `.kir` declares a
+    /// range and `Simulation::build` refuses anything outside it — but a
+    /// division is guarded anyway, because a panic on the *reporting* path is
+    /// the worst place for a Set to discover a capacity it should never have
+    /// accepted.
+    pub fn per_element(self) -> u64 {
+        match self.capacity {
+            0 => 0,
+            n => self.bytes / u64::from(n),
+        }
+    }
+}
 
 /// The fixed simulation step. **Not** the real frame delta — see the
 /// determinism invariant in `README.md`. Public because the session clock a
@@ -1547,7 +1594,7 @@ impl Set {
             let mut upstream: Vec<karakuri_ir::Attr> = l1.emit.clone();
             // The engine-written slots and the element count at the current
             // position, both of which an amplifier changes for everything below it.
-            let mut synthetic = karakuri_codegen::layout::Synthetic::NONE;
+            let mut synthetic = karakuri_ir::layout::Synthetic::NONE;
             let mut chain_capacity = capacity;
             // **Index of the last node that amplified**, which is where the chain's
             // liveness and counts live from that point on. Tracked rather than
@@ -2046,6 +2093,47 @@ impl Set {
         });
         self.bindings.push(binding);
         Bound::Yes
+    }
+
+    /// **What every node of this Set allocated to hold elements**, one entry
+    /// per node — see [`ElementStorage`].
+    ///
+    /// In the order the sources are walked, and within a source: the
+    /// simulation, the far simulation it pairs with where there is one, then
+    /// the chain of deforms — the order the elements themselves travel in.
+    ///
+    /// **Not the order [`Set::node_names`] is in**, and it cannot be made to
+    /// be: a name is per *procedure* and an entry here is per *instance*, so a
+    /// Set over two sources instantiates one chain of deforms twice and has
+    /// more entries than there are names. Labelling these belongs to whatever
+    /// gives a node instance an address, which nothing does yet — see
+    /// `docs/roadmap.md`, "Naming what a Set holds".
+    ///
+    /// **A renderer and a camera are absent rather than zero.** An L4 draws
+    /// from the buffer the node above it allocated and an L3 has no elements at
+    /// all, so a row for either would be a zero the reader has to work out the
+    /// meaning of — and charging one would count the same memory twice.
+    pub fn element_storage(&self) -> Vec<ElementStorage> {
+        self.sources
+            .iter()
+            .flat_map(|source| {
+                std::iter::once(source.sim.element_storage())
+                    .chain(source.paired.iter().map(Simulation::element_storage))
+                    .chain(source.deforms.iter().map(Deform::element_storage))
+            })
+            .collect()
+    }
+
+    /// **What this Set holds in element storage, in bytes.**
+    ///
+    /// The question the per-element figures exist to answer, and the first
+    /// place it can be asked: `capacity` differs per node and an amplifier
+    /// multiplies it for everything below, so no node — and no procedure —
+    /// knows what the Set as a whole is resident for. A deck that wants its own
+    /// total sums this over its slots, which is a sum over Sets rather than a
+    /// second walk of the nodes.
+    pub fn element_storage_bytes(&self) -> u64 {
+        self.element_storage().iter().map(|e| e.bytes).sum()
     }
 
     /// **What each node is called**, in node order.

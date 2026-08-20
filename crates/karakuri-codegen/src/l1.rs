@@ -80,9 +80,9 @@
 use karakuri_ir::typed::{Checked, TStmt, Target};
 use karakuri_ir::{Ambient, Attr, BlockKind, Kind};
 
-use crate::layout::{
-    self, binding, group, ElementLayout, UniformLayout, UniformLayoutBuilder, WORKGROUP_SIZE,
-};
+use karakuri_ir::layout::{self as ir_layout, ElementLayout};
+
+use crate::layout::{self, binding, group, UniformLayout, UniformLayoutBuilder, WORKGROUP_SIZE};
 use crate::lower::{lower_expr, mangle_local, Resolver};
 use crate::prelude::{self, Requirements};
 use crate::ty::wgsl_ty;
@@ -472,7 +472,7 @@ pub fn generate_l1(
             .collect::<Vec<_>>()
     );
     let element_layout =
-        layout::generate_element_layout(&checked.emit, layout::Synthetic::NONE, derived);
+        ir_layout::generate_element_layout(&checked.emit, ir_layout::Synthetic::NONE, derived);
 
     // No `t`: it is per substep, not per frame, and lives in `StepArgs`.
     let mut b = UniformLayoutBuilder::new();
