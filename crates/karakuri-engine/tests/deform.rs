@@ -149,6 +149,7 @@ fn build_over(gpu: &Gpu, l1: &str, l2s: &[&str], capacity: u32) -> Set {
         &[&l4],
         Layering::Overdraw,
         7,
+        &[],
         karakuri_engine::set::NodeNames::default(),
     )
     .expect("a chain of one L1, some L2s and one L4");
@@ -397,6 +398,7 @@ proc tinted_dots {
         &[&l4],
         Layering::Overdraw,
         7,
+        &[],
         karakuri_engine::set::NodeNames::default(),
     )
     .expect("the renderer consumes what the deformation emits");
@@ -413,6 +415,7 @@ proc tinted_dots {
         &[&l4],
         Layering::Overdraw,
         7,
+        &[],
         karakuri_engine::set::NodeNames::default(),
     )
     .err()
@@ -632,6 +635,7 @@ proc paint {{
             &[&l4],
             Layering::Overdraw,
             7,
+            &[],
             karakuri_engine::set::NodeNames::default(),
         )
         .expect("builds");
@@ -725,6 +729,7 @@ proc half_paint {
         &[&l4],
         Layering::Overdraw,
         7,
+        &[],
         karakuri_engine::set::NodeNames::default(),
     )
     .expect("builds");

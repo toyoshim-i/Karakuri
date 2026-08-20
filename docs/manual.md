@@ -587,6 +587,11 @@ way in both — a shared counter would put the second one somewhere else. And **
 own hash salt**, so the same file used twice comes out in two colours without your arranging
 it. That is the default rather than something to set up.
 
+**Which source gets which colours follows the order you spelled the paths in — until you save
+the Set.** `--save-set` writes down what each source was running at, so a Set you saved comes
+back as the Set you saved: reload it, reorder what is in it, and the colours stay with the
+geometry they were on.
+
 Each source runs at the capacity *it* declares, and `--capacity` overrides all of them.
 `--param L1:1:spawn_rate=…` addresses the second source; a bare `--param spawn_rate=…`
 reaches both.

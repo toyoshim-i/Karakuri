@@ -184,6 +184,7 @@ fn the_pairs_the_docs_offer_compose() {
             &l4s,
             karakuri_engine::set::Layering::Overdraw,
             0,
+            &[],
             karakuri_engine::set::NodeNames::default(),
         )
         .unwrap_or_else(|e| panic!("{} does not build: {e}", chain.join(" + ")));

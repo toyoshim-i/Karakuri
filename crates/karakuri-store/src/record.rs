@@ -237,15 +237,17 @@ pub enum Record {
     /// without touching anything structural.
     Seed {
         stream: Layer,
-        /// **Which node of that layer**, so that a salt can be *assigned*.
+        /// **Which node of that layer**, which is what lets a salt be
+        /// *assigned* rather than derived.
         ///
         /// The salt is what makes two identical grids differ in colour without
-        /// being arranged to, and today it is derived — `hash(set_salt,
-        /// ordinal)` — which `docs/ir-spec.md` calls provisional for one
-        /// reason: reordering `--set` changes which geometry gets which
+        /// being arranged to, and it used to be derived — `hash(set_salt,
+        /// ordinal)` — which `docs/ir-spec.md` called provisional for one
+        /// reason: reordering `--set` changed which geometry got which
         /// randomness. A derived value cannot be recorded, because there is
         /// nothing stable to record it against; an addressed one can, and this
-        /// is the address.
+        /// is the address. `--save-set` writes one of these per geometry now,
+        /// and `--load-set` gives each back to the source its index names.
         ///
         /// Absent is node 0 on [`Record::Slot`]'s terms rather than
         /// [`Record::Param`]'s — a seed salts the node it names — so a file
@@ -834,12 +836,13 @@ mod tests {
 
     /// **A seed names the node it salts.**
     ///
-    /// The salt is derived from `--set` order today, which `docs/ir-spec.md`
-    /// calls provisional for exactly one reason: reordering the command line
-    /// changes which geometry gets which randomness. A derived value has
-    /// nothing stable to be recorded against — this is the address that lets it
-    /// be assigned instead, and the line the spec prints has to survive it
-    /// unchanged.
+    /// The salt used to be derived from `--set` order, which `docs/ir-spec.md`
+    /// called provisional for exactly one reason: reordering the command line
+    /// changed which geometry got which randomness. A derived value has nothing
+    /// stable to be recorded against — this is the address that lets it be
+    /// assigned instead, and `--save-set` now writes one of these per geometry.
+    /// The line the spec prints has to survive that unchanged, which is what
+    /// the absent index below is for.
     #[test]
     fn a_seed_addresses_a_source_and_an_absent_index_stays_absent() {
         assert_eq!(

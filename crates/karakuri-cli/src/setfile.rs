@@ -42,16 +42,16 @@
 //! lives. One rule, one place, and a Set file and a command line cannot disagree
 //! about what a binding means.
 //!
-//! ## Two places the format is still finer than the engine
+//! ## One place the format is still finer than the engine
 //!
-//! The Set file keys `seed` by **node** — a layer and an index, so two
-//! geometries could run under two salts — and the engine takes one salt per Set
-//! and derives each source's from it, so this loader takes node 0's and says
-//! what it left behind. A `param` may also be a vector, and the engine's map
-//! holds `f32`.
+//! A `param` may be a vector, and the engine's map holds `f32`, so a vector
+//! write is reported rather than carried.
 //!
-//! Capacity was a third: it is keyed by node too, and the engine now holds one
-//! per geometry, so it is carried rather than reported.
+//! Capacity was a second and `seed` a third, and both are closed the same way:
+//! each is keyed by node, the engine now holds one per geometry, and so each is
+//! carried rather than reported. What a recorded seed buys is more than the
+//! symmetry — a salt derived from a source's position in `--set` moves when the
+//! list is reordered, and one read back from a file does not.
 //!
 //! None of that is resolved here and none of it is silently dropped. Loading
 //! reports what it could not carry — see [`Loaded::notes`] — because a Set file
@@ -126,7 +126,16 @@ pub struct Loaded {
     pub params: Vec<ParamWrite>,
     pub bindings: Vec<Binding>,
     pub camera: Option<Orbit>,
-    pub seed: Option<u32>,
+    /// **What each geometry was salted with**, by `slot` index, one entry per
+    /// `seed` record the file carried.
+    ///
+    /// `None` where the file named no seed for that geometry — an older file
+    /// that recorded one salt for the whole Set, or none at all — and the
+    /// engine then derives that source's from the Set's seed and its ordinal.
+    /// **The first entry is also the Set's own seed**, which is what an L3
+    /// reads and what an unsalted source is derived from: one number in one
+    /// place rather than a `seed` field beside a `salts` field, disagreeing.
+    pub salts: Vec<Option<u32>>,
     /// **What could not be carried across, in the operator's words.**
     ///
     /// Not warnings to be counted and not errors: a Set file that mentions a
@@ -394,7 +403,14 @@ pub struct Saving<'a> {
     pub params: &'a [ParamWrite],
     pub bindings: &'a [Binding],
     pub camera: &'a Orbit,
-    pub seed: u32,
+    /// **What each geometry is salted with**, one per L1 node in index order.
+    ///
+    /// **Per geometry, because the record is.** `seed` carries a stream and an
+    /// index, so a Set holding two grids records the salt each one is running
+    /// at — and comes back with the colours it had whichever order the paths
+    /// were spelled in. A Set of one geometry writes the one line it always
+    /// wrote: index 0 is absent from the record, so the bytes do not move.
+    pub seeds: &'a [u32],
 }
 
 /// **Write a Set file, and the artifacts it references.**
@@ -417,7 +433,7 @@ pub struct Saving<'a> {
 /// address fold to one node — see `key_for` in `project.rs` — and a gap in an
 /// index describes a chain with a hole in it, which [`from_lines`] refuses on
 /// the way back in rather than closing up.
-fn refuse_unwritable(nodes: &[Node<'_>], capacities: &[u32]) -> Result<(), String> {
+fn refuse_unwritable(nodes: &[Node<'_>], capacities: &[u32], seeds: &[u32]) -> Result<(), String> {
     let count = |layer: Kind| nodes.iter().filter(|n| n.layer == layer).count();
     let geometries = count(Kind::L1);
     if geometries == 0 {
@@ -441,6 +457,19 @@ fn refuse_unwritable(nodes: &[Node<'_>], capacities: &[u32]) -> Result<(), Strin
             if geometries == 1 { "y" } else { "ies" },
             capacities.len(),
             if capacities.len() == 1 { "y" } else { "ies" },
+        ));
+    }
+    // The same shape as the capacities, and for the same reason: a salt
+    // randomises one geometry, so a file that carried a different number of
+    // them would be a file where which grid is which colour depends on how a
+    // reader lines two lists up.
+    if seeds.len() != geometries {
+        return Err(format!(
+            "{geometries} geometr{} and {} seed{} — a seed salts one geometry, so \
+             there is exactly one per L1 node",
+            if geometries == 1 { "y" } else { "ies" },
+            seeds.len(),
+            if seeds.len() == 1 { "" } else { "s" },
         ));
     }
     for layer in [Kind::L1, Kind::L2, Kind::L3, Kind::L4, Kind::Field] {
@@ -494,9 +523,9 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
         params,
         bindings,
         camera,
-        seed,
+        seeds,
     } = set;
-    refuse_unwritable(nodes, capacities)?;
+    refuse_unwritable(nodes, capacities, seeds)?;
     let put = |path: &Path| -> Result<Hash, String> {
         let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
         store
@@ -577,15 +606,19 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
         radius: camera.radius,
         speed: camera.speed,
     }));
-    lines.push(Line::new(Record::Seed {
-        stream: Layer::L1,
-        // One seed, and it salts every geometry the Set builds: `Set::build_many`
-        // takes one salt and derives each source's from it. A per-source salt is
-        // expressible in the record and is still derived, so there is one to
-        // write — see `docs/roadmap.md`.
-        index: 0,
-        value: u64::from(seed),
-    }));
+    // On L1, because that is the layer whose randomness a salt moves, and one
+    // per geometry, because that is what it salts. **Recorded rather than left
+    // to be derived**, which is what `docs/ir-spec.md` asks for: a value
+    // derived from a position in `--set` changes when the list is reordered,
+    // and a value read back from here does not. Index 0 is absent from the
+    // record, so a Set of one geometry is the line it always was.
+    for (index, value) in seeds.iter().enumerate() {
+        lines.push(Line::new(Record::Seed {
+            stream: Layer::L1,
+            index: index as u32,
+            value: u64::from(*value),
+        }));
+    }
 
     store
         .write_set(id, &lines)
@@ -620,7 +653,10 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     let mut params = Vec::new();
     let mut bindings = Vec::new();
     let mut camera = None;
-    let mut seed = None;
+    // What each geometry is salted with, by index, growing as the file names
+    // them — the same shape as `capacities`, because a `seed` is addressed the
+    // same way and for the same reason.
+    let mut salts: Vec<Option<u32>> = Vec::new();
     let mut file_id = id.to_string();
 
     for line in lines {
@@ -753,20 +789,32 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                     ..Orbit::default()
                 });
             }
-            // The same, one field along: a per-source salt is expressible and
-            // this loader carries the first source's.
+            // **One per geometry, and each reaches the source it names.** This
+            // took index 0's and reported the rest, because the engine took one
+            // salt per Set and derived each source's from it. It takes them per
+            // source now, so a Set of two grids comes back with the colours it
+            // was saved with however its records are ordered — which is the
+            // whole of what recording a salt buys over deriving one.
             Record::Seed {
                 stream,
                 index,
                 value,
-            } => match (*stream, *index) {
-                (Layer::L1, 0) => seed = Some(*value as u32),
-                (Layer::L1, at) => notes.push(format!(
-                    "seed on L1 index {at} was skipped: this loader builds one geometry \
-                     and the seed it takes is index 0's"
-                )),
-                (other, _) => notes.push(format!(
-                    "seed on {} was skipped: a Set is salted from one seed and it is L1's",
+            } => match *stream {
+                Layer::L1 => {
+                    let at = *index as usize;
+                    if salts.len() <= at {
+                        salts.resize(at + 1, None);
+                    }
+                    if salts[at].is_some() {
+                        notes.push(format!(
+                            "two seeds both claim L1 index {at}; the later one is used"
+                        ));
+                    }
+                    salts[at] = Some(*value as u32);
+                }
+                other => notes.push(format!(
+                    "seed on {} was skipped: a seed salts a geometry, and the geometries \
+                     are L1's",
                     layer_name(other)
                 )),
             },
@@ -920,7 +968,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         params,
         bindings,
         camera,
-        seed,
+        salts,
         notes,
     })
 }
@@ -1078,7 +1126,7 @@ proc blob {
             params: &[],
             bindings,
             camera: &DEFAULT_CAMERA,
-            seed: 1,
+            seeds: &[1],
         }
     }
 
@@ -1107,7 +1155,7 @@ proc blob {
                 params: &params,
                 bindings: &[a_binding()],
                 camera: &camera,
-                seed: 4242,
+                seeds: &[4242],
             },
         )
         .expect("save");
@@ -1116,7 +1164,7 @@ proc blob {
         assert_eq!(loaded.id, "s1");
         assert_eq!(loaded.capacities, vec![Some(65_536)]);
         assert_eq!(loaded.params, params);
-        assert_eq!(loaded.seed, Some(4242));
+        assert_eq!(loaded.salts, vec![Some(4242)]);
         assert_eq!(
             loaded.camera.map(|c| (c.radius, c.speed)),
             Some((11.5, 0.42))
@@ -1249,8 +1297,10 @@ proc blob {
     }
 
     /// **What could not be carried is said, not dropped.** Three shapes, and
-    /// each is a real disagreement between a format keyed by layer and an
-    /// engine that holds one value per Set.
+    /// each is a real disagreement between what the format can address and what
+    /// the engine has: a salt and a capacity belong to a *geometry*, so one
+    /// written against a renderer names something that does not exist, and a
+    /// vector param has no `f32` to become.
     #[test]
     fn what_the_engine_cannot_carry_is_reported_rather_than_dropped() {
         let (_dir, store, l1, l4) = fixture();
@@ -1284,7 +1334,7 @@ proc blob {
         assert!(notes.contains("capacity on L4"), "{notes}");
         assert!(notes.contains("`tint`"), "{notes}");
         // The L1 values are still the ones applied: a note is not a refusal.
-        assert_eq!(loaded.seed, Some(1));
+        assert_eq!(loaded.salts, vec![Some(1)]);
         assert_eq!(loaded.capacities, vec![Some(4096)]);
     }
 
@@ -1505,7 +1555,7 @@ proc blob {
                 params: &[],
                 bindings: &[],
                 camera: &DEFAULT_CAMERA,
-                seed: 1,
+                seeds: &[1, 2],
             },
         )
         .expect("save");
@@ -1584,13 +1634,114 @@ proc blob {
                 params: &[],
                 bindings: &[],
                 camera: &DEFAULT_CAMERA,
-                seed: 1,
+                seeds: &[1, 2],
             },
         )
         .expect("save");
 
         let loaded = load(&store, "two").expect("load");
         assert_eq!(loaded.capacities, vec![Some(4096), Some(65_536)]);
+        assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
+    }
+
+    /// **A salt is recorded per geometry and comes back per geometry**, which
+    /// is what makes a saved Set reproduce its colours whatever order its
+    /// records are in — `docs/ir-spec.md`, "A `source` value is assigned and
+    /// recorded, never derived". This wrote one `seed` for the whole Set and
+    /// read node 0's, so the second geometry's randomness was a function of
+    /// where its path sat on the command line and of nothing in the file.
+    ///
+    /// **The bytes are asserted, not just the round trip.** Index 0 is absent
+    /// and index 1 is written, which is the whole of what keeps the file a Set
+    /// of one geometry has always written unchanged.
+    #[test]
+    fn each_geometry_keeps_the_salt_it_was_saved_with() {
+        let (dir, store, l1, l4) = fixture();
+        let l1b = beside(&dir, "l1b.kir", &L1.replace("proc ring", "proc ring_two"));
+        let nodes = vec![
+            Node {
+                path: &l1,
+                layer: Kind::L1,
+                index: 0,
+                name: None,
+            },
+            Node {
+                path: &l1b,
+                layer: Kind::L1,
+                index: 1,
+                name: None,
+            },
+            Node {
+                path: &l4,
+                layer: Kind::L4,
+                index: 0,
+                name: None,
+            },
+        ];
+        save(
+            &store,
+            "two",
+            Saving {
+                nodes: &nodes,
+                capacities: &[4096, 4096],
+                params: &[],
+                bindings: &[],
+                camera: &DEFAULT_CAMERA,
+                seeds: &[7, 9],
+            },
+        )
+        .expect("save");
+
+        let text = written(&store, "two");
+        assert!(
+            text.contains("{\"t\":\"seed\",\"stream\":\"L1\",\"value\":7}\n")
+                && text.contains("{\"t\":\"seed\",\"stream\":\"L1\",\"index\":1,\"value\":9}\n"),
+            "{text}"
+        );
+
+        let loaded = load(&store, "two").expect("load");
+        assert_eq!(loaded.salts, vec![Some(7), Some(9)]);
+        assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
+    }
+
+    /// **A Set file written when a seed salted the whole Set still loads**, and
+    /// says so by carrying one salt for the geometry it was written against.
+    ///
+    /// That is the older file's shape: one `seed` record, no index on it, and
+    /// however many geometries. The geometry it names keeps the colours it was
+    /// saved with; the ones it does not are salted the way an unsaved run is,
+    /// which is what `None` in [`Loaded::salts`] asks the engine for. Refusing
+    /// or defaulting either half would be a file that loads and draws something
+    /// nobody saved.
+    #[test]
+    fn a_file_that_salted_the_whole_set_still_loads() {
+        let (dir, store, l1, l4) = fixture();
+        let l1b = beside(&dir, "l1b.kir", &L1.replace("proc ring", "proc ring_two"));
+        let put = |path: &std::path::Path| {
+            store
+                .put_artifact(&std::fs::read(path).expect("read"))
+                .expect("put")
+        };
+        let lines = parsed(&format!(
+            r#"{{"t":"set","id":"old","v":1}}
+{{"t":"slot","layer":"L1","proc":"{}"}}
+{{"t":"slot","layer":"L1","index":1,"proc":"{}"}}
+{{"t":"slot","layer":"L4","proc":"{}"}}
+{{"t":"seed","stream":"L1","value":4242}}
+"#,
+            put(&l1),
+            put(&l1b),
+            put(&l4)
+        ));
+
+        let loaded = from_lines(&store, "old", &lines).expect("load");
+        assert_eq!(loaded.l1s.len(), 2);
+        assert_eq!(
+            loaded.salts,
+            vec![Some(4242)],
+            "the one seed the file carries salts the geometry it names, and the other \
+             geometry is left to be derived"
+        );
         assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
     }
 
@@ -1693,7 +1844,7 @@ proc blob {
                     params: &[],
                     bindings: &[],
                     camera: &DEFAULT_CAMERA,
-                    seed: 1,
+                    seeds: &[1],
                 },
             )
             .expect_err("a file nothing could read back was written");

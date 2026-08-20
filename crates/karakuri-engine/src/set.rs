@@ -393,12 +393,14 @@ pub(crate) struct Source {
     /// default rather than by being arranged to, because `hash1(seed)` differs
     /// between sources while `seed % 512u` does not.
     ///
-    /// **Derived from the Set's salt and the source's ordinal**, which is the
-    /// provisional half. The spec calls for a value *assigned* when a source is
-    /// added and recorded in the stream, so that it survives reordering — and
-    /// that needs a Set file able to carry sources, which one cannot. Until it
-    /// can, reordering the list on a command line changes the colours, and
-    /// nothing else about the picture.
+    /// **Assigned where the caller had a value, derived where it did not.** The
+    /// spec calls for a value chosen once when a source is added, recorded in
+    /// the stream, and read back from there forever after — which a Set file now
+    /// does, one `seed` record per geometry. So a Set that was ever saved comes
+    /// back with its salts in hand and reordering the list no longer moves the
+    /// colours. A bare `--set` has recorded nothing and gets [`derived_salt`],
+    /// which the same paragraph licenses: *where it came from stops mattering
+    /// once it is recorded*.
     salt: u32,
     /// **The L1 node.** Every buffer, pipeline and bind group the simulation
     /// needs, and the spawn accumulator that decides what it creates.
@@ -464,6 +466,14 @@ pub struct Set {
     /// and "the second geometry" is not something any of them can say. See
     /// `docs/roadmap.md`, "Naming what a Set holds".
     sources: Vec<Source>,
+    /// **What each geometry is salted with**, in L1-procedure order — so a
+    /// pairing Set has two entries and one [`Source`].
+    ///
+    /// Kept rather than asked of the sources, because the far side of a pairing
+    /// is a `Simulation` inside a `Source` and a Set file records a salt per
+    /// *geometry*. Held so that a writer can record what the Set is running at
+    /// instead of deriving it a second time — see [`Set::source_salts`].
+    source_salts: Vec<u32>,
     /// **What each node is called**, in node order — the same order [`Set::params`]
     /// and `ranges` are in, and for the same reason: one walk decides it.
     ///
@@ -688,6 +698,10 @@ impl Set {
             &[l4],
             Layering::Overdraw,
             seed_salt,
+            // A pair assigns nothing, so the one source is salted from the
+            // Set's seed and its ordinal — which for source 0 is that seed
+            // unchanged.
+            &[],
             // A pair names nothing, so both nodes are called what their
             // procedures are.
             NodeNames::default(),
@@ -711,10 +725,21 @@ impl Set {
     ///
     /// `l4s` must not be empty. A Set is a video source and a video source with
     /// nothing to draw has no frame to give.
-    // Eight, where clippy's line is seven. Four of them are the chain — an L1, a
-    // list of L2s, an optional L3, a list of L4s — and grouping them into a
+    // Eleven, where clippy's line is seven. Four of them are the chain — an L1,
+    // a list of L2s, an optional L3, a list of L4s — and grouping them into a
     // struct would be a second spelling of "the nodes of a Set", which is what
-    // the Set being returned already is.
+    // the Set being returned already is. Three more are what a caller knows
+    // about the nodes it is handing over rather than about the nodes
+    // themselves: how they layer, what they are salted with, what they are
+    // called.
+    /// **`salts` is one hash salt per geometry, and only what was assigned.**
+    /// A `None` — or an entry past the end — is a source nobody salted, and
+    /// [`derived_salt`] gives it one from `seed_salt` and its ordinal. Same
+    /// rule as [`NodeNames`] and for the same reason: a caller supplies what it
+    /// knows, and what it did not supply is filled in here rather than in two
+    /// places at once. `seed_salt` stays because it is still the Set's own —
+    /// what an L3 reads, and what an unsalted source is derived from.
+    ///
     /// **Everything this function builds happens inside a validation error
     /// scope**, which is the difference between a diagnostic and a dead
     /// process.
@@ -743,11 +768,12 @@ impl Set {
         l4s: &[&Checked],
         layering: Layering,
         seed_salt: u32,
+        salts: &[Option<u32>],
         names: NodeNames<'_>,
     ) -> Result<Set, SetError> {
         device.push_error_scope(wgpu::ErrorFilter::Validation);
         let built = Set::build_inner(
-            device, queue, l1s, l2s, l3, field, l4s, layering, seed_salt, names,
+            device, queue, l1s, l2s, l3, field, l4s, layering, seed_salt, salts, names,
         );
         // **Popped on every path**, which is why the body is a second function
         // rather than this one: it returns early in a dozen places, and a scope
@@ -785,6 +811,7 @@ impl Set {
         l4s: &[&Checked],
         layering: Layering,
         seed_salt: u32,
+        salts: &[Option<u32>],
         names: NodeNames<'_>,
     ) -> Result<Set, SetError> {
         let Some(&(first_l1, _)) = l1s.first() else {
@@ -961,9 +988,24 @@ impl Set {
             None => l1s,
             Some(_) => &l1s[..1],
         };
+        // **Assigned where the caller had one, derived where it had none** —
+        // `salts` is indexed by geometry, so the far side of a pairing is at 1
+        // whether or not the loop below ever reaches that index.
+        let salt_of = |at: usize| -> u32 {
+            salts
+                .get(at)
+                .copied()
+                .flatten()
+                .unwrap_or_else(|| derived_salt(seed_salt, at))
+        };
+        // **What each geometry is actually salted with**, in `l1s` order, kept
+        // so that whatever writes a Set file can record the value rather than
+        // work it out a second time — see [`Set::source_salts`].
+        let mut source_salts: Vec<u32> = Vec::with_capacity(l1s.len());
         let mut sources: Vec<Source> = Vec::with_capacity(heads.len());
         for (at, &(l1, capacity)) in heads.iter().enumerate() {
-            let salt = salt_for(seed_salt, at);
+            let salt = salt_of(at);
+            source_salts.push(salt);
             // **The plan, before anything is built.**
             //
             // A consumed attribute nothing emits used to be an unconditional error.
@@ -1174,13 +1216,18 @@ impl Set {
                             });
                         }
                     }
+                    // **The second geometry's own**, on the same terms as the
+                    // first: a pairing Set is two geometries and one `Source`,
+                    // and a Set file records a salt per geometry.
+                    let far_salt = salt_of(1);
+                    source_salts.push(far_salt);
                     Some((
                         far.emit.clone(),
                         Simulation::build(
                             device,
                             far,
                             far_capacity,
-                            salt_for(seed_salt, 1),
+                            far_salt,
                             &derived,
                             field_shader,
                         )?,
@@ -1387,6 +1434,7 @@ impl Set {
         let set = Set {
             names,
             seed_salt,
+            source_salts,
             steps_taken: 0,
             dt: DT,
             last_beats: 0.0,
@@ -1747,6 +1795,19 @@ impl Set {
     /// **What each node is called**, in node order.
     pub fn node_names(&self) -> &[String] {
         &self.names
+    }
+
+    /// **What each geometry is salted with**, in the order its L1 procedures
+    /// were given — one entry per geometry, so a pairing Set has two.
+    ///
+    /// For whatever records a Set: the spec's salt is a value *assigned* and
+    /// written into the record stream, and what has to be written is the value
+    /// the Set is actually running at. A caller that assigned one is being told
+    /// its own number back; a caller that assigned none finds out what it got.
+    /// Either way it is one fact read from where it lives rather than a second
+    /// derivation somewhere else.
+    pub fn source_salts(&self) -> &[u32] {
+        &self.source_salts
     }
 
     /// The node a name addresses, as the `(layer, index)` every other surface
@@ -2883,22 +2944,30 @@ impl VideoSource for Set {
     }
 }
 
-/// A source's hash salt, from the Set's and the source's ordinal.
+/// **The salt a source takes when nothing assigned it one**, from the Set's
+/// seed and the source's ordinal.
 ///
-/// **The provisional half of `source`.** `docs/ir-spec.md` calls for a value
-/// *assigned* when a source is added and recorded in the stream, so that it
-/// survives the list being reordered. That wanted a Set file able to carry
-/// sources, which one now is — what is left is writing a `seed` record per
-/// source and reading it back. Derived here until then, which gives the picture
-/// the spec asks for (two identical grids in different colours by default) and
-/// not the stability (reordering the list on a command line changes which
-/// colour is which).
+/// `docs/ir-spec.md` asks for a value *assigned* when a source is added and
+/// recorded in the stream, and a Set file now carries one `seed` record per
+/// geometry — so a Set that was saved arrives with its salts in hand and this
+/// is never consulted for it. What is left for this is the case that has
+/// recorded nothing: a bare `--set`, where the ordinal is the only thing there
+/// is. The spec licenses exactly that — *where it came from stops mattering
+/// once it is recorded* — so a value derived here and then written into a file
+/// is an assigned value from the moment the file exists, and reordering the
+/// list stops moving the colours at that same moment.
+///
+/// **Public because the writer needs the same answer.** `--save-set` records
+/// what the run it describes is salted with, and it has no built Set to ask —
+/// it writes the material and stops before a GPU is opened. A second formula
+/// there would be two places for one fact, which is the shape this file has
+/// already paid for twice.
 ///
 /// An odd multiplier, so that adjacent ordinals do not give adjacent salts —
 /// `hash1` mixes, but a salt that walks by one is a salt whose first mixing
 /// round is nearly the same.
-fn salt_for(set_salt: u32, source: usize) -> u32 {
-    set_salt.wrapping_add((source as u32).wrapping_mul(0x9E37_79B9))
+pub fn derived_salt(seed_salt: u32, source: usize) -> u32 {
+    seed_salt.wrapping_add((source as u32).wrapping_mul(0x9E37_79B9))
 }
 
 /// A spliced field's parameter value, by the **semantic** name the layout holds.
@@ -3165,6 +3234,7 @@ proc dots {
             &[&l4],
             Layering::Overdraw,
             1,
+            &[],
             NodeNames::default(),
         )
         .expect("a chain of one L1, one amplifying L2 and one L4");

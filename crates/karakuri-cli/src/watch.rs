@@ -120,6 +120,24 @@ pub struct Watch {
     /// would have pinned every later build to whatever the first one declared.
     capacity: Option<u32>,
     seed_salt: u32,
+    /// **One hash salt per geometry**, restated on every rebuild rather than
+    /// left to be derived there — for the reason `Request::bindings` gives, and
+    /// with a louder symptom: a slot filled from a Set file is running at the
+    /// salts that file recorded, so a rebuild that derived its own would repaint
+    /// every element in it on the next save of a `.kir`.
+    ///
+    /// **One resolved number each, unlike `capacity` above**, and the two differ
+    /// because what they depend on differs. A capacity may come from the *new*
+    /// file's declaration, so resolving it at startup would pin every later
+    /// build to the first one's; a salt depends on nothing in the file at all,
+    /// so the run's own numbers are the answer for as long as the run lasts.
+    ///
+    /// A rebuild whose files declare *more* geometries than the run started
+    /// with gets a salt for the ones this knows and a derived one for the rest,
+    /// which is the rule `Set::build_many` follows for a short list — the ones
+    /// that were already there keep their colours, and the new one is salted
+    /// like a source nobody recorded, because that is what it is.
+    salts: Vec<u32>,
     overrides: Vec<karakuri_engine::ParamWrite>,
     /// The interface, restated on every rebuild for the same reason the
     /// bindings are — and the more urgent one: a `control:` binding whose
@@ -148,10 +166,10 @@ pub struct Watch {
 }
 
 impl Watch {
-    // Eight, where clippy's line is seven. Six of them are one slot's identity
-    // — its files, its layering, its capacity, its seed and the values it was
-    // started with — and a struct to carry them would be `Watch` itself,
-    // constructed one field short.
+    // Nine, where clippy's line is seven. Seven of them are one slot's identity
+    // — its files, its layering, its capacity, its seed, its salts and the
+    // values it was started with — and a struct to carry them would be `Watch`
+    // itself, constructed one field short.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         slot: usize,
@@ -160,6 +178,7 @@ impl Watch {
         layering: karakuri_engine::set::Layering,
         capacity: Option<u32>,
         seed_salt: u32,
+        salts: Vec<u32>,
         overrides: Vec<karakuri_engine::ParamWrite>,
         published: Vec<karakuri_engine::set::Published>,
         bindings: Vec<Binding>,
@@ -174,6 +193,7 @@ impl Watch {
             layering,
             capacity,
             seed_salt,
+            salts,
             overrides,
             published,
             bindings,
@@ -411,6 +431,10 @@ impl Source for Watch {
             names: karakuri_engine::swap::RequestNames::default(),
             layering: self.layering,
             seed_salt: self.seed_salt,
+            // **The run's own, restated.** A rebuild is a new Set of the same
+            // material, and the material is what changed — not which geometry
+            // gets which randomness.
+            salts: self.salts.iter().copied().map(Some).collect(),
             params: self.overrides.clone(),
             published: self.published.clone(),
             bindings: self.bindings.clone(),
@@ -431,6 +455,7 @@ mod tests {
             karakuri_engine::set::Layering::Overdraw,
             Some(4096),
             1,
+            vec![1],
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -479,6 +504,7 @@ mod tests {
             karakuri_engine::set::Layering::Overdraw,
             Some(4096),
             1,
+            vec![1],
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -497,6 +523,50 @@ mod tests {
             .take(4)
             .flatten()
             .next()
+    }
+
+    /// **A rebuild restates the salts the slot is running at**, rather than
+    /// leaving them to be derived where the Set is built.
+    ///
+    /// A slot filled by `--load-set` runs at the salts its file recorded, and
+    /// nothing in a `.kir` says what they are. A request that left them out
+    /// hands `Set::build_many` an empty list, which derives from the ordinal —
+    /// so every element in the slot would change colour on the next save of a
+    /// file that had nothing to do with the geometry, and the Set an operator
+    /// loaded would stop being the Set they loaded partway through an edit.
+    #[test]
+    fn a_rebuild_restates_the_salts_the_slot_is_running_at() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let tmp = tempfile::tempdir().expect("temp dir");
+        // Two geometries, so that "each keeps its own" is a claim at all.
+        let files = ["drift_shell.kir", "lattice_shell.kir", "soft_points.kir"];
+        let paths: Vec<PathBuf> = files.iter().map(|f| tmp.path().join(f)).collect();
+        // Numbers no derivation produces, so a request that derived its own
+        // cannot pass by accident.
+        let salts: Vec<u32> = vec![0x0bad_cafe, 0x1234_5678];
+        let mut watch = Watch::new(
+            0,
+            paths[0].clone(),
+            paths[1..].to_vec(),
+            karakuri_engine::set::Layering::Overdraw,
+            Some(4096),
+            salts[0],
+            salts.clone(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        for (file, path) in files.iter().zip(&paths) {
+            std::fs::copy(root.join("examples").join(file), path).expect("copy an example");
+        }
+
+        let request = rebuild(&mut watch).expect("a build");
+        assert_eq!(request.l1s.len(), 2, "two geometries in the slot");
+        assert_eq!(
+            request.salts,
+            vec![Some(salts[0]), Some(salts[1])],
+            "a rebuild handed the engine salts other than the ones the slot is running at"
+        );
     }
 
     /// **The startup path and the rebuild path answer "which layer is this file
@@ -631,6 +701,7 @@ mod tests {
                 karakuri_engine::set::Layering::Overdraw,
                 Some(4096),
                 1,
+                vec![1],
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),

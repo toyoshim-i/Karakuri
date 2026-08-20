@@ -275,6 +275,16 @@ pub struct Request {
     /// not reproducible from a record stream.
     pub layering: crate::set::Layering,
     pub seed_salt: u32,
+    /// **One hash salt per geometry, and only what was assigned** — see
+    /// [`Set::build_many`]. Empty, or an entry that is `None`, is a source
+    /// whose salt is derived from `seed_salt` and its ordinal.
+    ///
+    /// **Restated on every rebuild**, on exactly the terms the params and the
+    /// bindings are, and with a sharper consequence than either: a rebuild that
+    /// let the salts be derived afresh would re-salt a Set that was loaded with
+    /// salts of its own, and every colour in it would change on the next save
+    /// of a `.kir` that had nothing to do with the geometry.
+    pub salts: Vec<Option<u32>>,
     /// Applied to the new Set once it is built. Parameter values are the one
     /// piece of Set state that is not structural, so they are the one thing
     /// worth carrying across a swap — and they are carried by being *restated*
@@ -1091,6 +1101,7 @@ fn run_worker(
                 &request.l4s.iter().collect::<Vec<_>>(),
                 request.layering,
                 request.seed_salt,
+                &request.salts,
                 // **Restated by the request**, on the same terms its bindings
                 // and its interface are: a rebuild that took the names off the
                 // outgoing Set would depend on what happened to be live, and a
