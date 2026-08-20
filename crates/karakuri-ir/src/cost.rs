@@ -101,6 +101,25 @@ fn fragment_ceiling(checked: &Checked) -> u64 {
 }
 
 /// Every attribute buffer is 16-byte aligned per the WGSL lowering section.
+///
+/// **This model is stale and reports about 85% too much.** An element slot took
+/// its attribute's own width at WGSL's own offsets in `697557b`; this still pads
+/// every one to sixteen bytes and charges the alive flag thirty-two. For
+/// `drift_shell` it says 192 bytes an element where the buffers are 104.
+///
+/// **It is a second copy of an arithmetic that lives in
+/// `karakuri-codegen::layout`, and it drifted the moment that one moved** —
+/// which is the defect this repository has now paid for five times. The copy
+/// exists because `karakuri-codegen` depends on `karakuri-ir` and not the other
+/// way round, so the honest fix is to move the placement rules *down* into this
+/// crate and have the lowering read them, rather than to correct the numbers
+/// here and leave two copies that agree for a while.
+///
+/// Nothing gates on the figure today — it is printed, and `docs/ir-spec.md`
+/// writes it into a `perf` record that nothing yet reads — which is why the
+/// drift went unnoticed. M4's metadata file is what starts reading it. See
+/// `docs/roadmap.md`, "The cost estimator models a layout that no longer
+/// exists".
 const BUFFER_ALIGN: u32 = 16;
 
 const fn align16(bytes: u32) -> u32 {
