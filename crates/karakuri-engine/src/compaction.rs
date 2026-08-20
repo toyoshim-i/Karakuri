@@ -58,6 +58,27 @@
 //! `record_advance` take no buffer arguments and allocate nothing; they
 //! encode commands and nothing else.
 //!
+//! **Those two are counted differently by another crate, so their sizes are
+//! not free to change here.** [`crate::set::ElementStorage`] reports what a
+//! node allocated per element, and it counts `dest` and leaves the pyramid
+//! out. `dest` is one `u32` per element, so it is a whole multiple of capacity
+//! and divides exactly; the pyramid is indexed by *workgroup*, so `sums[0]`
+//! holds `ceil(capacity / WORKGROUP_SIZE)` entries and counting it would turn
+//! [`crate::set::ElementStorage::per_element`] into a rounding-down division.
+//!
+//! **The reason is the exactness and not the size.** The pyramid is
+//! `Θ(capacity / 16)` bytes — linear in capacity with a small constant, since
+//! each level is a 64th of the one below it and the sum of the series is about
+//! a 16th of `capacity` — which is roughly 16 KiB against the 27 MiB counted
+//! for a compacted L1 at capacity 262144 with a 48-byte stride, 0.06%. It is
+//! negligible; it is not sublinear, and an argument for excluding it that
+//! rested on its growth would be wrong.
+//!
+//! So two edits here break a claim made in `set.rs` rather than merely
+//! changing a number: sizing `dest` at anything other than a whole multiple of
+//! capacity, and giving the pyramid an input indexed by element. Either one
+//! wants that claim revisited in the same change.
+//!
 //! # What this does not do
 //!
 //! It does not decide *whether* to run. A procedure with no `spawn` block
