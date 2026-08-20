@@ -2454,6 +2454,7 @@ fn open_store(args: &Args) -> karakuri_store::store::Store {
 fn session_head(
     args: &Args,
     placed: &[Vec<Placed>],
+    l1s: &[karakuri_ir::typed::Checked],
     store: &karakuri_store::store::Store,
     id: &str,
 ) -> Vec<karakuri_store::ndjson::Line> {
@@ -2484,7 +2485,7 @@ fn session_head(
         &material,
         setfile::Saving {
             nodes: &saving_nodes(nodes),
-            capacities: &saving_capacities(args, nodes),
+            capacities: &saving_capacities(args, l1s),
             params: &args.overrides,
             bindings: &args.bindings,
             camera: &camera,
@@ -2511,24 +2512,30 @@ fn saving_nodes(placed: &[Placed]) -> Vec<setfile::Node<'_>> {
     placed.iter().map(Placed::node).collect()
 }
 
-/// What a saved Set says each of its geometries runs at.
+/// What a saved Set says each of its geometries runs at: **what the run was
+/// actually drawing**.
 ///
-/// **The flag's number, per geometry, which is what it has always written.** A
-/// `.kir`'s own declared default is what an untyped `--capacity` leaves each
-/// source running at — see [`capacity_for`] — and writing that here instead
-/// would change the bytes of every Set file this program has ever saved. The
-/// disagreement is real and it is [`capacity_for`]'s to settle; what changes
-/// here is only that a second geometry has a capacity of its own to be wrong
-/// about rather than none at all.
-fn saving_capacities(args: &Args, placed: &[Placed]) -> Vec<u32> {
-    placed
-        .iter()
-        .filter(|node| node.layer == karakuri_ir::Kind::L1)
-        .map(|_| args.capacity)
-        .collect()
+/// This wrote `args.capacity` — the flag's number, or its default when no flag
+/// was given — where the run itself asks [`capacity_for`], which prefers the
+/// procedure's own declared default. So saving `lattice_shell` recorded 262144
+/// and the run that saved it drew 32768, and loading the file back gave a
+/// visibly different picture: a larger, smeared lattice.
+///
+/// **That falsified the one promise the format makes** — `README.md` states that
+/// a run driven by the file renders the same frame as the run whose flags wrote
+/// it. It was invisible while a Set was a pair, because the number was wrong in
+/// the file and wrong again on the way back in; `--load-set` learning to honour
+/// a recorded capacity is what made the two disagree out loud.
+///
+/// It changes the bytes of Set files saved by older builds of this program.
+/// Those files still load — a `capacity` record has always meant what it says —
+/// and they go on describing whatever they described. What changes is that new
+/// ones describe the run.
+fn saving_capacities(args: &Args, l1s: &[karakuri_ir::typed::Checked]) -> Vec<u32> {
+    l1s.iter().map(|l1| capacity_for(args, l1)).collect()
 }
 
-fn save_set(args: &Args, placed: &[Vec<Placed>], id: &str) {
+fn save_set(args: &Args, placed: &[Vec<Placed>], l1s: &[karakuri_ir::typed::Checked], id: &str) {
     let store = open_store(args);
     let Some(nodes) = placed.first().filter(|nodes| !nodes.is_empty()) else {
         eprintln!("karakuri-cli: --save-set needs a `.kir` chain to save");
@@ -2549,7 +2556,7 @@ fn save_set(args: &Args, placed: &[Vec<Placed>], id: &str) {
             // L2, an L3 or a field is saved as what it is rather than refused
             // for want of a slot to write it in.
             nodes: &saving_nodes(nodes),
-            capacities: &saving_capacities(args, nodes),
+            capacities: &saving_capacities(args, l1s),
             params: &args.overrides,
             bindings: &args.bindings,
             camera: &camera,
@@ -2752,7 +2759,8 @@ fn main() {
     // terms as `--render`. Running afterwards would leave an operator unsure
     // whether what they are watching is what was written.
     if let Some(id) = &args.save_set {
-        save_set(&args, &placed, id);
+        let geometries = procs.first().map(|m| m.l1s.as_slice()).unwrap_or(&[]);
+        save_set(&args, &placed, geometries, id);
         return;
     }
 
@@ -3663,7 +3671,13 @@ impl ApplicationHandler for App {
         let recorder = match &self.args.record_session {
             Some(id) => {
                 let store = open_store(&self.args);
-                let head = session_head(&self.args, &self.placed, &store, id);
+                let geometries = self
+                    .procs
+                    .as_ref()
+                    .and_then(|procs| procs.first())
+                    .map(|m| m.l1s.as_slice())
+                    .unwrap_or(&[]);
+                let head = session_head(&self.args, &self.placed, geometries, &store, id);
                 match session::Recorder::open(&store, id, &head) {
                     Ok(recorder) => {
                         eprintln!(
@@ -5105,6 +5119,48 @@ mod tests {
         assert!(parse(&["--audio-in"]).is_err());
     }
 
+    /// **A saved Set records what the run was drawing**, which is the one
+    /// promise the format makes and the one it was breaking.
+    ///
+    /// `--save-set` wrote `args.capacity` — the flag's number, or its default
+    /// where no flag was given — while the run asks each procedure for the
+    /// default *it* declares. A lattice written for 32768 elements was saved as
+    /// 262144 and loaded back a larger, smeared version of itself.
+    ///
+    /// It was invisible while `--load-set` also ignored what the file said: the
+    /// number was wrong on the way out and wrong again on the way in, and the
+    /// two cancelled. Teaching the loader to honour a recorded capacity is what
+    /// made them disagree out loud, which is the ordinary way a pair of
+    /// compensating errors is found.
+    #[test]
+    fn a_saved_set_records_the_capacity_the_run_was_drawing() {
+        let small = compile::check(
+            "proc small { kind L1 capacity [4096, 262144] = 32768 topology points \
+             emit position element { position = vec3(0.0); } }",
+        )
+        .expect("compiles");
+        let large = compile::check(
+            "proc large { kind L1 capacity [4096, 1048576] = 131072 topology points \
+             emit position element { position = vec3(0.0); } }",
+        )
+        .expect("compiles");
+
+        let args = parse(&[]).expect("parses");
+        assert_eq!(
+            saving_capacities(&args, &[small.clone(), large.clone()]),
+            vec![32768, 131072],
+            "the file has to say what each geometry drew, not what the flag defaults to"
+        );
+
+        // And `--capacity` is still the operator overriding every source, so
+        // that is what a file saved under it records.
+        let forced = parse(&["--capacity", "8192"]).expect("parses");
+        assert_eq!(
+            saving_capacities(&forced, &[small, large]),
+            vec![8192, 8192]
+        );
+    }
+
     /// **Each source runs at the capacity its own procedure declares.** The
     /// build asked `capacity_for` once, about the first L1, and handed the
     /// answer to every source — so a grid declared at 131072 ran at 32768
@@ -5273,9 +5329,9 @@ mod tests {
         let mut args = parse(&[]).expect("parses");
         args.sets = vec![(Named::bare(&l1), vec![Named::bare(&l4)])];
         args.store = dir.path().to_path_buf();
-        let (_, placed) = sort_slot(0, &args.sets[0].0, &args.sets[0].1);
+        let (material, placed) = sort_slot(0, &args.sets[0].0, &args.sets[0].1);
 
-        let head = session_head(&args, &[placed], &store, "a_set");
+        let head = session_head(&args, &[placed], &material.l1s, &store, "a_set");
         assert!(!head.is_empty(), "the head describes nothing");
 
         // Read back the way `--replay` reads it, which is the whole claim: the
@@ -5312,9 +5368,9 @@ mod tests {
             ],
         )];
         args.store = dir.path().to_path_buf();
-        let (_, placed) = sort_slot(0, &args.sets[0].0, &args.sets[0].1);
+        let (material, placed) = sort_slot(0, &args.sets[0].0, &args.sets[0].1);
 
-        let head = session_head(&args, &[placed], &store, "a_chain");
+        let head = session_head(&args, &[placed], &material.l1s, &store, "a_chain");
         let loaded = setfile::from_lines(&store, "a_chain", &head)
             .expect("the head a recording writes is a head a replay can load");
         assert_eq!(
