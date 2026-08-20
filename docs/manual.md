@@ -135,13 +135,15 @@ attached**: `--record-session` writes a `procedure` record whenever a swap lands
 `--replay` rebuilds the slot at the frame it changed on. That was not true when this surface
 was first built, and it is the one thing it needed of the format.
 
-Four things worth knowing before you rely on it:
+Five things worth knowing before you rely on it:
 
-- **It reaches an L1 and the renderers, and nothing else in a slot.** An L2, an L3 and a
-  `kind Field` are real nodes and none of them is addressable here — a rewrite is
-  `(slot, layer, index)` and this surface was built when those were the only two layers there
-  were. Those are edited in the files, with `--watch` picking them up. A slot's *second*
-  geometry is unreachable for the same reason.
+- **It reaches every node of a slot.** A read and a write are addressed `(slot, layer,
+  index)`, and the layer is any of `L1`, `L2`, `L3`, `L4` and `Field` — so a deformation, a
+  camera, a shape in a file of its own and a slot's *second* geometry are all editable by a
+  model, not only the geometry and the renderers. The address space is read off the files'
+  own `kind` lines, so a procedure that does not compile is still addressable, which is how
+  a model fixes it. A refusal says what the slot actually holds — "holds no L2: a
+  deformation is optional", "holds 2 L4 nodes, so index is 0-1".
 - **`--watch` is what picks a write up.** Without it the file changes and the screen does
   not; the tool says so, but it is easier to just pass it.
 - **A model that writes something too expensive is caught by the same machinery that catches
@@ -182,11 +184,15 @@ cargo run -p karakuri-cli -- --replay take1 --seq frames/
 A replay reads a `tick` where a live run reads a clock, and the recorded audio where a live
 run reads a microphone — so what comes back is the performance and not just the material.
 
-**A Set file carries one geometry and its renderers, and refuses anything else by name.** A
-slot holding an L2, an L3, a `kind Field` or a second geometry cannot be saved, and
-`--record-session` refuses it too, since a session opens with a Set file. Those slots are
-spelled on the command line and kept in a shell script until the format can name their
-nodes.
+**A Set file carries the whole chain.** A slot holding L2s, an L3, a `kind Field` or
+several geometries is saved as the chain it is — one `slot` record per node, on the layer
+that node's own `kind` declares — and `--record-session` takes it too, since a session opens
+with a Set file. Each geometry's own capacity and its own hash salt are written down, and so
+is every `--edge`, so a cube morphing into a sphere is a Set you can keep and reload with
+the colours and the pairing it had.
+
+What a Set file still leaves behind is the *layering*: `--merge` is not one of the records,
+so a saved Set loads as overdraw. That one stays on the command line.
 
 ---
 
@@ -199,14 +205,16 @@ nodes.
 | | |
 |---|---|
 | `--set L1.kir,L4.kir` | one deck slot. Repeat up to four times |
+| `--set near=L1.kir,far=L1.kir,…` | the same, naming the nodes. Any part may be written `name=file.kir`, and a part written bare is named after its procedure — a second use of one procedure becomes `lattice_shell-2`. The name is what `--edge`, a Set file and a rebuild address the node by |
 | `--set L1.kir,L4.kir,L4.kir` | the same, drawn twice — one simulation, two renderers over it, in the order given |
 | `--set L1.kir,L2.kir,L4.kir` | a deformation between the two. Every path after the first is sorted by the `kind` it declares, so there is nothing new to spell: L2s deform in the order given, L4s draw in the order given |
 | `--set L1.kir,L3.kir,L4.kir` | a camera. One per slot; without one the built-in orbit |
 | `--merge N` | slot `N` **composites** its renderers instead of overdrawing them — a render target each, folded through a gain, an opacity, a blend mode and a mask per renderer. Costs one frame-sized target per renderer and folds at most four. Without it they share one target and meet through their own blend states, which is what you want for one cloud drawn two ways |
 | `L1.kir L4.kir` | the same, positionally, for one slot |
-| `--capacity N` | elements per Set. **Without it each procedure's own declared default is used**, which is what a `.kir`'s `capacity [min, max] = N` line is for; give this and it overrides every slot |
+| `--capacity N` | elements per geometry. **Without it each procedure's own declared default is used**, which is what a `.kir`'s `capacity [min, max] = N` line is for; give this and it overrides every source in every slot |
 | `--param name=value` | a uniform write, applied to every Set — and within a Set, to every node that declares the name |
 | `--param L4:1:name=value` | the same, addressed at one node. How two renderers over one geometry get different values; a bare name cannot, since it reaches both. `L1`, `L2`, `L3`, `L4` and `Field`, and the index is required |
+| `--edge NODE.SLOT=NODE` | bind a procedure's declared geometry input to a node of this Set — `--edge morph.far=sphere_shell`. A `.kir` that declares `uses far : Geometry` names the slot and never which node fills it, so this is where that is said. Both sides are node names. A declared slot nothing binds is refused rather than guessed at |
 | `--publish NAME=key[LOW..HIGH]` | put one control on the console under a name the Set chose, over part of its declared range. Without any, every control is published — the first `--publish` makes the list *the* list. It narrows and never widens: a range outside what the procedure declared is refused |
 | `--publish NAME=L4:0:key[LOW..HIGH]` | the same, addressed at one node rather than every node declaring the key |
 | `--bind FIELDS` | attach a signal to a parameter — `layer=L1,key=turbulence,signal=energy,range=0.0..3.0`. `layer`, `key`, `signal` and `range` are required; `index=N`, `curve=lin\|pow2\|sqrt\|smooth` and the `noise.*` fields are optional. `--help` lists them all |
@@ -247,7 +255,7 @@ nodes.
 | | |
 |---|---|
 | `--store DIR` | where Sets, sessions and artifacts live |
-| `--save-set ID` | write the current material as a Set file and stop |
+| `--save-set ID` | write the material as a Set file and stop — the whole chain, at the capacity and the salt the run would have drawn with |
 | `--load-set ID` | build from one |
 | `--record-session ID` | write the timeline as it happens |
 | `--replay ID` | render a session back. Needs `--render` or `--seq` |

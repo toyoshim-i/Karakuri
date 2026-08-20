@@ -466,8 +466,9 @@ enum Clock {
 ///
 /// What falls out is that `source` need not be an element slot. A chain
 /// instance knows statically which source it belongs to, so what varies with
-/// the source is a uniform — and sixteen bytes on every element of every merged
-/// Set is what carrying it would have cost.
+/// the source is a uniform — and a `u32` on every element of every merged Set,
+/// plus whatever alignment it drags behind it, is what carrying it would have
+/// cost.
 ///
 /// **The procedures are shared and the instances are not.** `--param L2:0:x`
 /// addresses the first L2 *procedure*, and the Set writes that value into every

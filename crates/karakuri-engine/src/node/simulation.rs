@@ -13,9 +13,10 @@ use crate::set::{SetError, MAX_STEPS};
 use crate::uniforms::UniformScratch;
 
 /// Bytes per element in the alive buffer: a dense `array<u32>`, one flag per
-/// element, no vec4 padding — see the layout contract for why this is the
-/// one piece of per-element state that is *not* 16-byte padded: the
-/// compaction scan reads it as a plain array with no stride arithmetic.
+/// element — see the layout contract for why this is the one piece of
+/// per-element state that lives outside the `Element` struct entirely: the
+/// compaction scan reads it as a plain array with no stride arithmetic, and
+/// packing it in would make the scan depend on a per-procedure struct size.
 const ALIVE_STRIDE: u64 = 4;
 
 /// The param the engine quantises spawning from. Named once so the uniform

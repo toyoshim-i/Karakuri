@@ -467,8 +467,9 @@ fn attr_elem_ty(attr: Attr) -> StorageElemTy {
 /// The slots the engine writes and no procedure declares, beyond the two every
 /// element has.
 ///
-/// **Conditional, because each one is 16 bytes on every element of every Set
-/// that has it.** `seed` and `birth_frac` are unconditional because identity
+/// **Conditional, because each one costs its own width on every element of
+/// every Set that has it** — four bytes for `copy`, plus whatever alignment it
+/// drags behind it. `seed` and `birth_frac` are unconditional because identity
 /// and spawn timing are properties of an element as such; what is here is a
 /// property of what happened *upstream*, so a chain that never amplified
 /// carries no `copy` and a Set that pays for one is a Set that has one.

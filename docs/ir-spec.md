@@ -166,6 +166,14 @@ deform {
   like one — `expr . ident` is the grammar. Deciding it there costs no new syntactic
   category, which is the whole reason the read is spelled this way: `uses` adds one header
   declaration and one name, and nothing else in the language moves.
+- **A declaration of its own, rather than a second meaning for `consumes`.** The two say
+  different kinds of thing: `consumes position` names an *attribute*, and a node's inputs are
+  a set of them with no structure; `uses far : Geometry` names a *node input*, one slot with a
+  type and a binding in the Set. Spelling both with one word would make `consumes` a list of
+  two unrelated things — an author reading a header could not tell which a name was without
+  knowing every attribute the language has — and it would give one declaration two arities,
+  since an attribute is not bound by an `edge` and a slot is. The header gains one keyword and
+  every existing one keeps meaning exactly what it meant.
 - **One `consumes` covers both sides.** The second geometry is an input edge and a node
   reads the same attribute from each, so an attribute this node does not take is not
   readable on either side.
@@ -1426,12 +1434,12 @@ disc_point(float, float) -> vec2
 
 - Workgroup size 64
 - All per-element state packs into **one** `Element` struct per direction (prev / next),
-  not one buffer pair per attribute: `seed`, then the birth fraction, then `emit` in
-  declaration order, one 16-byte slot each. `seed` and the birth fraction are always
-  allocated whether or not the procedure names them — neither is nameable from IR. A
-  procedure emitting three attributes therefore binds four storage buffers in its compute
-  stage rather than twelve, which matters because the WebGPU default limit is 8 and the
-  downlevel default is 4
+  not one buffer pair per attribute: `seed`, then the birth fraction, then `copy` where
+  something above amplified, then whatever slot a derivation rule needs, then `emit` in
+  declaration order. `seed` and the birth fraction are always allocated whether or not the
+  procedure names them — neither is nameable from IR. A procedure emitting three attributes
+  therefore binds four storage buffers in its compute stage rather than twelve, which matters
+  because the WebGPU default limit is 8 and the downlevel default is 4
 - The alive flag is the one exception: it leaves the struct and becomes its own dense
   `array<u32>`, four bytes per element, because the compaction scan reads alive flags with
   no stride arithmetic and packing them into `Element` would make the scan depend on a
@@ -1456,11 +1464,23 @@ disc_point(float, float) -> vec2
   arguments derived from it; `t`, `spawn_count` and `seed_base` differ between the substeps
   of one frame, and live in a small per-substep buffer the engine writes ahead of the frame
   and binds one entry of at a time
-- Every slot of `Element` is a full 16-byte `vec4` regardless of the attribute's width, so
-  `(2 + emit.len()) * 16` is the stride of every element buffer and no attribute needs its
-  own arithmetic. It costs memory — a `float` attribute occupies four times what it needs —
-  and that is worth revisiting if VRAM becomes the binding constraint before something else
-  does
+- **Every slot is its own width, at the offset WGSL's own layout rules give it.** Slots used
+  to be padded to a full 16-byte `vec4` each, which made the stride `(2 + emit.len()) * 16`
+  and meant nothing had to do any arithmetic; it also spent 39% of every element buffer
+  across the geometries this repository ships, and the same 39% of the largest allocation in
+  the system, since an amplifying stage multiplies exactly this number. Declaration order is
+  kept and nothing is reordered to pack tighter — an author's `emit` order is the order the
+  struct reads in — and it packs well anyway, because a `vec3` is 16-byte aligned and 12
+  bytes long, so a scalar declared after one lands in the four bytes it leaves: `position,
+  size` is one 16-byte block rather than two. The stride is the struct's size rounded up to
+  its own alignment, which is the rule WGSL applies to `array<Element>`.
+
+  **What it costs is that something now knows WGSL's layout rules where nothing did.** The
+  host writes bytes at a published offset and the shader reads them through the struct, so a
+  disagreement is not a compile error anywhere — it is an element reading the middle of the
+  element before it. The align/size table lives in one place,
+  `crates/karakuri-codegen/src/layout.rs`, and the naga tests validate the emitted module
+  rather than trusting the arithmetic
 - Buffers swap at the end of every **step**, not every frame: what one substep wrote as
   "next" is the next substep's "prev", and after the last one it is what L4 reads
 
@@ -1593,27 +1613,43 @@ known. The total-cost decision lives there, not in the artifact.
 `.set.ndjson`. One record per line. Concatenation is composition.
 
 ```ndjson
-{"t":"set","id":"drift_01","v":1}
-{"t":"slot","layer":"L1","proc":"sha256:a3f2c1…"}
+{"t":"set","id":"morph_01","v":1}
+{"t":"slot","layer":"L1","name":"near","proc":"sha256:a3f2c1…"}
+{"t":"slot","layer":"L1","index":1,"proc":"sha256:77b9e0…"}
+{"t":"slot","layer":"L2","proc":"sha256:1d4a8f…"}
 {"t":"slot","layer":"L4","proc":"sha256:9c1b04…"}
-{"t":"slot","layer":"L4","proc":"sha256:5e7d20…"}
-{"t":"capacity","layer":"L1","value":524288}
+{"t":"slot","layer":"L4","index":1,"proc":"sha256:5e7d20…"}
+{"t":"capacity","layer":"L1","value":32768}
+{"t":"capacity","layer":"L1","index":1,"value":32768}
 {"t":"param","layer":"L1","key":"radius","value":2.4}
-{"t":"param","layer":"L4","key":"hue","value":0.58}
+{"t":"param","layer":"L4","index":1,"key":"hue","value":0.58}
 {"t":"bind","layer":"L1","key":"turbulence","signal":"energy","curve":"pow2","range":[0.1,2.4]}
 {"t":"edge","node":"morph","slot":"far","to":"sphere_shell"}
 {"t":"camera","kind":"orbit","radius":8.0,"speed":0.15}
 {"t":"seed","stream":"L1","value":19274}
+{"t":"seed","stream":"L1","index":1,"value":48113}
 ```
+
+**One `slot` record per node, in node order** — the geometries, the deformers, the camera,
+the renderers, then the field. The chain above is two geometries, a morph between them and
+two renderers over the result; a Set of one geometry and one renderer is the two `slot` lines
+it always was. Only `near` was written down: the other four names are derived from their
+procedures where the Set is built, which is why the `edge` can name `morph` and `sphere_shell`
+without either appearing in the file.
 
 - `proc` is a hash reference. When bundled, the source is inlined as a run of
   `{"t":"src","hash":"…","line":0,"s":"…"}` records.
 - `capacity` is optional; without it the `.kir` default applies. A value outside the range
   the `.kir` declares is rejected at Set build time.
-- **A `slot` may carry a `name`**, which is what a mask points at when a Set has more than
-  one source — `{"t":"slot","layer":"L1","index":1,"name":"veil","proc":"…"}`. Optional and
-  absent by default: an unnamed source is unreferenceable, on the terms HTML gives an `id`.
-  Unique within the file. See "Multiple L1 sources".
+- **A `slot` may carry a `name`**, which is what an `edge`, a `--param` address, a rebuild
+  and an MCP call point at — `{"t":"slot","layer":"L1","index":1,"name":"veil","proc":"…"}`.
+  Optional and absent by default, on the terms HTML gives an `id`: it is written only where
+  somebody chose one, and **a name is a cost you pay when you want to point at something**.
+  What it is *not* is the difference between a node that can be pointed at and one that
+  cannot — every node has a name whether or not one was written, and an unwritten one is
+  derived from the procedure and disambiguated (`lattice_shell`, `lattice_shell-2`) where the
+  Set is built. Written names are unique within the file, and two that collide are refused
+  rather than resolved. See "Naming a source, on the terms HTML gives an `id`".
 - **`edge` binds one node's declared input slot to another node**, and is **the one record
   addressed by name at both ends**. A procedure declares what it takes and never which node
   supplies it — `uses far : Geometry`, see [above](#uses-l2-only) — because a `.kir` that
@@ -2288,8 +2324,9 @@ identity is the pair. That way `hash1(seed)` still gives every mirror image of o
 the same colour, which is what makes eight copies read as one object, and breaking that is
 the deliberate `hash1(seed + copy * 8191u)`. `copy` joins `seed` and `birth_frac` as a slot
 the engine writes — but **only where something upstream amplified**, unlike those two, which
-every element has: sixteen bytes on every element of every Set is what an unconditional slot
-costs, and a chain with no amplifier in it has nothing to put there. Where the slot is
+every element has: a `u32` on every element of every Set, plus whatever alignment it drags
+behind it, is what an unconditional slot costs, and a chain with no amplifier in it has
+nothing to put there. Where the slot is
 absent, `copy` reads `0u`, which is the true answer rather than a stand-in — an element that
 passed no amplifier is copy zero of itself.
 
@@ -2313,11 +2350,18 @@ The question was asked because `Set` owns an `Orbit` field today, and this docum
 that implementation into a design question. Worth remembering as a shape: **an existing field
 is not a fact about the design.**
 
-An L3 is a `.kir` procedure rather than the `camera` record it is today. The expectations
-that settled it are dynamic — follow an element, jump on the beat while facing the centre —
-and a record with two numbers in it cannot carry either.
+An L3 is a `.kir` procedure rather than a `camera` record, and that half is built: a `kind
+L3` file is a node, and the `camera` record is what a Set says when it has none and is taking
+the built-in orbit. The expectations that settled it are dynamic — follow an element, jump on
+the beat while facing the centre — and a record with two numbers in it cannot carry either.
 
-#### What an L3 can point at: a reduction, or element zero
+**What is not built is the fan-out this section describes.** A Set holds at most one L3 and
+every renderer in it looks through that one, so "two L4s reading different L3s" is a shape the
+code cannot spell. It is capped for the reason a field is: the binding notation exists — a
+procedure declares a named input and a Set's [`edge`](#set-file-format) fills it — and this
+layer does not use it yet. See `docs/roadmap.md`, "Naming what a Set holds".
+
+#### What an L3 can point at: a reduction, or element zero — M4
 
 Two things, and the second is cheaper *and* more meaningful than this document claimed a day
 ago.
@@ -2555,8 +2599,9 @@ name drawn around some nodes.
 ### Metadata file format — M4
 
 Nothing writes or reads one. `karakuri-store`'s record vocabulary covers the Set file
-and the session stream — `set`, `slot`, `capacity`, `param`, `bind`, `camera`, `seed`,
-`src`, `tick` — and **none of the records below**. The store is content-addressed from
+— `set`, `slot`, `capacity`, `param`, `bind`, `camera`, `seed`, `edge`, `src` — and the
+session stream, which adds `tick` and the mix and measurement records listed above, and
+**none of the records below**. The store is content-addressed from
 M1, which is half of what M4 asks of it; the separate metadata file is the other half
 and does not exist yet. `parent` in particular has to start being recorded with the
 first generated artifact or the genealogy has a hole at its root.
@@ -2793,9 +2838,11 @@ Stated so a later reader can tell them from the parts above, which are forced.
   saved carrying one.
 
   **The reasoning this bullet used to carry was falsified by the code.** It said "anyone who
-  needs to point at a source is already writing a Set file" — but a Set file refuses a chain
-  and a second geometry by name, so the people with two geometries are exactly the people who
-  *cannot* write one. Getting a name required a file and writing the file required a name.
+  needs to point at a source is already writing a Set file" — but a Set file at the time
+  refused a chain and a second geometry by name, so the people with two geometries were
+  exactly the people who *could not* write one. Getting a name required a file and writing the
+  file required a name. (A Set file carries a chain now; the fix to the circle was this
+  bullet, and the fix to the file came after it.)
   Marking this a preference rather than a force is what let it be revisited without a
   redesign, which is the whole reason that distinction is drawn.
 
