@@ -1435,8 +1435,8 @@ than against one being taught to.
 
   What falls out is that **`source` need not be an element slot**, which the spec assumed it
   would be. A chain instance knows statically which source it belongs to, so what varies with
-  the source is a *uniform* — and an element slot is sixteen bytes on every element of every
-  merged Set. That is the third time in this milestone a per-element cost the spec took for
+  the source is a *uniform* — and an element slot is four more bytes on every element of every
+  merged Set, plus whatever alignment it drags behind it. That is the third time in this milestone a per-element cost the spec took for
   granted turned out to be avoidable, after `velocity`'s third buffer and the always-on
   derivation storage.
 
@@ -1620,12 +1620,19 @@ than against one being taught to.
   fifth off an amplified chain is a fifth off the largest allocation in the system, which is
   the argument for doing it that "four Sets fit here" hid.
 
-  **And it is scheduled, on a principle rather than on a threshold** — see "What a machine's
+  **And it was scheduled on a principle rather than on a threshold** — see "What a machine's
   size is allowed to decide", below. Sixteen bytes holding four is not a trade that buys
   anything at any capacity on any machine; it is slack, and slack is tightened because it is
   slack. Waiting for a Set that does not fit would be waiting for a *rich* machine to notice
   something a small one pays for every frame. It is `generate_element_layout` and the offsets
-  that read it, and it is the second item of M4.
+  that read it, and it was the second item of M4.
+
+  **Built there, and it beat the estimate above.** The fifth-to-two-fifths figure counted the
+  scalars sitting *before* the attributes and missed that a `vec3` is 12 bytes in a 16-byte
+  alignment, so it leaves four addressable bytes behind it — `position, size` packs into one
+  block with no reordering. It is **39%** off every element buffer across the geometries this
+  repository ships: `drift_shell` 80 bytes to 48, `lattice_shell` 64 to 48. See
+  "~~Narrowing the element slot~~ — built".
 - **An L4 is now compiled against a specific L1's element layout**, since both declare the
   same struct over the same buffer. That is the slot interface contract arriving early and
   informally. When the contract becomes a real declaration, it should subsume this rather

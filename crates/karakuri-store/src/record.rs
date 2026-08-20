@@ -137,10 +137,15 @@ pub enum Record {
         /// lives: an `id` belongs to the element rather than to the tag, so a
         /// name belongs to the *use* and is written here rather than in the
         /// `.kir` — which is why one procedure loaded twice is two names and
-        /// not a collision. Absent is the ordinary case and costs nothing: an
-        /// unnamed node is simply unreferenceable, and **a name is a cost you
-        /// pay when you want to point at something**. See `docs/ir-spec.md`,
-        /// "Naming a source, on the terms HTML gives an `id`".
+        /// not a collision. Absent is the ordinary case and costs nothing:
+        /// **a name is a cost you pay when you want to point at something**,
+        /// and it is written here only where somebody chose one. What absent
+        /// does *not* mean is a node nothing can point at — every node has a
+        /// name whether or not one was written, and an unwritten one is
+        /// derived from the procedure and disambiguated where the Set is
+        /// built, which is what lets [`Record::Edge`] name both its ends in a
+        /// file that wrote no names at all. See `docs/ir-spec.md`, "Naming a
+        /// source, on the terms HTML gives an `id`".
         ///
         /// **It is not part of the address.** `(layer, index)` says which node
         /// the record is about and the name is one of the things it says about
