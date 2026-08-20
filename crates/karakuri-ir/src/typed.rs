@@ -18,10 +18,24 @@
 //!   is for locals only" rule is enforced in exactly one place.
 
 use crate::ast::{
-    Ambient, Attr, BinOp, Blend, BlockKind, CapacityDecl, Kind, Lit, Output, Param, Topology, Ty,
+    Ambient, Attr, BinOp, Blend, BlockKind, CapacityDecl, Kind, Lit, Output, Param, SlotTy,
+    Topology, Ty,
 };
 use crate::builtin::Builtin;
 use crate::span::Span;
+
+/// **One slot a procedure declares**, checked — the name it is read through
+/// and the type it takes.
+///
+/// The pair is what a binding needs both halves of: the name is what an `edge`
+/// names, and the type is what decides whether the thing bound to it is the
+/// right kind of node. Kept together so that neither can be resolved against
+/// the wrong one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Slot {
+    pub name: String,
+    pub ty: SlotTy,
+}
 
 /// A procedure that has passed parsing, type checking, and contract checking.
 ///
@@ -65,16 +79,23 @@ pub struct Checked {
     /// declaration generates the shader it always generated, shares its input's
     /// liveness and its input's counts, and allocates nothing.
     pub amplify: Option<u32>,
-    /// **The name this L2 gives the second geometry it takes** — see
-    /// [`crate::ast::UsesDecl`]. `Some("far")` is `uses far : Geometry` on the
-    /// header, and the far element's attributes are then read as `far.<name>`.
+    /// **The slots this procedure declares** — see [`crate::ast::UsesDecl`].
+    /// `uses far : Geometry` on the header is one [`Slot`], and the far
+    /// element's attributes are then read as `far.<attr>`.
     ///
     /// The name is carried rather than reduced to a flag because it is what a
     /// Set's `edge` is written against: the file says what it needs and the Set
     /// says what fills it, and neither half can be resolved without the other's
     /// spelling. The correspondence between the two geometries is the slot
     /// index, which is only the same element in both while neither compacts.
-    pub uses: Option<String>,
+    ///
+    /// **A list, though the checker admits at most one today.** What a reader
+    /// wants of it is "the geometry slot", and that is a question about a type
+    /// rather than about a position — [`Checked::geometry_slot`] asks it. The
+    /// arity is the check pass's rule and stays there, where the refusal that
+    /// enforces it is written; a shape that could only hold one would put a
+    /// second copy of that rule in the type.
+    pub uses: Vec<Slot>,
     pub blend: Option<Blend>,
     pub params: Vec<Param>,
     pub emit: Vec<Attr>,
@@ -154,6 +175,21 @@ pub struct Checked {
 impl Checked {
     pub fn block(&self, kind: BlockKind) -> Option<&TBlock> {
         self.blocks.iter().find(|b| b.kind == kind)
+    }
+
+    /// **The name of the geometry slot this procedure declares**, and `None`
+    /// for one that declares none.
+    ///
+    /// Asked by name rather than by position, because every caller wants the
+    /// geometry one specifically: what a lowering binds is a buffer of
+    /// elements, and what a Set's edge resolves against is a node with
+    /// elements in it. A slot of another type answers a different question and
+    /// must not answer this one by being first in the list.
+    pub fn geometry_slot(&self) -> Option<&str> {
+        self.uses
+            .iter()
+            .find(|s| s.ty == SlotTy::Geometry)
+            .map(|s| s.name.as_str())
     }
 
     /// **Whether nothing ever moves an element between slots**, so that `seed`

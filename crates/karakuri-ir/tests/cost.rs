@@ -107,7 +107,7 @@ fn checked(emit: Vec<Attr>, blocks: Vec<TBlock>) -> Checked {
         topology: Some(Topology::Points),
         capacity: None,
         amplify: None,
-        uses: None,
+        uses: Vec::new(),
         blend: None,
         params: vec![],
         emit,

@@ -3,10 +3,10 @@
 //! invalid fixtures exercises every failure mode the check pass is
 //! responsible for.
 
-use karakuri_ir::ast::{Attr, BinOp, BlockKind, Kind, Output, Topology, Ty};
+use karakuri_ir::ast::{Attr, BinOp, BlockKind, Kind, Output, SlotTy, Topology, Ty};
 use karakuri_ir::check::check;
 use karakuri_ir::parse::parse;
-use karakuri_ir::typed::{Checked, TExprKind, TStmt, Target};
+use karakuri_ir::typed::{Checked, Slot, TExprKind, TStmt, Target};
 
 /// Parse then check, panicking with rendered diagnostics if either stage
 /// unexpectedly fails. Used for fixtures this test expects to be valid.
@@ -2814,6 +2814,36 @@ proc wrong {
     );
 }
 
+/// **A geometry slot is refused on a field too**, which is the one geometry
+/// declaration this arm used to let past.
+///
+/// A field is a function of space: it is handed `point` and returns a
+/// distance, and there is no element for a far one to be paired with. Nothing
+/// downstream could have honoured it either — a Set's edges resolve against
+/// what an L2 declares, so the slot was invisible where it would have been
+/// bound and the `edge` naming it came back as an unknown slot, a page away
+/// from the line that caused it.
+#[test]
+fn a_field_refuses_a_geometry_slot() {
+    let errs = check_err(
+        r#"
+proc wrong {
+  kind Field
+
+  uses far : Geometry
+
+  field {
+    distance = length(point) - 1.0;
+  }
+}
+"#,
+    );
+    assert!(
+        errs.iter().any(|e| e.message.contains("`uses` is L2 only")),
+        "expected `uses` to be refused on a field, got: {errs:?}"
+    );
+}
+
 /// **`is_static` asks whether anything ever moves an element between slots**,
 /// which is two questions and used to be one.
 ///
@@ -2891,15 +2921,24 @@ proc morph {
 }
 "#;
 
-/// The declaration lands on `Checked` **as a name**, and `far.<attr>` resolves
-/// to a read of the far element.
+/// The declaration lands on `Checked` **as a name and a type**, and
+/// `far.<attr>` resolves to a read of the far element.
 ///
 /// The name is what the whole change is: it is the procedure's own, so nothing
-/// couples to a Set, and it is what an `edge` is written against.
+/// couples to a Set, and it is what an `edge` is written against. The type is
+/// what says which sort of thing may fill it — one today, and asked for by
+/// type rather than by position.
 #[test]
 fn a_used_geometry_checks_clean_and_carries_its_name() {
     let checked = check_ok(MORPH);
-    assert_eq!(checked.uses.as_deref(), Some("far"));
+    assert_eq!(
+        checked.uses,
+        vec![Slot {
+            name: "far".to_string(),
+            ty: SlotTy::Geometry,
+        }]
+    );
+    assert_eq!(checked.geometry_slot(), Some("far"));
     assert_eq!(checked.kind, Kind::L2);
 
     let deform = checked.block(BlockKind::Deform).expect("a deform");
@@ -3113,5 +3152,5 @@ proc shadow {
 }
 "#,
     );
-    assert_eq!(checked.uses, None, "and it declares no geometry slot");
+    assert!(checked.uses.is_empty(), "and it declares no geometry slot");
 }

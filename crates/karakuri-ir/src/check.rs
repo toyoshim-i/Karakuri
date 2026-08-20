@@ -106,12 +106,13 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::{
-    Ambient, Attr, BinOp, BlockKind, Expr, Kind, Lit, Output, Proc, Stmt, Topology, Ty, UnOp,
+    Ambient, Attr, BinOp, BlockKind, Expr, Kind, Lit, Output, Proc, SlotTy, Stmt, Topology, Ty,
+    UnOp,
 };
 use crate::builtin::{Builtin, Domain, Shape};
 use crate::error::{IrError, IrResult, Stage};
 use crate::span::Span;
-use crate::typed::{Checked, TBlock, TExpr, TExprKind, TStmt, Target};
+use crate::typed::{Checked, Slot, TBlock, TExpr, TExprKind, TStmt, Target};
 
 /// Resolve names, type every expression, and enforce the contracts.
 pub fn check(proc: &Proc) -> IrResult<Checked> {
@@ -130,8 +131,13 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
     //
     // The declared slot name is the second such fact: a `deform` writing
     // `far.position` is reading a geometry the *header* named, and a block does
-    // not see its own header.
-    let uses = proc.uses.first().map(|u| u.name.as_str());
+    // not see its own header. The geometry one specifically — `far.position` is
+    // a read of an element, and a slot of some other type has no element in it.
+    let uses = proc
+        .uses
+        .iter()
+        .find(|u| u.ty == SlotTy::Geometry)
+        .map(|u| u.name.as_str());
     let fullscreen =
         proc.kind == Kind::L4 && proc.blocks.iter().all(|b| b.kind != BlockKind::Vertex);
     let mut blocks = Vec::with_capacity(proc.blocks.len());
@@ -218,7 +224,14 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
             },
             capacity: proc.capacity,
             amplify: proc.amplify.map(|a| a.factor),
-            uses: proc.uses.first().map(|u| u.name.clone()),
+            uses: proc
+                .uses
+                .iter()
+                .map(|u| Slot {
+                    name: u.name.clone(),
+                    ty: u.ty,
+                })
+                .collect(),
             blend: proc.blend,
             params: proc.params.clone(),
             emit: emit_vec.into_iter().map(|(a, _)| a).collect(),
@@ -352,10 +365,14 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 );
             }
             for u in &proc.uses {
-                errors.push(IrError::contract(u.span, "`uses` is L2 only").with_hint(
-                    "remove it: an L1 makes geometry rather than taking any, so there is \
-                         nothing for a second one to be blended with",
-                ));
+                match u.ty {
+                    SlotTy::Geometry => {
+                        errors.push(IrError::contract(u.span, "`uses` is L2 only").with_hint(
+                            "remove it: an L1 makes geometry rather than taking any, so there \
+                             is nothing for a second one to be blended with",
+                        ))
+                    }
+                }
             }
             if proc.blocks.iter().all(|b| b.kind != BlockKind::Element) {
                 errors.push(IrError::contract(
@@ -586,10 +603,12 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 );
             }
             for u in &proc.uses {
-                errors.push(
-                    IrError::contract(u.span, "`uses` is L2 only")
-                        .with_hint("remove it: an L3 produces a viewpoint, not geometry"),
-                );
+                match u.ty {
+                    SlotTy::Geometry => errors.push(
+                        IrError::contract(u.span, "`uses` is L2 only")
+                            .with_hint("remove it: an L3 produces a viewpoint, not geometry"),
+                    ),
+                }
             }
             if !proc.emit.is_empty() {
                 errors.push(
@@ -650,6 +669,28 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                         IrError::contract(proc.span, format!("`{what}` is not a field's"))
                             .with_hint(format!("remove `{what}`: {hint}")),
                     );
+                }
+            }
+            // **A field takes no geometry either**, which is the one geometry
+            // declaration this arm used to let past. It is refused for the
+            // reason the four above are refused: a field is a function of
+            // space, and a slot is a second set of *elements* to read beside
+            // the ones a node runs over.
+            //
+            // Nothing below would have honoured it. A Set resolves an `edge`
+            // against what an L2 declares, so the slot was invisible exactly
+            // where it would have been bound, and the edge naming it came back
+            // as an unknown slot — a refusal a page away from the line that
+            // caused it.
+            for u in &proc.uses {
+                match u.ty {
+                    SlotTy::Geometry => {
+                        errors.push(IrError::contract(u.span, "`uses` is L2 only").with_hint(
+                            "remove it: a field is a function of space — it is handed `point` \
+                             and returns a distance, and there are no elements here for a \
+                             second geometry to be read beside",
+                        ))
+                    }
                 }
             }
             if !proc.emit.is_empty() || !proc.consumes.is_empty() {
@@ -730,10 +771,14 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                 );
             }
             for u in &proc.uses {
-                errors.push(IrError::contract(u.span, "`uses` is L2 only").with_hint(
-                    "remove it: a renderer draws what reaches it. Taking a second geometry \
-                         is a deformation, above the renderer rather than inside it",
-                ));
+                match u.ty {
+                    SlotTy::Geometry => {
+                        errors.push(IrError::contract(u.span, "`uses` is L2 only").with_hint(
+                            "remove it: a renderer draws what reaches it. Taking a second \
+                             geometry is a deformation, above the renderer rather than inside it",
+                        ))
+                    }
+                }
             }
             // **A `vertex` block is what makes an L4 per-element**, and an L4
             // without one draws the whole frame instead — see

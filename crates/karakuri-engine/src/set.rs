@@ -1115,7 +1115,7 @@ impl Set {
                 continue;
             };
             let declares = (at >= l1s.len() && at < l1s.len() + l2s.len())
-                .then(|| l2s[at - l1s.len()].uses.as_deref())
+                .then(|| l2s[at - l1s.len()].geometry_slot())
                 .flatten();
             if declares != Some(edge.slot.as_str()) {
                 return Err(SetError::NoSuchSlot {
@@ -1133,7 +1133,7 @@ impl Set {
         // simulations**, not two sources: the far one feeds the slot and
         // nothing else, which is what makes "is it drawn?" a question with no
         // place to be asked.
-        let pairing = l2s.iter().position(|n| n.uses.is_some());
+        let pairing = l2s.iter().position(|n| n.geometry_slot().is_some());
         // **Which geometry the slot is bound to**, as an index into `l1s`.
         // `None` where no node declares a slot. This used to be `l1s[1]` and
         // was written nowhere at all — reordering the command line silently
@@ -1144,9 +1144,9 @@ impl Set {
                 let l2 = l2s[at];
                 let node = names[l1s.len() + at].clone();
                 let slot = l2
-                    .uses
-                    .clone()
-                    .expect("`pairing` is the position of a node that declares a slot");
+                    .geometry_slot()
+                    .expect("`pairing` is the position of a node that declares a slot")
+                    .to_string();
                 if at != 0 {
                     return Err(SetError::PairingNotFirst {
                         l2: l2.name.clone(),
@@ -1638,7 +1638,7 @@ impl Set {
                     // It reads a *simulation* rather than whatever reached this
                     // position, which is why such a node has to be first in the
                     // chain — refused above if it is not.
-                    let paired = paired.as_ref().filter(|_| l2.uses.is_some());
+                    let paired = paired.as_ref().filter(|_| l2.geometry_slot().is_some());
                     let far = paired.map(|(emits, sim): &(Vec<karakuri_ir::Attr>, Simulation)| {
                         (emits.as_slice(), sim.geometry())
                     });

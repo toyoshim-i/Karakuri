@@ -922,7 +922,10 @@ proc blob {
 - **No attribute is readable.** A field has no element — refused with that sentence rather
   than with advice to declare one, since declaring one is not available and would not help.
 - **No geometry declaration is legal**: no `capacity`, `topology`, `blend`, `amplify`,
-  `emit` or `consumes`. It counts nothing, draws nothing and carries nothing.
+  `emit`, `consumes` or `uses`. It counts nothing, draws nothing and carries nothing.
+  `uses` was the one this list left out while stating the rule that covers it — a field is
+  handed `point` and returns a distance, so there are no elements here for a second geometry
+  to be read beside.
 
 **Its cost is on an axis of its own.** A field is reported in **ops per evaluation**, and
 the three other figures are zero for one. What it scales with is *how often its caller calls
