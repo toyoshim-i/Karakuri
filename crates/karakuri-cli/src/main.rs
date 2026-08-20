@@ -699,6 +699,25 @@ pub fn op_wire_names() -> String {
         .join(", ")
 }
 
+/// What a Set file said that no flag can say.
+///
+/// Not flags: there is no `--seed` and no `--camera`, and inventing two so that
+/// a file could be read would be adding surface to carry a value rather than to
+/// be used. **Slot 0's, always** — `--load-set` fills that slot and every other
+/// comes from `--set`.
+#[derive(Clone, Debug, Default)]
+struct FromSet {
+    seed: Option<u32>,
+    camera: Option<karakuri_engine::camera::Orbit>,
+    /// What each geometry runs at, by index, `None` where the file named none.
+    ///
+    /// **Kept here rather than folded into `--capacity`.** One flag holds one
+    /// number and a Set file holds one per geometry, so folding would put the
+    /// first source's count onto every source — which is the bug
+    /// [`capacities_for`] exists to have stopped making.
+    capacities: Vec<Option<u32>>,
+}
+
 /// A `.kir` named on the command line, with the name the operator gave it.
 ///
 /// **A name belongs to the *use*, not to the procedure** — see `docs/ir-spec.md`,
@@ -870,11 +889,9 @@ struct Args {
     record_session: Option<String>,
     /// `--replay ID`: render a recorded session instead of running one.
     replay: Option<String>,
-    /// What a Set file said about the seed and the camera, when one was loaded.
-    /// Not flags: there is no `--seed` and no `--camera`, and inventing two so
-    /// that a file could be read would be adding surface to carry a value
-    /// rather than to be used.
-    from_set: Option<(Option<u32>, Option<karakuri_engine::camera::Orbit>)>,
+    /// What a Set file said that no flag says, when one was loaded — see
+    /// [`FromSet`].
+    from_set: Option<FromSet>,
     /// Drive the deck from a named script instead of waiting for a keyboard.
     /// A demonstration harness, not a feature: it presses keys.
     demo: Option<Demo>,
@@ -1691,8 +1708,26 @@ fn capacity_for(args: &Args, l1: &karakuri_ir::typed::Checked) -> u32 {
 /// because it was loaded beside a cube. Nothing refused it either — the number
 /// came from a declaration, so it was inside somebody's range, just not the
 /// range of the procedure it was applied to.
-fn capacities_for(args: &Args, l1s: &[karakuri_ir::typed::Checked]) -> Vec<u32> {
-    l1s.iter().map(|l1| capacity_for(args, l1)).collect()
+///
+/// `recorded` is what a Set file said, per geometry, and it wins where it said
+/// anything: **the file is where that geometry's count was decided**, and a
+/// Set that came back at a different size is a Set that was not saved. Empty
+/// for a slot no file filled, which is every slot but slot 0.
+fn capacities_for(
+    args: &Args,
+    l1s: &[karakuri_ir::typed::Checked],
+    recorded: &[Option<u32>],
+) -> Vec<u32> {
+    l1s.iter()
+        .enumerate()
+        .map(|(at, l1)| {
+            recorded
+                .get(at)
+                .copied()
+                .flatten()
+                .unwrap_or_else(|| capacity_for(args, l1))
+        })
+        .collect()
 }
 
 /// Refuse a canvas the GPU cannot make a texture of, by name.
@@ -1799,6 +1834,162 @@ impl Names {
     }
 }
 
+/// Where one of a slot's files ended up: the layer its own `kind` declaration
+/// puts it on, and which node of that layer it is, beside the name and path it
+/// was spelled with.
+///
+/// **Kept beside the compiled [`Material`] rather than worked out again.** A
+/// Set file records a node's layer and its index, and a run that answered "what
+/// layer is this file on" once for the engine and once for the file it saves
+/// would hold two answers to one question — the shape this project has been
+/// bitten by twice. See [`setfile::Node`], which is this as the record.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Placed {
+    named: Named,
+    layer: karakuri_ir::Kind,
+    index: u32,
+}
+
+impl Placed {
+    fn node(&self) -> setfile::Node<'_> {
+        setfile::Node {
+            path: &self.named.path,
+            layer: self.layer,
+            index: self.index,
+            name: self.named.name.as_deref(),
+        }
+    }
+}
+
+/// **Compile one slot's files and sort them by the `kind` each declares**,
+/// keeping list order within a kind.
+///
+/// **The first path is the first source**, and every later `kind L1` is another
+/// one. Each simulates independently — its own `seed` from zero, its own hash
+/// salt, its own compaction — and the renderers draw all of them. See
+/// `docs/ir-spec.md`, "Multiple L1 sources".
+///
+/// The head is sorted by its declaration like everything after it. It used to
+/// be taken as the L1 whatever it said, which cost nothing while the engine was
+/// the only reader — it refuses a non-L1 there with `WrongKind` — and starts
+/// costing as soon as a Set file records the layer: an L2 written down as
+/// `slot L1` is a file that reads back as a Set nobody assembled.
+///
+/// Fatal on the disagreements a slot cannot hold, and fatal here rather than at
+/// the build, because the file is what an operator can fix.
+fn sort_slot(slot: usize, l1: &Named, rest: &[Named]) -> (Material, Vec<Placed>) {
+    let named: Vec<String> = rest.iter().map(|p| p.path.display().to_string()).collect();
+    eprintln!(
+        "  slot {slot}: {} + {}",
+        l1.path.display(),
+        named.join(" + ")
+    );
+    let load = |named: &Named| match compile::load(&named.path) {
+        Ok(checked) => checked,
+        Err(report) => {
+            eprintln!("{report}");
+            std::process::exit(1);
+        }
+    };
+    // **A name per node, in the same per-layer shape the engine takes its
+    // procedures in.** Not one flat list in node order: that order is the
+    // engine's, and a caller that reproduced it would be the second place a
+    // fact this project has already been bitten by lives.
+    let mut names = Names::default();
+    let mut l1s = Vec::new();
+    let mut l2s = Vec::new();
+    let mut l3: Option<karakuri_ir::typed::Checked> = None;
+    let mut field: Option<karakuri_ir::typed::Checked> = None;
+    let mut l4s = Vec::new();
+    let mut placed = Vec::new();
+    for path in std::iter::once(l1).chain(rest) {
+        let checked = load(path);
+        let name = path.name.clone();
+        let (layer, index) = match checked.kind {
+            karakuri_ir::Kind::L2 => {
+                names.l2s.push(name);
+                l2s.push(checked);
+                (karakuri_ir::Kind::L2, l2s.len() - 1)
+            }
+            karakuri_ir::Kind::L4 => {
+                names.l4s.push(name);
+                l4s.push(checked);
+                (karakuri_ir::Kind::L4, l4s.len() - 1)
+            }
+            // **One camera per slot**, refused rather than last-one-wins for
+            // the same reason a second L1 is not: a Set is a grouping around one
+            // viewpoint, and a run that quietly dropped one of two would be
+            // playing something nobody asked for. Two viewpoints composited
+            // is a graph, which is what an L5 is for.
+            karakuri_ir::Kind::L3 if l3.is_some() => {
+                eprintln!(
+                    "slot {slot}: {} is a second L3 — a slot looks from one camera, and \
+                     compositing two viewpoints is what an L5 is for",
+                    path.path.display()
+                );
+                std::process::exit(1);
+            }
+            karakuri_ir::Kind::L3 => {
+                names.l3 = name;
+                l3 = Some(checked);
+                (karakuri_ir::Kind::L3, 0)
+            }
+            // **One field per slot**, refused rather than last-one-wins on
+            // exactly the camera's terms: several would need naming, and
+            // naming is fan-in.
+            karakuri_ir::Kind::Field if field.is_some() => {
+                eprintln!(
+                    "slot {slot}: {} is a second `kind Field` — a slot evaluates one \
+                     field, and naming several is the notation fan-in brings with it",
+                    path.path.display()
+                );
+                std::process::exit(1);
+            }
+            karakuri_ir::Kind::Field => {
+                names.field = name;
+                field = Some(checked);
+                (karakuri_ir::Kind::Field, 0)
+            }
+            // **A second L1 is a second source**, not a mistake. Each one
+            // simulates independently — its own `seed` from zero, its own hash
+            // salt, its own compaction — and the renderers draw all of them.
+            karakuri_ir::Kind::L1 => {
+                names.l1s.push(name);
+                l1s.push(checked);
+                (karakuri_ir::Kind::L1, l1s.len() - 1)
+            }
+        };
+        placed.push(Placed {
+            named: path.clone(),
+            layer,
+            index: index as u32,
+        });
+    }
+    if l4s.is_empty() {
+        eprintln!(
+            "slot {slot}: nothing here draws — {} names no L4, and a Set with no \
+             renderer has no frame to give",
+            l1.path.display()
+        );
+        std::process::exit(1);
+    }
+    if let Err(e) = names.check_unique() {
+        eprintln!("slot {slot}: {e}");
+        std::process::exit(1);
+    }
+    (
+        Material {
+            l1s,
+            l2s,
+            l3,
+            field,
+            l4s,
+            names,
+        },
+        placed,
+    )
+}
+
 /// **Render a recorded session.** The material comes from the stream's head and
 /// every frame advances by the `tick` that was recorded, so nothing here reads
 /// a clock — which is the whole claim: a replay and the run it came from are
@@ -1887,15 +2078,15 @@ fn replay_session(args: &Args, id: &str) {
 
     let mut set = build(
         &gpu,
-        std::slice::from_ref(&loaded.l1),
-        // **A Set file carries neither a chain nor a camera yet.** It records
-        // an L1 and its renderers, so a replay of one draws them from the
-        // built-in orbit — the same gap L2 has, and the same fix will close
-        // both. `--set` is where a chain, a camera and a field are spelled
-        // today.
-        &[],
-        None,
-        None,
+        &loaded.l1s,
+        // **The chain the file recorded**, which is the whole of what was
+        // played: the deformers in chain order, the camera if it had one, the
+        // field if it had one. A head that names none of them replays from the
+        // built-in orbit, exactly as every session recorded before a Set file
+        // could carry a chain does.
+        &loaded.l2s,
+        loaded.l3.as_ref(),
+        loaded.field.as_ref(),
         &loaded.l4s,
         // **A Set file does not record a layering**, on the same terms it
         // records neither a chain nor a camera: it names an L1 and its
@@ -1905,12 +2096,10 @@ fn replay_session(args: &Args, id: &str) {
         // A Set file records no names yet, so every node is called what its
         // procedure declares.
         &Names::default(),
-        // The file's number when it recorded one, and otherwise the
-        // procedure's own declared default — never the flag's, which is a
+        // The file's number per geometry when it recorded one, and otherwise
+        // the procedure's own declared default — never the flag's, which is a
         // general default beating a specific declaration that meant it.
-        &[loaded
-            .capacity
-            .unwrap_or_else(|| capacity_for(args, &loaded.l1))],
+        &capacities_for(args, &loaded.l1s, &loaded.capacities),
         &mut vec![false; loaded.bindings.len()],
         &loaded.params,
         &loaded.bindings,
@@ -2111,7 +2300,9 @@ fn rebuild(
         &l4s,
         karakuri_engine::set::Layering::Overdraw,
         &Names::default(),
-        &capacities_for(args, std::slice::from_ref(&l1)),
+        // Nothing recorded: a `procedure` record names a swapped-in procedure
+        // and carries no capacity, so each source runs at what it declares.
+        &capacities_for(args, std::slice::from_ref(&l1), &[]),
         &mut vec![false; args.bindings.len()],
         &args.overrides,
         &args.bindings,
@@ -2262,14 +2453,15 @@ fn open_store(args: &Args) -> karakuri_store::store::Store {
 /// where the records are.
 fn session_head(
     args: &Args,
+    placed: &[Vec<Placed>],
     store: &karakuri_store::store::Store,
     id: &str,
 ) -> Vec<karakuri_store::ndjson::Line> {
-    if args.sets.len() > 1 {
+    if placed.len() > 1 {
         eprintln!(
             "  only slot 0's material is in the session's head — a session stream cannot \
              say what a deck held, so the other {} will not replay",
-            args.sets.len() - 1
+            placed.len() - 1
         );
     }
     if let Some(set) = &args.load_set {
@@ -2281,7 +2473,7 @@ fn session_head(
             }
         };
     }
-    let Some((l1, l4s)) = args.sets.first() else {
+    let Some(nodes) = placed.first().filter(|nodes| !nodes.is_empty()) else {
         eprintln!("karakuri-cli: nothing to record — no Set to put at the session's head");
         std::process::exit(2);
     };
@@ -2291,9 +2483,8 @@ fn session_head(
         store,
         &material,
         setfile::Saving {
-            l1_path: &l1.path,
-            l4_paths: &l4s.iter().map(|n| n.path.clone()).collect::<Vec<_>>(),
-            capacity: args.capacity,
+            nodes: &saving_nodes(nodes),
+            capacities: &saving_capacities(args, nodes),
             params: &args.overrides,
             bindings: &args.bindings,
             camera: &camera,
@@ -2315,13 +2506,35 @@ fn session_head(
     }
 }
 
-fn save_set(args: &Args, id: &str) {
+/// One slot's nodes as the records they will be written as.
+fn saving_nodes(placed: &[Placed]) -> Vec<setfile::Node<'_>> {
+    placed.iter().map(Placed::node).collect()
+}
+
+/// What a saved Set says each of its geometries runs at.
+///
+/// **The flag's number, per geometry, which is what it has always written.** A
+/// `.kir`'s own declared default is what an untyped `--capacity` leaves each
+/// source running at — see [`capacity_for`] — and writing that here instead
+/// would change the bytes of every Set file this program has ever saved. The
+/// disagreement is real and it is [`capacity_for`]'s to settle; what changes
+/// here is only that a second geometry has a capacity of its own to be wrong
+/// about rather than none at all.
+fn saving_capacities(args: &Args, placed: &[Placed]) -> Vec<u32> {
+    placed
+        .iter()
+        .filter(|node| node.layer == karakuri_ir::Kind::L1)
+        .map(|_| args.capacity)
+        .collect()
+}
+
+fn save_set(args: &Args, placed: &[Vec<Placed>], id: &str) {
     let store = open_store(args);
-    let Some((l1, l4s)) = args.sets.first() else {
-        eprintln!("karakuri-cli: --save-set needs a `.kir` pair to save");
+    let Some(nodes) = placed.first().filter(|nodes| !nodes.is_empty()) else {
+        eprintln!("karakuri-cli: --save-set needs a `.kir` chain to save");
         std::process::exit(1);
     };
-    if args.sets.len() > 1 {
+    if placed.len() > 1 {
         eprintln!(
             "  only slot 0 is saved: a Set file describes one Set, and which Sets a deck              is holding belongs to a session"
         );
@@ -2331,9 +2544,12 @@ fn save_set(args: &Args, id: &str) {
         &store,
         id,
         setfile::Saving {
-            l1_path: &l1.path,
-            l4_paths: &l4s.iter().map(|n| n.path.clone()).collect::<Vec<_>>(),
-            capacity: args.capacity,
+            // **Every node, on the layer its own `kind` put it on.** The sorter
+            // already answered that for the engine — see [`sort_slot`] — so an
+            // L2, an L3 or a field is saved as what it is rather than refused
+            // for want of a slot to write it in.
+            nodes: &saving_nodes(nodes),
+            capacities: &saving_capacities(args, nodes),
             params: &args.overrides,
             bindings: &args.bindings,
             camera: &camera,
@@ -2375,7 +2591,11 @@ fn load_set(args: &mut Args, id: &str) -> setfile::Loaded {
     // having said so as much as `--capacity` is. Without it, `--capacity 100000
     // --save-set x` followed by `--load-set x` ran at whatever the `.kir`
     // declared, which falsifies the one promise a Set file makes.
-    if let Some(capacity) = loaded.capacity {
+    // The first geometry's, because that is what one number can hold; the rest
+    // travel per geometry on `from_set` and are applied where the sources are
+    // in hand. This one is still needed as the flag: it is what a rebuilt slot
+    // is given — see `Watch::new` — and what the status line prints.
+    if let Some(capacity) = loaded.capacities.first().copied().flatten() {
         args.capacity = capacity;
         args.capacity_given = true;
     }
@@ -2388,7 +2608,11 @@ fn load_set(args: &mut Args, id: &str) -> setfile::Loaded {
     let mut bindings = loaded.bindings.clone();
     bindings.append(&mut args.bindings);
     args.bindings = bindings;
-    args.from_set = Some((loaded.seed, loaded.camera));
+    args.from_set = Some(FromSet {
+        seed: loaded.seed,
+        camera: loaded.camera,
+        capacities: loaded.capacities.clone(),
+    });
     loaded
 }
 
@@ -2427,21 +2651,17 @@ fn main() {
         // A loaded Set names its procedures by hash and has no file anywhere,
         // so it is written into the scratch first and then joins `args.sets` as
         // ordinary material. Everything downstream — the compile, the watcher,
-        // the MCP surface — then treats it exactly like a `--set` pair, which
+        // the MCP surface — then treats it exactly like a `--set` chain, which
         // is what makes a saved Set editable rather than only playable.
         if let Some(loaded) = &loaded {
-            let placed: Result<Vec<PathBuf>, String> =
-                std::iter::once((&loaded.l1.name, &loaded.l1_src))
-                    .chain(
-                        loaded
-                            .l4s
-                            .iter()
-                            .map(|c| &c.name)
-                            .zip(loaded.l4_srcs.iter()),
-                    )
-                    .map(|(name, src)| scratch::place(&root, name, src))
-                    .collect();
-            match placed {
+            // Every node the file named, in node order — which starts with the
+            // geometries, so the first path is the L1 the pair below wants and
+            // the rest are sorted by their own `kind` like any `--set` list.
+            let written: Result<Vec<PathBuf>, String> = loaded
+                .nodes()
+                .map(|(checked, src)| scratch::place(&root, &checked.name, src))
+                .collect();
+            match written {
                 Ok(paths) => args.sets.insert(
                     0,
                     (
@@ -2492,138 +2712,47 @@ fn main() {
 
     eprintln!("compiling:");
     let mut procs: Vec<Material> = Vec::new();
+    // Where each slot's files ended up, slot for slot beside `procs`. **Kept
+    // parallel**, empty entry and all, because everything downstream indexes it
+    // by slot: a list that skipped the slot a Set file filled would hand slot
+    // 0's saver slot 1's files. See [`Placed`].
+    let mut placed: Vec<Vec<Placed>> = Vec::new();
     // Only when it was *not* materialised into the scratch above. An editable
     // run compiles it out of `args.sets` with everything else, which is the
     // point: one path, so a loaded Set can be watched and rewritten.
     if let Some(loaded) = loaded.filter(|_| !editable) {
         eprintln!("  slot 0: set `{}`", loaded.id);
-        // **The names a Set file recorded**, once it records them. Until then a
+        // **The names a Set file recorded**, once anything reads them back. A
+        // file records the name the operator wrote; nothing this build points
+        // at a node by name, so `setfile` reports each one and stops — and a
         // loaded Set's nodes are named after their procedures, which is what a
         // bare `--set` gets too.
         let names = Names::default();
         procs.push(Material {
-            l1s: vec![loaded.l1],
-            l2s: Vec::new(),
-            l3: None,
-            field: None,
+            l1s: loaded.l1s,
+            l2s: loaded.l2s,
+            l3: loaded.l3,
+            field: loaded.field,
             l4s: loaded.l4s,
             names,
         });
+        // No files behind it — the sources came out of the store by hash. The
+        // empty entry is what keeps `placed` indexed by slot; nothing saves
+        // this slot, since `--load-set` with `--save-set` is refused and a
+        // session's head is the file itself.
+        placed.push(Vec::new());
     }
     for (slot, (l1, rest)) in args.sets.iter().enumerate() {
-        let named: Vec<String> = rest.iter().map(|p| p.path.display().to_string()).collect();
-        eprintln!(
-            "  slot {slot}: {} + {}",
-            l1.path.display(),
-            named.join(" + ")
-        );
-        let load = |named: &Named| match compile::load(&named.path) {
-            Ok(checked) => checked,
-            Err(report) => {
-                eprintln!("{report}");
-                std::process::exit(1);
-            }
-        };
-        // **A name per node, in the same per-layer shape the engine takes its
-        // procedures in.** Not one flat list in node order: that order is the
-        // engine's, and a caller that reproduced it would be the second place a
-        // fact this project has already been bitten by lives.
-        let mut names = Names::default();
-        // **Sorted by the `kind` each file declares**, keeping list order within
-        // a kind. A second L1 is refused rather than silently ignored: a slot
-        // simulates with one geometry, and a run that quietly dropped the
-        // second would be playing something nobody asked for.
-        // **The first path is the first source**, and every later `kind L1` is
-        // another one. Each simulates independently — its own `seed` from zero,
-        // its own hash salt, its own compaction — and the renderers draw all of
-        // them. See `docs/ir-spec.md`, "Multiple L1 sources".
-        let mut l1s = vec![load(l1)];
-        names.l1s.push(l1.name.clone());
-        let mut l2s = Vec::new();
-        let mut l3: Option<karakuri_ir::typed::Checked> = None;
-        let mut field: Option<karakuri_ir::typed::Checked> = None;
-        let mut l4s = Vec::new();
-        for (path, checked) in rest.iter().zip(rest.iter().map(load)) {
-            let name = path.name.clone();
-            match checked.kind {
-                karakuri_ir::Kind::L2 => {
-                    names.l2s.push(name);
-                    l2s.push(checked)
-                }
-                karakuri_ir::Kind::L4 => {
-                    names.l4s.push(name);
-                    l4s.push(checked)
-                }
-                // **One camera per slot**, refused rather than last-one-wins for
-                // the same reason a second L1 is: a Set is a grouping around one
-                // viewpoint, and a run that quietly dropped one of two would be
-                // playing something nobody asked for. Two viewpoints composited
-                // is a graph, which is what an L5 is for.
-                karakuri_ir::Kind::L3 if l3.is_some() => {
-                    eprintln!(
-                        "slot {slot}: {} is a second L3 — a slot looks from one camera, and \
-                         compositing two viewpoints is what an L5 is for",
-                        path.path.display()
-                    );
-                    std::process::exit(1);
-                }
-                karakuri_ir::Kind::L3 => {
-                    names.l3 = name;
-                    l3 = Some(checked)
-                }
-                // **One field per slot**, refused rather than last-one-wins on
-                // exactly the camera's terms: several would need naming, and
-                // naming is fan-in.
-                karakuri_ir::Kind::Field if field.is_some() => {
-                    eprintln!(
-                        "slot {slot}: {} is a second `kind Field` — a slot evaluates one \
-                         field, and naming several is the notation fan-in brings with it",
-                        path.path.display()
-                    );
-                    std::process::exit(1);
-                }
-                karakuri_ir::Kind::Field => {
-                    names.field = name;
-                    field = Some(checked)
-                }
-                // **A second L1 is a second source**, not a mistake. Each one
-                // simulates independently — its own `seed` from zero, its own
-                // hash salt, its own compaction — and the renderers draw all of
-                // them. See `docs/ir-spec.md`, "Multiple L1 sources".
-                karakuri_ir::Kind::L1 => {
-                    names.l1s.push(name);
-                    l1s.push(checked)
-                }
-            }
-        }
-        if l4s.is_empty() {
-            eprintln!(
-                "slot {slot}: nothing here draws — {} names no L4, and a Set with no \
-                 renderer has no frame to give",
-                l1.path.display()
-            );
-            std::process::exit(1);
-        }
-        if let Err(e) = names.check_unique() {
-            eprintln!("slot {slot}: {e}");
-            std::process::exit(1);
-        }
-
-        procs.push(Material {
-            l1s,
-            l2s,
-            l3,
-            field,
-            l4s,
-            names,
-        });
+        let (material, nodes) = sort_slot(slot, l1, rest);
+        procs.push(material);
+        placed.push(nodes);
     }
 
     // Saving is a one-shot: it writes what the flags say and stops, on the same
     // terms as `--render`. Running afterwards would leave an operator unsure
     // whether what they are watching is what was written.
     if let Some(id) = &args.save_set {
-        save_set(&args, id);
+        save_set(&args, &placed, id);
         return;
     }
 
@@ -2669,6 +2798,7 @@ fn main() {
                 .run_app(&mut App {
                     args,
                     procs: Some(procs),
+                    placed,
                     live: None,
                     snapshots,
                 })
@@ -2690,6 +2820,17 @@ fn report_live_counts(gpu: &Gpu, deck: &Deck) {
             set.live_count(&gpu.device, &gpu.queue),
             set.capacity()
         );
+    }
+}
+
+/// What a loaded Set file said its geometries run at, for the slot it filled.
+///
+/// **Slot 0 and nothing else**, on the same terms as its seed and its camera:
+/// `--load-set` fills that slot and every other slot comes from `--set`.
+fn recorded_capacities(args: &Args, slot: usize) -> &[Option<u32>] {
+    match (slot, args.from_set.as_ref()) {
+        (0, Some(from_set)) => &from_set.capacities,
+        _ => &[],
     }
 }
 
@@ -2743,7 +2884,7 @@ fn build_deck(
                     karakuri_engine::set::Layering::Overdraw
                 },
                 &material.names,
-                &capacities_for(args, l1),
+                &capacities_for(args, l1, recorded_capacities(args, slot)),
                 &mut attached,
                 &args.overrides,
                 &args.bindings,
@@ -2753,11 +2894,16 @@ fn build_deck(
                 // in. It only ever applies to slot 0: `--load-set` fills that
                 // slot and the rest come from `--set`.
                 match (slot, args.from_set.as_ref()) {
-                    (0, Some((Some(seed), _))) => *seed,
+                    (
+                        0,
+                        Some(FromSet {
+                            seed: Some(seed), ..
+                        }),
+                    ) => *seed,
                     _ => seed_for(slot),
                 },
                 match (slot, args.from_set.as_ref()) {
-                    (0, Some((_, camera))) => *camera,
+                    (0, Some(from_set)) => from_set.camera,
                     _ => None,
                 },
             );
@@ -2977,6 +3123,9 @@ fn build(
 struct App {
     args: Args,
     procs: Option<Vec<Material>>,
+    /// Where each slot's files ended up, slot for slot beside `procs` — what a
+    /// session's head is written from. See [`Placed`].
+    placed: Vec<Vec<Placed>>,
     live: Option<Live>,
     /// The run's edit history, already holding what it started with. Handed to
     /// every slot's watcher when the deck is built — see [`history`].
@@ -3514,7 +3663,7 @@ impl ApplicationHandler for App {
         let recorder = match &self.args.record_session {
             Some(id) => {
                 let store = open_store(&self.args);
-                let head = session_head(&self.args, &store, id);
+                let head = session_head(&self.args, &self.placed, &store, id);
                 match session::Recorder::open(&store, id, &head) {
                     Ok(recorder) => {
                         eprintln!(
@@ -4979,20 +5128,32 @@ mod tests {
 
         let args = parse(&[]).expect("parses");
         assert_eq!(
-            capacities_for(&args, &[small.clone(), large.clone()]),
+            capacities_for(&args, &[small.clone(), large.clone()], &[]),
             vec![32768, 131072]
         );
         // Order is not what decides it, which is the half a first-one-wins
         // implementation gets right by accident half the time.
         assert_eq!(
-            capacities_for(&args, &[large.clone(), small.clone()]),
+            capacities_for(&args, &[large.clone(), small.clone()], &[]),
             vec![131072, 32768]
         );
 
         // `--capacity` still overrides all of them: the operator asking for a
         // number is asking about the Set, not about one file in it.
         let forced = parse(&["--capacity", "8192"]).expect("parses");
-        assert_eq!(capacities_for(&forced, &[small, large]), vec![8192, 8192]);
+        assert_eq!(
+            capacities_for(&forced, &[small.clone(), large.clone()], &[]),
+            vec![8192, 8192]
+        );
+
+        // **And a Set file's own number wins over both**, per geometry: the
+        // file is where that geometry's count was decided, and a Set that came
+        // back at another size is a Set that was not saved. Where the file said
+        // nothing, the declaration underneath still answers.
+        assert_eq!(
+            capacities_for(&args, &[small, large], &[Some(16384), None]),
+            vec![16384, 131072]
+        );
     }
 
     // -- midi ------------------------------------------------------------
@@ -5110,18 +5271,78 @@ mod tests {
         let store = karakuri_store::store::Store::open(dir.path()).expect("store");
 
         let mut args = parse(&[]).expect("parses");
-        args.sets = vec![(Named::bare(l1), vec![Named::bare(l4)])];
+        args.sets = vec![(Named::bare(&l1), vec![Named::bare(&l4)])];
         args.store = dir.path().to_path_buf();
+        let (_, placed) = sort_slot(0, &args.sets[0].0, &args.sets[0].1);
 
-        let head = session_head(&args, &store, "a_set");
+        let head = session_head(&args, &[placed], &store, "a_set");
         assert!(!head.is_empty(), "the head describes nothing");
 
         // Read back the way `--replay` reads it, which is the whole claim: the
         // artifacts resolve out of the store and both slots are there.
         let loaded = setfile::from_lines(&store, "a_set", &head)
             .expect("the head a recording writes is a head a replay can load");
-        assert_eq!(loaded.l1.kind, karakuri_ir::Kind::L1);
+        assert_eq!(loaded.l1s[0].kind, karakuri_ir::Kind::L1);
         assert_eq!(loaded.l4s[0].kind, karakuri_ir::Kind::L4);
+        assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
+    }
+
+    /// **A session opens with a Set file, so what a Set file cannot hold is a
+    /// performance that cannot be recorded.**
+    ///
+    /// A cube morphing into a sphere is two geometries, an L2 that pairs them
+    /// and a renderer — a chain `--set` has spelled for a while and the head
+    /// could not carry: `session_head` wrote every path after the first as an
+    /// `L4` slot, so `--record-session` refused it outright rather than
+    /// recording a performance nobody could replay. This is that chain through
+    /// the head and back, layer by layer.
+    #[test]
+    fn a_session_head_carries_a_whole_chain_and_not_just_a_pair() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = karakuri_store::store::Store::open(dir.path()).expect("store");
+
+        let mut args = parse(&[]).expect("parses");
+        args.sets = vec![(
+            Named::bare(root.join("examples/lattice_shell.kir")),
+            vec![
+                Named::bare(root.join("examples/sphere_shell.kir")),
+                Named::bare(root.join("examples/morph.kir")),
+                Named::bare(root.join("examples/soft_points.kir")),
+            ],
+        )];
+        args.store = dir.path().to_path_buf();
+        let (_, placed) = sort_slot(0, &args.sets[0].0, &args.sets[0].1);
+
+        let head = session_head(&args, &[placed], &store, "a_chain");
+        let loaded = setfile::from_lines(&store, "a_chain", &head)
+            .expect("the head a recording writes is a head a replay can load");
+        assert_eq!(
+            loaded
+                .l1s
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
+            ["lattice_shell", "sphere_shell"],
+            "the geometries, in the order they were named"
+        );
+        assert_eq!(
+            loaded
+                .l2s
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
+            ["morph"],
+            "the deformer that pairs them"
+        );
+        assert_eq!(
+            loaded
+                .l4s
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
+            ["soft_points"]
+        );
         assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
     }
 

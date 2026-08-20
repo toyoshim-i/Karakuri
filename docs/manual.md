@@ -597,8 +597,9 @@ names nothing gets each node named after its procedure — a second use of one p
 becomes `lattice_shell-2`. The run prints the list it settled on.
 
 A slot with two geometries rebuilds under `--watch` like any other, and MCP reaches every
-node in it. **What is still short is the Set file**: a slot holding a chain or a second
-geometry cannot be saved or recorded, because the format names an L1 and its renderers.
+node in it. A Set file carries the whole of it — a `slot` record per node, on the layer the
+node's own `kind` declares — so a chain or a second geometry is saved and recorded like
+anything else.
 
 Two sources and two renderers under `--merge` is **two pipelines composited, published as one
 control**:
@@ -634,9 +635,11 @@ They also have to be the same size, and the far one is **never drawn on its own*
 Set is one geometry made of two simulations, with one chain and one set of renderers over it.
 
 **What is not there yet is treating them differently.** A mask on which source an element
-came from wants a way to *name* a source, and a name has to be written where the source is
-used — in a Set file, which today carries an L1 and its renderers. Until then the two are
-merged and drawn, and telling them apart is done by giving them different `.kir` files.
+came from wants a way to *name* a source. A name is written where the source is used —
+`--set far=sphere_shell.kir,…` — and a Set file records it on the node's `slot`, so the
+half that was missing is the reading: nothing points at a node by name yet, and a load says
+so rather than pretending. Until then the two are merged and drawn, and telling them apart is
+done by giving them different `.kir` files.
 
 ### A shape in a file of its own
 

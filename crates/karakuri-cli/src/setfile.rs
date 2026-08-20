@@ -8,11 +8,25 @@
 //!
 //! Two directions, and both are needed or neither is worth anything:
 //!
-//! - [`save`] puts the two `.kir` sources into the store as content-addressed
-//!   artifacts and writes a Set file that references them by hash, with the
-//!   capacity, parameters, bindings, camera and seed the run was using.
-//! - [`load`] reads one back and returns everything `Set::build` and the flags
-//!   used to supply.
+//! - [`save`] puts every node's source into the store as a content-addressed
+//!   artifact and writes a Set file that references them by hash, with the
+//!   capacities, parameters, bindings, camera and seed the run was using.
+//! - [`load`] reads one back and returns everything `Set::build_many` and the
+//!   flags used to supply.
+//!
+//! ## The whole chain, not an L1 and its renderers
+//!
+//! Both halves handled a pair and then a stack: an L1, and the L4s drawn over
+//! it. Everything else a `--set` can spell — the L2s that deform, an L3 that
+//! looks, a `kind Field` that shapes — was refused by [`save`] and skipped with
+//! a note by [`load`], so a cube morphing into a sphere was a Set that could be
+//! played and could not be kept, and `--record-session` refused it for the same
+//! reason, since a session opens with a Set file.
+//!
+//! **Nothing in the format had to change to close that.** A `slot` record has
+//! carried a layer, an index and a name since the address existed; what was
+//! missing was a writer that put a node's own `kind` into it and a reader that
+//! honoured the index on every layer rather than on one.
 //!
 //! ## Where the flag went
 //!
@@ -28,14 +42,16 @@
 //! lives. One rule, one place, and a Set file and a command line cannot disagree
 //! about what a binding means.
 //!
-//! ## Three places the format is finer than the engine
+//! ## Two places the format is still finer than the engine
 //!
-//! The Set file keys `seed` and `capacity` by **node** — a layer and an index,
-//! so two geometries can run at two capacities under two salts — and keys
-//! `param` by a layer and an optional index. This loader builds one geometry
-//! and hands the engine one seed, one capacity and one flat parameter map, so
-//! it takes node 0's and says what it left behind. A `param` may also be a
-//! vector, and the engine's map holds `f32`.
+//! The Set file keys `seed` by **node** — a layer and an index, so two
+//! geometries could run under two salts — and the engine takes one salt per Set
+//! and derives each source's from it, so this loader takes node 0's and says
+//! what it left behind. A `param` may also be a vector, and the engine's map
+//! holds `f32`.
+//!
+//! Capacity was a third: it is keyed by node too, and the engine now holds one
+//! per geometry, so it is carried rather than reported.
 //!
 //! None of that is resolved here and none of it is silently dropped. Loading
 //! reports what it could not carry — see [`Loaded::notes`] — because a Set file
@@ -45,7 +61,7 @@
 //! param name is the same disagreement seen from the other side.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use karakuri_engine::binding::{Curve, NOISE_SIGNAL};
 use karakuri_engine::camera::Orbit;
@@ -67,26 +83,46 @@ const VERSION: u32 = 1;
 pub const DEFAULT_OCTAVES: u32 = 4;
 
 /// What a Set file said, in the terms the engine takes.
+///
+/// **Per layer, which is the shape `Set::build_many` takes its nodes in.** A
+/// Set file records a `slot` per node and the layer is what the node's own
+/// `kind` declared, so a chain comes back as a chain rather than as a pile the
+/// loader has to classify a second time.
 #[cfg_attr(test, derive(Debug))]
 pub struct Loaded {
     pub id: String,
-    pub l1: Checked,
-    /// The renderers, in the order their `slot` records appeared — which is
+    /// The geometry sources, by `slot` index. At least one; several is one Set
+    /// simulating several times and drawing all of them.
+    pub l1s: Vec<Checked>,
+    /// The deformers, by `slot` index — which is chain order, each one reading
+    /// what the one before it wrote.
+    pub l2s: Vec<Checked>,
+    /// The camera, or `None` for the built-in orbit. At most one per Set.
+    pub l3: Option<Checked>,
+    /// The field, or `None`. At most one per Set, on the camera's terms.
+    pub field: Option<Checked>,
+    /// The renderers, in the order their `slot` records indexed them — which is
     /// draw order. **Several `slot` records on L4 is how a file says a stack**;
     /// the format already allowed it and nothing new had to be added.
     pub l4s: Vec<Checked>,
-    /// Every procedure as text — the L1, then each renderer in draw order.
+    /// Every procedure as text, in **node order** — the L1s, the L2s, the L3,
+    /// the renderers, then the field, which is the order `Set::node_names`
+    /// reports and the order [`Loaded::nodes`] walks.
     ///
     /// **Carried because a Set file has no `.kir` on disk and an editable run
     /// needs one.** A Set names its procedures by hash; the sources come out of
     /// the store, or out of the file when it was bundled. Before the scratch
     /// existed there was nowhere to put them and `--mcp` with `--load-set` was
     /// refused for exactly that reason. See `scratch::place`.
-    pub l1_src: String,
-    pub l4_srcs: Vec<String>,
-    /// `None` when the file gave no `capacity` record, which means the `.kir`
-    /// default applies — the spec's own wording.
-    pub capacity: Option<u32>,
+    pub srcs: Vec<String>,
+    /// What each geometry runs at, by `slot` index, one entry per L1.
+    ///
+    /// `None` where the file gave no `capacity` record for that geometry, which
+    /// means the `.kir` default applies — the spec's own wording. **Per
+    /// geometry rather than per Set**, because each source declares its own
+    /// range and one number cannot serve two of them; the format has keyed it
+    /// by node since the address existed.
+    pub capacities: Vec<Option<u32>>,
     pub params: Vec<ParamWrite>,
     pub bindings: Vec<Binding>,
     pub camera: Option<Orbit>,
@@ -98,6 +134,25 @@ pub struct Loaded {
     /// and the honest response is to load it and say so. Silence here would be
     /// the load succeeding and the material being subtly not what was saved.
     pub notes: Vec<String>,
+}
+
+impl Loaded {
+    /// Every node, compiled and as text, in node order.
+    ///
+    /// **The one place the two halves are walked together.** `srcs` is a flat
+    /// list and the procedures are per layer, so pairing them anywhere else
+    /// would be a second copy of what node order is — and a caller that got it
+    /// wrong would write one node's source into another node's file. See
+    /// `scratch::place`, which is what wants the pairing.
+    pub fn nodes(&self) -> impl Iterator<Item = (&Checked, &str)> {
+        self.l1s
+            .iter()
+            .chain(&self.l2s)
+            .chain(&self.l3)
+            .chain(&self.l4s)
+            .chain(&self.field)
+            .zip(self.srcs.iter().map(String::as_str))
+    }
 }
 
 /// Convert one [`Record::Bind`] into the binding the engine applies.
@@ -253,17 +308,24 @@ fn kind_of(layer: Layer) -> Kind {
     }
 }
 
+/// The record `Layer` an engine [`Kind`] names. The inverse of [`kind_of`], and
+/// total for the same reason: every layer a Set can hold is a layer a record
+/// can address.
+fn layer_of(kind: Kind) -> Layer {
+    match kind {
+        Kind::L1 => Layer::L1,
+        Kind::L2 => Layer::L2,
+        Kind::L3 => Layer::L3,
+        Kind::L4 => Layer::L4,
+        Kind::Field => Layer::Field,
+    }
+}
+
 /// The record a binding is. The inverse of [`binding_from_record`], and what
 /// [`save`] writes.
 pub fn record_from_binding(binding: &Binding) -> Record {
     Record::Bind {
-        layer: match binding.layer {
-            Kind::L1 => Layer::L1,
-            Kind::L2 => Layer::L2,
-            Kind::L3 => Layer::L3,
-            Kind::L4 => Layer::L4,
-            Kind::Field => Layer::Field,
-        },
+        layer: layer_of(binding.layer),
         index: binding.index,
         key: binding.key.clone(),
         signal: binding.signal.clone(),
@@ -296,14 +358,39 @@ fn layer_name(layer: Layer) -> &'static str {
     }
 }
 
+/// One node of a Set on its way into a file: where its source is, which layer
+/// its `kind` declaration puts it on, which node of that layer it is, and what
+/// the operator called it.
+///
+/// **The layer is read where the chain was sorted, not worked out again here.**
+/// `main.rs` already sorts a `--set` list by the `kind` each file declares —
+/// that is how the engine gets its nodes — so asking the same question a second
+/// time is how a Set file comes to disagree with the run it was saved from.
+/// A `slot` record is exactly this, which is why the fields are these four.
+pub struct Node<'a> {
+    pub path: &'a Path,
+    pub layer: Kind,
+    /// Which node of that layer, numbered from 0 with no gaps. Index is
+    /// position: the L2s deform in it and the L4s draw in it.
+    pub index: u32,
+    /// `None` for a path written bare, which is the ordinary case — a name is a
+    /// cost paid when something wants to point at the node. See `Named`.
+    pub name: Option<&'a str>,
+}
+
 /// Everything a Set file records, gathered so [`save`] takes one argument for
 /// the Set rather than seven for its parts. The fields are the records, in the
 /// order they are written.
 pub struct Saving<'a> {
-    pub l1_path: &'a Path,
-    /// The renderers, in draw order. One is the ordinary case.
-    pub l4_paths: &'a [PathBuf],
-    pub capacity: u32,
+    /// Every node of the Set, in any order — [`save`] writes them by layer and
+    /// index, so the file is the same bytes however the caller gathered them.
+    pub nodes: &'a [Node<'a>],
+    /// What each geometry runs at, one per L1 node in index order.
+    ///
+    /// **Per geometry, because the record is.** A Set holds several sources,
+    /// each with its own declared range, and a single number written against
+    /// node 0 was the only thing this could say before the address existed.
+    pub capacities: &'a [u32],
     pub params: &'a [ParamWrite],
     pub bindings: &'a [Binding],
     pub camera: &'a Orbit,
@@ -316,29 +403,68 @@ pub struct Saving<'a> {
 /// so a Set file is a few dozen lines a human can read rather than a copy of
 /// the material. Content addressing means saving the same procedure twice
 /// stores it once.
-/// **Refused rather than mislabelled**, for anything but an L1 and its
-/// renderers.
+/// **Refused rather than written into a file that cannot be read back.**
 ///
-/// A Set file records a `slot` per procedure and this function was given "the
-/// L1, and every other path" — so an L2, an L3 or a field was written as an
-/// `L4` slot. That reloads as `slot L4 needs a L4 procedure, got Field`, which
-/// is the good case; the bad one is an L2 whose `deform` the loader hands to a
-/// renderer. The gap is real and old — a Set file carries an L1 and its
-/// renderers, and `--set` is where a chain is spelled — and saying so is better
-/// than a file that cannot be read back.
-fn refuse_unsavable(paths: &[std::path::PathBuf]) -> Result<(), String> {
-    for path in paths {
-        let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let Ok(proc) = karakuri_ir::parse(&src) else {
-            continue;
-        };
-        if proc.kind != Kind::L4 {
+/// This used to refuse an L2, an L3 or a `kind Field` outright, because a Set
+/// file recorded "the L1, and every other path": everything else went out as an
+/// `L4` slot, and reloading as `slot L4 needs a L4 procedure, got Field` was the
+/// *good* case — the bad one was an L2 whose `deform` the loader handed to a
+/// renderer. The format has always had a slot per layer, so a chain is now
+/// written as the chain it is and none of that is left to refuse.
+///
+/// What is left is what a Set *is*, and what the projection can fold. A file
+/// with no geometry or nothing to draw describes no Set; two nodes at one
+/// address fold to one node — see `key_for` in `project.rs` — and a gap in an
+/// index describes a chain with a hole in it, which [`from_lines`] refuses on
+/// the way back in rather than closing up.
+fn refuse_unwritable(nodes: &[Node<'_>], capacities: &[u32]) -> Result<(), String> {
+    let count = |layer: Kind| nodes.iter().filter(|n| n.layer == layer).count();
+    let geometries = count(Kind::L1);
+    if geometries == 0 {
+        return Err(
+            "none of these files declares `kind L1`, and a Set is a geometry and the nodes \
+             over it"
+                .to_string(),
+        );
+    }
+    if count(Kind::L4) == 0 {
+        return Err(
+            "none of these files declares `kind L4`, and a Set with no renderer has no frame \
+             to give"
+                .to_string(),
+        );
+    }
+    if capacities.len() != geometries {
+        return Err(format!(
+            "{geometries} geometr{} and {} capacit{} — a capacity sizes one geometry, so \
+             there is exactly one per L1 node",
+            if geometries == 1 { "y" } else { "ies" },
+            capacities.len(),
+            if capacities.len() == 1 { "y" } else { "ies" },
+        ));
+    }
+    for layer in [Kind::L1, Kind::L2, Kind::L3, Kind::L4, Kind::Field] {
+        let mut indices: Vec<u32> = nodes
+            .iter()
+            .filter(|n| n.layer == layer)
+            .map(|n| n.index)
+            .collect();
+        indices.sort_unstable();
+        if let Some((at, index)) = indices
+            .iter()
+            .enumerate()
+            .find(|(at, index)| **index != *at as u32)
+        {
             return Err(format!(
-                "{} is a `kind {}`, and a Set file carries an L1 and its renderers\n\
-                 hint: a chain — L2s, an L3, a field — is spelled with `--set` today. Saving \
-                 one would write it as an L4 and read it back as one",
-                path.display(),
-                kind_name(proc.kind),
+                "the {} nodes are numbered {indices:?}: index {index} is the {}, and a \
+                 layer's nodes run from 0 with no gaps and no repeats",
+                kind_name(layer),
+                match *index < at as u32 {
+                    true =>
+                        "second node at that address, which is one node in the file that \
+                             comes back",
+                    false => "far side of a gap, which is a chain with a hole in it",
+                },
             ));
         }
     }
@@ -358,67 +484,58 @@ fn kind_name(kind: Kind) -> &'static str {
 
 pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
     let Saving {
-        l1_path,
-        l4_paths,
-        capacity,
+        nodes,
+        capacities,
         params,
         bindings,
         camera,
         seed,
     } = set;
-    refuse_unsavable(l4_paths)?;
+    refuse_unwritable(nodes, capacities)?;
     let put = |path: &Path| -> Result<Hash, String> {
         let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
         store
             .put_artifact(&bytes)
             .map_err(|e| format!("{}: {e}", path.display()))
     };
-    let l1_hash = put(l1_path)?;
-    let l4_hashes = l4_paths
-        .iter()
-        .map(|p| put(p))
-        .collect::<Result<Vec<_>, _>>()?;
 
-    let mut lines = vec![
-        Line::new(Record::Set {
-            id: id.to_string(),
-            v: VERSION,
-        }),
-        Line::new(Record::Slot {
+    let mut lines = vec![Line::new(Record::Set {
+        id: id.to_string(),
+        v: VERSION,
+    })];
+    // **One `slot` record per node, in node order** — the geometries, the
+    // deformers, the camera, the renderers, then the field. Several on a layer
+    // is how the format says a stack or a chain, and it needed no new record to
+    // say it: a file holding one geometry and one renderer is the two lines it
+    // always was, in the order it always had them.
+    //
+    // Sorted here rather than trusted from the caller, so that the file is a
+    // function of the Set rather than of the order somebody walked it in.
+    let mut ordered: Vec<&Node<'_>> = nodes.iter().collect();
+    ordered.sort_by_key(|n| (layer_ordinal(n.layer), n.index));
+    for node in ordered {
+        let proc_hash = put(node.path)?;
+        lines.push(Line::new(Record::Slot {
+            layer: layer_of(node.layer),
+            index: node.index,
+            // **Written only where the operator wrote one.** A name belongs to
+            // the use rather than to the procedure, so a bare path has none to
+            // record, and an absent name is written as nothing — which is what
+            // keeps a file this build saves byte for byte the file it saved
+            // before the field existed.
+            name: node.name.map(str::to_string),
+            proc_hash,
+        }));
+    }
+    // On L1, because that is the layer whose element buffers a capacity sizes,
+    // and one per geometry, because that is what it sizes: each source declares
+    // its own range and one number cannot serve two of them.
+    for (index, value) in capacities.iter().enumerate() {
+        lines.push(Line::new(Record::Capacity {
             layer: Layer::L1,
-            index: 0,
-            // **Nothing here can write a name yet.** The record carries one so
-            // that a Set file can say which source a mask points at; the
-            // authoring surfaces that would name a node are M4's, and an
-            // absent name is written as nothing, so a file this build saves is
-            // byte for byte the file it saved before the field existed.
-            name: None,
-            proc_hash: l1_hash,
-        }),
-        // On L1, because that is the layer whose element buffers it sizes. The
-        // format keys capacity by layer and the engine holds one per Set; see
-        // the module doc.
-        Line::new(Record::Capacity {
-            layer: Layer::L1,
-            // The first geometry's, because this run builds one. The record
-            // can address a second and nothing here has a second to address.
-            index: 0,
-            value: capacity,
-        }),
-    ];
-    // **One `slot` record per renderer, in draw order.** Several on L4 is how
-    // the format says a stack, and it needed no new record to say it — a file
-    // with one reads exactly as it always did.
-    for (index, proc_hash) in l4_hashes.into_iter().enumerate() {
-        lines.insert(
-            lines.len() - 1,
-            Line::new(Record::Slot {
-                layer: Layer::L4,
-                index: index as u32,
-                name: None,
-                proc_hash,
-            }),
-        );
+            index: index as u32,
+            value: *value,
+        }));
     }
     // Sorted, so saving the same state twice produces the same file. A
     // `HashMap`'s order is not a property anything should depend on, and a Set
@@ -457,8 +574,10 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
     }));
     lines.push(Line::new(Record::Seed {
         stream: Layer::L1,
-        // One seed, and it salts the one geometry this run built. A per-source
-        // salt is expressible in the record now and is still derived here.
+        // One seed, and it salts every geometry the Set builds: `Set::build_many`
+        // takes one salt and derives each source's from it. A per-source salt is
+        // expressible in the record and is still derived, so there is one to
+        // write — see `docs/roadmap.md`.
         index: 0,
         value: u64::from(seed),
     }));
@@ -486,12 +605,13 @@ pub fn load(store: &Store, id: &str) -> Result<Loaded, String> {
 /// way once anything writes one.
 pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, String> {
     let mut notes = Vec::new();
-    let mut slots: BTreeMap<&str, Hash> = BTreeMap::new();
-    // The renderers, by index. `None` is a gap — an index nothing claimed —
-    // which is refused below rather than silently closed up.
-    let mut l4_slots: Vec<Option<Hash>> = Vec::new();
+    // Every layer's slots by index, the layers in the order [`layer_ordinal`]
+    // gives them. `None` is a gap — an index nothing claimed — which is refused
+    // below rather than silently closed up.
+    let mut slots: [Vec<Option<Hash>>; 5] = Default::default();
     let mut inlined: BTreeMap<Hash, BTreeMap<u32, String>> = BTreeMap::new();
-    let mut capacity = None;
+    // What each geometry runs at, by index, growing as the file names them.
+    let mut capacities: Vec<Option<u32>> = Vec::new();
     let mut params = Vec::new();
     let mut bindings = Vec::new();
     let mut camera = None;
@@ -526,72 +646,59 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                          points at a node by name yet"
                     ));
                 }
-                match layer {
-                    // **The index is honoured here, and it used to be dropped.**
-                    // Two `slot L1` lines both landed in the one entry and the
-                    // second silently replaced the first, while the L4 arm below
-                    // caught the identical mistake and said so. A file naming two
-                    // geometries is one this loader cannot build — but it is a
-                    // file that said something, and what it said is now reported.
-                    Layer::L1 if *index != 0 => notes.push(format!(
-                        "slot L1 index {index} was skipped: this loader builds one \
-                         geometry and it is index 0"
-                    )),
-                    Layer::L1 => {
-                        if slots.insert("L1", *proc_hash).is_some() {
-                            notes.push(
-                                "two L1 slots both claim index 0; the later one is used"
-                                    .to_string(),
-                            );
-                        }
-                    }
-                    // **Placed by index, not appended.** A second L4 `slot` record
-                    // is a second renderer over the same geometry rather than a
-                    // correction of the first — and the index says which, so the
-                    // records need not arrive in order and the projection can fold
-                    // them without one. A file from before stacks existed carries
-                    // one L4 at index 0 and lands where it always did.
-                    Layer::L4 => {
-                        let at = *index as usize;
-                        if l4_slots.len() <= at {
-                            l4_slots.resize(at + 1, None);
-                        }
-                        if l4_slots[at].is_some() {
-                            notes.push(format!(
-                                "two L4 slots both claim index {at}; the later one is used"
-                            ));
-                        }
-                        l4_slots[at] = Some(*proc_hash);
-                    }
-                    // **A Set file records an L1 and its renderers**, and a chain and
-                    // a camera are spelled on the command line. Not a statement
-                    // about what a Set can hold — it holds both — but about what
-                    // this format has a slot for.
-                    other => notes.push(format!(
-                        "slot {} was skipped: a Set file records an L1 and its renderers",
-                        layer_name(*other)
-                    )),
+                // **Placed by layer and index, and every layer reads the same
+                // way.** A second `slot` on a layer is a second node — another
+                // geometry, another deformer in the chain, another renderer over
+                // the same points — rather than a correction of the first, and
+                // the index says which, so the records need not arrive in order
+                // and the projection can fold them without one.
+                //
+                // Three of the five layers used to be dropped with a note saying
+                // a Set file records an L1 and its renderers, and the L1's own
+                // index was dropped beside them: the format could always say a
+                // chain and this loader could not read one back, so a cube
+                // morphing into a sphere could be played and not kept.
+                let at = *index as usize;
+                let layer_slots = &mut slots[layer_ordinal(kind_of(*layer)) as usize];
+                if layer_slots.len() <= at {
+                    layer_slots.resize(at + 1, None);
                 }
+                if layer_slots[at].is_some() {
+                    notes.push(format!(
+                        "two {} slots both claim index {at}; the later one is used",
+                        layer_name(*layer)
+                    ));
+                }
+                layer_slots[at] = Some(*proc_hash);
             }
             Record::Src { hash, line, s } => {
                 inlined.entry(*hash).or_default().insert(*line, s.clone());
             }
-            // **Keyed by the node now, and the engine here still holds one.**
-            // A capacity addressed at a second geometry is a value the format
-            // can express and this loader has nowhere to put — reported rather
-            // than applied to the first, which would resize the wrong source.
+            // **Keyed by the geometry it sizes.** A capacity addressed at the
+            // second source used to be reported and dropped, because the engine
+            // held one number per Set; it holds one per source now, so the
+            // number reaches the geometry the file wrote it against rather than
+            // resizing the wrong one.
             Record::Capacity {
                 layer,
                 index,
                 value,
-            } => match (*layer, *index) {
-                (Layer::L1, 0) => capacity = Some(*value),
-                (Layer::L1, at) => notes.push(format!(
-                    "capacity on L1 index {at} was skipped: this loader builds one \
-                     geometry and the capacity it takes is index 0's"
-                )),
-                (other, _) => notes.push(format!(
-                    "capacity on {} was skipped: a Set has one capacity and it is L1's",
+            } => match *layer {
+                Layer::L1 => {
+                    let at = *index as usize;
+                    if capacities.len() <= at {
+                        capacities.resize(at + 1, None);
+                    }
+                    if capacities[at].is_some() {
+                        notes.push(format!(
+                            "two capacities both claim L1 index {at}; the later one is used"
+                        ));
+                    }
+                    capacities[at] = Some(*value);
+                }
+                other => notes.push(format!(
+                    "capacity on {} was skipped: a capacity sizes a geometry, and the \
+                     geometries are L1's",
                     layer_name(other)
                 )),
             },
@@ -683,8 +790,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         }
     }
 
-    let source_of = |layer: &str, hash: Option<&Hash>| -> Result<String, String> {
-        let hash = hash.ok_or_else(|| format!("set `{file_id}` has no {layer} slot"))?;
+    let source_of = |layer: &str, hash: &Hash| -> Result<String, String> {
         if let Some(lines) = inlined.get(hash) {
             // Bundled: the file carries its own source, so it reads on a
             // machine whose store has never seen this artifact.
@@ -701,36 +807,111 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         String::from_utf8(bytes).map_err(|e| format!("set `{file_id}`: {layer} is not UTF-8: {e}"))
     };
 
-    let l1_src = source_of("L1", slots.get("L1"))?;
-    if l4_slots.is_empty() {
+    // One layer's sources, in index order. A gap is not a missing artifact:
+    // index 2 with no index 1 describes a chain with a hole in it, and closing
+    // it up would silently change draw order or what deforms what.
+    let sources = |layer: Kind| -> Result<Vec<String>, String> {
+        slots[layer_ordinal(layer) as usize]
+            .iter()
+            .enumerate()
+            .map(|(at, hash)| match hash {
+                Some(hash) => source_of(kind_name(layer), hash),
+                None => Err(format!(
+                    "set `{file_id}` names a {} at index {at} but none before it",
+                    kind_name(layer)
+                )),
+            })
+            .collect()
+    };
+    let l1_srcs = sources(Kind::L1)?;
+    let l2_srcs = sources(Kind::L2)?;
+    let l3_srcs = sources(Kind::L3)?;
+    let l4_srcs = sources(Kind::L4)?;
+    let field_srcs = sources(Kind::Field)?;
+    if l1_srcs.is_empty() {
+        return Err(format!("set `{file_id}` has no L1 slot"));
+    }
+    if l4_srcs.is_empty() {
         return Err(format!("set `{file_id}` has no L4 slot"));
     }
-    let l4_srcs = l4_slots
-        .iter()
-        .enumerate()
-        .map(|(at, h)| {
-            source_of("L4", h.as_ref()).map_err(|e| match h {
-                Some(_) => e,
-                // A gap rather than a missing artifact: index 2 without index 1
-                // describes a stack with a hole in it, and closing it up would
-                // silently change draw order.
-                None => format!("set `{file_id}` names an L4 at index {at} but none before it"),
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let l1 = crate::compile::check(&l1_src)?;
-    let l4s = l4_srcs
-        .iter()
-        .map(|src| crate::compile::check(src))
-        .collect::<Result<Vec<_>, _>>()?;
+    // **One camera and one field, which is what a Set is.** The format
+    // addresses nodes per layer, so it can say two of either; a slot looks from
+    // one viewpoint and evaluates one field, and compositing two viewpoints is
+    // what an L5 is for. Reported and left in the file rather than built into
+    // something nobody asked for — the same refusal `--set` makes, one step
+    // later.
+    for (layer, count, why) in [
+        (
+            "L3",
+            l3_srcs.len(),
+            "a Set looks from one camera, and compositing two viewpoints is what an L5 is for",
+        ),
+        (
+            "Field",
+            field_srcs.len(),
+            "a Set evaluates one field, and naming several is the notation fan-in brings with it",
+        ),
+    ] {
+        if count > 1 {
+            notes.push(format!(
+                "{} {layer} slot{} past index 0 {} skipped: {why}",
+                count - 1,
+                if count == 2 { "" } else { "s" },
+                if count == 2 { "was" } else { "were" }
+            ));
+        }
+    }
+    // A capacity for a geometry the file does not name has nothing to size.
+    // Said rather than dropped, because it is the file describing a source that
+    // is not there — a `slot` record that went missing, most likely.
+    for (at, value) in capacities.iter().enumerate().skip(l1_srcs.len()) {
+        if let Some(value) = value {
+            notes.push(format!(
+                "capacity {value} on L1 index {at} was skipped: this file names {} \
+                 geometr{}",
+                l1_srcs.len(),
+                if l1_srcs.len() == 1 { "y" } else { "ies" }
+            ));
+        }
+    }
+    capacities.resize(l1_srcs.len(), None);
+
+    let check = |srcs: &[String]| {
+        srcs.iter()
+            .map(|src| crate::compile::check(src))
+            .collect::<Result<Vec<_>, _>>()
+    };
+    let l1s = check(&l1_srcs)?;
+    let l2s = check(&l2_srcs)?;
+    let l3 = l3_srcs
+        .first()
+        .map(|s| crate::compile::check(s))
+        .transpose()?;
+    let l4s = check(&l4_srcs)?;
+    let field = field_srcs
+        .first()
+        .map(|s| crate::compile::check(s))
+        .transpose()?;
+
+    // Node order, which is what [`Loaded::srcs`] promises: the same order the
+    // procedures above are chained in, so the two walk in step.
+    let srcs = l1_srcs
+        .into_iter()
+        .chain(l2_srcs)
+        .chain(l3_srcs.into_iter().take(1))
+        .chain(l4_srcs)
+        .chain(field_srcs.into_iter().take(1))
+        .collect();
 
     Ok(Loaded {
         id: file_id,
-        l1,
+        l1s,
+        l2s,
+        l3,
+        field,
         l4s,
-        l1_src,
-        l4_srcs,
-        capacity,
+        srcs,
+        capacities,
         params,
         bindings,
         camera,
@@ -780,6 +961,41 @@ proc points {
 }
 "#;
 
+    /// The rest of the chain a `--set` can spell, minimal for the reason the
+    /// pair above is: what is under test is the file, not the picture.
+    const L2: &str = r#"
+proc warp {
+  kind L2
+
+  consumes position
+
+  deform {
+    position = vec3(position.x, position.y * 1.5, position.z);
+  }
+}
+"#;
+
+    const L3: &str = r#"
+proc look {
+  kind L3
+
+  camera {
+    eye    = vec3(0.0, 2.0, 9.0);
+    target = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#;
+
+    const FIELD: &str = r#"
+proc blob {
+  kind Field
+
+  field {
+    distance = sd_sphere(point, 1.0);
+  }
+}
+"#;
+
     /// A store with the two procedures written out beside it, and the paths.
     fn fixture() -> (
         tempfile::TempDir,
@@ -794,6 +1010,44 @@ proc points {
         std::fs::write(&l4, L4).expect("write l4");
         let store = Store::open(dir.path().join("store")).expect("store");
         (dir, store, l1, l4)
+    }
+
+    /// A `.kir` on disk beside the fixture's, so a test can name a node of any
+    /// layer it likes.
+    fn beside(dir: &tempfile::TempDir, file: &str, src: &str) -> std::path::PathBuf {
+        let path = dir.path().join(file);
+        std::fs::write(&path, src).expect("write");
+        path
+    }
+
+    /// The nodes of an ordinary Set — one geometry, and the renderers over it
+    /// in draw order.
+    fn ordinary<'a>(l1: &'a std::path::Path, l4s: &'a [std::path::PathBuf]) -> Vec<Node<'a>> {
+        std::iter::once(Node {
+            path: l1,
+            layer: Kind::L1,
+            index: 0,
+            name: None,
+        })
+        .chain(l4s.iter().enumerate().map(|(at, path)| Node {
+            path,
+            layer: Kind::L4,
+            index: at as u32,
+            name: None,
+        }))
+        .collect()
+    }
+
+    /// The whole set file as bytes, which is what a compatibility claim is
+    /// about. `read` keeps each line's text verbatim, so this is what is on
+    /// disk rather than a re-serialisation of it.
+    fn written(store: &Store, id: &str) -> String {
+        store
+            .read_set(id)
+            .expect("read")
+            .iter()
+            .map(|line| format!("{}\n", line.as_str()))
+            .collect()
     }
 
     /// A Set file's text, through the file reader — so the bytes a test writes
@@ -812,15 +1066,10 @@ proc points {
     /// its fields; `LazyLock` keeps that to one place rather than one per call.
     static DEFAULT_CAMERA: std::sync::LazyLock<Orbit> = std::sync::LazyLock::new(Orbit::default);
 
-    fn plain<'a>(
-        l1: &'a std::path::Path,
-        l4: &'a [PathBuf],
-        bindings: &'a [Binding],
-    ) -> Saving<'a> {
+    fn plain<'a>(nodes: &'a [Node<'a>], bindings: &'a [Binding]) -> Saving<'a> {
         Saving {
-            l1_path: l1,
-            l4_paths: l4,
-            capacity: 4096,
+            nodes,
+            capacities: &[4096],
             params: &[],
             bindings,
             camera: &DEFAULT_CAMERA,
@@ -848,9 +1097,8 @@ proc points {
             &store,
             "s1",
             Saving {
-                l1_path: &l1,
-                l4_paths: std::slice::from_ref(&l4),
-                capacity: 65_536,
+                nodes: &ordinary(&l1, std::slice::from_ref(&l4)),
+                capacities: &[65_536],
                 params: &params,
                 bindings: &[a_binding()],
                 camera: &camera,
@@ -861,7 +1109,7 @@ proc points {
 
         let loaded = load(&store, "s1").expect("load");
         assert_eq!(loaded.id, "s1");
-        assert_eq!(loaded.capacity, Some(65_536));
+        assert_eq!(loaded.capacities, vec![Some(65_536)]);
         assert_eq!(loaded.params, params);
         assert_eq!(loaded.seed, Some(4242));
         assert_eq!(
@@ -890,7 +1138,12 @@ proc points {
     #[test]
     fn a_set_whose_artifacts_are_missing_says_which_and_why() {
         let (_dir, store, l1, l4) = fixture();
-        save(&store, "s1", plain(&l1, std::slice::from_ref(&l4), &[])).expect("save");
+        save(
+            &store,
+            "s1",
+            plain(&ordinary(&l1, std::slice::from_ref(&l4)), &[]),
+        )
+        .expect("save");
         let lines = store.read_set("s1").expect("read");
 
         // A second store that has the file but not the artifacts — a Set file
@@ -908,7 +1161,12 @@ proc points {
     #[test]
     fn inlined_source_loads_without_a_store_that_knows_the_artifact() {
         let (_dir, store, l1, l4) = fixture();
-        save(&store, "s1", plain(&l1, std::slice::from_ref(&l4), &[])).expect("save");
+        save(
+            &store,
+            "s1",
+            plain(&ordinary(&l1, std::slice::from_ref(&l4)), &[]),
+        )
+        .expect("save");
         let mut lines = store.read_set("s1").expect("read");
         // Bundle it: every slot's source inlined, line by line, as `src`.
         let mut bundled = Vec::new();
@@ -935,7 +1193,7 @@ proc points {
         let elsewhere = tempfile::tempdir().expect("tempdir");
         let bare = Store::open(elsewhere.path()).expect("store");
         let loaded = from_lines(&bare, "s1", &lines).expect("the file carries its own source");
-        assert_eq!(loaded.l1.name, "ring");
+        assert_eq!(loaded.l1s[0].name, "ring");
         assert_eq!(loaded.l4s[0].name, "points");
     }
 
@@ -991,7 +1249,12 @@ proc points {
     #[test]
     fn what_the_engine_cannot_carry_is_reported_rather_than_dropped() {
         let (_dir, store, l1, l4) = fixture();
-        save(&store, "s1", plain(&l1, std::slice::from_ref(&l4), &[])).expect("save");
+        save(
+            &store,
+            "s1",
+            plain(&ordinary(&l1, std::slice::from_ref(&l4)), &[]),
+        )
+        .expect("save");
         let mut lines = store.read_set("s1").expect("read");
         lines.push(Line::new(Record::Seed {
             stream: Layer::L4,
@@ -1017,7 +1280,7 @@ proc points {
         assert!(notes.contains("`tint`"), "{notes}");
         // The L1 values are still the ones applied: a note is not a refusal.
         assert_eq!(loaded.seed, Some(1));
-        assert_eq!(loaded.capacity, Some(4096));
+        assert_eq!(loaded.capacities, vec![Some(4096)]);
     }
 
     /// **A binding the engine cannot honour is reported and skipped**, and the
@@ -1029,7 +1292,7 @@ proc points {
         save(
             &store,
             "s1",
-            plain(&l1, std::slice::from_ref(&l4), &[a_binding()]),
+            plain(&ordinary(&l1, std::slice::from_ref(&l4)), &[a_binding()]),
         )
         .expect("save");
         let mut lines = store.read_set("s1").expect("read");
@@ -1083,15 +1346,15 @@ proc points {
         assert!(err.contains("fbm"), "{err}");
     }
 
-    /// **Two `slot L1` lines are two geometries, and this loader builds one.**
+    /// **Two `slot L1` lines are two geometries, and one address is one node.**
     ///
-    /// The index used to be destructured and thrown away on this arm: both
-    /// lines landed in the same entry, the second silently replaced the first,
-    /// and a file describing two sources loaded as one with nothing said —
-    /// while the L4 arm beside it caught the identical mistake and reported it.
-    /// What a loader cannot carry it has to say, which is the whole of `notes`.
+    /// The index used to be destructured and thrown away on this arm: every
+    /// `slot L1` landed in the same entry, so a file describing two sources
+    /// loaded as one. Index 1 is now the second geometry it always described,
+    /// and what is left to report is the collision — two lines claiming index
+    /// 0, which the projection folds to one whatever this loader does.
     #[test]
-    fn two_l1_slots_are_reported_rather_than_one_silently_replacing_the_other() {
+    fn a_second_geometry_is_carried_and_two_slots_at_one_address_are_reported() {
         let (_dir, store, l1, l4) = fixture();
         let put = |bytes: &[u8]| store.put_artifact(bytes).expect("put");
         let first = put(&std::fs::read(&l1).expect("read"));
@@ -1114,13 +1377,20 @@ proc points {
             notes.contains("two L1 slots both claim index 0"),
             "a second geometry replaced the first in silence; notes were {notes:?}"
         );
-        assert!(
-            notes.contains("slot L1 index 1"),
-            "a geometry at index 1 was dropped in silence; notes were {notes:?}"
+        // Both geometries, in index order — the file named two sources and two
+        // is what a Set holds.
+        assert_eq!(
+            loaded
+                .l1s
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
+            ["ring_two", "ring_two"],
+            "a geometry at index 1 was dropped; notes were {notes:?}"
         );
         // The later of the colliding pair is what was built, which is what the
         // note promises and the only reading under which the note is true.
-        assert_eq!(loaded.l1.name, "ring_two");
+        assert_eq!(loaded.l1s[0].name, "ring_two");
     }
 
     /// **A name is reported rather than dropped, and the Set still loads.**
@@ -1148,13 +1418,346 @@ proc points {
 
         let loaded = from_lines(&store, "named", &lines).expect("a named slot still loads");
         assert_eq!(
-            loaded.l1.name, "ring",
+            loaded.l1s[0].name, "ring",
             "the material is unaffected by the name"
         );
         let notes = loaded.notes.join("\n");
         assert!(
             notes.contains("veil"),
             "the name went nowhere and was not reported; notes were {notes:?}"
+        );
+    }
+
+    /// **The whole chain, through the file and back.**
+    ///
+    /// A Set file recorded an L1 and its renderers: [`save`] refused an L2, an
+    /// L3 or a `kind Field` outright, so a cube morphing into a sphere was a
+    /// Set that could be played and not kept — and `--record-session` refused
+    /// it with the same message, because a session opens with a Set file. Every
+    /// layer is asserted separately, because writing them all as `L4` slots is
+    /// exactly what used to happen and a count would not have noticed.
+    #[test]
+    fn the_whole_chain_survives_the_file_it_is_written_to() {
+        let (dir, store, l1, l4) = fixture();
+        let l1b = beside(&dir, "l1b.kir", &L1.replace("proc ring", "proc ring_two"));
+        let l2 = beside(&dir, "l2.kir", L2);
+        let l3 = beside(&dir, "l3.kir", L3);
+        let field = beside(&dir, "field.kir", FIELD);
+        let l4b = beside(&dir, "l4b.kir", &L4.replace("proc points", "proc streaks"));
+
+        let nodes = vec![
+            Node {
+                path: &l1,
+                layer: Kind::L1,
+                index: 0,
+                // A name the operator wrote, which is what `--set veil=l1.kir`
+                // spells and what nothing here could record before.
+                name: Some("veil"),
+            },
+            Node {
+                path: &l1b,
+                layer: Kind::L1,
+                index: 1,
+                name: None,
+            },
+            Node {
+                path: &l2,
+                layer: Kind::L2,
+                index: 0,
+                name: None,
+            },
+            Node {
+                path: &l3,
+                layer: Kind::L3,
+                index: 0,
+                name: None,
+            },
+            Node {
+                path: &field,
+                layer: Kind::Field,
+                index: 0,
+                name: None,
+            },
+            Node {
+                path: &l4,
+                layer: Kind::L4,
+                index: 0,
+                name: None,
+            },
+            Node {
+                path: &l4b,
+                layer: Kind::L4,
+                index: 1,
+                name: None,
+            },
+        ];
+        save(
+            &store,
+            "chain",
+            Saving {
+                nodes: &nodes,
+                capacities: &[4096, 8192],
+                params: &[],
+                bindings: &[],
+                camera: &DEFAULT_CAMERA,
+                seed: 1,
+            },
+        )
+        .expect("save");
+        assert!(
+            written(&store, "chain").contains(r#""name":"veil""#),
+            "a name the operator wrote went nowhere: {}",
+            written(&store, "chain")
+        );
+
+        let loaded = load(&store, "chain").expect("load");
+        let named = |procs: &[Checked]| procs.iter().map(|c| c.name.clone()).collect::<Vec<_>>();
+        assert_eq!(named(&loaded.l1s), ["ring", "ring_two"]);
+        assert_eq!(named(&loaded.l2s), ["warp"]);
+        assert_eq!(loaded.l3.as_ref().map(|c| c.name.as_str()), Some("look"));
+        assert_eq!(loaded.field.as_ref().map(|c| c.name.as_str()), Some("blob"));
+        assert_eq!(named(&loaded.l4s), ["points", "streaks"]);
+        // Node order, which is what the scratch places them in — see
+        // [`Loaded::nodes`].
+        assert_eq!(
+            loaded
+                .nodes()
+                .map(|(checked, _)| checked.name.clone())
+                .collect::<Vec<_>>(),
+            ["ring", "ring_two", "warp", "look", "points", "streaks", "blob"]
+        );
+        assert!(
+            loaded.srcs[2].contains("proc warp"),
+            "a node was paired with another node's source: {}",
+            loaded.srcs[2]
+        );
+        // The one thing a load still cannot carry, said rather than dropped.
+        assert_eq!(
+            loaded.notes.iter().filter(|n| n.contains("veil")).count(),
+            1,
+            "{:?}",
+            loaded.notes
+        );
+    }
+
+    /// **Each geometry runs at the number written against it.**
+    ///
+    /// The capacity was keyed by node in the format and by Set in this loader:
+    /// a `capacity` on L1 index 1 was reported and dropped, so a Set whose two
+    /// sources were sized differently came back with the second at whatever its
+    /// `.kir` declared. The engine takes one per source and now so does this.
+    #[test]
+    fn each_geometry_keeps_the_capacity_it_was_saved_with() {
+        let (dir, store, l1, l4) = fixture();
+        let l1b = beside(&dir, "l1b.kir", &L1.replace("proc ring", "proc ring_two"));
+        let nodes = vec![
+            Node {
+                path: &l1,
+                layer: Kind::L1,
+                index: 0,
+                name: None,
+            },
+            Node {
+                path: &l1b,
+                layer: Kind::L1,
+                index: 1,
+                name: None,
+            },
+            Node {
+                path: &l4,
+                layer: Kind::L4,
+                index: 0,
+                name: None,
+            },
+        ];
+        save(
+            &store,
+            "two",
+            Saving {
+                nodes: &nodes,
+                capacities: &[4096, 65_536],
+                params: &[],
+                bindings: &[],
+                camera: &DEFAULT_CAMERA,
+                seed: 1,
+            },
+        )
+        .expect("save");
+
+        let loaded = load(&store, "two").expect("load");
+        assert_eq!(loaded.capacities, vec![Some(4096), Some(65_536)]);
+        assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
+    }
+
+    /// **A one-geometry Set is byte for byte the file it has always been.**
+    ///
+    /// Every Set file ever written is one L1 and its renderers, and the fields
+    /// that carry a chain — `index` on every layer, `name` on a slot — are
+    /// absent rather than defaulted for exactly this reason. A literal, not a
+    /// re-save compared against itself: a round trip through one writer agrees
+    /// with itself however far both halves have drifted.
+    #[test]
+    fn a_one_geometry_set_is_byte_for_byte_the_file_it_always_was() {
+        let (_dir, store, l1, l4) = fixture();
+        save(
+            &store,
+            "s1",
+            plain(&ordinary(&l1, std::slice::from_ref(&l4)), &[]),
+        )
+        .expect("save");
+        let hash = |path: &std::path::Path| {
+            store
+                .put_artifact(&std::fs::read(path).expect("read"))
+                .expect("put")
+        };
+        assert_eq!(
+            written(&store, "s1"),
+            format!(
+                r#"{{"t":"set","id":"s1","v":1}}
+{{"t":"slot","layer":"L1","proc":"{}"}}
+{{"t":"slot","layer":"L4","proc":"{}"}}
+{{"t":"capacity","layer":"L1","value":4096}}
+{{"t":"camera","kind":"orbit","radius":8.0,"speed":0.15}}
+{{"t":"seed","stream":"L1","value":1}}
+"#,
+                hash(&l1),
+                hash(&l4)
+            )
+        );
+    }
+
+    /// **Refused rather than written into a file that cannot be read back.**
+    ///
+    /// What [`save`] refuses is no longer a layer — it has a slot for every one
+    /// — but the two shapes that are not a Set, and the two a projection keyed
+    /// by address cannot fold: a repeat, and a gap.
+    #[test]
+    fn what_the_file_cannot_hold_is_refused_rather_than_written() {
+        let (_dir, store, l1, l4) = fixture();
+        let node = |path: &'static std::path::Path, layer, index| Node {
+            path,
+            layer,
+            index,
+            name: None,
+        };
+        let l1: &'static std::path::Path = Box::leak(l1.into_boxed_path());
+        let l4: &'static std::path::Path = Box::leak(l4.into_boxed_path());
+
+        let cases: Vec<(Vec<Node<'static>>, &[u32], &str)> = vec![
+            (
+                vec![node(l4, Kind::L4, 0)],
+                &[],
+                "none of these files declares `kind L1`",
+            ),
+            (
+                vec![node(l1, Kind::L1, 0)],
+                &[4096],
+                "none of these files declares `kind L4`",
+            ),
+            (
+                vec![
+                    node(l1, Kind::L1, 0),
+                    node(l4, Kind::L4, 0),
+                    node(l4, Kind::L4, 0),
+                ],
+                &[4096],
+                "second node at that address",
+            ),
+            (
+                vec![
+                    node(l1, Kind::L1, 0),
+                    node(l4, Kind::L4, 0),
+                    node(l4, Kind::L4, 2),
+                ],
+                &[4096],
+                "far side of a gap",
+            ),
+            (
+                vec![node(l1, Kind::L1, 0), node(l4, Kind::L4, 0)],
+                &[4096, 4096],
+                "1 geometry and 2 capacities",
+            ),
+        ];
+        for (nodes, capacities, expected) in cases {
+            let err = save(
+                &store,
+                "bad",
+                Saving {
+                    nodes: &nodes,
+                    capacities,
+                    params: &[],
+                    bindings: &[],
+                    camera: &DEFAULT_CAMERA,
+                    seed: 1,
+                },
+            )
+            .expect_err("a file nothing could read back was written");
+            assert!(err.contains(expected), "{err}");
+        }
+    }
+
+    /// **A gap in a layer is refused on the way in too**, and on every layer:
+    /// index 2 with no index 1 says a chain with a hole in it, and closing it up
+    /// would silently change what deforms what — or, on L4, draw order.
+    #[test]
+    fn a_gap_in_a_chain_is_refused_rather_than_closed_up() {
+        let (dir, store, l1, l4) = fixture();
+        let l2 = beside(&dir, "l2.kir", L2);
+        let put = |path: &std::path::Path| {
+            store
+                .put_artifact(&std::fs::read(path).expect("read"))
+                .expect("put")
+        };
+        let lines = parsed(&format!(
+            r#"{{"t":"set","id":"holed","v":1}}
+{{"t":"slot","layer":"L1","proc":"{}"}}
+{{"t":"slot","layer":"L2","index":1,"proc":"{}"}}
+{{"t":"slot","layer":"L4","proc":"{}"}}
+"#,
+            put(&l1),
+            put(&l2),
+            put(&l4)
+        ));
+
+        let err = from_lines(&store, "holed", &lines).expect_err("index 1 with no index 0");
+        assert!(
+            err.contains("names a L2 at index 0 but none before it"),
+            "{err}"
+        );
+    }
+
+    /// **A Set looks from one camera**, and the format can address a second.
+    /// Reported and left in the file rather than composited into something
+    /// nobody asked for — `--set` refuses the same thing one step earlier.
+    #[test]
+    fn a_second_camera_is_reported_rather_than_composited() {
+        let (dir, store, l1, l4) = fixture();
+        let l3 = beside(&dir, "l3.kir", L3);
+        let l3b = beside(&dir, "l3b.kir", &L3.replace("proc look", "proc look_two"));
+        let put = |path: &std::path::Path| {
+            store
+                .put_artifact(&std::fs::read(path).expect("read"))
+                .expect("put")
+        };
+        let lines = parsed(&format!(
+            r#"{{"t":"set","id":"two_eyes","v":1}}
+{{"t":"slot","layer":"L1","proc":"{}"}}
+{{"t":"slot","layer":"L3","proc":"{}"}}
+{{"t":"slot","layer":"L3","index":1,"proc":"{}"}}
+{{"t":"slot","layer":"L4","proc":"{}"}}
+"#,
+            put(&l1),
+            put(&l3),
+            put(&l3b),
+            put(&l4)
+        ));
+
+        let loaded = from_lines(&store, "two_eyes", &lines).expect("a second camera still loads");
+        assert_eq!(loaded.l3.as_ref().map(|c| c.name.as_str()), Some("look"));
+        let notes = loaded.notes.join("\n");
+        assert!(
+            notes.contains("1 L3 slot past index 0 was skipped"),
+            "a camera was dropped in silence; notes were {notes:?}"
         );
     }
 

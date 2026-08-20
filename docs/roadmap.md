@@ -1440,8 +1440,10 @@ than against one being taught to.
   a value chosen when a source is added and *recorded*, so it survives the list being
   reordered; derived from the ordinal, it gives the picture the spec asks for — two identical
   grids in different colours by default — and not the stability. Reordering `--set` changes
-  which colour is which. Assigning it wants a Set file able to carry sources, and one carries
-  an L1 and its renderers. **Outstanding, and scheduled** — head of M4.
+  which colour is which. Assigning it wanted a Set file able to carry sources, and one now
+  does — a `slot` per node, indexed per layer, names and all. What is left is the assigning
+  itself: a `seed` record per source, written when the source is added rather than derived
+  from its ordinal. **Outstanding, and scheduled** — head of M4.
 
   Still open for the same reason: **how a mask names a source.** The spec says a name resolved
   where the Set is built, and every worked example writes an ordinal — which is the spelling

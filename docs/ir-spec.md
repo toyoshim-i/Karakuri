@@ -1622,11 +1622,12 @@ reads it back and builds from it, resolving each `slot` by hash or from inlined 
 when the file is bundled. A run driven by a Set file renders the same frame as the run whose
 flags wrote it.
 
-**What it will not save is a chain.** A Set file names an L1 and its renderers, so a slot
-holding an L2, an L3, a `kind Field` or a second L1 is refused by name rather than saved
-short — and `--record-session` refuses it for the same reason, since a session head is a Set
-file. The format needs a way to name those nodes before it can carry them, which is the same
-naming this document defers twice above.
+**And it saves a chain**, which it did not at first: a slot holding an L2, an L3, a `kind
+Field` or a second L1 was refused by name rather than saved short, and `--record-session`
+refused it for the same reason, since a session head is a Set file. Nothing in the format had
+to change to close that — a `slot` has carried a layer, an index and a name since the address
+existed. What was missing was a writer that put a node's own `kind` into it and a reader that
+honoured the index on every layer rather than on one.
 
 `--bind` survives as a way of *writing* a `bind` record rather than as a path beside one:
 the flag parses its fields into a `Record::Bind` and hands it to the same decoder a Set
@@ -2447,8 +2448,10 @@ and the per-input controls, `Deck` mixes on it with a surface wired to every inp
 folds its renderers with it and no surface at all.
 
 A Set says which it wants with `karakuri_engine::set::Layering`, reached from the command
-line as `--merge <slot>`. It is not in a Set file, on the same terms a chain and a camera are
-not: that format records an L1 and its renderers.
+line as `--merge <slot>`. It is not in a Set file: the format records the *nodes* of a Set —
+a `slot` per node, chain and camera included — and how the renderers meet each other is not
+one of them. A saved Set therefore loads as overdraw, which is what every Set was before an
+L5 could be nested.
 
 **Which separates the mix from the deck**, and the separation is worth having because today
 they are one type. `gain`, `opacity`, `blend` and `mask` are properties of an *edge into an
