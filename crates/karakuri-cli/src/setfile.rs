@@ -472,7 +472,12 @@ fn refuse_unwritable(nodes: &[Node<'_>], capacities: &[u32]) -> Result<(), Strin
 }
 
 /// The name a `kind` declaration uses.
-fn kind_name(kind: Kind) -> &'static str {
+///
+/// **Shared with the watcher**, which spells a layer the same way into the edit
+/// history and into a session's `procedure` records. A second table would be a
+/// second spelling, and a snapshot filed under one and addressed by the other is
+/// a version an operator cannot walk back to.
+pub(crate) fn kind_name(kind: Kind) -> &'static str {
     match kind {
         Kind::L1 => "L1",
         Kind::L2 => "L2",

@@ -1,15 +1,15 @@
-//! Watching one slot's two `.kir` files and rebuilding when they change.
+//! Watching one slot's `.kir` files and rebuilding when they change.
 //!
 //! This is the [`Source`] the engine's build worker polls. It runs on that
 //! worker thread, so everything expensive it does — a file read, four
 //! validation stages, and the diagnostics it prints when one of them refuses —
 //! is already off the render thread before `Set::build` is even reached.
 //!
-//! **One of these per deck slot, over that slot's own pair.** A slot is the
+//! **One of these per deck slot, over that slot's own files.** A slot is the
 //! unit that gets replaced — that is what it means for each slot to own its own
 //! `HotSwap` — so the way "rebuild the slot whose files changed" is enforced is
 //! that no watcher can see another slot's files at all. Two slots given the
-//! same pair both rebuild, which is right: the same edit reached both of them.
+//! same files both rebuild, which is right: the same edit reached both of them.
 //!
 //! ## Polling, not `notify`
 //!
@@ -18,8 +18,8 @@
 //! event to replace. Given that, `notify` would add a dependency, a platform
 //! backend per OS, and a second event vocabulary to debounce, in exchange for
 //! shaving a tenth of a second off a loop whose other end is a human editing a
-//! file. Reading two small files every hundred milliseconds is not a cost worth
-//! avoiding here, and it is the same amount of code.
+//! file. Reading a handful of small files every hundred milliseconds is not a
+//! cost worth avoiding here, and it is the same amount of code.
 //!
 //! ## Contents, not timestamps
 //!
@@ -52,7 +52,7 @@ use karakuri_engine::{Binding, Request, Source};
 
 use crate::compile;
 
-/// How often the two files are stamped. Two polls of quiet are needed before a
+/// How often the files are stamped. Two polls of quiet are needed before a
 /// change is acted on, so this is half the latency of a save reaching the
 /// screen — a fifth of a second, against a compile that takes longer than that
 /// anyway.
@@ -97,11 +97,16 @@ pub struct Watch {
     /// prints — from a worker thread, interleaved with every other slot's — say
     /// which of the four they are about.
     slot: usize,
-    l1: PathBuf,
-    /// The renderers this slot draws with, in draw order. Watched together:
-    /// a rebuild restates the whole stack, so an edit to any one of them
-    /// recompiles all of them and the Set that lands is the one the files say.
-    l4s: Vec<PathBuf>,
+    /// The file the slot was spelled with. **Not necessarily its L1** — what
+    /// layer it is on is what its own `kind` declares, which the sort reads
+    /// like it reads every other file's. It is first here only because it is
+    /// first on the command line, and list order is chain order.
+    head: PathBuf,
+    /// The rest of the slot's files, in the order they were spelled. Watched
+    /// together with the head: a rebuild restates the whole stack, so an edit
+    /// to any one of them recompiles all of them and the Set that lands is the
+    /// one the files say.
+    rest: Vec<PathBuf>,
     /// Whether this slot's renderers composite or overdraw. Restated on every
     /// rebuild rather than read off the outgoing Set, for the reason
     /// `Request::bindings` gives.
@@ -150,8 +155,8 @@ impl Watch {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         slot: usize,
-        l1: PathBuf,
-        l4s: Vec<PathBuf>,
+        head: PathBuf,
+        rest: Vec<PathBuf>,
         layering: karakuri_engine::set::Layering,
         capacity: Option<u32>,
         seed_salt: u32,
@@ -164,8 +169,8 @@ impl Watch {
             recording: None,
             snapshots: None,
             slot,
-            l1,
-            l4s,
+            head,
+            rest,
             layering,
             capacity,
             seed_salt,
@@ -175,8 +180,8 @@ impl Watch {
             stamps: Vec::new(),
             settling: false,
         };
-        // Seeded from what is on disk right now, so that the pair the CLI
-        // already compiled at startup is not immediately compiled again.
+        // Seeded from what is on disk right now, so that the files the CLI
+        // already compiled at startup are not immediately compiled again.
         watch.stamps = watch.stamp();
         watch
     }
@@ -192,8 +197,8 @@ impl Watch {
                 h.finish()
             })
         };
-        std::iter::once(digest(&self.l1))
-            .chain(self.l4s.iter().map(digest))
+        std::iter::once(digest(&self.head))
+            .chain(self.rest.iter().map(digest))
             .collect()
     }
 }
@@ -234,52 +239,35 @@ impl Source for Watch {
 
         let slot = self.slot;
         eprintln!("slot {slot}: recompiling:");
-        // Both files, not just the changed one: the composition check needs
-        // the pair, and an L4 that stopped being compatible with its L1 is a
-        // diagnostic rather than a half-applied edit.
+        // Every file, not only the one that changed: the composition check
+        // needs the whole stack, and an L4 that stopped being compatible with
+        // its L1 is a diagnostic rather than a half-applied edit.
+        //
         // **The source is read here and handed on**, rather than compiled and
         // thrown away. A session that records what it played has to name the
         // procedure that was playing, and the only moment both the text and the
         // build it produced are in the same hand is this one — by the time the
         // swap lands, the file may have changed again.
-        let l1_src = match std::fs::read_to_string(&self.l1) {
-            Ok(src) => src,
-            Err(e) => {
-                eprintln!("{}: {e}\nslot {slot} unchanged", self.l1.display());
-                return None;
-            }
-        };
-        let mut l4_srcs = Vec::with_capacity(self.l4s.len());
-        for path in &self.l4s {
+        let paths: Vec<&std::path::Path> = std::iter::once(self.head.as_path())
+            .chain(self.rest.iter().map(PathBuf::as_path))
+            .collect();
+        let mut srcs = Vec::with_capacity(paths.len());
+        for path in &paths {
             match std::fs::read_to_string(path) {
-                Ok(src) => l4_srcs.push(src),
+                Ok(src) => srcs.push(src),
                 Err(e) => {
                     eprintln!("{}: {e}\nslot {slot} unchanged", path.display());
                     return None;
                 }
             }
         }
-        let l1 = match compile::check(&l1_src) {
-            Ok(checked) => checked,
-            Err(report) => {
-                eprintln!(
-                    "{}:\n{report}\nslot {slot} unchanged; its Set is still running",
-                    self.l1.display()
-                );
-                return None;
-            }
-        };
-        // **Sorted by the `kind` each file declares**, exactly as the startup
-        // path sorts them. This used to push every file into the renderer list,
-        // which was right while a slot named an L1 and renderers and became
-        // wrong without a word when `--set` learned to spell a chain: a rebuild
-        // then handed `Set::build_many` an L2 or an L3 as a renderer, the build
-        // was rejected with "slot L4 needs a L4 procedure, got L3", and the slot
-        // kept its old Set for the rest of the run. Every save, silently.
-        let mut compiled = Vec::with_capacity(l4_srcs.len());
-        for (path, src) in self.l4s.iter().zip(&l4_srcs) {
+        let mut compiled = Vec::with_capacity(paths.len());
+        for (path, src) in paths.iter().zip(&srcs) {
             match compile::check(src) {
-                Ok(checked) => compiled.push(checked),
+                // Bare, because a watcher has no names to give: `Watch::new`
+                // is handed paths. What addresses these nodes is `(slot, layer,
+                // index)`, which is what the sort answers.
+                Ok(checked) => compiled.push((crate::Named::bare(*path), checked)),
                 Err(report) => {
                     eprintln!(
                         "{}:\n{report}\nslot {slot} unchanged; its Set is still running",
@@ -289,76 +277,29 @@ impl Source for Watch {
                 }
             }
         }
-        // Kept alongside each procedure so the edit history and the session
-        // record can name the layer and the position it was built at, rather
-        // than filing a camera under `L4` index 2.
-        let mut addressed: Vec<(&'static str, usize, String)> = Vec::with_capacity(compiled.len());
-        let mut l1s = vec![l1];
-        let mut l2s = Vec::new();
-        let mut l3: Option<karakuri_ir::typed::Checked> = None;
-        let mut field: Option<karakuri_ir::typed::Checked> = None;
-        let mut l4s = Vec::new();
-        for (path, checked) in self.l4s.iter().zip(compiled) {
-            // **A rebuild that cannot be built is `None`**, on the same terms a
-            // compile error is: the running Set keeps running, and the operator
-            // is told which file is the problem. Editing a slot into an illegal
-            // shape must not take the picture down.
-            let refuse = |what: &str| {
-                eprintln!(
-                    "{}: {what}\nslot {slot} unchanged; its Set is still running",
-                    path.display()
-                );
-            };
-            match checked.kind {
-                karakuri_ir::Kind::L2 => {
-                    addressed.push(("L2", l2s.len(), checked.name.clone()));
-                    l2s.push(checked);
-                }
-                karakuri_ir::Kind::L3 if l3.is_some() => {
-                    refuse("a second L3 — a slot looks from one camera");
-                    return None;
-                }
-                karakuri_ir::Kind::L3 => {
-                    addressed.push(("L3", 0, checked.name.clone()));
-                    l3 = Some(checked);
-                }
-                karakuri_ir::Kind::L4 => {
-                    addressed.push(("L4", l4s.len(), checked.name.clone()));
-                    l4s.push(checked);
-                }
-                // **Refused rather than accepted and ignored.** A slot
-                // evaluates one field: `field(p)` names it by being the only
-                // one, and rebuilding with two would produce a slot that
-                // silently lost one of the files it was told to watch.
-                karakuri_ir::Kind::Field if field.is_some() => {
-                    refuse("a second `kind Field` — a slot evaluates one field");
-                    return None;
-                }
-                karakuri_ir::Kind::Field => {
-                    addressed.push(("Field", 0, checked.name.clone()));
-                    field = Some(checked);
-                }
-                // **A second geometry is a second source**, and rebuilding one
-                // needs nothing a first does not: the request already carries a
-                // list, and every place this build is recorded addresses a node
-                // as `(slot, layer, index)`. This used to refuse — a slot with
-                // two geometries started and then printed a refusal on every
-                // save, forever, with the picture frozen at its startup build.
-                karakuri_ir::Kind::L1 => {
-                    addressed.push(("L1", l1s.len(), checked.name.clone()));
-                    l1s.push(checked);
-                }
+        // **Sorted by the `kind` each file declares, in the same code the
+        // startup path sorts with** — see [`crate::sort_compiled`], which says
+        // why that is one function. This used to be a copy of that match, and a
+        // copy is how the two came to disagree about the head: it was taken for
+        // the L1 whatever it declared, so a slot spelled with an L2 first
+        // started fine and then rebuilt into a Set the engine refused.
+        //
+        // **A rebuild that cannot be assembled is `None`**, on the same terms a
+        // compile error is: the running Set keeps running, and the operator is
+        // told which file is the problem. Editing a slot into an illegal shape
+        // must not take the picture down — which is the whole of what this side
+        // does differently, and the reason the sort returns a sentence rather
+        // than exiting.
+        let (material, placed) = match crate::sort_compiled(compiled) {
+            Ok(sorted) => sorted,
+            Err(e) => {
+                eprintln!("slot {slot}: {e}\nslot {slot} unchanged; its Set is still running");
+                return None;
             }
-        }
-        if l4s.is_empty() {
-            eprintln!(
-                "slot {slot}: nothing here draws\nslot {slot} unchanged; its Set is still running"
-            );
-            return None;
-        }
+        };
 
-        // **Both compiled**, which is this feature's whole gate: a version that
-        // does not compile is not a version, and one that compiled is worth
+        // **Everything compiled**, which is this feature's whole gate: a version
+        // that does not compile is not a version, and one that compiled is worth
         // keeping whether or not it goes on to fit the frame budget.
         //
         // Reported and never acted on. A snapshot that could not be written
@@ -370,25 +311,23 @@ impl Source for Watch {
             // compiled — this is bookkeeping either way.
             match snapshots.lock() {
                 Ok(mut snapshots) => {
-                    // Every renderer, each under its own index. A rebuild
+                    // Every file, each under its own layer and index. A rebuild
                     // recompiles the whole stack whichever file was saved, so
                     // every one of them is offered — and `Snapshots::record`
                     // drops the ones that did not change, which is what keeps
                     // the untouched renderers' chains from becoming rows of
                     // identical files.
-                    // **`addressed` and `l4_srcs` are both in the slot's file
-                    // order**, which the sort above deliberately did not
-                    // disturb: what a version is recorded under is the layer and
-                    // the position it was *built* at, and which file it came
-                    // from is how it is found again.
-                    let rest = addressed
-                        .iter()
-                        .zip(&l4_srcs)
-                        .map(|((layer, index, name), src)| (*layer, *index, name, src));
-                    for (layer, index, name, src) in
-                        [("L1", 0, &l1s[0].name, &l1_src)].into_iter().chain(rest)
-                    {
-                        if let Err(e) = snapshots.record(slot, layer, index, name, src.as_bytes()) {
+                    // **`placed` and `srcs` are both in the slot's file
+                    // order**, which the sort deliberately did not disturb: what
+                    // a version is recorded under is the layer and the position
+                    // it was *built* at, and which file it came from is how it
+                    // is found again.
+                    for (node, src) in placed.iter().zip(&srcs) {
+                        let layer = crate::setfile::kind_name(node.layer);
+                        let index = node.index as usize;
+                        if let Err(e) =
+                            snapshots.record(slot, layer, index, &node.proc, src.as_bytes())
+                        {
                             eprintln!("slot {slot}: this version is not in the edit history: {e}");
                         }
                     }
@@ -397,43 +336,37 @@ impl Source for Watch {
             }
         }
 
-        let label = format!(
-            "{} + {}",
-            l1s[0].name,
-            addressed
-                .iter()
-                .map(|(.., name)| name.as_str())
-                .collect::<Vec<_>>()
-                .join(" + ")
-        );
+        let label = placed
+            .iter()
+            .map(|node| node.proc.as_str())
+            .collect::<Vec<_>>()
+            .join(" + ");
         // **Unique across the whole run**, because that is what it is for: the
         // caller matches an outcome back to the source that produced it, and
-        // labels repeat on every rebuild of the same pair.
+        // labels repeat on every rebuild of the same files.
         self.builds += 1;
         let id = (self.slot as u64) << 32 | self.builds;
-        // **On this thread, which is the worker's.** Two artifacts of a few
+        // **On this thread, which is the worker's.** A few artifacts of a few
         // kilobytes, written where a whole Set is about to be compiled anyway
         // — rather than on the frame that installs it.
         if let Some((store, tx)) = &self.recording {
-            let stored: Result<Vec<_>, _> = std::iter::once(l1_src.as_bytes())
-                .chain(l4_srcs.iter().map(|s| s.as_bytes()))
-                .map(|bytes| store.put_artifact(bytes))
+            let stored: Result<Vec<_>, _> = srcs
+                .iter()
+                .map(|src| store.put_artifact(src.as_bytes()))
                 .collect();
             match stored {
                 Ok(hashes) => {
-                    // **The head is the L1 the slot was named with, and every
-                    // later hash takes the address the sort gave its file.**
-                    // `addressed` and `l4_srcs` are both in file order, which
-                    // the sort deliberately did not disturb, so zipping the
-                    // hashes onto it names each node the way a `procedure`
-                    // record does.
-                    let nodes = std::iter::once(("L1", 0, hashes[0]))
-                        .chain(
-                            addressed
-                                .iter()
-                                .zip(&hashes[1..])
-                                .map(|((layer, index, _), hash)| (*layer, *index as u32, *hash)),
-                        )
+                    // **Every hash takes the address the sort gave its file**,
+                    // the head included. `placed` and `srcs` are both in file
+                    // order, which the sort deliberately did not disturb, so
+                    // zipping the hashes onto it names each node the way a
+                    // `procedure` record does.
+                    let nodes = placed
+                        .iter()
+                        .zip(&hashes)
+                        .map(|(node, hash)| {
+                            (crate::setfile::kind_name(node.layer), node.index, *hash)
+                        })
                         .collect();
                     let _ = tx.send(Built { id, nodes });
                 }
@@ -443,6 +376,16 @@ impl Source for Watch {
                 ),
             }
         }
+        // The names the sort collected are dropped, because a watcher never had
+        // any to collect: its files arrive as bare paths. See `names` below.
+        let crate::Material {
+            l1s,
+            l2s,
+            l3,
+            field,
+            l4s,
+            ..
+        } = material;
         Some(Request {
             id,
             // **Each geometry at the capacity it declares**, and `--capacity`
@@ -517,6 +460,190 @@ mod tests {
 
         std::fs::write(dir.join("a.kir"), "proc a { }").expect("edit");
         assert_ne!(before, w.stamp(), "a real edit read as unchanged");
+    }
+
+    /// The examples this suite sorts, copied into a directory of their own so
+    /// that a watcher can be built over paths that do not exist yet.
+    ///
+    /// **Built before the files are written**, which is what makes writing them
+    /// the edit it wakes on: a missing file stamps as `None`, and appearing is
+    /// a change like any other. The alternative is editing a file's text, which
+    /// would make the two paths sort different bytes.
+    fn watch_over(dir: &std::path::Path, files: &[&str]) -> (Watch, Vec<PathBuf>) {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let paths: Vec<PathBuf> = files.iter().map(|f| dir.join(f)).collect();
+        let watch = Watch::new(
+            0,
+            paths[0].clone(),
+            paths[1..].to_vec(),
+            karakuri_engine::set::Layering::Overdraw,
+            Some(4096),
+            1,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        for (file, path) in files.iter().zip(&paths) {
+            std::fs::copy(root.join("examples").join(file), path).expect("copy an example");
+        }
+        (watch, paths)
+    }
+
+    /// Polled until it builds, or four intervals, whichever is first. One poll
+    /// sees the change and the next acts on it — see "Debouncing" — so a build
+    /// that has not arrived by the fourth is a refusal.
+    fn rebuild(watch: &mut Watch) -> Option<Request> {
+        std::iter::repeat_with(|| watch.poll())
+            .take(4)
+            .flatten()
+            .next()
+    }
+
+    /// **The startup path and the rebuild path answer "which layer is this file
+    /// on, and which node of that layer" identically**, which is the whole
+    /// reason [`crate::sort_compiled`] is one function rather than a match in
+    /// each of them.
+    ///
+    /// The two used to hold a copy each and had already drifted: the rebuild
+    /// took its head for the L1 whatever the file declared, so a slot spelled
+    /// with a deformer first sorted one way at startup and another way on the
+    /// first save. Asserted as agreement rather than as two expected answers,
+    /// because what has to hold is that they are the same answer — an expected
+    /// answer written twice is the drift again, in the tests.
+    #[test]
+    fn a_rebuild_addresses_a_slot_exactly_as_startup_did() {
+        // A whole stack, head first and deliberately not an L1: every layer, and
+        // two of the three that can hold several, so a wrong *index* fails here
+        // as loudly as a wrong layer.
+        let files = [
+            "swirl_warp.kir",
+            "drift_shell.kir",
+            "beat_jump.kir",
+            "melt_blob.kir",
+            "soft_points.kir",
+            "lattice_shell.kir",
+            "kaleidoscope.kir",
+            "glass_shell.kir",
+        ];
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let (watch, paths) = watch_over(tmp.path(), &files);
+
+        let store_dir = tempfile::tempdir().expect("temp dir");
+        let store = std::sync::Arc::new(
+            karakuri_store::store::Store::open(store_dir.path()).expect("store"),
+        );
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut watch = watch.recording_to(store, tx);
+        let request = rebuild(&mut watch).expect("the stack compiles, so it rebuilds");
+
+        let rest: Vec<crate::Named> = paths[1..]
+            .iter()
+            .map(|p| crate::Named::bare(p.clone()))
+            .collect();
+        let (material, placed) = crate::sort_slot(0, &crate::Named::bare(paths[0].clone()), &rest);
+
+        let procs = |checked: &[karakuri_ir::typed::Checked]| {
+            checked
+                .iter()
+                .map(|c| c.name.clone())
+                .collect::<Vec<String>>()
+        };
+        assert_eq!(
+            request
+                .l1s
+                .iter()
+                .map(|(c, _)| c.name.clone())
+                .collect::<Vec<String>>(),
+            procs(&material.l1s),
+            "the two paths disagree about the geometries"
+        );
+        assert_eq!(procs(&request.l2s), procs(&material.l2s), "the deformers");
+        assert_eq!(procs(&request.l4s), procs(&material.l4s), "the renderers");
+        let camera = |c: &Option<karakuri_ir::typed::Checked>| c.as_ref().map(|c| c.name.clone());
+        assert_eq!(camera(&request.l3), camera(&material.l3), "the camera");
+        assert_eq!(camera(&request.field), camera(&material.field), "the field");
+
+        // **The addresses, file by file**, which is the half a request cannot
+        // show: a `procedure` record names a node by `(layer, index)`, and the
+        // history files a version under the same pair.
+        let built = rx.try_recv().expect("a recorded build is reported");
+        let rebuilt: Vec<(&str, u32)> = built
+            .nodes
+            .iter()
+            .map(|(layer, index, _)| (*layer, *index))
+            .collect();
+        let started: Vec<(&str, u32)> = placed
+            .iter()
+            .map(|node| (crate::setfile::kind_name(node.layer), node.index))
+            .collect();
+        assert_eq!(
+            rebuilt, started,
+            "the two paths address the same files as different nodes"
+        );
+        // The premise, stated so that a rewrite of the file list cannot quietly
+        // turn this back into a test about a slot whose head is its L1.
+        assert_eq!(
+            started[0],
+            ("L2", 0),
+            "this asserts nothing unless the head is a file that is not the L1"
+        );
+    }
+
+    /// **A rebuild that cannot be assembled leaves the running Set alone.** This
+    /// is the one thing the two sorting paths do differently, and the reason
+    /// [`crate::sort_compiled`] hands back a sentence rather than exiting: a
+    /// startup with no picture has nothing to keep showing, and an operator
+    /// editing a slot into an illegal shape has a picture on stage.
+    #[test]
+    fn a_slot_that_cannot_be_assembled_leaves_the_running_set_alone() {
+        // Two cameras, and then the same stack with one — so this fails if the
+        // refusal stopped happening *and* if it started happening to everything.
+        for (files, buildable) in [
+            (
+                &["drift_shell.kir", "beat_jump.kir", "soft_points.kir"][..],
+                true,
+            ),
+            (
+                &[
+                    "drift_shell.kir",
+                    "beat_jump.kir",
+                    "beat_jump.kir",
+                    "soft_points.kir",
+                ][..],
+                false,
+            ),
+            // Nothing that draws: a Set with no renderer has no frame to give.
+            (&["drift_shell.kir", "swirl_warp.kir"][..], false),
+        ] {
+            let tmp = tempfile::tempdir().expect("temp dir");
+            // Two of the same file need two names, or the copy is one file.
+            let unique: Vec<String> = files
+                .iter()
+                .enumerate()
+                .map(|(n, f)| format!("{n}_{f}"))
+                .collect();
+            let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+            let paths: Vec<PathBuf> = unique.iter().map(|f| tmp.path().join(f)).collect();
+            let mut watch = Watch::new(
+                0,
+                paths[0].clone(),
+                paths[1..].to_vec(),
+                karakuri_engine::set::Layering::Overdraw,
+                Some(4096),
+                1,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            );
+            for (file, path) in files.iter().zip(&paths) {
+                std::fs::copy(root.join("examples").join(file), path).expect("copy an example");
+            }
+            assert_eq!(
+                rebuild(&mut watch).is_some(),
+                buildable,
+                "{files:?} rebuilt the wrong way"
+            );
+        }
     }
 
     /// A missing file is stable rather than a change every interval, so
