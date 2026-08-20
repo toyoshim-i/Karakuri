@@ -2887,11 +2887,12 @@ impl VideoSource for Set {
 ///
 /// **The provisional half of `source`.** `docs/ir-spec.md` calls for a value
 /// *assigned* when a source is added and recorded in the stream, so that it
-/// survives the list being reordered — and that needs a Set file able to carry
-/// sources, which one cannot. Derived here instead, which gives the picture the
-/// spec asks for (two identical grids in different colours by default) and not
-/// the stability (reordering the list on a command line changes which colour is
-/// which).
+/// survives the list being reordered. That wanted a Set file able to carry
+/// sources, which one now is — what is left is writing a `seed` record per
+/// source and reading it back. Derived here until then, which gives the picture
+/// the spec asks for (two identical grids in different colours by default) and
+/// not the stability (reordering the list on a command line changes which
+/// colour is which).
 ///
 /// An odd multiplier, so that adjacent ordinals do not give adjacent salts —
 /// `hash1` mixes, but a salt that walks by one is a salt whose first mixing
