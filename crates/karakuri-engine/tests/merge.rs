@@ -98,6 +98,7 @@ fn build(gpu: &Gpu, l4s: &[String], layering: Layering) -> Set {
         &refs,
         layering,
         5,
+        &[],
         karakuri_engine::set::NodeNames::default(),
     )
     .expect("one L1 and some L4s");
@@ -338,6 +339,7 @@ fn compositing_refuses_more_renderers_than_an_l5_can_fold() {
             &refs,
             Layering::Composite,
             5,
+            &[],
             karakuri_engine::set::NodeNames::default(),
         )
         .err()

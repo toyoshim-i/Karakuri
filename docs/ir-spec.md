@@ -1590,9 +1590,14 @@ known. The total-cost decision lives there, not in the artifact.
   The address is `(layer, index)` present or absent as a unit.
 - **`seed` is keyed by node, not only by layer** — `{"t":"seed","stream":"L1","index":1,…}`
   salts the second source. Absent means 0, so a file naming one source per layer reads as it
-  always did. The value is also what that source's `source` attribute carries, since the
-  discriminator and the salt are one value — the attribute is not built, and the record now
-  carries the address.
+  always did — and a Set of one geometry writes the line it always wrote. **Written and read
+  per geometry**: `--save-set` records the salt each source was running at and `--load-set`
+  gives it back to the source that index names, which is what makes a saved Set reproduce its
+  colours rather than re-derive them from the order its paths were spelled in. A geometry the
+  file names no seed for is salted from the Set's seed and its ordinal, so an older file
+  loads and keeps whatever it did say. The value is also what that source's `source`
+  attribute will carry, since the discriminator and the salt are one value — the attribute is
+  not built, and the record already carries what it would carry.
 - **`capacity` is keyed by node too** — `{"t":"capacity","layer":"L1","index":1,"value":…}`
   sizes the second geometry. Absent means 0 rather than a wildcard, on the `slot` rule and
   not the `param` one: it names exactly one node, and a Set that held one geometry had only
@@ -2761,10 +2766,15 @@ source. What does not exist is the attribute: nothing carries a `source` value, 
 downstream can mask on one, and the two ways to tell sources apart today are the salt (which
 differs by construction) and writing different attributes in different chains.
 
-**And the salt is derived rather than assigned**, which is the provisional half of the
-paragraph below: it is `hash(set_salt, ordinal)`, so reordering `--set` changes which
-geometry gets which randomness. Assigning it needs a stable name for a source, and a source
-has no name — see `docs/roadmap.md`, "Naming what a Set holds".
+**And the salt is assigned and recorded**, which was the provisional half and is no longer.
+`--save-set` writes one `seed` record per geometry carrying the value that source was running
+at, and `--load-set` hands each one back to the source its `index` names — so a Set that has
+been saved keeps its colours whatever order its records arrive in, and reordering `--set`
+after a save does not move them. This paragraph said assigning needed a stable *name* for a
+source; it needed an *address*, which `seed`'s `index` already was. What is still derived is
+a Set nothing has recorded: a bare `--set` salts each source from the Set's seed and the
+source's ordinal, which the section above licenses outright — *where it came from stops
+mattering once it is recorded*, and the first save is when it stops.
 
 **The two salting rules compose, and are on different axes.** Amplification requires
 `hash1(seed)` to give every copy of one element the *same* value, which is what makes eight

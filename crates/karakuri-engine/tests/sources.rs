@@ -96,6 +96,7 @@ fn build_paired(gpu: &Gpu, l1s: &[&str], l2: &str) -> Result<Set, karakuri_engin
         &[&l4],
         Layering::Overdraw,
         7,
+        &[],
         karakuri_engine::set::NodeNames::default(),
     )?;
     set.resize(&gpu.device, W, H);
@@ -108,7 +109,27 @@ fn build_paired(gpu: &Gpu, l1s: &[&str], l2: &str) -> Result<Set, karakuri_engin
     Ok(set)
 }
 
+/// The same Set, with a salt assigned to each geometry — `None`, or an entry
+/// past the end, is a source nobody salted, which is what a bare `--set` hands
+/// over.
+fn build_salted(gpu: &Gpu, l1s: &[&str], salts: &[Option<u32>]) -> Set {
+    build_all(gpu, l1s, &[DOTS], Layering::Overdraw, salts)
+}
+
 fn build_with(gpu: &Gpu, l1s: &[&str], l4s: &[&str], layering: Layering) -> Set {
+    build_all(gpu, l1s, l4s, layering, &[])
+}
+
+/// Every dial the two above turn, in one place — a salt list is one more of
+/// them, and a second copy of this function with one argument changed is how
+/// two builds in one file end up disagreeing about the camera.
+fn build_all(
+    gpu: &Gpu,
+    l1s: &[&str],
+    l4s: &[&str],
+    layering: Layering,
+    salts: &[Option<u32>],
+) -> Set {
     let compiled: Vec<Checked> = l1s.iter().map(|s| compile(s)).collect();
     let sources: Vec<(&Checked, u32)> = compiled.iter().map(|c| (c, 64)).collect();
     let draw: Vec<Checked> = l4s.iter().map(|s| compile(s)).collect();
@@ -123,6 +144,7 @@ fn build_with(gpu: &Gpu, l1s: &[&str], l4s: &[&str], layering: Layering) -> Set 
         &draw_refs,
         layering,
         7,
+        salts,
         karakuri_engine::set::NodeNames::default(),
     )
     .expect("several sources and some renderers");
@@ -299,6 +321,104 @@ fn two_sources_of_one_procedure_differ_in_colour() {
     // And it is still the same *material*: every channel grew, so the second
     // source drew a lattice rather than nothing.
     assert!((0..3).all(|c| b[c] > a[c] * 1.2), "{a:?} against {b:?}");
+}
+
+/// How many pixels two frames disagree about, past what a float target rounds.
+///
+/// Zero is the same picture and a large number is a different one; there is
+/// nothing interesting in between here, because a salt that moved moves every
+/// element it touches.
+fn disagreements(a: &[f32], b: &[f32]) -> usize {
+    assert_eq!(a.len(), b.len(), "two frames of one canvas");
+    a.chunks_exact(4)
+        .zip(b.chunks_exact(4))
+        .filter(|(x, y)| (0..3).any(|c| (x[c] - y[c]).abs() > 1e-3))
+        .count()
+}
+
+/// **A salt that was recorded travels with its geometry rather than with its
+/// position in the list**, which is the whole of what assigning one buys over
+/// deriving one — `docs/ir-spec.md`, "A `source` value is assigned and
+/// recorded, never derived".
+///
+/// The story a Set file tells, in four builds: a bare `--set` is salted by
+/// ordinal, `--save-set` writes down what it was salted with, `--load-set`
+/// hands those numbers back, and a Set whose records come back in the other
+/// order is still the Set that was saved. The last build is the control, and it
+/// is the behaviour this replaces.
+///
+/// **Two lattices at different depths**, so that which one is which colour is
+/// visible in the frame at all: at one depth they are the same points twice,
+/// and two sources trading colours there is a picture nothing can tell apart.
+#[test]
+fn a_recorded_salt_survives_the_list_being_reordered() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let near = lattice("near", 0.0);
+    let far = lattice("far", 1.4);
+
+    // `--set near.kir,far.kir`: nothing assigned a salt, so each source is
+    // salted from the Set's seed and its ordinal.
+    let mut run = build_salted(&gpu, &[&near, &far], &[]);
+    let saved = frame(&gpu, &mut run);
+
+    // What `--save-set` writes into the `seed` records — asked of the Set that
+    // is running rather than worked out a second time.
+    let recorded: Vec<Option<u32>> = run.source_salts().iter().copied().map(Some).collect();
+    assert_eq!(recorded.len(), 2, "a salt per geometry, and there are two");
+
+    // `--load-set`: the same two geometries, each handed the salt it was
+    // running at.
+    let mut reloaded = build_salted(&gpu, &[&near, &far], &recorded);
+    assert_eq!(
+        disagreements(&saved, &frame(&gpu, &mut reloaded)),
+        0,
+        "a reloaded Set drew something other than the Set that was saved"
+    );
+
+    // The same Set with its two geometries read in the other order. A record is
+    // addressed, so nothing about the Set has changed but the order it arrives
+    // in — and the picture must not know.
+    let mut swapped = build_salted(&gpu, &[&far, &near], &[recorded[1], recorded[0]]);
+    assert_eq!(
+        disagreements(&saved, &frame(&gpu, &mut swapped)),
+        0,
+        "reordering a recorded Set repainted it, so the salt is still following the \
+         position rather than the geometry"
+    );
+
+    // **The control.** The same reorder with nothing recorded hands each source
+    // the other one's salt, and the two lattices trade colours. Without this,
+    // every assertion above would pass against an engine that ignored the
+    // salts it was given.
+    let mut derived = build_salted(&gpu, &[&far, &near], &[]);
+    assert!(
+        disagreements(&saved, &frame(&gpu, &mut derived)) > 16,
+        "reordering an unrecorded Set drew the same picture, so this test cannot tell a \
+         salt that follows the geometry from one that follows the list"
+    );
+}
+
+/// **[`Set::source_salts`] answers for every geometry**, assigned or not, which
+/// is what makes it something a writer can record: a file that carried salts
+/// for the sources somebody happened to name would come back as a Set whose
+/// other sources are salted by whatever the ordinal was at the time.
+#[test]
+fn source_salts_answers_for_the_derived_ones_too() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let one = lattice("one", 0.0);
+    let two = lattice("two", 0.0);
+
+    let both = build_salted(&gpu, &[&one, &two], &[Some(0xfeed), Some(0xbeef)]);
+    assert_eq!(both.source_salts(), [0xfeed, 0xbeef]);
+
+    // A file that named the first geometry's salt and not the second's — which
+    // is every Set file written before a salt was recorded per source.
+    let half = build_salted(&gpu, &[&one, &two], &[Some(0xfeed)]);
+    assert_eq!(
+        half.source_salts(),
+        [0xfeed, karakuri_engine::set::derived_salt(7, 1)],
+        "an unassigned source is salted from the Set's seed and its ordinal, and says so"
+    );
 }
 
 /// A second renderer, so that "two pipelines" is two of each.
@@ -661,6 +781,7 @@ fn both_sides_of_a_pairing_share_the_element_struct() {
         &[&l4],
         Layering::Overdraw,
         7,
+        &[],
         karakuri_engine::set::NodeNames::default(),
     )
     .expect("two static sources and a derived attribute");
@@ -721,6 +842,7 @@ fn a_name_resolves_to_the_node_it_addresses() {
         &[&draw],
         Layering::Overdraw,
         0,
+        &[],
         karakuri_engine::set::NodeNames {
             l1s: &[Some("near".to_string()), None],
             ..Default::default()
@@ -760,6 +882,7 @@ fn a_procedure_used_twice_gives_its_second_node_a_different_name() {
         &[&draw, &draw],
         Layering::Overdraw,
         0,
+        &[],
         karakuri_engine::set::NodeNames::default(),
     )
     .expect("builds");
@@ -792,6 +915,7 @@ fn two_written_names_that_collide_are_refused() {
         &[&draw],
         Layering::Overdraw,
         0,
+        &[],
         karakuri_engine::set::NodeNames {
             l1s: &[Some("shape".to_string())],
             l4s: &[Some("shape".to_string())],
@@ -824,6 +948,7 @@ fn a_derived_name_never_takes_one_that_was_written() {
         &[&draw, &draw],
         Layering::Overdraw,
         0,
+        &[],
         karakuri_engine::set::NodeNames {
             l4s: &[None, Some("dots".to_string())],
             ..Default::default()

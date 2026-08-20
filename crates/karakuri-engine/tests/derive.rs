@@ -148,6 +148,7 @@ fn build_chain(
         &[&compile(l4)],
         Layering::Overdraw,
         7,
+        &[],
         karakuri_engine::set::NodeNames::default(),
     )?;
     set.resize(&gpu.device, W, H);

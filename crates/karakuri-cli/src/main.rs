@@ -707,7 +707,15 @@ pub fn op_wire_names() -> String {
 /// comes from `--set`.
 #[derive(Clone, Debug, Default)]
 struct FromSet {
-    seed: Option<u32>,
+    /// What each geometry was salted with, by index, `None` where the file
+    /// named none.
+    ///
+    /// **Per geometry rather than one number for the Set**, because that is
+    /// what the record says and what the picture depends on: a salt derived
+    /// from a source's position in `--set` moves when the list is reordered,
+    /// and one read back from a file does not. The first entry doubles as the
+    /// Set's own seed — see [`salts_for`].
+    salts: Vec<Option<u32>>,
     camera: Option<karakuri_engine::camera::Orbit>,
     /// What each geometry runs at, by index, `None` where the file named none.
     ///
@@ -1760,6 +1768,36 @@ fn seed_for(slot: usize) -> u32 {
     SEED.wrapping_add((slot as u32).wrapping_mul(0x9E37_79B9))
 }
 
+/// **What each of a slot's geometries is salted with**, in the order its L1
+/// procedures were given — one number per geometry.
+///
+/// `recorded` is what a Set file said, per geometry, and it wins where it said
+/// anything. That is the whole of what recording a salt buys over deriving one:
+/// `docs/ir-spec.md` asks for a value assigned when a source is added and read
+/// back from the stream forever after, so that reordering `--set` stops
+/// changing which grid gets which randomness. Empty for a slot no file filled,
+/// which is every slot but slot 0.
+///
+/// **Derived where nothing recorded one**, by the engine's own fallback rather
+/// than by a formula spelled out a second time here — and the spec licenses
+/// that squarely: *where it came from stops mattering once it is recorded*. A
+/// bare `--set` run is salted by ordinal and looks exactly as it always did;
+/// the moment `--save-set` writes these numbers down they stop being derived,
+/// which is why this is also what the writer asks. One function, so the file
+/// cannot record a salt the run was not using — the shape [`capacities_for`]
+/// was fixed into after recording the flag's number and drawing another.
+fn salts_for(seed: u32, recorded: &[Option<u32>], geometries: usize) -> Vec<u32> {
+    (0..geometries)
+        .map(|at| {
+            recorded
+                .get(at)
+                .copied()
+                .flatten()
+                .unwrap_or_else(|| karakuri_engine::set::derived_salt(seed, at))
+        })
+        .collect()
+}
+
 /// One deck slot's material, sorted into the chain a `Set` is built from: the
 /// procedure that simulates, the deformations between, and the renderers drawn
 /// over the result.
@@ -2133,6 +2171,11 @@ fn replay_session(args: &Args, id: &str) {
     // one replaying it — which is the case a flag check could never have caught.
     check_canvas(&gpu.device, w, h);
 
+    // **The file's own, per geometry, and derived only where it recorded
+    // none.** A replay that re-derived them would be a replay of the material
+    // in different colours, which is exactly the failure the seed record was
+    // added to stop.
+    let salts = salts_for(seed_for(0), &loaded.salts, loaded.l1s.len());
     let mut set = build(
         &gpu,
         &loaded.l1s,
@@ -2166,7 +2209,11 @@ fn replay_session(args: &Args, id: &str) {
         // publishing everything, so a replay shows the whole console — which is
         // the safe direction, since an interface is about attention.
         &[],
-        loaded.seed.unwrap_or_else(|| seed_for(0)),
+        // The Set's own seed — what an L3 reads — is the first geometry's,
+        // which is what one number can hold and what a file recording one seed
+        // has always meant by it.
+        salts.first().copied().unwrap_or_else(|| seed_for(0)),
+        &salts,
         loaded.camera,
     );
     set.resize(&gpu.device, w, h);
@@ -2365,6 +2412,10 @@ fn rebuild(
         &args.bindings,
         &[],
         seed_for(slot),
+        // **Nothing recorded, on the same terms as the capacity above.** A
+        // `procedure` record names a swapped-in procedure and carries no salt,
+        // so the one source is salted from the slot's seed and its ordinal.
+        &salts_for(seed_for(slot), &[], 1),
         None,
     ))
 }
@@ -2546,7 +2597,7 @@ fn session_head(
             params: &args.overrides,
             bindings: &args.bindings,
             camera: &camera,
-            seed: seed_for(0),
+            seeds: &saving_seeds(args, l1s),
         },
     ) {
         // Fatal, on the same terms the recorder itself is: `--record-session`
@@ -2592,6 +2643,24 @@ fn saving_capacities(args: &Args, l1s: &[karakuri_ir::typed::Checked]) -> Vec<u3
     l1s.iter().map(|l1| capacity_for(args, l1)).collect()
 }
 
+/// What a saved Set says each of its geometries is salted with: **what the run
+/// it describes will be salted with**, one number per geometry.
+///
+/// The same function the run itself asks, for the reason [`saving_capacities`]
+/// exists — a writer with its own copy of the rule records numbers the run was
+/// not using, and the file then describes a picture nobody has seen. Slot 0's,
+/// because a Set file describes one Set and slot 0 is the one that gets saved.
+///
+/// **Derived today and recorded from here on.** Nothing on the command line
+/// assigns a salt, so these are the ordinals — and writing them down is exactly
+/// what stops them being ordinals: `docs/ir-spec.md` says *where it came from
+/// stops mattering once it is recorded*, and from this line onward the file is
+/// where the value lives. Reordering the paths in `--set` moves the colours of
+/// a Set that was never saved and no longer moves the colours of one that was.
+fn saving_seeds(args: &Args, l1s: &[karakuri_ir::typed::Checked]) -> Vec<u32> {
+    salts_for(seed_for(0), recorded_salts(args, 0), l1s.len())
+}
+
 fn save_set(args: &Args, placed: &[Vec<Placed>], l1s: &[karakuri_ir::typed::Checked], id: &str) {
     let store = open_store(args);
     let Some(nodes) = placed.first().filter(|nodes| !nodes.is_empty()) else {
@@ -2617,7 +2686,7 @@ fn save_set(args: &Args, placed: &[Vec<Placed>], l1s: &[karakuri_ir::typed::Chec
             params: &args.overrides,
             bindings: &args.bindings,
             camera: &camera,
-            seed: seed_for(0),
+            seeds: &saving_seeds(args, l1s),
         },
     ) {
         Ok(()) => eprintln!(
@@ -2673,7 +2742,7 @@ fn load_set(args: &mut Args, id: &str) -> setfile::Loaded {
     bindings.append(&mut args.bindings);
     args.bindings = bindings;
     args.from_set = Some(FromSet {
-        seed: loaded.seed,
+        salts: loaded.salts.clone(),
         camera: loaded.camera,
         capacities: loaded.capacities.clone(),
     });
@@ -2899,6 +2968,15 @@ fn recorded_capacities(args: &Args, slot: usize) -> &[Option<u32>] {
     }
 }
 
+/// What a loaded Set file said its geometries are salted with, for the slot it
+/// filled. **Slot 0 and nothing else**, on the same terms as its capacities.
+fn recorded_salts(args: &Args, slot: usize) -> &[Option<u32>] {
+    match (slot, args.from_set.as_ref()) {
+        (0, Some(from_set)) => &from_set.salts,
+        _ => &[],
+    }
+}
+
 /// `meters` is false for the offscreen paths: a `--render` has nobody to show
 /// a level to, and a meter that nothing reads is a compute pass and a staging
 /// ring per frame for no reason. That is the whole point of it being opt-in.
@@ -2925,6 +3003,22 @@ fn build_deck(
     // One flag per binding, shared across every slot: a binding names a layer
     // and a param, and a deck of four slots is four chances for it to land.
     let mut attached = vec![false; args.bindings.len()];
+    // **Resolved once per slot, and handed to everything that needs it.** A
+    // slot's salts are what its Set is built with *and* what its watcher
+    // restates on every rebuild; working them out in two places is how a save
+    // under `--watch` would come back in different colours from the Set it
+    // rebuilt.
+    let salts: Vec<Vec<u32>> = procs
+        .iter()
+        .enumerate()
+        .map(|(slot, material)| {
+            salts_for(
+                seed_for(slot),
+                recorded_salts(args, slot),
+                material.l1s.len(),
+            )
+        })
+        .collect();
     let swaps: Vec<_> = procs
         .iter()
         .enumerate()
@@ -2954,19 +3048,18 @@ fn build_deck(
                 &args.overrides,
                 &args.bindings,
                 &args.published,
-                // A Set file's own seed when it named one, so a saved Set
-                // reproduces rather than being re-salted by the slot it lands
-                // in. It only ever applies to slot 0: `--load-set` fills that
-                // slot and the rest come from `--set`.
-                match (slot, args.from_set.as_ref()) {
-                    (
-                        0,
-                        Some(FromSet {
-                            seed: Some(seed), ..
-                        }),
-                    ) => *seed,
-                    _ => seed_for(slot),
-                },
+                // **The Set's own seed is its first geometry's salt**, which
+                // is what one number can hold and what a file recording one
+                // `seed` has always meant by it. A Set file's own where it
+                // recorded one, so a saved Set reproduces rather than being
+                // re-salted by the slot it lands in — which only ever applies
+                // to slot 0, since `--load-set` fills that slot and the rest
+                // come from `--set`.
+                salts[slot]
+                    .first()
+                    .copied()
+                    .unwrap_or_else(|| seed_for(slot)),
+                &salts[slot],
                 match (slot, args.from_set.as_ref()) {
                     (0, Some(from_set)) => from_set.camera,
                     _ => None,
@@ -2988,7 +3081,16 @@ fn build_deck(
                         args.sets[slot].1.iter().map(|n| n.path.clone()).collect(),
                         layering,
                         args.capacity_given.then_some(args.capacity),
-                        seed_for(slot),
+                        salts[slot]
+                            .first()
+                            .copied()
+                            .unwrap_or_else(|| seed_for(slot)),
+                        // **Restated on every rebuild rather than derived
+                        // there.** A slot filled from a Set file is running at
+                        // the salts that file recorded, and a rebuild that
+                        // derived its own would change every colour in it on the
+                        // next save of a `.kir`.
+                        salts[slot].clone(),
                         args.overrides.clone(),
                         args.published.clone(),
                         args.bindings.clone(),
@@ -3093,6 +3195,8 @@ fn build(
     bindings: &[Binding],
     published: &[karakuri_engine::set::Published],
     seed: u32,
+    // One per entry in `l1s`, in the same order — see `salts_for`.
+    salts: &[u32],
     camera: Option<karakuri_engine::camera::Orbit>,
 ) -> Set {
     let deform: Vec<&karakuri_ir::typed::Checked> = l2s.iter().collect();
@@ -3110,6 +3214,13 @@ fn build(
     );
     let sources: Vec<(&karakuri_ir::typed::Checked, u32)> =
         l1s.iter().zip(capacities.iter().copied()).collect();
+    // **Resolved by the caller, never left to be filled in here.** The engine
+    // derives a salt for a source nobody assigned one, and a run whose salts
+    // were half assigned and half derived would be a run whose Set file records
+    // numbers it was not using — so `salts_for` answers for every geometry and
+    // this hands the whole answer over.
+    assert_eq!(l1s.len(), salts.len(), "one salt per geometry source");
+    let assigned: Vec<Option<u32>> = salts.iter().copied().map(Some).collect();
     match Set::build_many(
         &gpu.device,
         &gpu.queue,
@@ -3120,6 +3231,7 @@ fn build(
         &draw,
         layering,
         seed,
+        &assigned,
         karakuri_engine::set::NodeNames {
             l1s: &names.l1s,
             l2s: &names.l2s,
@@ -6132,6 +6244,37 @@ mod tests {
     #[test]
     fn slot_zero_keeps_the_original_seed() {
         assert_eq!(seed_for(0), SEED);
+    }
+
+    /// **What a Set file recorded is what the run uses, and an ordinal fills in
+    /// the rest.**
+    ///
+    /// The two halves are one function on purpose: this is what a slot is built
+    /// with *and* what `--save-set` writes down, so a file cannot record a salt
+    /// the run was not using — the failure [`saving_capacities`] was fixed
+    /// after, one field along. An unsaved `--set` is the ordinals, which is
+    /// what makes saving a no-op on the picture and reloading a reproduction of
+    /// it.
+    #[test]
+    fn a_recorded_salt_wins_and_an_unrecorded_one_is_derived() {
+        let seed = seed_for(0);
+        let derived = |at| karakuri_engine::set::derived_salt(seed, at);
+
+        // A bare `--set a.kir,b.kir`: nothing recorded anything, so both are
+        // the ordinals — and source 0's is the Set's seed unchanged, which is
+        // what keeps a one-geometry run the run it always was.
+        assert_eq!(salts_for(seed, &[], 2), vec![derived(0), derived(1)]);
+        assert_eq!(salts_for(seed, &[], 1), vec![seed]);
+
+        // A Set file that recorded both. Neither is an ordinal, and neither
+        // moves when the geometries change places — which is the whole point.
+        assert_eq!(salts_for(seed, &[Some(11), Some(22)], 2), vec![11, 22]);
+
+        // And one that recorded fewer salts than the Set has geometries: an
+        // older file, where a `seed` salted the Set rather than a source. What
+        // it named keeps its colours and the rest are derived, which is what
+        // one number could ever have meant.
+        assert_eq!(salts_for(seed, &[Some(11)], 2), vec![11, derived(1)]);
     }
 
     #[test]

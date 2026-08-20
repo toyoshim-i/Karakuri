@@ -91,6 +91,7 @@ fn build(gpu: &Gpu, field: Option<&str>, l4: &str) -> Result<Set, SetError> {
         &[&compile(l4)],
         Layering::Overdraw,
         7,
+        &[],
         karakuri_engine::set::NodeNames::default(),
     )?;
     set.resize(&gpu.device, W, H);
@@ -274,6 +275,7 @@ fn two_renderers_in_one_set_agree_on_the_fields_value() {
         &[&l4, &l4],
         Layering::Overdraw,
         7,
+        &[],
         karakuri_engine::set::NodeNames::default(),
     )
     .expect("two renderers over one field");

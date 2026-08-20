@@ -228,6 +228,7 @@ fn build(gpu: &Gpu, l1: &str, l2s: &[&str]) -> Set {
         &[&l4],
         Layering::Overdraw,
         7,
+        &[],
         karakuri_engine::set::NodeNames::default(),
     )
     .expect("a chain of one L1, some L2s and one L4");
@@ -619,6 +620,7 @@ proc huge {
         &[&l4],
         Layering::Overdraw,
         7,
+        &[],
         karakuri_engine::set::NodeNames::default(),
     );
     let Err(err) = built else {

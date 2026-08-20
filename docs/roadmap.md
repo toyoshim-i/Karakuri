@@ -133,11 +133,14 @@ Each layer composes differently, and each needs its own semantics.
   Set, each at its own capacity, each with its own chain.
 
   **What is not built is the identity.** There is no `source` attribute — nothing carries
-  one, so nothing downstream can mask on one. And the salt is **derived** from the source's
-  ordinal where the design says it must be **assigned and recorded**, because every
-  derivation fails on a case this system has: graph edits move a position, a `.kir` edit
-  moves a content hash under `--watch`, and a declared procedure name collides for the same
-  lattice used twice. Today reordering `--set` changes which geometry gets which randomness.
+  one, so nothing downstream can mask on one. The **salt** is built: `--save-set` writes a
+  `seed` record per geometry carrying what that source was running at and `--load-set` gives
+  each one back to the source its index names, which is the *assigned and recorded* the
+  design asks for and the reason it asks for it — every derivation fails on a case this
+  system has, since graph edits move a position, a `.kir` edit moves a content hash under
+  `--watch`, and a declared procedure name collides for the same lattice used twice. A Set
+  nothing has recorded still derives from the ordinal, which the spec licenses in the same
+  breath: where a value came from stops mattering once it is recorded.
   Both wait on the same thing — a source has no name. See "Naming what a Set holds".
 - **L2 multiple** — chain. Order matters. Each modulator carries a weight and a mask, and
   masks are attribute-based: only elements where `seed % 3 == 0`, only inside a region,
@@ -845,13 +848,16 @@ call. `--set` reaches all of it with no new syntax — files are sorted by the `
 declares. Parameters, bindings, the edit history and the MCP surface address a *node* rather
 than a layer, and a Set can say which of them a console sees.
 
-Every item on the Adds list below is struck. Four things that were inside those items are
-**not** built, and each is struck through to where it went rather than left implied:
+Every item on the Adds list below is struck. Four things that were inside those items were
+**not** built; three still are not, and each is struck through to where it went rather than
+left implied:
 
 - The **graph compiler**, split in two. Its authoring half opens M4 as "Naming what a Set
   holds"; its fusion half is in "Deferred by decision" with a trigger.
-- A source's **salt is derived rather than assigned**, so `--set` order decides which
-  geometry gets which randomness — M4, same item.
+- ~~A source's **salt is derived rather than assigned**~~ — **built.** A `seed` record per
+  geometry, written by `--save-set` and read back by `--load-set`, so a saved Set keeps its
+  colours whatever order its records are in. What it wanted was not the naming below but an
+  address, and `seed` already had one.
 - **How a mask names a source**, and the `source` attribute it would read — M4, same item.
 - **What an L3 points at**: a reduction, or element zero. Decided, refused by name in the
   checker, and waiting on the same naming — M4, same item.
@@ -1436,14 +1442,19 @@ than against one being taught to.
   attachment clears it" needed no second rule for several sources, since it was already about
   the attachment rather than about the list.
 
-  **The salt is derived and not assigned**, which is the provisional half. The spec calls for
-  a value chosen when a source is added and *recorded*, so it survives the list being
-  reordered; derived from the ordinal, it gives the picture the spec asks for — two identical
-  grids in different colours by default — and not the stability. Reordering `--set` changes
-  which colour is which. Assigning it wanted a Set file able to carry sources, and one now
-  does — a `slot` per node, indexed per layer, names and all. What is left is the assigning
-  itself: a `seed` record per source, written when the source is added rather than derived
-  from its ordinal. **Outstanding, and scheduled** — head of M4.
+  **The salt is assigned and recorded**, which was the provisional half and is no longer.
+  `--save-set` writes a `seed` record per geometry carrying the value that source was running
+  at — asked of the same function the run is built from, so a file cannot record a salt the
+  run was not using — and `--load-set` gives each back to the source its `index` names. A
+  saved Set therefore keeps its colours whatever order its records arrive in, where before
+  reordering `--set` changed which colour was which.
+
+  **What this needed was an address and not a name.** It was written here as waiting on a Set
+  file able to carry sources; the file gained that, and `seed` turned out to have carried the
+  address all along. A bare `--set` still derives each source's salt from the ordinal and
+  that is the finished behaviour rather than a remainder — the spec licenses it in the same
+  paragraph that asks for recording: *where it came from stops mattering once it is
+  recorded*, so the first save is what turns an ordinal into an assignment.
 
   Still open for the same reason: **how a mask names a source.** The spec says a name resolved
   where the Set is built, and every worked example writes an ordinal — which is the spelling
@@ -1659,7 +1670,7 @@ no name:**
 | ~~MCP reaches an L1 and the renderers and no other node~~ | **Closed.** A model reads and writes every node at `(slot, layer, index)` |
 | One `kind Field` per Set, one L3 per Set | Refused at build, with "several would need naming" as the reason |
 | A mask cannot say which source it applies to | The `source` attribute does not exist |
-| A source's salt is derived from `--set` order rather than assigned | Reordering changes which geometry gets which randomness |
+| ~~A source's salt is derived from `--set` order rather than assigned~~ | **Closed.** A `seed` record per geometry, written by `--save-set` and read by `--load-set` |
 
 The first three are the sharp ones, because they are surfaces that *already exist* and stop
 working the moment a Set holds what M3 taught it to hold. **All three are closed**, and the
@@ -1697,10 +1708,11 @@ file's name on the rule `--param` already follows beside `--load-set`. See `docs
 "Naming a source, on the terms HTML gives an `id`", where this replaces a stated *preference*
 whose reasoning the code had falsified.
 
-**Two records have to move with it**, and they are the reason this is not only a parser
-change: `Record::Capacity` and `Record::Seed` carry a `layer` and no index, so two geometries
-at different capacities and a per-source salt are both inexpressible in the format however
-they are spelled on the way in.
+**Two records moved ahead of it**, which is why the naming below is now a parser change and
+little more: `Record::Capacity` and `Record::Seed` carried a `layer` and no index, so two
+geometries at different capacities and a per-source salt were both inexpressible in the
+format however they were spelled on the way in. Both carry an index now, and both are written
+and read per geometry.
 
 What this is *not* is fusion. That half is deferred with a trigger — see "Deferred by
 decision".
