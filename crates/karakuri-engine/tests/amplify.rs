@@ -229,7 +229,7 @@ fn build(gpu: &Gpu, l1: &str, l2s: &[&str]) -> Set {
         Layering::Overdraw,
         7,
         &[],
-        karakuri_engine::set::NodeNames::default(),
+        karakuri_engine::set::Wiring::default(),
     )
     .expect("a chain of one L1, some L2s and one L4");
     set.resize(&gpu.device, W, H);
@@ -621,7 +621,7 @@ proc huge {
         Layering::Overdraw,
         7,
         &[],
-        karakuri_engine::set::NodeNames::default(),
+        karakuri_engine::set::Wiring::default(),
     );
     let Err(err) = built else {
         panic!("a billion elements is past every device, and building it should have said so");

@@ -20,7 +20,7 @@
 
 use crate::ast::{
     AmplifyDecl, Attr, BinOp, Blend, Block, BlockKind, CapacityDecl, Expr, Kind, Lit, Param, Proc,
-    Stmt, Topology, Ty, UnOp,
+    Stmt, Topology, Ty, UnOp, UsesDecl,
 };
 use crate::error::IrError;
 use crate::error::IrResult;
@@ -50,7 +50,7 @@ pub fn parse(src: &str) -> IrResult<Proc> {
 /// Header/block keywords. Declaration recovery scans forward to the next one
 /// of these (or `}`), so one bad declaration does not eat the rest of the file.
 const DECL_KEYWORDS: [&str; 17] = [
-    "kind", "topology", "capacity", "amplify", "pairs", "param", "emit", "consumes", "blend",
+    "kind", "topology", "capacity", "amplify", "uses", "param", "emit", "consumes", "blend",
     "spawn", "element", "deform", "mask", "camera", "field", "vertex", "fragment",
 ];
 
@@ -315,7 +315,7 @@ impl Parser {
         let mut topology = None;
         let mut capacity = None;
         let mut amplify = None;
-        let mut pairs = None;
+        let mut uses = Vec::new();
         let mut blend = None;
         let mut params = Vec::new();
         let mut emit = Vec::new();
@@ -343,10 +343,11 @@ impl Parser {
                     }
                     "capacity" => capacity = Some(self.parse_capacity()),
                     "amplify" => amplify = Some(self.parse_amplify()),
-                    // A bare keyword, unlike every other header declaration:
-                    // there is nothing to say beyond that it applies, because
-                    // the arity is two and the sources are the Set's.
-                    "pairs" => pairs = Some(self.advance().span),
+                    "uses" => {
+                        if let Some(u) = self.parse_uses() {
+                            uses.push(u);
+                        }
+                    }
                     "param" => {
                         if let Some(p) = self.parse_param() {
                             params.push(p);
@@ -429,7 +430,7 @@ impl Parser {
             topology,
             capacity,
             amplify,
-            pairs,
+            uses,
             blend,
             params,
             emit,
@@ -523,6 +524,39 @@ impl Parser {
             factor,
             span: start.join(self.prev_span()),
         }
+    }
+
+    /// `uses <name> : Geometry` — a second geometry this node takes.
+    ///
+    /// **The name is the procedure's and the binding is the Set's.** So this
+    /// declaration says what the file needs and never which node supplies it:
+    /// a `.kir` that named a node would be a procedure coupled to one Set, and
+    /// it would stop being a library part. See [`UsesDecl`].
+    ///
+    /// The type is checked here rather than carried, because there is exactly
+    /// one and a value with one variant is a value nobody reads. What the
+    /// declaration buys by writing it down anyway is room: a slot that takes a
+    /// camera or a field is the next thing this notation is for.
+    fn parse_uses(&mut self) -> Option<UsesDecl> {
+        let start = self.advance().span; // "uses"
+        let (name, name_span) =
+            self.expect_ident("a name for the geometry this procedure takes")?;
+        self.expect(TokKind::Colon, ":");
+        if let Some((ty, ty_span)) = self.expect_ident("`Geometry`") {
+            if ty != "Geometry" {
+                self.error_with_hint(
+                    ty_span,
+                    format!("unknown input type `{ty}`"),
+                    "`Geometry` is the one thing a `uses` slot can be today — the elements of \
+                     an L1, read beside the ones this node runs over",
+                );
+            }
+        }
+        Some(UsesDecl {
+            name,
+            name_span,
+            span: start.join(self.prev_span()),
+        })
     }
 
     fn parse_capacity(&mut self) -> CapacityDecl {
@@ -1077,7 +1111,7 @@ fn empty_proc(span: Span) -> Proc {
         topology: None,
         capacity: None,
         amplify: None,
-        pairs: None,
+        uses: Vec::new(),
         blend: None,
         params: Vec::new(),
         emit: Vec::new(),

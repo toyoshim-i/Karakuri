@@ -65,11 +65,16 @@ pub struct Checked {
     /// declaration generates the shader it always generated, shares its input's
     /// liveness and its input's counts, and allocates nothing.
     pub amplify: Option<u32>,
-    /// **This L2 takes two geometries and produces one** — see
-    /// `karakuri_ir::ast::Proc::pairs`. The paired element's attributes are read
-    /// as `other.<name>`, and the correspondence is the slot index, which is
-    /// only the same element in both sources while neither compacts.
-    pub pairs: bool,
+    /// **The name this L2 gives the second geometry it takes** — see
+    /// [`crate::ast::UsesDecl`]. `Some("far")` is `uses far : Geometry` on the
+    /// header, and the far element's attributes are then read as `far.<name>`.
+    ///
+    /// The name is carried rather than reduced to a flag because it is what a
+    /// Set's `edge` is written against: the file says what it needs and the Set
+    /// says what fills it, and neither half can be resolved without the other's
+    /// spelling. The correspondence between the two geometries is the slot
+    /// index, which is only the same element in both while neither compacts.
+    pub uses: Option<String>,
     pub blend: Option<Blend>,
     pub params: Vec<Param>,
     pub emit: Vec<Attr>,
@@ -346,15 +351,21 @@ pub enum TExprKind {
     Param(String),
     /// A read, which is always of the previous frame's value.
     Attr(Attr),
-    /// A read of the **paired** element's attribute, from the second geometry a
-    /// `pairs` L2 takes. Written `other.<name>`.
+    /// A read of the **far** element's attribute — the geometry bound to this
+    /// node's declared slot, at the same element index. Written `<slot>.<name>`,
+    /// where the slot is whatever the procedure's `uses` called it.
+    ///
+    /// The name is not carried here, and that is not an omission: a node takes
+    /// one second geometry, so the read has nowhere else to point. What the
+    /// name decides is which spellings *reach* this variant, which the checker
+    /// has already settled by the time one exists.
     ///
     /// Its own variant rather than a flag on [`TExprKind::Attr`], because every
     /// pass that walks attribute reads has to decide about it: cost weighs it
     /// the same, the lowering addresses a different buffer, and
     /// `is_closed_form` treats it as a read of carried state exactly as it
     /// treats the near side.
-    Other(Attr),
+    Far(Attr),
     Ambient(Ambient),
     Unary {
         op: crate::ast::UnOp,

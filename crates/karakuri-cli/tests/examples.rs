@@ -123,36 +123,68 @@ fn the_pairs_the_docs_offer_compose() {
     // examples' own comments give as command lines. Each is one L1, the middle
     // files in the order written, and one renderer — sorted by the `kind` each
     // declares, exactly as `--set` sorts them.
-    for chain in [
+    //
+    // **With the `--edge` the command line carries**, where it carries one. A
+    // node that declares a geometry slot is refused unless the Set says which
+    // node fills it, so the wiring is as much a part of the documented command
+    // as the file list is — and a chain built without it here would be a
+    // command line this test says composes and an operator cannot run.
+    let edge = |node: &str, slot: &str, to: &str| karakuri_engine::set::Edge {
+        node: node.to_string(),
+        slot: slot.to_string(),
+        to: to.to_string(),
+    };
+    for (chain, edges) in [
         // `swirl_warp.kir`'s own header offers this one.
-        &["drift_shell.kir", "swirl_warp.kir", "soft_points.kir"][..],
+        (
+            &["drift_shell.kir", "swirl_warp.kir", "soft_points.kir"][..],
+            &[][..],
+        ),
         // `beat_jump.kir`'s does.
-        &["drift_shell.kir", "beat_jump.kir", "soft_points.kir"][..],
+        (
+            &["drift_shell.kir", "beat_jump.kir", "soft_points.kir"][..],
+            &[][..],
+        ),
         // `late_bloom.kir`'s does, and it is the one with two modulators in it:
         // a chain is where an L2 being stateless stops being a claim and starts
         // being the thing that lets the pair be written in either order.
-        &[
-            "drift_shell.kir",
-            "swirl_warp.kir",
-            "late_bloom.kir",
-            "soft_points.kir",
-        ][..],
+        (
+            &[
+                "drift_shell.kir",
+                "swirl_warp.kir",
+                "late_bloom.kir",
+                "soft_points.kir",
+            ][..],
+            &[][..],
+        ),
         // `kaleidoscope.kir`'s own header offers this one, and it is the only
         // chain here that changes the element count.
-        &["drift_shell.kir", "kaleidoscope.kir", "soft_points.kir"][..],
+        (
+            &["drift_shell.kir", "kaleidoscope.kir", "soft_points.kir"][..],
+            &[][..],
+        ),
         // `field_lens.kir`'s does: a marcher containing no shape, and a shape
         // that is nothing else. Neither builds without the other.
-        &["drift_shell.kir", "melt_blob.kir", "field_lens.kir"][..],
+        (
+            &["drift_shell.kir", "melt_blob.kir", "field_lens.kir"][..],
+            &[][..],
+        ),
         // `morph.kir`'s does, and it is the only one with **two geometries** in
         // it. The loop below takes every L1 it finds with that L1's own declared
         // capacity, which is what makes this line a test of more than the sort:
         // a pairing Set is refused unless both sources are the same size.
-        &[
-            "lattice_shell.kir",
-            "sphere_shell.kir",
-            "morph.kir",
-            "soft_points.kir",
-        ][..],
+        (
+            &[
+                "lattice_shell.kir",
+                "sphere_shell.kir",
+                "morph.kir",
+                "soft_points.kir",
+            ][..],
+            // The one the file's own header prints, pointing with the names
+            // nobody wrote: a node nothing named is called what its procedure
+            // declares, and that is a real name from the moment it is derived.
+            &[edge("morph", "far", "sphere_shell")][..],
+        ),
     ] {
         let compiled: Vec<karakuri_ir::typed::Checked> = chain
             .iter()
@@ -185,7 +217,10 @@ fn the_pairs_the_docs_offer_compose() {
             karakuri_engine::set::Layering::Overdraw,
             0,
             &[],
-            karakuri_engine::set::NodeNames::default(),
+            karakuri_engine::set::Wiring {
+                edges,
+                ..Default::default()
+            },
         )
         .unwrap_or_else(|e| panic!("{} does not build: {e}", chain.join(" + ")));
     }

@@ -68,12 +68,15 @@ pub trait Resolver {
     /// discipline.
     fn read_attr(&self, attr: Attr) -> String;
 
-    /// A read of the **paired** element, from the second geometry a `pairs` L2
-    /// takes. Only that resolver has one; the checker refuses `other` anywhere
-    /// else, so every other implementation says so rather than inventing an
-    /// answer.
-    fn read_other(&self, attr: Attr) -> String {
-        unreachable!("`other.{}` is refused outside a `pairs` L2", attr.name())
+    /// A read of the **far** element, from the geometry bound to this node's
+    /// declared slot. Only an L2 that declares one has such a resolver; the
+    /// checker refuses the read anywhere else, so every other implementation
+    /// says so rather than inventing an answer.
+    fn read_far(&self, attr: Attr) -> String {
+        unreachable!(
+            "a read of `{}` from a used geometry is refused where none is declared",
+            attr.name()
+        )
     }
     fn read_seed(&self) -> String;
     fn read_ambient(&self, amb: Ambient) -> String;
@@ -102,7 +105,7 @@ pub fn lower_expr(expr: &TExpr, resolver: &dyn Resolver, req: &mut Requirements)
             .read_param(name)
             .unwrap_or_else(|| format!("u.{}", mangle_param(name))),
         TExprKind::Attr(attr) => resolver.read_attr(*attr),
-        TExprKind::Other(attr) => resolver.read_other(*attr),
+        TExprKind::Far(attr) => resolver.read_far(*attr),
         TExprKind::Ambient(Ambient::Seed) => resolver.read_seed(),
         TExprKind::Ambient(amb) => resolver.read_ambient(*amb),
         TExprKind::Unary { op, value } => {

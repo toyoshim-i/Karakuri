@@ -127,7 +127,11 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
     // **What makes an L4 a marcher**, and the one procedure-wide fact a block
     // checker needs: `eye` and `ray` are defined by the ray prologue a
     // fullscreen fragment stage opens with, and by nothing else.
-    let pairs = proc.pairs.is_some();
+    //
+    // The declared slot name is the second such fact: a `deform` writing
+    // `far.position` is reading a geometry the *header* named, and a block does
+    // not see its own header.
+    let uses = proc.uses.first().map(|u| u.name.as_str());
     let fullscreen =
         proc.kind == Kind::L4 && proc.blocks.iter().all(|b| b.kind != BlockKind::Vertex);
     let mut blocks = Vec::with_capacity(proc.blocks.len());
@@ -143,7 +147,7 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
             block_kind_owner,
             Some(block.kind),
             fullscreen,
-            pairs,
+            uses,
             &params,
             &emit_set,
             &consumes_set,
@@ -214,7 +218,7 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
             },
             capacity: proc.capacity,
             amplify: proc.amplify.map(|a| a.factor),
-            pairs: proc.pairs.is_some(),
+            uses: proc.uses.first().map(|u| u.name.clone()),
             blend: proc.blend,
             params: proc.params.clone(),
             emit: emit_vec.into_iter().map(|(a, _)| a).collect(),
@@ -262,14 +266,6 @@ fn calls_field(stmts: &[crate::ast::Stmt]) -> bool {
         Stmt::Kill { .. } => false,
     })
 }
-
-/// The base name a paired read is written against: `other.position`.
-///
-/// Reserved everywhere, not only in a `pairs` L2 — a local called `other` in an
-/// ordinary procedure would read fine today and stop reading the day the file
-/// grew the declaration, which is the shape every other reserved name here
-/// exists to prevent.
-pub const OTHER: &str = "other";
 
 fn drawn_topology(blocks: &[TBlock]) -> Topology {
     let Some(vertex) = blocks.iter().find(|b| b.kind == BlockKind::Vertex) else {
@@ -355,10 +351,10 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     ),
                 );
             }
-            if let Some(span) = proc.pairs {
-                errors.push(IrError::contract(span, "`pairs` is L2 only").with_hint(
-                    "remove `pairs`: an L1 makes geometry rather than taking any, so there \
-                         is no second one for it to pair with",
+            for u in &proc.uses {
+                errors.push(IrError::contract(u.span, "`uses` is L2 only").with_hint(
+                    "remove it: an L1 makes geometry rather than taking any, so there is \
+                         nothing for a second one to be blended with",
                 ));
             }
             if proc.blocks.iter().all(|b| b.kind != BlockKind::Element) {
@@ -469,13 +465,44 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             //
             // Refused rather than resolved, because nothing wants it yet and a
             // rule invented for no case is a rule nobody can check against one.
-            if let (Some(span), Some(_)) = (proc.pairs, &proc.amplify) {
+            if let (Some(u), Some(_)) = (proc.uses.first(), &proc.amplify) {
                 errors.push(
-                    IrError::contract(span, "`pairs` and `amplify` cannot both apply").with_hint(
-                        "split them: a node that pairs two geometries, and a node below it \
-                             that amplifies what the pairing produced",
+                    IrError::contract(u.span, "`uses` and `amplify` cannot both apply").with_hint(
+                        "split them: a node that takes a second geometry, and a node below \
+                             it that amplifies what the first one produced",
                     ),
                 );
+            }
+            // **A second slot is refused with a sentence, not overwritten.**
+            // One name would silently win and the other's reads would resolve
+            // against the wrong geometry — the shape this whole notation
+            // exists to end. What a second one needs is a second bound buffer
+            // on the node and a second `edge` per Set, neither of which is
+            // built; refusing here is what keeps a file that asks for it a
+            // refusal rather than a picture that is quietly wrong.
+            for u in proc.uses.iter().skip(1) {
+                errors.push(
+                    IrError::contract(u.span, "a node takes one second geometry").with_hint(
+                        format!(
+                            "`{}` is already declared. Chain two nodes instead — each takes \
+                             one and passes the result down",
+                            proc.uses[0].name
+                        ),
+                    ),
+                );
+            }
+            // **The slot name shares one scope with everything else nameable
+            // here.** It is read the way a local is — `far.position` — so a
+            // slot called `position` or `t` would make one spelling mean two
+            // things depending on whether a dot follows it.
+            for u in &proc.uses {
+                check_reserved(&u.name, u.name_span, proc.kind, "geometry slot", errors);
+                if proc.params.iter().any(|p| p.name == u.name) {
+                    errors.push(
+                        IrError::contract(u.name_span, format!("`{}` is already a param", u.name))
+                            .with_hint("a slot and a param share one scope — rename one of them"),
+                    );
+                }
             }
             // **A factor below two is refused, and the two cases are refused
             // for different reasons.** Zero is a stage that discards every
@@ -558,10 +585,10 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                         .with_hint("remove `amplify`: an L3 produces one viewpoint, not elements"),
                 );
             }
-            if let Some(span) = proc.pairs {
+            for u in &proc.uses {
                 errors.push(
-                    IrError::contract(span, "`pairs` is L2 only")
-                        .with_hint("remove `pairs`: an L3 produces a viewpoint, not geometry"),
+                    IrError::contract(u.span, "`uses` is L2 only")
+                        .with_hint("remove it: an L3 produces a viewpoint, not geometry"),
                 );
             }
             if !proc.emit.is_empty() {
@@ -702,10 +729,10 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     ),
                 );
             }
-            if let Some(span) = proc.pairs {
-                errors.push(IrError::contract(span, "`pairs` is L2 only").with_hint(
-                    "remove `pairs`: a renderer draws what reaches it. Pairing two \
-                         geometries is a deformation, above the renderer rather than inside it",
+            for u in &proc.uses {
+                errors.push(IrError::contract(u.span, "`uses` is L2 only").with_hint(
+                    "remove it: a renderer draws what reaches it. Taking a second geometry \
+                         is a deformation, above the renderer rather than inside it",
                 ));
             }
             // **A `vertex` block is what makes an L4 per-element**, and an L4
@@ -805,7 +832,14 @@ fn shadows_output(name: &str, kind: Kind) -> bool {
 }
 
 /// Attributes, ambients, and stage outputs are a closed, reserved vocabulary
-/// that no param or local may take on — see the module docs on shadowing.
+/// that no param, local or declared geometry slot may take on — see the module
+/// docs on shadowing.
+///
+/// **A slot name goes through here for the same reason a param's does**: it is
+/// read the way a local is, `far.position`, so one spelling would otherwise mean
+/// two things depending on whether a dot follows it. What it is *not* is a
+/// reserved word of its own — the name belongs to the procedure that declared
+/// it, and reserving one language-wide is what caps a procedure at one input.
 fn check_reserved(
     name: &str,
     span: Span,
@@ -825,11 +859,6 @@ fn check_reserved(
         errors.push(
             IrError::contract(span, format!("`{name}` shadows an attribute name"))
                 .with_hint("pick a different name — attributes and params share one scope"),
-        );
-    } else if name == OTHER {
-        errors.push(
-            IrError::contract(span, format!("`{name}` is reserved"))
-                .with_hint("`other` names the second geometry a `pairs` L2 takes"),
         );
     } else if Ambient::from_name(name).is_some() {
         errors.push(IrError::contract(
@@ -876,7 +905,7 @@ fn check_params(proc: &Proc, errors: &mut Vec<IrError>) -> HashMap<String, Ty> {
             proc.kind,
             None,
             false,
-            false,
+            None,
             &empty_params,
             &empty_attrs,
             &empty_attrs,
@@ -1113,7 +1142,7 @@ fn reads_carried(e: &TExpr, carried: &HashSet<Attr>) -> bool {
     match &e.kind {
         // **Both sides.** A paired read is a read of the other source's carried
         // state, which is state all the same.
-        TExprKind::Attr(a) | TExprKind::Other(a) => carried.contains(a),
+        TExprKind::Attr(a) | TExprKind::Far(a) => carried.contains(a),
         TExprKind::Lit(_) | TExprKind::Local(_) | TExprKind::Param(_) | TExprKind::Ambient(_) => {
             false
         }
@@ -1162,7 +1191,7 @@ fn reads_beats(blocks: &[TBlock]) -> bool {
             | TExprKind::Local(_)
             | TExprKind::Param(_)
             | TExprKind::Attr(_)
-            | TExprKind::Other(_)
+            | TExprKind::Far(_)
             | TExprKind::Ambient(_) => false,
             TExprKind::Unary { value, .. } => in_expr(value),
             TExprKind::Binary { lhs, rhs, .. } => in_expr(lhs) || in_expr(rhs),
@@ -1361,9 +1390,14 @@ struct Checker<'a> {
     /// about the procedure, and a block checker otherwise sees only its own
     /// block. `eye` and `ray` need it — see [`Checker::marching_only`].
     fullscreen: bool,
-    /// Whether this procedure declares `pairs`, which is what makes `other`
-    /// mean anything.
-    pairs: bool,
+    /// **What this procedure calls the second geometry it takes**, from
+    /// `uses far : Geometry`, and `None` for a procedure that takes none.
+    ///
+    /// It is what makes `far.position` mean anything, and it is per *procedure*
+    /// rather than per block for the reason [`Checker::fullscreen`] is: the
+    /// declaration is in the header and a block checker sees only its own
+    /// block.
+    uses: Option<&'a str>,
     params: &'a HashMap<String, Ty>,
     emit: &'a HashSet<Attr>,
     consumes: &'a HashSet<Attr>,
@@ -1384,7 +1418,7 @@ impl<'a> Checker<'a> {
         kind: Kind,
         block: Option<BlockKind>,
         fullscreen: bool,
-        pairs: bool,
+        uses: Option<&'a str>,
         params: &'a HashMap<String, Ty>,
         emit: &'a HashSet<Attr>,
         consumes: &'a HashSet<Attr>,
@@ -1393,7 +1427,7 @@ impl<'a> Checker<'a> {
             kind,
             block,
             fullscreen,
-            pairs,
+            uses,
             params,
             emit,
             consumes,
@@ -1528,12 +1562,12 @@ impl<'a> Checker<'a> {
             );
             return;
         }
-        if name == OTHER {
+        if self.uses == Some(name) {
             self.err_hint(
                 Stage::Contract,
                 span,
-                format!("`{name}` is reserved"),
-                "`other` names the second geometry a `pairs` L2 takes",
+                format!("`{name}` is the geometry this procedure uses"),
+                "a slot and a local share one scope — rename one of them",
             );
             return;
         }
@@ -2071,6 +2105,29 @@ impl<'a> Checker<'a> {
             );
             return None;
         }
+        // **A geometry is not a value.** `far` on its own is the whole second
+        // source, which this language has no type for and no way to pass — the
+        // one thing that can be said about it is what one of its elements
+        // holds.
+        //
+        // **Before the stage outputs**, and that is not an ordering
+        // convenience: `near` and `far` are the camera's clip planes, so they
+        // are output names on an L3 and ordinary names everywhere else — which
+        // is exactly what `shadows_output` already says by asking about the
+        // kind. Asked in the other order, an L2 slot called `far` would be
+        // declarable and unreadable.
+        if self.uses == Some(name) {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{name}` is a geometry, not a value"),
+                format!(
+                    "read an attribute of the element it is paired with — `{name}.position` \
+                     — which is the whole of what a used geometry offers"
+                ),
+            );
+            return None;
+        }
         if Output::from_name(name).is_some() {
             self.err_hint(
                 Stage::Contract,
@@ -2503,37 +2560,34 @@ impl<'a> Checker<'a> {
         Some(TExpr::new(ty, span, TExprKind::Construct { args }))
     }
 
-    /// `other.<attr>` — the paired element's attribute.
+    /// `<slot>.<attr>` — an attribute of the far element, from the geometry
+    /// bound to the slot this procedure declared.
     ///
-    /// **Only in a `pairs` L2, and only for something it consumes.** The second
-    /// geometry is an input edge: this node reads it and writes its own output,
-    /// so what is readable there is what the node declared it takes.
-    fn check_other(&mut self, name: &str, span: Span) -> Option<TExpr> {
+    /// **Only for something the node consumes.** The far geometry is an input
+    /// edge: this node reads it and writes its own output, so what is readable
+    /// there is what the node declared it takes.
+    ///
+    /// `slot` is the name the header gave it, carried in only so the
+    /// diagnostics are written in the author's own spelling. Which node fills
+    /// it is not decided here and never can be — it is the Set's answer.
+    fn check_far(&mut self, slot: &str, name: &str, span: Span) -> Option<TExpr> {
         let Some(attr) = Attr::from_name(name) else {
             self.err_hint(
                 Stage::Contract,
                 span,
-                format!("`{OTHER}.{name}` is not an attribute"),
-                "the paired element has the attributes an element has — \
-                 `other.position`, `other.tint` — and nothing else",
+                format!("`{slot}.{name}` is not an attribute"),
+                format!(
+                    "`{slot}` is a geometry, so it has the attributes an element has — \
+                     `{slot}.position`, `{slot}.tint` — and nothing else"
+                ),
             );
             return None;
         };
-        if !self.pairs {
-            self.err_hint(
-                Stage::Contract,
-                span,
-                format!("`{OTHER}` is the second geometry, and this procedure takes one"),
-                "add `pairs` to the header: an L2 that declares it takes two geometries and \
-                 produces one, pairing their elements by slot index",
-            );
-            return None;
-        }
         if !matches!(self.block, Some(BlockKind::Deform) | Some(BlockKind::Mask)) {
             self.err(
                 Stage::Contract,
                 span,
-                format!("`{OTHER}` is readable in a `deform` or a `mask`, and nowhere else"),
+                format!("`{slot}` is readable in a `deform` or a `mask`, and nowhere else"),
             );
             return None;
         }
@@ -2541,28 +2595,33 @@ impl<'a> Checker<'a> {
             self.err_hint(
                 Stage::Contract,
                 span,
-                format!("`{OTHER}.{name}` is not consumed"),
+                format!("`{slot}.{name}` is not consumed"),
                 format!(
-                    "add `{name}` to `consumes`: the paired geometry is an input edge, and one \
-                     `consumes` covers both sides of it — pairing reads the same attribute from \
-                     each"
+                    "add `{name}` to `consumes`: a used geometry is an input edge, and one \
+                     `consumes` covers both sides of it — a node reads the same attribute \
+                     from each"
                 ),
             );
             return None;
         }
-        Some(TExpr::new(attr.ty(), span, TExprKind::Other(attr)))
+        Some(TExpr::new(attr.ty(), span, TExprKind::Far(attr)))
     }
 
     fn check_swizzle(&mut self, value: &Expr, components: &str, span: Span) -> Option<TExpr> {
-        // **`other.position` is not a swizzle**, and it arrives here because it
+        // **`far.position` is not a swizzle**, and it arrives here because it
         // is *shaped* like one — `expr . ident` is the grammar, and the parser
         // is right not to decide which it is. Deciding here costs no new
-        // syntactic category, which is the whole reason the paired read is
-        // spelled this way: a `pairs` L2 adds one header keyword and one base
-        // name, and nothing else in the language moves.
+        // syntactic category, which is the whole reason a read of the second
+        // geometry is spelled this way: `uses` adds one header declaration and
+        // one name, and nothing else in the language moves.
+        //
+        // **The base name is the procedure's own**, so what reaches here is a
+        // comparison against what the header declared rather than against a
+        // reserved word. That is the difference the whole notation is: a file
+        // that had to spell it `other` could only ever have one.
         if let Expr::Ident { name, .. } = value {
-            if name == OTHER {
-                return self.check_other(components, span);
+            if self.uses == Some(name.as_str()) {
+                return self.check_far(name, components, span);
             }
         }
         let v = self.check_expr(value)?;

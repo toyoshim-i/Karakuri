@@ -108,8 +108,8 @@ L1.
 
 **Two declarations break L2's endomorphism, on its two different axes**, and that is why the
 line above no longer states it flatly. `amplify N` breaks it on the *count* axis — one
-element in, `N` out — and `pairs` breaks it on the *arity* axis, taking two geometries and
-returning one. Both stay in the same slot position, because what a `deform` writes is decided
+element in, `N` out — and `uses <name> : Geometry` breaks it on the *arity* axis, taking a
+second geometry and returning one. Both stay in the same slot position, because what a `deform` writes is decided
 before it runs. Stackability survives for the plain kind, which is the kind a library is
 mostly made of.
 
@@ -935,8 +935,9 @@ cost, or `Device::set_device_lost_callback` and rebuilding, which the deck alrea
 material for since it can rebuild a Set from records.
 
 **How it went, item by item.** Cross-source interpolation was the last to land,
-as a pairing L2 — `pairs` on the header, `other.<attr>` for the paired element, and a Set
-that holds exactly two sources when the chain begins with one. Multiple L1 sources landed
+as an L2 that declares a second geometry — `uses <name> : Geometry` on the header,
+`<name>.<attr>` for the far element, and a Set that holds exactly two sources when the chain
+begins with one. Multiple L1 sources landed
 before it, and the nested L5's motivating case landed with those — "two pipelines, one knob"
 was waiting on nothing but a Set able to hold two geometries, and it now renders and is
 tested: two sources, two renderers, two composited targets, and one published control that
@@ -1298,11 +1299,14 @@ being true they have to be spelled. Inferring them was not a shortcut being take
 there was exactly one edge set consistent with the nodes, so writing them down would have been
 a second place for the same fact.
 
-**That moment has passed.** A Set can hold two L1s, and a pairing L2 reads two of them, so
-there is no longer exactly one consistent edge set — which two geometries a `pairs` node takes
-is decided by `--set` order and written nowhere. This paragraph promised that "when fan-in
-arrives it brings the notation with it"; fan-in arrived twice and brought none, and the debt
-is now the first item of M4. See "Naming what a Set holds".
+**That moment has passed, and the debt it left is paid for one edge.** A Set can hold two
+L1s and an L2 can read two of them, so there is no longer exactly one consistent edge set —
+which geometry the second input takes was decided by `--set` order and written nowhere. This
+paragraph promised that "when fan-in arrives it brings the notation with it"; fan-in arrived
+twice and brought none. The notation is now built: a procedure declares a named input slot
+(`uses far : Geometry`) and the Set binds it (an `edge` record, `--edge morph.far=sphere`).
+What is left is carrying it to the other capped-at-one places — the field, the camera, a
+mask's source. See "Naming what a Set holds".
 
 **How a param is addressed.** Under the hierarchy framing this was "layer and position";
 under nodes it is simply **the node**, which is the same key with a name that will still be
@@ -1482,18 +1486,18 @@ than against one being taught to.
   dispatch count needs more than 64 of them. Two injected defects survived a whole test file
   before that was noticed, which is the argument for injecting them
 - ~~**Cross-source interpolation**~~ — **built**, restricted to static sources where `seed` is the slot index
-  and the paired read is a direct one. **The language half is built**: `pairs` on an L2
-  header, `other.<attr>` for the paired element. **And the engine half**: the pairing node binds
-  the second geometry as a third input buffer and reads `other[i]` at the same slot index, and
+  and the far read is a direct one. **The language half is built**: `uses far : Geometry` on
+  an L2 header, `far.<attr>` for the far element. **And the engine half**: the node binds the
+  second geometry as a third input buffer and reads it at the same slot index, and
   `examples/morph.kir` slides a lattice onto a sphere on one fader. Five preconditions are
   refused where the Set is built, because none of them is a property of one file — two
-  sources, the pairing node first in the chain, both static, both the same size, and the far
-  source able to supply what the chain derives.
+  sources, the node with the slot first in the chain, both static, both the same size, and
+  the far source able to supply what the chain derives.
 
-  **It needed no new syntactic category.** `other.position` reaches the checker as a swizzle
-  — `expr . ident` is the grammar — so deciding it there costs one header keyword and one
-  base name, and nothing else in the language moves. That is the same shape `amplify` had,
-  and the two now break the L2 endomorphism on its two different axes: count and arity.
+  **It needed no new syntactic category.** `far.position` reaches the checker as a swizzle
+  — `expr . ident` is the grammar — so deciding it there costs one header declaration and one
+  name, and nothing else in the language moves. That is the same shape `amplify` had, and the
+  two now break the L2 endomorphism on its two different axes: count and arity.
 
   **A pairing Set is one source made of two simulations**, not two sources — which is what
   answers "is the far geometry also drawn?" by construction rather than by a rule: there is
@@ -1507,9 +1511,12 @@ than against one being taught to.
   name the two did not share came back a miss and reached the shader as zero — a picture with
   a shape in it, drawn from a value nobody set. `examples/morph.kir` is the picture.
 
-  **Which two geometries is the Set's**, in `--set` order, and a Set holding a pairing L2 has
-  exactly two sources. This is the system's first fan-in and it deliberately brings no general
-  notation for one
+  **Which geometry is the Set's answer and is now written down.** It shipped as `--set`
+  order — the file said "two" and nothing said *which*, on the reasoning that this was the
+  system's first fan-in and a general notation should arrive with the thing that needed one.
+  It has: the slot is named by the procedure and bound by an `edge`, so a `.kir` still names
+  no node and the command line's order decides nothing. An unbound slot is refused. See
+  "Naming what a Set holds"
 - ~~**Slot interface contracts, attribute declarations, automatic adapters**~~ — **built as
   the derivation, and the three words above turned out to name one thing.** An unmet
   `consumes` is no longer an unconditional error: `age` and `velocity` are synthesised where
@@ -1654,11 +1661,12 @@ new one.
 work of this milestone rather than a nicety inside it.** A library of Sets you cannot save is
 not a library, and that is exactly where this lands.
 
-**Its stated precondition has arrived and inverted into a debt.** The condition was "wait for
-the fan-in that multiple sources bring". Fan-in arrived twice in M3 — two geometries in a
-Set, and a pairing L2 that reads both — and neither brought a notation. So the edges of the
-graph are no longer inferable: which two geometries a `pairs` node takes is `--set` order,
-written nowhere, and reordering the command line silently changes the picture.
+**Its stated precondition arrived, inverted into a debt, and the debt is now paid for one
+edge.** The condition was "wait for the fan-in that multiple sources bring". Fan-in arrived
+twice in M3 — two geometries in a Set, and an L2 that reads both — and neither brought a
+notation, so which geometry the second input took was `--set` order, written nowhere, and
+reordering the command line silently changed the picture. **Both halves are built now**:
+identity, and the first edge.
 
 **What is capped, blocked or quietly broken today, all of it for the same reason — a node has
 no name:**
@@ -1668,7 +1676,8 @@ no name:**
 | ~~A slot with two geometries cannot be rebuilt under `--watch`~~ | **Closed.** Every node of a slot rebuilds, and each geometry at the capacity it declares |
 | ~~A slot holding a chain or a second geometry cannot be saved as a Set file~~ | **Closed.** One `slot` record per node, one `capacity` per geometry |
 | ~~MCP reaches an L1 and the renderers and no other node~~ | **Closed.** A model reads and writes every node at `(slot, layer, index)` |
-| One `kind Field` per Set, one L3 per Set | Refused at build, with "several would need naming" as the reason |
+| ~~Which geometry a node's second input takes is `--set` order~~ | **Closed.** `uses far : Geometry` declares a named slot and an `edge` binds it; an unbound slot is refused |
+| One `kind Field` per Set, one L3 per Set | The notation exists and this layer does not use it yet: `field(p)` names the one field by being the only one, so calling several needs the *call* to carry a name as well as the header |
 | A mask cannot say which source it applies to | The `source` attribute does not exist |
 | ~~A source's salt is derived from `--set` order rather than assigned~~ | **Closed.** A `seed` record per geometry, written by `--save-set` and read by `--load-set` |
 
@@ -1680,9 +1689,10 @@ are features that were capped at one rather than designed for several, and they 
 
 **Two gaps the identity half leaves, recorded so they are not rediscovered:**
 
-- **A rebuild carries no node names.** `Watch` is given paths, so `--set near=a.kir` loses
-  `near` on every save and the uniqueness check never runs on the rebuild path. An edit that
-  introduces a collision is refused at startup and not on a save.
+- ~~**A rebuild carries no node names.**~~ **Closed**, and closed because an edge forced it:
+  a rebuild that renamed every node resolved its edges against spellings that were no longer
+  there. `Watch` holds the names the slot was spelled with and restates them, so the
+  uniqueness check runs on the rebuild path too.
 - **`history::seed` and `mcp::Slots` answer "which layer is this file" by scanning the text**,
   because both run before anything is compiled. That is a genuine second reader rather than a
   copy — but `seed` still falls back to treating the head as an L1, which is the assumption
@@ -1693,12 +1703,24 @@ are features that were capped at one rather than designed for several, and they 
 execution side needs nothing new: the render graph a compiler would target already exists in
 miniature, because a node owns its buffers, pipelines and uniforms and names its inputs.
 
-**Identity first, edges second, and they are scheduled apart.** Naming a node and recording
-it closes every row in the table above; spelling the *edges* — which two geometries a `pairs`
-node takes, which source a mask applies to, and the `source` attribute a mask would read — is
-a second design with a fork of its own in it, since a `.kir` cannot name a node without
-coupling the procedure to one Set. The three sharp rows are all identity, so identity is
-what M4 opens with.
+**Identity first, edges second, and they were scheduled apart.** Naming a node and recording
+it closed every sharp row above; spelling the *edges* was a second design with a fork of its
+own in it, since **a `.kir` may not name a node** — naming one couples the procedure to one
+Set and it stops being a library part.
+
+**The fork was resolved by naming the slot rather than the node.** A procedure declares a
+named input — `uses far : Geometry`, which names an input the way `consumes position` names
+an attribute — and the Set binds it: an `edge` record, written from the command line as
+`--edge morph.far=sphere_shell`. The name in the `.kir` is the procedure's own, so nothing
+couples; the name in the Set is a node's, which every node has whether or not one was
+written. **An unbound slot is refused**, deliberately and not as an oversight: "if there is
+exactly one, use it" is the implicit rule being removed, and reinstating it under a new
+spelling would cap the next fan-in at one the same way.
+
+**One edge is spelled and the rest follow the same shape**: which source a mask applies to
+and the `source` attribute it would read, several fields per Set, several cameras. Each needs
+the same two halves — a declaration on the procedure and a binding on the Set — and the one
+that shipped first is the one that had a working picture behind it, `examples/morph.kir`.
 
 **A name lives in a Set file, and the command line can write one.** The file is where a use
 is recorded, so it is where the name belongs, and the GUI M5 builds writes it there. The
@@ -2105,8 +2127,9 @@ choose, and changing one is a redesign rather than an edit. The reasoning behind
   no `bind`, because what follows a tempo is not a parameter value but the passage of time,
   and a binding writes one number where a clock has to move everything the procedure does.
 - Every name the language gives meaning to is reserved against params and locals:
-  attributes, ambients, `id`, `other`, and — within the layer that writes it — stage
-  outputs. Generated WGSL additionally mangles all IR-derived identifiers, so a procedure cannot capture a generated name whatever it is
+  attributes, ambients, `id`, and — within the layer that writes it — stage outputs. A name
+  the *procedure* gives meaning to joins that scope for that procedure only, which is what a
+  declared geometry slot is. Generated WGSL additionally mangles all IR-derived identifiers, so a procedure cannot capture a generated name whatever it is
   called.
 - One `t` value means one record shape, across every file. A decoder dispatches on `t`
   alone, and every ndjson decoder does.

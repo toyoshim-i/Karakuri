@@ -2374,6 +2374,7 @@ fn a_swap_in_one_slot_leaves_the_other_slot_alone() {
 
     tx.send(Request {
         names: karakuri_engine::swap::RequestNames::default(),
+        edges: Vec::new(),
         id: 1,
         l1s: vec![(compile(L1), SWAPPED)],
         l2s: Vec::new(),
@@ -2491,6 +2492,7 @@ fn an_off_air_slot_is_not_judged_against_its_neighbours_frames() {
 
     tx.send(Request {
         names: karakuri_engine::swap::RequestNames::default(),
+        edges: Vec::new(),
         id: 1,
         l1s: vec![(compile(L1), SWAPPED)],
         l2s: Vec::new(),

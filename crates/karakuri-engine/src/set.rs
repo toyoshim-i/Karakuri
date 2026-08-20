@@ -186,11 +186,17 @@ pub enum SetError {
          deformations after it"
     )]
     PairingNotFirst { l2: String, at: usize },
-    /// A pairing L2 in a Set that does not hold exactly two sources.
+    /// An L2 with a geometry slot, in a Set that does not hold exactly two
+    /// sources.
+    ///
+    /// **Two: the one the chain runs over, and the one the slot names.** Which
+    /// is which is the edge's answer now rather than `--set` order, but how
+    /// many there are is still this: a node declares one slot, and a Set with a
+    /// third geometry has one nothing reads and nothing draws.
     #[error(
-        "`{l2}` pairs two geometries and this Set has {sources}\n\
-         hint: name exactly two L1s — `--set A.kir,B.kir,{l2}.kir,L4.kir`. Naming which two \
-         of several is what a fan-in notation is for, and there is not one yet"
+        "`{l2}` takes a second geometry and this Set has {sources}\n\
+         hint: name exactly two L1s — the one the chain runs over and the one the slot is \
+         bound to. A third would be a source no node reads"
     )]
     PairingArity { l2: String, sources: usize },
     /// A pairing L2 over a source that compacts.
@@ -230,6 +236,88 @@ pub enum SetError {
          `--capacity`, or declare the same default in both"
     )]
     PairingCapacity { l2: String, a: u32, b: u32 },
+    /// **A declared geometry slot that nothing in this Set binds.**
+    ///
+    /// Refused, and this is the refusal the whole notation is for. The rule it
+    /// replaced was "there is exactly one, so it needs no name", which is
+    /// exactly what capped fan-in at one — so filling an unbound slot from
+    /// whatever geometry happened to be lying around would put that rule back
+    /// under a new spelling. A procedure says what it needs; the Set says what
+    /// fills it; neither guesses.
+    #[error(
+        "`{node}` uses a geometry it calls `{slot}`, and nothing in this Set says which one\n\
+         hint: bind it — `--edge {node}.{slot}=<geometry>`. This Set holds: {holds}"
+    )]
+    SlotUnbound {
+        node: String,
+        slot: String,
+        holds: String,
+    },
+    /// An edge naming a slot the node it addresses does not declare.
+    ///
+    /// **The node is in this Set, so the statement is about it and is wrong.**
+    /// An edge whose *node* names nothing here is a different matter — it is a
+    /// statement about another Set, and is passed over rather than refused, on
+    /// the same terms a `--param` naming a node this Set has not got is.
+    #[error(
+        "`{node}` declares no geometry called `{slot}`\n\
+         hint: an edge names a slot the procedure declared with `uses {slot} : Geometry`{declares}"
+    )]
+    NoSuchSlot {
+        node: String,
+        slot: String,
+        /// What it does declare, ready to be appended — empty where it declares
+        /// nothing, since "and it declares none" reads better as silence than
+        /// as an empty list.
+        declares: String,
+    },
+    /// An edge whose far end names no node of this Set.
+    #[error(
+        "`{node}.{slot}` is bound to `{to}`, which is not a node of this Set\n\
+         hint: this Set holds: {holds}"
+    )]
+    EdgeToUnknown {
+        node: String,
+        slot: String,
+        to: String,
+        holds: String,
+    },
+    /// An edge whose far end names a node that is not geometry.
+    ///
+    /// A slot declared `: Geometry` takes an L1, and nothing else in a Set has
+    /// elements to read. A deformer has a buffer, but reading it would be
+    /// reading whatever instant the chain had reached — which is the same
+    /// reason a slot has to be bound at the head of the chain.
+    #[error(
+        "`{node}.{slot}` is bound to `{to}`, which is {layer}\n\
+         hint: a slot declared `: Geometry` takes an L1 — the sources in this Set are: {sources}"
+    )]
+    EdgeToNotGeometry {
+        node: String,
+        slot: String,
+        to: String,
+        /// What the bound node is, article and all — "an L2", say. One field
+        /// rather than two so that this variant stays under the size at which
+        /// every `Result<_, SetError>` in the crate starts being reported as
+        /// carrying a large error.
+        layer: &'static str,
+        sources: String,
+    },
+    /// Two edges binding one slot.
+    ///
+    /// Refused rather than last-one-wins, on [`SetError::DuplicateNodeName`]'s
+    /// terms: a slot is one input and two answers to which geometry fills it is
+    /// two different pictures, one of which is being discarded in silence.
+    #[error(
+        "`{node}.{slot}` is bound twice, to `{first}` and to `{second}`\n\
+         hint: a slot is one input — remove one of the edges"
+    )]
+    SlotBoundTwice {
+        node: String,
+        slot: String,
+        first: String,
+        second: String,
+    },
     /// A Set with no geometry at all.
     ///
     /// **Refused for the same reason an empty renderer list is**: a Set is a
@@ -402,19 +490,30 @@ pub(crate) struct Source {
     /// which the same paragraph licenses: *where it came from stops mattering
     /// once it is recorded*.
     salt: u32,
+    /// **Which L1 procedure each of this source's simulations is**, as an index
+    /// into the list the Set was built from, near one first.
+    ///
+    /// Recorded rather than assumed, because the assumption stopped holding: a
+    /// Set used to draw `l1s[0]` and read `l1s[1]`, so walking the simulations
+    /// and walking the procedures were the same walk. An `edge` names which
+    /// geometry fills the slot, so the far one may be the first in the list —
+    /// and everything addressed at `L1:<n>` means the *procedure's* ordinal.
+    procedures: Vec<usize>,
     /// **The L1 node.** Every buffer, pipeline and bind group the simulation
     /// needs, and the spawn accumulator that decides what it creates.
     sim: Simulation,
-    /// **The paired geometry**, for a Set whose chain begins with a `pairs` L2.
+    /// **The far geometry**, for a Set whose chain begins with an L2 that
+    /// declares a `uses` slot — and *which* geometry it is came from the
+    /// [`Edge`] that bound the slot, not from a position in the list.
     ///
     /// It belongs to this source rather than being one of its own, and that is
-    /// what answers "is the second geometry drawn?" by construction: a pairing
-    /// Set has one `Source`, one chain and one set of renderers, and the second
-    /// simulation feeds the pairing node and nothing else.
+    /// what answers "is the second geometry drawn?" by construction: such a Set
+    /// has one `Source`, one chain and one set of renderers, and the far
+    /// simulation feeds that node and nothing else.
     ///
-    /// `Option` rather than a list, because the language says two: a pairing L2
-    /// takes two geometries, and naming several is what a fan-in notation is
-    /// for.
+    /// `Option` rather than a list, because the language says one slot per
+    /// node: a second `uses` is refused, and a node that took several would
+    /// need a bound buffer apiece.
     paired: Option<Simulation>,
     /// **The L2 nodes, in chain order**, instantiated for this source. Each
     /// reads what the one before it wrote and writes its own buffer, so the
@@ -614,7 +713,38 @@ pub enum PublishError {
     DuplicateName(String),
 }
 
-/// What a caller calls each node of a Set it is building.
+/// **One binding of a procedure's declared input slot to a node of this Set.**
+///
+/// `uses far : Geometry` says what a procedure takes and refuses to say where
+/// it comes from — a `.kir` that named a node would be coupled to one Set and
+/// would stop being a library part. This is the other half, and it belongs
+/// where the *use* is recorded: an `edge` record in a Set file, written from
+/// the command line as `--edge morph.far=sphere_shell`.
+///
+/// **Both ends are names**, because that is what a Set has to point with: an
+/// address moves when the list is reordered, which is the property that made
+/// `--set` order an unwritable answer in the first place. Every node has a name
+/// whether or not one was written — see [`Set::node_names`] — so both ends
+/// always resolve to something.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Edge {
+    /// The node that declares the slot.
+    pub node: String,
+    /// What that node's procedure calls the slot, from its `uses` declaration.
+    pub slot: String,
+    /// The node bound to it.
+    pub to: String,
+}
+
+/// What a caller decided about the nodes of a Set it is building: what each one
+/// is called, and which node fills each declared input slot.
+///
+/// **Names and edges travel together because neither is answerable alone.** An
+/// edge is written in terms of names, and a name nobody wrote is derived here
+/// rather than in a caller — so a caller that supplied the two apart would be
+/// resolving one against a spelling it does not have. They are also the same
+/// *kind* of fact: the Set's answer rather than the file's, restated on every
+/// rebuild for the reason `Request::bindings` gives.
 ///
 /// **Per layer, in the same shape the procedures themselves are passed in.** The
 /// node *order* belongs to [`Set::build_many`] — `slot_of` and `nodes_of` decide
@@ -627,12 +757,21 @@ pub enum PublishError {
 /// would be two places for one fact; ask [`Set::node_names`] for what a node
 /// ended up called.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct NodeNames<'a> {
+pub struct Wiring<'a> {
     pub l1s: &'a [Option<String>],
     pub l2s: &'a [Option<String>],
     pub l3: Option<&'a str>,
     pub l4s: &'a [Option<String>],
     pub field: Option<&'a str>,
+    /// **Every edge the caller was given, including ones about other Sets.**
+    ///
+    /// A deck is several Sets and a flag is one command line, so an edge naming
+    /// a node this Set has not got is a statement about a different one and is
+    /// passed over — the same rule a `--param` addressed at a node this Set has
+    /// not got follows. What is *not* passed over is an edge whose node is
+    /// here: then the statement is about this Set and every part of it has to
+    /// resolve.
+    pub edges: &'a [Edge],
 }
 
 /// The first value that appears twice, if any.
@@ -704,7 +843,7 @@ impl Set {
             &[],
             // A pair names nothing, so both nodes are called what their
             // procedures are.
-            NodeNames::default(),
+            Wiring::default(),
         )
     }
 
@@ -730,12 +869,14 @@ impl Set {
     // struct would be a second spelling of "the nodes of a Set", which is what
     // the Set being returned already is. Three more are what a caller knows
     // about the nodes it is handing over rather than about the nodes
-    // themselves: how they layer, what they are salted with, what they are
-    // called.
+    // themselves: how they layer, what they are salted with, and how they are
+    // wired — what each is called and which of them fills each declared input
+    // slot, which travel together as one [`Wiring`] because an edge is written
+    // in terms of the names beside it.
     /// **`salts` is one hash salt per geometry, and only what was assigned.**
     /// A `None` — or an entry past the end — is a source nobody salted, and
     /// [`derived_salt`] gives it one from `seed_salt` and its ordinal. Same
-    /// rule as [`NodeNames`] and for the same reason: a caller supplies what it
+    /// rule as [`Wiring`] and for the same reason: a caller supplies what it
     /// knows, and what it did not supply is filled in here rather than in two
     /// places at once. `seed_salt` stays because it is still the Set's own —
     /// what an L3 reads, and what an unsalted source is derived from.
@@ -769,11 +910,11 @@ impl Set {
         layering: Layering,
         seed_salt: u32,
         salts: &[Option<u32>],
-        names: NodeNames<'_>,
+        wiring: Wiring<'_>,
     ) -> Result<Set, SetError> {
         device.push_error_scope(wgpu::ErrorFilter::Validation);
         let built = Set::build_inner(
-            device, queue, l1s, l2s, l3, field, l4s, layering, seed_salt, salts, names,
+            device, queue, l1s, l2s, l3, field, l4s, layering, seed_salt, salts, wiring,
         );
         // **Popped on every path**, which is why the body is a second function
         // rather than this one: it returns early in a dozen places, and a scope
@@ -812,7 +953,7 @@ impl Set {
         layering: Layering,
         seed_salt: u32,
         salts: &[Option<u32>],
-        names: NodeNames<'_>,
+        wiring: Wiring<'_>,
     ) -> Result<Set, SetError> {
         let Some(&(first_l1, _)) = l1s.first() else {
             return Err(SetError::NoGeometry);
@@ -829,39 +970,194 @@ impl Set {
                 max: crate::deck::MAX_SLOTS,
             });
         }
-        // **A pairing chain is one source made of two simulations**, not two
-        // sources: the second feeds the pairing node and nothing else, which is
-        // what makes "is it drawn?" a question with no place to be asked.
-        let pairing = l2s.iter().position(|n| n.pairs);
-        if let Some(at) = pairing {
-            if at != 0 {
-                return Err(SetError::PairingNotFirst {
-                    l2: l2s[at].name.clone(),
-                    at,
-                });
-            }
-            if l1s.len() != 2 {
-                return Err(SetError::PairingArity {
-                    l2: l2s[at].name.clone(),
-                    sources: l1s.len(),
-                });
-            }
-            for (l1, _) in l1s {
-                if !l1.is_static() {
-                    return Err(SetError::PairingNotStatic {
-                        l2: l2s[at].name.clone(),
-                        l1: l1.name.clone(),
-                    });
+        // **Names first, because the edges are written against them.** A name
+        // arrives per layer,
+        // because the node *order* is this function's own — `slot_of` and
+        // `nodes_of` decide it — and a caller that laid the names out in node
+        // order would be the second place that fact lives. This file has paid
+        // for that twice.
+        //
+        // A procedure's own declared name where nothing named the node, so
+        // every node has one: a node nothing can address is a node nothing can
+        // point a mask, a `--param` or a rebuild at.
+        let given = |at: usize, from: &[Option<String>]| from.get(at).cloned().flatten();
+        let wanted: Vec<(Option<String>, &Checked)> = l1s
+            .iter()
+            .enumerate()
+            .map(|(at, (l1, _))| (given(at, wiring.l1s), *l1))
+            .chain(
+                l2s.iter()
+                    .enumerate()
+                    .map(|(at, n)| (given(at, wiring.l2s), *n)),
+            )
+            .chain(l3.map(|n| (wiring.l3.map(str::to_string), n)))
+            .chain(
+                l4s.iter()
+                    .enumerate()
+                    .map(|(at, n)| (given(at, wiring.l4s), *n)),
+            )
+            .chain(field.map(|n| (wiring.field.map(str::to_string), n)))
+            .collect();
+        // **Every written name is taken first, and the rest are derived
+        // against what is already taken.** Doing it in one pass would let a
+        // derived `lens` claim the name a written one further down the list
+        // asked for, and the written one is the address somebody chose.
+        let mut taken: Vec<String> = wanted.iter().filter_map(|(n, _)| n.clone()).collect();
+        if let Some(dup) = first_duplicate(&taken) {
+            return Err(SetError::DuplicateNodeName { name: dup });
+        }
+        let names: Vec<String> = wanted
+            .into_iter()
+            .map(|(name, node)| match name {
+                Some(written) => written,
+                // **Derived here and nowhere else.** A procedure's name is a
+                // *type* name — two renderers over one field are two nodes and
+                // one `proc lens` — so the second use is told apart the way
+                // `scratch` tells two files with one basename apart. Deriving
+                // it in a caller as well would be the second place a fact
+                // lives, which is the shape this file has been wrong about
+                // twice; a caller that wants to know what a node ended up
+                // called asks [`Set::node_names`].
+                None => {
+                    let mut candidate = node.name.clone();
+                    let mut at = 1;
+                    while taken.contains(&candidate) {
+                        at += 1;
+                        candidate = format!("{}-{at}", node.name);
+                    }
+                    taken.push(candidate.clone());
+                    candidate
                 }
-            }
-            if l1s[0].1 != l1s[1].1 {
-                return Err(SetError::PairingCapacity {
-                    l2: l2s[at].name.clone(),
-                    a: l1s[0].1,
-                    b: l1s[1].1,
+            })
+            .collect();
+
+        // **What a name points at**, over the list just derived: node order is
+        // the geometries, the deformers, the camera, the renderers, the field,
+        // so a name found below `l1s.len()` is a geometry and one at
+        // `l1s.len() + k` is the k-th deformer. Asked here rather than through
+        // [`Set::node_named`], which wants a built Set and there is not one yet.
+        let node_at = |name: &str| names.iter().position(|n| n == name);
+        let geometry_at = |name: &str| node_at(name).filter(|at| *at < l1s.len());
+        let holds = || names.join(", ");
+        let sources = || names[..l1s.len()].join(", ");
+
+        // **Every edge whose node is in this Set has to resolve.** One whose
+        // node is not is a statement about another Set of the deck — a flag is
+        // one command line and a deck is several Sets — and is passed over on
+        // the terms a `--param` addressed at an absent node already follows.
+        for edge in wiring.edges {
+            let Some(at) = node_at(&edge.node) else {
+                continue;
+            };
+            let declares = (at >= l1s.len() && at < l1s.len() + l2s.len())
+                .then(|| l2s[at - l1s.len()].uses.as_deref())
+                .flatten();
+            if declares != Some(edge.slot.as_str()) {
+                return Err(SetError::NoSuchSlot {
+                    node: edge.node.clone(),
+                    slot: edge.slot.clone(),
+                    declares: match declares {
+                        Some(name) => format!("; `{}` declares `{name}`", edge.node),
+                        None => String::new(),
+                    },
                 });
             }
         }
+
+        // **A chain with a geometry slot is one source made of two
+        // simulations**, not two sources: the far one feeds the slot and
+        // nothing else, which is what makes "is it drawn?" a question with no
+        // place to be asked.
+        let pairing = l2s.iter().position(|n| n.uses.is_some());
+        // **Which geometry the slot is bound to**, as an index into `l1s`.
+        // `None` where no node declares a slot. This used to be `l1s[1]` and
+        // was written nowhere at all — reordering the command line silently
+        // changed the picture, which is the whole reason an edge exists.
+        let far_at: Option<usize> = match pairing {
+            None => None,
+            Some(at) => {
+                let l2 = l2s[at];
+                let node = names[l1s.len() + at].clone();
+                let slot = l2
+                    .uses
+                    .clone()
+                    .expect("`pairing` is the position of a node that declares a slot");
+                if at != 0 {
+                    return Err(SetError::PairingNotFirst {
+                        l2: l2.name.clone(),
+                        at,
+                    });
+                }
+                if l1s.len() != 2 {
+                    return Err(SetError::PairingArity {
+                        l2: l2.name.clone(),
+                        sources: l1s.len(),
+                    });
+                }
+                let mut bound = wiring.edges.iter().filter(|e| e.node == node);
+                let Some(edge) = bound.next() else {
+                    return Err(SetError::SlotUnbound {
+                        node,
+                        slot,
+                        holds: holds(),
+                    });
+                };
+                if let Some(second) = bound.next() {
+                    return Err(SetError::SlotBoundTwice {
+                        node,
+                        slot,
+                        first: edge.to.clone(),
+                        second: second.to.clone(),
+                    });
+                }
+                let Some(far_at) = geometry_at(&edge.to) else {
+                    return Err(match node_at(&edge.to) {
+                        // In the Set and not a geometry: the layer it *is* is
+                        // the useful half of the sentence.
+                        Some(other) => SetError::EdgeToNotGeometry {
+                            node,
+                            slot,
+                            to: edge.to.clone(),
+                            layer: match other < l1s.len() + l2s.len() {
+                                true => "an L2",
+                                false => "a node that holds no elements",
+                            },
+                            sources: sources(),
+                        },
+                        None => SetError::EdgeToUnknown {
+                            node,
+                            slot,
+                            to: edge.to.clone(),
+                            holds: holds(),
+                        },
+                    });
+                };
+                for (l1, _) in l1s {
+                    if !l1.is_static() {
+                        return Err(SetError::PairingNotStatic {
+                            l2: l2.name.clone(),
+                            l1: l1.name.clone(),
+                        });
+                    }
+                }
+                // **The near side is whichever geometry the edge did not
+                // name**, which with two sources is exactly one. Not `l1s[0]`:
+                // the point of writing the edge down is that the list's order
+                // stops deciding anything, and a near side still read off
+                // position 0 would leave half the old rule in place.
+                let near_at = (0..l1s.len())
+                    .find(|at| *at != far_at)
+                    .expect("two sources, one of them bound");
+                if l1s[near_at].1 != l1s[far_at].1 {
+                    return Err(SetError::PairingCapacity {
+                        l2: l2.name.clone(),
+                        a: l1s[near_at].1,
+                        b: l1s[far_at].1,
+                    });
+                }
+                Some(far_at)
+            }
+        };
         for (l1, _) in l1s {
             if l1.kind != Kind::L1 {
                 return Err(SetError::WrongKind {
@@ -980,17 +1276,18 @@ impl Set {
         // instance: every source draws into the target its renderer owns, and
         // the first source is the one that clears it.
         let renderer_count = l4s.len();
-        // **Pairing collapses the list.** Two sources become one `Source` with
-        // two simulations in it, so the loop below runs once and everything
-        // under it — one chain, one set of renderers — is what a Set of one
-        // source has.
-        let heads: &[(&Checked, u32)] = match pairing {
-            None => l1s,
-            Some(_) => &l1s[..1],
-        };
+        // **A bound geometry collapses the list.** Two sources become one
+        // `Source` with two simulations in it, so the loop below runs once and
+        // everything under it — one chain, one set of renderers — is what a Set
+        // of one source has.
+        //
+        // **The drawn one is whichever the edge did not name.** Not position 0:
+        // an edge exists so that the order of the list decides nothing, and a
+        // head taken from position 0 would keep half of the rule this replaced.
+        let heads: Vec<usize> = (0..l1s.len()).filter(|at| Some(*at) != far_at).collect();
         // **Assigned where the caller had one, derived where it had none** —
-        // `salts` is indexed by geometry, so the far side of a pairing is at 1
-        // whether or not the loop below ever reaches that index.
+        // `salts` is indexed by geometry, and every geometry gets one whether
+        // it is drawn or read.
         let salt_of = |at: usize| -> u32 {
             salts
                 .get(at)
@@ -1001,11 +1298,15 @@ impl Set {
         // **What each geometry is actually salted with**, in `l1s` order, kept
         // so that whatever writes a Set file can record the value rather than
         // work it out a second time — see [`Set::source_salts`].
-        let mut source_salts: Vec<u32> = Vec::with_capacity(l1s.len());
+        //
+        // In `l1s` order and not in the order the loop below builds them,
+        // because the order it builds them in is no longer the list's: with a
+        // slot bound to the first geometry the far side is built first.
+        let source_salts: Vec<u32> = (0..l1s.len()).map(salt_of).collect();
         let mut sources: Vec<Source> = Vec::with_capacity(heads.len());
-        for (at, &(l1, capacity)) in heads.iter().enumerate() {
+        for &at in &heads {
+            let (l1, capacity) = l1s[at];
             let salt = salt_of(at);
-            source_salts.push(salt);
             // **The plan, before anything is built.**
             //
             // A consumed attribute nothing emits used to be an unconditional error.
@@ -1189,16 +1490,17 @@ impl Set {
 
             let sim = Simulation::build(device, l1, capacity, salt, &derived, field_shader)?;
 
-            // **The paired geometry is built with the same `derived` list**, and
-            // that is not a convenience: the pairing node addresses its buffer
-            // with a struct generated from this list, so a far side built with a
+            // **The far geometry is built with the same `derived` list**, and
+            // that is not a convenience: the node addresses its buffer with a
+            // struct generated from this list, so a far side built with a
             // different one is a struct that disagrees about every offset past
             // the first derived slot. It read the wrong bytes and the picture
             // went black, which is the quietest way that can go wrong.
-            let paired: Option<(Vec<karakuri_ir::Attr>, Simulation)> = match pairing {
+            let paired: Option<(Vec<karakuri_ir::Attr>, Simulation)> = match far_at {
                 None => None,
-                Some(at) => {
-                    let (far, far_capacity) = l1s[1];
+                Some(far_at) => {
+                    let at = pairing.expect("a bound geometry is a node that declared a slot");
+                    let (far, far_capacity) = l1s[far_at];
                     // A rule the far side cannot support is refused here rather
                     // than producing a slot nothing fills: `velocity` is derived
                     // from `position`, and a geometry emitting neither has
@@ -1216,11 +1518,10 @@ impl Set {
                             });
                         }
                     }
-                    // **The second geometry's own**, on the same terms as the
-                    // first: a pairing Set is two geometries and one `Source`,
-                    // and a Set file records a salt per geometry.
-                    let far_salt = salt_of(1);
-                    source_salts.push(far_salt);
+                    // **The far geometry's own**, on the same terms as the
+                    // near one: a Set with a slot bound is two geometries and
+                    // one `Source`, and a Set file records a salt per geometry.
+                    let far_salt = salt_of(far_at);
                     Some((
                         far.emit.clone(),
                         Simulation::build(
@@ -1268,22 +1569,21 @@ impl Set {
                         None => sim.geometry(),
                         Some(prev) => prev.geometry(alive, counts),
                     };
-                    // **The paired geometry, for the node that declares it.**
+                    // **The far geometry, for the node that declared a slot.**
                     // It reads a *simulation* rather than whatever reached this
-                    // position, which is why a pairing L2 has to be first in
-                    // the chain — refused above if it is not.
-                    let paired = paired.as_ref().filter(|_| l2.pairs);
-                    let other =
-                        paired.map(|(emits, sim): &(Vec<karakuri_ir::Attr>, Simulation)| {
-                            (emits.as_slice(), sim.geometry())
-                        });
+                    // position, which is why such a node has to be first in the
+                    // chain — refused above if it is not.
+                    let paired = paired.as_ref().filter(|_| l2.uses.is_some());
+                    let far = paired.map(|(emits, sim): &(Vec<karakuri_ir::Attr>, Simulation)| {
+                        (emits.as_slice(), sim.geometry())
+                    });
                     Deform::build(
                         device,
                         l2,
                         &upstream,
                         synthetic,
                         &derived,
-                        other.as_ref().map(|(a, g)| (*a, g)),
+                        far.as_ref().map(|(a, g)| (*a, g)),
                         field_shader,
                         &input,
                         chain_capacity,
@@ -1327,6 +1627,13 @@ impl Set {
             };
             sources.push(Source {
                 salt,
+                // **In the order `Set::prepare` walks the simulations**: the
+                // near one, then the far one where there is one. The two lists
+                // used to agree by construction, because the near side was
+                // always `l1s[0]`; an edge is what stopped them agreeing, and
+                // `--param L1:1:radius` still has to reach the procedure that
+                // declared `radius`.
+                procedures: std::iter::once(at).chain(far_at).collect(),
                 sim,
                 paired: paired.map(|(_, s)| s),
                 deforms,
@@ -1370,67 +1677,6 @@ impl Set {
             .chain(l4s.iter().map(|n| declared(n)))
             .chain(field.map(declared))
             .collect();
-        // **The third walk, and the reason it is a walk and not a list the
-        // caller handed over already in order.** A name arrives per layer,
-        // because the node *order* is this function's own — `slot_of` and
-        // `nodes_of` decide it — and a caller that laid the names out in node
-        // order would be the second place that fact lives. This file has paid
-        // for that twice.
-        //
-        // A procedure's own declared name where nothing named the node, so
-        // every node has one: a node nothing can address is a node nothing can
-        // point a mask, a `--param` or a rebuild at.
-        let given = |at: usize, from: &[Option<String>]| from.get(at).cloned().flatten();
-        let wanted: Vec<(Option<String>, &Checked)> = l1s
-            .iter()
-            .enumerate()
-            .map(|(at, (l1, _))| (given(at, names.l1s), *l1))
-            .chain(
-                l2s.iter()
-                    .enumerate()
-                    .map(|(at, n)| (given(at, names.l2s), *n)),
-            )
-            .chain(l3.map(|n| (names.l3.map(str::to_string), n)))
-            .chain(
-                l4s.iter()
-                    .enumerate()
-                    .map(|(at, n)| (given(at, names.l4s), *n)),
-            )
-            .chain(field.map(|n| (names.field.map(str::to_string), n)))
-            .collect();
-        // **Every written name is taken first, and the rest are derived
-        // against what is already taken.** Doing it in one pass would let a
-        // derived `lens` claim the name a written one further down the list
-        // asked for, and the written one is the address somebody chose.
-        let mut taken: Vec<String> = wanted.iter().filter_map(|(n, _)| n.clone()).collect();
-        if let Some(dup) = first_duplicate(&taken) {
-            return Err(SetError::DuplicateNodeName { name: dup });
-        }
-        let names: Vec<String> = wanted
-            .into_iter()
-            .map(|(name, node)| match name {
-                Some(written) => written,
-                // **Derived here and nowhere else.** A procedure's name is a
-                // *type* name — two renderers over one field are two nodes and
-                // one `proc lens` — so the second use is told apart the way
-                // `scratch` tells two files with one basename apart. Deriving
-                // it in a caller as well would be the second place a fact
-                // lives, which is the shape this file has been wrong about
-                // twice; a caller that wants to know what a node ended up
-                // called asks [`Set::node_names`].
-                None => {
-                    let mut candidate = node.name.clone();
-                    let mut at = 1;
-                    while taken.contains(&candidate) {
-                        at += 1;
-                        candidate = format!("{}-{at}", node.name);
-                    }
-                    taken.push(candidate.clone());
-                    candidate
-                }
-            })
-            .collect();
-
         let set = Set {
             names,
             seed_salt,
@@ -1730,17 +1976,26 @@ impl Set {
         }
         let range = self.nodes_of(binding.layer);
         let names: Vec<&[String]> = match binding.layer {
-            // **One entry per L1 *procedure***, which includes a paired
+            // **One entry per L1 *procedure***, which includes a far
             // geometry: it is an L1 with params of its own, and an operator
             // riding them is riding the far end of a morph.
-            Kind::L1 => self
-                .sources
-                .iter()
-                .flat_map(|s| {
-                    std::iter::once(s.sim.param_names())
-                        .chain(s.paired.iter().map(|p| p.param_names()))
-                })
-                .collect(),
+            //
+            // **Placed by the procedure's ordinal rather than appended**, for
+            // the reason `Source::procedures` exists: the order the simulations
+            // are walked in is not the order the procedures were given in once
+            // an edge decides which of them is the far one.
+            Kind::L1 => {
+                let mut out: Vec<&[String]> = vec![&[]; self.l1_count];
+                for source in &self.sources {
+                    for (k, sim) in std::iter::once(&source.sim)
+                        .chain(source.paired.iter())
+                        .enumerate()
+                    {
+                        out[source.procedures[k]] = sim.param_names();
+                    }
+                }
+                out
+            }
             // **One entry per L2 procedure, not per instance.** A chain is
             // instantiated once per source and the procedures are shared, so an
             // address names the procedure and the Set writes it to every
@@ -2399,11 +2654,17 @@ impl Set {
             // `None`, and the sphere collapsed to the origin — a picture with a
             // shape in it, drawn from a value nobody set.
             //
-            // The index walks the L1 procedures rather than the sources,
-            // because a pairing Set has two of the first and one of the second.
-            let mut at = 0usize;
+            // The index is the *procedure's*, read off the source rather than
+            // counted along with the walk: a Set whose slot is bound to the
+            // first geometry builds the far side first, so counting would hand
+            // each simulation the other one's map.
             for source in &mut self.sources {
-                for sim in std::iter::once(&mut source.sim).chain(source.paired.as_mut()) {
+                let procedures = source.procedures.clone();
+                for (k, sim) in std::iter::once(&mut source.sim)
+                    .chain(source.paired.as_mut())
+                    .enumerate()
+                {
+                    let at = procedures[k];
                     let own = &params[at];
                     let param = |name: &str| effective(bindings, own, Kind::L1, at, name);
                     let tick = crate::node::Tick {
@@ -2415,7 +2676,6 @@ impl Set {
                         field_value: &|name: &str| field_value(field_values, name),
                     };
                     sim.prepare(queue, &tick);
-                    at += 1;
                 }
             }
         }
@@ -3235,7 +3495,7 @@ proc dots {
             Layering::Overdraw,
             1,
             &[],
-            NodeNames::default(),
+            Wiring::default(),
         )
         .expect("a chain of one L1, one amplifying L2 and one L4");
 

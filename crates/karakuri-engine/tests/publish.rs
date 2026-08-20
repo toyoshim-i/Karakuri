@@ -92,7 +92,7 @@ fn build(gpu: &Gpu) -> Set {
         Layering::Overdraw,
         1,
         &[],
-        karakuri_engine::set::NodeNames::default(),
+        karakuri_engine::set::Wiring::default(),
     )
     .expect("one L1 and two L4s")
 }
