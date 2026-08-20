@@ -1655,6 +1655,23 @@ than against one being taught to.
 **Goal:** finding the right thing among two thousand artifacts is faster than generating a
 new one.
 
+**And a second goal this milestone turned out to have, which the first one hides.** Read
+through the Adds list, M4 adds no new pixels — no primitive, no blend, no material. That
+reading is wrong about what a milestone is for. **What changes is what can be done in front
+of an audience**: a morph that could be played and not edited, a chain that could be built
+and not kept, three layers of the language a model could not reach. The scene was always
+constructible; being able to *reach* it during a set is the thing, and it is worth stating
+because a feature table cannot show it.
+
+That is also the order to work in. The items below split into debts that are costing
+something today and capacity for a scale that has not arrived — twenty-one procedures and no
+generation loop is not two thousand artifacts. The first three, and variant pools, are the
+first kind. Thumbnails, embeddings and genealogy are the second, and they should be revived
+on evidence the way "Procedures a model can read" already was.
+
+**On the estimate below.** It was written when naming sat in M3. Naming is now the first work
+of this milestone, so read it as the *rest* of M4 rather than the whole of it.
+
 #### Naming what a Set holds
 
 **This is the graph compiler's authoring half, rescheduled out of M3, and it is the first
