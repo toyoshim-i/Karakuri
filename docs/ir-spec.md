@@ -2675,6 +2675,31 @@ rather than a constraint.
 
 #### Naming a source, on the terms HTML gives an `id`
 
+**Built, for every node and not only for a source.** `--set near=lattice_shell.kir,
+far=sphere_shell.kir,morph.kir,soft_points.kir` names two geometries, and the same spelling
+names an L2, an L3, a field or a renderer. What generalised it is that the argument below is
+about *use* rather than about geometry: a procedure used twice is two nodes whatever layer it
+sits on.
+
+**Every node has a name whether or not one was written**, which is where this ended up
+differing from the paragraph below. An unnamed *source* being unreferenceable is fine while
+the only thing that wants a name is a mask; it stops being fine when the name is also what a
+rebuild, an edit history and an MCP call address the node by — a node nothing can name is a
+node nothing can edit. So a name nobody wrote is derived from the procedure, disambiguated
+against what is already taken (`lattice_shell`, `lattice_shell-2`), and it is a real name from
+the moment it is recorded — which the paragraph above already licenses: *where it came from
+stops mattering once it is recorded*.
+
+Derived in one place, `Set::build_many`, and nowhere else. A caller that derived as well would
+be the second place one fact lives; `Set::node_names` is how anything else finds out what a
+node ended up called. Written names are taken first and derived ones fill in around them, or a
+derived name claims the one a written name further down the list asked for. Two *written*
+names that collide are refused, where two derived ones are told apart — a written name is an
+address somebody chose.
+
+What is **not** built is `source` itself: nothing carries the value a mask would compare, so
+naming a source and masking on one are still different distances away.
+
 A value nobody can write is a value nobody can mask on: `source == 0x8a3f21c4` is not
 something an author or a model produces. So a source that something wants to point at
 carries a **name**, and the mask is written against the name, resolved where the Set is
