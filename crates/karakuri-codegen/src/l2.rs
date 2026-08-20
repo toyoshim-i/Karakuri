@@ -75,10 +75,9 @@
 use karakuri_ir::typed::{Checked, TStmt, Target};
 use karakuri_ir::{Ambient, Attr, BlockKind, Kind};
 
-use crate::layout::{
-    self, binding, group, ElementLayout, Synthetic, UniformLayout, UniformLayoutBuilder,
-    WORKGROUP_SIZE,
-};
+use karakuri_ir::layout::{self as ir_layout, ElementLayout, Synthetic};
+
+use crate::layout::{self, binding, group, UniformLayout, UniformLayoutBuilder, WORKGROUP_SIZE};
 use crate::lower::{lower_expr, mangle_local, Resolver};
 use crate::prelude::{self, Requirements};
 use crate::ty::wgsl_ty;
@@ -141,7 +140,7 @@ pub fn generate_l2(
         "generate_l2 called on a non-L2 procedure"
     );
 
-    let in_layout = layout::generate_element_layout(upstream, synthetic, derived);
+    let in_layout = ir_layout::generate_element_layout(upstream, synthetic, derived);
     // **An amplifier is where `copy` starts existing**, and once it exists it
     // is carried by every node below — so this is an `||`, not an assignment.
     let out_synthetic = Synthetic {
@@ -159,7 +158,7 @@ pub fn generate_l2(
     let far_layout = far.map(|emits| {
         // The far side carries no `copy`: it is a *source*, and only an
         // amplifier below one puts that slot on an element.
-        layout::generate_element_layout(emits, Synthetic::NONE, derived)
+        ir_layout::generate_element_layout(emits, Synthetic::NONE, derived)
     });
     // Upstream order first, then whatever this node adds, so a chain's layouts
     // share a prefix and a reader that only wants `position` finds it at the
@@ -170,7 +169,7 @@ pub fn generate_l2(
             emits.push(attr);
         }
     }
-    let out_layout = layout::generate_element_layout(&emits, out_synthetic, derived);
+    let out_layout = ir_layout::generate_element_layout(&emits, out_synthetic, derived);
 
     let mut b = UniformLayoutBuilder::new();
     // **`t` and `beats` are here rather than in `StepArgs`.** An L1 is

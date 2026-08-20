@@ -29,13 +29,28 @@
 //! the kind of measurement stage 7's probe does for a whole procedure, just
 //! decomposed per builtin instead.
 //!
-//! `bytes_per_element` is simpler and not ordinal: it follows directly from
-//! the WGSL lowering section. Every emitted attribute gets a pair of storage
-//! buffers (prev/next), 16-byte aligned; `seed`, the alive flag, and the birth
-//! fraction are always allocated whether or not the procedure names them,
-//! because none of the three is nameable from IR.
+//! **There is no per-element byte figure here, and no version of this pass
+//! could have owned one.** Three of the inputs to the layout the engine
+//! actually allocates are settled after stage 4, and none of them is a rounding
+//! error: an L2's element struct is built from `upstream ∪ emit` rather than
+//! from its own `emit`, the `copy` slot is contributed by whichever amplifier
+//! sits *above* it in the chain, and a derivation's stored slot exists only
+//! because something *downstream* named the attribute. All three are properties
+//! of the Set, which is assembled two stages later — so a figure computed from
+//! one procedure is a floor for **every** kind rather than a measurement of
+//! any. `kaleidoscope` reported 96 bytes an element where its chain allocates
+//! 312, and `swirl_warp` 8 where it allocates 48.
+//!
+//! **The figure belongs to whatever does the allocating, and that is
+//! `karakuri-engine`.** A node there reports the size of the buffers it created,
+//! not a second expression that happens to agree with them, and a Set totals
+//! those over the capacities it was instantiated at — which is the question the
+//! number was always for, since `capacity` differs per node and an amplifier
+//! multiplies it downstream. Nothing is lost by its leaving: this pass rejects
+//! on `ops_per_element`, `ops_per_spawn` and `ops_per_fragment`, and there has
+//! never been a byte ceiling for such a figure to feed.
 
-use crate::ast::{BlockKind, Lit, Ty};
+use crate::ast::{BlockKind, Lit};
 use crate::builtin::Builtin;
 use crate::error::{IrError, IrResult};
 use crate::span::Span;
@@ -98,65 +113,6 @@ fn fragment_ceiling(checked: &Checked) -> u64 {
     } else {
         MAX_OPS_PER_FRAGMENT
     }
-}
-
-/// Every attribute buffer is 16-byte aligned per the WGSL lowering section.
-///
-/// **This model is stale and reports about 85% too much.** An element slot took
-/// its attribute's own width at WGSL's own offsets in `697557b`; this still pads
-/// every one to sixteen bytes and charges the alive flag thirty-two. For
-/// `drift_shell` it says 192 bytes an element where the buffers are 104.
-///
-/// **It is a second copy of an arithmetic that lives in
-/// `karakuri-codegen::layout`, and it drifted the moment that one moved** —
-/// which is the defect this repository has now paid for five times. The copy
-/// exists because `karakuri-codegen` depends on `karakuri-ir` and not the other
-/// way round, so the honest fix is to move the placement rules *down* into this
-/// crate and have the lowering read them, rather than to correct the numbers
-/// here and leave two copies that agree for a while.
-///
-/// Nothing gates on the figure today — it is printed, and `docs/ir-spec.md`
-/// writes it into a `perf` record that nothing yet reads — which is why the
-/// drift went unnoticed. M4's metadata file is what starts reading it. See
-/// `docs/roadmap.md`, "The cost estimator models a layout that no longer
-/// exists".
-const BUFFER_ALIGN: u32 = 16;
-
-const fn align16(bytes: u32) -> u32 {
-    bytes.div_ceil(BUFFER_ALIGN) * BUFFER_ALIGN
-}
-
-/// `seed`, the alive flag, and the birth fraction are always allocated per the
-/// lowering section, regardless of whether the procedure names them — none of
-/// the three is nameable from IR. Each is 4 bytes natively (a `uint`, a flag,
-/// and a `float`), padded to the buffer alignment, and double buffered like
-/// any emitted attribute.
-const ALWAYS_ALLOCATED_BYTES: u32 = align16(4) * 2 * 3;
-
-fn native_bytes(ty: Ty) -> u32 {
-    match ty {
-        Ty::Float | Ty::Int | Ty::Uint | Ty::Bool => 4,
-        Ty::Vec2 => 8,
-        Ty::Vec3 => 12,
-        Ty::Vec4 => 16,
-        Ty::Mat3 => 36,
-        Ty::Mat4 => 64,
-    }
-}
-
-fn storage_bytes(checked: &Checked) -> u32 {
-    // **A field has no element and therefore no per-element storage.** Without
-    // this it reported the unconditional slots every element carries, which is
-    // a number about a thing it does not have.
-    if checked.kind == crate::ast::Kind::Field {
-        return 0;
-    }
-    checked
-        .emit
-        .iter()
-        .fold(ALWAYS_ALLOCATED_BYTES, |total, attr| {
-            total + align16(native_bytes(attr.ty())) * 2
-        })
 }
 
 // ---------------------------------------------------------------------------
@@ -527,15 +483,6 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
     // an amplifying stage as for any other, and what makes a stage of factor 64
     // running an expensive body get refused for the reason it deserves rather
     // than sailing through at a sixty-fourth of its true cost.
-    //
-    // `bytes_per_element` multiplies for the same reason and stays as partial a
-    // figure as it always was — `storage_bytes` counts this node's own `emit`
-    // and doubles it for the two buffers an L1 has, and an amplifying L2 has
-    // neither property: three synthetic slots rather than two, and one buffer
-    // rather than two. It is wrong in both directions and nothing reads it,
-    // which is why it is left alone rather than half-corrected here: the figure
-    // wants an owner, and that owner is the memory budget a deck's residency
-    // question needs, not this function.
     let amplify = u64::from(checked.amplify.unwrap_or(1));
     let ops_per_element = ops_per_element.saturating_mul(amplify);
 
@@ -545,7 +492,6 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
         ops_per_fragment,
         ops_per_evaluation,
         field_calls,
-        bytes_per_element: storage_bytes(checked).saturating_mul(checked.amplify.unwrap_or(1)),
     };
 
     for (measured, ceiling, unit) in [

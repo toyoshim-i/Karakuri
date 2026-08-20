@@ -20,6 +20,7 @@ pub mod builtin;
 pub mod check;
 pub mod cost;
 pub mod error;
+pub mod layout;
 mod lexer;
 pub mod parse;
 pub mod span;

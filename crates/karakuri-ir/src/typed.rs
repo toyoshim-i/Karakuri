@@ -278,8 +278,6 @@ pub struct Cost {
     /// 0..48` is forty-eight evaluations, and only the pass that resolves loop
     /// bounds can say so.
     pub field_calls: FieldCalls,
-    /// Bytes of attribute storage per element, both buffers counted.
-    pub bytes_per_element: u32,
 }
 
 #[derive(Debug, Clone)]

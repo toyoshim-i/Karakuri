@@ -289,33 +289,6 @@ fn fbm_scales_with_octave_count() {
 }
 
 // ---------------------------------------------------------------------------
-// `bytes_per_element` counts both buffers and the always-allocated fields.
-// ---------------------------------------------------------------------------
-
-#[test]
-fn bytes_per_element_counts_double_buffers_and_always_allocated_fields() {
-    // No blocks at all: this test isolates byte accounting from op counting.
-    // emit position (vec3) and age (float).
-    let c = checked(vec![Attr::Position, Attr::Age], vec![]);
-
-    let cost = estimate(&c).expect("empty blocks cost nothing and never reject");
-    assert_eq!(cost.ops_per_element, 0);
-
-    // Every attribute buffer is 16-byte aligned per the lowering section:
-    //   position (vec3, 12 bytes) -> aligned 16, double buffered -> 32
-    //   age      (float, 4 bytes) -> aligned 16, double buffered -> 32
-    // seed, the alive flag, and the birth fraction are always allocated,
-    // each 4 native bytes -> aligned 16, double buffered -> 32 each -> 96.
-    let expected = 96 + 32 + 32;
-    assert_eq!(cost.bytes_per_element, expected);
-
-    // An attribute-free procedure still pays the always-allocated floor.
-    let empty = checked(vec![], vec![]);
-    let empty_cost = estimate(&empty).unwrap();
-    assert_eq!(empty_cost.bytes_per_element, 96);
-}
-
-// ---------------------------------------------------------------------------
 // A rejection's message carries both the estimate and the ceiling as numbers.
 // ---------------------------------------------------------------------------
 
@@ -533,5 +506,4 @@ fn a_fields_cost_is_per_evaluation_and_not_per_element() {
     assert_eq!(cost.ops_per_element, 0, "a field has no elements");
     assert_eq!(cost.ops_per_spawn, 0, "and nothing to spawn");
     assert_eq!(cost.ops_per_fragment, 0, "and covers no pixels");
-    assert_eq!(cost.bytes_per_element, 0, "and stores nothing per element");
 }

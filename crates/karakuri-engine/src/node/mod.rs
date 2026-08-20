@@ -70,7 +70,7 @@ pub(crate) use merge::Merge;
 pub(crate) use renderer::Renderer;
 pub(crate) use simulation::Simulation;
 
-use karakuri_codegen::layout::ElementLayout;
+use karakuri_ir::layout::ElementLayout;
 
 use crate::set::MAX_STEPS;
 

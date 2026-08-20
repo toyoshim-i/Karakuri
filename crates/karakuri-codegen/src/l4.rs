@@ -78,7 +78,9 @@ use std::collections::HashSet;
 use karakuri_ir::typed::{Checked, TBlock, TExpr, TExprKind, TStmt, Target};
 use karakuri_ir::{Ambient, Attr, Blend, BlockKind, Kind, Output, Topology};
 
-use crate::layout::{self, group, ElementLayout, UniformLayout, UniformLayoutBuilder};
+use karakuri_ir::layout::ElementLayout;
+
+use crate::layout::{self, group, UniformLayout, UniformLayoutBuilder};
 use crate::lower::{lower_expr, mangle_local, Resolver};
 use crate::prelude::{self, Requirements};
 use crate::ty::wgsl_ty;

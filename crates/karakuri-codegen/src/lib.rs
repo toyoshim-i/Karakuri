@@ -54,7 +54,7 @@ pub use l4::{generate_l4, L4Shader};
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
 
-use crate::layout::ElementLayout;
+use karakuri_ir::layout::ElementLayout;
 
 /// Dispatches on `checked.kind` and returns whichever of [`L1Shader`] /
 /// [`L4Shader`] applies.
@@ -623,9 +623,9 @@ mod tests {
 
     #[test]
     fn l4_quad_expansion_and_hsv_to_rgb_wiring() {
-        let elements = crate::layout::generate_element_layout(
+        let elements = karakuri_ir::layout::generate_element_layout(
             &[Attr::Position],
-            crate::layout::Synthetic::NONE,
+            karakuri_ir::layout::Synthetic::NONE,
             &[],
         );
         let shader = generate_l4(&l4_proc(), &elements, None);
