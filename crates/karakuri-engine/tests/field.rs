@@ -92,7 +92,7 @@ fn build(gpu: &Gpu, field: Option<&str>, l4: &str) -> Result<Set, SetError> {
         Layering::Overdraw,
         7,
         &[],
-        karakuri_engine::set::NodeNames::default(),
+        karakuri_engine::set::Wiring::default(),
     )?;
     set.resize(&gpu.device, W, H);
     set.camera = karakuri_engine::camera::Orbit {
@@ -276,7 +276,7 @@ fn two_renderers_in_one_set_agree_on_the_fields_value() {
         Layering::Overdraw,
         7,
         &[],
-        karakuri_engine::set::NodeNames::default(),
+        karakuri_engine::set::Wiring::default(),
     )
     .expect("two renderers over one field");
     both.resize(&gpu.device, W, H);

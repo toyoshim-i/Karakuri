@@ -696,6 +696,32 @@ pub struct AmplifyDecl {
     pub span: Span,
 }
 
+/// `uses <name> : Geometry`
+///
+/// **L2 only: a second geometry this node takes, named by the procedure and
+/// bound by the Set.**
+///
+/// The name is the *procedure's own*, exactly as `consumes position` names an
+/// attribute without naming which L1 supplies it. That is what keeps a `.kir` a
+/// library part: a file that named a node would be coupled to one Set and could
+/// not be used in another. Which geometry fills the slot is written where the
+/// use is recorded — an `edge` in the Set file, `--edge <node>.<slot>=<geometry>`
+/// on the command line — and an unbound slot is refused rather than filled in
+/// from whatever happened to be lying around.
+///
+/// The type is `Geometry` and there is nothing else it can be yet. It is written
+/// anyway, and refused when it is anything else, because a slot that takes a
+/// camera or a field is the next thing this notation is for and a declaration
+/// with no type in it would have to grow one incompatibly.
+#[derive(Debug, Clone)]
+pub struct UsesDecl {
+    pub name: String,
+    /// The name alone, so a refusal about what it collides with points at it
+    /// rather than at the whole declaration.
+    pub name_span: Span,
+    pub span: Span,
+}
+
 /// One `proc`, which is one file and fills one slot.
 #[derive(Debug, Clone)]
 pub struct Proc {
@@ -707,9 +733,7 @@ pub struct Proc {
     pub capacity: Option<CapacityDecl>,
     /// L2 only.
     pub amplify: Option<AmplifyDecl>,
-    /// **L2 only: this modulator takes two geometries and produces one.**
-    ///
-    /// The span of the `pairs` keyword, so a refusal can point at it.
+    /// **L2 only: the named geometry inputs this procedure declares.**
     ///
     /// `L2 : Geometry -> Geometry` is an endomorphism, which is what makes a
     /// chain stackable — and this breaks it in the second of the two possible
@@ -718,12 +742,12 @@ pub struct Proc {
     /// one out. Both stay in the same slot position and both are declared in the
     /// header, because what a `deform` writes is decided before it runs.
     ///
-    /// **This is the system's first fan-in.** What it does not bring is a
-    /// general notation for one: which two geometries is the `--set` list's
-    /// order, and a Set holding a `pairs` L2 has exactly two sources. Naming
-    /// several is what a real fan-in notation is for, and it arrives with the
-    /// thing that needs it.
-    pub pairs: Option<Span>,
+    /// **A list here and at most one after the check.** The parser collects
+    /// every `uses` so that a second one is refused with a sentence about what
+    /// is missing rather than silently overwriting the first — see
+    /// `check_header`. This is the system's first *named* fan-in, and the
+    /// notation is what the rest of it will be spelled with.
+    pub uses: Vec<UsesDecl>,
     /// L4 only.
     pub blend: Option<Blend>,
     pub params: Vec<Param>,

@@ -40,6 +40,9 @@ enum Key {
     Bind(Layer, Option<u32>, String),
     Camera,
     Seed(Layer, u32),
+    /// A node and the slot of it being bound — the two halves of what an edge
+    /// is *about*, where the node it is bound *to* is what the edge says.
+    Edge(String, String),
     Src(Hash, u32),
     /// An unfoldable line (currently only `Record::Unknown`), identified by
     /// its position in the input so it never coalesces with another.
@@ -98,6 +101,12 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         // onto one seed is two geometries salted alike, which is the one thing
         // salting exists to prevent.
         Record::Seed { stream, index, .. } => Some(Key::Seed(*stream, *index)),
+        // **By the slot it fills and not by what fills it**, which is the same
+        // reason a `slot` record folds by its address rather than by its name:
+        // rebinding a slot in a session is one slot with a later answer, and a
+        // fold keyed by the far end would keep both and describe a node with
+        // two inputs it never had.
+        Record::Edge { node, slot, .. } => Some(Key::Edge(node.clone(), slot.clone())),
         Record::Src { hash, line, .. } => Some(Key::Src(*hash, *line)),
         Record::Tick { .. }
         | Record::Audio { .. }

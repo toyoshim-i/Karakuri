@@ -89,21 +89,15 @@ impl Deform {
         upstream: &[Attr],
         synthetic: Synthetic,
         derived: &[Attr],
-        // The paired geometry, for a `pairs` L2 — its attribute list and the
-        // edge it reads. `None` for every other L2.
-        other: Option<(&[Attr], &Geometry<'_>)>,
+        // The far geometry, for an L2 that declares a `uses` slot — its
+        // attribute list and the edge it reads. `None` for every other L2, and
+        // *which* geometry it is was settled where the Set resolved the edge.
+        far: Option<(&[Attr], &Geometry<'_>)>,
         field: Option<&karakuri_codegen::field::FieldShader>,
         input: &Geometry<'_>,
         capacity: u32,
     ) -> Result<Deform, SetError> {
-        let shader = generate_l2(
-            l2,
-            upstream,
-            synthetic,
-            derived,
-            other.map(|(a, _)| a),
-            field,
-        );
+        let shader = generate_l2(l2, upstream, synthetic, derived, far.map(|(a, _)| a), field);
         // **The output capacity, and it is what everything below this node is
         // sized and dispatched against.** Saturating rather than wrapping: the
         // checker caps a single factor, a Set caps its own capacity, and a chain
@@ -183,14 +177,14 @@ impl Deform {
         // **The alive flags are read and never written.** An L2 cannot `kill()`,
         // so liveness passes through untouched — the node's output shares the
         // very buffer its input came with.
-        // **The paired geometry joins the input group**, because that is what
+        // **The far geometry joins the input group**, because that is what
         // it is: a second input edge, read and never written.
         let mut src_entries = vec![
             storage(binding::ELEMENT, true),
             storage(binding::ALIVE, true),
         ];
-        if other.is_some() {
-            src_entries.push(storage(binding::OTHER, true));
+        if far.is_some() {
+            src_entries.push(storage(binding::FAR, true));
         }
         let src_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("L2 src"),
@@ -261,13 +255,13 @@ impl Deform {
                     resource: input.alive[parity].as_entire_binding(),
                 },
             ];
-            if let Some((_, geometry)) = other {
-                // **The paired source's own parity**, which is the same one:
+            if let Some((_, geometry)) = far {
+                // **The far source's own parity**, which is the same one:
                 // both sources are static — no spawn, no kill, so no compaction
                 // — and a static simulation's parity walks with the step count
                 // exactly as this one's does.
                 entries.push(wgpu::BindGroupEntry {
-                    binding: binding::OTHER,
+                    binding: binding::FAR,
                     resource: geometry.elements[parity].as_entire_binding(),
                 });
             }

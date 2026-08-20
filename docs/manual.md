@@ -619,32 +619,48 @@ without an address reaches every procedure declaring the name.
 
 ### Morphing one geometry into another
 
-An L2 with `pairs` on its header takes **two** geometries and produces one, matching their
-elements by slot index:
+An L2 that declares `uses far : Geometry` takes **two** geometries and produces one, matching
+their elements by slot index:
 
 ```
 karakuri-cli --param L2:0:k=0.5 \
-  --set lattice_shell.kir,sphere_shell.kir,morph.kir,soft_points.kir
+  --set lattice_shell.kir,far=sphere_shell.kir,morph.kir,soft_points.kir \
+  --edge morph.far=far
 ```
 
+**Two halves, and they are deliberately apart.** `morph.kir` says it takes a geometry it
+calls `far` and never says which one — a `.kir` that named a node would be tied to one Set
+and could be used in no other. `--edge morph.far=far` is where you say which: the node with
+the slot on the left of the `.`, the slot after it, the geometry it is bound to after the
+`=`. The name on the right is a node's — one you wrote with `far=sphere_shell.kir`, or the
+one derived from the procedure when you wrote none, which is `sphere_shell` here.
+
+**An unbound slot is refused**, with a sentence naming the slot and listing what the Set
+holds. There is no "if there's exactly one, use it": that rule is what used to make the far
+geometry `--set` position 1, written down nowhere, so reordering the command line changed the
+picture in silence.
+
 `k` is an ordinary `param`, so a fader, a signal binding, a transition and a published control
-all reach it. At 0 you see the first geometry, at 1 the second, and in between every element
-is on its way.
+all reach it. At 0 you see the geometry the chain runs over, at 1 the one the edge names, and
+in between every element is on its way.
 
 **Both sources have to be still.** No `spawn` block and no `kill()` in either — a spawn
 allocates and a kill compacts, and after a compaction element 5 of one geometry is not
 element 5 of the other, so the pairing would match each element with a stranger. The Set
 refuses the pair by name rather than drawing that.
 
-They also have to be the same size, and the far one is **never drawn on its own**: a pairing
+They also have to be the same size, and the bound one is **never drawn on its own**: such a
 Set is one geometry made of two simulations, with one chain and one set of renderers over it.
+Which one is drawn is whichever the edge did not name, so the order the files are listed in
+decides nothing.
+
+`--save-set` writes the edge into the Set file as an `edge` record and `--load-set` reads it
+back, so a morph is a Set you can keep.
 
 **What is not there yet is treating them differently.** A mask on which source an element
-came from wants a way to *name* a source. A name is written where the source is used —
-`--set far=sphere_shell.kir,…` — and a Set file records it on the node's `slot`, so the
-half that was missing is the reading: nothing points at a node by name yet, and a load says
-so rather than pretending. Until then the two are merged and drawn, and telling them apart is
-done by giving them different `.kir` files.
+came from wants a `source` attribute to compare, and nothing carries one — so until then the
+two are merged and drawn, and telling them apart is done by giving them different `.kir`
+files.
 
 ### A shape in a file of its own
 

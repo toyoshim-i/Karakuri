@@ -280,8 +280,8 @@ fn emit_stmts(
 
 fn scan_expr(e: &TExpr, seed: &mut bool, copy: &mut bool, attrs: &mut HashSet<Attr>) {
     match &e.kind {
-        TExprKind::Other(_) => {
-            unreachable!("`other` is a `pairs` L2's, and an L4 cannot declare one")
+        TExprKind::Far(_) => {
+            unreachable!("a far read belongs to an L2 with a `uses` slot, and an L4 has none")
         }
         TExprKind::Attr(a) => {
             attrs.insert(*a);

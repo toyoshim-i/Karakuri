@@ -100,8 +100,15 @@ pub struct L2Shader {
     /// [`L2Shader::emits`] for the same reason — the next node in the chain
     /// compiles against this node's buffer and has to name the same fields.
     pub synthetic: Synthetic,
-    /// Whether this node pairs, so the engine knows to bind a second geometry.
-    pub pairs: bool,
+    /// **Whether this node takes a second geometry**, so the engine knows to
+    /// bind one — `uses <name> : Geometry` on the header.
+    ///
+    /// A flag rather than the name, because by here the name has done its work:
+    /// it decided which spellings in the `deform` were reads of the far side,
+    /// and the buffer it addresses is this node's one extra input either way.
+    /// **Which** geometry fills it is the Set's answer and never appears in a
+    /// shader at all.
+    pub uses: bool,
     /// The declared `amplify` factor, echoed back so the engine sizes the
     /// output buffer from the same number the shader loops to. `None` is the
     /// endomorphism, which shares its input's liveness and counts and allocates
@@ -121,11 +128,11 @@ pub fn generate_l2(
     upstream: &[Attr],
     synthetic: Synthetic,
     derived: &[Attr],
-    // What the **paired** geometry emits, for a `pairs` L2. `None` for every
-    // other L2, and `Some` exactly when `checked.pairs` — passed rather than
-    // derived because it is another source's list and this procedure cannot
-    // know it.
-    other: Option<&[Attr]>,
+    // What the **far** geometry emits, for an L2 that declares a `uses` slot.
+    // `None` for every other L2, and `Some` exactly when `checked.uses` —
+    // passed rather than derived because it is another source's list and this
+    // procedure cannot know it.
+    far: Option<&[Attr]>,
     field: Option<&crate::field::FieldShader>,
 ) -> L2Shader {
     assert_eq!(
@@ -140,17 +147,17 @@ pub fn generate_l2(
     let out_synthetic = Synthetic {
         copy: synthetic.copy || checked.amplify.is_some(),
     };
-    // **The paired geometry's own layout.** Two sources need not emit the same
+    // **The far geometry's own layout.** Two sources need not emit the same
     // attributes — each chain instance is compiled against the source it runs
     // over — so this is a second struct rather than a second view of the first.
     debug_assert_eq!(
-        checked.pairs,
-        other.is_some(),
-        "`{}` declares `pairs` and was handed no paired geometry, or the reverse",
+        checked.uses.is_some(),
+        far.is_some(),
+        "`{}` declares a geometry slot and was handed no geometry for it, or the reverse",
         checked.name
     );
-    let other_layout = other.map(|emits| {
-        // The paired side carries no `copy`: it is a *source*, and only an
+    let far_layout = far.map(|emits| {
+        // The far side carries no `copy`: it is a *source*, and only an
         // amplifier below one puts that slot on an element.
         layout::generate_element_layout(emits, Synthetic::NONE, derived)
     });
@@ -197,7 +204,7 @@ pub fn generate_l2(
     let (uniform_layout, uniform_pad_f32) = b.finish();
 
     let resolver = L2Resolver {
-        pairs: checked.pairs,
+        uses: checked.uses.is_some(),
         has_copy: out_synthetic.copy,
         derived: out_layout.derived.clone(),
     };
@@ -266,13 +273,19 @@ pub fn generate_l2(
         group::PREV,
         binding::ALIVE,
     ));
-    if let Some(layout) = &other_layout {
+    if let Some(layout) = &far_layout {
         src.push('\n');
-        layout::write_element_struct_named(&mut src, "ElementOther", layout);
+        layout::write_element_struct_named(&mut src, "ElementFar", layout);
+        // **`far` and not the slot's name.** A generated identifier is this
+        // module's, and the author's spelling has already done its work in the
+        // checker — naming the buffer after the slot would put a name a `.kir`
+        // chose into WGSL, where it could collide with anything the generator
+        // emits. User names are mangled for exactly that reason; see
+        // `lower::mangle_local`.
         src.push_str(&format!(
-            "@group({}) @binding({}) var<storage, read> other: array<ElementOther>;\n",
+            "@group({}) @binding({}) var<storage, read> far: array<ElementFar>;\n",
             group::PREV,
-            binding::OTHER,
+            binding::FAR,
         ));
     }
     src.push_str(&format!(
@@ -324,7 +337,7 @@ pub fn generate_l2(
         element_layout: out_layout,
         emits,
         synthetic: out_synthetic,
-        pairs: checked.pairs,
+        uses: checked.uses.is_some(),
         amplify: checked.amplify,
     }
 }
@@ -332,8 +345,9 @@ pub fn generate_l2(
 /// Reads and writes both address `dst`, which is what makes an L2 stateless by
 /// construction — see the module doc.
 struct L2Resolver {
-    /// Whether this node pairs, so that `other.<attr>` has a buffer to read.
-    pairs: bool,
+    /// Whether this node declares a geometry slot, so that a far read has a
+    /// buffer to address.
+    uses: bool,
     /// Whether the **output** layout has a `copy` slot: this node amplifies, or
     /// something above it did. Where it does not, `copy` is `0u` — the answer a
     /// chain that never amplified gives at every position in it.
@@ -354,19 +368,19 @@ impl Resolver for L2Resolver {
         format!("dst[i].{}", attr.name())
     }
 
-    /// **The paired element, at the same slot index.** That is the whole of the
+    /// **The far element, at the same slot index.** That is the whole of the
     /// correspondence and the whole of why both sources must be static: `seed`
     /// is the slot index only while nothing compacts, and a compaction would
     /// pair each element with a stranger without changing a line of this.
     ///
     /// Indexed by `i` rather than by the loop's element index, because a node
-    /// that both pairs and amplifies is refused — see `check_header`.
-    fn read_other(&self, attr: Attr) -> String {
+    /// that both uses a geometry and amplifies is refused — see `check_header`.
+    fn read_far(&self, attr: Attr) -> String {
         debug_assert!(
-            self.pairs,
-            "`other` reached a resolver for a node that does not pair"
+            self.uses,
+            "a far read reached a resolver for a node that declares no geometry slot"
         );
-        format!("other[i].{}", attr.name())
+        format!("far[i].{}", attr.name())
     }
 
     fn read_seed(&self) -> String {

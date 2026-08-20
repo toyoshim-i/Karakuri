@@ -81,7 +81,35 @@ fn build(gpu: &Gpu, l1s: &[&str]) -> Set {
     build_with(gpu, l1s, &[DOTS], Layering::Overdraw)
 }
 
+/// A Set whose L2 declares a geometry slot, with the slot bound to the last
+/// source named — which is the ordinary spelling and not a rule the engine
+/// knows: [`build_wired`] is what says so, and every test that cares which
+/// geometry is bound calls that instead.
 fn build_paired(gpu: &Gpu, l1s: &[&str], l2: &str) -> Result<Set, karakuri_engine::set::SetError> {
+    let far = compile(l1s[l1s.len() - 1]).name;
+    build_wired(gpu, l1s, l2, &[edge("morph", "far", &far)])
+}
+
+fn edge(node: &str, slot: &str, to: &str) -> karakuri_engine::set::Edge {
+    karakuri_engine::set::Edge {
+        node: node.to_string(),
+        slot: slot.to_string(),
+        to: to.to_string(),
+    }
+}
+
+/// The same, with the wiring spelled out: which node fills the slot is the
+/// Set's answer and nothing else's, so a test about that has to write it.
+///
+/// The nodes are unnamed, so each is called what its procedure declares — which
+/// is what an edge resolves against and what makes `lattice_at("far", …)` above
+/// the geometry `morph.far` is bound to.
+fn build_wired(
+    gpu: &Gpu,
+    l1s: &[&str],
+    l2: &str,
+    edges: &[karakuri_engine::set::Edge],
+) -> Result<Set, karakuri_engine::set::SetError> {
     let compiled: Vec<Checked> = l1s.iter().map(|s| compile(s)).collect();
     let sources: Vec<(&Checked, u32)> = compiled.iter().map(|c| (c, 64)).collect();
     let l2 = compile(l2);
@@ -97,7 +125,10 @@ fn build_paired(gpu: &Gpu, l1s: &[&str], l2: &str) -> Result<Set, karakuri_engin
         Layering::Overdraw,
         7,
         &[],
-        karakuri_engine::set::NodeNames::default(),
+        karakuri_engine::set::Wiring {
+            edges,
+            ..Default::default()
+        },
     )?;
     set.resize(&gpu.device, W, H);
     set.camera = karakuri_engine::camera::Orbit {
@@ -145,7 +176,7 @@ fn build_all(
         layering,
         7,
         salts,
-        karakuri_engine::set::NodeNames::default(),
+        karakuri_engine::set::Wiring::default(),
     )
     .expect("several sources and some renderers");
     set.resize(&gpu.device, W, H);
@@ -558,15 +589,15 @@ fn lattice_at(name: &str, z: f32) -> String {
 
 const MORPH: &str = r#"
 proc morph {
-  kind  L2
-  pairs
+  kind L2
+  uses far : Geometry
 
   param k : float [0.0, 1.0] = 0.0
 
   consumes position
 
   deform {
-    position = mix(position, other.position, vec3(k, k, k));
+    position = mix(position, far.position, vec3(k, k, k));
   }
 }
 "#;
@@ -680,6 +711,199 @@ fn a_source_that_compacts_cannot_be_paired() {
     );
 }
 
+/// **The edge decides which geometry the slot is bound to, and the list's order
+/// decides nothing.**
+///
+/// This is the whole of the change. `--set` position 1 used to be the answer
+/// and was written down nowhere, so reordering the command line silently
+/// swapped which shape a morph ended on. Here the same two sources are handed
+/// over in both orders and the edge names the same one, and `k = 1` has to land
+/// on that one both times.
+///
+/// Measured as the horizontal centre of the lit texels, which is what tells the
+/// two lattices apart — they sit at different depths and the camera is off to
+/// one side.
+#[test]
+fn the_edge_says_which_geometry_is_bound_and_the_list_order_does_not() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let near = lattice_at("near", -1.2);
+    let far = lattice_at("far", 1.2);
+
+    let centre_x = |set: &mut Set| -> f32 {
+        let px = frame(&gpu, set);
+        let (mut sum, mut weight) = (0.0f64, 0.0f64);
+        for (i, t) in px.chunks_exact(4).enumerate() {
+            let v = f64::from(t[0] + t[1] + t[2]);
+            if v > 0.02 {
+                sum += v * f64::from(i as u32 % W);
+                weight += v;
+            }
+        }
+        assert!(weight > 0.0, "nothing was drawn");
+        (sum / weight) as f32
+    };
+    let at_one = |l1s: &[&str]| -> f32 {
+        let mut set = build_wired(&gpu, l1s, MORPH, &[edge("morph", "far", "far")])
+            .expect("two static sources and a bound slot");
+        assert!(set.set_param_at(karakuri_ir::Kind::L2, 0, "k", 1.0));
+        centre_x(&mut set)
+    };
+
+    let listed_near_first = at_one(&[&near, &far]);
+    let listed_far_first = at_one(&[&far, &near]);
+    assert!(
+        (listed_near_first - listed_far_first).abs() < 1.5,
+        "the same edge over the same two sources is the same picture whichever \
+         order they were listed in: {listed_near_first} against {listed_far_first}"
+    );
+
+    // And it is `far`'s picture rather than either-of-them's: bound the other
+    // way round, `k = 1` lands somewhere else entirely.
+    let mut other_way = build_wired(&gpu, &[&near, &far], MORPH, &[edge("morph", "far", "near")])
+        .expect("the near lattice is a geometry like any other");
+    assert!(other_way.set_param_at(karakuri_ir::Kind::L2, 0, "k", 1.0));
+    let bound_to_near = centre_x(&mut other_way);
+    assert!(
+        (bound_to_near - listed_near_first).abs() > 8.0,
+        "binding the slot to the other geometry is a different picture: \
+         {bound_to_near} against {listed_near_first}"
+    );
+}
+
+/// **A declared slot that nothing binds is refused**, and this is the refusal
+/// the notation exists for.
+///
+/// The rule it replaced was "there is exactly one, so it needs no name", which
+/// is exactly what capped fan-in at one — so filling the slot from whatever
+/// geometry happened to be lying around would put that rule back under a new
+/// spelling, and a Set that was silently wired to something nobody chose would
+/// look like one that was.
+#[test]
+fn an_unbound_slot_is_refused_and_says_what_would_bind_it() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let near = lattice_at("near", -1.2);
+    let far = lattice_at("far", 1.2);
+
+    let err = build_wired(&gpu, &[&near, &far], MORPH, &[])
+        .err()
+        .expect("nothing says which geometry `far` is");
+    let text = err.to_string();
+    assert!(
+        text.contains("morph") && text.contains("far") && text.contains("--edge morph.far="),
+        "the refusal names the node, the slot and how to bind it: {text}"
+    );
+    assert!(
+        text.contains("near") && text.contains("far"),
+        "and what there is to bind it to: {text}"
+    );
+}
+
+/// **Every part of an edge whose node is in this Set has to resolve.**
+///
+/// Each of these is a `.kir` that checks clean and a Set that cannot be built,
+/// which is the shape this repository refuses one hole at a time: what must
+/// never happen is a Set that builds and reads the wrong buffer.
+#[test]
+fn an_edge_that_does_not_resolve_is_refused_by_the_part_that_missed() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let near = lattice_at("near", -1.2);
+    let far = lattice_at("far", 1.2);
+    let both = [near.as_str(), far.as_str()];
+
+    // Labelled, because four wirings come through here and a bare `expect`
+    // would say the same sentence about whichever of them built.
+    let refused = |what: &str, edges: &[karakuri_engine::set::Edge]| -> String {
+        build_wired(&gpu, &both, MORPH, edges)
+            .err()
+            .unwrap_or_else(|| panic!("{what} has to be refused"))
+            .to_string()
+    };
+
+    // A slot the node does not declare. The node *is* here, so the sentence is
+    // about it and is wrong — unlike an edge whose node is another Set's.
+    let text = refused(
+        "a slot the node does not declare",
+        &[edge("morph", "other", "far")],
+    );
+    assert!(
+        text.contains("declares no geometry called `other`") && text.contains("declares `far`"),
+        "it names the slot that is missing and the one that is there: {text}"
+    );
+
+    // A far end that is no node at all.
+    let text = refused(
+        "a far end that is no node",
+        &[edge("morph", "far", "sphere")],
+    );
+    assert!(
+        text.contains("`sphere`") && text.contains("not a node of this Set"),
+        "it names what was asked for and what there is: {text}"
+    );
+
+    // A far end that is a node and holds no elements. A slot declared
+    // `: Geometry` takes an L1, and reading the deformer's own buffer would be
+    // reading whatever instant the chain had reached.
+    let text = refused(
+        "a far end that is not geometry",
+        &[edge("morph", "far", "morph")],
+    );
+    assert!(
+        text.contains("`: Geometry` takes an L1"),
+        "it says what a geometry slot takes: {text}"
+    );
+
+    // And a slot bound twice, which is two pictures with one discarded in
+    // silence — refused on a duplicate node name's terms.
+    let text = refused(
+        "a slot bound twice",
+        &[edge("morph", "far", "far"), edge("morph", "far", "near")],
+    );
+    assert!(
+        text.contains("bound twice") && text.contains("`far`") && text.contains("`near`"),
+        "it names both answers: {text}"
+    );
+}
+
+/// **An edge naming a node this Set has not got is about another Set.**
+///
+/// A deck is several Sets and a flag is one command line, so `--edge` reaches
+/// every one of them — the rule a `--param` addressed at an absent node already
+/// follows. Passed over rather than refused, and the thing that stops a typo
+/// being swallowed is the other half: the slot it *meant* to bind is then
+/// unbound, which is a refusal by name.
+#[test]
+fn an_edge_about_another_set_is_passed_over() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let near = lattice_at("near", -1.2);
+    let far = lattice_at("far", 1.2);
+
+    let built = build_wired(
+        &gpu,
+        &[&near, &far],
+        MORPH,
+        &[
+            edge("someone_elses_node", "far", "near"),
+            edge("morph", "far", "far"),
+        ],
+    );
+    assert!(
+        built.is_ok(),
+        "an edge about a node this Set has not got is not this Set's business: {:?}",
+        built.err()
+    );
+
+    // The typo, without the edge that works beside it: the slot it was meant
+    // for is unbound, and *that* is the refusal.
+    let err = build_wired(&gpu, &[&near, &far], MORPH, &[edge("morhp", "far", "far")])
+        .err()
+        .expect("nothing bound the slot");
+    assert!(
+        err.to_string()
+            .contains("nothing in this Set says which one"),
+        "{err}"
+    );
+}
+
 /// A pairing L2 needs exactly two sources, and it has to be first in the chain
 /// because its second input is a *source* rather than whatever reached it.
 #[test]
@@ -687,7 +911,7 @@ fn a_pairing_l2_states_what_it_needs() {
     let gpu = Gpu::headless().expect("a GPU");
     let near = lattice_at("near", -1.2);
 
-    let err = build_paired(&gpu, &[&near], MORPH)
+    let err = build_wired(&gpu, &[&near], MORPH, &[edge("morph", "far", "near")])
         .err()
         .expect("one source is not two");
     assert!(err.to_string().contains("this Set has 1"), "{err}");
@@ -731,15 +955,34 @@ fn a_paired_sources_own_params_reach_it() {
     assert!(set.set_param_at(karakuri_ir::Kind::L2, 0, "k", 1.0));
     let before = centre_x(&mut set);
 
-    // `push` belongs to the *second* L1 procedure, which is the paired one.
+    // `push` belongs to the *second* L1 procedure, which is the far one.
     assert!(
         set.set_param_at(karakuri_ir::Kind::L1, 1, "push", 2.0),
-        "the paired geometry is an L1 procedure and `L1:1` addresses it"
+        "the far geometry is an L1 procedure and `L1:1` addresses it"
     );
     let after = centre_x(&mut set);
     assert!(
         (after - before).abs() > 3.0,
-        "the paired source's own param has to reach its own shader: {before} against {after}"
+        "the far source's own param has to reach its own shader: {before} against {after}"
+    );
+
+    // **And `L1:<n>` is the procedure's ordinal, not the order the simulations
+    // are stepped in.** Listed the other way round the far side is built
+    // *first*, so a Set that walked its simulations and counted along would
+    // hand each of them the other's parameter map — and `push` would silently
+    // move the geometry nobody addressed.
+    let mut reversed = build_wired(&gpu, &[&far, &near], MORPH, &[edge("morph", "far", "far")])
+        .expect("two static sources, listed the other way round");
+    assert!(reversed.set_param_at(karakuri_ir::Kind::L2, 0, "k", 1.0));
+    let before = centre_x(&mut reversed);
+    assert!(
+        reversed.set_param_at(karakuri_ir::Kind::L1, 0, "push", 2.0),
+        "`far` is the first L1 procedure here, so `L1:0` is the one declaring `push`"
+    );
+    let after = centre_x(&mut reversed);
+    assert!(
+        (after - before).abs() > 3.0,
+        "the far source's param reached the wrong shader: {before} against {after}"
     );
 }
 
@@ -782,7 +1025,10 @@ fn both_sides_of_a_pairing_share_the_element_struct() {
         Layering::Overdraw,
         7,
         &[],
-        karakuri_engine::set::NodeNames::default(),
+        karakuri_engine::set::Wiring {
+            edges: &[edge("morph", "far", "far")],
+            ..Default::default()
+        },
     )
     .expect("two static sources and a derived attribute");
     set.resize(&gpu.device, W, H);
@@ -843,7 +1089,7 @@ fn a_name_resolves_to_the_node_it_addresses() {
         Layering::Overdraw,
         0,
         &[],
-        karakuri_engine::set::NodeNames {
+        karakuri_engine::set::Wiring {
             l1s: &[Some("near".to_string()), None],
             ..Default::default()
         },
@@ -883,7 +1129,7 @@ fn a_procedure_used_twice_gives_its_second_node_a_different_name() {
         Layering::Overdraw,
         0,
         &[],
-        karakuri_engine::set::NodeNames::default(),
+        karakuri_engine::set::Wiring::default(),
     )
     .expect("builds");
 
@@ -916,7 +1162,7 @@ fn two_written_names_that_collide_are_refused() {
         Layering::Overdraw,
         0,
         &[],
-        karakuri_engine::set::NodeNames {
+        karakuri_engine::set::Wiring {
             l1s: &[Some("shape".to_string())],
             l4s: &[Some("shape".to_string())],
             ..Default::default()
@@ -949,7 +1195,7 @@ fn a_derived_name_never_takes_one_that_was_written() {
         Layering::Overdraw,
         0,
         &[],
-        karakuri_engine::set::NodeNames {
+        karakuri_engine::set::Wiring {
             l4s: &[None, Some("dots".to_string())],
             ..Default::default()
         },

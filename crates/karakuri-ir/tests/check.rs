@@ -47,6 +47,20 @@ fn check_err(src: &str) -> Vec<karakuri_ir::error::IrError> {
     check(&proc).expect_err("expected the check pass to reject this source")
 }
 
+/// Every refusal a source draws, whichever stage made it.
+///
+/// **For the fixtures where which stage refuses is the uninteresting half.**
+/// `uses far : Points` is a parse-time refusal and `far.position = …` is a
+/// grammar one, where everything else in this section is a contract check —
+/// and a test that had to know which would be asserting the shape of the
+/// compiler rather than that the file is refused.
+fn refusals(src: &str) -> Vec<karakuri_ir::error::IrError> {
+    match parse(src) {
+        Err(errs) => errs,
+        Ok(proc) => check(&proc).expect_err("expected this source to be rejected"),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // The three canonical examples must check clean with the expected shape.
 // ---------------------------------------------------------------------------
@@ -2859,80 +2873,127 @@ proc fountain {
 }
 
 // ---------------------------------------------------------------------------
-// `pairs`: an L2 that takes two geometries and produces one.
+// `uses`: an L2 that declares a named geometry input.
 // ---------------------------------------------------------------------------
 
 const MORPH: &str = r#"
 proc morph {
-  kind  L2
-  pairs
+  kind L2
+  uses far : Geometry
 
   param k : float [0.0, 1.0] = 0.5
 
   consumes position
 
   deform {
-    position = mix(position, other.position, vec3(k, k, k));
+    position = mix(position, far.position, vec3(k, k, k));
   }
 }
 "#;
 
-/// The declaration lands on `Checked`, and `other.<attr>` resolves to a read of
-/// the paired element.
+/// The declaration lands on `Checked` **as a name**, and `far.<attr>` resolves
+/// to a read of the far element.
+///
+/// The name is what the whole change is: it is the procedure's own, so nothing
+/// couples to a Set, and it is what an `edge` is written against.
 #[test]
-fn a_pairing_l2_checks_clean_and_carries_its_declaration() {
+fn a_used_geometry_checks_clean_and_carries_its_name() {
     let checked = check_ok(MORPH);
-    assert!(checked.pairs);
+    assert_eq!(checked.uses.as_deref(), Some("far"));
     assert_eq!(checked.kind, Kind::L2);
 
     let deform = checked.block(BlockKind::Deform).expect("a deform");
-    let reads_other = |stmts: &[TStmt]| {
+    let reads_far = |stmts: &[TStmt]| {
         stmts.iter().any(|s| match s {
-            TStmt::Assign { value, .. } => format!("{value:?}").contains("Other"),
+            TStmt::Assign { value, .. } => format!("{value:?}").contains("Far"),
             _ => false,
         })
     };
+    assert!(reads_far(&deform.stmts), "`far.position` is a far read");
+}
+
+/// **The base name is the procedure's own**, so a read through a name it did
+/// not declare resolves to nothing rather than to the second geometry.
+///
+/// This is the whole difference from the reserved `other` this replaced: a
+/// spelling means the far side because the header said so, not because the
+/// language reserved a word — which is what let there be only ever one.
+#[test]
+fn a_read_through_an_undeclared_name_is_refused() {
+    let errs = check_err(&MORPH.replace("  uses far : Geometry\n", ""));
     assert!(
-        reads_other(&deform.stmts),
-        "`other.position` is a paired read"
+        errs.iter().any(|e| e.message.contains("`far`")),
+        "expected the name to be reported as resolving to nothing, got: {errs:?}"
+    );
+
+    // And a procedure that declares one slot does not get a second by writing
+    // a different name.
+    let errs = check_err(&MORPH.replace("far.position", "near.position"));
+    assert!(
+        errs.iter().any(|e| e.message.contains("`near`")),
+        "expected `near` to resolve to nothing, got: {errs:?}"
     );
 }
 
-/// **`other` means nothing without the declaration**, and the diagnostic says
-/// what to add rather than that the name does not exist.
+/// **One `consumes` covers both sides.** The far geometry is an input edge, and
+/// a node reads the same attribute from each — so an attribute this node does
+/// not take is not readable on either side.
 #[test]
-fn other_is_refused_in_an_l2_that_does_not_pair() {
-    let errs = check_err(&MORPH.replace("  pairs\n", ""));
-    assert!(
-        errs.iter().any(|e| e.message.contains("second geometry")
-            && e.hint.as_deref().unwrap_or_default().contains("pairs")),
-        "expected the declaration to be named, got: {errs:?}"
-    );
-}
-
-/// **One `consumes` covers both sides.** The paired geometry is an input edge,
-/// and pairing reads the same attribute from each — so an attribute this node
-/// does not take is not readable on either side.
-#[test]
-fn other_reads_only_what_the_node_consumes() {
-    let errs = check_err(&MORPH.replace("other.position", "other.tint"));
+fn a_far_read_takes_only_what_the_node_consumes() {
+    let errs = check_err(&MORPH.replace("far.position", "far.tint"));
     assert!(
         errs.iter()
             .any(|e| e.message.contains("tint") && e.message.contains("not consumed")),
-        "expected `other.tint` to need `tint` in `consumes`, got: {errs:?}"
+        "expected `far.tint` to need `tint` in `consumes`, got: {errs:?}"
     );
 }
 
-/// `pairs` is L2's, on the same terms `amplify` is: an L1 makes geometry rather
+/// **A geometry is not a value.** `far` alone is the whole second source, which
+/// this language has no type for and no way to pass — so the one thing that can
+/// be said about it is what one of its elements holds.
+///
+/// The complement of the read above: the new name appears in expression
+/// position, and every position it can appear in either produces a value or is
+/// refused with its own reason.
+#[test]
+fn a_used_geometry_is_not_a_value_on_its_own() {
+    let errs = check_err(&MORPH.replace("far.position", "far"));
+    assert!(
+        errs.iter()
+            .any(|e| e.message.contains("`far` is a geometry, not a value")),
+        "expected a used geometry to be unreadable as a value, got: {errs:?}"
+    );
+}
+
+/// **And it is not assignable.** The far side is an input edge: this node reads
+/// it and writes its own output, so a `.kir` that assigned to it would be
+/// asking to write another source's buffer.
+///
+/// Refused by the grammar rather than by the checker — an assignment target is
+/// a bare name — which is a refusal all the same, and the one that matters is
+/// that it never reaches the generator.
+#[test]
+fn a_used_geometry_cannot_be_assigned_to() {
+    let errs = refusals(&MORPH.replace(
+        "position = mix(position, far.position, vec3(k, k, k));",
+        "far.position = position;",
+    ));
+    assert!(
+        !errs.is_empty(),
+        "writing to the far side has to be refused"
+    );
+}
+
+/// `uses` is L2's, on the same terms `amplify` is: an L1 makes geometry rather
 /// than taking any, an L3 makes a viewpoint, and an L4 draws what reaches it.
 #[test]
-fn pairs_is_refused_outside_an_l2() {
+fn uses_is_refused_outside_an_l2() {
     let l1 = r#"
 proc gen {
   kind     L1
   topology points
   capacity [1, 8] = 4
-  pairs
+  uses far : Geometry
 
   emit position
 
@@ -2943,7 +3004,7 @@ proc gen {
 proc dots {
   kind  L4
   blend additive
-  pairs
+  uses far : Geometry
 
   consumes position
 
@@ -2958,19 +3019,87 @@ proc dots {
     for src in [l1, l4] {
         let errs = check_err(src);
         assert!(
-            errs.iter()
-                .any(|e| e.message.contains("`pairs` is L2 only")),
-            "expected `pairs` to be refused, got: {errs:?}"
+            errs.iter().any(|e| e.message.contains("`uses` is L2 only")),
+            "expected `uses` to be refused, got: {errs:?}"
         );
     }
 }
 
-/// **`other` is reserved everywhere**, not only where it means something. A
-/// local called `other` reads fine today and stops the day the file grows the
-/// declaration, which is the shape every reserved name here prevents.
+/// **A node takes one second geometry**, and a second `uses` is refused with a
+/// sentence rather than quietly overwriting the first.
+///
+/// One name would win and the other's reads would resolve against the wrong
+/// geometry — which is the shape this notation exists to end, arriving through
+/// the notation itself.
 #[test]
-fn other_is_a_reserved_name() {
-    let errs = check_err(
+fn a_second_used_geometry_is_refused() {
+    let errs = check_err(&MORPH.replace(
+        "  uses far : Geometry\n",
+        "  uses far : Geometry\n  uses other : Geometry\n",
+    ));
+    assert!(
+        errs.iter()
+            .any(|e| e.message.contains("one second geometry")),
+        "expected a second slot to be refused, got: {errs:?}"
+    );
+}
+
+/// **`Geometry` is what a slot can be**, and anything else is refused by name
+/// rather than accepted and ignored.
+///
+/// The type is written even though there is one of them, so that the slot that
+/// takes a camera or a field — which is what this notation is for next — does
+/// not have to grow a type incompatibly.
+#[test]
+fn an_unknown_slot_type_is_refused() {
+    let errs = refusals(&MORPH.replace("uses far : Geometry", "uses far : Points"));
+    assert!(
+        errs.iter()
+            .any(|e| e.message.contains("unknown input type `Points`")),
+        "expected the type to be refused, got: {errs:?}"
+    );
+}
+
+/// **A slot shares one scope with everything else nameable here.** It is read
+/// the way a local is — `far.position` — so a slot called `position` would make
+/// one spelling mean two things depending on whether a dot follows it.
+#[test]
+fn a_slot_name_cannot_shadow_or_be_shadowed() {
+    // An attribute.
+    let errs = check_err(&MORPH.replace("uses far : Geometry", "uses position : Geometry"));
+    assert!(
+        errs.iter()
+            .any(|e| e.message.contains("shadows an attribute name")),
+        "expected a slot named after an attribute to be refused, got: {errs:?}"
+    );
+
+    // A param declared by this same procedure.
+    let errs = check_err(&MORPH.replace("param k :", "param far :"));
+    assert!(
+        errs.iter()
+            .any(|e| e.message.contains("`far` is already a param")),
+        "expected a slot and a param of one name to collide, got: {errs:?}"
+    );
+
+    // And a local, from the other direction.
+    let errs = check_err(&MORPH.replace(
+        "    position = mix",
+        "    let far = 1.0;\n    position = mix",
+    ));
+    assert!(
+        errs.iter().any(|e| e
+            .message
+            .contains("`far` is the geometry this procedure uses")),
+        "expected a local to collide with the slot, got: {errs:?}"
+    );
+}
+
+/// **`other` is an ordinary name again.** It was reserved everywhere because it
+/// was the one spelling a paired read could have; a slot is named by the
+/// procedure now, so reserving a word would be reserving one nothing means.
+#[test]
+fn other_is_no_longer_a_reserved_name() {
+    let checked = check_ok(
         r#"
 proc shadow {
   kind L2
@@ -2984,9 +3113,5 @@ proc shadow {
 }
 "#,
     );
-    assert!(
-        errs.iter()
-            .any(|e| e.message.contains("`other` is reserved")),
-        "expected `other` to be reserved, got: {errs:?}"
-    );
+    assert_eq!(checked.uses, None, "and it declares no geometry slot");
 }

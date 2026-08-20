@@ -101,12 +101,12 @@ pub struct Watch {
     /// layer it is on is what its own `kind` declares, which the sort reads
     /// like it reads every other file's. It is first here only because it is
     /// first on the command line, and list order is chain order.
-    head: PathBuf,
+    head: crate::Named,
     /// The rest of the slot's files, in the order they were spelled. Watched
     /// together with the head: a rebuild restates the whole stack, so an edit
     /// to any one of them recompiles all of them and the Set that lands is the
     /// one the files say.
-    rest: Vec<PathBuf>,
+    rest: Vec<crate::Named>,
     /// Whether this slot's renderers composite or overdraw. Restated on every
     /// rebuild rather than read off the outgoing Set, for the reason
     /// `Request::bindings` gives.
@@ -147,6 +147,12 @@ pub struct Watch {
     /// the reason `Request::bindings` gives: a request that depended on what
     /// happened to be live would not be reproducible from a record stream.
     bindings: Vec<Binding>,
+    /// **Which node fills each declared input slot**, restated on every rebuild
+    /// for the reason the bindings are — and with the loudest symptom of any of
+    /// them: a slot nothing binds is refused outright, so a rebuild that left
+    /// these out would turn every save of a morph's `.kir` into a build that
+    /// does not land, with the picture frozen at whatever startup produced.
+    edges: Vec<karakuri_engine::set::Edge>,
     /// A hash of each file's contents as of the previous poll. `None` for a
     /// file that does not exist or cannot be read, which compares equal to
     /// itself and so reads as "unchanged" rather than as a change every
@@ -173,8 +179,8 @@ impl Watch {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         slot: usize,
-        head: PathBuf,
-        rest: Vec<PathBuf>,
+        head: crate::Named,
+        rest: Vec<crate::Named>,
         layering: karakuri_engine::set::Layering,
         capacity: Option<u32>,
         seed_salt: u32,
@@ -182,6 +188,7 @@ impl Watch {
         overrides: Vec<karakuri_engine::ParamWrite>,
         published: Vec<karakuri_engine::set::Published>,
         bindings: Vec<Binding>,
+        edges: Vec<karakuri_engine::set::Edge>,
     ) -> Watch {
         let mut watch = Watch {
             builds: 0,
@@ -197,6 +204,7 @@ impl Watch {
             overrides,
             published,
             bindings,
+            edges,
             stamps: Vec::new(),
             settling: false,
         };
@@ -217,8 +225,8 @@ impl Watch {
                 h.finish()
             })
         };
-        std::iter::once(digest(&self.head))
-            .chain(self.rest.iter().map(digest))
+        std::iter::once(digest(&self.head.path))
+            .chain(self.rest.iter().map(|n| digest(&n.path)))
             .collect()
     }
 }
@@ -268,9 +276,10 @@ impl Source for Watch {
         // procedure that was playing, and the only moment both the text and the
         // build it produced are in the same hand is this one — by the time the
         // swap lands, the file may have changed again.
-        let paths: Vec<&std::path::Path> = std::iter::once(self.head.as_path())
-            .chain(self.rest.iter().map(PathBuf::as_path))
+        let named: Vec<&crate::Named> = std::iter::once(&self.head)
+            .chain(self.rest.iter())
             .collect();
+        let paths: Vec<&std::path::Path> = named.iter().map(|n| n.path.as_path()).collect();
         let mut srcs = Vec::with_capacity(paths.len());
         for path in &paths {
             match std::fs::read_to_string(path) {
@@ -282,16 +291,18 @@ impl Source for Watch {
             }
         }
         let mut compiled = Vec::with_capacity(paths.len());
-        for (path, src) in paths.iter().zip(&srcs) {
+        for (named, src) in named.iter().zip(&srcs) {
             match compile::check(src) {
-                // Bare, because a watcher has no names to give: `Watch::new`
-                // is handed paths. What addresses these nodes is `(slot, layer,
-                // index)`, which is what the sort answers.
-                Ok(checked) => compiled.push((crate::Named::bare(*path), checked)),
+                // **With the name the slot was spelled with.** A watcher used
+                // to hand the sort bare paths, so every rebuild called each
+                // node whatever its procedure declared — harmless while the
+                // only thing a name did was print, and not harmless once an
+                // `edge` resolves against one.
+                Ok(checked) => compiled.push(((*named).clone(), checked)),
                 Err(report) => {
                     eprintln!(
                         "{}:\n{report}\nslot {slot} unchanged; its Set is still running",
-                        path.display()
+                        named.path.display()
                     );
                     return None;
                 }
@@ -396,15 +407,13 @@ impl Source for Watch {
                 ),
             }
         }
-        // The names the sort collected are dropped, because a watcher never had
-        // any to collect: its files arrive as bare paths. See `names` below.
         let crate::Material {
             l1s,
             l2s,
             l3,
             field,
             l4s,
-            ..
+            names,
         } = material;
         Some(Request {
             id,
@@ -428,7 +437,17 @@ impl Source for Watch {
             // **Restated, like every other part of a request.** A rebuild that
             // read the names off the outgoing Set would depend on what happened
             // to be live, which is the property `bindings` gives its reason for.
-            names: karakuri_engine::swap::RequestNames::default(),
+            //
+            // The slot's own, from the paths it was spelled with — they used to
+            // be dropped here, and an edge is written against them.
+            names: karakuri_engine::swap::RequestNames {
+                l1s: names.l1s,
+                l2s: names.l2s,
+                l3: names.l3,
+                l4s: names.l4s,
+                field: names.field,
+            },
+            edges: self.edges.clone(),
             layering: self.layering,
             seed_salt: self.seed_salt,
             // **The run's own, restated.** A rebuild is a new Set of the same
@@ -450,12 +469,13 @@ mod tests {
     fn watch_on(dir: &std::path::Path) -> Watch {
         Watch::new(
             0,
-            dir.join("a.kir"),
-            vec![dir.join("b.kir")],
+            crate::Named::bare(dir.join("a.kir")),
+            vec![crate::Named::bare(dir.join("b.kir"))],
             karakuri_engine::set::Layering::Overdraw,
             Some(4096),
             1,
             vec![1],
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -499,12 +519,13 @@ mod tests {
         let paths: Vec<PathBuf> = files.iter().map(|f| dir.join(f)).collect();
         let watch = Watch::new(
             0,
-            paths[0].clone(),
-            paths[1..].to_vec(),
+            crate::Named::bare(paths[0].clone()),
+            paths[1..].iter().cloned().map(crate::Named::bare).collect(),
             karakuri_engine::set::Layering::Overdraw,
             Some(4096),
             1,
             vec![1],
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -546,12 +567,13 @@ mod tests {
         let salts: Vec<u32> = vec![0x0bad_cafe, 0x1234_5678];
         let mut watch = Watch::new(
             0,
-            paths[0].clone(),
-            paths[1..].to_vec(),
+            crate::Named::bare(paths[0].clone()),
+            paths[1..].iter().cloned().map(crate::Named::bare).collect(),
             karakuri_engine::set::Layering::Overdraw,
             Some(4096),
             salts[0],
             salts.clone(),
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -566,6 +588,72 @@ mod tests {
             request.salts,
             vec![Some(salts[0]), Some(salts[1])],
             "a rebuild handed the engine salts other than the ones the slot is running at"
+        );
+    }
+
+    /// **A rebuild restates the names and the edges the slot is wired with.**
+    ///
+    /// A watcher used to be handed bare paths, so every rebuild called each node
+    /// whatever its procedure declared — harmless while a name only printed. It
+    /// stops being harmless twice over now: an `edge` names the node that
+    /// declares a slot and the node bound to it, so a rebuild that dropped the
+    /// names resolves against spellings that are no longer there, and one that
+    /// dropped the edges leaves the slot unbound — which is refused outright.
+    /// Either way the save that lands is a build that will not build, with the
+    /// picture frozen at whatever startup produced.
+    #[test]
+    fn a_rebuild_restates_the_names_and_edges_the_slot_is_wired_with() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let files = [
+            "lattice_shell.kir",
+            "sphere_shell.kir",
+            "morph.kir",
+            "soft_points.kir",
+        ];
+        let paths: Vec<PathBuf> = files.iter().map(|f| tmp.path().join(f)).collect();
+        // Named as the command line names them, with the far geometry carrying
+        // the name the edge points with.
+        let named: Vec<crate::Named> = paths
+            .iter()
+            .zip(["near", "far", "morph", "draw"])
+            .map(|(path, name)| crate::Named {
+                name: Some(name.to_string()),
+                path: path.clone(),
+            })
+            .collect();
+        let edges = vec![karakuri_engine::set::Edge {
+            node: "morph".to_string(),
+            slot: "far".to_string(),
+            to: "far".to_string(),
+        }];
+        let mut watch = Watch::new(
+            0,
+            named[0].clone(),
+            named[1..].to_vec(),
+            karakuri_engine::set::Layering::Overdraw,
+            Some(32768),
+            1,
+            vec![1, 2],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            edges.clone(),
+        );
+        for (file, path) in files.iter().zip(&paths) {
+            std::fs::copy(root.join("examples").join(file), path).expect("copy an example");
+        }
+
+        let request = rebuild(&mut watch).expect("a build");
+        assert_eq!(
+            request.names.l1s,
+            vec![Some("near".to_string()), Some("far".to_string())],
+            "a rebuild renamed the geometries the edge points at"
+        );
+        assert_eq!(request.names.l2s, vec![Some("morph".to_string())]);
+        assert_eq!(
+            request.edges, edges,
+            "a rebuild dropped the wiring, so the slot it rebuilds is unbound"
         );
     }
 
@@ -696,12 +784,13 @@ mod tests {
             let paths: Vec<PathBuf> = unique.iter().map(|f| tmp.path().join(f)).collect();
             let mut watch = Watch::new(
                 0,
-                paths[0].clone(),
-                paths[1..].to_vec(),
+                crate::Named::bare(paths[0].clone()),
+                paths[1..].iter().cloned().map(crate::Named::bare).collect(),
                 karakuri_engine::set::Layering::Overdraw,
                 Some(4096),
                 1,
                 vec![1],
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),

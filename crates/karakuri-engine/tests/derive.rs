@@ -149,7 +149,7 @@ fn build_chain(
         Layering::Overdraw,
         7,
         &[],
-        karakuri_engine::set::NodeNames::default(),
+        karakuri_engine::set::Wiring::default(),
     )?;
     set.resize(&gpu.device, W, H);
     set.camera = karakuri_engine::camera::Orbit {

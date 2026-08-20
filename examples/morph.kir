@@ -1,32 +1,42 @@
 // The first procedure here that reads a geometry it is not running over.
 //
-// **`pairs` says this L2 takes two geometries and produces one.** `L2 : Geometry
-// -> Geometry` is an endomorphism, and the two ways to break it are now both
-// spelled: `amplify` breaks it on the *count* axis, one element in and several
-// out, and this breaks it on the *arity*.
+// **`uses far : Geometry` says this L2 takes a second geometry.** `L2 :
+// Geometry -> Geometry` is an endomorphism, and the two ways to break it are
+// now both spelled: `amplify` breaks it on the *count* axis, one element in and
+// several out, and this breaks it on the *arity*.
 //
-//   karakuri-cli --set lattice_shell.kir,sphere_shell.kir,morph.kir,soft_points.kir
+//   karakuri-cli --set lattice_shell.kir,sphere_shell.kir,morph.kir,soft_points.kir \
+//                --edge morph.far=sphere_shell
 //
-// **The correspondence is the slot index**, so element 5 of one geometry becomes
-// element 5 of the other. That is only the same element in both while nothing
-// moves one, which is why both sources must be static — no `spawn`, no `kill()`
-// — and why the Set refuses the pair rather than matching each element with a
-// stranger.
+// **`far` is this file's own name for what it takes**, exactly as `consumes
+// position` names an attribute without naming which L1 supplies it. Which
+// geometry fills it is the Set's answer and is written in the Set — an `edge`
+// record, or `--edge` on the way in. That is what keeps this file a library
+// part: a `.kir` that named a node would be coupled to one Set and could be
+// used in no other. An unbound slot is refused rather than filled in from
+// whatever geometry happens to be lying around.
 //
-// **The paired geometry is never drawn on its own.** A pairing Set is one source
-// made of two simulations, with one chain and one set of renderers over it, so
-// "is the far end also on screen?" is a question with no place to be asked.
+// **The correspondence is the slot index**, so element 5 of one geometry
+// becomes element 5 of the other. That is only the same element in both while
+// nothing moves one, which is why both sources must be static — no `spawn`, no
+// `kill()` — and why the Set refuses the pair rather than matching each element
+// with a stranger.
 //
-// One `consumes` covers both sides: pairing reads the same attribute from each,
-// so declaring it once is declaring it for both.
+// **The far geometry is never drawn on its own.** A Set with a bound slot is
+// one source made of two simulations, with one chain and one set of renderers
+// over it, so "is the far end also on screen?" is a question with no place to
+// be asked.
+//
+// One `consumes` covers both sides: this node reads the same attribute from
+// each, so declaring it once is declaring it for both.
 
 proc morph {
-  kind  L2
-  pairs
+  kind L2
+  uses far : Geometry
 
-  // 0 is the near geometry and 1 is the paired one. A fader, a signal binding,
-  // a transition and a published control all reach it, because it is an
-  // ordinary `param` — the same argument `weight` makes one layer down.
+  // A fader, a signal binding, a transition and a published control all reach
+  // it, because it is an ordinary `param` — the same argument `weight` makes
+  // one layer down.
   param k : float [0.0, 1.0] = 0.0
 
   consumes position, tint
@@ -36,7 +46,7 @@ proc morph {
     // passed as a scalar: this language's `mix` takes three of one type.
     let w = vec3(k, k, k);
 
-    position = mix(position, other.position, w);
-    tint     = mix(tint, other.tint, w);
+    position = mix(position, far.position, w);
+    tint     = mix(tint, far.tint, w);
   }
 }

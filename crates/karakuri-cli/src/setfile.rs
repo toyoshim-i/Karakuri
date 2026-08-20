@@ -125,6 +125,17 @@ pub struct Loaded {
     pub capacities: Vec<Option<u32>>,
     pub params: Vec<ParamWrite>,
     pub bindings: Vec<Binding>,
+    /// **What each node the file named is called**, in the same per-layer shape
+    /// the procedures come back in, and `None` for a node the file left
+    /// unnamed.
+    ///
+    /// Read and carried rather than read and reported. Nothing used to point at
+    /// a node by name, so a name was noted as unhonoured and dropped; an `edge`
+    /// points at two of them, so a loaded Set whose names were dropped is a
+    /// loaded Set whose edges cannot resolve.
+    pub names: crate::Names,
+    /// **Which node fills each declared input slot**, as the file recorded it.
+    pub edges: Vec<karakuri_engine::set::Edge>,
     pub camera: Option<Orbit>,
     /// **What each geometry was salted with**, by `slot` index, one entry per
     /// `seed` record the file carried.
@@ -153,6 +164,27 @@ impl Loaded {
     /// would be a second copy of what node order is — and a caller that got it
     /// wrong would write one node's source into another node's file. See
     /// `scratch::place`, which is what wants the pairing.
+    /// What each node is called, in the same node order [`Loaded::nodes`]
+    /// walks, and `None` for one the file left unnamed.
+    ///
+    /// **For the one caller that has node order and not layers**: a Set file
+    /// materialised into the scratch becomes a flat `--set` list, and the name
+    /// has to travel with the path it is written beside. Everything else takes
+    /// its names per layer, which is the shape `Set::build_many` wants.
+    pub fn node_names(&self) -> impl Iterator<Item = Option<String>> + '_ {
+        let at = |v: &[Option<String>], n: usize| -> Vec<Option<String>> {
+            let mut out = v.to_vec();
+            out.resize(n, None);
+            out
+        };
+        at(&self.names.l1s, self.l1s.len())
+            .into_iter()
+            .chain(at(&self.names.l2s, self.l2s.len()))
+            .chain(self.l3.iter().map(|_| self.names.l3.clone()))
+            .chain(at(&self.names.l4s, self.l4s.len()))
+            .chain(self.field.iter().map(|_| self.names.field.clone()))
+    }
+
     pub fn nodes(&self) -> impl Iterator<Item = (&Checked, &str)> {
         self.l1s
             .iter()
@@ -402,6 +434,10 @@ pub struct Saving<'a> {
     pub capacities: &'a [u32],
     pub params: &'a [ParamWrite],
     pub bindings: &'a [Binding],
+    /// **Which node fills each declared input slot**, exactly as the run was
+    /// wired. Empty for a Set no node of which takes a second geometry, which
+    /// is most of them.
+    pub edges: &'a [karakuri_engine::set::Edge],
     pub camera: &'a Orbit,
     /// **What each geometry is salted with**, one per L1 node in index order.
     ///
@@ -522,6 +558,7 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
         capacities,
         params,
         bindings,
+        edges,
         camera,
         seeds,
     } = set;
@@ -601,6 +638,21 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
     for binding in bindings {
         lines.push(Line::new(record_from_binding(binding)));
     }
+    // **After the slots, because an edge is written in terms of what they
+    // name.** A reader that has met every `slot` record has every name in hand
+    // — including the ones nobody wrote, which are derived from the procedure
+    // and so are a function of the artifact the slot references.
+    //
+    // Written as given rather than resolved to addresses. An edge is between
+    // *names* and that is the whole of why it exists: an address moves when the
+    // list is reordered, which is the failure `--set` position 1 was.
+    for edge in edges {
+        lines.push(Line::new(Record::Edge {
+            node: edge.node.clone(),
+            slot: edge.slot.clone(),
+            to: edge.to.clone(),
+        }));
+    }
     lines.push(Line::new(Record::Camera {
         kind: "orbit".to_string(),
         radius: camera.radius,
@@ -647,6 +699,11 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     // gives them. `None` is a gap — an index nothing claimed — which is refused
     // below rather than silently closed up.
     let mut slots: [Vec<Option<Hash>>; 5] = Default::default();
+    // What each of those is called, in the same shape and by the same index, so
+    // a name and the artifact it belongs to are placed by one statement.
+    let mut slot_names: [Vec<Option<String>>; 5] = Default::default();
+    // The edges the file recorded, in the order it recorded them.
+    let mut edges: Vec<karakuri_engine::set::Edge> = Vec::new();
     let mut inlined: BTreeMap<Hash, BTreeMap<u32, String>> = BTreeMap::new();
     // What each geometry runs at, by index, growing as the file names them.
     let mut capacities: Vec<Option<u32>> = Vec::new();
@@ -676,17 +733,13 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                 name,
                 proc_hash,
             } => {
-                // **A name is read, reported, and goes no further.** Nothing
-                // this build loads points at a node by name, so carrying one
-                // into `Loaded` would be inventing a use for it; dropping it
-                // in silence is the half-applying this module refuses. The
-                // file keeps the name either way — a load is not a rewrite.
-                if let Some(name) = name {
-                    notes.push(format!(
-                        "slot `{name}` was loaded without its name: nothing this build \
-                         points at a node by name yet"
-                    ));
-                }
+                // **A name is carried now, where it used to be reported and
+                // dropped.** "Nothing this build points at a node by name" was
+                // true until an `edge` did: an edge names the node that
+                // declares a slot and the node bound to it, so a Set whose
+                // names were dropped on the way in is a Set whose edges resolve
+                // against the wrong spellings — or against none.
+                //
                 // **Placed by layer and index, and every layer reads the same
                 // way.** A second `slot` on a layer is a second node — another
                 // geometry, another deformer in the chain, another renderer over
@@ -700,7 +753,8 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                 // chain and this loader could not read one back, so a cube
                 // morphing into a sphere could be played and not kept.
                 let at = *index as usize;
-                let layer_slots = &mut slots[layer_ordinal(kind_of(*layer)) as usize];
+                let ordinal = layer_ordinal(kind_of(*layer)) as usize;
+                let layer_slots = &mut slots[ordinal];
                 if layer_slots.len() <= at {
                     layer_slots.resize(at + 1, None);
                 }
@@ -711,6 +765,11 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                     ));
                 }
                 layer_slots[at] = Some(*proc_hash);
+                let layer_names = &mut slot_names[ordinal];
+                if layer_names.len() <= at {
+                    layer_names.resize(at + 1, None);
+                }
+                layer_names[at] = name.clone();
             }
             Record::Src { hash, line, s } => {
                 inlined.entry(*hash).or_default().insert(*line, s.clone());
@@ -762,6 +821,15 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                      scalar parameter values only"
                 )),
             },
+            // **Carried as written, both ends.** Whether the nodes it names
+            // are in this Set is not a question this decoder can answer — a
+            // name nobody wrote is derived where the Set is built — so it is
+            // asked there, once, rather than here and again there.
+            Record::Edge { node, slot, to } => edges.push(karakuri_engine::set::Edge {
+                node: node.clone(),
+                slot: slot.clone(),
+                to: to.clone(),
+            }),
             record @ Record::Bind { .. } => match binding_from_record(record) {
                 Ok(binding) => bindings.push(binding),
                 // Reported and skipped rather than failing the load: one
@@ -956,6 +1024,26 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         .chain(field_srcs.into_iter().take(1))
         .collect();
 
+    // **Trimmed to the nodes that came back**, so the two lists cannot
+    // disagree: a name past the end of its layer belongs to a `slot` record the
+    // refusals above have already dealt with.
+    let mut names = crate::Names {
+        l1s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L1) as usize]),
+        l2s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L2) as usize]),
+        l3: slot_names[layer_ordinal(Kind::L3) as usize]
+            .first()
+            .cloned()
+            .flatten(),
+        l4s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L4) as usize]),
+        field: slot_names[layer_ordinal(Kind::Field) as usize]
+            .first()
+            .cloned()
+            .flatten(),
+    };
+    names.l1s.truncate(l1s.len());
+    names.l2s.truncate(l2s.len());
+    names.l4s.truncate(l4s.len());
+
     Ok(Loaded {
         id: file_id,
         l1s,
@@ -967,6 +1055,8 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         capacities,
         params,
         bindings,
+        names,
+        edges,
         camera,
         salts,
         notes,
@@ -1125,9 +1215,92 @@ proc blob {
             capacities: &[4096],
             params: &[],
             bindings,
+            edges: &[],
             camera: &DEFAULT_CAMERA,
             seeds: &[1],
         }
+    }
+
+    /// **The edge survives the file, and so do the names it points with.**
+    ///
+    /// The two halves are one fact: an edge is between *names*, and a file that
+    /// carried the edge and dropped the names would come back naming nodes that
+    /// are no longer called that. What makes it round-trip at all is that the
+    /// names it points with are either written down beside the node — as `far`
+    /// is here — or derived from the procedure, which is a function of the
+    /// artifact the `slot` record already references.
+    #[test]
+    fn an_edge_and_the_names_it_points_with_survive_the_file() {
+        let (dir, store, l1, l4) = fixture();
+        let l1b = beside(&dir, "l1b.kir", &L1.replace("proc ring", "proc ring_two"));
+        let l2 = beside(&dir, "l2.kir", L2);
+        let nodes = vec![
+            Node {
+                path: &l1,
+                layer: Kind::L1,
+                index: 0,
+                name: None,
+            },
+            Node {
+                path: &l1b,
+                layer: Kind::L1,
+                index: 1,
+                // Written, because it is what the edge points with.
+                name: Some("far"),
+            },
+            Node {
+                path: &l2,
+                layer: Kind::L2,
+                index: 0,
+                name: None,
+            },
+            Node {
+                path: &l4,
+                layer: Kind::L4,
+                index: 0,
+                name: None,
+            },
+        ];
+        let edges = vec![karakuri_engine::set::Edge {
+            node: "warp".to_string(),
+            slot: "far".to_string(),
+            to: "far".to_string(),
+        }];
+        save(
+            &store,
+            "wired",
+            Saving {
+                nodes: &nodes,
+                capacities: &[4096, 4096],
+                params: &[],
+                bindings: &[],
+                edges: &edges,
+                camera: &DEFAULT_CAMERA,
+                seeds: &[1, 2],
+            },
+        )
+        .expect("save");
+
+        let text = written(&store, "wired");
+        assert!(
+            text.contains(r#"{"t":"edge","node":"warp","slot":"far","to":"far"}"#),
+            "the edge is one line naming both ends: {text}"
+        );
+        // **After the slots**, so a reader has every name in hand by the time
+        // it meets the record that uses them.
+        assert!(
+            text.find(r#""t":"edge""#) > text.rfind(r#""t":"slot""#),
+            "an edge is written after the slots it names: {text}"
+        );
+
+        let loaded = load(&store, "wired").expect("load");
+        assert_eq!(loaded.edges, edges, "the edge came back as it went in");
+        assert_eq!(loaded.names.l1s, [None, Some("far".to_string())]);
+        assert!(
+            loaded.notes.is_empty(),
+            "nothing here is unhonourable: {:?}",
+            loaded.notes
+        );
     }
 
     fn a_binding() -> Binding {
@@ -1154,6 +1327,7 @@ proc blob {
                 capacities: &[65_536],
                 params: &params,
                 bindings: &[a_binding()],
+                edges: &[],
                 camera: &camera,
                 seeds: &[4242],
             },
@@ -1448,15 +1622,16 @@ proc blob {
         assert_eq!(loaded.l1s[0].name, "ring_two");
     }
 
-    /// **A name is reported rather than dropped, and the Set still loads.**
+    /// **A name the file recorded comes back, where it used to be reported and
+    /// dropped.**
     ///
-    /// A `slot` carries a name so that something can point at the node — a mask
-    /// naming the source it applies to. Nothing this build loads points at a
-    /// node by name, so the name reaches `notes` and stops there. It stays in
-    /// the file: a load is not a rewrite, and the note says what this run did
-    /// not use rather than what the file may not say.
+    /// "Nothing this build points at a node by name" was true until an `edge`
+    /// did: an edge names the node that declares a slot and the node bound to
+    /// it, so a load that dropped the names is a load whose edges resolve
+    /// against the wrong spellings — or, for a name nobody wrote, against the
+    /// procedure's own and by luck.
     #[test]
-    fn a_name_this_build_cannot_use_is_reported_and_the_set_still_loads() {
+    fn a_name_the_file_recorded_comes_back_with_the_node() {
         let (_dir, store, l1, l4) = fixture();
         let put = |path: &std::path::Path| {
             store
@@ -1476,10 +1651,19 @@ proc blob {
             loaded.l1s[0].name, "ring",
             "the material is unaffected by the name"
         );
+        assert_eq!(
+            loaded.names.l1s,
+            [Some("veil".to_string())],
+            "the name the file recorded is what the node is called"
+        );
+        // **And an unnamed node stays unnamed** rather than being filled in
+        // here: a name nobody wrote is derived where the Set is built, and
+        // deriving it here as well would be the second place one fact lives.
+        assert_eq!(loaded.names.l4s, [None]);
         let notes = loaded.notes.join("\n");
         assert!(
-            notes.contains("veil"),
-            "the name went nowhere and was not reported; notes were {notes:?}"
+            !notes.contains("veil"),
+            "a name that was honoured is not a note; notes were {notes:?}"
         );
     }
 
@@ -1554,6 +1738,7 @@ proc blob {
                 capacities: &[4096, 8192],
                 params: &[],
                 bindings: &[],
+                edges: &[],
                 camera: &DEFAULT_CAMERA,
                 seeds: &[1, 2],
             },
@@ -1586,13 +1771,10 @@ proc blob {
             "a node was paired with another node's source: {}",
             loaded.srcs[2]
         );
-        // The one thing a load still cannot carry, said rather than dropped.
-        assert_eq!(
-            loaded.notes.iter().filter(|n| n.contains("veil")).count(),
-            1,
-            "{:?}",
-            loaded.notes
-        );
+        // And the name it was written with, placed on the node it belongs to
+        // rather than on whichever node the walk happened to reach.
+        assert_eq!(loaded.names.l1s, [Some("veil".to_string()), None]);
+        assert_eq!(loaded.names.l2s, [None]);
     }
 
     /// **Each geometry runs at the number written against it.**
@@ -1633,6 +1815,7 @@ proc blob {
                 capacities: &[4096, 65_536],
                 params: &[],
                 bindings: &[],
+                edges: &[],
                 camera: &DEFAULT_CAMERA,
                 seeds: &[1, 2],
             },
@@ -1686,6 +1869,7 @@ proc blob {
                 capacities: &[4096, 4096],
                 params: &[],
                 bindings: &[],
+                edges: &[],
                 camera: &DEFAULT_CAMERA,
                 seeds: &[7, 9],
             },
@@ -1843,6 +2027,7 @@ proc blob {
                     capacities,
                     params: &[],
                     bindings: &[],
+                    edges: &[],
                     camera: &DEFAULT_CAMERA,
                     seeds: &[1],
                 },

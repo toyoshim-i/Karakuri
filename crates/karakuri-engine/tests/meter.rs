@@ -825,6 +825,7 @@ fn a_build_landing_on_a_slot_retires_its_meter() {
     requests
         .send(Request {
             names: karakuri_engine::swap::RequestNames::default(),
+            edges: Vec::new(),
             id: 1,
             l1s: vec![(compile(L1), CAPACITY)],
             l2s: Vec::new(),

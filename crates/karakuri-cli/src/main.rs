@@ -435,6 +435,14 @@ options:
                         layer, key, signal and range are required.
                         signal=bpm is refused: a tempo is not a [0,1] signal
                         and the binding would never move — bind beat or bar
+  --edge NODE.SLOT=NODE bind a procedure's declared geometry input to a node
+                        of the Set: `--edge morph.far=sphere_shell`. A `.kir`
+                        that takes a second geometry names the slot and never
+                        which node fills it, so this is where that is said —
+                        and a slot nothing binds is refused rather than
+                        guessed at. Both sides are node names: one you wrote
+                        with `--set far=file.kir`, or the procedure's own where
+                        you wrote none
   --publish NAME=SPEC   put one control on the console, over a param or a
                         node's param: `level=exposure[0..2]` or
                         `level=L4:0:exposure[0..2]`. Repeat for more. An
@@ -818,6 +826,23 @@ struct Args {
     /// has no slot field: a Set file is per Set, and one per `--set` is what
     /// replaces it.
     bindings: Vec<Binding>,
+    /// `--edge`, applied to every Set on the same terms as `overrides`.
+    ///
+    /// **A procedure declares a named input slot and the Set binds it to a
+    /// node.** `uses far : Geometry` in a `.kir` says what the file needs
+    /// without naming which node supplies it — a file that named one would be
+    /// coupled to one Set — so this is where the other half is written. Which
+    /// geometry a morph blends towards used to be `--set` position 1, written
+    /// nowhere at all, and reordering the command line changed the picture in
+    /// silence.
+    ///
+    /// **The record is the home and the flag writes into it**, on the terms
+    /// `--bind` follows: an `edge` record in a Set file is what a saved use
+    /// carries, and this is the authoring surface that exists today. Like
+    /// `--param` it applies to every Set of the deck, and an edge whose node
+    /// names nothing in a given Set is a statement about a different one — see
+    /// [`karakuri_engine::set::Wiring::edges`].
+    edges: Vec<karakuri_engine::set::Edge>,
     /// The session tempo. There is **no tempo record** in the v0.2 vocabulary,
     /// so unlike `--bind` this flag has nothing to map onto yet; it is here
     /// because a binding to `beat` is meaningless at a tempo nobody can set.
@@ -1012,6 +1037,52 @@ fn extent(flag: &str, value: String) -> Result<(u32, u32), String> {
 /// an unknown `t` for forward compatibility between engine versions; a typo on
 /// a command line has no such excuse, and `curv=pow2` silently taking the
 /// default curve is the exact silence every other flag here was fixed for.
+/// `--edge <node>.<slot>=<geometry>` — bind one procedure's declared input slot
+/// to a node of the Set.
+///
+/// **`.` between the node and the slot, `=` before the node it is bound to.**
+/// The `=` is `--set`'s already and means "the thing on the left is a name for
+/// the thing on the right"; the `.` is the same dot the procedure reads the slot
+/// through, so `--edge morph.far=sphere_shell` and `far.position` in the
+/// `deform` are visibly one spelling. `:` was not available — `--param` and
+/// `--publish` use it for a layer and an index, and it is a path character on
+/// Windows.
+///
+/// **`--bind` was taken**, by signals, which is the other reason the word here
+/// is `edge`: it is what the record has always been going to be called, since
+/// what it writes down is one edge of the graph a Set describes.
+///
+/// Every part is refused empty rather than accepted and resolved to nothing: an
+/// edge with no slot in it is a sentence about a node, and there is no such
+/// sentence.
+fn parse_edge(value: &str) -> Result<karakuri_engine::set::Edge, String> {
+    let bad = |what: &str| format!("`--edge {value}` — {what}");
+    let Some((from, to)) = value.split_once('=') else {
+        return Err(bad(
+            "expected `<node>.<slot>=<geometry>`, e.g. `morph.far=sphere_shell`",
+        ));
+    };
+    // **The last dot, not the first.** A node name may hold one — nothing
+    // refuses `--set my.morph=morph.kir` — and the slot is a `.kir` identifier,
+    // which cannot.
+    let Some((node, slot)) = from.rsplit_once('.') else {
+        return Err(bad(
+            "expected a `.` between the node and the slot it declares, e.g. \
+             `morph.far=sphere_shell`",
+        ));
+    };
+    if node.is_empty() || slot.is_empty() || to.is_empty() {
+        return Err(bad(
+            "every part names something: `<node>.<slot>=<geometry>`",
+        ));
+    }
+    Ok(karakuri_engine::set::Edge {
+        node: node.to_string(),
+        slot: slot.to_string(),
+        to: to.to_string(),
+    })
+}
+
 fn parse_bind(value: &str) -> Result<Binding, String> {
     let bad = |what: &str| format!("`--bind {value}` — {what}");
 
@@ -1292,6 +1363,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
     let mut args_out = Args {
         overrides: Vec::new(),
         bindings: Vec::new(),
+        edges: Vec::new(),
         bpm: DEFAULT_BPM,
         sets: Vec::new(),
         capacity: 262_144,
@@ -1384,6 +1456,10 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
             "--bind" => {
                 let value = value_for("--bind", &mut it)?;
                 args_out.bindings.push(parse_bind(&value)?);
+            }
+            "--edge" => {
+                let value = value_for("--edge", &mut it)?;
+                args_out.edges.push(parse_edge(&value)?);
             }
             "--bpm" => {
                 let value = value_for("--bpm", &mut it)?;
@@ -1828,12 +1904,12 @@ struct Material {
 /// reproduced it here would be a second place for a fact this project has
 /// already been bitten by twice.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct Names {
-    l1s: Vec<Option<String>>,
-    l2s: Vec<Option<String>>,
-    l3: Option<String>,
-    l4s: Vec<Option<String>>,
-    field: Option<String>,
+pub struct Names {
+    pub l1s: Vec<Option<String>>,
+    pub l2s: Vec<Option<String>>,
+    pub l3: Option<String>,
+    pub l4s: Vec<Option<String>>,
+    pub field: Option<String>,
 }
 
 impl Names {
@@ -2193,9 +2269,12 @@ fn replay_session(args: &Args, id: &str) {
         // renderers. Overdraw is what every Set was before an L5 could be
         // nested, so it is what a file that cannot say reads as.
         karakuri_engine::set::Layering::Overdraw,
-        // A Set file records no names yet, so every node is called what its
-        // procedure declares.
-        &Names::default(),
+        // **The names and edges the file recorded.** A replay is the material
+        // as it was played, and an edge is part of the material: a slot the
+        // file bound and a replay did not would be a Set that will not build,
+        // and one bound to a different geometry is a different picture.
+        &loaded.names,
+        &loaded.edges,
         // The file's number per geometry when it recorded one, and otherwise
         // the procedure's own declared default — never the flag's, which is a
         // general default beating a specific declaration that meant it.
@@ -2404,6 +2483,9 @@ fn rebuild(
         &l4s,
         karakuri_engine::set::Layering::Overdraw,
         &Names::default(),
+        // **No node here declares a slot**, because there is no L2 here at all:
+        // a `procedure` record names an L1 and its renderers.
+        &[],
         // Nothing recorded: a `procedure` record names a swapped-in procedure
         // and carries no capacity, so each source runs at what it declares.
         &capacities_for(args, std::slice::from_ref(&l1), &[]),
@@ -2596,6 +2678,11 @@ fn session_head(
             capacities: &saving_capacities(args, l1s),
             params: &args.overrides,
             bindings: &args.bindings,
+            // **Which node fills each declared slot**, saved so the file
+            // rebuilds: a slot nothing binds is refused where the Set is built,
+            // so a Set file that dropped its edges would be one that no longer
+            // loads.
+            edges: &args.edges,
             camera: &camera,
             seeds: &saving_seeds(args, l1s),
         },
@@ -2685,6 +2772,11 @@ fn save_set(args: &Args, placed: &[Vec<Placed>], l1s: &[karakuri_ir::typed::Chec
             capacities: &saving_capacities(args, l1s),
             params: &args.overrides,
             bindings: &args.bindings,
+            // **Which node fills each declared slot**, saved so the file
+            // rebuilds: a slot nothing binds is refused where the Set is built,
+            // so a Set file that dropped its edges would be one that no longer
+            // loads.
+            edges: &args.edges,
             camera: &camera,
             seeds: &saving_seeds(args, l1s),
         },
@@ -2741,6 +2833,22 @@ fn load_set(args: &mut Args, id: &str) -> setfile::Loaded {
     let mut bindings = loaded.bindings.clone();
     bindings.append(&mut args.bindings);
     args.bindings = bindings;
+    // **The file's edges, then the flags'**, on the terms the params above
+    // follow: an `--edge` given beside `--load-set` is the operator rebinding a
+    // slot the file bound. It *replaces* rather than piling up, which is where
+    // this differs from a `--param` — two edges on one slot are refused where
+    // the Set is built, so appending both would turn an override into a
+    // refusal. Only the slot the flag names is dropped; the file's other edges
+    // stand.
+    let mut edges = loaded.edges.clone();
+    edges.retain(|e| {
+        !args
+            .edges
+            .iter()
+            .any(|given| given.node == e.node && given.slot == e.slot)
+    });
+    edges.append(&mut args.edges);
+    args.edges = edges;
     args.from_set = Some(FromSet {
         salts: loaded.salts.clone(),
         camera: loaded.camera,
@@ -2795,13 +2903,19 @@ fn main() {
                 .map(|(checked, src)| scratch::place(&root, &checked.name, src))
                 .collect();
             match written {
-                Ok(paths) => args.sets.insert(
-                    0,
-                    (
-                        Named::bare(paths[0].clone()),
-                        paths[1..].iter().cloned().map(Named::bare).collect(),
-                    ),
-                ),
+                // **Each path keeps the name the file gave that node**, so a
+                // loaded Set that is then edited resolves its edges against the
+                // spellings it was saved with rather than against the procedure
+                // names the scratch happens to file it under.
+                Ok(paths) => {
+                    let mut named = paths
+                        .iter()
+                        .cloned()
+                        .zip(loaded.node_names())
+                        .map(|(path, name)| Named { name, path });
+                    let head = named.next().expect("a Set file names at least an L1");
+                    args.sets.insert(0, (head, named.collect()))
+                }
                 Err(e) => {
                     eprintln!("karakuri-cli: {e}");
                     std::process::exit(1);
@@ -2855,12 +2969,10 @@ fn main() {
     // point: one path, so a loaded Set can be watched and rewritten.
     if let Some(loaded) = loaded.filter(|_| !editable) {
         eprintln!("  slot 0: set `{}`", loaded.id);
-        // **The names a Set file recorded**, once anything reads them back. A
-        // file records the name the operator wrote; nothing this build points
-        // at a node by name, so `setfile` reports each one and stops — and a
-        // loaded Set's nodes are named after their procedures, which is what a
-        // bare `--set` gets too.
-        let names = Names::default();
+        // **The names the file recorded**, which are what its edges are
+        // written against — a load that dropped them would be a load whose
+        // slots resolve to nothing.
+        let names = loaded.names.clone();
         procs.push(Material {
             l1s: loaded.l1s,
             l2s: loaded.l2s,
@@ -3043,6 +3155,7 @@ fn build_deck(
                     karakuri_engine::set::Layering::Overdraw
                 },
                 &material.names,
+                &args.edges,
                 &capacities_for(args, l1, recorded_capacities(args, slot)),
                 &mut attached,
                 &args.overrides,
@@ -3077,8 +3190,12 @@ fn build_deck(
                     };
                     let watcher = watch::Watch::new(
                         slot,
-                        args.sets[slot].0.path.clone(),
-                        args.sets[slot].1.iter().map(|n| n.path.clone()).collect(),
+                        // **With the names, not only the paths.** A rebuild
+                        // resolves its edges against them, and a watcher that
+                        // handed the sort bare paths would rename every node
+                        // on the first save.
+                        args.sets[slot].0.clone(),
+                        args.sets[slot].1.clone(),
                         layering,
                         args.capacity_given.then_some(args.capacity),
                         salts[slot]
@@ -3094,6 +3211,7 @@ fn build_deck(
                         args.overrides.clone(),
                         args.published.clone(),
                         args.bindings.clone(),
+                        args.edges.clone(),
                     );
                     // **Only when a session is being recorded.** Without
                     // one there is nothing to name and no store to name it
@@ -3185,6 +3303,10 @@ fn build(
     layering: karakuri_engine::set::Layering,
     // What each node is called — see `Names`.
     names: &Names,
+    // Which node fills each declared input slot — see `Args::edges`. Every one
+    // the run was given, including any about another slot's Set, which the
+    // engine passes over.
+    edges: &[karakuri_engine::set::Edge],
     // One per entry in `l1s`, in the same order — see `capacities_for`.
     capacities: &[u32],
     // Set to `true` for each binding that attached, and left alone otherwise.
@@ -3232,12 +3354,13 @@ fn build(
         layering,
         seed,
         &assigned,
-        karakuri_engine::set::NodeNames {
+        karakuri_engine::set::Wiring {
             l1s: &names.l1s,
             l2s: &names.l2s,
             l3: names.l3.as_deref(),
             l4s: &names.l4s,
             field: names.field.as_deref(),
+            edges,
         },
     ) {
         Ok(mut set) => {
@@ -5269,6 +5392,57 @@ mod tests {
         }
     }
 
+    // -- edges -----------------------------------------------------------
+
+    /// **`--edge <node>.<slot>=<geometry>` writes the record it stands for**,
+    /// and every part of the spelling names something.
+    ///
+    /// The `.` is the same dot the procedure reads the slot through and the `=`
+    /// is `--set`'s, so `--edge morph.far=sphere` and `far.position` in the
+    /// `deform` are visibly one spelling.
+    #[test]
+    fn an_edge_names_a_node_a_slot_and_the_geometry_bound_to_it() {
+        let args = parse(&["--edge", "morph.far=sphere_shell"]).expect("parses");
+        assert_eq!(
+            args.edges,
+            vec![karakuri_engine::set::Edge {
+                node: "morph".to_string(),
+                slot: "far".to_string(),
+                to: "sphere_shell".to_string(),
+            }]
+        );
+
+        // **The last dot, not the first.** A node name may hold one — nothing
+        // refuses `--set my.morph=morph.kir` — and a slot is a `.kir`
+        // identifier, which cannot.
+        let args = parse(&["--edge", "my.morph.far=sphere"]).expect("parses");
+        assert_eq!(args.edges[0].node, "my.morph");
+        assert_eq!(args.edges[0].slot, "far");
+    }
+
+    /// **A malformed edge is refused rather than dropped**, on `--param`'s
+    /// terms: an edge that was silently discarded looks exactly like a slot
+    /// nobody bound, and the refusal for *that* would name the file rather than
+    /// the command line that misspelt it.
+    #[test]
+    fn a_malformed_edge_says_so() {
+        for spelled in [
+            // No geometry after the `=`.
+            "morph.far",
+            // No slot: a sentence about a node, which there is no such thing as.
+            "morph=sphere",
+            // Every part names something.
+            "morph.=sphere",
+            ".far=sphere",
+            "morph.far=",
+        ] {
+            let err = parse(&["--edge", spelled])
+                .expect_err(&format!("`{spelled}` is not an edge"))
+                .to_string();
+            assert!(err.contains("--edge"), "`{spelled}` -> {err}");
+        }
+    }
+
     // -- audio -----------------------------------------------------------
 
     #[test]
@@ -5497,6 +5671,15 @@ mod tests {
 
         let mut args = parse(&[]).expect("parses");
         args.sets = vec![(Named::bare(&l1), vec![Named::bare(&l4)])];
+        // **And the edge that makes it buildable.** `morph` takes a geometry it
+        // calls `far` and a Set that does not say which one is refused where it
+        // is built — so a head recorded without it is a head no replay can
+        // open, which is exactly the failure this test is about.
+        args.edges = vec![karakuri_engine::set::Edge {
+            node: "morph".to_string(),
+            slot: "far".to_string(),
+            to: "sphere_shell".to_string(),
+        }];
         args.store = dir.path().to_path_buf();
         let (material, placed) = sort_slot(0, &args.sets[0].0, &args.sets[0].1);
 
@@ -5568,6 +5751,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["soft_points"]
         );
+        assert_eq!(loaded.edges, args.edges, "and the wiring between them");
         assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
     }
 

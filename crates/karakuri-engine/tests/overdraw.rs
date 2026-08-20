@@ -142,7 +142,7 @@ fn try_build(gpu: &Gpu, l1: &str, l4s: &[&str]) -> Result<Set, SetError> {
         karakuri_engine::set::Layering::Overdraw,
         3,
         &[],
-        karakuri_engine::set::NodeNames::default(),
+        karakuri_engine::set::Wiring::default(),
     )
 }
 
@@ -160,7 +160,7 @@ fn build_over(gpu: &Gpu, l1: &str, l4s: &[&str]) -> Set {
         karakuri_engine::set::Layering::Overdraw,
         3,
         &[],
-        karakuri_engine::set::NodeNames::default(),
+        karakuri_engine::set::Wiring::default(),
     )
     .expect("one L1 and however many renderers over it");
     set.resize(&gpu.device, W, H);

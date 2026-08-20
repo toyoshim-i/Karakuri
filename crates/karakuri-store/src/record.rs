@@ -257,6 +257,35 @@ pub enum Record {
         index: u32,
         value: u64,
     },
+    /// **Binds one node's declared input slot to another node of this Set.**
+    ///
+    /// A procedure declares what it takes and refuses to say where it comes
+    /// from — `uses far : Geometry` names a slot the way `consumes position`
+    /// names an attribute, without naming which node supplies it, because a
+    /// `.kir` that named one would be coupled to one Set and would stop being a
+    /// library part. This record is the other half, and it is here rather than
+    /// in the `.kir` for the reason a [`Record::Slot`]'s name is: an edge
+    /// belongs to the *use*, and a Set file is what a use is recorded as.
+    ///
+    /// **Addressed by name at both ends, which is the one record that is.**
+    /// Everything else here says which node it is about with `(layer, index)`,
+    /// and an edge cannot: a position moves when the list is reordered, and
+    /// reordering silently changing which geometry a morph blends towards is
+    /// the exact failure this record exists to end. Every node has a name
+    /// whether or not one was written — a name nobody wrote is derived from the
+    /// procedure where the Set is built — so both ends always resolve.
+    ///
+    /// A slot bound twice is refused where the Set is built rather than here,
+    /// on the terms a duplicate node name is: the vocabulary's job is to carry
+    /// what a file said.
+    Edge {
+        /// The node that declares the slot.
+        node: String,
+        /// What that node's procedure calls it.
+        slot: String,
+        /// The node bound to it.
+        to: String,
+    },
     /// Inlined `.kir` source, for bundling an artifact with the Set that uses it.
     Src {
         hash: Hash,

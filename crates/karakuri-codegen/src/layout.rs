@@ -138,14 +138,18 @@ pub mod binding {
     /// `array<u32>`, one flag per element. Not part of `Element` — see the
     /// module doc for why it is its own buffer.
     pub const ALIVE: u32 = 1;
-    /// [`group::PREV`](super::group::PREV): the **paired** geometry, for a
-    /// `pairs` L2 — `array<ElementOther>`, read-only.
+    /// [`group::PREV`](super::group::PREV): the **far** geometry, for an L2
+    /// that declares `uses <name> : Geometry` — `array<ElementFar>`, read-only.
     ///
     /// In the input group beside the near side, because that is what it is: a
     /// second input edge, read and never written. It has its own struct rather
     /// than sharing `ElementIn`, since two sources need not emit the same
     /// attributes and each addresses its own buffer.
-    pub const OTHER: u32 = 2;
+    ///
+    /// **One, not one per declared slot.** A node takes one second geometry —
+    /// the checker refuses a second `uses` — so this is a constant rather than
+    /// a base an index is added to.
+    pub const FAR: u32 = 2;
 
     /// A uniform buffer: `Uniforms` in [`group::UNIFORMS`], `StepArgs` in
     /// [`group::STEP`](super::group::STEP).

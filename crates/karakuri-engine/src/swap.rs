@@ -312,6 +312,12 @@ pub struct Request {
     /// the procedures are given in. Restated rather than carried over for the
     /// reason `bindings` is.
     pub names: RequestNames,
+    /// **Which node fills each declared input slot** — see
+    /// [`crate::set::Edge`]. Restated on every rebuild, and with a sharper
+    /// consequence than the names beside it: a slot nothing binds is refused
+    /// outright, so a request that left these out would turn every save of a
+    /// morph's `.kir` into a rebuild that will not build.
+    pub edges: Vec<crate::set::Edge>,
     pub label: String,
 }
 
@@ -1106,12 +1112,13 @@ fn run_worker(
                 // and its interface are: a rebuild that took the names off the
                 // outgoing Set would depend on what happened to be live, and a
                 // request has to be reproducible from a record stream.
-                crate::set::NodeNames {
+                crate::set::Wiring {
                     l1s: &request.names.l1s,
                     l2s: &request.names.l2s,
                     l3: request.names.l3.as_deref(),
                     l4s: &request.names.l4s,
                     field: request.names.field.as_deref(),
+                    edges: &request.edges,
                 },
             )
             .map(|mut set| {

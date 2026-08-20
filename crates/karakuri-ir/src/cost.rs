@@ -388,7 +388,7 @@ fn expr_cost(
         | TExprKind::Local(_)
         | TExprKind::Param(_)
         | TExprKind::Attr(_)
-        | TExprKind::Other(_)
+        | TExprKind::Far(_)
         | TExprKind::Ambient(_) => 1,
         TExprKind::Unary { value, .. } => {
             1u64.saturating_add(expr_cost(value, mult, block, hot, calls))

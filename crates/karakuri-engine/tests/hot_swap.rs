@@ -175,6 +175,7 @@ fn request(l4_src: &str, capacity: u32, label: &str) -> Request {
 fn request_many(l4_srcs: &[&str], capacity: u32, label: &str) -> Request {
     Request {
         names: karakuri_engine::swap::RequestNames::default(),
+        edges: Vec::new(),
         id: 1,
         l1s: vec![(compile(L1), capacity)],
         l2s: Vec::new(),

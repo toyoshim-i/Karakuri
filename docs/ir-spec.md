@@ -58,10 +58,10 @@ procedures evaluate it, so it needs no buffer, no pass and no position in the ch
 
 Each brings its own header rules, and a declaration belonging to another layer is refused
 where it is written rather than ignored: `capacity` and `topology` are L1's, `amplify` and
-`pairs` are L2's, `blend` is L4's, `emit` belongs to procedures that write elements. An L3
+`uses` are L2's, `blend` is L4's, `emit` belongs to procedures that write elements. An L3
 declares none of them — it produces a viewpoint, and what is drawn with it is the
-renderer's business. `amplify` and `pairs` are refused *together* on one procedure: one node
-cannot both take two geometries and return several copies of each.
+renderer's business. `amplify` and `uses` are refused *together* on one procedure: one node
+cannot both take a second geometry and return several copies of each element.
 
 **Each kind also has a declaration and a block it cannot do without**, and the refusal is by
 name at the header rather than by a missing symbol later:
@@ -134,55 +134,80 @@ but a fork with no compilation in it, which primes almost immediately.
 The **live** count is dynamic, lives in an indirect-dispatch args buffer, and is not
 readable from IR. See [Element lifecycle](#element-lifecycle).
 
-### pairs (L2 only)
+### uses (L2 only)
 
 ```
-kind  L2
-pairs
+kind L2
+uses far : Geometry
 ```
 
-**An L2 that takes two geometries and produces one.** `L2 : Geometry -> Geometry` is an
+**An L2 that takes a second geometry and produces one.** `L2 : Geometry -> Geometry` is an
 endomorphism, and this breaks it in the second of the two possible directions: `amplify`
 breaks it on the *count* axis, one element in and several out, and this breaks it on the
 *arity* axis. Both stay in the same slot position and both are header declarations, because
 what a `deform` writes is decided before it runs.
 
-The paired element's attributes are read as **`other.<name>`**:
+**The name is the procedure's own**, exactly as `consumes position` names an attribute
+without naming which L1 supplies it. That is the load-bearing rule and the reason the
+declaration exists at all: **a `.kir` may not name a node**, because naming one couples the
+procedure to one Set and it stops being a library part. So the file says what it takes and
+the Set says what fills it — an [`edge`](#set-file-format) record, written from the command
+line as `--edge <node>.<slot>=<geometry>`.
+
+The far element's attributes are read through that name:
 
 ```
 deform {
-  position = mix(position, other.position, vec3(k, k, k));
+  position = mix(position, far.position, vec3(k, k, k));
 }
 ```
 
-- **`other.position` is not a swizzle**, and it reaches the checker because it is *shaped*
+- **`far.position` is not a swizzle**, and it reaches the checker because it is *shaped*
   like one — `expr . ident` is the grammar. Deciding it there costs no new syntactic
-  category, which is the whole reason the paired read is spelled this way: a pairing L2 adds
-  one header keyword and one base name, and nothing else in the language moves.
-- **One `consumes` covers both sides.** The second geometry is an input edge and pairing
-  reads the same attribute from each, so an attribute this node does not take is not readable
-  on either side.
-- **`other` is reserved everywhere**, not only where it means something. A local called
-  `other` reads fine today and stops reading the day the file grows the declaration.
+  category, which is the whole reason the read is spelled this way: `uses` adds one header
+  declaration and one name, and nothing else in the language moves.
+- **One `consumes` covers both sides.** The second geometry is an input edge and a node
+  reads the same attribute from each, so an attribute this node does not take is not
+  readable on either side.
+- **The name is ordinary and shares one scope.** A local, a param or a slot of the same name
+  is refused, on the terms every other collision here is; and a name nothing declared is
+  simply a name that resolves to nothing. Nothing is reserved language-wide — that was what
+  the previous spelling did, and reserving one word is exactly what caps a procedure at one
+  input.
+- **A geometry is not a value.** `far` alone is refused: the language has no type for a
+  whole source and no way to pass one, so what can be said about it is what one of its
+  elements holds. It is not assignable either — the far side is an input edge.
+- **The type is written and there is one of them.** `Geometry` is what a slot may be today,
+  and anything else is refused by name. Writing it anyway is what lets the slot that takes a
+  camera or a field arrive without the declaration changing shape.
 - Readable in a `deform` and a `mask`, and nowhere else.
+- **One slot per node.** A second `uses` is refused with a sentence: a second bound buffer
+  per node and a second edge per Set are not built, and one name silently winning would put
+  back exactly the failure this notation removes.
 
-**Which two geometries is the Set's answer, not the file's.** A Set holding a pairing L2 has
-exactly two sources and they are paired in `--set` order. **This is the system's first
-fan-in, and it deliberately brings no general notation for one** — naming several is what a
-real fan-in notation is for, and it arrives with the thing that needs it.
+**Which geometry fills the slot is the Set's answer, not the file's, and it is written
+down.** It used to be `--set` position 1 — written nowhere, so reordering the command line
+silently changed the picture. It is an `edge` now, at both ends by name, and **an unbound
+slot is refused**. Not "if there is exactly one, use it": that implicit rule is the thing
+being removed, and reintroducing it under a new spelling would cap the next fan-in at one
+the same way.
 
-**Five things are refused where a pairing Set is built**, because none of them is a property
-of the file: exactly two sources, the pairing node *first* in the chain (so its second input
-is a source rather than whatever reached its position), both sources static, both the same
-size, and the far source able to supply whatever the chain derives — a chain that consumes
-`velocity` needs it on both sides, and the far source's element struct is built with the same
-derived slots as the near one or `other.position` reads from the middle of the element
-before it.
+**Five things are refused where such a Set is built**, because none of them is a property
+of the file: exactly two sources, the node with the slot *first* in the chain (so its second
+input is a source rather than whatever reached its position), both sources static, both the
+same size, and the far source able to supply whatever the chain derives — a chain that
+consumes `velocity` needs it on both sides, and the far source's element struct is built
+with the same derived slots as the near one or the far read comes from the middle of the
+element before it.
 
-**The correspondence is the slot index**, which is the same element in both sources only
-while neither compacts. So both sources must be *static*: no `spawn` block and no `kill()`,
-which `Checked::is_static` answers and which is why that predicate had to start asking about
-both.
+The near geometry — the one the chain runs over and the renderers draw — is whichever source
+no edge bound. Not position 0: an edge exists so that the list's order decides nothing, and
+a near side still read off a position would keep half of the rule this replaced.
+
+**The correspondence is the element's slot index**, which is the same element in both sources
+only while neither compacts. So both sources must be *static*: no `spawn` block and no
+`kill()`, which `Checked::is_static` answers and which is why that predicate had to start
+asking about both.
 
 ### amplify (L2 only)
 
@@ -227,7 +252,7 @@ param <name> : <type> [<min>, <max>] = <default>
   instruction like "a little slower" can only be translated into a value by something that
   knows what the range is. Without one, every revision falls back to regenerating code.
 - **Every name the language already gives meaning to is reserved, and how widely depends on
-  the name.** Reserved in every layer: `id`, `other`, every attribute (`position`, `size`,
+  the name.** Reserved in every layer: `id`, every attribute (`position`, `size`,
   `tint`, …) and every ambient (`seed`, `copy`, `point`, `t`, `beats`, `dt`, `capacity`,
   `camera`, `point_coord`, `eye`, `ray`). Reserved in the layer that *writes* it: a stage
   output — `clip`, `clip_b`, `point_size` and `color` in an L4, `target`, `up`, `fov_y`,
@@ -235,6 +260,12 @@ param <name> : <type> [<min>, <max>] = <default>
   `param color : vec3` is accepted on an L1, which declares no `color` output, and refused
   on the L4 that would have to write one — the collision is with the *lowering's* name for
   the output, and an L1 has no such name.
+  A **declared geometry slot** joins that scope where a procedure declares one — `uses far :
+  Geometry` makes `far` this procedure's, so a local or a param of that name is refused. It is
+  not reserved anywhere else, and that is the point: the name is the procedure's own, so
+  reserving it language-wide would be reserving one word for one input and capping every
+  procedure at that one. The spelling it replaced, `other`, was exactly such a word.
+
   Params, attributes, ambients and stage outputs share one scope inside a block, and the
   lowering packs params and ambients into one uniform struct — `param t : float` would
   collide with the ambient `t` in the generated WGSL, silently, at a point far from the
@@ -901,10 +932,11 @@ more block, one more ambient and one more output, which is the shape L2 and L3 a
 established.
 
 **One per Set**, on the same terms as the camera. Several would need naming, and naming is
-fan-in. Fan-in has since arrived twice — two sources in a Set, and a pairing L2 that reads
-both — and neither brought a notation: which two geometries a `pairs` node takes is `--set`
-order. So this is now waiting on a debt rather than on a feature, which is the shape
-`docs/roadmap.md` records under "Naming what a Set holds".
+fan-in — and a notation for one now exists: [`uses`](#uses-l2-only) declares a named input
+and a Set's `edge` binds it. What is not built is this layer's use of it, since `field(p)`
+names the one field by being the only one and would have to grow a name of its own. So this
+is waiting on the same notation being carried one layer further rather than on a design, and
+`docs/roadmap.md` records the order under "Naming what a Set holds".
 
 #### Evaluating one
 
@@ -1569,6 +1601,7 @@ known. The total-cost decision lives there, not in the artifact.
 {"t":"param","layer":"L1","key":"radius","value":2.4}
 {"t":"param","layer":"L4","key":"hue","value":0.58}
 {"t":"bind","layer":"L1","key":"turbulence","signal":"energy","curve":"pow2","range":[0.1,2.4]}
+{"t":"edge","node":"morph","slot":"far","to":"sphere_shell"}
 {"t":"camera","kind":"orbit","radius":8.0,"speed":0.15}
 {"t":"seed","stream":"L1","value":19274}
 ```
@@ -1581,6 +1614,21 @@ known. The total-cost decision lives there, not in the artifact.
   one source — `{"t":"slot","layer":"L1","index":1,"name":"veil","proc":"…"}`. Optional and
   absent by default: an unnamed source is unreferenceable, on the terms HTML gives an `id`.
   Unique within the file. See "Multiple L1 sources".
+- **`edge` binds one node's declared input slot to another node**, and is **the one record
+  addressed by name at both ends**. A procedure declares what it takes and never which node
+  supplies it — `uses far : Geometry`, see [above](#uses-l2-only) — because a `.kir` that
+  named a node would be coupled to one Set. This is the other half, and it lives here for the
+  same reason a `slot`'s name does: an edge belongs to the *use*, and a Set file is what a
+  use is recorded as. `--edge morph.far=sphere_shell` writes one.
+
+  It cannot use `(layer, index)`: a position moves when the list is reordered, and reordering
+  silently changing which geometry a morph blends towards is the failure this record exists
+  to end. Every node has a name whether or not one was written — a name nobody wrote is
+  derived from the procedure where the Set is built, which is a function of the artifact the
+  `slot` record already references — so both ends always resolve, and a file that names no
+  node at all still round-trips. Written after the `slot` records, so a reader has every name
+  in hand by the time it meets one. **A declared slot that no `edge` binds is refused where
+  the Set is built**, and so is a slot bound twice.
 - **`param` and `bind` may carry an `index`**, which addresses one node of the layer —
   `{"t":"param","layer":"L4","index":1,"key":"exposure","value":0.9}`. **Absent is a
   wildcard, not node 0**: it reaches every node declaring the key, which is what a bare name
@@ -2798,7 +2846,7 @@ Three things get called "mixing two sources" and only one of them needs anything
 |---|---|---|
 | Crossfade | draw both, blend opacity | Nothing here. Two Sets and the L5 mixer |
 | Dissolve | hide one source's elements progressively | Nothing here. An L2 mask on `source` writing `size` or `tint` |
-| Interpolation | pair elements and blend their attributes | **A cross-source read** — `pairs` and `other.<attr>`, [above](#pairs-l2-only) |
+| Interpolation | pair elements and blend their attributes | **A cross-source read** — `uses <name> : Geometry` and `<name>.<attr>`, [above](#uses-l2-only) |
 
 Interpolation is the only real addition, and it is not a count change — it is an
 element-wise operation that needs to read *another source's* element at the corresponding

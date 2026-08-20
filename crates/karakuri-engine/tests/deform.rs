@@ -150,7 +150,7 @@ fn build_over(gpu: &Gpu, l1: &str, l2s: &[&str], capacity: u32) -> Set {
         Layering::Overdraw,
         7,
         &[],
-        karakuri_engine::set::NodeNames::default(),
+        karakuri_engine::set::Wiring::default(),
     )
     .expect("a chain of one L1, some L2s and one L4");
     set.resize(&gpu.device, W, H);
@@ -399,7 +399,7 @@ proc tinted_dots {
         Layering::Overdraw,
         7,
         &[],
-        karakuri_engine::set::NodeNames::default(),
+        karakuri_engine::set::Wiring::default(),
     )
     .expect("the renderer consumes what the deformation emits");
 
@@ -416,7 +416,7 @@ proc tinted_dots {
         Layering::Overdraw,
         7,
         &[],
-        karakuri_engine::set::NodeNames::default(),
+        karakuri_engine::set::Wiring::default(),
     )
     .err()
     .expect("`tint` is not available without the deformation that emits it");
@@ -636,7 +636,7 @@ proc paint {{
             Layering::Overdraw,
             7,
             &[],
-            karakuri_engine::set::NodeNames::default(),
+            karakuri_engine::set::Wiring::default(),
         )
         .expect("builds");
         set.resize(&gpu.device, W, H);
@@ -730,7 +730,7 @@ proc half_paint {
         Layering::Overdraw,
         7,
         &[],
-        karakuri_engine::set::NodeNames::default(),
+        karakuri_engine::set::Wiring::default(),
     )
     .expect("builds");
     set.resize(&gpu.device, W, H);
