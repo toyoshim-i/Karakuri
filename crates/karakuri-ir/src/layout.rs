@@ -275,9 +275,20 @@ fn attr_elem_ty(attr: Attr) -> StorageElemTy {
 /// property of what happened *upstream*, so a chain that never amplified
 /// carries no `copy` and a Set that pays for one is a Set that has one.
 ///
-/// One struct rather than a parameter per slot: `docs/roadmap.md` has two more
-/// of these coming — `source` from multiple L1 sources — and three independent
-/// booleans threaded through the same call sites is three places to forget one.
+/// **One struct rather than a `bool` parameter, and it now holds one flag.**
+/// It was built expecting company: `source`, from a Set with several L1
+/// sources, was going to be the second synthetic slot, and threading two
+/// independent booleans through the same call sites is two places to forget
+/// one. `source` did not arrive and will not — a chain is instantiated per
+/// source, so which source an element came from is the same value for every
+/// element that instance will ever touch, which makes it a uniform rather than
+/// four bytes restating a constant on every element of every merged Set. See
+/// `karakuri-engine`'s `Source`, and `docs/ir-spec.md` under `source`, where
+/// that reversal is recorded.
+///
+/// The struct stays because the shape is still right: the next conditional
+/// slot lands as a field here rather than as a second parameter at every call
+/// site. It is a struct waiting to be needed, not one that already is.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Synthetic {
     /// `copy`: which copy of its parent this element is, from an amplifying L2
