@@ -1312,11 +1312,9 @@ paragraph promised that "when fan-in arrives it brings the notation with it"; fa
 twice and brought none. The notation is now built: a procedure declares a named input slot
 (`uses far : Geometry`) and the Set binds it (an `edge` record, `--edge morph.far=sphere`).
 What is left is carrying it to the other capped-at-one places — ~~the field~~, ~~the
-camera~~, a mask's source. The field and the camera are done: `uses shape : Field` and `uses
-view : Camera` declare them, an `edge` binds each, and a Set holds as many of both as its
-files declare. A mask's source is the one left, and it is not a slot — the value is a salt
-already in every uniform block, and what is missing is the spelling that reads it. See
-"Naming what a Set holds".
+camera~~, ~~a mask's source~~. All three are done: `uses shape : Field`, `uses view : Camera`
+and `uses only : Source` declare them, an `edge` binds each, and a Set holds as many of the
+first two as its files declare. See "Naming what a Set holds".
 
 **How a param is addressed.** Under the hierarchy framing this was "layer and position";
 under nodes it is simply **the node**, which is the same key with a name that will still be
@@ -1718,7 +1716,7 @@ no name:**
 | ~~MCP reaches an L1 and the renderers and no other node~~ | **Closed.** A model reads and writes every node at `(slot, layer, index)` |
 | ~~Which geometry a node's second input takes is `--set` order~~ | **Closed.** `uses far : Geometry` declares a named slot and an `edge` binds it; an unbound slot is refused |
 | ~~One `kind Field` per Set, one L3 per Set~~ | **Closed, both halves.** The field's call carries a name — `uses shape : Field` and `shape(p)` — and the camera's read carries one too: `uses view : Camera`, `view.clip`, bound by the same `edge`. The half this row said was "a rule rather than a limit" was the cap again in the rule's clothes: *a Set is a grouping around one viewpoint* is only true while nothing can say **which** viewpoint, and a renderer can now. A Set holds as many cameras as its files declare, each a node with a name, an address (`L3:1:radius`) and a `slot` record of its own — and **the built-in orbit is a node too**, called `orbit`, so a renderer can be bound to it rather than reaching it only by saying nothing |
-| A mask cannot say which source it applies to | Nothing exposes the `source` uniform to a procedure. The value is the salt, which is assigned, recorded and already in every uniform block; the read is what is missing |
+| ~~A mask cannot say which source it applies to~~ | **Closed.** `source` is readable, and `uses only : Source` with `--edge dissolve.only=lattice` gives a mask the other half of the comparison. The slot binds a `u32` where a `Geometry` slot binds an element buffer, which is why several are legal on one node and a geometry slot is still capped at one |
 | ~~A source's salt is derived from `--set` order rather than assigned~~ | **Closed.** A `seed` record per geometry, written by `--save-set` and read by `--load-set` |
 
 The first three are the sharp ones, because they are surfaces that *already exist* and stop
@@ -1762,9 +1760,36 @@ and the `source` uniform it would read, ~~several fields per Set~~, ~~several ca
 needs the same two halves — a declaration on the procedure and a binding on the Set — and the
 one that shipped first is the one that had a working picture behind it, `examples/morph.kir`.
 The fields and the cameras followed it, in that order, and each cost one `SlotTy` variant and
-a `Vec` where an `Option` was. **The mask's source is the one left and it is not a slot**: the
-value is a salt already in every uniform block, so what is missing is a spelling that reads
-it rather than an edge that binds one.
+a `Vec` where an `Option` was. **The mask's source came last and it is half a slot, which is
+what the earlier reading of this line got wrong.** The value an element compares — `source`,
+its own identity — is an ambient and needed only a spelling, because the salt was already in
+every uniform block. The value it is compared *against* is a slot, because a `.kir` may not
+name a node: `uses only : Source`, bound by an `edge` like the other three. What separates it
+from `uses far : Geometry` is what the binding costs — a `u32` in a uniform against a
+bind-group entry per node — which is why several `Source` slots are legal on a node that may
+declare one `far`.
+
+**A mask on `source` is an on/off for a whole chain, and the cheap form of it is not to
+build the node.** `source == only` compares two uniforms, so it is the same value in every
+lane — the branch a GPU costs least rather than the one it costs most, which is the half of
+this that made a uniform the right place for `source`. But it is also *constant for the whole
+chain instance*, because a chain is instantiated per source and knows statically which one it
+runs over. So the deformation still runs on every element of every source and multiplies by a
+strength that was decided before the frame began.
+
+The honest optimisation is not to instantiate the node in the chains its slot excludes at
+all, which the per-source chain structure makes nearly free — the Set already builds a
+separate chain per source, and this is a node it would skip rather than a branch it would
+fold. **It is not free where it matters, though**: skipping a node changes what that source's
+elements carry, because the skipped node's `emit` is no longer in the layout. Two sources
+need not agree on what they `emit`, so this is permitted rather than blocked — but it lands
+directly on the element placement work of this milestone, and doing both at once is how a
+layout ends up with two owners again.
+
+**Trigger**: a probe measurement where a masked-out deformation is a measurable share of a
+frame, on a Set whose sources differ enough that the excluded chain is most of the elements.
+Until then the compare is a few instructions on work that was going to run anyway, and the
+picture is identical either way.
 
 **What a renderer can read of a camera, and what it is deliberately not given yet.** The
 three members `uses view : Camera` offers — `view.clip`, `view.eye`, `view.ray` — are the

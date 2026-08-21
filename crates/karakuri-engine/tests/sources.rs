@@ -1211,3 +1211,287 @@ fn a_derived_name_never_takes_one_that_was_written() {
     // renderer that had to give way.
     assert_eq!(set.node_names()[2], "dots-2");
 }
+
+// ---------------------------------------------------------------------------
+// A mask that says which source it applies to
+// ---------------------------------------------------------------------------
+
+/// **A deformation that blanks whichever geometry its slot names, and leaves
+/// the other alone.**
+///
+/// The mask is the whole point: `source` is the chain instance's own identity
+/// and `only` is the one an edge bound, so one `.kir` in one Set behaves
+/// differently in each of the two instances the Set runs it in.
+const DISSOLVE: &str = r#"
+proc dissolve {
+  kind L2
+
+  uses only : Source
+
+  consumes position, tint
+
+  mask {
+    strength = 0.0;
+    if source == only { strength = 1.0; }
+  }
+
+  deform {
+    tint = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#;
+
+/// The same lattice with the salt taken out of its colour.
+///
+/// **Because the salt *is* the identity.** `lattice` tints by `hash1(seed)`,
+/// which is salted per source — the property the tests above are about — so two
+/// sources of one procedure hold different amounts of light and "one lattice's
+/// worth" would be a different number for each of them. A test that counts
+/// light to find out *which* source survived cannot also be measuring the thing
+/// that makes them differ.
+fn white_lattice(name: &str, z: f32) -> String {
+    let src = lattice_at(name, z);
+    let tint = "tint     = vec3(hash1(seed), hash1(seed + 1u), hash1(seed + 2u));";
+    assert!(src.contains(tint), "the tint line moved: {src}");
+    src.replace(tint, "tint     = vec3(1.0, 1.0, 1.0);")
+}
+
+/// The horizontal centre of the light in the frame, which is what tells the two
+/// lattices apart — they sit at different depths and the camera reads that
+/// across the screen.
+fn lit_centre(gpu: &Gpu, set: &mut Set) -> f32 {
+    let px = frame(gpu, set);
+    let (mut sum, mut weight) = (0.0f64, 0.0f64);
+    for (i, t) in px.chunks_exact(4).enumerate() {
+        let v = f64::from(t[0] + t[1] + t[2]);
+        if v > 0.02 {
+            sum += v * f64::from(i as u32 % W);
+            weight += v;
+        }
+    }
+    assert!(weight > 0.0, "nothing was drawn");
+    (sum / weight) as f32
+}
+
+/// **A mask dissolves one of two sources and leaves the other standing**, which
+/// is the row this closes: a mask could not say which source it applied to, and
+/// now it names one through a slot.
+///
+/// Measured twice over, because either half alone has a duller explanation. The
+/// *total* says one lattice's worth of light is gone — half, not none and not
+/// all — and the *centre* says it was the bound one that went, rather than both
+/// halves dimming. Rebinding the edge to the other geometry moves the centre to
+/// the other side, which is what makes the slot the thing deciding it.
+#[test]
+fn a_mask_dissolves_the_source_its_slot_names() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let left = white_lattice("left", -1.2);
+    let right = white_lattice("right", 1.2);
+
+    // Where each lattice sits on its own, and what one of them is worth.
+    let (mut only_left, mut only_right) = (build(&gpu, &[&left]), build(&gpu, &[&right]));
+    let (at_left, at_right) = (
+        lit_centre(&gpu, &mut only_left),
+        lit_centre(&gpu, &mut only_right),
+    );
+    let one_lattice = total(&gpu, &mut only_left);
+    assert!(
+        (at_left - at_right).abs() > 8.0,
+        "the two sit far enough apart to tell apart: {at_left} against {at_right}"
+    );
+
+    let mut both = build_with(&gpu, &[&left, &right], &[DOTS], Layering::Overdraw);
+    let two_lattices = total(&gpu, &mut both);
+
+    for (bound, survivor, gone) in [("right", at_left, at_right), ("left", at_right, at_left)] {
+        let mut set = build_wired(
+            &gpu,
+            &[&left, &right],
+            DISSOLVE,
+            &[edge("dissolve", "only", bound)],
+        )
+        .expect("a Set whose mask names one of its two sources");
+
+        let light = total(&gpu, &mut set);
+        assert!(
+            (light - one_lattice).abs() < one_lattice * 0.15,
+            "binding `only` to `{bound}` leaves one lattice's worth of light: \
+             {light} against {one_lattice} (both would be {two_lattices})"
+        );
+
+        let centre = lit_centre(&gpu, &mut set);
+        assert!(
+            (centre - survivor).abs() < 2.0,
+            "and it is `{bound}` that went, not the other: the light is at {centre}, \
+             the survivor is at {survivor} and the dissolved one was at {gone}"
+        );
+    }
+}
+
+/// **Two Source slots on one node are two independent edges**, which is the
+/// difference between this slot type and the two capped at one: what it binds
+/// is a `u32` in a uniform block the module already has, not a buffer.
+///
+/// Three sources and a mask that spares the one named by neither. If the two
+/// slots shared an answer — one edge winning, or the second overwriting the
+/// first — the surviving lattice would be the wrong one, and the light would
+/// come out at one or three lattices rather than at one.
+#[test]
+fn two_source_slots_on_one_node_name_two_geometries() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let a = white_lattice("a", -1.4);
+    let b = white_lattice("b", 0.0);
+    let c = white_lattice("c", 1.4);
+
+    let pair = r#"
+proc dissolve {
+  kind L2
+
+  uses one : Source
+  uses two : Source
+
+  consumes position, tint
+
+  mask {
+    strength = 0.0;
+    if source == one || source == two { strength = 1.0; }
+  }
+
+  deform {
+    tint = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#;
+
+    // Each of the three, spared in turn, so that neither slot can be the one
+    // doing all the work.
+    for spared in ["a", "b", "c"] {
+        let bound: Vec<&str> = ["a", "b", "c"]
+            .into_iter()
+            .filter(|n| *n != spared)
+            .collect();
+        let mut set = build_wired(
+            &gpu,
+            &[&a, &b, &c],
+            pair,
+            &[
+                edge("dissolve", "one", bound[0]),
+                edge("dissolve", "two", bound[1]),
+            ],
+        )
+        .expect("a Set whose mask names two of its three sources");
+
+        let mut alone = build(
+            &gpu,
+            &[match spared {
+                "a" => &a,
+                "b" => &b,
+                _ => &c,
+            }],
+        );
+        let (masked, expected) = (total(&gpu, &mut set), total(&gpu, &mut alone));
+        assert!(
+            (masked - expected).abs() < expected * 0.15,
+            "sparing `{spared}` leaves exactly that lattice: {masked} against {expected}"
+        );
+        assert!(
+            (lit_centre(&gpu, &mut set) - lit_centre(&gpu, &mut alone)).abs() < 2.0,
+            "and it is `{spared}` that is left standing"
+        );
+    }
+}
+
+/// **An unbound Source slot is refused**, on the terms every other slot's is:
+/// "if there is exactly one, use it" is the rule this whole notation removes,
+/// and a Set of one geometry could satisfy every mask by guessing.
+#[test]
+fn an_unbound_source_slot_is_refused() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let left = lattice_at("left", -1.2);
+    let right = lattice_at("right", 1.2);
+
+    let err = build_wired(&gpu, &[&left, &right], DISSOLVE, &[])
+        .err()
+        .expect("a declared slot that nothing binds is refused");
+    let text = err.to_string();
+    assert!(
+        text.contains("`dissolve` declares `only : Source`"),
+        "the refusal names the slot and the type it was declared with: {text}"
+    );
+    assert!(
+        text.contains("--edge dissolve.only="),
+        "and says how to bind it: {text}"
+    );
+
+    // And a Set of *one* source is refused just the same, which is the half
+    // that matters: there is one right answer and it is still not guessed.
+    let err = build_wired(&gpu, &[&left], DISSOLVE, &[])
+        .err()
+        .expect("one source is not an excuse to fill the slot in");
+    assert!(err
+        .to_string()
+        .contains("nothing in this Set says what fills it"));
+}
+
+/// **A Source slot takes an L1 and nothing else**, and the refusal is its own
+/// sentence rather than the geometry slot's.
+///
+/// The two take the same kind of node for different reasons — that one binds an
+/// element buffer to read beside the ones a node runs over, this one binds the
+/// `u32` that says which geometry a chain instance is — so an author who bound
+/// a mask's comparand to a renderer is not told about buffers.
+#[test]
+fn a_source_slot_bound_to_something_that_is_not_a_geometry_is_refused() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let left = lattice_at("left", -1.2);
+    let right = lattice_at("right", 1.2);
+
+    // Bound to the renderer, which is a node of this Set and has no identity.
+    let err = build_wired(
+        &gpu,
+        &[&left, &right],
+        DISSOLVE,
+        &[edge("dissolve", "only", "dots")],
+    )
+    .err()
+    .expect("a renderer is not a source");
+    let text = err.to_string();
+    assert!(
+        text.contains("which is an L4"),
+        "the refusal says what was bound: {text}"
+    );
+    assert!(
+        text.contains("a slot declared `: Source` takes an L1"),
+        "and what a Source slot takes: {text}"
+    );
+    assert!(
+        text.contains("left") && text.contains("right"),
+        "and lists the sources there are: {text}"
+    );
+
+    // Bound to the deforming node itself, which has elements and still no
+    // identity of its own — an L2 runs *inside* a source rather than being one.
+    let err = build_wired(
+        &gpu,
+        &[&left, &right],
+        DISSOLVE,
+        &[edge("dissolve", "only", "dissolve")],
+    )
+    .err()
+    .expect("an L2 is not a source either");
+    assert!(err.to_string().contains("which is an L2"), "{err}");
+
+    // And a name that is in no Set at all is the other refusal, unchanged.
+    let err = build_wired(
+        &gpu,
+        &[&left, &right],
+        DISSOLVE,
+        &[edge("dissolve", "only", "nowhere")],
+    )
+    .err()
+    .expect("a name nothing answers to");
+    assert!(
+        err.to_string().contains("is not a node of this Set"),
+        "{err}"
+    );
+}

@@ -16,7 +16,7 @@ use karakuri_ir::builtin::Builtin;
 use karakuri_ir::typed::{TExpr, TExprKind};
 use karakuri_ir::{Ambient, Attr, BinOp, Lit, Ty, UnOp};
 
-use crate::layout::mangle_param;
+use crate::layout::{mangle_param, mangle_source_slot};
 use crate::prelude::{mod_helper_name, Requirements};
 use crate::ty::wgsl_ty;
 
@@ -108,6 +108,12 @@ pub fn lower_expr(expr: &TExpr, resolver: &dyn Resolver, req: &mut Requirements)
         TExprKind::Far(attr) => resolver.read_far(*attr),
         TExprKind::Ambient(Ambient::Seed) => resolver.read_seed(),
         TExprKind::Ambient(amb) => resolver.read_ambient(*amb),
+        // **Not routed through the resolver**, unlike a param's read, and the
+        // difference is which module the value lives in. A field's body is
+        // spliced into a caller and reads the caller's uniform, which is why
+        // `read_param` exists at all — and a field may not declare a Source
+        // slot, so every module that can hold one holds it in its own `u`.
+        TExprKind::Source { slot } => format!("u.{}", mangle_source_slot(slot)),
         TExprKind::Unary { op, value } => {
             let v = lower_expr(value, resolver, req);
             match op {

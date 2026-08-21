@@ -2304,3 +2304,180 @@ fn naga_agrees_about_a_slot_no_procedure_declared() {
     assert!(shader.element_layout.has_slot("velocity_lived"));
     assert_naga_agrees(&shader.source, "Element", &shader.element_layout);
 }
+
+/// **`source` and a Source slot both lower to a uniform read, in every kind
+/// that has one**, and the result is WGSL a front end accepts.
+///
+/// The two halves are one claim about where the value lives. `source` is
+/// `u.seed_salt` — the field `Set::prepare` has been writing the geometry's
+/// salt into all along, which is why the read needed no new plumbing — and a
+/// declared slot is a `u32` of its own beside it, holding whatever geometry an
+/// edge named. Neither is per element: nothing lands in a varying, nothing
+/// lands in the element struct, and a fullscreen renderer with no element at
+/// all reads both.
+#[test]
+fn source_and_a_source_slot_lower_to_uniform_reads() {
+    let layout = karakuri_ir::layout::generate_element_layout(
+        &[Attr::Position],
+        karakuri_ir::layout::Synthetic::NONE,
+        &[],
+    );
+
+    let l1 = compiled(
+        r#"
+proc gen {
+  kind     L1
+  topology points
+  capacity [1, 64] = 8
+
+  uses only : Source
+
+  emit position
+
+  element {
+    var k = 0.0;
+    if source == only { k = 1.0; }
+    position = vec3(k, 0.0, 0.0);
+  }
+}
+"#,
+    );
+    let out = karakuri_codegen::generate_l1(&l1, &[], &[]);
+    assert!(
+        out.source.contains("u.seed_salt == u.source_only"),
+        "`source == only` is two uniform loads: {}",
+        out.source
+    );
+    validate(&out.source);
+
+    let l2 = r#"
+proc dissolve {
+  kind L2
+
+  uses a : Source
+  uses b : Source
+
+  consumes position, size
+
+  mask {
+    strength = 0.0;
+    if source == a || source == b { strength = 1.0; }
+  }
+
+  deform { size = size * 0.2; }
+}
+"#;
+    let out = compiled_l2(
+        l2,
+        &[Attr::Position, Attr::Size],
+        karakuri_ir::layout::Synthetic::NONE,
+    );
+    // **Two slots, two fields.** One would be an edge answering for both, which
+    // is the failure the name on the slot exists to prevent.
+    assert!(
+        out.source.contains("u.source_a") && out.source.contains("u.source_b"),
+        "each slot reads its own uniform field: {}",
+        out.source
+    );
+    validate(&out.source);
+
+    // A per-element renderer, and a fullscreen one — which has no element and
+    // reads it all the same, because the value is per chain instance.
+    for src in [
+        r#"
+proc lit {
+  kind  L4
+  blend additive
+
+  uses only : Source
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 4.0;
+  }
+
+  fragment {
+    var k = 0.0;
+    if source == only { k = 1.0; }
+    color = vec4(k, 0.0, 0.0, 1.0);
+  }
+}
+"#,
+        r#"
+proc march {
+  kind  L4
+  blend additive
+
+  uses only : Source
+
+  fragment {
+    var k = 0.0;
+    if source == only { k = 1.0; }
+    color = vec4(k, length(ray) * 0.0, 0.0, 1.0);
+  }
+}
+"#,
+    ] {
+        let l4 = compiled(src);
+        let out = karakuri_codegen::generate_l4(&l4, &layout, &[]);
+        assert!(
+            out.source.contains("u.seed_salt == u.source_only"),
+            "an L4 reads both out of its uniform: {}",
+            out.source
+        );
+        assert!(
+            !out.source.contains("in.source") && !out.source.contains(".source;"),
+            "and neither is a varying or an element field: {}",
+            out.source
+        );
+        validate(&out.source);
+    }
+}
+
+/// **A procedure that declares no Source slot carries no such uniform field**,
+/// which is what keeps this from being a `u32` every module in every Set pays
+/// for.
+#[test]
+fn a_procedure_with_no_source_slot_declares_no_field_for_one() {
+    let layout = karakuri_ir::layout::generate_element_layout(
+        &[Attr::Position],
+        karakuri_ir::layout::Synthetic::NONE,
+        &[],
+    );
+    let l4 = compiled(
+        r#"
+proc plain {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 4.0;
+  }
+
+  fragment { color = vec4(float(source % 3u) * 0.3, 0.0, 0.0, 1.0); }
+}
+"#,
+    );
+    let out = karakuri_codegen::generate_l4(&l4, &layout, &[]);
+    assert!(
+        !out.source.contains("source_"),
+        "no slot, no field: {}",
+        out.source
+    );
+    // And `source` itself still reads, out of the field that was always there.
+    assert!(out.source.contains("u.seed_salt"), "{}", out.source);
+    assert!(
+        out.uniform_layout
+            .fields
+            .iter()
+            .all(|f| !f.name.starts_with("source\u{1}")),
+        "the layout carries no slot key either: {:?}",
+        out.uniform_layout.fields
+    );
+    validate(&out.source);
+}

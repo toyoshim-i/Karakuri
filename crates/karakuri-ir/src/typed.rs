@@ -228,6 +228,24 @@ impl Checked {
             .map(|s| s.name.as_str())
     }
 
+    /// **The sources this procedure names**, in header order, and empty for one
+    /// that names none.
+    ///
+    /// A list on [`Checked::field_slots`]'s terms rather than an option on the
+    /// two above: what a Source slot costs is one `u32` in a uniform block the
+    /// module already has, so there is nothing for an arity rule to protect —
+    /// and `source == a || source == b` is an ordinary thing for a mask to
+    /// want. Every caller wants the Source ones specifically: what fills one is
+    /// an L1's assigned identity, and a slot of another type answers a
+    /// different question.
+    pub fn source_slots(&self) -> Vec<&str> {
+        self.uses
+            .iter()
+            .filter(|s| s.ty == SlotTy::Source)
+            .map(|s| s.name.as_str())
+            .collect()
+    }
+
     /// **Whether nothing ever moves an element between slots**, so that `seed`
     /// is the slot index for the whole run.
     ///
@@ -505,6 +523,23 @@ pub enum TExprKind {
     Field {
         slot: String,
         point: Box<TExpr>,
+    },
+    /// **The identity of the geometry bound to a declared Source slot** —
+    /// `only`, alone, where the header said `uses only : Source`.
+    ///
+    /// **A value rather than a member or a call**, which is what separates it
+    /// from the three slot reads beside it: a geometry has no type, a field has
+    /// no value until it is evaluated somewhere, and a camera is six numbers —
+    /// this is a `uint`, and the language has one of those.
+    ///
+    /// Its own variant rather than an [`Ambient`], because the answer is per
+    /// *slot*: `Ambient::Source` is the instance this chain runs over and there
+    /// is one of it, while a procedure may declare several of these and each
+    /// resolves to whichever L1 its own edge named. The name is carried for the
+    /// reason [`TExprKind::Field`]'s is — it is what the lowering addresses the
+    /// uniform field under, and what the engine writes the salt into.
+    Source {
+        slot: String,
     },
     /// `vec3(a, b, c)`, `vec3(x)` broadcasting, and the scalar conversions
     /// `float(i)` / `int(x)` / `uint(x)`. All of them construct `ty` from

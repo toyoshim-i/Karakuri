@@ -140,6 +140,15 @@ pub(crate) struct View<'a> {
     /// field's, addressed as `Field:0:…`, and every caller writes the same
     /// answer into its own uniform.
     pub field_value: &'a dyn Fn(&str) -> Option<f32>,
+    /// **The identity of the geometry behind each declared Source slot**, by
+    /// the key its uniform field carries.
+    ///
+    /// Separate from [`View::param`] and [`View::field_value`] because it comes
+    /// from a third place and is a `u32`: what fills a Source slot is an L1's
+    /// assigned salt, resolved once where the Set was built and looked up
+    /// through the declaring node's own index — two nodes may each call a slot
+    /// `only` and name different geometries.
+    pub source_value: &'a dyn Fn(&str) -> Option<u32>,
 }
 
 /// Everything one frame of simulation needs that is the grouping's rather than
@@ -173,6 +182,9 @@ pub(crate) struct Tick<'a> {
     /// field's, addressed as `Field:0:…`, and every caller writes the same
     /// answer into its own uniform.
     pub field_value: &'a dyn Fn(&str) -> Option<f32>,
+    /// The same as [`View::source_value`], for the layer that has a `Tick`
+    /// where every other has a `View`.
+    pub source_value: &'a dyn Fn(&str) -> Option<u32>,
 }
 
 /// **Every declared param, packed as the layout declares it.**
@@ -215,6 +227,35 @@ pub(crate) fn write_field_params(
         .cloned()
         .collect();
     write_params(p, layout, &mine, value);
+}
+
+/// **Every Source slot this node declared**, found in the layout rather than
+/// listed by the caller.
+///
+/// The same trick [`write_field_params`] uses and for a stronger reason: a Set
+/// hands every node one answer function, and which slots a node has is a fact
+/// its own uniform layout already carries. Nothing else in the engine has to
+/// keep a per-node list in step with the generator.
+///
+/// **`0` for a key the Set has no answer under is not a silent default**, it is
+/// unreachable: a declared slot is bound or the Set was refused at build. It is
+/// written rather than skipped because the packer refuses to produce bytes for
+/// a layout field nothing set, which is the assertion that keeps a half-written
+/// uniform away from a shader.
+pub(crate) fn write_source_slots(
+    p: &mut crate::uniforms::UniformPacker<'_>,
+    layout: &karakuri_codegen::layout::UniformLayout,
+    value: &dyn Fn(&str) -> Option<u32>,
+) {
+    let keys: Vec<String> = layout
+        .fields
+        .iter()
+        .filter(|f| f.name.starts_with("source\u{1}"))
+        .map(|f| f.name.clone())
+        .collect();
+    for key in keys {
+        p.u32(&key, value(&key).unwrap_or(0));
+    }
 }
 
 pub(crate) fn write_params(

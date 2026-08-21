@@ -1324,6 +1324,110 @@ proc blob {
         );
     }
 
+    /// A deformation that names one of the Set's sources through a slot.
+    const DISSOLVE: &str = r#"
+proc dissolve {
+  kind L2
+
+  uses only : Source
+
+  consumes position
+
+  mask {
+    strength = 0.0;
+    if source == only { strength = 1.0; }
+  }
+
+  deform {
+    position = position * 0.2;
+  }
+}
+"#;
+
+    /// **A Source-slot edge survives the file**, with the name it points with.
+    ///
+    /// The record is the same `edge` a geometry slot writes — node, slot, and
+    /// the node it is bound to — because what an edge says is one fact whatever
+    /// type the slot was declared with. That is the claim: the fourth slot type
+    /// cost this file nothing, and a Set whose mask names a source can be saved
+    /// and loaded like any other.
+    #[test]
+    fn a_source_slot_edge_survives_the_file() {
+        let (dir, store, l1, l4) = fixture();
+        let l1b = beside(&dir, "l1b.kir", &L1.replace("proc ring", "proc ring_two"));
+        let l2 = beside(&dir, "l2.kir", DISSOLVE);
+        let nodes = vec![
+            Node {
+                path: &l1,
+                layer: Kind::L1,
+                index: 0,
+                name: None,
+            },
+            Node {
+                path: &l1b,
+                layer: Kind::L1,
+                index: 1,
+                // Written, because it is what the edge points with — and here
+                // it is what the mask *means*, rather than a second buffer.
+                name: Some("victim"),
+            },
+            Node {
+                path: &l2,
+                layer: Kind::L2,
+                index: 0,
+                name: None,
+            },
+            Node {
+                path: &l4,
+                layer: Kind::L4,
+                index: 0,
+                name: None,
+            },
+        ];
+        let edges = vec![karakuri_engine::set::Edge {
+            node: "dissolve".to_string(),
+            slot: "only".to_string(),
+            to: "victim".to_string(),
+        }];
+        save(
+            &store,
+            "masked",
+            Saving {
+                nodes: &nodes,
+                capacities: &[4096, 4096],
+                params: &[],
+                bindings: &[],
+                edges: &edges,
+                camera: &DEFAULT_CAMERA,
+                // **The salts are the identities the mask compares**, so a
+                // saved Set that gave them back differently would be a mask
+                // pointing at a different geometry after a reload.
+                seeds: &[11, 22],
+            },
+        )
+        .expect("save");
+
+        let text = written(&store, "masked");
+        assert!(
+            text.contains(r#"{"t":"edge","node":"dissolve","slot":"only","to":"victim"}"#),
+            "one line, both ends, and nothing about the type: {text}"
+        );
+
+        let loaded = load(&store, "masked").expect("load");
+        assert_eq!(loaded.edges, edges, "the edge came back as it went in");
+        assert_eq!(loaded.names.l1s, [None, Some("victim".to_string())]);
+        assert_eq!(
+            loaded.salts,
+            vec![Some(11), Some(22)],
+            "and so did the salts the mask compares against"
+        );
+        assert!(
+            loaded.notes.is_empty(),
+            "nothing here is unhonourable: {:?}",
+            loaded.notes
+        );
+    }
+
     fn a_binding() -> Binding {
         Binding::new(Kind::L1, "spin", "beat", Curve::Pow2, [0.5, 3.0])
     }

@@ -354,7 +354,7 @@ pub enum SetError {
     #[error(
         "`{node}` declares no slot called `{slot}`\n\
          hint: an edge names a slot the procedure declared with `uses {slot} : \
-         <Geometry|Field>`{declares}"
+         <Geometry|Field|Camera|Source>`{declares}"
     )]
     NoSuchSlot {
         node: String,
@@ -439,6 +439,28 @@ pub enum SetError {
         layer: &'static str,
         /// The cameras this Set holds, by name.
         cameras: String,
+    },
+    /// An edge whose far end names a node that is not geometry, where the slot
+    /// asked for a source's *identity* rather than its elements.
+    ///
+    /// **A fourth sibling, and not a second use of
+    /// [`SetError::EdgeToNotGeometry`].** The two take the same kind of node
+    /// and say different things about why: that one binds an element buffer to
+    /// read beside the ones a node runs over, and this one binds the `u32` that
+    /// says which geometry a chain instance is. An author who bound a mask's
+    /// comparand to an L2 is not being told about buffers.
+    #[error(
+        "`{node}.{slot}` is bound to `{to}`, which is {layer}\n\
+         hint: a slot declared `: Source` takes an L1 — it is the identity `source` is \
+         compared against, and only a geometry has one. The sources in this Set are: {sources}"
+    )]
+    EdgeToNotSource {
+        node: String,
+        slot: String,
+        to: String,
+        /// What the bound node is, article and all — "an L2", say.
+        layer: &'static str,
+        sources: String,
     },
     /// Two edges binding one slot.
     ///
@@ -811,6 +833,20 @@ pub struct Set {
     /// home for a fact — the shape this file has already been wrong about
     /// twice — and the edges are not kept anyway.
     field_bound: Vec<(usize, String, usize)>,
+    /// **Which geometry fills each Source slot, by node.** `(node, slot,
+    /// geometry ordinal)`, where the node is an index into [`Set::params`]'s
+    /// node order and the ordinal indexes [`Set::source_salts`].
+    ///
+    /// **The ordinal and not the salt**, which is the one thing to keep right
+    /// here: a salt is assigned once and the list is in hand, so storing the
+    /// index costs nothing and leaves one home for the value. Storing the salt
+    /// would be a second copy of it, and the two would agree until something
+    /// re-salted a source.
+    ///
+    /// Kept rather than re-derived on the frame path for [`Set::field_bound`]'s
+    /// reason: a slot's spelling is the declaring node's, so two nodes may each
+    /// call one `only` and mean different geometries.
+    source_bound: Vec<(usize, String, usize)>,
     /// How many `kind Field` procedures this Set holds. Not
     /// `!field_params.is_empty()`: a field may declare no `param`, and the two
     /// questions are different ones.
@@ -1583,6 +1619,75 @@ impl Set {
                 }
             }
         }
+        // **Every Source slot on every node, bound by an edge or refused** —
+        // the third walk of this shape, over a slot type legal on the three
+        // kinds a Set instantiates per source.
+        //
+        // **A list per node rather than one entry**, unlike the camera walk
+        // above: several are legal, because what a Source slot costs is a `u32`
+        // in a uniform block the module already has, and `source == a || source
+        // == b` is an ordinary thing for a mask to want. There is nothing here
+        // for an arity rule to protect.
+        //
+        // **What it leaves behind is which geometry each slot names**, as an
+        // index into `l1s` — resolved once here, the way the Field slots'
+        // ordinals are, rather than walked out of the edges again on the frame
+        // path. The salt itself is not taken yet: `salts` is applied below this
+        // point, and reading it here would capture the value a source was
+        // *given* rather than the one it ended up with.
+        let mut source_bound: Vec<(usize, String, usize)> = Vec::new();
+        for (at, node) in nodes.iter().enumerate() {
+            let Some(node) = node else { continue };
+            for slot in node
+                .uses
+                .iter()
+                .filter(|s| s.ty == karakuri_ir::SlotTy::Source)
+            {
+                let node_name = names[at].clone();
+                let mut bound = wiring
+                    .edges
+                    .iter()
+                    .filter(|e| e.node == node_name && e.slot == slot.name);
+                let Some(edge) = bound.next() else {
+                    return Err(SetError::SlotUnbound {
+                        node: node_name,
+                        slot: slot.name.clone(),
+                        takes: slot.ty.name(),
+                        holds: holds(),
+                    });
+                };
+                if let Some(second) = bound.next() {
+                    return Err(SetError::SlotBoundTwice {
+                        node: node_name,
+                        slot: slot.name.clone(),
+                        first: edge.to.clone(),
+                        second: second.to.clone(),
+                    });
+                }
+                match node_at(&edge.to) {
+                    Some(to) => match geometry_at(&edge.to) {
+                        Some(l1_at) => source_bound.push((at, slot.name.clone(), l1_at)),
+                        None => {
+                            return Err(SetError::EdgeToNotSource {
+                                node: node_name,
+                                slot: slot.name.clone(),
+                                to: edge.to.clone(),
+                                layer: layer_of(to),
+                                sources: sources(),
+                            })
+                        }
+                    },
+                    None => {
+                        return Err(SetError::EdgeToUnknown {
+                            node: node_name,
+                            slot: slot.name.clone(),
+                            to: edge.to.clone(),
+                            holds: holds(),
+                        })
+                    }
+                }
+            }
+        }
         for (l1, _) in l1s {
             if l1.kind != Kind::L1 {
                 return Err(SetError::WrongKind {
@@ -2238,6 +2343,7 @@ impl Set {
                 keys
             },
             field_bound,
+            source_bound,
         };
         for source in &set.sources {
             source.sim.initialize(queue);
@@ -3205,6 +3311,8 @@ impl Set {
             let field_bound = &self.field_bound;
             let field_params = &self.field_params;
             let params = &self.params;
+            let source_bound = &self.source_bound;
+            let source_salts = &self.source_salts;
 
             // **Every L1 procedure resolves against its own map**, and a paired
             // geometry is one of them. Handing it the near side's was a silent
@@ -3237,6 +3345,13 @@ impl Set {
                         // counting along the walk would read the other
                         // simulation's slots.
                         field_value: &|name: &str| field_value(field_bound, field_maps, at, name),
+                        // **The procedure's node index too**, and for the
+                        // reason above it: a bound geometry builds the far
+                        // side first, so counting along the walk would hand
+                        // one simulation the other's slots.
+                        source_value: &|key: &str| {
+                            source_value(source_bound, source_salts, at, key)
+                        },
                     };
                     sim.prepare(queue, &tick);
                 }
@@ -3307,6 +3422,11 @@ impl Set {
                 self.last_beats,
                 self.seed_salt,
             );
+            // **Always `None` here, and it is a statement rather than a
+            // stub.** An L3 may not declare a Source slot — it runs once a
+            // frame over no geometry — so a camera's uniform has no such field
+            // for the walk to find, and the answer is never asked for.
+            let no_sources = |_: &str| None;
             let fallback = self.camera.state(t);
             let params = &self.params[first..];
             for (at, (camera, params)) in self.cameras.iter_mut().zip(params).enumerate() {
@@ -3320,6 +3440,7 @@ impl Set {
                     field_value: &|name: &str| {
                         field_value(field_bound, field_maps, first + at, name)
                     },
+                    source_value: &no_sources,
                     param: &|name: &str| effective(bindings, params, Kind::L3, at, name),
                 };
                 camera.prepare(queue, &view, dt, &fallback);
@@ -3334,6 +3455,7 @@ impl Set {
             &self.field_bound,
             &self.params[field_range.clone()],
         );
+        let (source_bound, source_salts) = (&self.source_bound, &self.source_salts);
         // **Asked rather than re-derived.** This line spelled out `1 +
         // deforms.len()` and was right until an L3 landed between the
         // deformations and the renderers — after which every renderer read the
@@ -3362,6 +3484,13 @@ impl Set {
                     field_value: &|name: &str| {
                         field_value(field_bound, field_maps, first + at, name)
                     },
+                    // **The procedure's index, like the params beside it.**
+                    // Every source runs the same renderers, so a slot bound on
+                    // `L4:2` names one geometry in every instance — which is
+                    // exactly what makes `source == only` select one of them.
+                    source_value: &|key: &str| {
+                        source_value(source_bound, source_salts, first + at, key)
+                    },
                     param: &|name: &str| effective(bindings, params, Kind::L4, at, name),
                 };
                 renderer.write_uniforms(queue, &view);
@@ -3387,6 +3516,7 @@ impl Set {
             &self.field_bound,
             &self.params[field_range.clone()],
         );
+        let (source_bound, source_salts) = (&self.source_bound, &self.source_salts);
         let capacity = self.sources[0].sim.capacity();
         // The range is read before the loop: `self.deforms` is borrowed mutably
         // by the iterator and `self.params` immutably by the closure, which are
@@ -3414,6 +3544,9 @@ impl Set {
                     field_params,
                     field_value: &|name: &str| {
                         field_value(field_bound, field_maps, first + at, name)
+                    },
+                    source_value: &|key: &str| {
+                        source_value(source_bound, source_salts, first + at, key)
                     },
                     param: &|name: &str| effective(bindings, params, Kind::L2, at, name),
                 };
@@ -3845,6 +3978,30 @@ fn field_value(
         .iter()
         .find(|(at, name, _)| *at == node && name == slot)?;
     maps.get(*ordinal)?.get(declared).copied()
+}
+
+/// **Which geometry a declared Source slot names, as its assigned identity** —
+/// the answer behind one uniform key, for the node that declared the slot.
+///
+/// [`field_value`]'s shape, one separator shorter: a key carries the slot and
+/// the *node* is asked as well, because a slot's spelling is the declaring
+/// node's and two nodes may each call one `only` while meaning different
+/// geometries.
+///
+/// **The salt is looked up rather than stored**, so that a source re-salted by
+/// `--load-set` is answered for by the value it ended up with rather than the
+/// one the binding was resolved against.
+fn source_value(
+    bound: &[(usize, String, usize)],
+    salts: &[u32],
+    node: usize,
+    key: &str,
+) -> Option<u32> {
+    let slot = key.strip_prefix("source\u{1}")?;
+    let (_, _, at) = bound
+        .iter()
+        .find(|(node_at, name, _)| *node_at == node && name == slot)?;
+    salts.get(*at).copied()
 }
 
 /// The scalar default of a param, for the uniform. Vector params are not yet

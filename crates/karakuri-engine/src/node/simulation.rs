@@ -520,6 +520,11 @@ impl Simulation {
                 tick.field_params,
                 tick.field_value,
             );
+            // **The Source slots this procedure declared** — see
+            // [`super::View::source_value`]. An L1 may name a source too: a
+            // generator that behaves differently in one geometry of a Set is
+            // the same question a mask asks, one layer up.
+            super::write_source_slots(&mut p, &self.uniform_layout, tick.source_value);
             queue.write_buffer(&self.uniforms, 0, p.finish());
         }
         self.write_step_args(queue, tick);

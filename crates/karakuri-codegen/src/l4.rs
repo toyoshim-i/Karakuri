@@ -173,6 +173,12 @@ impl Resolver for L4Resolver {
                 unreachable!("`point` is a field's only input and appears in no other block")
             }
             Ambient::T => "u.t".to_string(),
+            // **`source` is the salt, and the salt is already here.**
+            // `docs/ir-spec.md` settles that the value identifying a geometry
+            // *is* its salt rather than a dense index beside it, and
+            // `Set::prepare` has been writing it into this field all along —
+            // so the read is one arm and no new plumbing.
+            Ambient::Source => "u.seed_salt".to_string(),
             Ambient::Beats => "u.beats".to_string(),
             // The camera is its own bind group, written on the GPU by
             // `karakuri_engine`'s derivation pass — not a field of `u`, because
@@ -290,7 +296,14 @@ fn scan_expr(e: &TExpr, seed: &mut bool, copy: &mut bool, attrs: &mut HashSet<At
         }
         TExprKind::Ambient(Ambient::Seed) => *seed = true,
         TExprKind::Ambient(Ambient::Copy) => *copy = true,
-        TExprKind::Ambient(_) | TExprKind::Lit(_) | TExprKind::Local(_) | TExprKind::Param(_) => {}
+        // **A Source slot's read is a uniform read and nothing else** — it is
+        // not per element, so it puts nothing in the varyings this scan
+        // decides. That is the point of the value being where it is.
+        TExprKind::Ambient(_)
+        | TExprKind::Lit(_)
+        | TExprKind::Local(_)
+        | TExprKind::Param(_)
+        | TExprKind::Source { .. } => {}
         TExprKind::Unary { value, .. } => scan_expr(value, seed, copy, attrs),
         TExprKind::Binary { lhs, rhs, .. } => {
             scan_expr(lhs, seed, copy, attrs);
@@ -796,6 +809,13 @@ pub fn generate_l4(
     b.field("t", "f32");
     b.field("beats", "f32");
     b.field("seed_salt", "u32");
+    // **One `u32` per declared Source slot**, holding the identity of the
+    // geometry an edge bound to it. A comparison against `source` is then two
+    // uniform loads — the same value in every lane, which is the branch a GPU
+    // costs least.
+    for slot in checked.source_slots() {
+        b.source_slot_field(slot);
+    }
     // Not an IR ambient: converting `point_size` (pixels) into a clip-space
     // offset needs the render target's dimensions, which is engine state,
     // not a value any procedure computes. Present in `points.wgsl` today
@@ -942,6 +962,13 @@ fn generate_fullscreen(
     b.field("t", "f32");
     b.field("beats", "f32");
     b.field("seed_salt", "u32");
+    // **One `u32` per declared Source slot**, holding the identity of the
+    // geometry an edge bound to it. A comparison against `source` is then two
+    // uniform loads — the same value in every lane, which is the branch a GPU
+    // costs least.
+    for slot in checked.source_slots() {
+        b.source_slot_field(slot);
+    }
     // No `viewport` and no camera field of any kind: the ray basis is in the
     // camera's own bind group, and the projection is already in it.
     for p in &checked.params {

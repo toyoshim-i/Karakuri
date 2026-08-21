@@ -593,6 +593,9 @@ proc two {
                 param: &|_| None,
                 field_params: &[],
                 field_value: &|_| None,
+                // A camera declares no Source slot — `uses … : Source` is
+                // refused on an L3 — so nothing here can ask for one.
+                source_value: &|_| None,
             },
             crate::set::DT,
             // Unread: this node has a procedure, so the built-in is not its
@@ -677,6 +680,9 @@ proc six {
                 param: &|_| None,
                 field_params: &[],
                 field_value: &|_| None,
+                // A camera declares no Source slot — `uses … : Source` is
+                // refused on an L3 — so nothing here can ask for one.
+                source_value: &|_| None,
             },
             crate::set::DT,
             &crate::camera::Orbit::default().state(0.0),
