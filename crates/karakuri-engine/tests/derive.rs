@@ -144,7 +144,7 @@ fn build_chain(
         &[(&l1, capacity)],
         &l2_refs,
         None,
-        None,
+        &[],
         &[&compile(l4)],
         Layering::Overdraw,
         7,

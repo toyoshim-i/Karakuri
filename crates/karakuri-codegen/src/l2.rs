@@ -133,7 +133,7 @@ pub fn generate_l2(
     // passed rather than derived because it is another source's list and this
     // procedure cannot know it.
     far: Option<&[Attr]>,
-    field: Option<&Checked>,
+    fields: crate::Bound<'_>,
 ) -> L2Shader {
     assert_eq!(
         checked.kind,
@@ -197,7 +197,7 @@ pub fn generate_l2(
     // if the field's body did — a `.kir` taking down shaders that have nothing
     // to do with it. The slot is in the name because two fields in one caller
     // are two independent sets of values.
-    let splices = crate::splices(checked, field);
+    let splices = crate::splices(checked, fields);
     for f in &splices {
         for (name, ty) in &f.params {
             b.field_param_field(&f.slot, name, ty);

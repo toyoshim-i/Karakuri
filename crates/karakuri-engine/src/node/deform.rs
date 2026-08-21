@@ -99,11 +99,18 @@ impl Deform {
         // attribute list and the edge it reads. `None` for every other L2, and
         // *which* geometry it is was settled where the Set resolved the edge.
         far: Option<(&[Attr], &Geometry<'_>)>,
-        field: Option<&Checked>,
+        fields: karakuri_codegen::Bound<'_>,
         input: &Geometry<'_>,
         capacity: u32,
     ) -> Result<Deform, SetError> {
-        let shader = generate_l2(l2, upstream, synthetic, derived, far.map(|(a, _)| a), field);
+        let shader = generate_l2(
+            l2,
+            upstream,
+            synthetic,
+            derived,
+            far.map(|(a, _)| a),
+            fields,
+        );
         // **The output capacity, and it is what everything below this node is
         // sized and dispatched against.** Saturating rather than wrapping: the
         // checker caps a single factor, a Set caps its own capacity, and a chain

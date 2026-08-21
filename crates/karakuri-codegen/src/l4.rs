@@ -759,7 +759,7 @@ fn fragment_entry(id: Identity, attrs_used: &[Attr], body: &str, weighted: bool)
 pub fn generate_l4(
     checked: &Checked,
     elements: &ElementLayout,
-    field: Option<&Checked>,
+    fields: crate::Bound<'_>,
 ) -> L4Shader {
     assert_eq!(
         checked.kind,
@@ -789,7 +789,7 @@ pub fn generate_l4(
     // below textually unchanged rather than threading a condition through it,
     // and keeps `viewport` and `camera` out of a uniform that never reads them.
     if topology == Topology::Fullscreen {
-        return generate_fullscreen(checked, fragment_blk, elements, weighted, field);
+        return generate_fullscreen(checked, fragment_blk, elements, weighted, fields);
     }
 
     let mut b = UniformLayoutBuilder::new();
@@ -814,7 +814,7 @@ pub fn generate_l4(
     // if the field's body did — a `.kir` taking down shaders that have nothing
     // to do with it. The slot is in the name because two fields in one caller
     // are two independent sets of values.
-    let splices = crate::splices(checked, field);
+    let splices = crate::splices(checked, fields);
     for f in &splices {
         for (name, ty) in &f.params {
             b.field_param_field(&f.slot, name, ty);
@@ -936,7 +936,7 @@ fn generate_fullscreen(
     fragment_blk: &TBlock,
     elements: &ElementLayout,
     weighted: bool,
-    field: Option<&Checked>,
+    fields: crate::Bound<'_>,
 ) -> L4Shader {
     let mut b = UniformLayoutBuilder::new();
     b.field("t", "f32");
@@ -957,7 +957,7 @@ fn generate_fullscreen(
     // if the field's body did — a `.kir` taking down shaders that have nothing
     // to do with it. The slot is in the name because two fields in one caller
     // are two independent sets of values.
-    let splices = crate::splices(checked, field);
+    let splices = crate::splices(checked, fields);
     for f in &splices {
         for (name, ty) in &f.params {
             b.field_param_field(&f.slot, name, ty);

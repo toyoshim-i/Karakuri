@@ -440,7 +440,7 @@ fn element(@builtin(global_invocation_id) gid: vec3<u32>) {{
 /// which is the point: the slots those rules read are written here, at spawn and
 /// on every step, and only a caller holding the whole chain knows whether
 /// anything is going to ask for them.
-pub fn generate_l1(checked: &Checked, derived: &[Attr], field: Option<&Checked>) -> L1Shader {
+pub fn generate_l1(checked: &Checked, derived: &[Attr], fields: crate::Bound<'_>) -> L1Shader {
     assert_eq!(
         checked.kind,
         Kind::L1,
@@ -488,7 +488,7 @@ pub fn generate_l1(checked: &Checked, derived: &[Attr], field: Option<&Checked>)
     // if the field's body did — a `.kir` taking down shaders that have nothing
     // to do with it. The slot is in the name because two fields in one caller
     // are two independent sets of values.
-    let splices = crate::splices(checked, field);
+    let splices = crate::splices(checked, fields);
     for f in &splices {
         for (name, ty) in &f.params {
             b.field_param_field(&f.slot, name, ty);

@@ -83,7 +83,7 @@ impl Camera {
     pub(crate) fn build(
         device: &wgpu::Device,
         l3: Option<&Checked>,
-        field: Option<&Checked>,
+        fields: karakuri_codegen::Bound<'_>,
     ) -> Camera {
         let state = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("camera state"),
@@ -201,7 +201,7 @@ impl Camera {
             }],
         });
 
-        let proc = l3.map(|l3| Producer::build(device, l3, &state, field));
+        let proc = l3.map(|l3| Producer::build(device, l3, &state, fields));
         Camera {
             state,
             derived,
@@ -346,9 +346,9 @@ impl Producer {
         device: &wgpu::Device,
         l3: &Checked,
         state: &wgpu::Buffer,
-        field: Option<&Checked>,
+        fields: karakuri_codegen::Bound<'_>,
     ) -> Producer {
-        let shader = generate_l3(l3, field);
+        let shader = generate_l3(l3, fields);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(&format!("{} (L3)", l3.name)),
             source: wgpu::ShaderSource::Wgsl(shader.source.as_str().into()),
@@ -516,7 +516,7 @@ mod tests {
         };
         let aspect = 16.0 / 9.0;
 
-        let cam = Camera::build(&gpu.device, None, None);
+        let cam = Camera::build(&gpu.device, None, &[]);
         cam.write_state(&gpu.queue, &state);
         cam.write_canvas(&gpu.queue, aspect);
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
@@ -582,7 +582,7 @@ proc two {
         let l3 = karakuri_ir::check::check(&parsed).expect("checks");
         let aspect = 16.0 / 9.0;
 
-        let mut cam = Camera::build(&gpu.device, Some(&l3), None);
+        let mut cam = Camera::build(&gpu.device, Some(&l3), &[]);
         cam.write_canvas(&gpu.queue, aspect);
         cam.prepare(
             &gpu.queue,
@@ -666,7 +666,7 @@ proc six {
         let l3 = karakuri_ir::check::check(&parsed).expect("checks");
         let aspect = 4.0 / 3.0;
 
-        let mut cam = Camera::build(&gpu.device, Some(&l3), None);
+        let mut cam = Camera::build(&gpu.device, Some(&l3), &[]);
         cam.write_canvas(&gpu.queue, aspect);
         cam.prepare(
             &gpu.queue,
@@ -742,7 +742,7 @@ proc six {
             near: 0.1,
             far: 50.0,
         };
-        let cam = Camera::build(&gpu.device, None, None);
+        let cam = Camera::build(&gpu.device, None, &[]);
         let derive = |aspect: f32| {
             cam.write_state(&gpu.queue, &state);
             cam.write_canvas(&gpu.queue, aspect);

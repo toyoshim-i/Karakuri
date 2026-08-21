@@ -143,7 +143,7 @@ impl Simulation {
         // What the Set decided to synthesise — see `Set::build_many`. The
         // slots those rules read are written by this node and by nothing else.
         derived: &[karakuri_ir::Attr],
-        field: Option<&Checked>,
+        fields: karakuri_codegen::Bound<'_>,
     ) -> Result<Simulation, SetError> {
         let range = l1
             .capacity
@@ -157,7 +157,7 @@ impl Simulation {
             });
         }
 
-        let shader = generate_l1(l1, derived, field);
+        let shader = generate_l1(l1, derived, fields);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(&format!("{} (L1)", l1.name)),
             source: wgpu::ShaderSource::Wgsl(shader.source.as_str().into()),

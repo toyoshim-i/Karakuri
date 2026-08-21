@@ -220,7 +220,7 @@ fn build_sources(gpu: &Gpu, l1s: &[&str], l2s: &[&str], edges: &[Edge]) -> Set {
         &sources,
         &l2_refs,
         None,
-        None,
+        &[],
         &[&l4],
         Layering::Overdraw,
         7,

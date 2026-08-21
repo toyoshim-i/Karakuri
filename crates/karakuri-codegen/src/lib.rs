@@ -61,7 +61,23 @@ pub(crate) fn evaluated_slots(checked: &karakuri_ir::typed::Checked) -> Vec<&str
         .collect()
 }
 
-/// The splices one caller needs: the bound field's body, once per slot the
+/// **Which `kind Field` procedure fills each Field slot a caller declared**, as
+/// the Set resolved it: the caller's own name for the slot beside the procedure
+/// bound to it.
+///
+/// **A list rather than one field**, because a Set holds as many as its edges
+/// name. It used to be `Option<&Checked>` — "the Set's field, if it has one" —
+/// which is the same rule the slot notation exists to remove, said in a
+/// signature instead of in the language: a caller with two slots would have
+/// reached one procedure through both however the edges were written.
+///
+/// **Resolved by the Set and never here.** An edge is a name on each end and
+/// this crate has no names, so what arrives is already the answer; a slot with
+/// no entry is one that was never called, since a declared slot nothing binds
+/// is refused before any shader is generated.
+pub type Bound<'a> = &'a [(&'a str, &'a Checked)];
+
+/// The splices one caller needs: each bound field's body, once per slot the
 /// caller reaches it through.
 ///
 /// One function per *slot* rather than per field, because the name at the call
@@ -70,14 +86,14 @@ pub(crate) fn evaluated_slots(checked: &karakuri_ir::typed::Checked) -> Vec<&str
 /// buys each of them its own params.
 pub(crate) fn splices(
     checked: &karakuri_ir::typed::Checked,
-    field: Option<&karakuri_ir::typed::Checked>,
+    fields: Bound<'_>,
 ) -> Vec<field::FieldShader> {
-    let Some(f) = field else {
-        return Vec::new();
-    };
     evaluated_slots(checked)
         .into_iter()
-        .map(|slot| field::generate_field(f, slot))
+        .filter_map(|slot| {
+            let (_, f) = fields.iter().find(|(name, _)| *name == slot)?;
+            Some(field::generate_field(f, slot))
+        })
         .collect()
 }
 pub mod l1;
@@ -119,7 +135,7 @@ pub enum Shader {
 /// from `checked.emit`.
 pub fn generate(checked: &Checked, elements: Option<&ElementLayout>) -> Shader {
     match checked.kind {
-        Kind::L1 => Shader::L1(generate_l1(checked, &[], None)),
+        Kind::L1 => Shader::L1(generate_l1(checked, &[], &[])),
         // **Not reachable through this entry point.** An L2 is generated
         // against the attributes available *where it sits* in a chain, which is
         // a list rather than one upstream layout — `Set::build` has it and this
@@ -130,10 +146,10 @@ pub fn generate(checked: &Checked, elements: Option<&ElementLayout>) -> Shader {
         // into whichever procedures evaluate it, so it has no module, no
         // bindings and no dispatch — there is nothing for a `Shader` to hold.
         Kind::Field => panic!("a field lowers into its callers: call generate_field"),
-        Kind::L3 => Shader::L3(generate_l3(checked, None)),
+        Kind::L3 => Shader::L3(generate_l3(checked, &[])),
         Kind::L4 => {
             let elements = elements.expect("an L4 procedure needs its paired L1's ElementLayout");
-            Shader::L4(generate_l4(checked, elements, None))
+            Shader::L4(generate_l4(checked, elements, &[]))
         }
     }
 }
@@ -239,7 +255,7 @@ mod tests {
 
     #[test]
     fn attribute_read_after_assignment_still_reads_prev_buffer() {
-        let shader = generate_l1(&read_after_write_proc(), &[], None);
+        let shader = generate_l1(&read_after_write_proc(), &[], &[]);
         // The write goes to `next[out]`; the following read must still be
         // `prev[i]`, never a reference to a local that captured the write.
         // Read and write index are separate expressions precisely because
@@ -262,7 +278,7 @@ mod tests {
     /// a binding for it.
     #[test]
     fn a_static_procedure_neither_binds_nor_reads_the_destination_indices() {
-        let shader = generate_l1(&read_after_write_proc(), &[], None);
+        let shader = generate_l1(&read_after_write_proc(), &[], &[]);
         assert!(
             !shader.compacted,
             "no spawn block and no kill() is a static procedure"
@@ -303,7 +319,7 @@ mod tests {
             span: span(),
         });
 
-        let shader = generate_l1(&p, &[], None);
+        let shader = generate_l1(&p, &[], &[]);
         assert!(
             shader.compacted,
             "a kill() inside an if inside a for still kills"
@@ -360,7 +376,7 @@ mod tests {
 
     #[test]
     fn fbm_is_unrolled_at_generation_time() {
-        let shader = generate_l1(&fbm_proc(), &[], None);
+        let shader = generate_l1(&fbm_proc(), &[], &[]);
         // Exactly one `perlin` helper definition, plus exactly three call
         // sites from unrolling `fbm(position, 3)` — counting bare
         // `"perlin("` would also match the helper's own `fn perlin(`.
@@ -418,7 +434,7 @@ mod tests {
 
     #[test]
     fn mod_helper_appears_only_when_percent_is_used_on_a_float() {
-        let with_rem = generate_l1(&float_rem_proc(), &[], None);
+        let with_rem = generate_l1(&float_rem_proc(), &[], &[]);
         assert!(
             with_rem.source.contains("fn mod_f32("),
             "{}",
@@ -444,7 +460,7 @@ mod tests {
             stmts: vec![assign],
             span: span(),
         });
-        let without_rem = generate_l1(&p, &[], None);
+        let without_rem = generate_l1(&p, &[], &[]);
         assert!(
             !without_rem.source.contains("mod_f32"),
             "{}",
@@ -488,7 +504,7 @@ mod tests {
             stmts: vec![let_stmt, assign],
             span: span(),
         });
-        let shader = generate_l1(&p, &[], None);
+        let shader = generate_l1(&p, &[], &[]);
         assert!(
             shader.source.contains("let usr_bucket = (seed % 512u);"),
             "{}",
@@ -530,7 +546,7 @@ mod tests {
             span: span(),
         });
 
-        let shader = generate_l1(&p, &[], None);
+        let shader = generate_l1(&p, &[], &[]);
         assert_eq!(
             shader.uniform_layout.total_size % 16,
             0,
@@ -671,7 +687,7 @@ mod tests {
             karakuri_ir::layout::Synthetic::NONE,
             &[],
         );
-        let shader = generate_l4(&l4_proc(), &elements, None);
+        let shader = generate_l4(&l4_proc(), &elements, &[]);
         let src = &shader.source;
         assert!(
             src.contains("@builtin(vertex_index) corner_idx: u32"),

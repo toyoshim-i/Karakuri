@@ -739,24 +739,37 @@ pub struct Set {
     /// working, and an author opts in by naming what they want rather than by
     /// hiding twenty-four things. See `docs/ir-spec.md`, "What a Set publishes".
     interface: Vec<Published>,
-    /// **The spliced field's params, under their semantic names — one set per
-    /// slot any node reaches it through.** Held here rather than on each node
-    /// because there is one field and every caller writes the same values into
-    /// its own uniform — see [`crate::node::View::field_params`].
+    /// **The spliced fields' params, under their semantic names — one set per
+    /// slot any node reaches one through.** Held here rather than on each node
+    /// because a field has no node of its own to hold them — see
+    /// [`crate::node::View::field_params`].
     ///
-    /// A key names a *slot*, so this is the union over every node's header
-    /// rather than the field's param list alone. It is a superset of what any
-    /// one module holds and that is what it is for: each node writes the keys
-    /// its own layout has, which is how one list serves five kinds of uniform
-    /// struct without any of them knowing about the others.
+    /// A key names a *slot*, so this is the union over every binding rather
+    /// than any one field's param list. It is a superset of what any one module
+    /// holds and that is what it is for: each node writes the keys its own
+    /// layout has, which is how one list serves five kinds of uniform struct
+    /// without any of them knowing about the others.
     field_params: Vec<String>,
-    /// The same params under the names they were **declared** with, which is
-    /// what an address names: `--param Field:0:ball`, `--bind layer=Field`, and
-    /// a published control all use this, and only the uniform uses the other.
-    field_declared: Vec<String>,
-    /// Whether this Set holds a field at all. Not `!field_params.is_empty()`: a
-    /// field may declare no `param`, and the two questions are different ones.
-    has_field: bool,
+    /// The same params under the names they were **declared** with, one list
+    /// per field, which is what an address names: `--param Field:1:ball`,
+    /// `--bind layer=Field`, and a published control all use these, and only
+    /// the uniform uses the others.
+    field_declared: Vec<Vec<String>>,
+    /// **Which field fills each Field slot, by node.** `(node, slot, field
+    /// ordinal)`, where the node and the ordinal are both indices into
+    /// [`Set::params`]'s node order.
+    ///
+    /// **Kept rather than re-derived**, because a slot's spelling is the
+    /// *caller's* and two callers may spell one name for two different fields:
+    /// `field_params` says which keys exist and only this says which map each
+    /// one reads. Resolving it a second time from the edges would be the second
+    /// home for a fact — the shape this file has already been wrong about
+    /// twice — and the edges are not kept anyway.
+    field_bound: Vec<(usize, String, usize)>,
+    /// How many `kind Field` procedures this Set holds. Not
+    /// `!field_params.is_empty()`: a field may declare no `param`, and the two
+    /// questions are different ones.
+    field_count: usize,
 }
 
 /// One control on the console, and where it lands inside the Set.
@@ -865,7 +878,11 @@ pub struct Wiring<'a> {
     pub l2s: &'a [Option<String>],
     pub l3: Option<&'a str>,
     pub l4s: &'a [Option<String>],
-    pub field: Option<&'a str>,
+    /// **A list, on the same terms as the renderers.** A Set holds as many
+    /// fields as the files it was given declare, and each of them is a node
+    /// with a name for an edge to point at — so the `Option<&str>` this
+    /// replaced could only ever name the one there was.
+    pub fields: &'a [Option<String>],
     /// **Every edge the caller was given, including ones about other Sets.**
     ///
     /// A deck is several Sets and a flag is one command line, so an edge naming
@@ -936,7 +953,7 @@ impl Set {
             &[(l1, capacity)],
             &[],
             None,
-            None,
+            &[],
             &[l4],
             Layering::Overdraw,
             seed_salt,
@@ -1008,7 +1025,7 @@ impl Set {
         l1s: &[(&Checked, u32)],
         l2s: &[&Checked],
         l3: Option<&Checked>,
-        field: Option<&Checked>,
+        fields: &[&Checked],
         l4s: &[&Checked],
         layering: Layering,
         seed_salt: u32,
@@ -1017,7 +1034,7 @@ impl Set {
     ) -> Result<Set, SetError> {
         device.push_error_scope(wgpu::ErrorFilter::Validation);
         let built = Set::build_inner(
-            device, queue, l1s, l2s, l3, field, l4s, layering, seed_salt, salts, wiring,
+            device, queue, l1s, l2s, l3, fields, l4s, layering, seed_salt, salts, wiring,
         );
         // **Popped on every path**, which is why the body is a second function
         // rather than this one: it returns early in a dozen places, and a scope
@@ -1051,7 +1068,7 @@ impl Set {
         l1s: &[(&Checked, u32)],
         l2s: &[&Checked],
         l3: Option<&Checked>,
-        field: Option<&Checked>,
+        fields: &[&Checked],
         l4s: &[&Checked],
         layering: Layering,
         seed_salt: u32,
@@ -1099,7 +1116,12 @@ impl Set {
                     .enumerate()
                     .map(|(at, n)| (given(at, wiring.l4s), *n)),
             )
-            .chain(field.map(|n| (wiring.field.map(str::to_string), n)))
+            .chain(
+                fields
+                    .iter()
+                    .enumerate()
+                    .map(|(at, n)| (given(at, wiring.fields), *n)),
+            )
             .collect();
         // **The procedures, in node order**, so that an edge resolved against a
         // name can ask the node it found what it declares. `wanted` is consumed
@@ -1148,12 +1170,16 @@ impl Set {
         let holds = || names.join(", ");
         let sources = || names[..l1s.len()].join(", ");
         // **Last in the order**, after the renderers — see the chain `wanted`
-        // was built from. There is one, so this is a position rather than a
-        // search.
-        let field_at: Option<usize> = field.map(|_| names.len() - 1);
-        let fields = || match field_at {
-            Some(at) => names[at].clone(),
-            None => "none — this Set holds no `kind Field` procedure".to_string(),
+        // was built from. A run of positions rather than one, and derived from
+        // the end rather than counted from the start: everything before it is
+        // already what the arithmetic above is written in terms of.
+        let field_range = names.len() - fields.len()..names.len();
+        // Which field a node index is, counting from zero — the ordinal
+        // `--param Field:1:x` names, and `None` for a node that is not one.
+        let field_ordinal = |at: usize| field_range.contains(&at).then(|| at - field_range.start);
+        let holds_fields = || match field_range.is_empty() {
+            true => "none — this Set holds no `kind Field` procedure".to_string(),
+            false => names[field_range.clone()].join(", "),
         };
         // What one node is, for a refusal that has to say what was bound where
         // a slot wanted something else.
@@ -1164,7 +1190,7 @@ impl Set {
                 "an L2"
             } else if l3.is_some() && at == l1s.len() + l2s.len() {
                 "an L3"
-            } else if Some(at) == field_at {
+            } else if field_range.contains(&at) {
                 "a field"
             } else {
                 "an L4"
@@ -1322,6 +1348,14 @@ impl Set {
         // notation exists to remove — "if there is exactly one, use it" is what
         // capped a procedure at one input, and reinstating it here would cap
         // the next Set at one field with nothing in the language to say so.
+        //
+        // **What it leaves behind is the binding**, node and slot to field
+        // ordinal. Everything downstream — which body to splice, which params
+        // to write, which map a `--param Field:1:x` lands in — is a question
+        // about one slot on one node, and answering it a second time by walking
+        // the edges again is the shape this file has already been wrong about
+        // twice.
+        let mut field_bound: Vec<(usize, String, usize)> = Vec::new();
         for (at, node) in nodes.iter().enumerate() {
             for slot in node
                 .uses
@@ -1349,17 +1383,19 @@ impl Set {
                         second: second.to.clone(),
                     });
                 }
-                match node_at(&edge.to) {
-                    Some(to) if Some(to) == field_at => {}
-                    // In the Set and not the field: the layer it *is* is the
+                match node_at(&edge.to).map(|to| (to, field_ordinal(to))) {
+                    Some((_, Some(ordinal))) => {
+                        field_bound.push((at, slot.name.clone(), ordinal));
+                    }
+                    // In the Set and not a field: the layer it *is* is the
                     // useful half of the sentence.
-                    Some(other) => {
+                    Some((other, None)) => {
                         return Err(SetError::EdgeToNotField {
                             node: node_name,
                             slot: slot.name.clone(),
                             to: edge.to.clone(),
                             layer: layer_of(other),
-                            fields: fields(),
+                            fields: holds_fields(),
                         })
                     }
                     None => {
@@ -1402,11 +1438,11 @@ impl Set {
         // should fix all of them. The *first node* that fails stops the build,
         // because everything after it would be reported against a chain that
         // will not exist.
-        // **Compiled once, spliced into everything that evaluates it.** A field
-        // has no node — it lowers into its callers — so this is the whole of
-        // what a Set does with one, and the `Option` is the whole of "a Set may
-        // have a field".
-        if let Some(f) = field {
+        // **Compiled once per slot, spliced into everything that evaluates
+        // it.** A field has no node — it lowers into its callers — so this is
+        // the whole of what a Set does with one, and the list is the whole of
+        // "a Set may hold as many as its edges name".
+        for f in fields {
             if f.kind != Kind::Field {
                 return Err(SetError::WrongKind {
                     slot: "Field",
@@ -1415,37 +1451,74 @@ impl Set {
                 });
             }
         }
+        // **What each node's Field slots are bound to**, ready to hand to a
+        // generator. Built once here rather than per node build, because the
+        // near geometry, the far geometry, every deform and every renderer all
+        // want the same answer and three of them are inside loops.
+        let bound_at = |at: usize| -> Vec<(&str, &Checked)> {
+            field_bound
+                .iter()
+                .filter(|(node, _, _)| *node == at)
+                .map(|(_, slot, ordinal)| (slot.as_str(), fields[*ordinal]))
+                .collect()
+        };
 
         // **The ceiling every caller passed was applied to an incomplete
         // figure**, because a `field(p)` weighs nothing where a single file is
         // estimated. This is where it is completed.
-        if let Some(f) = field {
+        //
+        // **Skipped for a Set with no field**, because there is nothing to
+        // complete: `check_with_field` reports a caller that is over on its own
+        // terms as well, and that refusal belongs to the cost pass that runs
+        // over one file, under a sentence that is about one file.
+        if !fields.is_empty() {
             // **Estimated here rather than read off `Checked`.** That field is
             // never filled by anything — `cost::estimate` returns its answer and
             // the callers discard it — so reading it made both this check and
             // the one below silently dead. Asking is cheap: a tree walk over
             // material that has already been through the same walk once.
-            let per_evaluation = karakuri_ir::cost::estimate(f)
-                .map(|c| c.ops_per_evaluation)
-                .unwrap_or(0);
-            for caller in l1s
+            let per_evaluation: Vec<u64> = fields
                 .iter()
-                .map(|(l1, _)| l1)
-                .chain(l2s.iter())
-                .chain(l3.iter())
-                .chain(l4s.iter())
+                .map(|f| {
+                    karakuri_ir::cost::estimate(f)
+                        .map(|c| c.ops_per_evaluation)
+                        .unwrap_or(0)
+                })
+                .collect();
+            // The callers, at the node indices the bindings are keyed by —
+            // every node that is not itself a field, since a field cannot take
+            // one.
+            for (at, caller) in nodes
+                .iter()
+                .enumerate()
+                .filter(|(at, _)| !field_range.contains(at))
             {
-                // **Asked per slot, and this Set answers the same number for
-                // every one of them.** There is one field, so every bound slot
-                // reaches it; what the closure is for is that the *count* is
-                // per slot, and a procedure that marches one field twice under
-                // two names pays for both.
-                let per_slot = |_slot: &str| per_evaluation;
+                // **Asked per slot, and answered by whichever field that slot
+                // is bound to.** A shape and a cutter are two procedures with
+                // two prices, and the sum is what `check_with_field` charges —
+                // so an answer that ignored the slot would charge one of them
+                // twice and the other never.
+                let per_slot = |slot: &str| {
+                    field_bound
+                        .iter()
+                        .find(|(node, name, _)| *node == at && name == slot)
+                        .map(|(_, _, ordinal)| per_evaluation[*ordinal])
+                        .unwrap_or(0)
+                };
                 if let Err(over) = karakuri_ir::cost::check_with_field(caller, &per_slot) {
+                    // **The field the named slot reaches**, not the Set's
+                    // first: the sentence says which procedure is the
+                    // expensive one, and with several it would otherwise name
+                    // whichever happened to be given first.
+                    let blamed = field_bound
+                        .iter()
+                        .find(|(node, name, _)| *node == at && *name == over.slot)
+                        .map(|(_, _, ordinal)| fields[*ordinal].name.clone())
+                        .unwrap_or_default();
                     return Err(SetError::FieldTooExpensive {
                         caller: caller.name.clone(),
                         slot: over.slot,
-                        field: f.name.clone(),
+                        field: blamed,
                         detail: over
                             .errors
                             .first()
@@ -1475,7 +1548,16 @@ impl Set {
                 });
             }
         }
-        let camera_node = crate::node::Camera::build(device, l3, field);
+        // **The L3's own slots, and nothing where there is no L3.** With no
+        // camera procedure the position `l1s.len() + l2s.len()` is the first
+        // renderer's, so asking for it unconditionally would hand the built-in
+        // orbit a renderer's bindings — unread today, and the kind of unread
+        // that stops being unread quietly.
+        let camera_bound = match l3 {
+            Some(_) => bound_at(l1s.len() + l2s.len()),
+            None => Vec::new(),
+        };
+        let camera_node = crate::node::Camera::build(device, l3, &camera_bound);
 
         // **Everything below is per source**, because everything below depends
         // on what that source emits: which attributes are derived, which the
@@ -1700,7 +1782,7 @@ impl Set {
             // which is where the range check lives, because the range is that
             // node's own. Everything the simulation needs is inside it.
 
-            let sim = Simulation::build(device, l1, capacity, salt, &derived, field)?;
+            let sim = Simulation::build(device, l1, capacity, salt, &derived, &bound_at(at))?;
 
             // **The far geometry is built with the same `derived` list**, and
             // that is not a convenience: the node addresses its buffer with a
@@ -1736,7 +1818,14 @@ impl Set {
                     let far_salt = salt_of(far_at);
                     Some((
                         far.emit.clone(),
-                        Simulation::build(device, far, far_capacity, far_salt, &derived, field)?,
+                        Simulation::build(
+                            device,
+                            far,
+                            far_capacity,
+                            far_salt,
+                            &derived,
+                            &bound_at(far_at),
+                        )?,
                     ))
                 }
             };
@@ -1760,7 +1849,7 @@ impl Set {
             // `[amplify, plain]` is the first node's buffers, and asking the last
             // node alone would give the simulation's.
             let mut live: Option<usize> = None;
-            for l2 in l2s {
+            for (k, l2) in l2s.iter().enumerate() {
                 let node = {
                     let from = sim.geometry();
                     let (alive, counts) = match live {
@@ -1789,7 +1878,7 @@ impl Set {
                         synthetic,
                         &derived,
                         far.as_ref().map(|(a, g)| (*a, g)),
-                        field,
+                        &bound_at(l1s.len() + k),
                         &input,
                         chain_capacity,
                     )?
@@ -1826,8 +1915,18 @@ impl Set {
                     None => sim.geometry(),
                     Some(last) => last.geometry(alive, counts),
                 };
+                let first_l4 = l1s.len() + l2s.len() + usize::from(l3.is_some());
                 l4s.iter()
-                    .map(|l4| Renderer::build(device, l4, &geometry, &camera_node, field))
+                    .enumerate()
+                    .map(|(k, l4)| {
+                        Renderer::build(
+                            device,
+                            l4,
+                            &geometry,
+                            &camera_node,
+                            &bound_at(first_l4 + k),
+                        )
+                    })
                     .collect()
             };
             sources.push(Source {
@@ -1864,7 +1963,7 @@ impl Set {
             // **Last, and by declared name.** The prefix belongs to the WGSL
             // spelling and to nothing else: an operator writes
             // `--param Field:0:ball`, which is the name the file declares.
-            .chain(field.map(map))
+            .chain(fields.iter().map(|n| map(n)))
             .collect();
         // The same walk, so a node's values and its ranges cannot end up at
         // different indices — the defect this file has already paid for twice.
@@ -1880,7 +1979,7 @@ impl Set {
             .chain(l2s.iter().map(|n| declared(n)))
             .chain(l3.map(declared))
             .chain(l4s.iter().map(|n| declared(n)))
-            .chain(field.map(declared))
+            .chain(fields.iter().map(|n| declared(n)))
             .collect();
         let set = Set {
             names,
@@ -1930,25 +2029,31 @@ impl Set {
             bindings: Vec::new(),
             interface: Vec::new(),
             l1_count: l1s.len(),
-            has_field: field.is_some(),
-            field_declared: field
+            field_count: fields.len(),
+            field_declared: fields
+                .iter()
                 .map(|f| f.params.iter().map(|p| p.name.clone()).collect())
-                .unwrap_or_default(),
-            field_params: field
-                .map(|f| {
-                    let mut slots: Vec<&str> = nodes.iter().flat_map(|n| n.field_slots()).collect();
-                    slots.sort_unstable();
-                    slots.dedup();
-                    slots
-                        .into_iter()
-                        .flat_map(|slot| {
-                            f.params.iter().map(move |p| {
-                                karakuri_codegen::layout::field_param_key(slot, &p.name)
-                            })
-                        })
-                        .collect()
-                })
-                .unwrap_or_default(),
+                .collect(),
+            // **One key per binding**, not per slot spelling: two nodes may
+            // each declare a `shape` and have them bound to different fields,
+            // so the union is taken over what was *bound* and the value behind
+            // each key is a question about the node reading it — see
+            // [`Set::field_bound`].
+            field_params: {
+                let mut keys: Vec<String> = field_bound
+                    .iter()
+                    .flat_map(|(_, slot, ordinal)| {
+                        fields[*ordinal]
+                            .params
+                            .iter()
+                            .map(move |p| karakuri_codegen::layout::field_param_key(slot, &p.name))
+                    })
+                    .collect();
+                keys.sort_unstable();
+                keys.dedup();
+                keys
+            },
+            field_bound,
         };
         for source in &set.sources {
             source.sim.initialize(queue);
@@ -2226,10 +2331,9 @@ impl Set {
             // operator's to ride — so what is returned here is the list the
             // field declared, and every caller writes the same answer into its
             // own uniform.
-            Kind::Field => match self.field_declared.is_empty() && !self.has_field {
-                true => Vec::new(),
-                false => vec![&self.field_declared],
-            },
+            // **One entry per field**, so that `Field:1:radius` is checked
+            // against the second field's declarations and not the first's.
+            Kind::Field => self.field_declared.iter().map(Vec::as_slice).collect(),
             Kind::L4 => self.sources[0]
                 .renderers
                 .iter()
@@ -2372,7 +2476,7 @@ impl Set {
             Kind::L2 => first.deforms.len(),
             Kind::L3 => self.camera_node.node_count(),
             Kind::L4 => first.renderers.len(),
-            Kind::Field => usize::from(self.has_field),
+            Kind::Field => self.field_count,
         }
     }
 
@@ -2394,13 +2498,14 @@ impl Set {
             // already gets.
             Kind::L3 => self.l1_count + self.procedures(Kind::L2),
             Kind::L4 => self.l1_count + self.procedures(Kind::L2) + self.camera_node.node_count(),
-            // **Last, and it addresses a node that does not exist.** A field
-            // has no pass and no buffers — it lowers into whoever evaluates it —
-            // so what the slot points at is a parameter map and nothing else.
-            // That is enough for every surface an operator has: an override, a
+            // **Last, and it addresses nodes that do not exist.** A field has
+            // no pass and no buffers — it lowers into whoever evaluates it — so
+            // what the slot points at is a parameter map and nothing else. That
+            // is enough for every surface an operator has: an override, a
             // signal binding, a published control, a saved Set file. Every
-            // procedure that evaluates the field writes the same answer into
-            // its own uniform, so one address reaches all of them.
+            // procedure that reaches a field through a bound slot writes that
+            // field's values into its own uniform, so one address reaches every
+            // caller of the field it names — and only of that one.
             Kind::Field => {
                 self.l1_count
                     + self.procedures(Kind::L2)
@@ -2419,14 +2524,12 @@ impl Set {
             // Zero or one: the built-in camera is a field on this struct rather
             // than a node, and has no parameter map to address.
             Kind::L3 => start..start + self.camera_node.node_count(),
-            Kind::L4 => start..self.params.len() - usize::from(self.has_field),
-            // Empty, on the same terms `L3` is empty for a Set with no camera
-            // procedure: the kind is addressable and there is nothing at that
-            // address, so a `--param Field:…` is reported as reaching no node.
-            // One when the Set holds a field, zero otherwise — the same shape
-            // `L3` has, and for the same reason: the kind is addressable and a
-            // Set that has none reports `--param Field:…` as reaching nothing.
-            Kind::Field => start..start + usize::from(self.has_field),
+            Kind::L4 => start..self.params.len() - self.field_count,
+            // One per field, and empty for a Set with none — on the same terms
+            // `L3` is empty for a Set with no camera procedure: the kind is
+            // addressable and a Set that holds nothing there reports
+            // `--param Field:…` as reaching nothing.
+            Kind::Field => start..start + self.field_count,
         }
     }
 
@@ -2910,8 +3013,9 @@ impl Set {
 
         {
             let bindings = &self.bindings;
-            let field_at = self.nodes_of(Kind::Field).next();
-            let field_values = field_at.and_then(|at| self.params.get(at));
+            let field_range = self.nodes_of(Kind::Field);
+            let field_maps = &self.params[field_range.clone()];
+            let field_bound = &self.field_bound;
             let field_params = &self.field_params;
             let params = &self.params;
 
@@ -2941,7 +3045,11 @@ impl Set {
                         instants,
                         param: &param,
                         field_params,
-                        field_value: &|name: &str| field_value(field_values, name),
+                        // **The procedure's node index**, which is `at` and not
+                        // `k`: a bound geometry builds the far side first, so
+                        // counting along the walk would read the other
+                        // simulation's slots.
+                        field_value: &|name: &str| field_value(field_bound, field_maps, at, name),
                     };
                     sim.prepare(queue, &tick);
                 }
@@ -2999,13 +3107,14 @@ impl Set {
             // calls this closure — and it would become a renderer's `exposure`
             // arriving as the orbit's `radius` the moment the built-in took one.
             let at = self.nodes_of(Kind::L3).next();
-            let field_at = self.nodes_of(Kind::Field).next();
-            let (bindings, params, dt, field_params, field_values) = (
+            let field_range = self.nodes_of(Kind::Field);
+            let (bindings, params, dt, field_params, field_bound, field_maps) = (
                 &self.bindings,
                 at.and_then(|at| self.params.get(at)),
                 self.dt,
                 &self.field_params,
-                field_at.and_then(|at| self.params.get(at)),
+                &self.field_bound,
+                &self.params[field_range.clone()],
             );
             let view = crate::node::View {
                 t,
@@ -3013,19 +3122,23 @@ impl Set {
                 seed_salt: self.seed_salt,
                 viewport: self.viewport,
                 field_params,
-                field_value: &|name: &str| field_value(field_values, name),
+                // A Set with no camera procedure reaches no field from one, so
+                // an absent node resolves nothing rather than resolving as some
+                // other node's.
+                field_value: &|name: &str| field_value(field_bound, field_maps, at?, name),
                 param: &|name: &str| params.and_then(|p| effective(bindings, p, Kind::L3, 0, name)),
             };
             let fallback = self.camera.state(t);
             self.camera_node.prepare(queue, &view, dt, &fallback);
         }
-        let field_at = self.nodes_of(Kind::Field).next();
-        let (bindings, beats, viewport, field_params, field_values) = (
+        let field_range = self.nodes_of(Kind::Field);
+        let (bindings, beats, viewport, field_params, field_bound, field_maps) = (
             &self.bindings,
             self.last_beats,
             self.viewport,
             &self.field_params,
-            field_at.and_then(|at| self.params.get(at)),
+            &self.field_bound,
+            &self.params[field_range.clone()],
         );
         // **Asked rather than re-derived.** This line spelled out `1 +
         // deforms.len()` and was right until an L3 landed between the
@@ -3052,7 +3165,9 @@ impl Set {
                     seed_salt: salt,
                     viewport,
                     field_params,
-                    field_value: &|name: &str| field_value(field_values, name),
+                    field_value: &|name: &str| {
+                        field_value(field_bound, field_maps, first + at, name)
+                    },
                     param: &|name: &str| effective(bindings, params, Kind::L4, at, name),
                 };
                 renderer.write_uniforms(queue, &view);
@@ -3068,14 +3183,15 @@ impl Set {
     /// output cannot disagree about when this frame is.
     fn write_l2_uniforms(&mut self, queue: &wgpu::Queue) {
         let t = self.time();
-        let field_at = self.nodes_of(Kind::Field).next();
-        let (bindings, beats, viewport, dt, field_params, field_values) = (
+        let field_range = self.nodes_of(Kind::Field);
+        let (bindings, beats, viewport, dt, field_params, field_bound, field_maps) = (
             &self.bindings,
             self.last_beats,
             self.viewport,
             self.dt,
             &self.field_params,
-            field_at.and_then(|at| self.params.get(at)),
+            &self.field_bound,
+            &self.params[field_range.clone()],
         );
         let capacity = self.sources[0].sim.capacity();
         // The range is read before the loop: `self.deforms` is borrowed mutably
@@ -3088,6 +3204,10 @@ impl Set {
         // happens to be right for L2 because that layer starts at a constant —
         // which is exactly the kind of accident that stops being one.
         let range = self.nodes_of(Kind::L2);
+        // **Where this layer starts in node order**, which is what a field
+        // binding is keyed by: `at` below is the deformer's ordinal and the
+        // binding names the node.
+        let first = range.start;
         let params = &self.params[range];
         for source in &mut self.sources {
             let salt = source.salt;
@@ -3098,7 +3218,9 @@ impl Set {
                     seed_salt: salt,
                     viewport,
                     field_params,
-                    field_value: &|name: &str| field_value(field_values, name),
+                    field_value: &|name: &str| {
+                        field_value(field_bound, field_maps, first + at, name)
+                    },
                     param: &|name: &str| effective(bindings, params, Kind::L2, at, name),
                 };
                 node.write_uniforms(queue, &view, dt, capacity);
@@ -3498,21 +3620,34 @@ pub fn derived_salt(seed_salt: u32, source: usize) -> u32 {
     seed_salt.wrapping_add((source as u32).wrapping_mul(0x9E37_79B9))
 }
 
-/// A spliced field's parameter value, by the **semantic** name the layout holds.
+/// A spliced field's parameter value, by the **semantic** name the layout holds
+/// and the node whose uniform is being written.
 ///
 /// The map is keyed by the declared name, so the prefix comes off here — one
 /// place, rather than at each of the four nodes that write it. The separator is
 /// a character no `.kir` identifier can contain, which is what makes this
 /// strip unambiguous — see `layout::field_param_key`.
-fn field_value(map: Option<&HashMap<String, f32>>, key: &str) -> Option<f32> {
-    // **Both separators come off, and the slot between them is discarded.** A
-    // key names the slot a param was reached through, and the value is the
-    // field's own: one `--param Field:0:radius` is one number, written into
-    // every caller's uniform under every slot that reaches it. The day a Set
-    // holds two fields the slot is what tells them apart, and this is the line
-    // that has to stop discarding it.
-    let (_slot, declared) = key.strip_prefix("field\u{1}")?.split_once('\u{1}')?;
-    map?.get(declared).copied()
+fn field_value(
+    bound: &[(usize, String, usize)],
+    maps: &[HashMap<String, f32>],
+    node: usize,
+    key: &str,
+) -> Option<f32> {
+    // **Both separators come off and the slot decides which map is read.** A
+    // key names the slot a param was reached through, and the slot is what
+    // says which field that is: `Field:0` and `Field:1` are two procedures
+    // with two `radius`es, and a caller's `shape(p)` reads exactly one of
+    // them. This line used to discard the slot and hand every caller the
+    // Set's only field, which was right for as long as there was only one.
+    //
+    // **The node is asked as well**, because a slot's spelling is the caller's:
+    // two renderers may each declare `shape` and be bound to different fields,
+    // and the key alone cannot tell those apart.
+    let (slot, declared) = key.strip_prefix("field\u{1}")?.split_once('\u{1}')?;
+    let (_, _, ordinal) = bound
+        .iter()
+        .find(|(at, name, _)| *at == node && name == slot)?;
+    maps.get(*ordinal)?.get(declared).copied()
 }
 
 /// The scalar default of a param, for the uniform. Vector params are not yet
@@ -3764,7 +3899,7 @@ proc dots {
             &[(&l1, CAPACITY)],
             &[&l2],
             None,
-            None,
+            &[],
             &[&l4],
             Layering::Overdraw,
             1,

@@ -234,7 +234,9 @@ pub struct RequestNames {
     pub l2s: Vec<Option<String>>,
     pub l3: Option<String>,
     pub l4s: Vec<Option<String>>,
-    pub field: Option<String>,
+    /// **A list, like the renderers'** — a Set holds as many fields as its
+    /// files declare, and each of them is a node an edge points at by name.
+    pub fields: Vec<Option<String>>,
 }
 
 pub struct Request {
@@ -261,9 +263,14 @@ pub struct Request {
     /// is a grouping around one viewpoint, and two viewpoints composited is a
     /// graph rather than a Set.
     pub l3: Option<Checked>,
-    /// The field, or `None` for a Set that evaluates none. At most one, on the
-    /// same terms as the camera — see [`karakuri_ir::Kind::Field`].
-    pub field: Option<Checked>,
+    /// **The fields, in node order.** Empty for a Set that evaluates none.
+    ///
+    /// **A list where the camera is an option**, and the difference is the
+    /// whole of what a slot bought: a Set is a grouping around one viewpoint,
+    /// and there is no such rule about the shapes it marches — a renderer
+    /// naming a shape and a cutter is the ordinary case, and each of them is a
+    /// `kind Field` file of its own.
+    pub fields: Vec<Checked>,
     /// The renderers, in draw order — see [`Set::build_many`]. A rebuild names
     /// every one of them rather than the one that changed, for the reason the
     /// params below are restated: a request that depended on what happens to be
@@ -1103,7 +1110,7 @@ fn run_worker(
                 &request.l1s.iter().map(|(p, c)| (p, *c)).collect::<Vec<_>>(),
                 &request.l2s.iter().collect::<Vec<_>>(),
                 request.l3.as_ref(),
-                request.field.as_ref(),
+                &request.fields.iter().collect::<Vec<_>>(),
                 &request.l4s.iter().collect::<Vec<_>>(),
                 request.layering,
                 request.seed_salt,
@@ -1117,7 +1124,7 @@ fn run_worker(
                     l2s: &request.names.l2s,
                     l3: request.names.l3.as_deref(),
                     l4s: &request.names.l4s,
-                    field: request.names.field.as_deref(),
+                    fields: &request.names.fields,
                     edges: &request.edges,
                 },
             )

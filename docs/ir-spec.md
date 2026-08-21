@@ -986,12 +986,17 @@ new syntactic category. There is no user-defined function here; there is one mor
 more block, one more ambient and one more output, which is the shape L2 and L3 already
 established.
 
-**One per Set today, and nothing in the notation says so any more.** It used to be the
-camera's rule for the camera's reason — several would need naming, and naming is fan-in —
-and the naming now exists: a caller declares [`uses shape : Field`](#uses) and a Set's `edge`
-says which field fills it. What is left is the plumbing: the engine and the CLI still hold
-one `Option<Field>` apiece and a second `kind Field` file is still refused. That is a `Vec`,
-not a design, and `docs/roadmap.md` records it under "Naming what a Set holds".
+**As many per Set as its files declare.** It used to be one, for the camera's reason —
+several would need naming, and naming is fan-in — and the naming arrived first: a caller
+declares [`uses shape : Field`](#uses) and a Set's `edge` says which field fills it. The
+plumbing followed, and it was a `Vec` where the `Option`s were rather than a design: a Set
+holds a list of fields, each is a node with a name for an edge to point at and an address of
+its own (`--param Field:1:radius`), and a Set file writes one `slot` record per field.
+
+**The camera is still one per Set, and that is a rule rather than a cap.** The two were
+written down together and they part here: a Set is a grouping around one viewpoint, so two
+cameras is a graph and an L5 is what composites one; nothing corresponding is true of shapes,
+and a marcher taking a shape and a cutter is the ordinary case.
 
 #### Evaluating one
 
@@ -1049,8 +1054,13 @@ spelling that caller would have written inline.
 prefix of their own — so a renderer and the field it draws may both declare `exposure`, and
 `--param Field:0:exposure` and `--param L4:0:exposure` reach different things. **The slot is
 in the prefix as well**, so a procedure reaching two fields addresses each one's params
-separately: one shape's `radius` is not the other's. There is one value per field today:
-every caller writes the same answer into its own uniform, because there is one field.
+separately: one shape's `radius` is not the other's.
+
+**One value per field, and the address is what picks the field.** `--param Field:0:radius`
+and `--param Field:1:radius` are two numbers because they are two procedures; every caller
+that reaches a field through a bound slot writes *that* field's value into its own uniform,
+and reaches no other. The slot is what carries the answer from the edge to the uniform, which
+is why it is in the key and not only in the WGSL spelling.
 
 The prefix has to make the name unforgeable rather than unlikely. It is a separator no
 `.kir` identifier can contain, because a caller declaring `param field_radius` beside a field
