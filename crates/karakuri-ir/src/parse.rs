@@ -526,8 +526,8 @@ impl Parser {
         }
     }
 
-    /// `uses <name> : Geometry` / `uses <name> : Field` — one named input this
-    /// node takes.
+    /// `uses <name> : Geometry` / `uses <name> : Field` / `uses <name> :
+    /// Camera` — one named input this node takes.
     ///
     /// **The name is the procedure's and the binding is the Set's.** So this
     /// declaration says what the file needs and never which node supplies it:
@@ -546,14 +546,14 @@ impl Parser {
         // Both have already reported, so neither reaches the check pass;
         // carrying on with one of the types there are lets the rest of the
         // header be parsed and its own mistakes reported in the same run.
-        let ty = match self.expect_ident("`Geometry` or `Field`") {
+        let ty = match self.expect_ident("`Geometry`, `Field` or `Camera`") {
             Some((spelling, ty_span)) => SlotTy::from_name(&spelling).unwrap_or_else(|| {
                 self.error_with_hint(
                     ty_span,
                     format!("unknown input type `{spelling}`"),
                     "a `uses` slot is `Geometry` — the elements of an L1, read beside the ones \
-                     this node runs over — or `Field`, a `kind Field` procedure this one \
-                     evaluates",
+                     this node runs over — `Field`, a `kind Field` procedure this one \
+                     evaluates, or `Camera`, a viewpoint this one draws from",
                 );
                 SlotTy::Geometry
             }),

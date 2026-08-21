@@ -97,22 +97,32 @@ pub struct Loaded {
     /// The deformers, by `slot` index — which is chain order, each one reading
     /// what the one before it wrote.
     pub l2s: Vec<Checked>,
-    /// The camera, or `None` for the built-in orbit. At most one per Set.
-    pub l3: Option<Checked>,
-    /// **The fields, by `slot` index.** Empty for a Set that evaluates none,
-    /// and a list rather than the camera's option: a Set looks from one
-    /// viewpoint, and how many shapes it marches is a question its edges
-    /// answer. **Several `slot` records on Field is how a file says so**, which
-    /// the format already allowed — nothing new had to be added, and a file
-    /// written before this commit still names exactly one.
+    /// **The cameras, by `slot` index.** Empty for a Set that looks from the
+    /// built-in orbit — which is a node all the same, so such a Set still holds
+    /// one camera and still addresses it at `L3:0`.
+    ///
+    /// **Several `slot` records on L3 is how a file says so**, which the format
+    /// already allowed: this loader used to read the first and report the rest
+    /// as skipped, because the engine took one. A file written before this
+    /// commit names at most one and reads back unchanged.
+    pub l3s: Vec<Checked>,
+    /// **The fields, by `slot` index.** Empty for a Set that evaluates none.
+    /// **Several `slot` records on Field is how a file says so**, which the
+    /// format already allowed — nothing new had to be added, and a file written
+    /// before this commit still names exactly one.
     pub fields: Vec<Checked>,
     /// The renderers, in the order their `slot` records indexed them — which is
     /// draw order. **Several `slot` records on L4 is how a file says a stack**;
     /// the format already allowed it and nothing new had to be added.
     pub l4s: Vec<Checked>,
-    /// Every procedure as text, in **node order** — the L1s, the L2s, the L3,
-    /// the renderers, then the field, which is the order `Set::node_names`
+    /// Every procedure as text, in **node order** — the L1s, the L2s, the L3s,
+    /// the renderers, then the fields, which is the order `Set::node_names`
     /// reports and the order [`Loaded::nodes`] walks.
+    ///
+    /// **The built-in camera has no entry**, because it has no source: a Set
+    /// that declares no L3 holds a camera node with no procedure behind it, so
+    /// this list is one shorter than that Set's node names. See
+    /// [`Loaded::node_names`].
     ///
     /// **Carried because a Set file has no `.kir` on disk and an editable run
     /// needs one.** A Set names its procedures by hash; the sources come out of
@@ -185,7 +195,7 @@ impl Loaded {
         at(&self.names.l1s, self.l1s.len())
             .into_iter()
             .chain(at(&self.names.l2s, self.l2s.len()))
-            .chain(self.l3.iter().map(|_| self.names.l3.clone()))
+            .chain(at(&self.names.l3s, self.l3s.len()))
             .chain(at(&self.names.l4s, self.l4s.len()))
             .chain(at(&self.names.fields, self.fields.len()))
     }
@@ -194,7 +204,7 @@ impl Loaded {
         self.l1s
             .iter()
             .chain(&self.l2s)
-            .chain(&self.l3)
+            .chain(&self.l3s)
             .chain(&self.l4s)
             .chain(&self.fields)
             .zip(self.srcs.iter().map(String::as_str))
@@ -658,8 +668,15 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
             to: edge.to.clone(),
         }));
     }
+    // **The built-in camera is the last node of the L3 layer**, and the index
+    // is written for the same reason a `seed`'s and a `capacity`'s are: the
+    // record describes one producer, and a layer that holds several needs to
+    // say which. It is `L3:0` in a Set whose files declare no camera procedure,
+    // which is every Set written before they could — and zero is not written,
+    // so those files are the line they always were.
     lines.push(Line::new(Record::Camera {
         kind: "orbit".to_string(),
+        index: nodes.iter().filter(|n| n.layer == Kind::L3).count() as u32,
         radius: camera.radius,
         speed: camera.speed,
     }));
@@ -715,6 +732,9 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     let mut params = Vec::new();
     let mut bindings = Vec::new();
     let mut camera = None;
+    // Which camera node the `camera` record above was about, checked against
+    // the file's L3 slots once every one of them has been met.
+    let mut camera_index = 0;
     // What each geometry is salted with, by index, growing as the file names
     // them — the same shape as `capacities`, because a `seed` is addressed the
     // same way and for the same reason.
@@ -844,6 +864,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             },
             Record::Camera {
                 kind,
+                index,
                 radius,
                 speed,
             } => {
@@ -852,6 +873,19 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                         "camera kind `{kind}` is not one this engine has; using an orbit"
                     ));
                 }
+                // **The index is checked against where the built-in actually
+                // is**, which is after the camera procedures the file names —
+                // so it is `0` in a file that names none, which is every file
+                // written before this record carried an index. An index naming
+                // a camera that *is* a procedure is said rather than applied:
+                // such a node writes its own six numbers every frame and would
+                // overwrite these before the first draw.
+                //
+                // Checked after the loop, where the `slot` records have all
+                // been met: a record's meaning here depends on how many
+                // cameras the file names, and the count is only complete at
+                // the end.
+                camera_index = *index;
                 // The record carries two of the six fields an `Orbit` has, so
                 // the rest take their defaults. Said out loud because a saved
                 // camera and a loaded one are then not the same camera unless
@@ -954,31 +988,31 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     let l3_srcs = sources(Kind::L3)?;
     let l4_srcs = sources(Kind::L4)?;
     let field_srcs = sources(Kind::Field)?;
+    // **The built-in camera is the last node of the L3 layer**, after the
+    // procedures the file names — so a record about any earlier one is about a
+    // camera that produces its own six numbers every frame, and applying these
+    // to it would be overwritten before the first draw. Reported and dropped,
+    // which is what this file does with everything it cannot honour.
+    if camera.is_some() && camera_index as usize != l3_srcs.len() {
+        notes.push(format!(
+            "camera at L3:{camera_index} was skipped: the built-in orbit is this Set's L3:{}, \
+             and a camera that is a procedure produces its own state",
+            l3_srcs.len()
+        ));
+        camera = None;
+    }
     if l1_srcs.is_empty() {
         return Err(format!("set `{file_id}` has no L1 slot"));
     }
     if l4_srcs.is_empty() {
         return Err(format!("set `{file_id}` has no L4 slot"));
     }
-    // **One camera, which is what a Set is.** The format addresses nodes per
-    // layer, so it can say two; a Set looks from one viewpoint, and compositing
-    // two of them is what an L5 is for. Reported and left in the file rather
-    // than built into something nobody asked for — the same refusal `--set`
-    // makes, one step later.
-    //
-    // **Field is no longer beside it.** It was here for the plumbing's sake and
-    // said so: a caller names the slot it reaches a field through, so several
-    // fields are several nodes with names of their own and there is nothing for
-    // this to arbitrate. A file naming two now loads two.
-    if l3_srcs.len() > 1 {
-        notes.push(format!(
-            "{} L3 slot{} past index 0 {} skipped: a Set looks from one camera, and \
-             compositing two viewpoints is what an L5 is for",
-            l3_srcs.len() - 1,
-            if l3_srcs.len() == 2 { "" } else { "s" },
-            if l3_srcs.len() == 2 { "was" } else { "were" }
-        ));
-    }
+    // **Nothing is capped here any more.** The last two refusals in this
+    // function were about the plumbing rather than about the material and said
+    // so; a renderer names the slot it draws through and an `edge` names which
+    // camera fills it, so several cameras are several nodes with names of their
+    // own and there is nothing for this to arbitrate. A file naming two now
+    // loads two.
     // A capacity for a geometry the file does not name has nothing to size.
     // Said rather than dropped, because it is the file describing a source that
     // is not there — a `slot` record that went missing, most likely.
@@ -1001,10 +1035,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     };
     let l1s = check(&l1_srcs)?;
     let l2s = check(&l2_srcs)?;
-    let l3 = l3_srcs
-        .first()
-        .map(|s| crate::compile::check(s))
-        .transpose()?;
+    let l3s = check(&l3_srcs)?;
     let l4s = check(&l4_srcs)?;
     let fields = check(&field_srcs)?;
 
@@ -1013,7 +1044,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     let srcs = l1_srcs
         .into_iter()
         .chain(l2_srcs)
-        .chain(l3_srcs.into_iter().take(1))
+        .chain(l3_srcs)
         .chain(l4_srcs)
         .chain(field_srcs)
         .collect();
@@ -1024,15 +1055,13 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     let mut names = crate::Names {
         l1s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L1) as usize]),
         l2s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L2) as usize]),
-        l3: slot_names[layer_ordinal(Kind::L3) as usize]
-            .first()
-            .cloned()
-            .flatten(),
+        l3s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L3) as usize]),
         l4s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L4) as usize]),
         fields: std::mem::take(&mut slot_names[layer_ordinal(Kind::Field) as usize]),
     };
     names.l1s.truncate(l1s.len());
     names.l2s.truncate(l2s.len());
+    names.l3s.truncate(l3s.len());
     names.l4s.truncate(l4s.len());
     names.fields.truncate(fields.len());
 
@@ -1040,7 +1069,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         id: file_id,
         l1s,
         l2s,
-        l3,
+        l3s,
         fields,
         l4s,
         srcs,
@@ -1746,7 +1775,7 @@ proc blob {
         let named = |procs: &[Checked]| procs.iter().map(|c| c.name.clone()).collect::<Vec<_>>();
         assert_eq!(named(&loaded.l1s), ["ring", "ring_two"]);
         assert_eq!(named(&loaded.l2s), ["warp"]);
-        assert_eq!(loaded.l3.as_ref().map(|c| c.name.as_str()), Some("look"));
+        assert_eq!(named(&loaded.l3s), ["look"]);
         assert_eq!(named(&loaded.fields), ["blob"]);
         assert_eq!(named(&loaded.l4s), ["points", "streaks"]);
         // Node order, which is what the scratch places them in — see
@@ -2150,11 +2179,13 @@ proc blob {
         );
     }
 
-    /// **A Set looks from one camera**, and the format can address a second.
-    /// Reported and left in the file rather than composited into something
-    /// nobody asked for — `--set` refuses the same thing one step earlier.
+    /// **A second camera is a second camera.** The format could address one
+    /// all along and this loader used to read the first and report the rest as
+    /// skipped — a refusal about the plumbing, which took a `Vec` here and in
+    /// the engine to lift. Which renderer draws from which is an `edge`, so
+    /// there is nothing here to arbitrate.
     #[test]
-    fn a_second_camera_is_reported_rather_than_composited() {
+    fn a_second_camera_loads_beside_the_first() {
         let (dir, store, l1, l4) = fixture();
         let l3 = beside(&dir, "l3.kir", L3);
         let l3b = beside(&dir, "l3b.kir", &L3.replace("proc look", "proc look_two"));
@@ -2176,12 +2207,106 @@ proc blob {
             put(&l4)
         ));
 
-        let loaded = from_lines(&store, "two_eyes", &lines).expect("a second camera still loads");
-        assert_eq!(loaded.l3.as_ref().map(|c| c.name.as_str()), Some("look"));
-        let notes = loaded.notes.join("\n");
+        let loaded = from_lines(&store, "two_eyes", &lines).expect("two cameras load");
+        assert_eq!(
+            loaded
+                .l3s
+                .iter()
+                .map(|c| c.name.clone())
+                .collect::<Vec<_>>(),
+            ["look", "look_two"],
+            "the second camera was dropped"
+        );
         assert!(
-            notes.contains("1 L3 slot past index 0 was skipped"),
-            "a camera was dropped in silence; notes were {notes:?}"
+            loaded.notes.is_empty(),
+            "two cameras are ordinary material now; notes were {:?}",
+            loaded.notes
+        );
+    }
+
+    /// **A `camera` record with no index is node 0's**, which is what every
+    /// file ever written means by it: a Set held one camera, so there was one
+    /// node for the record to describe, and a file that names no camera
+    /// procedure still has the built-in at `L3:0`.
+    ///
+    /// The index exists because the L3 layer holds several now. The built-in
+    /// orbit is the node after the procedures, and the only one a `camera`
+    /// record can be about — a camera that is a procedure writes its own six
+    /// numbers every frame — so an index naming one of those is said rather
+    /// than applied to it.
+    #[test]
+    fn a_camera_record_with_no_index_is_node_zeros() {
+        let (_dir, store, l1, l4) = fixture();
+        let put = |path: &std::path::Path| {
+            store
+                .put_artifact(&std::fs::read(path).expect("read"))
+                .expect("put")
+        };
+        let file = |camera: &str| {
+            parsed(&format!(
+                r#"{{"t":"set","id":"seen","v":1}}
+{{"t":"slot","layer":"L1","proc":"{}"}}
+{{"t":"slot","layer":"L4","proc":"{}"}}
+{camera}
+"#,
+                put(&l1),
+                put(&l4)
+            ))
+        };
+
+        // As a file written before the index existed spells it.
+        let loaded = from_lines(
+            &store,
+            "seen",
+            &file(r#"{"t":"camera","kind":"orbit","radius":7.5,"speed":0.5}"#),
+        )
+        .expect("load");
+        assert_eq!(
+            loaded.camera.map(|c| (c.radius, c.speed)),
+            Some((7.5, 0.5)),
+            "a `camera` record with no index has to reach the built-in camera"
+        );
+        assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
+
+        // Written out, the index is absent again: 0 is not serialised, so a
+        // file this build saves is the line every earlier build wrote.
+        save(
+            &store,
+            "written_back",
+            Saving {
+                nodes: &ordinary(&l1, std::slice::from_ref(&l4)),
+                capacities: &[65_536],
+                params: &[],
+                bindings: &[],
+                edges: &[],
+                camera: &DEFAULT_CAMERA,
+                seeds: &[1],
+            },
+        )
+        .expect("save");
+        let text = written(&store, "written_back");
+        let line = text
+            .lines()
+            .find(|l| l.contains(r#""t":"camera""#))
+            .expect("a camera record is written");
+        assert!(!line.contains("index"), "index 0 is not written: {line}");
+
+        // An index that is not the built-in's names a camera that is a
+        // procedure, which produces its own state — said rather than applied.
+        let loaded = from_lines(
+            &store,
+            "seen",
+            &file(r#"{"t":"camera","kind":"orbit","index":1,"radius":7.5,"speed":0.5}"#),
+        )
+        .expect("load");
+        assert!(
+            loaded.camera.is_none(),
+            "an orbit was applied to a camera node that produces its own state"
+        );
+        assert!(
+            loaded.notes.iter().any(|n| n.contains("camera at L3:1")),
+            "and it has to be said: {:?}",
+            loaded.notes
         );
     }
 

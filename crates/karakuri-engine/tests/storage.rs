@@ -219,7 +219,7 @@ fn build_sources(gpu: &Gpu, l1s: &[&str], l2s: &[&str], edges: &[Edge]) -> Set {
         &gpu.queue,
         &sources,
         &l2_refs,
-        None,
+        &[],
         &[],
         &[&l4],
         Layering::Overdraw,

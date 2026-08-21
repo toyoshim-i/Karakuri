@@ -4,8 +4,8 @@
 //!
 //! Folding is last-write-wins per address and key, where "key" depends on the
 //! record type — a [`Record::Param`] is keyed by `(layer, index, key)`, a
-//! [`Record::Capacity`] and a [`Record::Seed`] by the node they address,
-//! [`Record::Camera`] is a singleton, and so on. **What a record says about a
+//! [`Record::Capacity`], a [`Record::Seed`] and a [`Record::Camera`] by the
+//! node they address, and so on. **What a record says about a
 //! node is folded; which node it says it about is what it is folded by**, so a
 //! [`Record::Slot`]'s `name` is on the value side of that line and its
 //! `(layer, index)` is on the key side.
@@ -38,7 +38,7 @@ enum Key {
     Capacity(Layer, u32),
     Param(Layer, Option<u32>, String),
     Bind(Layer, Option<u32>, String),
-    Camera,
+    Camera(u32),
     Seed(Layer, u32),
     /// A node and the slot of it being bound — the two halves of what an edge
     /// is *about*, where the node it is bound *to* is what the edge says.
@@ -96,7 +96,10 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         Record::Bind {
             layer, index, key, ..
         } => Some(Key::Bind(*layer, *index, key.clone())),
-        Record::Camera { .. } => Some(Key::Camera),
+        // By the node, so that two cameras described in one session survive
+        // the fold as the two producers they are — the same correction
+        // `capacity` and `seed` needed when a layer stopped holding one node.
+        Record::Camera { index, .. } => Some(Key::Camera(*index)),
         // The same, and it is what a per-source salt *is*: two sources folded
         // onto one seed is two geometries salted alike, which is the one thing
         // salting exists to prevent.

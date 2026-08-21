@@ -1,0 +1,49 @@
+// The same cloud, drawn from a camera you name.
+//
+// **This is `soft_points` with one line added and one word changed**, and the
+// pair is the whole demonstration: `soft_points` reads `camera`, which is the
+// Set's — the first camera node, and the only one there was to mean while a Set
+// held one. This one declares `uses view : Camera` and reads `view.clip`, so a
+// Set holding two viewpoints can draw the same geometry from both at once:
+//
+//     --set drift_shell.kir,beat_jump.kir,soft_points.kir,second_eye.kir \
+//     --edge second_eye.view=orbit
+//
+// draws the cloud from `beat_jump` — which is `L3:0`, the Set's camera, so
+// `soft_points` gets it by saying nothing — and again from the built-in orbit,
+// which is a node called `orbit` like any other and is in every Set whatever
+// its files declare.
+//
+// **The slot has to be bound.** There is no "if there is exactly one, use it":
+// that rule is what capped a Set at one camera, and a renderer that means the
+// Set's camera says so by declaring no slot — which every other renderer here
+// does.
+//
+// `shade` rather than a hue from the seed, so that two of these over one geometry
+// are told apart by their parameters rather than by their material.
+
+proc second_eye {
+  kind  L4
+  blend additive
+
+  uses view : Camera
+
+  consumes position, velocity
+
+  param point_scale : float [0.5, 40.0] = 4.0
+  param shade       : float [0.0, 1.0]  = 0.08
+  param exposure    : float [0.0, 8.0]  = 1.00
+  param falloff     : float [0.5, 8.0]  = 3.0
+
+  vertex {
+    clip       = view.clip * vec4(position, 1.0);
+    point_size = point_scale * (0.35 + 0.65 * clamp(length(velocity) * 0.6, 0.0, 1.0));
+  }
+
+  fragment {
+    let d = length(point_coord * 2.0 - 1.0);
+    let a = pow(max(0.0, 1.0 - d), falloff);
+    let c = hsv_to_rgb(vec3(shade, 0.75, 1.0));
+    color = vec4(c * exposure, a);
+  }
+}

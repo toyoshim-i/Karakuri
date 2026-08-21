@@ -171,6 +171,20 @@ fn the_pairs_the_docs_offer_compose() {
             &["drift_shell.kir", "melt_blob.kir", "field_lens.kir"][..],
             &[edge("field_lens", "shape", "melt_blob")][..],
         ),
+        // `second_eye.kir`'s does, and it is the only chain here with **two
+        // cameras** in it — one written as a procedure and one the built-in,
+        // which is a node in every Set and is what the edge names. Two
+        // renderers over one geometry, each drawing it from a different
+        // viewpoint into the same frame.
+        (
+            &[
+                "drift_shell.kir",
+                "beat_jump.kir",
+                "soft_points.kir",
+                "second_eye.kir",
+            ][..],
+            &[edge("second_eye", "view", "orbit")][..],
+        ),
         // `morph.kir`'s does, and it is the only one with **two geometries** in
         // it. The loop below takes every L1 it finds with that L1's own declared
         // capacity, which is what makes this line a test of more than the sort:
@@ -206,14 +220,14 @@ fn the_pairs_the_docs_offer_compose() {
             .collect();
         assert!(!sources.is_empty(), "a chain starts with an L1");
         let l2s: Vec<&karakuri_ir::typed::Checked> = by(karakuri_ir::Kind::L2).collect();
-        let l3 = by(karakuri_ir::Kind::L3).next();
+        let l3s: Vec<&karakuri_ir::typed::Checked> = by(karakuri_ir::Kind::L3).collect();
         let l4s: Vec<&karakuri_ir::typed::Checked> = by(karakuri_ir::Kind::L4).collect();
         karakuri_engine::Set::build_many(
             &gpu.device,
             &gpu.queue,
             &sources,
             &l2s,
-            l3,
+            &l3s,
             &by(karakuri_ir::Kind::Field).collect::<Vec<_>>(),
             &l4s,
             karakuri_engine::set::Layering::Overdraw,

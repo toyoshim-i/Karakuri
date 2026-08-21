@@ -232,7 +232,10 @@ pub const POLL_INTERVAL: Duration = Duration::from_millis(50);
 pub struct RequestNames {
     pub l1s: Vec<Option<String>>,
     pub l2s: Vec<Option<String>>,
-    pub l3: Option<String>,
+    /// **A list, like the renderers'**, and one entry long for a Set with no
+    /// camera procedure: the built-in orbit is a node too, and a caller may
+    /// name it.
+    pub l3s: Vec<Option<String>>,
     pub l4s: Vec<Option<String>>,
     /// **A list, like the renderers'** — a Set holds as many fields as its
     /// files declare, and each of them is a node an edge points at by name.
@@ -259,17 +262,16 @@ pub struct Request {
     /// The deformations, in chain order — each reads what the one before wrote.
     /// Empty for a Set that draws its geometry as the L1 made it.
     pub l2s: Vec<Checked>,
-    /// The camera, or `None` to leave it the built-in orbit. At most one: a Set
-    /// is a grouping around one viewpoint, and two viewpoints composited is a
-    /// graph rather than a Set.
-    pub l3: Option<Checked>,
-    /// **The fields, in node order.** Empty for a Set that evaluates none.
+    /// **The cameras, in node order.** Empty leaves the Set looking from the
+    /// built-in orbit, which is a node of its own — so a Set has at least one
+    /// camera whatever this list says, and `L3:0` addresses something in every
+    /// Set.
     ///
-    /// **A list where the camera is an option**, and the difference is the
-    /// whole of what a slot bought: a Set is a grouping around one viewpoint,
-    /// and there is no such rule about the shapes it marches — a renderer
-    /// naming a shape and a cutter is the ordinary case, and each of them is a
-    /// `kind Field` file of its own.
+    /// **A list, on the terms the fields and the renderers already had.** Which
+    /// renderer draws from which camera is an `edge` and not a position, so
+    /// several cost this nothing but a `Vec`.
+    pub l3s: Vec<Checked>,
+    /// **The fields, in node order.** Empty for a Set that evaluates none.
     pub fields: Vec<Checked>,
     /// The renderers, in draw order — see [`Set::build_many`]. A rebuild names
     /// every one of them rather than the one that changed, for the reason the
@@ -1109,7 +1111,7 @@ fn run_worker(
                 &queue,
                 &request.l1s.iter().map(|(p, c)| (p, *c)).collect::<Vec<_>>(),
                 &request.l2s.iter().collect::<Vec<_>>(),
-                request.l3.as_ref(),
+                &request.l3s.iter().collect::<Vec<_>>(),
                 &request.fields.iter().collect::<Vec<_>>(),
                 &request.l4s.iter().collect::<Vec<_>>(),
                 request.layering,
@@ -1122,7 +1124,7 @@ fn run_worker(
                 crate::set::Wiring {
                     l1s: &request.names.l1s,
                     l2s: &request.names.l2s,
-                    l3: request.names.l3.as_deref(),
+                    l3s: &request.names.l3s,
                     l4s: &request.names.l4s,
                     fields: &request.names.fields,
                     edges: &request.edges,

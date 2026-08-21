@@ -3444,3 +3444,302 @@ fn a_field_slot_may_not_be_named_after_a_builtin_or_a_type() {
     );
     assert_eq!(checked.geometry_slot(), Some("sin"));
 }
+
+// ---------------------------------------------------------------------------
+// A camera, reached through a slot
+// ---------------------------------------------------------------------------
+
+/// A renderer that says which camera it draws from, and reads the projection
+/// through it.
+const THROUGH: &str = r#"
+proc through {
+  kind  L4
+  blend additive
+
+  uses view : Camera
+
+  consumes position
+
+  vertex {
+    clip       = view.clip * vec4(position, 1.0);
+    point_size = 3.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+}
+"#;
+
+/// A marcher that says which camera it marches from.
+const MARCH_THROUGH: &str = r#"
+proc march_through {
+  kind  L4
+  blend additive
+
+  uses view : Camera
+
+  fragment {
+    let p = view.eye + view.ray;
+    color = vec4(p.x, p.y, p.z, 1.0);
+  }
+}
+"#;
+
+/// **A declared Camera slot is read as a member, and the members are the
+/// ambients under another name.**
+///
+/// That is the whole of what this notation is: an L4 could already read the
+/// Set's camera as `camera`, `eye` and `ray`, and what it could not say was
+/// *which* camera. So the read resolves to the same three values — a new
+/// spelling for an old capability, which is why nothing below the checker had
+/// to move.
+#[test]
+fn a_declared_camera_slot_is_read_as_a_member() {
+    let checked = check_ok(THROUGH);
+    assert_eq!(
+        checked.uses,
+        vec![Slot {
+            name: "view".to_string(),
+            ty: SlotTy::Camera,
+        }]
+    );
+    assert_eq!(checked.camera_slot(), Some("view"));
+    assert_eq!(
+        checked.geometry_slot(),
+        None,
+        "and it is not a geometry slot: the two answer different questions"
+    );
+    assert!(checked.field_slots().is_empty());
+
+    // `view.clip` is the `camera` ambient, so what reaches the lowering is
+    // exactly what a renderer that named no slot produces.
+    let vertex = checked.block(BlockKind::Vertex).expect("a vertex block");
+    let read = format!("{:?}", vertex.stmts);
+    assert!(
+        read.contains("Ambient(Camera)"),
+        "`view.clip` has to resolve to the camera ambient: {read}"
+    );
+    assert!(
+        !read.contains("Far("),
+        "and not to an attribute of a far element: {read}"
+    );
+
+    // The other two, in the stage that has them.
+    let marching = format!(
+        "{:?}",
+        check_ok(MARCH_THROUGH)
+            .block(BlockKind::Fragment)
+            .expect("a fragment block")
+            .stmts
+    );
+    assert!(
+        marching.contains("Ambient(Eye)") && marching.contains("Ambient(Ray)"),
+        "`view.eye` and `view.ray` have to resolve to the marcher's two: {marching}"
+    );
+}
+
+/// **A Camera slot is L4's alone**, and each of the other four refuses it with
+/// a sentence about itself rather than about `uses`.
+///
+/// An L3 *is* a camera — every member is a derivation of the six numbers it
+/// writes — an L1 and an L2 work in world space and do not project, and a field
+/// is a function of space whose answer cannot depend on where it is watched
+/// from.
+#[test]
+fn a_camera_slot_is_l4s_alone() {
+    for src in [
+        r#"
+proc gen {
+  kind     L1
+  topology points
+  capacity [1, 64] = 8
+
+  uses view : Camera
+
+  emit position
+
+  element { position = vec3(0.0, 0.0, 0.0); }
+}
+"#,
+        r#"
+proc warp {
+  kind L2
+
+  uses view : Camera
+
+  consumes position
+
+  deform { position = position * 1.5; }
+}
+"#,
+        r#"
+proc look {
+  kind L3
+
+  uses view : Camera
+
+  camera {
+    eye    = vec3(0.0, 0.0, 4.0);
+    target = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#,
+        r#"
+proc blob {
+  kind Field
+
+  uses view : Camera
+
+  field { distance = length(point) - 1.0; }
+}
+"#,
+    ] {
+        let errs = check_err(src);
+        assert!(
+            errs.iter()
+                .any(|e| e.message.contains("`uses … : Camera` is L4 only")),
+            "expected a Camera slot to be refused here, got: {errs:?}"
+        );
+    }
+
+    // And an L4 takes one, so none of the above is a refusal of the type as
+    // such.
+    assert_eq!(check_ok(THROUGH).camera_slot(), Some("view"));
+}
+
+/// **A renderer draws from one camera.** Two slots would need two bind groups
+/// in one pipeline and two edges per Set, and neither is what anybody asked
+/// for: a frame drawn from two viewpoints is two renderers, which is exactly
+/// what an edge per renderer makes possible.
+///
+/// Refused rather than resolved by position, on the terms every other collision
+/// in a header is.
+#[test]
+fn two_camera_slots_on_one_renderer_are_refused() {
+    let errs = check_err(
+        r#"
+proc twice {
+  kind  L4
+  blend additive
+
+  uses left  : Camera
+  uses right : Camera
+
+  consumes position
+
+  vertex {
+    clip       = left.clip * vec4(position, 1.0);
+    point_size = 3.0;
+  }
+
+  fragment { color = vec4(1.0, 1.0, 1.0, 1.0); }
+}
+"#,
+    );
+    assert!(
+        errs.iter()
+            .any(|e| e.message.contains("a renderer draws from one camera")),
+        "expected a second Camera slot to be refused, got: {errs:?}"
+    );
+
+    // Two of one *name* is refused as well, and by the check every slot type
+    // goes through: an edge names a slot, so two would be one address for two
+    // inputs.
+    let errs = check_err(&THROUGH.replace(
+        "uses view : Camera",
+        "uses view : Camera\n  uses view : Camera",
+    ));
+    assert!(
+        errs.iter().any(|e| e.message.contains("already a slot")),
+        "expected two slots of one name to be refused, got: {errs:?}"
+    );
+}
+
+/// **A camera's members are resolved against its type**, so a name that is not
+/// one of the three is refused with the three named — and with the four values
+/// an L4 still cannot read, which is a roadmap entry rather than an oversight.
+#[test]
+fn a_member_a_camera_has_not_got_is_refused() {
+    let errs = check_err(&THROUGH.replace("view.clip", "view.target"));
+    assert!(
+        errs.iter()
+            .any(|e| e.message.contains("`view.target` is not part of a camera")),
+        "expected an unknown member to be refused, got: {errs:?}"
+    );
+    assert!(
+        errs.iter()
+            .any(|e| e.hint.as_deref().is_some_and(|h| h.contains("view.clip"))),
+        "and the hint has to name the members there are, got: {errs:?}"
+    );
+
+    // A camera is not a value on its own either: what can be had from it is one
+    // of its parts.
+    let errs = check_err(&THROUGH.replace("view.clip *", "view *"));
+    assert!(
+        errs.iter()
+            .any(|e| e.message.contains("`view` is a camera, not a value")),
+        "expected the bare slot name to be refused, got: {errs:?}"
+    );
+}
+
+/// **The members keep the stage rules the ambients have**, asked rather than
+/// restated: `.eye` and `.ray` are built by the ray prologue a fullscreen
+/// fragment stage opens with, and a per-element renderer has no such prologue.
+///
+/// A `.kir` that read them anyway used to check clean and lower to a bare
+/// identifier nothing declared — WGSL naga refuses it, and wgpu's uncaptured
+/// error handler takes the thread down. Reaching them through a slot must not
+/// be a way back to that.
+#[test]
+fn the_members_keep_the_ambients_stage_rules() {
+    // **Per element, and in the `fragment` stage**, which is where the ambient
+    // itself is legal: what refuses this is the procedure having a `vertex`
+    // block at all, so reading it anywhere else would be refused by the block
+    // rule instead and prove nothing about this one.
+    let errs = check_err(&THROUGH.replace(
+        "color = vec4(1.0, 1.0, 1.0, 1.0)",
+        "color = vec4(view.ray, 1.0)",
+    ));
+    assert!(
+        errs.iter().any(|e| e
+            .message
+            .contains("`view.ray` is only available to a procedure that draws the whole frame")),
+        "expected a per-element `.ray` to be refused, got: {errs:?}"
+    );
+
+    // Fullscreen: the same read is exactly what a marcher is for.
+    assert_eq!(check_ok(MARCH_THROUGH).camera_slot(), Some("view"));
+
+    // And `.clip` is readable in a vertex stage, which is where a projection is
+    // used — so the rule is the ambient's own and not a blanket one.
+    assert_eq!(check_ok(THROUGH).camera_slot(), Some("view"));
+}
+
+/// **A Camera slot's name goes through the same reserved-word check every slot
+/// name does**, and it is *not* checked against the builtins.
+///
+/// The builtin rule is Field-only by design — a slot that is *called* is the
+/// one with that collision, and `uses sin : Camera` is read `sin.clip`, which
+/// cannot be confused with the sine. The same reasoning a geometry slot
+/// already followed.
+#[test]
+fn a_camera_slot_name_shares_the_scope_every_slot_name_does() {
+    let errs = check_err(&THROUGH.replace("view", "position"));
+    assert!(
+        errs.iter()
+            .any(|e| e.message.contains("shadows an attribute name")),
+        "expected a slot named after an attribute to be refused, got: {errs:?}"
+    );
+    let errs = check_err(&THROUGH.replace("view", "beats"));
+    assert!(
+        errs.iter()
+            .any(|e| e.message.contains("shadows an ambient value")),
+        "expected a slot named after an ambient to be refused, got: {errs:?}"
+    );
+
+    // A builtin's name is still a name here, because a camera slot is read and
+    // not called.
+    let checked = check_ok(&THROUGH.replace("view", "sin"));
+    assert_eq!(checked.camera_slot(), Some("sin"));
+}

@@ -143,7 +143,7 @@ fn build_chain(
         &gpu.queue,
         &[(&l1, capacity)],
         &l2_refs,
-        None,
+        &[],
         &[],
         &[&compile(l4)],
         Layering::Overdraw,

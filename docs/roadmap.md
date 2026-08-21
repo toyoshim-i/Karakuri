@@ -1311,9 +1311,12 @@ which geometry the second input takes was decided by `--set` order and written n
 paragraph promised that "when fan-in arrives it brings the notation with it"; fan-in arrived
 twice and brought none. The notation is now built: a procedure declares a named input slot
 (`uses far : Geometry`) and the Set binds it (an `edge` record, `--edge morph.far=sphere`).
-What is left is carrying it to the other capped-at-one places — ~~the field~~, the camera, a
-mask's source. The field is done: `uses shape : Field` declares it, an `edge` binds it, and a
-Set holds as many as its files declare. See "Naming what a Set holds".
+What is left is carrying it to the other capped-at-one places — ~~the field~~, ~~the
+camera~~, a mask's source. The field and the camera are done: `uses shape : Field` and `uses
+view : Camera` declare them, an `edge` binds each, and a Set holds as many of both as its
+files declare. A mask's source is the one left, and it is not a slot — the value is a salt
+already in every uniform block, and what is missing is the spelling that reads it. See
+"Naming what a Set holds".
 
 **How a param is addressed.** Under the hierarchy framing this was "layer and position";
 under nodes it is simply **the node**, which is the same key with a name that will still be
@@ -1714,7 +1717,7 @@ no name:**
 | ~~A slot holding a chain or a second geometry cannot be saved as a Set file~~ | **Closed.** One `slot` record per node, one `capacity` per geometry |
 | ~~MCP reaches an L1 and the renderers and no other node~~ | **Closed.** A model reads and writes every node at `(slot, layer, index)` |
 | ~~Which geometry a node's second input takes is `--set` order~~ | **Closed.** `uses far : Geometry` declares a named slot and an `edge` binds it; an unbound slot is refused |
-| One `kind Field` per Set, one L3 per Set | **Closed for the field, and only for the field.** The call carries a name — `uses shape : Field` and `shape(p)`, bound by an `edge` — and the plumbing behind it is a list: a Set holds as many `kind Field` files as it is given, each a node with a name, an address (`Field:1:radius`) and a `slot` record of its own. **The camera is untouched and stays capped at one**, which is a rule rather than a limit: a Set is a grouping around one viewpoint, and compositing two of them is what an L5 is for — so this row closes half way and the half it leaves is the half that is meant to stay |
+| ~~One `kind Field` per Set, one L3 per Set~~ | **Closed, both halves.** The field's call carries a name — `uses shape : Field` and `shape(p)` — and the camera's read carries one too: `uses view : Camera`, `view.clip`, bound by the same `edge`. The half this row said was "a rule rather than a limit" was the cap again in the rule's clothes: *a Set is a grouping around one viewpoint* is only true while nothing can say **which** viewpoint, and a renderer can now. A Set holds as many cameras as its files declare, each a node with a name, an address (`L3:1:radius`) and a `slot` record of its own — and **the built-in orbit is a node too**, called `orbit`, so a renderer can be bound to it rather than reaching it only by saying nothing |
 | A mask cannot say which source it applies to | Nothing exposes the `source` uniform to a procedure. The value is the salt, which is assigned, recorded and already in every uniform block; the read is what is missing |
 | ~~A source's salt is derived from `--set` order rather than assigned~~ | **Closed.** A `seed` record per geometry, written by `--save-set` and read by `--load-set` |
 
@@ -1755,9 +1758,32 @@ exactly one, use it" is the implicit rule being removed, and reinstating it unde
 spelling would cap the next fan-in at one the same way.
 
 **One edge is spelled and the rest follow the same shape**: which source a mask applies to
-and the `source` uniform it would read, several fields per Set, several cameras. Each needs
-the same two halves — a declaration on the procedure and a binding on the Set — and the one
-that shipped first is the one that had a working picture behind it, `examples/morph.kir`.
+and the `source` uniform it would read, ~~several fields per Set~~, ~~several cameras~~. Each
+needs the same two halves — a declaration on the procedure and a binding on the Set — and the
+one that shipped first is the one that had a working picture behind it, `examples/morph.kir`.
+The fields and the cameras followed it, in that order, and each cost one `SlotTy` variant and
+a `Vec` where an `Option` was. **The mask's source is the one left and it is not a slot**: the
+value is a salt already in every uniform block, so what is missing is a spelling that reads
+it rather than an edge that binds one.
+
+**What a renderer can read of a camera, and what it is deliberately not given yet.** The
+three members `uses view : Camera` offers — `view.clip`, `view.eye`, `view.ray` — are the
+three ambients under another name: an L4 could already read all of them and could not say
+*which* camera, so the slot is a new spelling for an old capability. The other four values an
+L3 writes are not:
+
+| Deferred | Why it is a new capability rather than a new spelling |
+|---|---|
+| `view.target` | An L4 cannot read it today under any spelling. `camera`, `eye` and `ray` are *derivations* the engine makes; these are the state itself |
+| `view.up` | The same, and the pair `target`/`up` is what a renderer would use to build its own basis — restating the engine's projection convention inside every shader that wanted it, which is the thing deriving on the GPU exists to prevent |
+| `view.fov_y` | The same, plus an aspect ratio it would need beside it, which belongs to the canvas rather than to the camera |
+| `view.near`, `view.far` | Already read by `blend weighted` through `depth_range`, which is a derivation. Exposing the planes themselves is a second way to depend on them, and the coupling `blend weighted` already has to them is the one nobody predicted |
+
+**`Kind::L3`'s own doc argues them the other way and that argument is why they wait**: an L3
+produces *state, not a matrix*, precisely so that a blend of two trajectories means something
+— so handing a renderer the state is a decision about what a camera is to a renderer, not a
+member list. Adding them is cheap when something wants them; nothing does, and a member set
+invented for no case is a member set nobody can check against one.
 
 **A name lives in a Set file, and the command line can write one.** The file is where a use
 is recorded, so it is where the name belongs, and the GUI M5 builds writes it there. The
