@@ -509,6 +509,9 @@ impl Deform {
             view.field_params,
             view.field_value,
         );
+        // **The Source slots this node declared**, each holding the identity
+        // of the geometry its edge named — see [`View::source_value`].
+        super::write_source_slots(&mut p, &self.uniform_layout, view.source_value);
         queue.write_buffer(&self.uniforms, 0, p.finish());
     }
 

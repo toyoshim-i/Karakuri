@@ -166,6 +166,28 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
         .iter()
         .find(|u| u.ty == SlotTy::Camera)
         .map(|u| u.name.as_str());
+    // **The fifth, and the one that makes a name a bare value.** A Source slot
+    // is read as `only` and nothing else, so a block checker that could not see
+    // the header would resolve it against the signal-bus hint and tell the
+    // author to declare a param.
+    //
+    // A list, like the field one and for the same reason: what a Source slot
+    // costs is a `u32` in a uniform block the module already has, so nothing
+    // caps it at one and `source == a || source == b` is the ordinary case.
+    let sources: Vec<&str> = proc
+        .uses
+        .iter()
+        .filter(|u| u.ty == SlotTy::Source)
+        .map(|u| u.name.as_str())
+        .collect();
+    // **Whether this procedure declares a geometry slot**, which is what makes
+    // `source` ambiguous rather than merely present — see
+    // [`Checker::paired`].
+    let paired = proc
+        .uses
+        .iter()
+        .find(|u| u.ty == SlotTy::Geometry)
+        .map(|u| u.name.clone());
     let fullscreen =
         proc.kind == Kind::L4 && proc.blocks.iter().all(|b| b.kind != BlockKind::Vertex);
     let mut blocks = Vec::with_capacity(proc.blocks.len());
@@ -184,6 +206,8 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
             uses,
             &fields,
             camera,
+            &sources,
+            paired.as_deref(),
             &params,
             &emit_set,
             &consumes_set,
@@ -395,6 +419,13 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                              no projection here for a camera to be the origin of",
                         ),
                     ),
+                    // **Legal here, and on L2 and L4** — the three kinds a Set
+                    // instantiates per source, which is exactly where `source`
+                    // is readable. What a Source slot binds is a `u32` in the
+                    // uniform this module already has, so it adds an input to
+                    // the file and no buffer, no bind group and nothing to the
+                    // chain.
+                    SlotTy::Source => {}
                 }
             }
             if proc.blocks.iter().all(|b| b.kind != BlockKind::Element) {
@@ -664,6 +695,26 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                              and `clip`, `eye` and `ray` are derived from what it writes",
                         ),
                     ),
+                    // **The same refusal `source` itself gets here, one level
+                    // up.** A Source slot exists to be compared against
+                    // `source`, and an L3 has no `source` to compare: it runs
+                    // once a frame over nothing, and the identity is a property
+                    // of a Set's geometry, which a camera is not. Refused at
+                    // the declaration rather than left to the read, so that a
+                    // camera which declares one and never reads it is turned
+                    // away too — the Set would otherwise bind an edge to a
+                    // value nothing here could ever use.
+                    SlotTy::Source => errors.push(
+                        IrError::contract(
+                            u.span,
+                            "`uses … : Source` is for masking, and an L3 masks nothing",
+                        )
+                        .with_hint(
+                            "remove it: a Source slot is the comparand for `source`, and an L3 \
+                             runs once a frame over no geometry — there is no chain instance \
+                             here for `source` to name",
+                        ),
+                    ),
                 }
             }
             if !proc.emit.is_empty() {
@@ -780,6 +831,23 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                              the same point has the same distance from wherever it is seen",
                         ),
                     ),
+                    // **And a field has no `source` either**, for the reason it
+                    // has no `seed`: it is spliced into every procedure that
+                    // declares a slot for it, and two of those may be running
+                    // over two different geometries — so a distance that varied
+                    // with the source would be two shapes in one frame, out of
+                    // one body.
+                    SlotTy::Source => errors.push(
+                        IrError::contract(
+                            u.span,
+                            "`uses … : Source` is for masking, and a field masks nothing",
+                        )
+                        .with_hint(
+                            "remove it: a field is handed `point` and returns a distance, and \
+                             it is spliced into callers that may be running over different \
+                             geometries — mask in the caller, where there is one source to name",
+                        ),
+                    ),
                 }
             }
             if !proc.emit.is_empty() || !proc.consumes.is_empty() {
@@ -850,6 +918,10 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     // what a renderer projects and marches with, and no other
                     // layer does either.
                     SlotTy::Camera => {}
+                    // Legal, and on a fullscreen renderer too: `source` is per
+                    // *instance* rather than per element, so a procedure with
+                    // no element still knows whose chain it is running in.
+                    SlotTy::Source => {}
                 }
             }
             // **A renderer looks from one place.** Two would each need their
@@ -1123,6 +1195,8 @@ fn check_params(proc: &Proc, errors: &mut Vec<IrError>) -> HashMap<String, Ty> {
             None,
             &[],
             None,
+            &[],
+            None,
             &empty_params,
             &empty_attrs,
             &empty_attrs,
@@ -1360,9 +1434,15 @@ fn reads_carried(e: &TExpr, carried: &HashSet<Attr>) -> bool {
         // **Both sides.** A paired read is a read of the other source's carried
         // state, which is state all the same.
         TExprKind::Attr(a) | TExprKind::Far(a) => carried.contains(a),
-        TExprKind::Lit(_) | TExprKind::Local(_) | TExprKind::Param(_) | TExprKind::Ambient(_) => {
-            false
-        }
+        // **A Source slot is a constant for the whole run**, which is the
+        // strongest thing that can be said about a value here: it is the
+        // assigned identity of a geometry, written once into a uniform and
+        // never moved. Not carried state, so it disqualifies nothing.
+        TExprKind::Lit(_)
+        | TExprKind::Local(_)
+        | TExprKind::Param(_)
+        | TExprKind::Ambient(_)
+        | TExprKind::Source { .. } => false,
         TExprKind::Unary { value, .. } => reads_carried(value, carried),
         TExprKind::Binary { lhs, rhs, .. } => {
             reads_carried(lhs, carried) || reads_carried(rhs, carried)
@@ -1413,6 +1493,7 @@ fn reads_beats(blocks: &[TBlock]) -> bool {
             | TExprKind::Param(_)
             | TExprKind::Attr(_)
             | TExprKind::Far(_)
+            | TExprKind::Source { .. }
             | TExprKind::Ambient(_) => false,
             TExprKind::Unary { value, .. } => in_expr(value),
             TExprKind::Binary { lhs, rhs, .. } => in_expr(lhs) || in_expr(rhs),
@@ -1640,6 +1721,25 @@ struct Checker<'a> {
     /// the reason the two above are: the declaration is in the header and a
     /// block checker sees only its own block.
     camera: Option<&'a str>,
+    /// **What this procedure calls the sources it names**, from every `uses
+    /// <name> : Source` in its header.
+    ///
+    /// The list is what makes a bare `only` mean anything, and it is per
+    /// procedure for the reason the three above are. Several, because a mask
+    /// asking `source == a || source == b` is the ordinary case and each slot
+    /// costs a `u32` in a uniform block that already exists.
+    sources: &'a [&'a str],
+    /// **What this procedure calls the second geometry it takes, if it takes
+    /// one** — the same declaration [`Checker::uses`] carries, kept a second
+    /// time because this one is read where `source` is.
+    ///
+    /// **It is what makes `source` ambiguous.** In a pairing Set the far
+    /// simulation lives inside the near `Source` and shares its uniform, so a
+    /// node with a geometry slot has *two* geometries in hand and one salt to
+    /// answer with — and the answer would silently be the near one. Refused
+    /// with the slot's name in the sentence, because a hint that says which
+    /// reading was ambiguous is better than a rule the author has to infer.
+    paired: Option<&'a str>,
     params: &'a HashMap<String, Ty>,
     emit: &'a HashSet<Attr>,
     consumes: &'a HashSet<Attr>,
@@ -1656,9 +1756,9 @@ enum TargetRes {
 }
 
 impl<'a> Checker<'a> {
-    // Nine, and each one is a fact about the *procedure* that a block checker
+    // Eleven, and each one is a fact about the *procedure* that a block checker
     // cannot see for itself — the header is not in the block. Bundling them
-    // into a struct would be the same nine fields under one name, and the
+    // into a struct would be the same eleven fields under one name, and the
     // struct would have exactly one constructor and one use.
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -1668,6 +1768,8 @@ impl<'a> Checker<'a> {
         uses: Option<&'a str>,
         fields: &'a [&'a str],
         camera: Option<&'a str>,
+        sources: &'a [&'a str],
+        paired: Option<&'a str>,
         params: &'a HashMap<String, Ty>,
         emit: &'a HashSet<Attr>,
         consumes: &'a HashSet<Attr>,
@@ -1679,6 +1781,8 @@ impl<'a> Checker<'a> {
             uses,
             fields,
             camera,
+            sources,
+            paired,
             params,
             emit,
             consumes,
@@ -2311,6 +2415,37 @@ impl<'a> Checker<'a> {
             return None;
         }
         if let Some(ambient) = Ambient::from_name(name) {
+            // **`source` and a geometry slot cannot both be in one
+            // procedure**, and the read is where it is caught because the read
+            // is what is ambiguous.
+            //
+            // A pairing Set is *one* source made of two simulations: the far
+            // one feeds the slot and shares the near one's uniform, so there is
+            // one `seed_salt` for two geometries and `source` here would
+            // silently mean the near one. Refused rather than defined as the
+            // near side, because a value that quietly answers for one of two
+            // things is the shape this whole notation exists to remove — and
+            // the sentence names the slot, so the author is told *which*
+            // reading was ambiguous rather than left to infer a rule.
+            if ambient == Ambient::Source {
+                if let Some(far) = self.paired {
+                    self.err_hint(
+                        Stage::Contract,
+                        span,
+                        format!(
+                            "`source` is ambiguous in a procedure that declares `{far} : Geometry`"
+                        ),
+                        format!(
+                            "this node has two geometries in hand and one identity to answer \
+                             with: the far one feeds `{far}` and shares this node's uniform, so \
+                             `source` would mean the near one and say nothing about it. Compare \
+                             against a `uses <name> : Source` slot in a node that takes no \
+                             second geometry"
+                        ),
+                    );
+                    return None;
+                }
+            }
             let available = match self.block {
                 Some(block) => {
                     ambient.available_in(self.kind, block)
@@ -2367,6 +2502,34 @@ impl<'a> Checker<'a> {
                 );
                 return None;
             }
+            // The fourth such sentence, for the two kinds that have no chain
+            // instance to be running over. "Not available in this block" would
+            // send an author looking at the block, where what is wrong is the
+            // `kind` — a camera and a field are not run per geometry at all.
+            if ambient == Ambient::Source && matches!(self.kind, Kind::L3 | Kind::Field) {
+                let (what, hint) = match self.kind {
+                    Kind::L3 => (
+                        "a camera",
+                        "an L3 runs once a frame over nothing, and the identity `source` \
+                         names is a property of a Set's geometry — which a camera is not. \
+                         Read the clock and this procedure's params instead",
+                    ),
+                    _ => (
+                        "a field",
+                        "a field is a function of space: it is spliced into whichever \
+                         procedures evaluate it, including fragment stages that run over no \
+                         geometry at all, so there is no chain instance for it to belong to. \
+                         Mask in the caller instead, where there is one",
+                    ),
+                };
+                self.err_hint(
+                    Stage::Contract,
+                    span,
+                    format!("`source` is per geometry, and {what} runs over none"),
+                    hint,
+                );
+                return None;
+            }
             self.err(
                 Stage::Contract,
                 span,
@@ -2411,6 +2574,24 @@ impl<'a> Checker<'a> {
                 ),
             );
             return None;
+        }
+        // **A Source slot *is* a value, and it is the one that is.** The three
+        // refusals around it say the language has no type for a whole source,
+        // no function type and nothing for six numbers — all true, and none of
+        // them about this: what a Source slot binds is the assigned `uint` that
+        // identifies one geometry, and `uint` is a type the language has.
+        //
+        // **Before the camera arm and after the field one**, which is only
+        // where it reads best: the four slot names are checked against four
+        // disjoint lists, so the order between them decides nothing.
+        if self.sources.contains(&name) {
+            return Some(TExpr::new(
+                Ty::Uint,
+                span,
+                TExprKind::Source {
+                    slot: name.to_string(),
+                },
+            ));
         }
         // **A camera is not a value either.** It is six numbers and three
         // derivations of them, and the language has no type for any of that —

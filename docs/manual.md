@@ -214,7 +214,7 @@ so a saved Set loads as overdraw. That one stays on the command line.
 | `--capacity N` | elements per geometry. **Without it each procedure's own declared default is used**, which is what a `.kir`'s `capacity [min, max] = N` line is for; give this and it overrides every source in every slot |
 | `--param name=value` | a uniform write, applied to every Set — and within a Set, to every node that declares the name |
 | `--param L4:1:name=value` | the same, addressed at one node. How two renderers over one geometry get different values; a bare name cannot, since it reaches both. `L1`, `L2`, `L3`, `L4` and `Field`, and the index is required |
-| `--edge NODE.SLOT=NODE` | bind a procedure's declared input to a node of this Set — `--edge morph.far=sphere_shell` for a geometry, `--edge field_lens.shape=melt_blob` for a field, `--edge lens.view=orbit` for a camera. A `.kir` that declares `uses far : Geometry`, `uses shape : Field` or `uses view : Camera` names the slot and never which node fills it, so this is where that is said. Both sides are node names. A declared slot nothing binds is refused rather than guessed at, and so is one bound to the wrong sort of node |
+| `--edge NODE.SLOT=NODE` | bind a procedure's declared input to a node of this Set — `--edge morph.far=sphere_shell` for a geometry, `--edge field_lens.shape=melt_blob` for a field, `--edge lens.view=orbit` for a camera, `--edge dissolve.only=lattice_shell` for a source a mask names. A `.kir` that declares `uses far : Geometry`, `uses shape : Field`, `uses view : Camera` or `uses only : Source` names the slot and never which node fills it, so this is where that is said. Both sides are node names. A declared slot nothing binds is refused rather than guessed at, and so is one bound to the wrong sort of node |
 | `--publish NAME=key[LOW..HIGH]` | put one control on the console under a name the Set chose, over part of its declared range. Without any, every control is published — the first `--publish` makes the list *the* list. It narrows and never widens: a range outside what the procedure declared is refused |
 | `--publish NAME=L4:0:key[LOW..HIGH]` | the same, addressed at one node rather than every node declaring the key |
 | `--bind FIELDS` | attach a signal to a parameter — `layer=L1,key=turbulence,signal=energy,range=0.0..3.0`. `layer`, `key`, `signal` and `range` are required; `index=N`, `curve=lin\|pow2\|sqrt\|smooth` and the `noise.*` fields are optional. `--help` lists them all |
@@ -665,12 +665,57 @@ decides nothing.
 `--save-set` writes the edge into the Set file as an `edge` record and `--load-set` reads it
 back, so a morph is a Set you can keep.
 
-**What is not there yet is treating them differently.** A mask on which source an element
-came from wants a `source` value to compare, and nothing yet lets a procedure read one.
-Nothing has to be added to the elements for that: the value is the source's own hash salt —
-the same thing that gives it its own colours — and it is already in every procedure's
-uniform block. What is missing is the spelling that reads it. So until then the two are
-merged and drawn, and telling them apart is done by giving them different `.kir` files.
+### Treating one source differently from another
+
+**One `.kir` runs once per geometry, and it can now tell which one it is in.** A Set
+instantiates its chain per source, so a deformation in a Set of three is running in three
+places — `source` is the identity of the one this invocation is in:
+
+```
+proc dissolve {
+  kind L2
+
+  uses only : Source
+
+  consumes position, size
+
+  mask {
+    strength = 0.0;
+    if source == only { strength = 1.0; }
+  }
+
+  deform { size = size * 0.2; }
+}
+```
+
+```
+karakuri-cli --set lattice_shell.kir,keeper=sphere_shell.kir,dissolve.kir,soft_points.kir \
+  --edge dissolve.only=keeper
+```
+
+**The comparand comes through a slot for the reason the geometry did**: a `.kir` may not
+name a node, so `dissolve.kir` says it wants *a* source called `only` and the Set says which.
+`--edge dissolve.only=keeper` is the same spelling as `--edge morph.far=sphere_shell`, an
+unbound slot is refused the same way, and a Set file records it as the same `edge` record.
+
+**`: Source` is not `: Geometry`, and the difference is what gets bound.** A `Geometry` slot
+binds the far geometry's *elements*, so a node has at most one and reads it as
+`far.position`. A `Source` slot binds only the number that identifies a geometry, so it costs
+nothing, several are legal — `if source == a || source == b` — and it is read as a bare
+value. A mask wants the identity and reads no elements, which is exactly the case the second
+type exists for.
+
+**It is not confined to a mask or to an L2.** `source` and a `Source` slot are readable in an
+L1, an L2 and an L4 — anywhere a chain instance runs — so a generator that lays one geometry
+out differently, or a renderer that tints one of them, is the same two lines in a different
+block. They are refused in an L3 and in a `kind Field` procedure, which run over no geometry
+at all, and in any procedure that also declares a `uses … : Geometry` slot, where a pairing
+Set would make "which source" a question with two answers and one of them silent.
+
+**No value is added to the elements to make this work.** `source` is the geometry's own hash
+salt — the same thing that gives it its own colours — which has been in every procedure's
+uniform block all along. So a comparison against it is one uniform against another: the same
+answer in every lane, and the cheapest branch a GPU has.
 
 ### A shape in a file of its own
 

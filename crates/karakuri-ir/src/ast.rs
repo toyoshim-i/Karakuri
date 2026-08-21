@@ -549,11 +549,34 @@ pub enum Ambient {
     /// right. It also keeps a `mat4` inverse out of a language that has no
     /// operator for one.
     Ray,
+    /// **Which geometry this chain instance is running over**, as the assigned
+    /// value that identifies it — its salt, which `docs/ir-spec.md` settles is
+    /// the value rather than a dense index beside it.
+    ///
+    /// **A per-source uniform and not an element attribute**, which is the one
+    /// thing about it a reader is most likely to have backwards: the spec's
+    /// table called it "implicit, carried, never declared" and the engine
+    /// reached the other answer. A Set instantiates its chain **per source**,
+    /// so an instance knows *statically* which geometry it runs over — and a
+    /// value that is the same for every element an instance will ever touch is
+    /// a uniform by definition. Carrying it on the element instead would be a
+    /// `u32` on every element of every merged Set spent restating a constant.
+    ///
+    /// So nothing new is written to read it: `Source::salt` is per geometry,
+    /// `Set::prepare` already writes it as `seed_salt` into every node's
+    /// uniform block, and every generated module already declares the field.
+    /// The read is the whole of what was missing.
+    ///
+    /// It is what a downstream mask compares against, and what it compares
+    /// *to* is a [`SlotTy::Source`] slot — a `.kir` may not name a node, so
+    /// the comparand arrives through a slot the Set binds.
+    Source,
 }
 
 impl Ambient {
-    pub const ALL: [Ambient; 11] = [
+    pub const ALL: [Ambient; 12] = [
         Ambient::Seed,
+        Ambient::Source,
         Ambient::Copy,
         Ambient::Point,
         Ambient::Capacity,
@@ -569,6 +592,7 @@ impl Ambient {
     pub fn name(self) -> &'static str {
         match self {
             Ambient::Seed => "seed",
+            Ambient::Source => "source",
             Ambient::Copy => "copy",
             Ambient::Point => "point",
             Ambient::Capacity => "capacity",
@@ -588,7 +612,7 @@ impl Ambient {
 
     pub fn ty(self) -> Ty {
         match self {
-            Ambient::Seed | Ambient::Copy | Ambient::Capacity => Ty::Uint,
+            Ambient::Seed | Ambient::Source | Ambient::Copy | Ambient::Capacity => Ty::Uint,
             Ambient::T | Ambient::Beats | Ambient::Dt => Ty::Float,
             Ambient::Camera => Ty::Mat4,
             Ambient::Eye | Ambient::Ray | Ambient::Point => Ty::Vec3,
@@ -608,6 +632,18 @@ impl Ambient {
             // those may be a fragment stage — so there is no element even in
             // principle, let alone one this evaluation belongs to.
             Ambient::Seed => kind != Kind::L3 && kind != Kind::Field,
+            // **The same two kinds, and it is the same sentence.** An L3 runs
+            // once a frame over nothing and the salt is a property of a Set's
+            // geometry, which a camera is not; a field is a function of space,
+            // spliced into whichever procedures call it — one of which may be
+            // a fragment stage — so there is no element and no chain instance
+            // even in principle, let alone one this evaluation belongs to.
+            //
+            // **Not on `seed`'s other terms, though.** `seed` is per element
+            // and this is per *instance*, so a fullscreen L4 — which has no
+            // element and reads no `seed` — reads this perfectly well: its
+            // uniform holds the salt like every other module's.
+            Ambient::Source => kind != Kind::L3 && kind != Kind::Field,
             // **Downstream of an amplifier, and nowhere else it could mean
             // anything.** An L1 writes the buffer an amplifier later reads, so
             // `copy` there is zero by construction; an L3 has no element. In an
@@ -705,7 +741,7 @@ pub struct AmplifyDecl {
     pub span: Span,
 }
 
-/// `uses <name> : Geometry`, `uses <name> : Field`, `uses <name> : Camera`
+/// `uses <name> : Geometry`, `: Field`, `: Camera`, `: Source`
 ///
 /// **One input this node takes, named by the procedure and bound by the Set.**
 ///
@@ -720,7 +756,7 @@ pub struct AmplifyDecl {
 /// **The type decides every rule about it**, which is why it is written and
 /// carried rather than checked and dropped — see [`SlotTy`]. Which kinds may
 /// declare one, how many are legal, what an `edge` may bind it to and how it is
-/// read all differ between the three, and each of those refusals is a sentence
+/// read all differ between the four, and each of those refusals is a sentence
 /// about a type rather than about `uses`.
 #[derive(Debug, Clone)]
 pub struct UsesDecl {
@@ -741,13 +777,15 @@ pub struct UsesDecl {
 /// cost each such refusal one arm rather than a rewrite around a distinction
 /// nothing had drawn.
 ///
-/// The three differ in every rule that mentions them, which is the argument for
+/// The four differ in every rule that mentions them, which is the argument for
 /// the type being written down at all: a geometry slot is L2's alone and there
 /// is at most one, because a second bound element buffer is not built; a Field
 /// slot is legal on the four kinds that can evaluate one and there may be
 /// several, because a marcher wanting a shape and a cutter is the ordinary
 /// case; a Camera slot is L4's alone and there is at most one, because a
-/// renderer draws one picture and a picture is seen from one place.
+/// renderer draws one picture and a picture is seen from one place; a Source
+/// slot is legal wherever a chain instance runs and there may be several,
+/// because `source == a || source == b` is an ordinary thing to want.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SlotTy {
     /// The elements of an L1, read beside the ones this node runs over.
@@ -779,6 +817,28 @@ pub enum SlotTy {
     /// declares one is saying *which* camera, which is the question a Set with
     /// several has no other way to be asked.
     Camera,
+    /// **The identity of one geometry, for comparing [`Ambient::Source`]
+    /// against** — the L1 an edge names, reduced to the assigned value that
+    /// identifies it.
+    ///
+    /// **It is not `Geometry`, and the difference is what it binds.** A
+    /// `Geometry` slot binds an element *buffer* — a bind-group entry on every
+    /// node that has one — and is capped at one because a second bound buffer
+    /// is not built. This binds a `u32` in a uniform the module already has. A
+    /// mask wants the identity and reads no elements, so declaring it
+    /// `Geometry` would both allocate a buffer nothing reads and collide with
+    /// that cap on a node which already declares a `far`.
+    ///
+    /// Read as a **value**, alone, which no other slot type is: `only` is the
+    /// bound source's identity. `docs/ir-spec.md` says a geometry is not a
+    /// value because "the language has no type for a whole source and no way to
+    /// pass one" — that sentence is about `Geometry` and stays true. This is a
+    /// `uint`, which the language does have.
+    ///
+    /// **Several are legal**, unlike `Geometry` and `Camera`: a mask that says
+    /// `source == a || source == b` is the ordinary case, and each slot costs
+    /// one `u32` in a uniform block rather than a buffer or a bind group.
+    Source,
 }
 
 impl SlotTy {
@@ -790,6 +850,7 @@ impl SlotTy {
             "Geometry" => SlotTy::Geometry,
             "Field" => SlotTy::Field,
             "Camera" => SlotTy::Camera,
+            "Source" => SlotTy::Source,
             _ => return None,
         })
     }
@@ -801,6 +862,7 @@ impl SlotTy {
             SlotTy::Geometry => "Geometry",
             SlotTy::Field => "Field",
             SlotTy::Camera => "Camera",
+            SlotTy::Source => "Source",
         }
     }
 }

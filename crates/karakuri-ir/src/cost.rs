@@ -363,11 +363,14 @@ fn expr_cost(
     calls: &mut Vec<(String, u64)>,
 ) -> u64 {
     match &expr.kind {
+        // A Source slot's read is a uniform load, which is what an ambient's
+        // and a param's are — one, on the same terms.
         TExprKind::Lit(_)
         | TExprKind::Local(_)
         | TExprKind::Param(_)
         | TExprKind::Attr(_)
         | TExprKind::Far(_)
+        | TExprKind::Source { .. }
         | TExprKind::Ambient(_) => 1,
         TExprKind::Unary { value, .. } => {
             1u64.saturating_add(expr_cost(value, mult, block, hot, calls))

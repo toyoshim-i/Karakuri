@@ -425,6 +425,30 @@ pub fn field_param_key(slot: &str, name: &str) -> String {
     format!("field\u{1}{slot}\u{1}{name}")
 }
 
+/// The WGSL spelling of a **Source slot's** identity, in the uniform of the
+/// procedure that declared it.
+///
+/// A prefix of its own, on [`mangle_param`]'s terms: the slot name is `.kir`
+/// text, so `uses param_x : Source` beside `param x : float` would otherwise be
+/// two fields of one WGSL name. A different prefix from a param's and from a
+/// field param's purely so a human reading generated WGSL can tell at a glance
+/// which kind of declaration a name came from.
+pub fn mangle_source_slot(slot: &str) -> String {
+    format!("source_{slot}")
+}
+
+/// The **semantic** name of a Source slot's identity, which is what the engine
+/// looks the uniform field up by — [`field_param_key`]'s counterpart, and its
+/// reasoning verbatim.
+///
+/// The separator is a character no `.kir` identifier can contain, so a slot
+/// called `only` cannot collide with a param a procedure happened to call
+/// `source_only`, and the engine can take the key apart again to get the slot
+/// back without guessing where the prefix ends.
+pub fn source_slot_key(slot: &str) -> String {
+    format!("source\u{1}{slot}")
+}
+
 /// The complete field order and size of a generated uniform struct. This is
 /// the other half of the "byte offsets" contract alongside
 /// [`karakuri_ir::layout::ElementSlot`] —
@@ -523,6 +547,13 @@ impl UniformLayoutBuilder {
             mangle_field_param(slot, name),
             wgsl_ty,
         )
+    }
+
+    /// Adds the `u32` a declared Source slot is read out of — see
+    /// [`mangle_source_slot`]. Both names are prefixed, for the reason
+    /// [`UniformLayoutBuilder::field_param_field`]'s are.
+    pub fn source_slot_field(&mut self, slot: &str) -> &mut Self {
+        self.push(source_slot_key(slot), mangle_source_slot(slot), "u32")
     }
 
     fn push(&mut self, name: String, wgsl_name: String, wgsl_ty: &'static str) -> &mut Self {

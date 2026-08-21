@@ -332,6 +332,11 @@ word `field(p)` — and a **camera**: `uses view : Camera` and `view.clip`, so a
 many viewpoints as its files declare and each renderer says which one it draws from. All
 three inputs that were capped at one are named, bound and refused the same way.
 
+A fourth slot type takes none of those. `uses only : Source` binds a geometry's *identity*
+rather than its elements — a `u32` in a uniform against a bind-group entry — so a `mask`
+can finally say which of a Set's geometries it applies to, with `source == only`, and a
+node may declare several where it may declare one `far`.
+
 The table below is what exists, part by part. What is still absent, and why, stays in
 [docs/roadmap.md](docs/roadmap.md) rather than being listed here: agents, the library,
 the node editor.

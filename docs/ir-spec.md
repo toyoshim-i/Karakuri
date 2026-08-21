@@ -153,29 +153,44 @@ uses shape : Field
 
 kind L4
 uses view : Camera
+
+kind L2
+uses only : Source
 ```
 
 **One named input a procedure takes, with a type that decides every rule about it.** The
 type is not decoration and never was: which kinds may declare one, how many are legal, what
-an `edge` may bind it to and how it is *read* all differ between the three, and each of
+an `edge` may bind it to and how it is *read* all differ between the four, and each of
 those refusals is a sentence about a type rather than about `uses`.
 
-| | `Geometry` | `Field` | `Camera` |
-|---|---|---|---|
-| Legal on | L2 | L1, L2, L3, L4 | L4 |
-| How many | one | any number | one |
-| Bound to | an L1 | a `kind Field` procedure | an L3, or the built-in camera |
-| Read as | `far.position` — `expr . ident` | `shape(p)` — a call | `view.clip` — `expr . ident` |
+| | `Geometry` | `Field` | `Camera` | `Source` |
+|---|---|---|---|---|
+| Legal on | L2 | L1, L2, L3, L4 | L4 | L1, L2, L4 |
+| How many | one | any number | one | any number |
+| Bound to | an L1 | a `kind Field` procedure | an L3, or the built-in camera | an L1 |
+| Read as | `far.position` — `expr . ident` | `shape(p)` — a call | `view.clip` — `expr . ident` | `only` — a value |
+| What it binds | an element buffer | a spliced function body | a bind group | a `u32` in a uniform |
 
-All three are bound by an [`edge`](#set-file-format) and an unbound one is refused. What
-follows is the geometry slot; the Field slot is under [The `field` block](#the-field-block)
-and the Camera slot under [Several cameras](#several-cameras).
+All four are bound by an [`edge`](#set-file-format) and an unbound one is refused. What
+follows is the geometry slot; the Field slot is under [The `field` block](#the-field-block),
+the Camera slot under [Several cameras](#several-cameras) and the Source slot under
+[`weight` and the `mask` block](#weight-and-the-mask-block-l2).
 
 **A Camera slot is the one whose members are resolved against its type.** `far.position` is
 read against the attribute table, because a geometry's parts *are* attributes; a camera's
 are not parts of anything else, so the checker asks the slot's declared type what members
 it has. That is the only cost the third type had, and it is the reason the type is written
 in the header rather than inferred from what an `edge` binds.
+
+**`Geometry` and `Source` take the same kind of node and are not the same slot**, and the
+last row is the whole of the difference. A `Geometry` slot binds an element *buffer* — a
+bind-group entry on every node that has one, which is why there is at most one: a second
+bound buffer is not built. A `Source` slot binds the `u32` that says which geometry a chain
+instance is running over, in a uniform block the module already has. A mask wants the
+identity and reads no elements, so writing it `: Geometry` would allocate a buffer nothing
+reads *and* collide with that cap on a node which already declares a `far`. Which is also
+why several `Source` slots are legal and cost nothing to have: `source == a || source == b`
+is an ordinary thing to want.
 
 #### A geometry slot (L2 only)
 
@@ -225,6 +240,11 @@ deform {
 - **A geometry is not a value.** `far` alone is refused: the language has no type for a
   whole source and no way to pass one, so what can be said about it is what one of its
   elements holds. It is not assignable either — the far side is an input edge.
+
+  **A `Source` slot *is* read as a value, and that does not contradict the sentence above.**
+  The sentence is about `Geometry`, and it stays true: `far` is a whole source and there is
+  no type for one. `only` is not a source — it is the `uint` that *identifies* one, which is
+  a type the language does have. The two are as far apart as an element buffer and an `id`.
 - **The type is written and it is what the rules are about.** Writing it is what let the
   Field slot arrive without the declaration changing shape — and what kept every refusal
   about a geometry slot a sentence that grew an arm beside itself rather than being rewritten
@@ -441,6 +461,7 @@ The only implicit values readable inside a block:
 | `beats` | `float` | musical position on the session's tempo grid, at the instant `t` names | all |
 | `dt` | `float` | fixed simulation step. Scaled on an element's first update — see [Spawn timing](#spawn-timing) | L1, L3 |
 | `copy` | `uint` | which copy of an amplified element this is, `0` where nothing upstream amplified — see [`amplify`](#amplify-l2-only) | L2, L4 |
+| `source` | `uint` | **which geometry this chain instance is running over**, as the assigned value that identifies it. A per-source uniform, never declared — see [Multiple L1 sources](#multiple-l1-sources--built-and-source--built) | L1, L2, L4 |
 | `point` | `vec3` | the position a field is being asked about. The one input a field has | `field` block |
 | `camera` | `mat4` | view-projection matrix, of **the Set's camera** — the node at `L3:0`. A renderer that draws from another one declares a slot and reads `view.clip`; see [Several cameras](#several-cameras) | L4 |
 | `point_coord` | `vec2` | 0..1 across the primitive: within the sprite under `points`, along-by-across the stroke under `lines`, across the frame under `fullscreen` | L4 fragment |
@@ -454,6 +475,23 @@ a fullscreen L4, which covers the frame and draws no element; and a `field` bloc
 handed a `point` and is spliced into callers that may have no element at all. Each of those
 three is a refusal with its own sentence, and each was added after a `.kir` that read `seed`
 there compiled to WGSL naming a value nothing declared.
+
+**`source` is refused in two of those three and readable in the third**, which is the whole
+of what separates the two values. It is refused in a `camera` block and in a `field` block
+for `seed`'s exact reasons — an L3 runs once a frame over nothing and the identity is a
+property of a Set's *geometry*, which a camera is not; a field is spliced into callers that
+may be running over different geometries, so a distance that varied with the source would be
+two shapes in one frame out of one body. But it is readable in a **fullscreen L4**, where
+`seed` is not: `seed` is per element and a fullscreen procedure has none, while `source` is
+per chain *instance*, and a procedure with no element still knows whose chain it is running
+in.
+
+**And it is refused in a procedure that declares a `Geometry` slot**, which is a rule about
+the pair rather than about either half. A pairing Set is one source made of two simulations —
+the far one feeds the slot and shares the near one's uniform — so there is one salt for two
+geometries and `source` would answer for the near one without saying so. Refused with the
+slot's name in the sentence, because a hint that says which reading was ambiguous is better
+than a rule an author has to infer from the pairing rules three sections away.
 
 ### `beats`, and why it is not a signal
 
@@ -893,6 +931,57 @@ pass-through left rather than a value. It writes nothing but `strength`.
 
 An L2 with neither is what every L2 was before they existed, and lowers to the
 identical shader.
+
+#### A mask that names the source it applies to
+
+**A Set instantiates its chain per geometry, so one `.kir` is already running
+in several places — and until now it could not tell them apart.** `source` is
+the identity of the instance this invocation is in; a `Source` slot is the
+identity of a geometry the *Set* named. Comparing them is a mask that applies
+to one source and leaves the others standing:
+
+```
+proc dissolve {
+  kind L2
+
+  uses only : Source
+
+  consumes position, age
+
+  mask {
+    strength = 0.0;
+    if source == only { strength = 1.0; }
+  }
+
+  deform { size = size * 0.2; }
+}
+```
+
+and the Set says which geometry fills it — `--edge dissolve.only=lattice`, or
+an [`edge`](#set-file-format) record.
+
+**The comparand arrives through a slot because a `.kir` may not name a node.**
+That is the same rule the geometry, the field and the camera all follow, and
+for the same reason: a file that named `lattice` would be coupled to one Set
+and stop being a library part. What is different is what the slot *binds* — a
+`u32` rather than a buffer, a spliced body or a bind group — which is why
+[several are legal](#uses) and why a mask that wants two sources writes `source
+== a || source == b` rather than being told to split into two nodes.
+
+**Not only a mask, and not only an L2.** The slot and the ambient are legal
+wherever a chain instance runs — L1, L2 and L4 — so a generator that lays out
+one geometry differently from another, or a renderer that tints one of them, is
+the same sentence in a different block. The mask is where it was asked for
+first, not where it is confined.
+
+**What it is *not* is a build-time selection**, and the difference is worth
+stating because the shader says otherwise. `source == only` compares two
+uniforms: the same value in every lane, the cheapest branch a GPU has — and
+also a constant for the whole instance, which makes this an on/off for the
+instance rather than a mask across the material. The honest optimisation is not
+to instantiate the node in the chains it excludes at all. That is recorded in
+`docs/roadmap.md` with the trigger for doing it; it is an optimisation and not a
+change of meaning.
 
 ### The `camera` block (L3)
 
@@ -2950,7 +3039,7 @@ in the pass that already runs. A rule needing a reduction or a scan would need a
 do not, and inventing one for them would put a position in the chain that has to be
 explained.
 
-### Multiple L1 sources — built, and `source` — deferred
+### Multiple L1 sources — built, and `source` — built
 
 Merging several geometry sources into one Set raises the question the removal of `id` left
 open: how two sources avoid colliding identities. `seed` is a monotone ordinal from a
@@ -2964,6 +3053,12 @@ which source an element came from:
 | Name | Type | Notes |
 |---|---|---|
 | `source` | `uint` | which source produced this element. A per-source uniform, never declared |
+
+**Readable now.** The value and its home were settled before anything could read it; what
+was missing was one arm in each of the three resolvers that have a uniform to read it out
+of. See [Ambient values](#ambient-values-and-the-signal-rule) for where it is refused and
+[A mask that names the source it applies to](#a-mask-that-names-the-source-it-applies-to)
+for what it is compared against.
 
 - Each source counts its own `seed` from zero, so `seed % side` and every other structured
   layout works identically in every source.
@@ -3044,13 +3139,22 @@ derived name claims the one a written name further down the list asked for. Two 
 names that collide are refused, where two derived ones are told apart — a written name is an
 address somebody chose.
 
-What is **not** built is `source` itself: nothing supplies the value a mask would compare, so
-naming a source and masking on one are still different distances away.
+**And `source` is built too, which closes the gap this paragraph recorded.** It used to read
+*"nothing supplies the value a mask would compare, so naming a source and masking on one are
+still different distances away"* — the distance is gone, and the two halves met exactly where
+this section said they would.
 
 A value nobody can write is a value nobody can mask on: `source == 0x8a3f21c4` is not
 something an author or a model produces. So a source that something wants to point at
 carries a **name**, and the mask is written against the name, resolved where the Set is
 built.
+
+**Resolved into a slot, and that is the one thing the paragraph above did not predict.** The
+name cannot be written in the `.kir` — a procedure that named a node would be coupled to one
+Set — so what the mask compares against is a `uses only : Source` slot the Set binds by name,
+exactly as it binds a geometry, a field or a camera. "Written against the name, resolved
+where the Set is built" holds word for word; the notation it resolves *through* is the one
+the three edges before it established.
 
 The analogy is exact and settles two things at once. An `id` belongs to the *element*, not
 to the tag — so the name is written where a source is **used**, in the Set, and not in the

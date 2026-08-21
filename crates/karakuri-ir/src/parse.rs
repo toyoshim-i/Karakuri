@@ -546,14 +546,15 @@ impl Parser {
         // Both have already reported, so neither reaches the check pass;
         // carrying on with one of the types there are lets the rest of the
         // header be parsed and its own mistakes reported in the same run.
-        let ty = match self.expect_ident("`Geometry`, `Field` or `Camera`") {
+        let ty = match self.expect_ident("`Geometry`, `Field`, `Camera` or `Source`") {
             Some((spelling, ty_span)) => SlotTy::from_name(&spelling).unwrap_or_else(|| {
                 self.error_with_hint(
                     ty_span,
                     format!("unknown input type `{spelling}`"),
                     "a `uses` slot is `Geometry` — the elements of an L1, read beside the ones \
                      this node runs over — `Field`, a `kind Field` procedure this one \
-                     evaluates, or `Camera`, a viewpoint this one draws from",
+                     evaluates, `Camera`, a viewpoint this one draws from, or `Source`, the \
+                     identity of one geometry for `source` to be compared against",
                 );
                 SlotTy::Geometry
             }),

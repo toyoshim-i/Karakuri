@@ -190,7 +190,11 @@ impl Resolver for L3Resolver {
             // is never new.
             Ambient::Dt => "u.dt".to_string(),
             Ambient::Seed => unreachable!("read_seed handles this"),
-            Ambient::Point
+            // An L3 runs once a frame over no geometry, so there is no chain
+            // instance for `source` to name — refused in the checker, beside
+            // `seed` and for the same reason.
+            Ambient::Source
+            | Ambient::Point
             | Ambient::Copy
             | Ambient::Capacity
             | Ambient::Camera

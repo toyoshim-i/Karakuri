@@ -157,6 +157,12 @@ impl Resolver for L1Resolver {
                 unreachable!("`copy` is not available in an L1: nothing has amplified yet")
             }
             Ambient::Capacity => "u.capacity".to_string(),
+            // **`source` is the salt, and the salt is already here.**
+            // `docs/ir-spec.md` settles that the value identifying a geometry
+            // *is* its salt rather than a dense index beside it, and
+            // `Set::prepare` has been writing it into this field all along —
+            // so the read is one arm and no new plumbing.
+            Ambient::Source => "u.seed_salt".to_string(),
             Ambient::T => "step_args.t".to_string(),
             // Per substep alongside `t`, and for the same reason: a frame of
             // two steps has to land on the same two musical instants two
@@ -475,6 +481,13 @@ pub fn generate_l1(checked: &Checked, derived: &[Attr], fields: crate::Bound<'_>
     b.field("dt", "f32");
     b.field("capacity", "u32");
     b.field("seed_salt", "u32");
+    // **One `u32` per declared Source slot**, holding the identity of the
+    // geometry an edge bound to it. A comparison against `source` is then two
+    // uniform loads — the same value in every lane, which is the branch a GPU
+    // costs least.
+    for slot in checked.source_slots() {
+        b.source_slot_field(slot);
+    }
     for p in &checked.params {
         b.param_field(p.name.clone(), wgsl_ty(p.ty));
     }
