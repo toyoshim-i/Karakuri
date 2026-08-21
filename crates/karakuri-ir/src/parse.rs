@@ -526,33 +526,34 @@ impl Parser {
         }
     }
 
-    /// `uses <name> : Geometry` — a second geometry this node takes.
+    /// `uses <name> : Geometry` / `uses <name> : Field` — one named input this
+    /// node takes.
     ///
     /// **The name is the procedure's and the binding is the Set's.** So this
     /// declaration says what the file needs and never which node supplies it:
     /// a `.kir` that named a node would be a procedure coupled to one Set, and
     /// it would stop being a library part. See [`UsesDecl`].
     ///
-    /// The type is carried rather than checked and dropped: there is one of
-    /// them today, and the rules downstream are about *which* one — an L3
-    /// refuses a geometry slot because an L3 makes no geometry, which is a
-    /// sentence that has to be able to stop being the only one. See [`SlotTy`].
+    /// The type is carried rather than checked and dropped, because every rule
+    /// downstream is about *which* one — an L3 refuses a geometry slot because
+    /// an L3 makes no geometry, and accepts a Field slot because evaluating a
+    /// field is not making geometry. See [`SlotTy`].
     fn parse_uses(&mut self) -> Option<UsesDecl> {
         let start = self.advance().span; // "uses"
-        let (name, name_span) =
-            self.expect_ident("a name for the geometry this procedure takes")?;
+        let (name, name_span) = self.expect_ident("a name for the input this procedure takes")?;
         self.expect(TokKind::Colon, ":");
         // **A refused type recovers as `Geometry`**, and a missing one too.
         // Both have already reported, so neither reaches the check pass;
-        // carrying on with the one type there is lets the rest of the header
-        // be parsed and its own mistakes reported in the same run.
-        let ty = match self.expect_ident("`Geometry`") {
+        // carrying on with one of the types there are lets the rest of the
+        // header be parsed and its own mistakes reported in the same run.
+        let ty = match self.expect_ident("`Geometry` or `Field`") {
             Some((spelling, ty_span)) => SlotTy::from_name(&spelling).unwrap_or_else(|| {
                 self.error_with_hint(
                     ty_span,
                     format!("unknown input type `{spelling}`"),
-                    "`Geometry` is the one thing a `uses` slot can be today — the elements of \
-                     an L1, read beside the ones this node runs over",
+                    "a `uses` slot is `Geometry` — the elements of an L1, read beside the ones \
+                     this node runs over — or `Field`, a `kind Field` procedure this one \
+                     evaluates",
                 );
                 SlotTy::Geometry
             }),

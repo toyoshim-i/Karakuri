@@ -296,6 +296,9 @@ fn scan_expr(e: &TExpr, seed: &mut bool, copy: &mut bool, attrs: &mut HashSet<At
             scan_expr(lhs, seed, copy, attrs);
             scan_expr(rhs, seed, copy, attrs);
         }
+        // The point handed over, and nothing behind it: a field reads no
+        // element of its caller's.
+        TExprKind::Field { point, .. } => scan_expr(point, seed, copy, attrs),
         TExprKind::Builtin { args, .. } | TExprKind::Construct { args } => {
             for a in args {
                 scan_expr(a, seed, copy, attrs);
@@ -756,7 +759,7 @@ fn fragment_entry(id: Identity, attrs_used: &[Attr], body: &str, weighted: bool)
 pub fn generate_l4(
     checked: &Checked,
     elements: &ElementLayout,
-    field: Option<&crate::field::FieldShader>,
+    field: Option<&Checked>,
 ) -> L4Shader {
     assert_eq!(
         checked.kind,
@@ -805,14 +808,16 @@ pub fn generate_l4(
     // that this procedure and the field it evaluates may both declare
     // `exposure` — see `layout::mangle_field_param`.
     //
-    // **Only where the procedure evaluates one.** The field used to be spliced
-    // into every module in the Set, so a renderer that never mentions one still
-    // carried its params and still failed to compile if the field's body did —
-    // a `.kir` taking down shaders that have nothing to do with it.
-    let field = field.filter(|_| crate::evaluates_field(checked));
-    if let Some(f) = field {
+    // **One set per slot, and only for the slots the procedure evaluates.** The
+    // field used to be spliced into every module in the Set, so a renderer that
+    // never mentions one still carried its params and still failed to compile
+    // if the field's body did — a `.kir` taking down shaders that have nothing
+    // to do with it. The slot is in the name because two fields in one caller
+    // are two independent sets of values.
+    let splices = crate::splices(checked, field);
+    for f in &splices {
         for (name, ty) in &f.params {
-            b.field_param_field(name, ty);
+            b.field_param_field(&f.slot, name, ty);
         }
     }
     let (uniform_layout, uniform_pad_f32) = b.finish();
@@ -868,11 +873,11 @@ pub fn generate_l4(
     // has to carry what it calls — the prelude is demand-driven, and a field
     // calling `sd_torus` in a caller that does not would otherwise produce a
     // call to a function nothing emitted, in a shader that checked clean.
-    if let Some(f) = field {
+    for f in &splices {
         req.absorb(&f.requirements);
     }
     src.push_str(&prelude::render(&req));
-    if let Some(f) = field {
+    for f in &splices {
         src.push('\n');
         src.push_str(&f.source);
     }
@@ -931,7 +936,7 @@ fn generate_fullscreen(
     fragment_blk: &TBlock,
     elements: &ElementLayout,
     weighted: bool,
-    field: Option<&crate::field::FieldShader>,
+    field: Option<&Checked>,
 ) -> L4Shader {
     let mut b = UniformLayoutBuilder::new();
     b.field("t", "f32");
@@ -946,14 +951,16 @@ fn generate_fullscreen(
     // that this procedure and the field it evaluates may both declare
     // `exposure` — see `layout::mangle_field_param`.
     //
-    // **Only where the procedure evaluates one.** The field used to be spliced
-    // into every module in the Set, so a renderer that never mentions one still
-    // carried its params and still failed to compile if the field's body did —
-    // a `.kir` taking down shaders that have nothing to do with it.
-    let field = field.filter(|_| crate::evaluates_field(checked));
-    if let Some(f) = field {
+    // **One set per slot, and only for the slots the procedure evaluates.** The
+    // field used to be spliced into every module in the Set, so a renderer that
+    // never mentions one still carried its params and still failed to compile
+    // if the field's body did — a `.kir` taking down shaders that have nothing
+    // to do with it. The slot is in the name because two fields in one caller
+    // are two independent sets of values.
+    let splices = crate::splices(checked, field);
+    for f in &splices {
         for (name, ty) in &f.params {
-            b.field_param_field(name, ty);
+            b.field_param_field(&f.slot, name, ty);
         }
     }
     let (uniform_layout, uniform_pad_f32) = b.finish();
@@ -980,11 +987,11 @@ fn generate_fullscreen(
     // has to carry what it calls — the prelude is demand-driven, and a field
     // calling `sd_torus` in a caller that does not would otherwise produce a
     // call to a function nothing emitted, in a shader that checked clean.
-    if let Some(f) = field {
+    for f in &splices {
         req.absorb(&f.requirements);
     }
     src.push_str(&prelude::render(&req));
-    if let Some(f) = field {
+    for f in &splices {
         src.push('\n');
         src.push_str(&f.source);
     }

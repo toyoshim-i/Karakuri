@@ -3154,3 +3154,293 @@ proc shadow {
     );
     assert!(checked.uses.is_empty(), "and it declares no geometry slot");
 }
+
+// ---------------------------------------------------------------------------
+// A field, reached through a slot
+// ---------------------------------------------------------------------------
+
+/// A marcher that contains no shape: it declares the field it takes and calls
+/// it by that name.
+const LENS: &str = r#"
+proc lens {
+  kind  L4
+  blend additive
+
+  uses shape : Field
+
+  fragment {
+    var p = eye;
+    var hit = 0.0;
+    for i in 0..8 {
+      let d = shape(p);
+      if d < 0.005 {
+        hit = 1.0;
+      }
+      p = p + ray * max(d, 0.005);
+    }
+    color = vec4(hit, hit, hit, 1.0);
+  }
+}
+"#;
+
+/// **A declared Field slot is callable, and the call carries the slot's name.**
+///
+/// The name is the whole change. `field(p)` named the one field by being the
+/// one spelling there was; this resolves against what the header declared, so
+/// what reaches the lowering is a call that says *which* field — and a lowering
+/// that has the name can address a second one without any of this moving.
+#[test]
+fn a_declared_field_slot_is_called_and_carries_its_name() {
+    let checked = check_ok(LENS);
+    assert_eq!(
+        checked.uses,
+        vec![Slot {
+            name: "shape".to_string(),
+            ty: SlotTy::Field,
+        }]
+    );
+    assert_eq!(checked.field_slots(), vec!["shape"]);
+    assert_eq!(
+        checked.geometry_slot(),
+        None,
+        "and it is not a geometry slot: the two answer different questions"
+    );
+
+    let fragment = checked.block(BlockKind::Fragment).expect("a fragment");
+    let calls = format!("{:?}", fragment.stmts);
+    assert!(
+        calls.contains("Field") && calls.contains("shape"),
+        "the call resolves to a field read naming its slot: {calls}"
+    );
+
+    // And its type is the field block's: one `vec3` in, a `float` out.
+    let errs = check_err(&LENS.replace("shape(p)", "shape(p, 1.0)"));
+    assert!(
+        errs.iter().any(|e| e.message.contains("takes 1 argument")),
+        "expected the arity to be the field's, got: {errs:?}"
+    );
+    let errs = check_err(&LENS.replace("shape(p)", "shape(1.0)"));
+    assert!(
+        errs.iter().any(|e| e.message.contains("expects `vec3`")),
+        "expected a position to be required, got: {errs:?}"
+    );
+}
+
+/// **Several Field slots on one procedure are legal**, which is the rule a
+/// geometry slot does not follow.
+///
+/// A marcher wanting a shape and a cutter is the ordinary case, and it costs
+/// nothing: a field has no node and no buffer, so a second slot is one more
+/// body spliced under one more name. The count is a rule about *geometry* —
+/// a second bound element buffer per node is what is not built — which is why
+/// splitting the arity rule by type is what this notation needed.
+#[test]
+fn two_field_slots_on_one_procedure_are_accepted() {
+    let checked = check_ok(
+        r#"
+proc carve {
+  kind  L4
+  blend additive
+
+  uses shape  : Field
+  uses cutter : Field
+
+  fragment {
+    let d = max(shape(eye), -cutter(eye + ray));
+    color = vec4(d, d, d, 1.0);
+  }
+}
+"#,
+    );
+    assert_eq!(checked.field_slots(), vec!["shape", "cutter"]);
+
+    // **Counted apart**, which is what lets a Set multiply each by the field
+    // bound to it rather than by whichever one it found first.
+    let cost = karakuri_ir::cost::estimate(&checked).expect("a marcher of two fields costs");
+    assert_eq!(
+        cost.field_calls.slot("shape").map(|c| c.total),
+        Some(1),
+        "{:?}",
+        cost.field_calls
+    );
+    assert_eq!(
+        cost.field_calls.slot("cutter").map(|c| c.total),
+        Some(1),
+        "{:?}",
+        cost.field_calls
+    );
+
+    // Two of one *name* is still refused: an edge names a slot, so two would be
+    // one address for two inputs.
+    let errs = check_err(
+        r#"
+proc twice {
+  kind  L4
+  blend additive
+
+  uses shape : Field
+  uses shape : Field
+
+  fragment {
+    let d = shape(eye);
+    color = vec4(d, d, d, 1.0);
+  }
+}
+"#,
+    );
+    assert!(
+        errs.iter().any(|e| e.message.contains("already a slot")),
+        "expected two slots of one name to be refused, got: {errs:?}"
+    );
+}
+
+/// **A Field slot is legal on L1, L2, L3 and L4** — the four kinds that can
+/// evaluate one — and a geometry slot is still L2's alone.
+///
+/// The two are told apart by the type on the declaration, which is what the
+/// type was written down for: every refusal about `uses` is a sentence about
+/// one of them, and this is the commit where each of them grew the arm beside
+/// the one it had.
+#[test]
+fn a_field_slot_is_legal_on_every_kind_that_can_evaluate_one() {
+    for src in [
+        r#"
+proc gen {
+  kind     L1
+  topology points
+  capacity [1, 64] = 8
+
+  uses shape : Field
+
+  emit position
+
+  element { position = vec3(shape(position), 0.0, 0.0); }
+}
+"#,
+        r#"
+proc warp {
+  kind L2
+
+  uses shape : Field
+
+  consumes position
+
+  deform { position = position * (1.0 + shape(position) * 0.01); }
+}
+"#,
+        r#"
+proc look {
+  kind L3
+
+  uses shape : Field
+
+  camera {
+    eye    = vec3(0.0, 0.0, 4.0 + shape(vec3(0.0, 0.0, 0.0)));
+    target = vec3(0.0, 0.0, 0.0);
+  }
+}
+"#,
+        LENS,
+    ] {
+        let checked = check_ok(src);
+        assert_eq!(
+            checked.field_slots(),
+            vec!["shape"],
+            "in `{}`",
+            checked.name
+        );
+    }
+}
+
+/// **A field may not take a field**, and the reason is the one the recursion
+/// refusal it replaced carried: a field bound to itself is a function calling
+/// itself, which WGSL forbids outright.
+///
+/// Two fields naming each other is the same failure at one remove, and telling
+/// that apart from a legal chain of shapes is a walk over every edge in the
+/// Set. That is a graph question, answerable where the Set is built and nowhere
+/// in one file — so the whole thing is refused rather than half-checked here.
+#[test]
+fn a_field_refuses_a_field_slot() {
+    let errs = check_err(
+        r#"
+proc wrong {
+  kind Field
+
+  uses other : Field
+
+  field {
+    distance = other(point);
+  }
+}
+"#,
+    );
+    assert!(
+        errs.iter()
+            .any(|e| e.message.contains("a field cannot take a field")),
+        "expected a field taking a field to be refused, got: {errs:?}"
+    );
+}
+
+/// **`field(p)` no longer resolves**, and the sentence says what to write
+/// instead.
+///
+/// It was a reserved word, which is exactly what capped a procedure at one
+/// field: a second would have had nothing to be called. Keeping it as an alias
+/// for "the one field, if there is exactly one" would be that rule reinstated
+/// under a new spelling, so it is gone — and this is a breaking change to the
+/// language, which is why the refusal is written for the person migrating a
+/// file rather than for the compiler.
+#[test]
+fn field_is_no_longer_a_reserved_word() {
+    let errs = check_err(&LENS.replace("shape(p)", "field(p)"));
+    assert!(
+        errs.iter().any(|e| e
+            .message
+            .contains("`field` is not a builtin function or a type constructor")),
+        "expected `field(p)` to resolve to nothing, got: {errs:?}"
+    );
+    assert!(
+        errs.iter().any(|e| e
+            .hint
+            .as_deref()
+            .is_some_and(|h| h.contains("uses shape : Field"))),
+        "and the hint has to say what replaced it, got: {errs:?}"
+    );
+
+    // It is an ordinary name again, in both directions: a slot may be called
+    // `field`, and then `field(p)` means that slot.
+    let checked = check_ok(&LENS.replace("shape", "field"));
+    assert_eq!(checked.field_slots(), vec!["field"]);
+}
+
+/// **A Field slot's name is called, so it may not be a builtin's.**
+///
+/// `check_reserved` asks about names that are *read* — an attribute, an
+/// ambient, a stage output — and a builtin is none of those: `sin` was a
+/// perfectly good slot name while a slot was only ever read with a dot after
+/// it. A call resolves against the header first, so `sin(x)` would stop meaning
+/// the sine, and either resolution order is a spelling that quietly means
+/// something other than it says.
+#[test]
+fn a_field_slot_may_not_be_named_after_a_builtin_or_a_type() {
+    for (name, what) in [
+        ("sin", "a builtin function"),
+        ("vec3", "a type constructor"),
+    ] {
+        let errs = check_err(&LENS.replace("shape", name));
+        assert!(
+            errs.iter().any(|e| e.message.contains(what)),
+            "expected `{name}` to be refused as a Field slot, got: {errs:?}"
+        );
+    }
+
+    // A *geometry* slot is not called, so it keeps the name: the refusal is
+    // about the type, not about `uses`.
+    let checked = check_ok(
+        &MORPH
+            .replace("uses far : Geometry", "uses sin : Geometry")
+            .replace("far.position", "sin.position"),
+    );
+    assert_eq!(checked.geometry_slot(), Some("sin"));
+}

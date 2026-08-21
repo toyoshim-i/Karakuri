@@ -164,10 +164,12 @@ fn the_pairs_the_docs_offer_compose() {
             &[][..],
         ),
         // `field_lens.kir`'s does: a marcher containing no shape, and a shape
-        // that is nothing else. Neither builds without the other.
+        // that is nothing else. Neither builds without the other, and the edge
+        // is what says so — a marcher declares the field it takes and the Set
+        // names which one, so this line is now a pair *and* a wiring.
         (
             &["drift_shell.kir", "melt_blob.kir", "field_lens.kir"][..],
-            &[][..],
+            &[edge("field_lens", "shape", "melt_blob")][..],
         ),
         // `morph.kir`'s does, and it is the only one with **two geometries** in
         // it. The loop below takes every L1 it finds with that L1's own declared

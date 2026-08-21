@@ -436,14 +436,16 @@ options:
                         layer, key, signal and range are required.
                         signal=bpm is refused: a tempo is not a [0,1] signal
                         and the binding would never move — bind beat or bar
-  --edge NODE.SLOT=NODE bind a procedure's declared geometry input to a node
-                        of the Set: `--edge morph.far=sphere_shell`. A `.kir`
-                        that takes a second geometry names the slot and never
-                        which node fills it, so this is where that is said —
-                        and a slot nothing binds is refused rather than
-                        guessed at. Both sides are node names: one you wrote
-                        with `--set far=file.kir`, or the procedure's own where
-                        you wrote none
+  --edge NODE.SLOT=NODE bind a procedure's declared input to a node of the
+                        Set: `--edge morph.far=sphere_shell` for a geometry,
+                        `--edge field_lens.shape=melt_blob` for a field. A
+                        `.kir` that takes one names the slot and never which
+                        node fills it, so this is where that is said — and a
+                        slot nothing binds is refused rather than guessed at,
+                        as is one bound to the wrong sort of node. Both sides
+                        are node names: one you wrote with
+                        `--set far=file.kir`, or the procedure's own where you
+                        wrote none
   --publish NAME=SPEC   put one control on the console, over a param or a
                         node's param: `level=exposure[0..2]` or
                         `level=L4:0:exposure[0..2]`. Repeat for more. An
@@ -1041,14 +1043,17 @@ fn extent(flag: &str, value: String) -> Result<(u32, u32), String> {
 /// an unknown `t` for forward compatibility between engine versions; a typo on
 /// a command line has no such excuse, and `curv=pow2` silently taking the
 /// default curve is the exact silence every other flag here was fixed for.
-/// `--edge <node>.<slot>=<geometry>` — bind one procedure's declared input slot
-/// to a node of the Set.
+/// `--edge <node>.<slot>=<node>` — bind one procedure's declared input slot
+/// to a node of the Set, whatever type the slot was declared with.
 ///
 /// **`.` between the node and the slot, `=` before the node it is bound to.**
 /// The `=` is `--set`'s already and means "the thing on the left is a name for
 /// the thing on the right"; the `.` is the same dot the procedure reads the slot
 /// through, so `--edge morph.far=sphere_shell` and `far.position` in the
-/// `deform` are visibly one spelling. `:` was not available — `--param` and
+/// `deform` are visibly one spelling. A Field slot is read as a call rather than
+/// through a dot — `--edge field_lens.shape=melt_blob`, then `shape(p)` — and
+/// still writes the same record, because what an edge says is the same fact
+/// whatever fills the slot. `:` was not available — `--param` and
 /// `--publish` use it for a layer and an index, and it is a path character on
 /// Windows.
 ///
@@ -1063,7 +1068,8 @@ fn parse_edge(value: &str) -> Result<karakuri_engine::set::Edge, String> {
     let bad = |what: &str| format!("`--edge {value}` — {what}");
     let Some((from, to)) = value.split_once('=') else {
         return Err(bad(
-            "expected `<node>.<slot>=<geometry>`, e.g. `morph.far=sphere_shell`",
+            "expected `<node>.<slot>=<node>`, e.g. `morph.far=sphere_shell` or \
+             `field_lens.shape=melt_blob`",
         ));
     };
     // **The last dot, not the first.** A node name may hold one — nothing
@@ -1076,9 +1082,7 @@ fn parse_edge(value: &str) -> Result<karakuri_engine::set::Edge, String> {
         ));
     };
     if node.is_empty() || slot.is_empty() || to.is_empty() {
-        return Err(bad(
-            "every part names something: `<node>.<slot>=<geometry>`",
-        ));
+        return Err(bad("every part names something: `<node>.<slot>=<node>`"));
     }
     Ok(karakuri_engine::set::Edge {
         node: node.to_string(),
@@ -2067,11 +2071,13 @@ fn sort_compiled(
                 l3 = Some(checked);
                 (karakuri_ir::Kind::L3, 0)
             }
-            // **One field per slot**, refused rather than last-one-wins on
-            // exactly the camera's terms: several would need naming, and
-            // naming is fan-in. `field(p)` names the one by being the only one,
-            // so accepting two would build a slot that silently lost one of the
-            // files it was given.
+            // **One field per slot, and this is now the only thing saying
+            // so.** The language stopped: a caller declares `uses shape :
+            // Field` and an `edge` binds it, so several fields would each have
+            // a name to be reached by. What has not moved is the plumbing here
+            // and in the engine — one `Option<Field>` apiece — and accepting
+            // two against it would build a slot that silently lost one of the
+            // files it was given. A `Vec` is the next commit.
             karakuri_ir::Kind::Field if field.is_some() => {
                 return Err(format!(
                     "{} is a second `kind Field` — a slot evaluates one \

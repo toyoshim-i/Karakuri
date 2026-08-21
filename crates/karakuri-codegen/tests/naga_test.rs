@@ -1866,10 +1866,12 @@ proc wobble {
 }
 "#;
 
-fn spliced() -> karakuri_codegen::field::FieldShader {
+/// The field itself, not a splice of it: a generator is handed the `kind Field`
+/// procedure now and splices it once per slot its caller declared, because the
+/// function's name is the caller's name for it.
+fn spliced() -> karakuri_ir::typed::Checked {
     let parsed = karakuri_ir::parse(SPLICED).expect("parses");
-    let checked = karakuri_ir::check::check(&parsed).expect("checks");
-    karakuri_codegen::field::generate_field(&checked)
+    karakuri_ir::check::check(&parsed).expect("checks")
 }
 
 fn compiled(src: &str) -> karakuri_ir::typed::Checked {
@@ -1882,7 +1884,7 @@ fn compiled(src: &str) -> karakuri_ir::typed::Checked {
 /// The engine's own tests reach one shape — a fullscreen L4 — so three of the
 /// five splice sites had no coverage at any level, and deleting the splice from
 /// any of them left the whole workspace green. What breaks is not subtle: a
-/// module that names `_field_at` and does not define it.
+/// module that names `_field_shape_at` and does not define it.
 ///
 /// The field above reads `t` and `beats`, which each caller spells its own way,
 /// and calls `fbm`, whose unrolled `perlin` requirement belongs to the field and
@@ -1904,12 +1906,14 @@ proc gen {
   topology points
   capacity [1, 64] = 8
 
+  uses shape : Field
+
   param spawn_rate : float [0.0, 100.0] = 10.0
 
   emit position
 
-  spawn   { position = vec3(field(vec3(0.0, 0.0, 0.0)), 0.0, 0.0); }
-  element { position = position + vec3(0.0, field(position), 0.0) * dt; }
+  spawn   { position = vec3(shape(vec3(0.0, 0.0, 0.0)), 0.0, 0.0); }
+  element { position = position + vec3(0.0, shape(position), 0.0) * dt; }
 }
 "#,
     );
@@ -1920,9 +1924,10 @@ proc gen {
         r#"
 proc warp {
   kind L2
+  uses shape : Field
   consumes position
-  mask   { strength = clamp(field(position), 0.0, 1.0); }
-  deform { position = position * (1.0 + field(position) * 0.01); }
+  mask   { strength = clamp(shape(position), 0.0, 1.0); }
+  deform { position = position * (1.0 + shape(position) * 0.01); }
 }
 "#,
     );
@@ -1943,8 +1948,9 @@ proc warp {
         r#"
 proc look {
   kind L3
+  uses shape : Field
   camera {
-    eye    = vec3(0.0, 0.0, 4.0 + field(vec3(0.0, 0.0, 0.0)));
+    eye    = vec3(0.0, 0.0, 4.0 + shape(vec3(0.0, 0.0, 0.0)));
     target = vec3(0.0, 0.0, 0.0);
   }
 }
@@ -1960,15 +1966,17 @@ proc dots {
   kind  L4
   blend additive
 
+  uses shape : Field
+
   consumes position
 
   vertex {
     clip       = camera * vec4(position, 1.0);
-    point_size = 2.0 + field(position) * 0.0;
+    point_size = 2.0 + shape(position) * 0.0;
   }
 
   fragment {
-    let d = field(vec3(0.0, 0.0, 0.0));
+    let d = shape(vec3(0.0, 0.0, 0.0));
     color = vec4(d, d, d, 1.0);
   }
 }
@@ -1983,8 +1991,10 @@ proc marcher {
   kind  L4
   blend additive
 
+  uses shape : Field
+
   fragment {
-    let d = field(eye + ray);
+    let d = shape(eye + ray);
     color = vec4(d, d, d, 1.0);
   }
 }
@@ -2026,11 +2036,11 @@ proc plain {
     let src = karakuri_codegen::generate_l4(&plain, &layout, Some(&field)).source;
     validate(&src);
     assert!(
-        !src.contains("_field_at"),
+        !src.contains("_field_shape_at"),
         "the function is not here: {src}"
     );
     assert!(
-        !src.contains("field_radius"),
+        !src.contains("field_shape_radius"),
         "and neither are its params: {src}"
     );
 }
@@ -2049,9 +2059,11 @@ proc gen {
   topology points
   capacity [1, 64] = 8
 
+  uses shape : Field
+
   emit position
 
-  element { position = vec3(field(position), 0.0, 0.0); }
+  element { position = vec3(shape(position), 0.0, 0.0); }
 }
 "#,
     );
@@ -2072,8 +2084,10 @@ proc marcher {
   kind  L4
   blend additive
 
+  uses shape : Field
+
   fragment {
-    let d = field(eye);
+    let d = shape(eye);
     color = vec4(d, d, d, 1.0);
   }
 }
@@ -2081,7 +2095,7 @@ proc marcher {
     );
     let src = karakuri_codegen::generate_l4(&full, &layout, Some(&field)).source;
     assert!(
-        src.contains("_field_at(") && src.contains("u.t"),
+        src.contains("_field_shape_at(") && src.contains("u.t"),
         "and a renderer passes `u.t`: {src}"
     );
 }

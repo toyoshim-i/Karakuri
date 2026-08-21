@@ -117,6 +117,23 @@ pub fn lower_expr(expr: &TExpr, resolver: &dyn Resolver, req: &mut Requirements)
         }
         TExprKind::Binary { op, lhs, rhs } => lower_binary(*op, lhs, rhs, resolver, req),
         TExprKind::Builtin { func, args } => lower_builtin(*func, args, expr.ty, resolver, req),
+        // **The call site's name is the caller's; the function's is this
+        // crate's**, and its body is spliced in from another procedure
+        // entirely. Not routed through the builtin table, which would also ask
+        // the prelude for a body it does not have.
+        //
+        // **The caller's own spelling of the clock, at the call site.** A field
+        // is one body spliced into several kinds of module and an L1 reads `t`
+        // from `step_args` where everything else reads `u.t`, so the answer
+        // comes from the resolver that is lowering this call — which is the
+        // resolver that would have written it inline.
+        TExprKind::Field { slot, point } => format!(
+            "{}({}, {}, {})",
+            crate::field::fn_name(slot),
+            lower_expr(point, resolver, req),
+            resolver.read_ambient(Ambient::T),
+            resolver.read_ambient(Ambient::Beats),
+        ),
         TExprKind::Construct { args } => {
             let inner: Vec<String> = args.iter().map(|a| lower_expr(a, resolver, req)).collect();
             format!("{}({})", wgsl_ty(expr.ty), inner.join(", "))
@@ -204,25 +221,6 @@ fn lower_builtin(
         // `prelude::mod_helper_name`.
         req.note_mod(ret_ty);
         return format!("{}({})", mod_helper_name(ret_ty), inner.join(", "));
-    }
-
-    // **Not `field(...)`.** The call site's name is the language's; the
-    // function's name is this crate's, and it is spliced in from another
-    // procedure entirely. Noting it as a builtin would also ask the prelude for
-    // a body it does not have.
-    if func == Builtin::Field {
-        // **The caller's own spelling of the clock, at the call site.** A field
-        // is one body spliced into several kinds of module and an L1 reads `t`
-        // from `step_args` where everything else reads `u.t`, so the answer
-        // comes from the resolver that is lowering this call — which is the
-        // resolver that would have written it inline.
-        return format!(
-            "{}({}, {}, {})",
-            crate::field::FN,
-            inner.join(", "),
-            resolver.read_ambient(Ambient::T),
-            resolver.read_ambient(Ambient::Beats),
-        );
     }
 
     req.note_builtin(func);

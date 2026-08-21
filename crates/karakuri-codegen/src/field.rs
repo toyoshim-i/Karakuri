@@ -12,13 +12,30 @@
 //! and that an L5 has no `kind` because it has no code to lower. This is the
 //! mirror — only code, so a file and no node.
 //!
+//! # One splice per slot, named by the slot
+//!
+//! A caller reaches a field through a slot its own header declared — `uses
+//! shape : Field`, called `shape(p)` — so the function this generates is named
+//! for that slot and not for the field. Two callers naming one field
+//! differently get one function each in their own modules, which costs nothing:
+//! a field is spliced per caller already, and the module boundary is what makes
+//! two names for one body harmless.
+//!
+//! **The names are per slot even while a Set holds one field**, and that is
+//! deliberate. Nothing about a slot's spelling depends on how many fields there
+//! are, so getting it right now costs a parameter and getting it right later
+//! would cost a rename sweep through every line of generated WGSL and every
+//! test that reads one.
+//!
 //! # Its params are the caller's uniform, under a prefix of their own
 //!
-//! A spliced body reads `u.field_ball`, in the caller's `Uniforms` struct. The
-//! prefix is not decoration: a renderer declaring `exposure` beside a field
-//! declaring `exposure` would otherwise be one uniform field with two meanings,
-//! and prefixing them apart removes a refusal that would otherwise have to
-//! exist. See [`crate::layout::mangle_field_param`].
+//! A spliced body reads `u.field_shape_radius`, in the caller's `Uniforms`
+//! struct. The prefix is not decoration: a renderer declaring `exposure` beside
+//! a field declaring `exposure` would otherwise be one uniform field with two
+//! meanings, and prefixing them apart removes a refusal that would otherwise
+//! have to exist. **The slot is in the prefix too**, so a procedure reaching two
+//! fields addresses each one's params separately — one shape's `radius` is not
+//! the other's. See [`crate::layout::mangle_field_param`].
 //!
 //! # What it may not read
 //!
@@ -34,12 +51,17 @@ use crate::layout;
 use crate::lower::{lower_expr, mangle_local, Resolver};
 use crate::prelude::Requirements;
 
-/// The WGSL name of the function a field lowers to.
+/// The WGSL name of the function a field lowers to, **under the slot that
+/// reached it**.
 ///
-/// **One name, because there is one field per Set** — the same restriction the
-/// camera has, and for the same reason: several would need naming, and naming
-/// is fan-in.
-pub const FN: &str = "_field_at";
+/// It used to be one constant, `_field_at`, because there was one field per Set
+/// and the language named it with a reserved word — which is the same fact said
+/// twice: a single name is what caps fan-in at one. The name is the caller's
+/// own now, so a procedure that takes a shape and a cutter calls two functions
+/// and nothing about either spelling has to be arbitrated.
+pub fn fn_name(slot: &str) -> String {
+    format!("_field_{slot}_at")
+}
 
 /// The parameter the body reads as `point`.
 ///
@@ -62,6 +84,10 @@ const T: &str = "_field_t";
 const BEATS: &str = "_field_beats";
 
 pub struct FieldShader {
+    /// **The caller's name for this field**, which is what its function and its
+    /// params are addressed under. Carried rather than recomputed, because
+    /// every consumer needs it and the mangling rules are not theirs to know.
+    pub slot: String,
     /// The function, ready to splice ahead of a caller's entry points.
     pub source: String,
     /// What the body requires of the prelude. **The caller's requirements have
@@ -71,8 +97,8 @@ pub struct FieldShader {
     pub params: Vec<(String, &'static str)>,
 }
 
-/// Generate the WGSL function for one field.
-pub fn generate_field(checked: &Checked) -> FieldShader {
+/// Generate the WGSL function for one field, as reached through `slot`.
+pub fn generate_field(checked: &Checked, slot: &str) -> FieldShader {
     assert_eq!(
         checked.kind,
         Kind::Field,
@@ -84,9 +110,10 @@ pub fn generate_field(checked: &Checked) -> FieldShader {
         .expect("a Field procedure must have a field block");
 
     let mut req = Requirements::default();
+    let resolver = FieldResolver { slot };
     let body = {
         let mut out = String::new();
-        emit_stmts(&block.stmts, &mut req, 2, &mut out);
+        emit_stmts(&block.stmts, &resolver, &mut req, 2, &mut out);
         out
     };
 
@@ -98,8 +125,9 @@ pub fn generate_field(checked: &Checked) -> FieldShader {
 
     // `var` rather than `let`, because the block may assign `distance` on
     // several paths — the coverage check requires every path, not one.
+    let name = fn_name(slot);
     let source = format!(
-        "fn {FN}({POINT}: vec3<f32>, {T}: f32, {BEATS}: f32) -> f32 {{\n\
+        "fn {name}({POINT}: vec3<f32>, {T}: f32, {BEATS}: f32) -> f32 {{\n\
          \x20   var _distance: f32;\n\
          \x20   {{\n\
          {body}\
@@ -109,6 +137,7 @@ pub fn generate_field(checked: &Checked) -> FieldShader {
     );
 
     FieldShader {
+        slot: slot.to_string(),
         source,
         requirements: req,
         params,
@@ -117,9 +146,15 @@ pub fn generate_field(checked: &Checked) -> FieldShader {
 
 /// Reads resolve to the function parameter and to the caller's uniform; there
 /// is nothing else in scope.
-struct FieldResolver;
+///
+/// It holds the slot because a param read is addressed under it: the same field
+/// reached through two slots is two independent sets of values in one caller's
+/// uniform, which is what makes them separately drivable.
+struct FieldResolver<'a> {
+    slot: &'a str,
+}
 
-impl Resolver for FieldResolver {
+impl Resolver for FieldResolver<'_> {
     fn read_attr(&self, attr: Attr) -> String {
         unreachable!(
             "`{}` is refused in a field block: a field has no element",
@@ -144,24 +179,30 @@ impl Resolver for FieldResolver {
     }
 
     fn read_param(&self, name: &str) -> Option<String> {
-        Some(format!("u.{}", layout::mangle_field_param(name)))
+        Some(format!("u.{}", layout::mangle_field_param(self.slot, name)))
     }
 }
 
-fn emit_stmts(stmts: &[TStmt], req: &mut Requirements, indent: usize, out: &mut String) {
+fn emit_stmts(
+    stmts: &[TStmt],
+    resolver: &FieldResolver<'_>,
+    req: &mut Requirements,
+    indent: usize,
+    out: &mut String,
+) {
     let pad = "    ".repeat(indent);
     for stmt in stmts {
         match stmt {
             TStmt::Let { name, value, .. } => {
-                let v = lower_expr(value, &FieldResolver, req);
+                let v = lower_expr(value, resolver, req);
                 out.push_str(&format!("{pad}let {} = {v};\n", mangle_local(name)));
             }
             TStmt::Var { name, value, .. } => {
-                let v = lower_expr(value, &FieldResolver, req);
+                let v = lower_expr(value, resolver, req);
                 out.push_str(&format!("{pad}var {} = {v};\n", mangle_local(name)));
             }
             TStmt::Assign { target, value, .. } => {
-                let v = lower_expr(value, &FieldResolver, req);
+                let v = lower_expr(value, resolver, req);
                 match target {
                     Target::Local(name) => {
                         out.push_str(&format!("{pad}{} = {v};\n", mangle_local(name)))
@@ -175,14 +216,14 @@ fn emit_stmts(stmts: &[TStmt], req: &mut Requirements, indent: usize, out: &mut 
             TStmt::If {
                 cond, then, els, ..
             } => {
-                let c = lower_expr(cond, &FieldResolver, req);
+                let c = lower_expr(cond, resolver, req);
                 out.push_str(&format!("{pad}if {c} {{\n"));
-                emit_stmts(then, req, indent + 1, out);
+                emit_stmts(then, resolver, req, indent + 1, out);
                 if els.is_empty() {
                     out.push_str(&format!("{pad}}}\n"));
                 } else {
                     out.push_str(&format!("{pad}}} else {{\n"));
-                    emit_stmts(els, req, indent + 1, out);
+                    emit_stmts(els, resolver, req, indent + 1, out);
                     out.push_str(&format!("{pad}}}\n"));
                 }
             }
@@ -197,7 +238,7 @@ fn emit_stmts(stmts: &[TStmt], req: &mut Requirements, indent: usize, out: &mut 
                 out.push_str(&format!(
                     "{pad}for (var {v}: i32 = {start}; {v} < {end}; {v} = {v} + 1) {{\n"
                 ));
-                emit_stmts(body, req, indent + 1, out);
+                emit_stmts(body, resolver, req, indent + 1, out);
                 out.push_str(&format!("{pad}}}\n"));
             }
             TStmt::Kill { .. } => unreachable!("`kill()` in a field is refused by the checker"),

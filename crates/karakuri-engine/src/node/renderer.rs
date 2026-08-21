@@ -51,7 +51,7 @@ impl Renderer {
         l4: &Checked,
         geometry: &Geometry<'_>,
         camera: &Camera,
-        field: Option<&karakuri_codegen::field::FieldShader>,
+        field: Option<&Checked>,
     ) -> Renderer {
         let fullscreen = l4.topology == Some(karakuri_ir::Topology::Fullscreen);
         let weighted = l4.blend == Some(karakuri_ir::Blend::Weighted);

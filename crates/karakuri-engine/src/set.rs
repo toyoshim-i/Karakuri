@@ -229,12 +229,18 @@ pub enum SetError {
     /// other. A field is inlined at every call site, so a marcher evaluating one
     /// forty-eight times pays for it forty-eight times.
     #[error(
-        "`{caller}` with `{field}` inlined is over budget: {detail}\n\
+        "`{caller}` with `{field}` inlined through `{slot}` is over budget: {detail}\n\
          hint: a field costs its caller once per evaluation — cut the field, the \
          evaluations, or the loop around them"
     )]
     FieldTooExpensive {
         caller: String,
+        /// The slot the expensive field was reached through. **Named as well as
+        /// the field**, because a procedure may declare several and the
+        /// question the author has is which of its call sites to cut — which is
+        /// a question about the name in its own file, not about the node the
+        /// Set bound to it.
+        slot: String,
         field: String,
         detail: String,
     },
@@ -300,21 +306,29 @@ pub enum SetError {
          `--capacity`, or declare the same default in both"
     )]
     PairingCapacity { l2: String, a: u32, b: u32 },
-    /// **A declared geometry slot that nothing in this Set binds.**
+    /// **A declared slot that nothing in this Set binds**, of either type.
     ///
     /// Refused, and this is the refusal the whole notation is for. The rule it
     /// replaced was "there is exactly one, so it needs no name", which is
     /// exactly what capped fan-in at one — so filling an unbound slot from
-    /// whatever geometry happened to be lying around would put that rule back
-    /// under a new spelling. A procedure says what it needs; the Set says what
-    /// fills it; neither guesses.
+    /// whatever happened to be lying around would put that rule back under a
+    /// new spelling. A procedure says what it needs; the Set says what fills
+    /// it; neither guesses.
+    ///
+    /// **One variant for both types**, unlike the two `EdgeTo…` refusals below:
+    /// what is missing is the same fact whatever the slot takes, and the
+    /// sentence that helps is the same sentence with the declared type read
+    /// back out of it.
     #[error(
-        "`{node}` uses a geometry it calls `{slot}`, and nothing in this Set says which one\n\
-         hint: bind it — `--edge {node}.{slot}=<geometry>`. This Set holds: {holds}"
+        "`{node}` declares `{slot} : {takes}` and nothing in this Set says what fills it\n\
+         hint: bind it — `--edge {node}.{slot}=<node>`. This Set holds: {holds}"
     )]
     SlotUnbound {
         node: String,
         slot: String,
+        /// The type the header wrote, so the hint names the sort of node that
+        /// would fit rather than a generic one.
+        takes: &'static str,
         holds: String,
     },
     /// An edge naming a slot the node it addresses does not declare.
@@ -324,8 +338,9 @@ pub enum SetError {
     /// statement about another Set, and is passed over rather than refused, on
     /// the same terms a `--param` naming a node this Set has not got is.
     #[error(
-        "`{node}` declares no geometry called `{slot}`\n\
-         hint: an edge names a slot the procedure declared with `uses {slot} : Geometry`{declares}"
+        "`{node}` declares no slot called `{slot}`\n\
+         hint: an edge names a slot the procedure declared with `uses {slot} : \
+         <Geometry|Field>`{declares}"
     )]
     NoSuchSlot {
         node: String,
@@ -367,6 +382,29 @@ pub enum SetError {
         layer: &'static str,
         sources: String,
     },
+    /// An edge whose far end names a node that is not a field.
+    ///
+    /// **A sibling of [`SetError::EdgeToNotGeometry`] rather than one variant
+    /// with a flag**, and the two sentences are why: what would help is a
+    /// different list — the Set's sources against the Set's field — and a
+    /// different statement about what the slot takes. Folding them together
+    /// would be one struct carrying both lists and a discriminator to choose
+    /// which half is a lie.
+    #[error(
+        "`{node}.{slot}` is bound to `{to}`, which is {layer}\n\
+         hint: a slot declared `: Field` takes a `kind Field` procedure — this Set's is: {fields}"
+    )]
+    EdgeToNotField {
+        node: String,
+        slot: String,
+        to: String,
+        /// What the bound node is, article and all — "an L1", say.
+        layer: &'static str,
+        /// The field this Set holds, or a sentence saying it holds none: an
+        /// edge pointing at the wrong node and a Set with nothing to point at
+        /// are different mistakes, and this is where they read differently.
+        fields: String,
+    },
     /// Two edges binding one slot.
     ///
     /// Refused rather than last-one-wins, on [`SetError::DuplicateNodeName`]'s
@@ -389,19 +427,13 @@ pub enum SetError {
     /// renderers to draw.
     #[error("a Set needs at least one L1 — there is nothing to draw")]
     NoGeometry,
-    /// A procedure evaluates `field(p)` and the Set holds no field.
-    ///
-    /// **Refused here because nowhere else could.** A `kind Field` file is
-    /// another procedure entirely, so no single-file pass can know whether one
-    /// is present; and the call lowers to a function name, so a module without
-    /// it is WGSL naga refuses — a panic on the thread that built it, from a
-    /// `.kir` that checked clean.
-    #[error(
-        "`{caller}` evaluates `field(p)` and this Set has no field\n\
-         hint: add a `kind Field` procedure to the slot — `--set L1.kir,shape.kir,L4.kir`, \
-         sorted by the `kind` each file declares"
-    )]
-    NoField { caller: String },
+    // **There is no `NoField` here any more**, and nothing lost a refusal. It
+    // said "this procedure evaluates `field(p)` and the Set holds no field",
+    // which was the only way to ask for a field that was not there: the call
+    // named no slot, so there was nothing earlier to check. A call names a slot
+    // now, and a slot has to be bound — so the same file is turned away by
+    // `SlotUnbound` before a shader is generated, pointing at the declaration
+    // rather than at the call.
     /// An amplified chain that asks for a buffer bigger than the device binds.
     ///
     /// **Checked here rather than left to fail**, because failing is not what
@@ -707,10 +739,16 @@ pub struct Set {
     /// working, and an author opts in by naming what they want rather than by
     /// hiding twenty-four things. See `docs/ir-spec.md`, "What a Set publishes".
     interface: Vec<Published>,
-    /// **The spliced field's params, under their WGSL names.** Held here rather
-    /// than on each node because there is one field and every caller writes the
-    /// same values into its own uniform — see
-    /// [`crate::node::View::field_params`].
+    /// **The spliced field's params, under their semantic names — one set per
+    /// slot any node reaches it through.** Held here rather than on each node
+    /// because there is one field and every caller writes the same values into
+    /// its own uniform — see [`crate::node::View::field_params`].
+    ///
+    /// A key names a *slot*, so this is the union over every node's header
+    /// rather than the field's param list alone. It is a superset of what any
+    /// one module holds and that is what it is for: each node writes the keys
+    /// its own layout has, which is how one list serves five kinds of uniform
+    /// struct without any of them knowing about the others.
     field_params: Vec<String>,
     /// The same params under the names they were **declared** with, which is
     /// what an address names: `--param Field:0:ball`, `--bind layer=Field`, and
@@ -1063,6 +1101,10 @@ impl Set {
             )
             .chain(field.map(|n| (wiring.field.map(str::to_string), n)))
             .collect();
+        // **The procedures, in node order**, so that an edge resolved against a
+        // name can ask the node it found what it declares. `wanted` is consumed
+        // deriving the names below, and this is the half of it the edges need.
+        let nodes: Vec<&Checked> = wanted.iter().map(|(_, n)| *n).collect();
         // **Every written name is taken first, and the rest are derived
         // against what is already taken.** Doing it in one pass would let a
         // derived `lens` claim the name a written one further down the list
@@ -1105,6 +1147,29 @@ impl Set {
         let geometry_at = |name: &str| node_at(name).filter(|at| *at < l1s.len());
         let holds = || names.join(", ");
         let sources = || names[..l1s.len()].join(", ");
+        // **Last in the order**, after the renderers — see the chain `wanted`
+        // was built from. There is one, so this is a position rather than a
+        // search.
+        let field_at: Option<usize> = field.map(|_| names.len() - 1);
+        let fields = || match field_at {
+            Some(at) => names[at].clone(),
+            None => "none — this Set holds no `kind Field` procedure".to_string(),
+        };
+        // What one node is, for a refusal that has to say what was bound where
+        // a slot wanted something else.
+        let layer_of = |at: usize| -> &'static str {
+            if at < l1s.len() {
+                "an L1"
+            } else if at < l1s.len() + l2s.len() {
+                "an L2"
+            } else if l3.is_some() && at == l1s.len() + l2s.len() {
+                "an L3"
+            } else if Some(at) == field_at {
+                "a field"
+            } else {
+                "an L4"
+            }
+        };
 
         // **Every edge whose node is in this Set has to resolve.** One whose
         // node is not is a statement about another Set of the deck — a flag is
@@ -1114,16 +1179,28 @@ impl Set {
             let Some(at) = node_at(&edge.node) else {
                 continue;
             };
-            let declares = (at >= l1s.len() && at < l1s.len() + l2s.len())
-                .then(|| l2s[at - l1s.len()].geometry_slot())
-                .flatten();
-            if declares != Some(edge.slot.as_str()) {
+            // **Asked of the node, whatever kind it is.** This used to look
+            // only at the L2s, because a slot was a geometry slot and a
+            // geometry slot is L2's alone; a Field slot is legal on four kinds,
+            // so an edge naming a renderer's is an ordinary edge and refusing
+            // it as "declares no slot" would be a refusal about the wrong
+            // thing.
+            let declared = &nodes[at].uses;
+            if !declared.iter().any(|slot| slot.name == edge.slot) {
                 return Err(SetError::NoSuchSlot {
                     node: edge.node.clone(),
                     slot: edge.slot.clone(),
-                    declares: match declares {
-                        Some(name) => format!("; `{}` declares `{name}`", edge.node),
-                        None => String::new(),
+                    declares: match declared.is_empty() {
+                        true => String::new(),
+                        false => format!(
+                            "; `{}` declares {}",
+                            edge.node,
+                            declared
+                                .iter()
+                                .map(|s| format!("`{}`", s.name))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
                     },
                 });
             }
@@ -1159,11 +1236,20 @@ impl Set {
                         sources: l1s.len(),
                     });
                 }
-                let mut bound = wiring.edges.iter().filter(|e| e.node == node);
+                // **The slot as well as the node.** One node may declare a
+                // geometry slot and a field slot at once, and a filter on the
+                // node alone read the field's edge as a second binding of this
+                // one — a Set refused for being wired twice when it was wired
+                // once each.
+                let mut bound = wiring
+                    .edges
+                    .iter()
+                    .filter(|e| e.node == node && e.slot == slot);
                 let Some(edge) = bound.next() else {
                     return Err(SetError::SlotUnbound {
                         node,
                         slot,
+                        takes: karakuri_ir::SlotTy::Geometry.name(),
                         holds: holds(),
                     });
                 };
@@ -1223,6 +1309,70 @@ impl Set {
                 Some(far_at)
             }
         };
+        // **Every Field slot on every node, bound by an edge or refused.**
+        //
+        // Every node, because a Field slot is legal on four of the five kinds —
+        // the four the loop below already walks when it decides who evaluates a
+        // field. The geometry slot above is one node's question and this is the
+        // whole Set's, which is why it is a walk rather than a `position`.
+        //
+        // **Unbound is refused rather than filled in**, exactly as a geometry
+        // slot's is. A Set holding one field could resolve every slot to it and
+        // be right every time today, and that is precisely the rule this
+        // notation exists to remove — "if there is exactly one, use it" is what
+        // capped a procedure at one input, and reinstating it here would cap
+        // the next Set at one field with nothing in the language to say so.
+        for (at, node) in nodes.iter().enumerate() {
+            for slot in node
+                .uses
+                .iter()
+                .filter(|s| s.ty == karakuri_ir::SlotTy::Field)
+            {
+                let node_name = names[at].clone();
+                let mut bound = wiring
+                    .edges
+                    .iter()
+                    .filter(|e| e.node == node_name && e.slot == slot.name);
+                let Some(edge) = bound.next() else {
+                    return Err(SetError::SlotUnbound {
+                        node: node_name,
+                        slot: slot.name.clone(),
+                        takes: slot.ty.name(),
+                        holds: holds(),
+                    });
+                };
+                if let Some(second) = bound.next() {
+                    return Err(SetError::SlotBoundTwice {
+                        node: node_name,
+                        slot: slot.name.clone(),
+                        first: edge.to.clone(),
+                        second: second.to.clone(),
+                    });
+                }
+                match node_at(&edge.to) {
+                    Some(to) if Some(to) == field_at => {}
+                    // In the Set and not the field: the layer it *is* is the
+                    // useful half of the sentence.
+                    Some(other) => {
+                        return Err(SetError::EdgeToNotField {
+                            node: node_name,
+                            slot: slot.name.clone(),
+                            to: edge.to.clone(),
+                            layer: layer_of(other),
+                            fields: fields(),
+                        })
+                    }
+                    None => {
+                        return Err(SetError::EdgeToUnknown {
+                            node: node_name,
+                            slot: slot.name.clone(),
+                            to: edge.to.clone(),
+                            holds: holds(),
+                        })
+                    }
+                }
+            }
+        }
         for (l1, _) in l1s {
             if l1.kind != Kind::L1 {
                 return Err(SetError::WrongKind {
@@ -1265,8 +1415,6 @@ impl Set {
                 });
             }
         }
-        let field_shader = field.map(karakuri_codegen::field::generate_field);
-        let field_shader = field_shader.as_ref();
 
         // **The ceiling every caller passed was applied to an incomplete
         // figure**, because a `field(p)` weighs nothing where a single file is
@@ -1287,35 +1435,34 @@ impl Set {
                 .chain(l3.iter())
                 .chain(l4s.iter())
             {
-                if let Err(errs) = karakuri_ir::cost::check_with_field(caller, per_evaluation) {
+                // **Asked per slot, and this Set answers the same number for
+                // every one of them.** There is one field, so every bound slot
+                // reaches it; what the closure is for is that the *count* is
+                // per slot, and a procedure that marches one field twice under
+                // two names pays for both.
+                let per_slot = |_slot: &str| per_evaluation;
+                if let Err(over) = karakuri_ir::cost::check_with_field(caller, &per_slot) {
                     return Err(SetError::FieldTooExpensive {
                         caller: caller.name.clone(),
+                        slot: over.slot,
                         field: f.name.clone(),
-                        detail: errs.first().map(|e| e.message.clone()).unwrap_or_default(),
+                        detail: over
+                            .errors
+                            .first()
+                            .map(|e| e.message.clone())
+                            .unwrap_or_default(),
                     });
                 }
             }
         }
 
-        // **A procedure that evaluates a field needs one to be there**, and
-        // nothing below this point could report it: the call lowers to a
-        // function name, and a module missing that function is WGSL naga
-        // refuses — a panic on the thread that built it, from a `.kir` the
-        // checker accepted.
-        if field.is_none() {
-            let caller = l1s
-                .iter()
-                .map(|(l1, _)| l1)
-                .chain(l2s.iter())
-                .chain(l3.iter())
-                .chain(l4s.iter())
-                .find(|n| karakuri_ir::cost::estimate(n).is_ok_and(|c| c.field_calls.any()));
-            if let Some(caller) = caller {
-                return Err(SetError::NoField {
-                    caller: caller.name.clone(),
-                });
-            }
-        }
+        // **A procedure that evaluates a field needs one to be there**, and it
+        // is the slot walk above that says so now rather than a search here. A
+        // call names a slot, a slot is declared in the header, and a declared
+        // slot is bound or refused — so a Set with no field turns the same file
+        // away at the declaration, which is where the author can do something
+        // about it. The search this replaced could only report the *caller*,
+        // because a call carried no name to report.
 
         // **One camera for the whole Set**, however many sources — sharing is
         // edge fan-out and needs no rule.
@@ -1328,7 +1475,7 @@ impl Set {
                 });
             }
         }
-        let camera_node = crate::node::Camera::build(device, l3, field_shader);
+        let camera_node = crate::node::Camera::build(device, l3, field);
 
         // **Everything below is per source**, because everything below depends
         // on what that source emits: which attributes are derived, which the
@@ -1553,7 +1700,7 @@ impl Set {
             // which is where the range check lives, because the range is that
             // node's own. Everything the simulation needs is inside it.
 
-            let sim = Simulation::build(device, l1, capacity, salt, &derived, field_shader)?;
+            let sim = Simulation::build(device, l1, capacity, salt, &derived, field)?;
 
             // **The far geometry is built with the same `derived` list**, and
             // that is not a convenience: the node addresses its buffer with a
@@ -1589,14 +1736,7 @@ impl Set {
                     let far_salt = salt_of(far_at);
                     Some((
                         far.emit.clone(),
-                        Simulation::build(
-                            device,
-                            far,
-                            far_capacity,
-                            far_salt,
-                            &derived,
-                            field_shader,
-                        )?,
+                        Simulation::build(device, far, far_capacity, far_salt, &derived, field)?,
                     ))
                 }
             };
@@ -1649,7 +1789,7 @@ impl Set {
                         synthetic,
                         &derived,
                         far.as_ref().map(|(a, g)| (*a, g)),
-                        field_shader,
+                        field,
                         &input,
                         chain_capacity,
                     )?
@@ -1687,7 +1827,7 @@ impl Set {
                     Some(last) => last.geometry(alive, counts),
                 };
                 l4s.iter()
-                    .map(|l4| Renderer::build(device, l4, &geometry, &camera_node, field_shader))
+                    .map(|l4| Renderer::build(device, l4, &geometry, &camera_node, field))
                     .collect()
             };
             sources.push(Source {
@@ -1796,9 +1936,16 @@ impl Set {
                 .unwrap_or_default(),
             field_params: field
                 .map(|f| {
-                    f.params
-                        .iter()
-                        .map(|p| karakuri_codegen::layout::field_param_key(&p.name))
+                    let mut slots: Vec<&str> = nodes.iter().flat_map(|n| n.field_slots()).collect();
+                    slots.sort_unstable();
+                    slots.dedup();
+                    slots
+                        .into_iter()
+                        .flat_map(|slot| {
+                            f.params.iter().map(move |p| {
+                                karakuri_codegen::layout::field_param_key(slot, &p.name)
+                            })
+                        })
                         .collect()
                 })
                 .unwrap_or_default(),
@@ -3358,7 +3505,13 @@ pub fn derived_salt(seed_salt: u32, source: usize) -> u32 {
 /// a character no `.kir` identifier can contain, which is what makes this
 /// strip unambiguous — see `layout::field_param_key`.
 fn field_value(map: Option<&HashMap<String, f32>>, key: &str) -> Option<f32> {
-    let declared = key.strip_prefix("field\u{1}")?;
+    // **Both separators come off, and the slot between them is discarded.** A
+    // key names the slot a param was reached through, and the value is the
+    // field's own: one `--param Field:0:radius` is one number, written into
+    // every caller's uniform under every slot that reaches it. The day a Set
+    // holds two fields the slot is what tells them apart, and this is the line
+    // that has to stop discarding it.
+    let (_slot, declared) = key.strip_prefix("field\u{1}")?.split_once('\u{1}')?;
     map?.get(declared).copied()
 }
 

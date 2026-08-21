@@ -387,11 +387,8 @@ pub fn mangle_param(name: &str) -> String {
     format!("param_{name}")
 }
 
-/// The WGSL spelling of a **field's** `param`, in a caller's uniform.
-///
-/// A `\u{1}` rather than an underscore, so the result is not an identifier any
-/// author could have typed — see [`UniformLayoutBuilder::field_param_field`] for
-/// why the *semantic* name has to be unforgeable and not merely unlikely.
+/// The WGSL spelling of a **field's** `param`, in a caller's uniform, under the
+/// slot that reached it.
 ///
 /// **A different prefix, and that is what makes a collision impossible.** A
 /// field's body is spliced into its caller's shader and reads its params out of
@@ -401,8 +398,13 @@ pub fn mangle_param(name: &str) -> String {
 /// nothing and removes the refusal that would otherwise have to exist, which
 /// is the better of the two: `--param Field:0:exposure` and
 /// `--param L4:0:exposure` name different things and both work.
-pub fn mangle_field_param(name: &str) -> String {
-    format!("field_{name}")
+///
+/// **The slot is in the prefix as well**, so that two fields in one caller are
+/// two sets of values rather than one — a shape's `radius` and a cutter's
+/// `radius` are different numbers, and a caller holding one name for both would
+/// drive them together with no way to say so.
+pub fn mangle_field_param(slot: &str, name: &str) -> String {
+    format!("field_{slot}_{name}")
 }
 
 /// The **semantic** name of a field's `param`, which is what the engine looks a
@@ -416,9 +418,11 @@ pub fn mangle_field_param(name: &str) -> String {
 /// says nothing about this one.
 ///
 /// The separator is a character no `.kir` identifier can contain, so this name
-/// cannot collide with any declared one however it is spelled.
-pub fn field_param_key(name: &str) -> String {
-    format!("field\u{1}{name}")
+/// cannot collide with any declared one however it is spelled — and it
+/// separates the slot from the param for the same reason, so that the engine
+/// can take a key apart again without guessing where one name ends.
+pub fn field_param_key(slot: &str, name: &str) -> String {
+    format!("field\u{1}{slot}\u{1}{name}")
 }
 
 /// The complete field order and size of a generated uniform struct. This is
@@ -508,8 +512,17 @@ impl UniformLayoutBuilder {
     /// [`mangle_field_param`]. The semantic `name` is prefixed too, because the
     /// engine looks a uniform field up by that name and a Set may hold a field
     /// and a renderer that declare the same one.
-    pub fn field_param_field(&mut self, name: &str, wgsl_ty: &'static str) -> &mut Self {
-        self.push(field_param_key(name), mangle_field_param(name), wgsl_ty)
+    pub fn field_param_field(
+        &mut self,
+        slot: &str,
+        name: &str,
+        wgsl_ty: &'static str,
+    ) -> &mut Self {
+        self.push(
+            field_param_key(slot, name),
+            mangle_field_param(slot, name),
+            wgsl_ty,
+        )
     }
 
     fn push(&mut self, name: String, wgsl_name: String, wgsl_ty: &'static str) -> &mut Self {

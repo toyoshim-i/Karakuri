@@ -58,7 +58,7 @@ pub struct L3Shader {
 pub const ENTRY: &str = "produce";
 
 /// Generate the compute shader for one L3.
-pub fn generate_l3(checked: &Checked, field: Option<&crate::field::FieldShader>) -> L3Shader {
+pub fn generate_l3(checked: &Checked, field: Option<&Checked>) -> L3Shader {
     assert_eq!(
         checked.kind,
         Kind::L3,
@@ -86,14 +86,16 @@ pub fn generate_l3(checked: &Checked, field: Option<&crate::field::FieldShader>)
     // that this procedure and the field it evaluates may both declare
     // `exposure` — see `layout::mangle_field_param`.
     //
-    // **Only where the procedure evaluates one.** The field used to be spliced
-    // into every module in the Set, so a renderer that never mentions one still
-    // carried its params and still failed to compile if the field's body did —
-    // a `.kir` taking down shaders that have nothing to do with it.
-    let field = field.filter(|_| crate::evaluates_field(checked));
-    if let Some(f) = field {
+    // **One set per slot, and only for the slots the procedure evaluates.** The
+    // field used to be spliced into every module in the Set, so a renderer that
+    // never mentions one still carried its params and still failed to compile
+    // if the field's body did — a `.kir` taking down shaders that have nothing
+    // to do with it. The slot is in the name because two fields in one caller
+    // are two independent sets of values.
+    let splices = crate::splices(checked, field);
+    for f in &splices {
         for (name, ty) in &f.params {
-            b.field_param_field(name, ty);
+            b.field_param_field(&f.slot, name, ty);
         }
     }
     let (uniform_layout, uniform_pad_f32) = b.finish();
@@ -126,11 +128,11 @@ pub fn generate_l3(checked: &Checked, field: Option<&crate::field::FieldShader>)
     // has to carry what it calls — the prelude is demand-driven, and a field
     // calling `sd_torus` in a caller that does not would otherwise produce a
     // call to a function nothing emitted, in a shader that checked clean.
-    if let Some(f) = field {
+    for f in &splices {
         req.absorb(&f.requirements);
     }
     src.push_str(&prelude::render(&req));
-    if let Some(f) = field {
+    for f in &splices {
         src.push('\n');
         src.push_str(&f.source);
     }

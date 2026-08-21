@@ -57,11 +57,17 @@ procedures evaluate it, so it needs no buffer, no pass and no position in the ch
 [The `field` block](#the-field-block).
 
 Each brings its own header rules, and a declaration belonging to another layer is refused
-where it is written rather than ignored: `capacity` and `topology` are L1's, `amplify` and
-`uses` are L2's, `blend` is L4's, `emit` belongs to procedures that write elements. An L3
-declares none of them — it produces a viewpoint, and what is drawn with it is the
-renderer's business. `amplify` and `uses` are refused *together* on one procedure: one node
-cannot both take a second geometry and return several copies of each element.
+where it is written rather than ignored: `capacity` and `topology` are L1's, `amplify` is
+L2's, `blend` is L4's, `emit` belongs to procedures that write elements. An L3 declares none
+of them — it produces a viewpoint, and what is drawn with it is the renderer's business.
+
+`uses` is the one declaration whose rules are about its **type** rather than about the
+layer. `uses far : Geometry` is L2's alone and there is at most one, because a second bound
+element buffer per node is not built; `uses shape : Field` is legal on L1, L2, L3 and L4 —
+the four kinds that can evaluate a field — and several are legal, because a marcher wanting
+a shape and a cutter is the ordinary case. `amplify` and a *geometry* slot are refused
+together on one procedure: one node cannot both take a second geometry and return several
+copies of each element. A Field slot changes no count and is refused beside neither.
 
 **Each kind also has a declaration and a block it cannot do without**, and the refusal is by
 name at the header rather than by a missing symbol later:
@@ -134,12 +140,32 @@ but a fork with no compilation in it, which primes almost immediately.
 The **live** count is dynamic, lives in an indirect-dispatch args buffer, and is not
 readable from IR. See [Element lifecycle](#element-lifecycle).
 
-### uses (L2 only)
+### uses
 
 ```
 kind L2
 uses far : Geometry
+
+kind L4
+uses shape : Field
 ```
+
+**One named input a procedure takes, with a type that decides every rule about it.** The
+type is not decoration and never was: which kinds may declare one, how many are legal, what
+an `edge` may bind it to and how it is *read* all differ between the two, and each of those
+refusals is a sentence about a type rather than about `uses`.
+
+| | `Geometry` | `Field` |
+|---|---|---|
+| Legal on | L2 | L1, L2, L3, L4 |
+| How many | one | any number |
+| Bound to | an L1 | a `kind Field` procedure |
+| Read as | `far.position` — `expr . ident` | `shape(p)` — a call |
+
+Both are bound by an [`edge`](#set-file-format) and an unbound one is refused. What follows
+is the geometry slot; the Field slot is under [The `field` block](#the-field-block).
+
+#### A geometry slot (L2 only)
 
 **An L2 that takes a second geometry and produces one.** `L2 : Geometry -> Geometry` is an
 endomorphism, and this breaks it in the second of the two possible directions: `amplify`
@@ -181,17 +207,22 @@ deform {
   is refused, on the terms every other collision here is; and a name nothing declared is
   simply a name that resolves to nothing. Nothing is reserved language-wide — that was what
   the previous spelling did, and reserving one word is exactly what caps a procedure at one
-  input.
+  input. `other` was such a word for the paired geometry and `field` was one for the field;
+  neither is reserved now, and neither layer is capped at one any more — see [Evaluating
+  one](#evaluating-one) for the second half of the same argument.
 - **A geometry is not a value.** `far` alone is refused: the language has no type for a
   whole source and no way to pass one, so what can be said about it is what one of its
   elements holds. It is not assignable either — the far side is an input edge.
-- **The type is written and there is one of them.** `Geometry` is what a slot may be today,
-  and anything else is refused by name. Writing it anyway is what lets the slot that takes a
-  camera or a field arrive without the declaration changing shape.
+- **The type is written and it is what the rules are about.** Writing it is what let the
+  Field slot arrive without the declaration changing shape — and what kept every refusal
+  about a geometry slot a sentence that grew an arm beside itself rather than being rewritten
+  around a distinction it had never drawn. Anything but `Geometry` or `Field` is refused by
+  name.
 - Readable in a `deform` and a `mask`, and nowhere else.
-- **One slot per node.** A second `uses` is refused with a sentence: a second bound buffer
+- **One geometry slot per node.** A second is refused with a sentence: a second bound buffer
   per node and a second edge per Set are not built, and one name silently winning would put
-  back exactly the failure this notation removes.
+  back exactly the failure this notation removes. This is a rule about *geometry* — a Field
+  slot is not counted by it, and several are legal.
 
 **Which geometry fills the slot is the Set's answer, not the file's, and it is written
 down.** It used to be `--set` position 1 — written nowhere, so reordering the command line
@@ -268,11 +299,19 @@ param <name> : <type> [<min>, <max>] = <default>
   `param color : vec3` is accepted on an L1, which declares no `color` output, and refused
   on the L4 that would have to write one — the collision is with the *lowering's* name for
   the output, and an L1 has no such name.
-  A **declared geometry slot** joins that scope where a procedure declares one — `uses far :
-  Geometry` makes `far` this procedure's, so a local or a param of that name is refused. It is
-  not reserved anywhere else, and that is the point: the name is the procedure's own, so
-  reserving it language-wide would be reserving one word for one input and capping every
-  procedure at that one. The spelling it replaced, `other`, was exactly such a word.
+  A **declared slot** of either type joins that scope where a procedure declares one — `uses
+  far : Geometry` makes `far` this procedure's and `uses shape : Field` makes `shape` its
+  own, so a local or a param of either name is refused. Neither is reserved anywhere else,
+  and that is the point: the name is the procedure's own, so reserving it language-wide would
+  be reserving one word for one input and capping every procedure at that one. Both spellings
+  this replaced — `other` for the paired geometry, `field` for the field — were exactly such
+  words.
+
+  A **Field** slot has one collision a geometry slot does not: it is *called*, so a slot
+  named after a builtin or a type constructor is refused as well. `sin` is a fine name for a
+  param, a local and a geometry slot, and not for a field — `sin(x)` would otherwise mean two
+  things at one call site, and either resolution order is a spelling that quietly means
+  something other than it says.
 
   Params, attributes, ambients and stage outputs share one scope inside a block, and the
   lowering packs params and ambients into one uniform struct — `param t : float` would
@@ -922,10 +961,15 @@ proc blob {
 - **No attribute is readable.** A field has no element — refused with that sentence rather
   than with advice to declare one, since declaring one is not available and would not help.
 - **No geometry declaration is legal**: no `capacity`, `topology`, `blend`, `amplify`,
-  `emit`, `consumes` or `uses`. It counts nothing, draws nothing and carries nothing.
-  `uses` was the one this list left out while stating the rule that covers it — a field is
-  handed `point` and returns a distance, so there are no elements here for a second geometry
-  to be read beside.
+  `emit`, `consumes` or `uses … : Geometry`. It counts nothing, draws nothing and carries
+  nothing — a field is handed `point` and returns a distance, so there are no elements here
+  for a second geometry to be read beside.
+- **And no `uses … : Field` either**, which is the one kind that may not take one. A field
+  bound to itself is a function calling itself, which WGSL forbids outright; two fields
+  naming each other is the same failure at one remove, and telling that apart from a legal
+  chain of shapes is a walk over every edge in the Set. That is a graph question, answerable
+  where the Set is built and nowhere in one file, so the whole thing is refused here rather
+  than half-checked.
 
 **Its cost is on an axis of its own.** A field is reported in **ops per evaluation**, and
 the three other figures are zero for one. What it scales with is *how often its caller calls
@@ -942,29 +986,59 @@ new syntactic category. There is no user-defined function here; there is one mor
 more block, one more ambient and one more output, which is the shape L2 and L3 already
 established.
 
-**One per Set**, on the same terms as the camera. Several would need naming, and naming is
-fan-in — and a notation for one now exists: [`uses`](#uses-l2-only) declares a named input
-and a Set's `edge` binds it. What is not built is this layer's use of it, since `field(p)`
-names the one field by being the only one and would have to grow a name of its own. So this
-is waiting on the same notation being carried one layer further rather than on a design, and
-`docs/roadmap.md` records the order under "Naming what a Set holds".
+**One per Set today, and nothing in the notation says so any more.** It used to be the
+camera's rule for the camera's reason — several would need naming, and naming is fan-in —
+and the naming now exists: a caller declares [`uses shape : Field`](#uses) and a Set's `edge`
+says which field fills it. What is left is the plumbing: the engine and the CLI still hold
+one `Option<Field>` apiece and a second `kind Field` file is still refused. That is a `Vec`,
+not a design, and `docs/roadmap.md` records it under "Naming what a Set holds".
 
 #### Evaluating one
 
-Any procedure may call `field(p)`. It takes a position and returns the distance the Set's
-field gives at it:
+**A procedure declares the field it takes and calls it by that name.** The slot is the
+procedure's own, exactly as a geometry slot's is, and which field fills it is the Set's
+answer:
 
 ```
-for i in 0..40 {
-  let d = field(p);
-  if d < 0.005 { hit = 1.0; }
-  p = p + ray * max(d, 0.005);
+proc field_lens {
+  kind L4
+  uses shape : Field
+
+  fragment {
+    for i in 0..40 {
+      let d = shape(p);
+      if d < 0.005 { hit = 1.0; }
+      p = p + ray * max(d, 0.005);
+    }
+  }
 }
 ```
 
-**A Set that holds no field refuses a procedure that calls one**, by name and at build. The
-call lowers to a function, and a module missing it is WGSL naga refuses — which is a panic on
-the thread that built it rather than a diagnostic.
+```
+karakuri-cli --set drift_shell.kir,melt_blob.kir,field_lens.kir \
+             --edge field_lens.shape=melt_blob
+```
+
+**The read site is a call**, because a field has no members and does have an argument — one
+`vec3` in, a `float` out. That reuses `Expr::Call` the way `far.position` reuses `expr .
+ident`: one existing shape given a second meaning, resolved against what the header declared
+rather than against a word the language reserved. The header wins over the builtin table,
+and a slot named after a builtin or a type constructor is refused where it is declared so
+that nothing is hidden by that order.
+
+**It used to be `field(p)`, and that word is gone rather than kept as an alias.** Keeping it
+would mean "if there is exactly one field, use it", which is precisely the rule the slot
+exists to remove — and [`uses`](#uses) says the same thing about the geometry slot's own
+discarded reserved word, `other`. A file written against the old spelling is refused with a
+sentence saying what to write instead. This is a breaking change to the language.
+
+**A slot nothing binds is refused**, and so is one bound to a node that is not a field —
+both where the Set is built, which is the first point holding the caller and the field at
+once. Not "if there is exactly one, use it": that is the implicit rule being removed, and
+reinstating it here would cap the next Set at one field with nothing in the language to say
+so. The refusal names the slot and the flag that would bind it, which is what the one it
+replaced could not do: a call carried no name, so all it could report was that some
+procedure somewhere evaluated a field.
 
 **The clock is passed in rather than read.** A field cannot know how its caller spells `t`:
 an L1 reads it from its per-substep arguments and everything else from its uniform, and one
@@ -973,8 +1047,10 @@ spelling that caller would have written inline.
 
 **A field's `param`s live in the uniform of every procedure that evaluates it**, under a
 prefix of their own — so a renderer and the field it draws may both declare `exposure`, and
-`--param Field:0:exposure` and `--param L4:0:exposure` reach different things. There is one
-value: every caller writes the same answer into its own uniform, because there is one field.
+`--param Field:0:exposure` and `--param L4:0:exposure` reach different things. **The slot is
+in the prefix as well**, so a procedure reaching two fields addresses each one's params
+separately: one shape's `radius` is not the other's. There is one value per field today:
+every caller writes the same answer into its own uniform, because there is one field.
 
 The prefix has to make the name unforgeable rather than unlikely. It is a separator no
 `.kir` identifier can contain, because a caller declaring `param field_radius` beside a field
@@ -984,14 +1060,19 @@ uniform field up by that name.
 **A field is spliced only into the procedures that evaluate it.** Otherwise a field's body
 takes down shaders with nothing to do with it, and every node in the Set carries its params.
 
-**A field cannot evaluate a field.** There is one per Set, so that is a function calling
-itself, which WGSL forbids.
+**A field cannot evaluate a field** — refused at the declaration, above.
 
-**The two are costed together, at the Set.** A `field(p)` weighs nothing where a single file
+**The two are costed together, at the Set.** A field call weighs nothing where a single file
 is estimated, since what one evaluation costs lives in another file — so the ceiling each of
 them passed was applied to a figure missing the other. A marcher evaluating a field forty
 times pays for it forty times, and a pair over the ceiling is refused with both figures in
 the message. Neither file need be over on its own.
+
+**The counts are per slot**, and the slots on one axis are *added*. A procedure taking a
+shape and a cutter pays for both against one fragment ceiling, so checking each on its own
+would let a pair through that neither half is over with — the same failure this check exists
+to close, one level up. The refusal names whichever slot contributes most, since that is the
+one worth cutting first.
 
 ### Spawn timing
 
@@ -1398,13 +1479,11 @@ op_union(float, float) -> float
 op_smooth_union(float, float, float) -> float
 op_subtract(float, float) -> float
 op_intersect(float, float) -> float
-
-field(vec3) -> float                  // the Set's field, at a point
 ```
 
-`field` is the one builtin that is not a function of its arguments alone: it evaluates the
-`kind Field` procedure in the same Set, and a Set with no field refuses a procedure that
-calls it. See [Evaluating one](#evaluating-one).
+**There is no `field` builtin.** There was one, `field(vec3) -> float`, and deleting it is
+what this notation *is*: a field is reached through a slot the header declares and the Set
+binds — `uses shape : Field`, then `shape(p)`. See [Evaluating one](#evaluating-one).
 
 ### Transform
 
@@ -1660,10 +1739,12 @@ without either appearing in the file.
   rather than resolved. See "Naming a source, on the terms HTML gives an `id`".
 - **`edge` binds one node's declared input slot to another node**, and is **the one record
   addressed by name at both ends**. A procedure declares what it takes and never which node
-  supplies it — `uses far : Geometry`, see [above](#uses-l2-only) — because a `.kir` that
-  named a node would be coupled to one Set. This is the other half, and it lives here for the
-  same reason a `slot`'s name does: an edge belongs to the *use*, and a Set file is what a
-  use is recorded as. `--edge morph.far=sphere_shell` writes one.
+  supplies it — `uses far : Geometry`, `uses shape : Field`, see [above](#uses) — because a
+  `.kir` that named a node would be coupled to one Set. This is the other half, and it lives
+  here for the same reason a `slot`'s name does: an edge belongs to the *use*, and a Set file
+  is what a use is recorded as. `--edge morph.far=sphere_shell` writes one, and
+  `--edge field_lens.shape=melt_blob` writes the other kind — one record for both, because
+  what an edge says is the same fact whatever the slot takes.
 
   It cannot use `(layer, index)`: a position moves when the list is reordered, and reordering
   silently changing which geometry a morph blends towards is the failure this record exists
@@ -2981,7 +3062,7 @@ Three things get called "mixing two sources" and only one of them needs anything
 |---|---|---|
 | Crossfade | draw both, blend opacity | Nothing here. Two Sets and the L5 mixer |
 | Dissolve | hide one source's elements progressively | Nothing here. An L2 mask on `source` writing `size` or `tint` |
-| Interpolation | pair elements and blend their attributes | **A cross-source read** — `uses <name> : Geometry` and `<name>.<attr>`, [above](#uses-l2-only) |
+| Interpolation | pair elements and blend their attributes | **A cross-source read** — `uses <name> : Geometry` and `<name>.<attr>`, [above](#a-geometry-slot-l2-only) |
 
 Interpolation is the only real addition, and it is not a count change — it is an
 element-wise operation that needs to read *another source's* element at the corresponding

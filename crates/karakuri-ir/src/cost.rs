@@ -200,12 +200,6 @@ const W_SRGB_LINEAR: u64 = W_TRANSCENDENTAL + 2; // a pow-shaped curve
 /// cost depends on its compile-time octave count.
 fn builtin_weight(func: Builtin, args: &[TExpr]) -> u64 {
     match func {
-        // **Zero here, and counted instead.** What one evaluation costs is the
-        // field's own figure, which lives in another file and is not in hand
-        // until the Set is built. Giving it a stand-in weight would be a
-        // number that is wrong for every field, and giving it the largest
-        // plausible one would refuse callers that are fine.
-        Builtin::Field => 0,
         Builtin::Abs
         | Builtin::Floor
         | Builtin::Ceil
@@ -300,7 +294,7 @@ fn stmts_cost(
     mult: u64,
     block: BlockKind,
     hot: &mut Option<HotSpot>,
-    calls: &mut u64,
+    calls: &mut Vec<(String, u64)>,
 ) -> u64 {
     stmts.iter().fold(0u64, |total, s| {
         total.saturating_add(stmt_cost(s, mult, block, hot, calls))
@@ -312,7 +306,7 @@ fn stmt_cost(
     mult: u64,
     block: BlockKind,
     hot: &mut Option<HotSpot>,
-    calls: &mut u64,
+    calls: &mut Vec<(String, u64)>,
 ) -> u64 {
     match stmt {
         TStmt::Let { value, .. } | TStmt::Var { value, .. } | TStmt::Assign { value, .. } => {
@@ -366,7 +360,7 @@ fn expr_cost(
     mult: u64,
     block: BlockKind,
     hot: &mut Option<HotSpot>,
-    calls: &mut u64,
+    calls: &mut Vec<(String, u64)>,
 ) -> u64 {
     match &expr.kind {
         TExprKind::Lit(_)
@@ -382,12 +376,6 @@ fn expr_cost(
             .saturating_add(expr_cost(lhs, mult, block, hot, calls))
             .saturating_add(expr_cost(rhs, mult, block, hot, calls)),
         TExprKind::Builtin { func, args } => {
-            // **`mult`, not one.** A `field(p)` inside `for i in 0..48` is
-            // forty-eight evaluations, and the number the Set multiplies has to
-            // be the number that actually happens.
-            if *func == Builtin::Field {
-                *calls = calls.saturating_add(mult);
-            }
             let weight = builtin_weight(*func, args);
             let contribution = weight.saturating_mul(mult);
             let is_new_max = hot.as_ref().is_none_or(|h| contribution > h.contribution);
@@ -403,6 +391,24 @@ fn expr_cost(
                 total.saturating_add(expr_cost(a, mult, block, hot, calls))
             });
             weight.saturating_add(args_cost)
+        }
+        // **Counted, and weighed at nothing.** What one evaluation costs is the
+        // bound field's own figure, which lives in another file and is not in
+        // hand until the Set is built. A stand-in weight would be a number
+        // wrong for every field, and the largest plausible one would refuse
+        // callers that are fine — so this pass counts call sites and the Set
+        // does the multiplication.
+        //
+        // **`mult`, not one, and under the slot's own name.** A `shape(p)`
+        // inside `for i in 0..48` is forty-eight evaluations of `shape`, and
+        // both halves of that matter: the number is what the Set multiplies,
+        // and the name is which field it multiplies by.
+        TExprKind::Field { slot, point } => {
+            match calls.iter_mut().find(|(name, _)| name == slot) {
+                Some((_, n)) => *n = n.saturating_add(mult),
+                None => calls.push((slot.clone(), mult)),
+            }
+            expr_cost(point, mult, block, hot, calls)
         }
         TExprKind::Construct { args } => 1u64.saturating_add(args.iter().fold(0u64, |total, a| {
             total.saturating_add(expr_cost(a, mult, block, hot, calls))
@@ -430,16 +436,19 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
 
     for block in &checked.blocks {
         // **Counted per block**, because which of the three ceilings a call
-        // charges is decided by the block it is in: a `field(p)` in a `vertex`
+        // charges is decided by the block it is in: a field call in a `vertex`
         // is once per element and one in a `fragment` is once per covered
         // pixel, and the two are not comparable numbers.
-        let mut block_calls = 0u64;
+        let mut block_calls: Vec<(String, u64)> = Vec::new();
         let block_cost = stmts_cost(&block.stmts, 1, block.kind, &mut hot, &mut block_calls);
         // **Every block, before the match below decides which ceiling it is
         // charged to.** Two of them are charged to none — a `camera` scales with
         // nothing, and a `field` is charged to its callers — and a call in
         // either is still a call.
-        field_calls.total = field_calls.total.saturating_add(block_calls);
+        for (slot, n) in &block_calls {
+            let entry = field_calls.entry(slot);
+            entry.total = entry.total.saturating_add(*n);
+        }
         block_totals.push((block.kind, block_cost));
         // Each block's cost is charged to the quantity it actually scales
         // with. These are not summed: see `Cost`.
@@ -450,15 +459,24 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
             // gates, so it scales with exactly what that does.
             BlockKind::Element | BlockKind::Deform | BlockKind::Mask | BlockKind::Vertex => {
                 ops_per_element = ops_per_element.saturating_add(block_cost);
-                field_calls.per_element = field_calls.per_element.saturating_add(block_calls);
+                for (slot, n) in &block_calls {
+                    let entry = field_calls.entry(slot);
+                    entry.per_element = entry.per_element.saturating_add(*n);
+                }
             }
             BlockKind::Spawn => {
                 ops_per_spawn = ops_per_spawn.saturating_add(block_cost);
-                field_calls.per_spawn = field_calls.per_spawn.saturating_add(block_calls);
+                for (slot, n) in &block_calls {
+                    let entry = field_calls.entry(slot);
+                    entry.per_spawn = entry.per_spawn.saturating_add(*n);
+                }
             }
             BlockKind::Fragment => {
                 ops_per_fragment = ops_per_fragment.saturating_add(block_cost);
-                field_calls.per_fragment = field_calls.per_fragment.saturating_add(block_calls);
+                for (slot, n) in &block_calls {
+                    let entry = field_calls.entry(slot);
+                    entry.per_fragment = entry.per_fragment.saturating_add(*n);
+                }
             }
             // **Charged to nothing, because it scales with nothing.** A
             // `camera` block runs once per frame, in one invocation, whatever
@@ -524,60 +542,117 @@ pub fn estimate(checked: &Checked) -> IrResult<Cost> {
     Ok(cost)
 }
 
-/// **Re-check a caller with the field it evaluates multiplied in.**
+/// **A caller and one of the fields it evaluates, over a ceiling together.**
 ///
-/// A `field(p)` weighs nothing where the caller is estimated, because what one
+/// Carries the *slot*, because the caller of this function has to say which
+/// field is the expensive one and a procedure may declare several. It is the
+/// slot rather than the field's own name for the reason the whole notation is
+/// spelled this way: the file knows what it called the input, and which node
+/// fills it is the Set's answer.
+pub struct OverBudget {
+    pub slot: String,
+    pub errors: Vec<IrError>,
+}
+
+/// **Re-check a caller with the fields it evaluates multiplied in.**
+///
+/// A field call weighs nothing where the caller is estimated, because what one
 /// evaluation costs lives in another file. So the ceiling a caller passed was a
 /// ceiling applied to an incomplete figure, and this is where it is completed —
-/// at the Set, which is the first point holding both procedures.
+/// at the Set, which is the first point holding every procedure at once.
 ///
-/// **Not a nicety.** `examples/field_march.kir` marches forty-eight steps; a
-/// field of 48 ops/evaluation adds 2304 to a 4096 fragment ceiling. A Set that
+/// **Not a nicety.** `examples/field_lens.kir` marches thirty-four steps; a
+/// field of 48 ops/evaluation adds 1632 to a 4096 fragment ceiling. A Set that
 /// skipped this would run a shader nobody had costed, and the number it is over
 /// by would be invisible.
-pub fn check_with_field(caller: &Checked, per_evaluation: u64) -> IrResult<()> {
+///
+/// **`per_evaluation` is asked per slot**, and the answers are *added*. A
+/// procedure taking a shape and a cutter pays for both on the same axis, so
+/// checking each slot against the ceiling on its own would let a pair through
+/// that neither half is over with — the same shape of failure this function
+/// exists to close, one level up. What the slot decides is *attribution*: the
+/// refusal names whichever slot contributes most, since that is the one worth
+/// cutting first.
+pub fn check_with_field(
+    caller: &Checked,
+    per_evaluation: &dyn Fn(&str) -> u64,
+) -> Result<(), OverBudget> {
     // **Estimated, not read.** `Checked::cost` is never filled by anything —
     // see its own doc — so taking it from there made this function a no-op that
     // reported success.
-    let cost = estimate(caller)?;
-    let calls = cost.field_calls;
-    for (own, count, ceiling, unit) in [
+    let cost = match estimate(caller) {
+        Ok(cost) => cost,
+        // Over on its own terms, before any field is multiplied in. There is no
+        // slot to blame, so the first declared one carries the report rather
+        // than the sentence claiming a field it cannot name.
+        Err(errors) => {
+            return Err(OverBudget {
+                slot: caller
+                    .field_slots()
+                    .first()
+                    .map(|s| s.to_string())
+                    .unwrap_or_default(),
+                errors,
+            })
+        }
+    };
+    for (own, ceiling, unit, count_of) in [
         (
             cost.ops_per_element,
-            calls.per_element,
             MAX_OPS_PER_ELEMENT,
             "ops/element",
+            (|s: &crate::typed::SlotCalls| s.per_element) as fn(&crate::typed::SlotCalls) -> u64,
         ),
         (
             cost.ops_per_spawn,
-            calls.per_spawn,
             MAX_OPS_PER_SPAWN,
             "ops/spawn",
+            (|s: &crate::typed::SlotCalls| s.per_spawn) as fn(&crate::typed::SlotCalls) -> u64,
         ),
         (
             cost.ops_per_fragment,
-            calls.per_fragment,
             fragment_ceiling(caller),
             "ops/fragment",
+            (|s: &crate::typed::SlotCalls| s.per_fragment) as fn(&crate::typed::SlotCalls) -> u64,
         ),
     ] {
-        if count == 0 {
+        // What each slot adds on this axis, and what all of them add together.
+        let charged: Vec<(&str, u64, u64)> = cost
+            .field_calls
+            .slots
+            .iter()
+            .map(|s| (s.slot.as_str(), count_of(s), per_evaluation(&s.slot)))
+            .filter(|(_, count, _)| *count > 0)
+            .collect();
+        let added = charged.iter().fold(0u64, |sum, (_, count, each)| {
+            sum.saturating_add(count.saturating_mul(*each))
+        });
+        if added == 0 {
             continue;
         }
-        let total = own.saturating_add(count.saturating_mul(per_evaluation));
+        let total = own.saturating_add(added);
         if total > ceiling {
-            return Err(vec![IrError::new(
-                crate::error::Stage::Cost,
-                caller.span,
-                format!(
-                    "{total} {unit} with the field multiplied in exceeds the {ceiling} {unit} \
-                     ceiling ({own} of its own, plus {count} evaluations at {per_evaluation})"
-                ),
-            )
-            .with_hint(
-                "a field is inlined at every call site, so evaluating one in a loop costs the \
-                 loop's count — cut the field, cut the evaluations, or cut the loop",
-            )]);
+            // The one worth cutting first, which is the one the sentence names.
+            let (slot, count, each) = charged
+                .iter()
+                .max_by_key(|(_, count, each)| count.saturating_mul(*each))
+                .expect("`added` is non-zero, so something is charged");
+            return Err(OverBudget {
+                slot: (*slot).to_string(),
+                errors: vec![IrError::new(
+                    crate::error::Stage::Cost,
+                    caller.span,
+                    format!(
+                        "{total} {unit} with its fields multiplied in exceeds the {ceiling} \
+                         {unit} ceiling ({own} of its own, plus {count} evaluations of \
+                         `{slot}` at {each})"
+                    ),
+                )
+                .with_hint(
+                    "a field is inlined at every call site, so evaluating one in a loop costs \
+                     the loop's count — cut the field, cut the evaluations, or cut the loop",
+                )],
+            });
         }
     }
     Ok(())

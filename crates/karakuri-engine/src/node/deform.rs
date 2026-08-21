@@ -99,7 +99,7 @@ impl Deform {
         // attribute list and the edge it reads. `None` for every other L2, and
         // *which* geometry it is was settled where the Set resolved the edge.
         far: Option<(&[Attr], &Geometry<'_>)>,
-        field: Option<&karakuri_codegen::field::FieldShader>,
+        field: Option<&Checked>,
         input: &Geometry<'_>,
         capacity: u32,
     ) -> Result<Deform, SetError> {

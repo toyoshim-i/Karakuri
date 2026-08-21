@@ -143,7 +143,7 @@ impl Simulation {
         // What the Set decided to synthesise — see `Set::build_many`. The
         // slots those rules read are written by this node and by nothing else.
         derived: &[karakuri_ir::Attr],
-        field: Option<&karakuri_codegen::field::FieldShader>,
+        field: Option<&Checked>,
     ) -> Result<Simulation, SetError> {
         let range = l1
             .capacity
