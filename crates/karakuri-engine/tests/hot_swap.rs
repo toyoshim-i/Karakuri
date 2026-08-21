@@ -179,7 +179,7 @@ fn request_many(l4_srcs: &[&str], capacity: u32, label: &str) -> Request {
         id: 1,
         l1s: vec![(compile(L1), capacity)],
         l2s: Vec::new(),
-        l3: None,
+        l3s: Vec::new(),
         fields: Vec::new(),
         layering: karakuri_engine::set::Layering::Overdraw,
         published: Vec::new(),

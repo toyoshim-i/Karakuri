@@ -525,6 +525,14 @@ pub enum Ambient {
     /// `t`.
     Beats,
     Dt,
+    /// **The view-projection matrix**, for an L4 that projects an element.
+    ///
+    /// *Which* camera it is is the Set's answer and not the file's: it is the
+    /// Set's camera, which is the first camera node — the one L3 procedure a
+    /// Set used to be allowed, or the built-in orbit where it has none. A
+    /// renderer in a Set of several that wants one of the others declares a
+    /// slot and reads `view.clip` through it; see [`SlotTy::Camera`], which
+    /// this and the two below are the unnamed form of.
     Camera,
     PointCoord,
     /// **Where the camera is**, in world space. L4 fragment only.
@@ -697,7 +705,7 @@ pub struct AmplifyDecl {
     pub span: Span,
 }
 
-/// `uses <name> : Geometry`, `uses <name> : Field`
+/// `uses <name> : Geometry`, `uses <name> : Field`, `uses <name> : Camera`
 ///
 /// **One input this node takes, named by the procedure and bound by the Set.**
 ///
@@ -712,7 +720,7 @@ pub struct AmplifyDecl {
 /// **The type decides every rule about it**, which is why it is written and
 /// carried rather than checked and dropped — see [`SlotTy`]. Which kinds may
 /// declare one, how many are legal, what an `edge` may bind it to and how it is
-/// read all differ between the two, and each of those refusals is a sentence
+/// read all differ between the three, and each of those refusals is a sentence
 /// about a type rather than about `uses`.
 #[derive(Debug, Clone)]
 pub struct UsesDecl {
@@ -733,12 +741,13 @@ pub struct UsesDecl {
 /// cost each such refusal one arm rather than a rewrite around a distinction
 /// nothing had drawn.
 ///
-/// The two differ in every rule that mentions them, which is the argument for
+/// The three differ in every rule that mentions them, which is the argument for
 /// the type being written down at all: a geometry slot is L2's alone and there
 /// is at most one, because a second bound element buffer is not built; a Field
 /// slot is legal on the four kinds that can evaluate one and there may be
 /// several, because a marcher wanting a shape and a cutter is the ordinary
-/// case.
+/// case; a Camera slot is L4's alone and there is at most one, because a
+/// renderer draws one picture and a picture is seen from one place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SlotTy {
     /// The elements of an L1, read beside the ones this node runs over.
@@ -752,6 +761,24 @@ pub enum SlotTy {
     /// language reserved. Reserving one is what capped a procedure at one
     /// field, and there is no reserved word left to cap it.
     Field,
+    /// **A viewpoint this renderer draws from** — a `kind L3` procedure, or the
+    /// built-in orbit, which is a node like any other so that an edge can name
+    /// it.
+    ///
+    /// Read as a *member* — `view.clip`, `view.eye`, `view.ray` — because a
+    /// camera is neither elements nor a function: it is one value with parts,
+    /// and the parts are the three derivations a renderer is handed. That
+    /// reuses `expr . ident` the way a geometry slot's read does, with one
+    /// difference that is the whole of what this variant cost the checker: the
+    /// members are resolved against the slot's *type*, where `far.position`
+    /// resolves against the attribute table.
+    ///
+    /// **The ambients it stands in for stay.** `camera`, `eye` and `ray` are
+    /// the Set's camera for a renderer that declares no slot — which is every
+    /// renderer written before this notation existed — and a renderer that
+    /// declares one is saying *which* camera, which is the question a Set with
+    /// several has no other way to be asked.
+    Camera,
 }
 
 impl SlotTy {
@@ -762,6 +789,7 @@ impl SlotTy {
         Some(match s {
             "Geometry" => SlotTy::Geometry,
             "Field" => SlotTy::Field,
+            "Camera" => SlotTy::Camera,
             _ => return None,
         })
     }
@@ -772,6 +800,7 @@ impl SlotTy {
         match self {
             SlotTy::Geometry => "Geometry",
             SlotTy::Field => "Field",
+            SlotTy::Camera => "Camera",
         }
     }
 }

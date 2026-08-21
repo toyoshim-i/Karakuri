@@ -65,9 +65,11 @@ of them — it produces a viewpoint, and what is drawn with it is the renderer's
 layer. `uses far : Geometry` is L2's alone and there is at most one, because a second bound
 element buffer per node is not built; `uses shape : Field` is legal on L1, L2, L3 and L4 —
 the four kinds that can evaluate a field — and several are legal, because a marcher wanting
-a shape and a cutter is the ordinary case. `amplify` and a *geometry* slot are refused
-together on one procedure: one node cannot both take a second geometry and return several
-copies of each element. A Field slot changes no count and is refused beside neither.
+a shape and a cutter is the ordinary case; `uses view : Camera` is L4's alone and there is
+at most one, because a renderer draws one picture and a picture is seen from one place.
+`amplify` and a *geometry* slot are refused together on one procedure: one node cannot both
+take a second geometry and return several copies of each element. A Field slot and a Camera
+slot change no count and are refused beside neither.
 
 **Each kind also has a declaration and a block it cannot do without**, and the refusal is by
 name at the header rather than by a missing symbol later:
@@ -148,22 +150,32 @@ uses far : Geometry
 
 kind L4
 uses shape : Field
+
+kind L4
+uses view : Camera
 ```
 
 **One named input a procedure takes, with a type that decides every rule about it.** The
 type is not decoration and never was: which kinds may declare one, how many are legal, what
-an `edge` may bind it to and how it is *read* all differ between the two, and each of those
-refusals is a sentence about a type rather than about `uses`.
+an `edge` may bind it to and how it is *read* all differ between the three, and each of
+those refusals is a sentence about a type rather than about `uses`.
 
-| | `Geometry` | `Field` |
-|---|---|---|
-| Legal on | L2 | L1, L2, L3, L4 |
-| How many | one | any number |
-| Bound to | an L1 | a `kind Field` procedure |
-| Read as | `far.position` — `expr . ident` | `shape(p)` — a call |
+| | `Geometry` | `Field` | `Camera` |
+|---|---|---|---|
+| Legal on | L2 | L1, L2, L3, L4 | L4 |
+| How many | one | any number | one |
+| Bound to | an L1 | a `kind Field` procedure | an L3, or the built-in camera |
+| Read as | `far.position` — `expr . ident` | `shape(p)` — a call | `view.clip` — `expr . ident` |
 
-Both are bound by an [`edge`](#set-file-format) and an unbound one is refused. What follows
-is the geometry slot; the Field slot is under [The `field` block](#the-field-block).
+All three are bound by an [`edge`](#set-file-format) and an unbound one is refused. What
+follows is the geometry slot; the Field slot is under [The `field` block](#the-field-block)
+and the Camera slot under [Several cameras](#several-cameras).
+
+**A Camera slot is the one whose members are resolved against its type.** `far.position` is
+read against the attribute table, because a geometry's parts *are* attributes; a camera's
+are not parts of anything else, so the checker asks the slot's declared type what members
+it has. That is the only cost the third type had, and it is the reason the type is written
+in the header rather than inferred from what an `edge` binds.
 
 #### A geometry slot (L2 only)
 
@@ -430,10 +442,10 @@ The only implicit values readable inside a block:
 | `dt` | `float` | fixed simulation step. Scaled on an element's first update — see [Spawn timing](#spawn-timing) | L1, L3 |
 | `copy` | `uint` | which copy of an amplified element this is, `0` where nothing upstream amplified — see [`amplify`](#amplify-l2-only) | L2, L4 |
 | `point` | `vec3` | the position a field is being asked about. The one input a field has | `field` block |
-| `camera` | `mat4` | view-projection matrix | L4 |
+| `camera` | `mat4` | view-projection matrix, of **the Set's camera** — the node at `L3:0`. A renderer that draws from another one declares a slot and reads `view.clip`; see [Several cameras](#several-cameras) | L4 |
 | `point_coord` | `vec2` | 0..1 across the primitive: within the sprite under `points`, along-by-across the stroke under `lines`, across the frame under `fullscreen` | L4 fragment |
-| `eye` | `vec3` | the camera's world-space position. `fullscreen` only | L4 fragment |
-| `ray` | `vec3` | unit direction from `eye` through this fragment. `fullscreen` only | L4 fragment |
+| `eye` | `vec3` | the Set's camera's world-space position, or `view.eye` through a slot. `fullscreen` only | L4 fragment |
+| `ray` | `vec3` | unit direction from `eye` through this fragment, or `view.ray` through a slot. `fullscreen` only | L4 fragment |
 
 `seed` is readable as well, but it is a carried attribute rather than an ambient value —
 see [Element identity](#element-identity). It is available **wherever there is an element**,
@@ -931,6 +943,71 @@ yet, because an L3 is allowed to hold state and smoothing is written against a s
 `eye` is also readable, as an ambient, in a marching L4's `fragment` block. One concept,
 written here and read there — the same relationship `position` has between an L1 and an L4.
 
+### Several cameras
+
+**A Set holds as many cameras as its files declare, and each renderer says which one it
+reads.** This was the last of the three inputs capped at one, and the cap was the same one
+the geometry and the field had: there was one, so it needed no name, so there could only be
+one. A renderer names it now:
+
+```
+proc lens {
+  kind  L4
+  blend additive
+
+  uses view : Camera
+
+  consumes position
+
+  vertex {
+    clip       = view.clip * vec4(position, 1.0);
+    point_size = 4.0;
+  }
+
+  fragment { color = vec4(1.0, 1.0, 1.0, 1.0); }
+}
+```
+
+and the Set says which camera fills it — `--edge lens.view=east`, or an
+[`edge`](#set-file-format) record.
+
+**Three members, and they are the three ambients under another name:**
+
+| Member | Type | The same value as | Readable in |
+|---|---|---|---|
+| `view.clip` | `mat4` | `camera` | any L4 stage |
+| `view.eye` | `vec3` | `eye` | a fullscreen L4's `fragment` |
+| `view.ray` | `vec3` | `ray` | a fullscreen L4's `fragment` |
+
+The stage rules are the ambients' own rather than a second set beside them: `eye` and `ray`
+are built by the ray prologue a fullscreen fragment stage opens with, so reaching them
+through a slot is not a way round the rule that a per-element renderer has no ray.
+
+**The three ambients stay, and they mean the Set's camera** — the node at `L3:0`. That is
+what every renderer written before this notation reads, and it keeps meaning exactly what it
+meant: a Set held one camera, so "the Set's" and "the one there is" were the same sentence.
+A renderer that declares a slot is saying *which*, which is the question a Set of several has
+no other way to be asked.
+
+**The built-in orbit is a node.** A Set whose files declare no `kind L3` holds one camera all
+the same, produced from the `camera` record's six numbers, and it is called `orbit` so that an
+edge can name it: `--edge lens.view=orbit`. It was a field on the Set before, which is why a
+renderer could draw from it only by saying nothing — one fact with two shapes, and the shape
+without a name was the one that could not be pointed at. So `L3:0` addresses something in
+every Set now, `node_names` has an entry for it, and the parameter map beside it is empty,
+because the built-in is a node rather than a procedure.
+
+**Fan-out needs no rule.** Two renderers naming one camera is the ordinary case — one
+viewpoint drawn two ways — and what is refused is two edges into one *slot*, which is one
+renderer with two answers about where it is looking from. A renderer may declare at most one
+Camera slot: a frame drawn from two viewpoints is two renderers.
+
+**What an L4 still cannot read is the other four values a camera writes** — `target`, `up`,
+`fov_y`, `near` and `far`. Those are a new capability rather than a new spelling for an old
+one, and they are deferred for the reason [L3 — the camera](#l3--the-camera) gives: an L3
+produces state, not a matrix, and handing a renderer the state is a decision about what a
+camera *is* to a renderer. See `docs/roadmap.md`.
+
 ### The `field` block
 
 A `kind Field` procedure is a signed distance function: it is handed a position and returns
@@ -993,10 +1070,11 @@ plumbing followed, and it was a `Vec` where the `Option`s were rather than a des
 holds a list of fields, each is a node with a name for an edge to point at and an address of
 its own (`--param Field:1:radius`), and a Set file writes one `slot` record per field.
 
-**The camera is still one per Set, and that is a rule rather than a cap.** The two were
-written down together and they part here: a Set is a grouping around one viewpoint, so two
-cameras is a graph and an L5 is what composites one; nothing corresponding is true of shapes,
-and a marcher taking a shape and a cutter is the ordinary case.
+**The camera followed, and the rule it was said to have turned out to be the same cap.**
+"A Set is a grouping around one viewpoint" is what this document said the day the field's
+cap came off, and it did not survive the notation: a renderer declares [`uses view :
+Camera`](#uses) and an `edge` says which camera fills it, so a Set holds as many as its
+files declare — see [Several cameras](#several-cameras).
 
 #### Evaluating one
 
@@ -1727,8 +1805,10 @@ known. The total-cost decision lives there, not in the artifact.
 {"t":"seed","stream":"L1","index":1,"value":48113}
 ```
 
-**One `slot` record per node, in node order** — the geometries, the deformers, the camera,
-the renderers, then the field. The chain above is two geometries, a morph between them and
+**One `slot` record per node, in node order** — the geometries, the deformers, the cameras,
+the renderers, then the fields. **The built-in camera has no `slot` record**, because it has
+no procedure to reference: it is the last node of the L3 layer in every Set, and the `camera`
+record below is what describes it. The chain above is two geometries, a morph between them and
 two renderers over the result; a Set of one geometry and one renderer is the two `slot` lines
 it always was. Only `near` was written down: the other four names are derived from their
 procedures where the Set is built, which is why the `edge` can name `morph` and `sphere_shell`
@@ -1749,12 +1829,13 @@ without either appearing in the file.
   rather than resolved. See "Naming a source, on the terms HTML gives an `id`".
 - **`edge` binds one node's declared input slot to another node**, and is **the one record
   addressed by name at both ends**. A procedure declares what it takes and never which node
-  supplies it — `uses far : Geometry`, `uses shape : Field`, see [above](#uses) — because a
-  `.kir` that named a node would be coupled to one Set. This is the other half, and it lives
+  supplies it — `uses far : Geometry`, `uses shape : Field`, `uses view : Camera`, see
+  [above](#uses) — because a `.kir` that named a node would be coupled to one Set. This is the other half, and it lives
   here for the same reason a `slot`'s name does: an edge belongs to the *use*, and a Set file
   is what a use is recorded as. `--edge morph.far=sphere_shell` writes one, and
-  `--edge field_lens.shape=melt_blob` writes the other kind — one record for both, because
-  what an edge says is the same fact whatever the slot takes.
+  `--edge field_lens.shape=melt_blob` and `--edge lens.view=orbit` write the other two —
+  one record for all three, because what an edge says is the same fact whatever the slot
+  takes.
 
   It cannot use `(layer, index)`: a position moves when the list is reordered, and reordering
   silently changing which geometry a morph blends towards is the failure this record exists
@@ -1789,6 +1870,18 @@ without either appearing in the file.
   in the order the records appear. It needed no new record to say so — a second one is a
   second renderer rather than a correction of the first. A file with one reads exactly as it
   always did.
+- **Several on `L3` is several cameras**, and which renderer reads which is an `edge`. The
+  format could always say it; what could not was the engine, and this loader read the first
+  and reported the rest as skipped. See [Several cameras](#several-cameras).
+- **`camera` carries an `index`** — `{"t":"camera","kind":"orbit","index":0,…}` — on the
+  `slot` rule rather than the `param` one: it describes one producer, and "every camera at
+  radius 9" is not something a camera has ever said. Absent means 0 and 0 is not written, so
+  every file ever written round-trips byte for byte and keeps meaning what it meant. **The
+  built-in orbit is the node after the camera procedures** — `L3:0` in a file that names
+  none, which is every file written before they could be named — and it is the only node such
+  a record can be about, since a camera that is a procedure writes its own six numbers every
+  frame. An index naming one of those is reported and skipped rather than applied to a node
+  that would overwrite it.
 - `param` and `bind` are keyed by `layer` in the record, and the engine holds one value per
   **node**. A name two procedures both declare is two values, each reaching the node that
   declared it — which it had to become, since every L4 in `examples/` declares `exposure`
@@ -2454,11 +2547,11 @@ L3` file is a node, and the `camera` record is what a Set says when it has none 
 the built-in orbit. The expectations that settled it are dynamic — follow an element, jump on
 the beat while facing the centre — and a record with two numbers in it cannot carry either.
 
-**What is not built is the fan-out this section describes.** A Set holds at most one L3 and
-every renderer in it looks through that one, so "two L4s reading different L3s" is a shape the
-code cannot spell. It is capped for the reason a field is: the binding notation exists — a
-procedure declares a named input and a Set's [`edge`](#set-file-format) fills it — and this
-layer does not use it yet. See `docs/roadmap.md`, "Naming what a Set holds".
+**The fan-out this section describes is built**, and it needed nothing this section did not
+already predict: a renderer declares [`uses view : Camera`](#uses), an `edge` names which
+camera fills it, and two L4s bound to one camera are one viewpoint drawn two ways. Sharing
+needed no rule — `SlotBoundTwice` forbids two edges into one *slot*, which is as right for a
+camera as for a geometry. See [Several cameras](#several-cameras).
 
 #### What an L3 can point at: a reduction, or element zero — M4
 

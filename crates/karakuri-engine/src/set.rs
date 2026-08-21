@@ -19,11 +19,13 @@
 //! its own.
 //!
 //! **The camera was on that list and no longer is.** A Set still owns the
-//! `Orbit` that produces it, because a `camera` record and a Set file both set
-//! one from outside — but what a renderer reads is a GPU buffer owned by
-//! [`crate::node::Camera`], derived in a pass. `L4 : (Geometry, Camera) ->
-//! Texture` makes it an input edge, and it stopped being handed down the moment
-//! it became one.
+//! `Orbit` that produces the built-in one, because a `camera` record and a Set
+//! file both set it from outside — but what a renderer reads is a GPU buffer
+//! owned by [`crate::node::Camera`], derived in a pass. `L4 : (Geometry,
+//! Camera) -> Texture` makes it an input edge, and it stopped being handed down
+//! the moment it became one. **There are as many as the Set's files declare**,
+//! and which renderer reads which is an `edge` — including the built-in, which
+//! is a node with a name for exactly that reason.
 //!
 //! One node of each kind today, and a list is what several renderers over one
 //! geometry will be. **Three places still reach into a node**, and each is a
@@ -61,6 +63,18 @@ use crate::video_source::VideoSource;
 /// advisory: each substep needs its own spawn-count entry, and that array is
 /// sized once, at build time.
 pub const MAX_STEPS: u8 = 4;
+
+/// **What the built-in camera is called when nobody named it.**
+///
+/// Every node has a name so that an `edge` can point at it, and a name that is
+/// derived is derived from the procedure — which the built-in has not got. So
+/// it is written down once, here, rather than in the caller that needs to spell
+/// it: `--edge lens.view=orbit` is the whole of how a renderer says it draws
+/// from the camera a Set has when its files declare none.
+///
+/// Disambiguated like any other derived name, so a Set holding a `proc orbit`
+/// beside it has an `orbit` and an `orbit-2` rather than a collision.
+pub const BUILTIN_CAMERA: &str = "orbit";
 
 /// **What one node allocated to hold elements, and how many elements those
 /// bytes cover.**
@@ -405,6 +419,27 @@ pub enum SetError {
         /// are different mistakes, and this is where they read differently.
         fields: String,
     },
+    /// An edge whose far end names a node that is not a camera.
+    ///
+    /// **A third sibling**, on the terms the second one set out: what helps is
+    /// this Set's *cameras*, which is a different list again, and a statement
+    /// about what a `: Camera` slot takes. The list is never empty — every Set
+    /// holds at least the built-in — so this one has no "holds none" half to
+    /// say.
+    #[error(
+        "`{node}.{slot}` is bound to `{to}`, which is {layer}\n\
+         hint: a slot declared `: Camera` takes an L3 or the built-in camera — \
+         this Set's are: {cameras}"
+    )]
+    EdgeToNotCamera {
+        node: String,
+        slot: String,
+        to: String,
+        /// What the bound node is, article and all — "an L4", say.
+        layer: &'static str,
+        /// The cameras this Set holds, by name.
+        cameras: String,
+    },
     /// Two edges binding one slot.
     ///
     /// Refused rather than last-one-wins, on [`SetError::DuplicateNodeName`]'s
@@ -708,16 +743,26 @@ pub struct Set {
     /// Nothing else in the engine reads it — the ranges are the console's and
     /// the agent's, and no uniform write is clamped by them.
     ranges: Vec<HashMap<String, [f32; 2]>>,
-    /// **The producer of the camera state**, and the only one there is until an
-    /// L3 can be a procedure. Public because a `camera` record and a Set file
-    /// both set it from outside; the six numbers it produces reach a renderer
-    /// through [`Set::camera_node`] and never directly.
+    /// **The producer of the built-in camera's state.** Public because a
+    /// `camera` record and a Set file both set it from outside; the six numbers
+    /// it produces reach a renderer through the camera node below and never
+    /// directly.
+    ///
+    /// **One, because a Set holds one built-in camera**: the last camera node
+    /// is the orbit, whatever else the Set's files declared, and it is the only
+    /// one whose six numbers come from outside. See [`Set::cameras`].
     pub camera: Orbit,
-    /// **The camera edge.** Written from `camera` above every frame, derived on
-    /// the GPU, and read by every renderer that projects or marches — see
-    /// [`crate::node::Camera`] for why the derivation is a pass rather than host
-    /// arithmetic.
-    camera_node: crate::node::Camera,
+    /// **The camera edges, one per camera node**, in the order they are
+    /// addressed as `L3:n`. Written every frame, derived on the GPU, and each
+    /// read by the renderers bound to it — see [`crate::node::Camera`] for why
+    /// the derivation is a pass rather than host arithmetic.
+    ///
+    /// **Never empty, and the last one is always the built-in orbit above.**
+    /// The alternative — a built-in that exists only where no procedure does —
+    /// is a camera that is a node in some Sets and a field on this struct in
+    /// others, which is one fact with two shapes and was exactly what stopped
+    /// an `edge` naming it.
+    cameras: Vec<crate::node::Camera>,
     /// **The L5 node, when the Set has one.** `None` is overdraw: the renderers
     /// run in order over the one attachment. `Some` is compositing: each gets a
     /// cleared target of its own and this folds them — see
@@ -876,7 +921,11 @@ pub struct Edge {
 pub struct Wiring<'a> {
     pub l1s: &'a [Option<String>],
     pub l2s: &'a [Option<String>],
-    pub l3: Option<&'a str>,
+    /// **A list, on the same terms as the renderers**, and one entry longer
+    /// than the procedures where a Set has none: the built-in camera is a node
+    /// and a caller may name it like any other. What it is called when nobody
+    /// does is [`BUILTIN_CAMERA`].
+    pub l3s: &'a [Option<String>],
     pub l4s: &'a [Option<String>],
     /// **A list, on the same terms as the renderers.** A Set holds as many
     /// fields as the files it was given declare, and each of them is a node
@@ -952,7 +1001,7 @@ impl Set {
             queue,
             &[(l1, capacity)],
             &[],
-            None,
+            &[],
             &[],
             &[l4],
             Layering::Overdraw,
@@ -1024,7 +1073,7 @@ impl Set {
         queue: &wgpu::Queue,
         l1s: &[(&Checked, u32)],
         l2s: &[&Checked],
-        l3: Option<&Checked>,
+        l3s: &[&Checked],
         fields: &[&Checked],
         l4s: &[&Checked],
         layering: Layering,
@@ -1034,7 +1083,7 @@ impl Set {
     ) -> Result<Set, SetError> {
         device.push_error_scope(wgpu::ErrorFilter::Validation);
         let built = Set::build_inner(
-            device, queue, l1s, l2s, l3, fields, l4s, layering, seed_salt, salts, wiring,
+            device, queue, l1s, l2s, l3s, fields, l4s, layering, seed_salt, salts, wiring,
         );
         // **Popped on every path**, which is why the body is a second function
         // rather than this one: it returns early in a dozen places, and a scope
@@ -1067,7 +1116,7 @@ impl Set {
         queue: &wgpu::Queue,
         l1s: &[(&Checked, u32)],
         l2s: &[&Checked],
-        l3: Option<&Checked>,
+        l3s: &[&Checked],
         fields: &[&Checked],
         l4s: &[&Checked],
         layering: Layering,
@@ -1101,32 +1150,65 @@ impl Set {
         // every node has one: a node nothing can address is a node nothing can
         // point a mask, a `--param` or a rebuild at.
         let given = |at: usize, from: &[Option<String>]| from.get(at).cloned().flatten();
-        let wanted: Vec<(Option<String>, &Checked)> = l1s
+        // **The camera nodes**: one per L3 procedure, and then the built-in
+        // orbit, which every Set has.
+        //
+        // `None` is that orbit, and it is a *node* here rather than a field on
+        // the Set for one reason: an edge points at names, so a camera nothing
+        // can name is a camera no renderer can be bound to. **Unconditional,
+        // and last.** Conditional on there being no procedure is the shape this
+        // whole commit removes — "if there is exactly one, use it" wearing a
+        // different hat — and it would make a renderer's right to draw from the
+        // orbit depend on which *other* files the Set was given. Last, so that
+        // `L3:0` is the first procedure where there is one and every address a
+        // Set file ever recorded still names what it named.
+        //
+        // A Set with no procedure at all therefore addresses one camera at
+        // `L3:0` where it addressed none, and [`Set::params`] grows an entry
+        // beside it in the same motion — see where the maps are built, and
+        // `docs/ir-spec.md`, "Several cameras".
+        let cameras: Vec<Option<&Checked>> = l3s
+            .iter()
+            .copied()
+            .map(Some)
+            .chain(std::iter::once(None))
+            .collect();
+        let wanted: Vec<(Option<String>, Option<&Checked>)> = l1s
             .iter()
             .enumerate()
-            .map(|(at, (l1, _))| (given(at, wiring.l1s), *l1))
+            .map(|(at, (l1, _))| (given(at, wiring.l1s), Some(*l1)))
             .chain(
                 l2s.iter()
                     .enumerate()
-                    .map(|(at, n)| (given(at, wiring.l2s), *n)),
+                    .map(|(at, n)| (given(at, wiring.l2s), Some(*n))),
             )
-            .chain(l3.map(|n| (wiring.l3.map(str::to_string), n)))
+            .chain(
+                cameras
+                    .iter()
+                    .enumerate()
+                    .map(|(at, n)| (given(at, wiring.l3s), *n)),
+            )
             .chain(
                 l4s.iter()
                     .enumerate()
-                    .map(|(at, n)| (given(at, wiring.l4s), *n)),
+                    .map(|(at, n)| (given(at, wiring.l4s), Some(*n))),
             )
             .chain(
                 fields
                     .iter()
                     .enumerate()
-                    .map(|(at, n)| (given(at, wiring.fields), *n)),
+                    .map(|(at, n)| (given(at, wiring.fields), Some(*n))),
             )
             .collect();
         // **The procedures, in node order**, so that an edge resolved against a
         // name can ask the node it found what it declares. `wanted` is consumed
         // deriving the names below, and this is the half of it the edges need.
-        let nodes: Vec<&Checked> = wanted.iter().map(|(_, n)| *n).collect();
+        //
+        // **`None` is the built-in camera**, which is the one node in a Set
+        // that is not a procedure: it declares no slots, no params and no
+        // attributes, so every walk below reads it as a node with nothing to
+        // say rather than as a special case.
+        let nodes: Vec<Option<&Checked>> = wanted.iter().map(|(_, n)| *n).collect();
         // **Every written name is taken first, and the rest are derived
         // against what is already taken.** Doing it in one pass would let a
         // derived `lens` claim the name a written one further down the list
@@ -1148,11 +1230,17 @@ impl Set {
                 // twice; a caller that wants to know what a node ended up
                 // called asks [`Set::node_names`].
                 None => {
-                    let mut candidate = node.name.clone();
+                    // **The built-in camera's own**, since it has no procedure
+                    // to take one from — and it is disambiguated against
+                    // everything else exactly as a procedure's is, so a Set
+                    // holding a `proc orbit` beside it still has two names.
+                    let mut candidate =
+                        node.map_or(BUILTIN_CAMERA, |n| n.name.as_str()).to_string();
                     let mut at = 1;
                     while taken.contains(&candidate) {
                         at += 1;
-                        candidate = format!("{}-{at}", node.name);
+                        candidate =
+                            format!("{}-{at}", node.map_or(BUILTIN_CAMERA, |n| n.name.as_str()));
                     }
                     taken.push(candidate.clone());
                     candidate
@@ -1174,6 +1262,15 @@ impl Set {
         // the end rather than counted from the start: everything before it is
         // already what the arithmetic above is written in terms of.
         let field_range = names.len() - fields.len()..names.len();
+        // **Between the deformations and the renderers**, where a camera's
+        // place in the node order has always been. A run rather than a
+        // position, and never empty.
+        let camera_range = l1s.len() + l2s.len()..l1s.len() + l2s.len() + cameras.len();
+        // Which camera a node index is, counting from zero — the ordinal
+        // `L3:1` names, and `None` for a node that is not one.
+        let camera_ordinal =
+            |at: usize| camera_range.contains(&at).then(|| at - camera_range.start);
+        let holds_cameras = || names[camera_range.clone()].join(", ");
         // Which field a node index is, counting from zero — the ordinal
         // `--param Field:1:x` names, and `None` for a node that is not one.
         let field_ordinal = |at: usize| field_range.contains(&at).then(|| at - field_range.start);
@@ -1188,8 +1285,8 @@ impl Set {
                 "an L1"
             } else if at < l1s.len() + l2s.len() {
                 "an L2"
-            } else if l3.is_some() && at == l1s.len() + l2s.len() {
-                "an L3"
+            } else if camera_range.contains(&at) {
+                "a camera"
             } else if field_range.contains(&at) {
                 "a field"
             } else {
@@ -1211,7 +1308,12 @@ impl Set {
             // so an edge naming a renderer's is an ordinary edge and refusing
             // it as "declares no slot" would be a refusal about the wrong
             // thing.
-            let declared = &nodes[at].uses;
+            // **The built-in camera declares nothing**, which is the honest
+            // answer rather than a special case: it is a node with no
+            // procedure, so an edge naming a slot on it is an edge naming a
+            // slot nothing declares.
+            let declared: &[karakuri_ir::typed::Slot] =
+                nodes[at].map_or(&[], |n| n.uses.as_slice());
             if !declared.iter().any(|slot| slot.name == edge.slot) {
                 return Err(SetError::NoSuchSlot {
                     node: edge.node.clone(),
@@ -1357,6 +1459,7 @@ impl Set {
         // twice.
         let mut field_bound: Vec<(usize, String, usize)> = Vec::new();
         for (at, node) in nodes.iter().enumerate() {
+            let Some(node) = node else { continue };
             for slot in node
                 .uses
                 .iter()
@@ -1396,6 +1499,77 @@ impl Set {
                             to: edge.to.clone(),
                             layer: layer_of(other),
                             fields: holds_fields(),
+                        })
+                    }
+                    None => {
+                        return Err(SetError::EdgeToUnknown {
+                            node: node_name,
+                            slot: slot.name.clone(),
+                            to: edge.to.clone(),
+                            holds: holds(),
+                        })
+                    }
+                }
+            }
+        }
+        // **Every Camera slot on every node, bound by an edge or refused** —
+        // the same walk as the one above and for the same reasons, over a slot
+        // type that is legal on one kind rather than four.
+        //
+        // **Unbound is refused rather than filled in from the Set's first
+        // camera**, which is the rule this whole notation exists to remove: "if
+        // there is exactly one, use it" is what a Set of one camera could get
+        // away with, and a renderer that meant the Set's camera says so by
+        // declaring no slot at all. The two spellings are the difference
+        // between a picture that is right by luck and one that is right by
+        // being written down.
+        //
+        // **What it leaves behind is which camera each renderer reads.** A
+        // renderer with no slot reads camera 0 — the Set's — and that is where
+        // the `camera`, `eye` and `ray` ambients have always pointed.
+        let mut camera_bound: Vec<(usize, usize)> = Vec::new();
+        for (at, node) in nodes.iter().enumerate() {
+            let Some(node) = node else { continue };
+            for slot in node
+                .uses
+                .iter()
+                .filter(|s| s.ty == karakuri_ir::SlotTy::Camera)
+            {
+                let node_name = names[at].clone();
+                let mut bound = wiring
+                    .edges
+                    .iter()
+                    .filter(|e| e.node == node_name && e.slot == slot.name);
+                let Some(edge) = bound.next() else {
+                    return Err(SetError::SlotUnbound {
+                        node: node_name,
+                        slot: slot.name.clone(),
+                        takes: slot.ty.name(),
+                        holds: holds(),
+                    });
+                };
+                // **Two renderers naming one camera is the ordinary case and
+                // needs no rule** — that is fan-out, and it is what one
+                // viewpoint drawn two ways is. What is refused here is two
+                // edges into *one slot*, which is one renderer with two
+                // answers to where it is looking from.
+                if let Some(second) = bound.next() {
+                    return Err(SetError::SlotBoundTwice {
+                        node: node_name,
+                        slot: slot.name.clone(),
+                        first: edge.to.clone(),
+                        second: second.to.clone(),
+                    });
+                }
+                match node_at(&edge.to).map(|to| (to, camera_ordinal(to))) {
+                    Some((_, Some(ordinal))) => camera_bound.push((at, ordinal)),
+                    Some((other, None)) => {
+                        return Err(SetError::EdgeToNotCamera {
+                            node: node_name,
+                            slot: slot.name.clone(),
+                            to: edge.to.clone(),
+                            layer: layer_of(other),
+                            cameras: holds_cameras(),
                         })
                     }
                     None => {
@@ -1492,6 +1666,7 @@ impl Set {
                 .iter()
                 .enumerate()
                 .filter(|(at, _)| !field_range.contains(at))
+                .filter_map(|(at, n)| n.map(|n| (at, n)))
             {
                 // **Asked per slot, and answered by whichever field that slot
                 // is bound to.** A shape and a cutter are two procedures with
@@ -1537,9 +1712,11 @@ impl Set {
         // about it. The search this replaced could only report the *caller*,
         // because a call carried no name to report.
 
-        // **One camera for the whole Set**, however many sources — sharing is
-        // edge fan-out and needs no rule.
-        if let Some(l3) = l3 {
+        // **As many cameras as the Set's files declare**, on the terms its
+        // fields and its renderers already had: several is a Set watched from
+        // several places at once, and which renderer reads which is the edge's
+        // answer rather than the list's.
+        for l3 in l3s {
             if l3.kind != Kind::L3 {
                 return Err(SetError::WrongKind {
                     slot: "L3",
@@ -1548,16 +1725,17 @@ impl Set {
                 });
             }
         }
-        // **The L3's own slots, and nothing where there is no L3.** With no
-        // camera procedure the position `l1s.len() + l2s.len()` is the first
-        // renderer's, so asking for it unconditionally would hand the built-in
-        // orbit a renderer's bindings — unread today, and the kind of unread
-        // that stops being unread quietly.
-        let camera_bound = match l3 {
-            Some(_) => bound_at(l1s.len() + l2s.len()),
-            None => Vec::new(),
-        };
-        let camera_node = crate::node::Camera::build(device, l3, &camera_bound);
+        // **Each camera's own field bindings, asked at its own node index.**
+        // `bound_at` is keyed by node, and the built-in's index holds a node
+        // that declares nothing — so this is the same call for both kinds of
+        // camera and comes back empty for the one with no procedure.
+        let camera_nodes: Vec<crate::node::Camera> = cameras
+            .iter()
+            .enumerate()
+            .map(|(k, l3)| {
+                crate::node::Camera::build(device, *l3, &bound_at(camera_range.start + k))
+            })
+            .collect();
 
         // **Everything below is per source**, because everything below depends
         // on what that source emits: which attributes are derived, which the
@@ -1898,10 +2076,11 @@ impl Set {
             // — see [`crate::node::Renderer`] — including the blend-mode rule that
             // needs both halves in hand. They all read the same edge, which is the
             // whole point: one simulation, several ways of looking at it.
-            // **One camera node, however many renderers.** Sharing is edge fan-out
-            // and needs no rule: two L4s reading one camera are one viewpoint drawn
-            // two ways. Two reading *different* cameras is a graph, which is what an
-            // L5 is for and not what a Set is.
+            // **Which camera each one reads is the edge's answer.** Sharing
+            // needs no rule — two L4s bound to one camera are one viewpoint
+            // drawn two ways, which is ordinary fan-out — and a renderer that
+            // declares no slot reads camera 0, the Set's, which is what
+            // `camera`, `eye` and `ray` have always meant.
             let renderers: Vec<Renderer> = {
                 let from = sim.geometry();
                 let (alive, counts) = match live {
@@ -1915,17 +2094,16 @@ impl Set {
                     None => sim.geometry(),
                     Some(last) => last.geometry(alive, counts),
                 };
-                let first_l4 = l1s.len() + l2s.len() + usize::from(l3.is_some());
+                let first_l4 = camera_range.end;
                 l4s.iter()
                     .enumerate()
                     .map(|(k, l4)| {
-                        Renderer::build(
-                            device,
-                            l4,
-                            &geometry,
-                            &camera_node,
-                            &bound_at(first_l4 + k),
-                        )
+                        let at = first_l4 + k;
+                        let camera = camera_bound
+                            .iter()
+                            .find(|(node, _)| *node == at)
+                            .map_or(0, |(_, ordinal)| *ordinal);
+                        Renderer::build(device, l4, &geometry, &camera_nodes[camera], &bound_at(at))
                     })
                     .collect()
             };
@@ -1958,7 +2136,13 @@ impl Set {
             .iter()
             .map(|(l1, _)| map(l1))
             .chain(l2s.iter().map(|n| map(n)))
-            .chain(l3.map(map))
+            // **One map per camera node, including the built-in's**, which is
+            // empty: it is not a procedure and declares no params. Empty rather
+            // than absent is the whole of what makes this list addressable —
+            // `slot_of` sums the layers before it, so a Set whose camera
+            // contributed no entry would put the first renderer's map at the
+            // camera's index and hand every `L4:n` the node before it.
+            .chain(cameras.iter().map(|n| n.map(map).unwrap_or_default()))
             .chain(l4s.iter().map(|n| map(n)))
             // **Last, and by declared name.** The prefix belongs to the WGSL
             // spelling and to nothing else: an operator writes
@@ -1977,7 +2161,7 @@ impl Set {
             .iter()
             .map(|(l1, _)| declared(l1))
             .chain(l2s.iter().map(|n| declared(n)))
-            .chain(l3.map(declared))
+            .chain(cameras.iter().map(|n| n.map(declared).unwrap_or_default()))
             .chain(l4s.iter().map(|n| declared(n)))
             .chain(fields.iter().map(|n| declared(n)))
             .collect();
@@ -2006,17 +2190,17 @@ impl Set {
             // that cannot be scrubbed to, and the conjunction is what says so.
             closed_form: l1s.iter().all(|(n, _)| n.closed_form)
                 && l2s.iter().all(|n| n.closed_form)
-                && l3.is_none_or(|n| n.closed_form)
+                && l3s.iter().all(|n| n.closed_form)
                 && l4s.iter().all(|n| n.closed_form),
             reads_beats: l1s.iter().any(|(n, _)| n.reads_beats)
                 || l2s.iter().any(|n| n.reads_beats)
-                || l3.is_some_and(|n| n.reads_beats)
+                || l3s.iter().any(|n| n.reads_beats)
                 || l4s.iter().any(|n| n.reads_beats),
             sources,
             params,
             ranges,
             camera: Orbit::default(),
-            camera_node,
+            cameras: camera_nodes,
             // **Built at one texel and resized before anything draws.** A Set
             // is built before it is sized — `Set::resize` is a separate call
             // and `viewport` starts at `[1, 1]` — so allocating at the frame
@@ -2067,8 +2251,10 @@ impl Set {
         // frame with no diagnostic. Every path that draws writes this first, so
         // nothing depends on it; it costs 64 bytes once and removes a shape of
         // failure that would only ever appear in a caller's test.
-        set.camera_node.write_state(queue, &set.camera.state(0.0));
-        set.camera_node.write_canvas(queue, 1.0);
+        for camera in &set.cameras {
+            camera.write_state(queue, &set.camera.state(0.0));
+            camera.write_canvas(queue, 1.0);
+        }
         // **After the simulation's own initialisation**, because what it primes
         // is a function of that. See [`Set::prime`].
         set.prime(device, queue);
@@ -2322,10 +2508,10 @@ impl Set {
                 .iter()
                 .map(|d| d.param_names())
                 .collect(),
-            Kind::L3 => match self.camera_node.node_count() {
-                0 => Vec::new(),
-                _ => vec![self.camera_node.param_names()],
-            },
+            // **One entry per camera node**, so that `L3:1:dist` is checked
+            // against the second camera's declarations. The built-in's is
+            // empty — it is a node and not a procedure.
+            Kind::L3 => self.cameras.iter().map(|c| c.param_names()).collect(),
             // **One "node" that is no node at all.** A field has no pass and no
             // buffers, and its params are still declared, addressable, and an
             // operator's to ride — so what is returned here is the list the
@@ -2474,7 +2660,7 @@ impl Set {
         match layer {
             Kind::L1 => self.l1_count,
             Kind::L2 => first.deforms.len(),
-            Kind::L3 => self.camera_node.node_count(),
+            Kind::L3 => self.cameras.len(),
             Kind::L4 => first.renderers.len(),
             Kind::Field => self.field_count,
         }
@@ -2489,15 +2675,15 @@ impl Set {
             // them, and the same defect: an origin that happens to be a
             // constant is an origin nobody notices stopping being one.
             Kind::L2 => self.l1_count,
-            // **An L3's place is between the deformations and the renderers**,
-            // and there is at most one — a Set is a grouping around one
-            // viewpoint. A Set whose camera is the built-in has none at all, so
-            // this and `L4` name the same slot and `nodes_of` hands back an
-            // empty range: a `--param L3:…` then reaches no node and is reported
-            // as reaching none, which is the answer a name no procedure declares
-            // already gets.
+            // **An L3's place is between the deformations and the
+            // renderers**, and there is at least one: a Set whose camera is the
+            // built-in holds it as a node like any other, so `L3:0` addresses
+            // something in every Set. It used to address nothing there, and
+            // `L4` began at the same slot — which made `slot_of(L3)` a name for
+            // the first renderer's map and was carefully worked around at every
+            // reader rather than fixed here.
             Kind::L3 => self.l1_count + self.procedures(Kind::L2),
-            Kind::L4 => self.l1_count + self.procedures(Kind::L2) + self.camera_node.node_count(),
+            Kind::L4 => self.l1_count + self.procedures(Kind::L2) + self.procedures(Kind::L3),
             // **Last, and it addresses nodes that do not exist.** A field has
             // no pass and no buffers — it lowers into whoever evaluates it — so
             // what the slot points at is a parameter map and nothing else. That
@@ -2509,7 +2695,7 @@ impl Set {
             Kind::Field => {
                 self.l1_count
                     + self.procedures(Kind::L2)
-                    + self.camera_node.node_count()
+                    + self.procedures(Kind::L3)
                     + self.procedures(Kind::L4)
             }
         }
@@ -2521,9 +2707,10 @@ impl Set {
         match layer {
             Kind::L1 => start..start + self.l1_count,
             Kind::L2 => start..start + self.procedures(Kind::L2),
-            // Zero or one: the built-in camera is a field on this struct rather
-            // than a node, and has no parameter map to address.
-            Kind::L3 => start..start + self.camera_node.node_count(),
+            // At least one, because the built-in camera is a node too — it
+            // declares no params, so the map at its index is empty and an
+            // address into it reaches a node that holds nothing.
+            Kind::L3 => start..start + self.procedures(Kind::L3),
             Kind::L4 => start..self.params.len() - self.field_count,
             // One per field, and empty for a Set with none — on the same terms
             // `L3` is empty for a Set with no camera procedure: the kind is
@@ -3085,51 +3272,58 @@ impl Set {
         // Read before the borrow: `time` takes `&self` and each node's packer
         // takes `&mut` its own scratch, but `param` below borrows this Set.
         let t = self.time();
-        // **The camera's edge, not a renderer's field.** This goes in here
-        // rather than into each uniform because there is one camera and several
-        // readers; the aspect ratio goes with it because a renderer no longer
-        // knows what projection it is drawing under. Both are writes rather than
+        // **The cameras' edges, not a renderer's field.** These go in here
+        // rather than into each uniform because a camera has several readers;
+        // the aspect ratio goes with them because a renderer no longer knows
+        // what projection it is drawing under. Both are writes rather than
         // passes — the derivation is recorded in [`Set::draw`].
         //
         // Which producer gets written is the node's decision and not this
         // one's: a Set hands down the frame and the built-in's six numbers, and
         // an L3 uses the first while the orbit uses the second.
-        self.camera_node
-            .write_canvas(queue, self.viewport[0] / self.viewport[1]);
         if let Some(merge) = &self.merge {
             merge.write_uniform(queue, &self.edges);
         }
         {
-            // **`nodes_of` rather than `slot_of`**, because there may be no
-            // camera node at all: with no L3 the two layers share a slot number,
-            // so `slot_of(L3)` names the first *renderer's* parameter map. It is
-            // unread today — the built-in producer declares no params and never
-            // calls this closure — and it would become a renderer's `exposure`
-            // arriving as the orbit's `radius` the moment the built-in took one.
-            let at = self.nodes_of(Kind::L3).next();
+            // **Every camera, each against its own parameter map.** The index
+            // is the node's, so a Set of two writes `L3:0`'s params into the
+            // first and `L3:1`'s into the second — one address, one producer,
+            // however many renderers read it.
+            //
+            // **`slot_of` rather than an arithmetic of its own**, and it is
+            // sound now in a way it was not: the camera layer is never empty,
+            // so `slot_of(L3)` names a camera's map rather than the first
+            // renderer's. That was the hazard this block used to work around.
+            let first = self.slot_of(Kind::L3);
+            let aspect = self.viewport[0] / self.viewport[1];
             let field_range = self.nodes_of(Kind::Field);
-            let (bindings, params, dt, field_params, field_bound, field_maps) = (
+            let (bindings, dt, field_params, field_bound, field_maps, viewport, beats, salt) = (
                 &self.bindings,
-                at.and_then(|at| self.params.get(at)),
                 self.dt,
                 &self.field_params,
                 &self.field_bound,
                 &self.params[field_range.clone()],
+                self.viewport,
+                self.last_beats,
+                self.seed_salt,
             );
-            let view = crate::node::View {
-                t,
-                beats: self.last_beats,
-                seed_salt: self.seed_salt,
-                viewport: self.viewport,
-                field_params,
-                // A Set with no camera procedure reaches no field from one, so
-                // an absent node resolves nothing rather than resolving as some
-                // other node's.
-                field_value: &|name: &str| field_value(field_bound, field_maps, at?, name),
-                param: &|name: &str| params.and_then(|p| effective(bindings, p, Kind::L3, 0, name)),
-            };
             let fallback = self.camera.state(t);
-            self.camera_node.prepare(queue, &view, dt, &fallback);
+            let params = &self.params[first..];
+            for (at, (camera, params)) in self.cameras.iter_mut().zip(params).enumerate() {
+                camera.write_canvas(queue, aspect);
+                let view = crate::node::View {
+                    t,
+                    beats,
+                    seed_salt: salt,
+                    viewport,
+                    field_params,
+                    field_value: &|name: &str| {
+                        field_value(field_bound, field_maps, first + at, name)
+                    },
+                    param: &|name: &str| effective(bindings, params, Kind::L3, at, name),
+                };
+                camera.prepare(queue, &view, dt, &fallback);
+            }
         }
         let field_range = self.nodes_of(Kind::Field);
         let (bindings, beats, viewport, field_params, field_bound, field_maps) = (
@@ -3533,9 +3727,12 @@ impl Set {
     pub fn draw(&mut self, encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView) {
         // **Ahead of every renderer, and here rather than in [`Set::step`].**
         // The camera is an input edge of an L4, so it has to be current wherever
-        // an L4 runs — and a preview draws a slot that nothing stepped. One pass
-        // for the whole Set, because one camera serves every node in it.
-        self.camera_node.record(encoder);
+        // an L4 runs — and a preview draws a slot that nothing stepped. One
+        // pass per camera the Set holds: a renderer bound to the second one
+        // needs it derived exactly as much as the first.
+        for camera in &self.cameras {
+            camera.record(encoder);
+        }
         // **The presence of an L5 is what decides overdraw from compositing**,
         // and it decides it here, in the one place the renderers are given
         // somewhere to draw. Under overdraw they share `target` and the first
@@ -3898,7 +4095,7 @@ proc dots {
             &gpu.queue,
             &[(&l1, CAPACITY)],
             &[&l2],
-            None,
+            &[],
             &[],
             &[&l4],
             Layering::Overdraw,

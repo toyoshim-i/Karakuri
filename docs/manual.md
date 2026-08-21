@@ -208,13 +208,13 @@ so a saved Set loads as overdraw. That one stays on the command line.
 | `--set near=L1.kir,far=L1.kir,…` | the same, naming the nodes. Any part may be written `name=file.kir`, and a part written bare is named after its procedure — a second use of one procedure becomes `lattice_shell-2`. The name is what `--edge`, a Set file and a rebuild address the node by |
 | `--set L1.kir,L4.kir,L4.kir` | the same, drawn twice — one simulation, two renderers over it, in the order given |
 | `--set L1.kir,L2.kir,L4.kir` | a deformation between the two. Every path after the first is sorted by the `kind` it declares, so there is nothing new to spell: L2s deform in the order given, L4s draw in the order given |
-| `--set L1.kir,L3.kir,L4.kir` | a camera. One per slot; without one the built-in orbit |
+| `--set L1.kir,L3.kir,L4.kir` | a camera. As many as you name; without one the built-in orbit, which is a node called `orbit` |
 | `--merge N` | slot `N` **composites** its renderers instead of overdrawing them — a render target each, folded through a gain, an opacity, a blend mode and a mask per renderer. Costs one frame-sized target per renderer and folds at most four. Without it they share one target and meet through their own blend states, which is what you want for one cloud drawn two ways |
 | `L1.kir L4.kir` | the same, positionally, for one slot |
 | `--capacity N` | elements per geometry. **Without it each procedure's own declared default is used**, which is what a `.kir`'s `capacity [min, max] = N` line is for; give this and it overrides every source in every slot |
 | `--param name=value` | a uniform write, applied to every Set — and within a Set, to every node that declares the name |
 | `--param L4:1:name=value` | the same, addressed at one node. How two renderers over one geometry get different values; a bare name cannot, since it reaches both. `L1`, `L2`, `L3`, `L4` and `Field`, and the index is required |
-| `--edge NODE.SLOT=NODE` | bind a procedure's declared input to a node of this Set — `--edge morph.far=sphere_shell` for a geometry, `--edge field_lens.shape=melt_blob` for a field. A `.kir` that declares `uses far : Geometry` or `uses shape : Field` names the slot and never which node fills it, so this is where that is said. Both sides are node names. A declared slot nothing binds is refused rather than guessed at, and so is one bound to the wrong sort of node |
+| `--edge NODE.SLOT=NODE` | bind a procedure's declared input to a node of this Set — `--edge morph.far=sphere_shell` for a geometry, `--edge field_lens.shape=melt_blob` for a field, `--edge lens.view=orbit` for a camera. A `.kir` that declares `uses far : Geometry`, `uses shape : Field` or `uses view : Camera` names the slot and never which node fills it, so this is where that is said. Both sides are node names. A declared slot nothing binds is refused rather than guessed at, and so is one bound to the wrong sort of node |
 | `--publish NAME=key[LOW..HIGH]` | put one control on the console under a name the Set chose, over part of its declared range. Without any, every control is published — the first `--publish` makes the list *the* list. It narrows and never widens: a range outside what the procedure declared is refused |
 | `--publish NAME=L4:0:key[LOW..HIGH]` | the same, addressed at one node rather than every node declaring the key |
 | `--bind FIELDS` | attach a signal to a parameter — `layer=L1,key=turbulence,signal=energy,range=0.0..3.0`. `layer`, `key`, `signal` and `range` are required; `index=N`, `curve=lin\|pow2\|sqrt\|smooth` and the `noise.*` fields are optional. `--help` lists them all |
@@ -707,8 +707,9 @@ karakuri-cli --param Field:0:blend_k=1.2 --set ...
 **As many fields as you name.** A `--set` list may hold several `kind Field` files; each is a
 node with a name, and the `--edge` beside it says which slot gets which — so a marcher taking
 a shape and a cutter takes two files, and `--param Field:0:blend_k` and `--param
-Field:1:blend_k` are two knobs. The camera is still one per Set, and that one is a rule rather
-than a limit: a Set looks from one viewpoint, and compositing two of them is what an L5 does.
+Field:1:blend_k` are two knobs. **The camera followed** — see [Two cameras at
+once](#two-cameras-at-once) — and the sentence that said it would not was about the plumbing
+rather than about the picture.
 
 **The cost is the renderer's**: a field is
 inlined wherever it is evaluated, so a marcher that samples it forty times pays for it forty
@@ -739,13 +740,40 @@ one: a normal is a property of a surface, and a point cloud has no surface to ta
 
 There is nothing to spell for either. Every `.kir` declares its own `kind`, so the first path
 is the geometry and the rest are sorted by what they say they are — L2s deform in the order
-given, L4s draw in the order given, and a slot takes at most one camera.
+given, L4s draw in the order given, and a slot takes as many cameras as it is given.
 
 **Without an L3 the camera is a slow orbit**, which is what every example is written to look
 right under. An L3 replaces it for that slot: `beat_jump` cuts to a new angle on the beat and
 keeps facing the centre. It needs no state to do that — the angle is a hash of the beat
 number, so the camera is *seekable*, and scrubbing the transport puts it exactly where it
 would have been.
+
+### Two cameras at once
+
+A `--set` list may hold **several** `kind L3` files, and each renderer says which one it
+draws from — the same shape a second geometry and a second shape already had:
+
+```
+karakuri-cli --set examples/drift_shell.kir,examples/beat_jump.kir,\
+examples/soft_points.kir,examples/second_eye.kir \
+             --edge second_eye.view=orbit
+```
+
+draws one cloud twice in one frame: `soft_points` from `beat_jump`, which cuts on the beat,
+and `second_eye` from the slow built-in orbit.
+
+A renderer that wants to say which camera it draws from declares `uses view : Camera` and
+reads the projection through it — `clip = view.clip * vec4(position, 1.0)`, and `view.eye`
+and `view.ray` in a marcher. `examples/second_eye.kir` is `soft_points` with exactly that one
+line added. **A renderer that says nothing draws from the Set's camera**, which is the first
+one: every other example is written that way and none of them moved.
+
+**The built-in orbit is a node too, and it is always there** — the last one, called `orbit`,
+whatever else the list holds. That is what the `--edge` above points at, and it is why a Set
+that names two `kind L3` files holds three cameras: `L3:0`, `L3:1` and the orbit at `L3:2`.
+Two renderers naming one camera is ordinary — one viewpoint drawn two ways. What is refused
+is a slot bound twice, a slot nothing binds at all, and a slot bound to a node that is not a
+camera.
 
 **A deformation can apply partially**, in two ways that multiply into one:
 

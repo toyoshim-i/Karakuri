@@ -152,6 +152,20 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
         .filter(|u| u.ty == SlotTy::Field)
         .map(|u| u.name.as_str())
         .collect();
+    // **The fourth, and the one that makes a name a value with parts.** A
+    // Camera slot is read as `view.clip`, which arrives at the swizzle checker
+    // shaped exactly like `far.position` — so the header has to reach it or the
+    // read resolves against the attribute table and is refused for not being an
+    // attribute, which is a sentence about the wrong thing.
+    //
+    // An option where the field one is a list, and for the reason the geometry
+    // one is: a renderer draws one picture and a picture is seen from one
+    // place. `check_header` is where that arity is refused.
+    let camera = proc
+        .uses
+        .iter()
+        .find(|u| u.ty == SlotTy::Camera)
+        .map(|u| u.name.as_str());
     let fullscreen =
         proc.kind == Kind::L4 && proc.blocks.iter().all(|b| b.kind != BlockKind::Vertex);
     let mut blocks = Vec::with_capacity(proc.blocks.len());
@@ -169,6 +183,7 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
             fullscreen,
             uses,
             &fields,
+            camera,
             &params,
             &emit_set,
             &consumes_set,
@@ -367,6 +382,19 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     // nothing to the chain: what an L1 may not take is
                     // *geometry*, and that is what the arm above says.
                     SlotTy::Field => {}
+                    // **A camera is for drawing with, and an L1 draws
+                    // nothing.** It makes the elements; where they are looked
+                    // at from is settled two layers down, by the renderer that
+                    // draws them — and a Set may draw one geometry from two
+                    // cameras at once, so a viewpoint baked into the geometry
+                    // would be a viewpoint one of those two renderers has to
+                    // disagree with.
+                    SlotTy::Camera => errors.push(
+                        IrError::contract(u.span, "`uses … : Camera` is L4 only").with_hint(
+                            "remove it: an L1 makes geometry and draws nothing, so there is \
+                             no projection here for a camera to be the origin of",
+                        ),
+                    ),
                 }
             }
             if proc.blocks.iter().all(|b| b.kind != BlockKind::Element) {
@@ -504,6 +532,21 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             // case — a marcher wanting a shape and a cutter — and costs
             // nothing, because a field has no node and no buffer: it is a body
             // spliced in once more under a second name.
+            // **A deformation moves elements and does not project them.**
+            // Where an element ends up on screen is the renderer's arithmetic,
+            // and it is settled *after* this node has run — so a deformation
+            // that read a camera would be deciding the picture from a layer
+            // that does not know how many renderers there are, let alone which
+            // camera each of them draws with.
+            for u in proc.uses.iter().filter(|u| u.ty == SlotTy::Camera) {
+                errors.push(
+                    IrError::contract(u.span, "`uses … : Camera` is L4 only").with_hint(
+                        "remove it: an L2 rewrites geometry in world space, and where that \
+                         geometry is watched from is the renderer's question — one geometry \
+                         may be drawn from two cameras at once",
+                    ),
+                );
+            }
             let mut geometries = proc.uses.iter().filter(|u| u.ty == SlotTy::Geometry);
             if let Some(first) = geometries.next() {
                 for u in geometries {
@@ -608,6 +651,19 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     // Legal: a camera that frames a shape evaluates a field,
                     // and evaluating one is not producing geometry.
                     SlotTy::Field => {}
+                    // **An L3 produces a viewpoint and has no use for one.**
+                    // Every value a camera slot offers is a *derivation* of the
+                    // six numbers this procedure is being asked to write, so a
+                    // camera reading one would be reading its own output — last
+                    // frame's, since there is no other, which is the frame
+                    // ordering an L3 is deliberately not given a way to depend
+                    // on.
+                    SlotTy::Camera => errors.push(
+                        IrError::contract(u.span, "`uses … : Camera` is L4 only").with_hint(
+                            "remove it: an L3 *is* a camera — it writes `eye` and `target`, \
+                             and `clip`, `eye` and `ray` are derived from what it writes",
+                        ),
+                    ),
                 }
             }
             if !proc.emit.is_empty() {
@@ -712,6 +768,18 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                              itself is a function calling itself",
                         ),
                     ),
+                    // **A field is a function of space and knows nothing about
+                    // where it is watched from.** It is spliced into every
+                    // procedure that declares a slot for it, and two of those
+                    // may draw from two different cameras — so a distance that
+                    // varied with the viewpoint would be two different shapes
+                    // in one frame.
+                    SlotTy::Camera => errors.push(
+                        IrError::contract(u.span, "`uses … : Camera` is L4 only").with_hint(
+                            "remove it: a field is handed `point` and returns a distance, and \
+                             the same point has the same distance from wherever it is seen",
+                        ),
+                    ),
                 }
             }
             if !proc.emit.is_empty() || !proc.consumes.is_empty() {
@@ -777,6 +845,33 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     // Legal, and this is the kind it is most for: a marcher
                     // that contains no shape at all takes one here.
                     SlotTy::Field => {}
+                    // **The one kind that may declare one**, and the reason is
+                    // the reason the value exists: `clip`, `eye` and `ray` are
+                    // what a renderer projects and marches with, and no other
+                    // layer does either.
+                    SlotTy::Camera => {}
+                }
+            }
+            // **A renderer looks from one place.** Two would each need their
+            // own bind group in one pipeline and their own edge per Set,
+            // neither of which is built — but the reason to refuse rather than
+            // build is that nothing has asked for the picture it would make: a
+            // frame drawn twice from two viewpoints is two renderers, which is
+            // exactly what this commit makes possible. Refused with a sentence
+            // so that a file asking for it is turned away at the declaration
+            // rather than drawn from whichever slot happened to be first.
+            let mut cameras = proc.uses.iter().filter(|u| u.ty == SlotTy::Camera);
+            if let Some(first) = cameras.next() {
+                for u in cameras {
+                    errors.push(
+                        IrError::contract(u.span, "a renderer draws from one camera").with_hint(
+                            format!(
+                                "`{}` is already declared. Two viewpoints in one frame are two \
+                                 renderers, each bound to its own camera",
+                                first.name
+                            ),
+                        ),
+                    );
                 }
             }
             // **A `vertex` block is what makes an L4 per-element**, and an L4
@@ -1027,6 +1122,7 @@ fn check_params(proc: &Proc, errors: &mut Vec<IrError>) -> HashMap<String, Ty> {
             false,
             None,
             &[],
+            None,
             &empty_params,
             &empty_attrs,
             &empty_attrs,
@@ -1536,6 +1632,14 @@ struct Checker<'a> {
     /// procedure may want a shape and a cutter, and neither of them is "the"
     /// field.
     fields: &'a [&'a str],
+    /// **What this procedure calls the camera it draws from**, from `uses view
+    /// : Camera`, and `None` for one that declares none — which then reads the
+    /// Set's camera as `camera`, `eye` and `ray`.
+    ///
+    /// It is what makes `view.clip` mean anything, and it is per procedure for
+    /// the reason the two above are: the declaration is in the header and a
+    /// block checker sees only its own block.
+    camera: Option<&'a str>,
     params: &'a HashMap<String, Ty>,
     emit: &'a HashSet<Attr>,
     consumes: &'a HashSet<Attr>,
@@ -1552,9 +1656,9 @@ enum TargetRes {
 }
 
 impl<'a> Checker<'a> {
-    // Eight, and each one is a fact about the *procedure* that a block checker
+    // Nine, and each one is a fact about the *procedure* that a block checker
     // cannot see for itself — the header is not in the block. Bundling them
-    // into a struct would be the same eight fields under one name, and the
+    // into a struct would be the same nine fields under one name, and the
     // struct would have exactly one constructor and one use.
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -1563,6 +1667,7 @@ impl<'a> Checker<'a> {
         fullscreen: bool,
         uses: Option<&'a str>,
         fields: &'a [&'a str],
+        camera: Option<&'a str>,
         params: &'a HashMap<String, Ty>,
         emit: &'a HashSet<Attr>,
         consumes: &'a HashSet<Attr>,
@@ -1573,6 +1678,7 @@ impl<'a> Checker<'a> {
             fullscreen,
             uses,
             fields,
+            camera,
             params,
             emit,
             consumes,
@@ -1721,6 +1827,15 @@ impl<'a> Checker<'a> {
                 Stage::Contract,
                 span,
                 format!("`{name}` is a field this procedure uses"),
+                "a slot and a local share one scope — rename one of them",
+            );
+            return;
+        }
+        if self.camera == Some(name) {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{name}` is the camera this procedure draws from"),
                 "a slot and a local share one scope — rename one of them",
             );
             return;
@@ -2297,6 +2412,21 @@ impl<'a> Checker<'a> {
             );
             return None;
         }
+        // **A camera is not a value either.** It is six numbers and three
+        // derivations of them, and the language has no type for any of that —
+        // what can be had is one of the parts, which is what the members are.
+        if self.camera == Some(name) {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{name}` is a camera, not a value"),
+                format!(
+                    "read one of its parts — `{name}.clip`, `{name}.eye`, `{name}.ray` — \
+                     which is the whole of what a camera offers a renderer"
+                ),
+            );
+            return None;
+        }
         if Output::from_name(name).is_some() {
             self.err_hint(
                 Stage::Contract,
@@ -2843,6 +2973,85 @@ impl<'a> Checker<'a> {
         Some(TExpr::new(attr.ty(), span, TExprKind::Far(attr)))
     }
 
+    /// `<slot>.<member>` — one part of the camera bound to the slot this
+    /// procedure declared.
+    ///
+    /// **The second resolution path, and the reason a Camera slot cost the
+    /// checker anything at all.** `far.position` resolves against the attribute
+    /// table, because a geometry's parts *are* attributes; a camera's are not
+    /// parts of anything else, so this asks the slot's *type* what it has.
+    /// Three members, and each is a value an L4 could already read — which is
+    /// what makes this a new spelling rather than a new capability: the
+    /// unnamed forms are [`Ambient::Camera`], [`Ambient::Eye`] and
+    /// [`Ambient::Ray`], and they mean the Set's camera where no slot was
+    /// declared.
+    ///
+    /// **So the stage rules are the ambients' own**, asked rather than
+    /// restated: `.clip` is readable wherever an L4 projects, and `.eye` and
+    /// `.ray` only in the fragment stage of a procedure that draws the whole
+    /// frame — because they are defined by the ray prologue such a stage opens
+    /// with and by nothing else. A second copy of those rules here would be a
+    /// second place for them to be wrong, and this one would be the copy
+    /// nobody looks at.
+    fn check_camera_member(&mut self, slot: &str, name: &str, span: Span) -> Option<TExpr> {
+        let amb = match name {
+            "clip" => Ambient::Camera,
+            "eye" => Ambient::Eye,
+            "ray" => Ambient::Ray,
+            _ => {
+                self.err_hint(
+                    Stage::Contract,
+                    span,
+                    format!("`{slot}.{name}` is not part of a camera"),
+                    format!(
+                        "a camera offers a renderer three things — `{slot}.clip`, the \
+                         projection to multiply a position by; `{slot}.eye`, where it is; \
+                         and `{slot}.ray`, the direction through this fragment. Its `target`, \
+                         `up`, `fov_y`, `near` and `far` are the L3's to write and no \
+                         renderer can read them yet — see `docs/roadmap.md`"
+                    ),
+                );
+                return None;
+            }
+        };
+        let available = match self.block {
+            Some(block) => amb.available_in(self.kind, block) && self.marching_only(amb),
+            None => false,
+        };
+        if available {
+            return Some(TExpr::new(amb.ty(), span, TExprKind::Ambient(amb)));
+        }
+        // The same sentence the bare ambient gets, because it is the same
+        // mistake: a `vertex` block is what makes an L4 per element, and a ray
+        // through a fragment is not something a sprite has.
+        if matches!(amb, Ambient::Eye | Ambient::Ray) && !self.fullscreen {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!(
+                    "`{slot}.{name}` is only available to a procedure that draws the whole frame"
+                ),
+                format!(
+                    "a `vertex` block is what makes an L4 per-element, and a ray through a \
+                     fragment is not something a sprite has. Remove the `vertex` block to \
+                     march, or project with `{slot}.clip` instead"
+                ),
+            );
+            return None;
+        }
+        self.err_hint(
+            Stage::Contract,
+            span,
+            format!("`{slot}.{name}` is not available in this block"),
+            format!(
+                "`{slot}.eye` and `{slot}.ray` are the fragment stage's — they are built by \
+                 the ray prologue it opens with, and a vertex stage has no fragment to send \
+                 one through"
+            ),
+        );
+        None
+    }
+
     fn check_swizzle(&mut self, value: &Expr, components: &str, span: Span) -> Option<TExpr> {
         // **`far.position` is not a swizzle**, and it arrives here because it
         // is *shaped* like one — `expr . ident` is the grammar, and the parser
@@ -2858,6 +3067,14 @@ impl<'a> Checker<'a> {
         if let Expr::Ident { name, .. } = value {
             if self.uses == Some(name.as_str()) {
                 return self.check_far(name, components, span);
+            }
+            // **The same shape a third time, resolved a second way.** A
+            // geometry slot's members are attributes and a camera slot's are
+            // not, so this cannot go through `check_far`: what decides which
+            // members exist is the *type* the header declared, which is the
+            // whole of what the type on a slot is for.
+            if self.camera == Some(name.as_str()) {
+                return self.check_camera_member(name, components, span);
             }
         }
         let v = self.check_expr(value)?;

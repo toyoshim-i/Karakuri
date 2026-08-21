@@ -213,6 +213,21 @@ impl Checked {
             .collect()
     }
 
+    /// **The name of the camera slot this procedure declares**, and `None` for
+    /// one that declares none — which draws with the Set's camera, as every
+    /// renderer written before this notation did.
+    ///
+    /// An option where [`Checked::field_slots`] is a list, on
+    /// [`Checked::geometry_slot`]'s terms: a renderer draws one picture and a
+    /// picture is seen from one place, so a second camera slot is refused by
+    /// the check pass rather than shaped away here.
+    pub fn camera_slot(&self) -> Option<&str> {
+        self.uses
+            .iter()
+            .find(|s| s.ty == SlotTy::Camera)
+            .map(|s| s.name.as_str())
+    }
+
     /// **Whether nothing ever moves an element between slots**, so that `seed`
     /// is the slot index for the whole run.
     ///

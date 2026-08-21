@@ -235,6 +235,18 @@ pub enum Record {
     },
     Camera {
         kind: String,
+        /// **Which camera node of the L3 layer these six numbers produce**, on
+        /// [`Record::Capacity`]'s and [`Record::Seed`]'s terms rather than
+        /// [`Record::Param`]'s: this record describes one producer, and "every
+        /// camera at radius 9" is not something a camera has ever said.
+        ///
+        /// **Absent is node 0, and 0 is not written**, so every file ever
+        /// written round-trips byte for byte and keeps meaning what it meant: a
+        /// Set held one camera, so node 0 was the only one there was to
+        /// describe. It becomes load-bearing when a Set holds several, which is
+        /// what an `edge` per renderer made expressible.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        index: u32,
         radius: f32,
         speed: f32,
     },

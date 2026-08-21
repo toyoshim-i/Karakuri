@@ -669,8 +669,8 @@ fn tools() -> Value {
                             "which node of that layer, from 0, in the order the slot's files \
                              were named. A slot draws with as many L4s as it likes — the same \
                              cloud as sprites and as strokes is one slot with two — and may \
-                             simulate with more than one L1; it holds at most one L3 and one \
-                             Field, whose index is 0. Omit for the first.",
+                             simulate with more than one L1, look from more than one L3 and \
+                             hold more than one Field. Omit for the first.",
                     },
                 },
                 "required": ["slot", "layer"],
@@ -747,10 +747,10 @@ fn call_tool(request: &Value, state: &mut State) -> Result<Value, String> {
 /// — where a `param` addresses a *value*, and one value reaching every
 /// declaration is both meaningful and the useful default.
 ///
-/// It defaults for a second reason now that every layer is addressable: a slot
-/// holds at most one L3 and at most one `kind Field`, so on those two layers 0
-/// is not a convenience but the only address there is, and a client that omits
-/// it has said everything there was to say.
+/// It defaults because the first node of a layer is what a client that says
+/// nothing means, on every layer: a slot holding one camera and one shape has
+/// nothing else `index` could name, and one holding two has an order its files
+/// were given in.
 ///
 /// **The layer is parsed here into the compiler's own `Kind`** and travels as
 /// one from here on, so the layer this resolves a file for and the layer a
@@ -2030,11 +2030,12 @@ mod tests {
             .path(0, Kind::L2, 2)
             .expect_err("there is no third L2");
         assert!(past.contains("0-1"), "the range is not named: {past}");
-        // One camera per slot, so 0 is the only address there is and an index
-        // that is not 0 is worth saying rather than folding.
+        // This slot was given one camera, so an index past it is worth saying
+        // rather than folding onto the one there is — the same sentence a
+        // second L2 gets, since nothing here caps a layer.
         let two_cameras = slots
             .path(0, Kind::L3, 1)
-            .expect_err("a slot looks from one camera");
+            .expect_err("this slot was given one camera");
         assert!(two_cameras.contains("one L3"), "{two_cameras}");
     }
 

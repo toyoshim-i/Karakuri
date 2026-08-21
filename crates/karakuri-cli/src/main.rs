@@ -1896,12 +1896,12 @@ struct Material {
     /// one; several is a merge.
     l1s: Vec<karakuri_ir::typed::Checked>,
     l2s: Vec<karakuri_ir::typed::Checked>,
-    /// The camera, or `None` for the built-in orbit. At most one per slot.
-    l3: Option<karakuri_ir::typed::Checked>,
+    /// **The cameras, in the order their paths appeared.** Empty leaves the
+    /// slot looking from the built-in orbit, which is a node all the same — so
+    /// a Set has at least one camera however this list comes out.
+    l3s: Vec<karakuri_ir::typed::Checked>,
     /// **The fields, in the order their paths appeared.** Empty for a slot that
-    /// evaluates none, and a list rather than the camera's option: a slot looks
-    /// from one viewpoint, and the number of shapes it marches is a question
-    /// the edges answer.
+    /// evaluates none.
     fields: Vec<karakuri_ir::typed::Checked>,
     l4s: Vec<karakuri_ir::typed::Checked>,
     /// What each of those is called, in the same per-layer shape.
@@ -1919,7 +1919,12 @@ struct Material {
 pub struct Names {
     pub l1s: Vec<Option<String>>,
     pub l2s: Vec<Option<String>>,
-    pub l3: Option<String>,
+    /// **A list, like the renderers'.** A slot holds as many cameras as its
+    /// files declare, and the built-in orbit is a node beside them — one
+    /// nobody can name from the command line, since a name is written beside
+    /// a path and the built-in has none. It is called `orbit`; see
+    /// `karakuri_engine::set::BUILTIN_CAMERA`.
+    pub l3s: Vec<Option<String>>,
     pub l4s: Vec<Option<String>>,
     pub fields: Vec<Option<String>>,
 }
@@ -1933,7 +1938,7 @@ impl Names {
             .iter()
             .flatten()
             .chain(self.l2s.iter().flatten())
-            .chain(&self.l3)
+            .chain(self.l3s.iter().flatten())
             .chain(self.l4s.iter().flatten())
             .chain(self.fields.iter().flatten())
     }
@@ -2040,7 +2045,7 @@ fn sort_compiled(
     let mut names = Names::default();
     let mut l1s = Vec::new();
     let mut l2s = Vec::new();
-    let mut l3: Option<karakuri_ir::typed::Checked> = None;
+    let mut l3s: Vec<karakuri_ir::typed::Checked> = Vec::new();
     let mut fields: Vec<karakuri_ir::typed::Checked> = Vec::new();
     let mut l4s = Vec::new();
     let mut placed = Vec::new();
@@ -2058,22 +2063,18 @@ fn sort_compiled(
                 l4s.push(checked);
                 (karakuri_ir::Kind::L4, l4s.len() - 1)
             }
-            // **One camera per slot**, refused rather than last-one-wins for
-            // the same reason a second L1 is not: a Set is a grouping around one
-            // viewpoint, and a run that quietly dropped one of two would be
-            // playing something nobody asked for. Two viewpoints composited
-            // is a graph, which is what an L5 is for.
-            karakuri_ir::Kind::L3 if l3.is_some() => {
-                return Err(format!(
-                    "{} is a second L3 — a slot looks from one camera, and \
-                     compositing two viewpoints is what an L5 is for",
-                    named.path.display()
-                ));
-            }
+            // **A second camera is a second camera**, and this was the last
+            // refusal in this file that said otherwise. It said a slot looks
+            // from one viewpoint, which was true of the plumbing and not of
+            // the material: a renderer declares `uses view : Camera` and an
+            // `edge` names which node fills it, so two cameras are two nodes
+            // with two names and nothing has to arbitrate between them. A
+            // renderer that names none draws from the first, which is what it
+            // has always drawn from.
             karakuri_ir::Kind::L3 => {
-                names.l3 = name;
-                l3 = Some(checked);
-                (karakuri_ir::Kind::L3, 0)
+                names.l3s.push(name);
+                l3s.push(checked);
+                (karakuri_ir::Kind::L3, l3s.len() - 1)
             }
             // **A second field is a second field**, not a mistake — the last
             // refusal in this file that said otherwise, and it said so about
@@ -2127,7 +2128,7 @@ fn sort_compiled(
         Material {
             l1s,
             l2s,
-            l3,
+            l3s,
             fields,
             l4s,
             names,
@@ -2269,7 +2270,7 @@ fn replay_session(args: &Args, id: &str) {
         // built-in orbit, exactly as every session recorded before a Set file
         // could carry a chain does.
         &loaded.l2s,
-        loaded.l3.as_ref(),
+        &loaded.l3s,
         &loaded.fields,
         &loaded.l4s,
         // **A Set file does not record a layering**, on the same terms it
@@ -2486,7 +2487,7 @@ fn rebuild(
         // Artifacts recorded by a session, which stores an L1 and its
         // renderers — see the note at the other `build` call site.
         &[],
-        None,
+        &[],
         &[],
         &l4s,
         karakuri_engine::set::Layering::Overdraw,
@@ -2984,7 +2985,7 @@ fn main() {
         procs.push(Material {
             l1s: loaded.l1s,
             l2s: loaded.l2s,
-            l3: loaded.l3,
+            l3s: loaded.l3s,
             fields: loaded.fields,
             l4s: loaded.l4s,
             names,
@@ -3143,10 +3144,10 @@ fn build_deck(
         .iter()
         .enumerate()
         .map(|(slot, material)| {
-            let (l1, l2s, l3, fields, l4s) = (
+            let (l1, l2s, l3s, fields, l4s) = (
                 material.l1s.as_slice(),
                 &material.l2s,
-                material.l3.as_ref(),
+                material.l3s.as_slice(),
                 material.fields.as_slice(),
                 &material.l4s,
             );
@@ -3154,7 +3155,7 @@ fn build_deck(
                 gpu,
                 l1,
                 l2s,
-                l3,
+                l3s,
                 fields,
                 l4s,
                 if args.merge.contains(&slot) {
@@ -3305,7 +3306,9 @@ fn build(
     gpu: &Gpu,
     l1s: &[karakuri_ir::typed::Checked],
     l2s: &[karakuri_ir::typed::Checked],
-    l3: Option<&karakuri_ir::typed::Checked>,
+    // The cameras, in node order — see `Material::l3s`. Empty leaves the Set
+    // looking from the built-in orbit.
+    l3s: &[karakuri_ir::typed::Checked],
     // The fields, in node order — see `Material::fields`. Empty for a Set that
     // evaluates none.
     fields: &[karakuri_ir::typed::Checked],
@@ -3332,6 +3335,7 @@ fn build(
     camera: Option<karakuri_engine::camera::Orbit>,
 ) -> Set {
     let deform: Vec<&karakuri_ir::typed::Checked> = l2s.iter().collect();
+    let look: Vec<&karakuri_ir::typed::Checked> = l3s.iter().collect();
     let shapes: Vec<&karakuri_ir::typed::Checked> = fields.iter().collect();
     let draw: Vec<&karakuri_ir::typed::Checked> = l4s.iter().collect();
     // **Each source at the capacity it declares**, and `--capacity` overrides
@@ -3359,7 +3363,7 @@ fn build(
         &gpu.queue,
         &sources,
         &deform,
-        l3,
+        &look,
         &shapes,
         &draw,
         layering,
@@ -3368,7 +3372,7 @@ fn build(
         karakuri_engine::set::Wiring {
             l1s: &names.l1s,
             l2s: &names.l2s,
-            l3: names.l3.as_deref(),
+            l3s: &names.l3s,
             l4s: &names.l4s,
             fields: &names.fields,
             edges,
@@ -3380,11 +3384,15 @@ fn build(
             // `build_many`, and deriving it a second time to print it is the
             // shape this repository keeps finding wrong.
             eprintln!("  nodes: {}", set.node_names().join(", "));
-            // **The `camera` record, and only when nothing else produces one.**
-            // An L3 writes the camera state every frame, so an orbit assigned
-            // here would be overwritten before the first draw — silently, which
-            // is the wrong way for two producers to meet.
-            if let Some(camera) = camera.filter(|_| l3.is_none()) {
+            // **The `camera` record, into the node it is about.** It used to
+            // be applied only to a Set whose files declared no L3, because an
+            // L3 wrote the one camera state there was and an orbit assigned
+            // beside it would have been overwritten before the first draw. The
+            // orbit is its own node now — the last one, whatever else the Set
+            // holds — so the record reaches it either way, and whether any
+            // renderer draws from it is what an `edge` says rather than what
+            // the file list happens to contain.
+            if let Some(camera) = camera {
                 set.camera = camera;
             }
             for write in overrides {
@@ -5788,7 +5796,7 @@ mod tests {
     /// The sentence names the file, because the file is what an operator can
     /// fix; the slot is prefixed by whichever caller is reporting it.
     #[test]
-    fn a_slot_refuses_a_second_camera_and_nothing_that_draws_and_takes_a_second_field() {
+    fn a_slot_refuses_nothing_that_draws_and_keeps_a_second_camera_and_field() {
         // Matched rather than `expect_err`, which would want `Material` to be
         // `Debug` — a derive on a production type to print something no test
         // reaching here ever prints.
@@ -5796,14 +5804,30 @@ mod tests {
             Err(e) => e,
             Ok(_) => panic!("this slot cannot be assembled"),
         };
-        let two_cameras = refused(&[
+        // **A second camera is not a refusal, and this is where that stopped
+        // being one.** It said a slot looks from one viewpoint, which was true
+        // of the plumbing and not of the material: a renderer declares `uses
+        // view : Camera` and an `edge` names which node fills it, so two
+        // cameras are two nodes addressed as `L3:0` and `L3:1`.
+        let (two_cameras, placed_cameras) = match sort_compiled(compiled(&[
             "drift_shell.kir",
             "beat_jump.kir",
             "beat_jump.kir",
             "soft_points.kir",
-        ]);
-        assert!(two_cameras.contains("is a second L3"), "{two_cameras}");
-        assert!(two_cameras.contains("beat_jump.kir"), "{two_cameras}");
+        ])) {
+            Ok(sorted) => sorted,
+            Err(e) => panic!("two cameras are two nodes: {e}"),
+        };
+        assert_eq!(two_cameras.l3s.len(), 2, "both were kept");
+        assert_eq!(
+            placed_cameras
+                .iter()
+                .filter(|p| p.layer == karakuri_ir::Kind::L3)
+                .map(|p| (p.layer, p.index))
+                .collect::<Vec<_>>(),
+            [(karakuri_ir::Kind::L3, 0), (karakuri_ir::Kind::L3, 1)],
+            "the cameras are numbered from 0 with no gaps"
+        );
         // **A second field is not a refusal, and this is where that stopped
         // being one.** The sort was the last thing in the tree saying a Set
         // holds one, and it said so about the plumbing rather than about the

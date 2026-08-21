@@ -410,7 +410,7 @@ impl Source for Watch {
         let crate::Material {
             l1s,
             l2s,
-            l3,
+            l3s,
             fields,
             l4s,
             names,
@@ -431,7 +431,7 @@ impl Source for Watch {
                 })
                 .collect(),
             l2s,
-            l3,
+            l3s,
             fields,
             l4s,
             // **Restated, like every other part of a request.** A rebuild that
@@ -443,7 +443,7 @@ impl Source for Watch {
             names: karakuri_engine::swap::RequestNames {
                 l1s: names.l1s,
                 l2s: names.l2s,
-                l3: names.l3,
+                l3s: names.l3s,
                 l4s: names.l4s,
                 fields: names.fields,
             },
@@ -717,8 +717,7 @@ mod tests {
         );
         assert_eq!(procs(&request.l2s), procs(&material.l2s), "the deformers");
         assert_eq!(procs(&request.l4s), procs(&material.l4s), "the renderers");
-        let camera = |c: &Option<karakuri_ir::typed::Checked>| c.as_ref().map(|c| c.name.clone());
-        assert_eq!(camera(&request.l3), camera(&material.l3), "the camera");
+        assert_eq!(procs(&request.l3s), procs(&material.l3s), "the cameras");
         assert_eq!(
             procs(&request.fields),
             procs(&material.fields),
@@ -758,8 +757,11 @@ mod tests {
     /// editing a slot into an illegal shape has a picture on stage.
     #[test]
     fn a_slot_that_cannot_be_assembled_leaves_the_running_set_alone() {
-        // Two cameras, and then the same stack with one — so this fails if the
-        // refusal stopped happening *and* if it started happening to everything.
+        // A stack that assembles, and then one that cannot — so this fails if
+        // the refusal stopped happening *and* if it started happening to
+        // everything. **Two cameras is the first kind and used to be the
+        // second**: a slot holds as many as its files declare, and which
+        // renderer draws from which is an `edge`.
         for (files, buildable) in [
             (
                 &["drift_shell.kir", "beat_jump.kir", "soft_points.kir"][..],
@@ -772,7 +774,7 @@ mod tests {
                     "beat_jump.kir",
                     "soft_points.kir",
                 ][..],
-                false,
+                true,
             ),
             // Nothing that draws: a Set with no renderer has no frame to give.
             (&["drift_shell.kir", "swirl_warp.kir"][..], false),

@@ -92,7 +92,7 @@ fn build(gpu: &Gpu, w: u32, h: u32, camera: Orbit) -> Set {
         &gpu.queue,
         &[(&compile(MARK), 1)],
         &[],
-        None,
+        &[],
         &[],
         &[&l4],
         Layering::Overdraw,
@@ -341,14 +341,14 @@ proc gain_dot {
 "#;
 
 fn with_camera(gpu: &Gpu, l3: Option<&str>, l4: &str, w: u32, h: u32) -> Set {
-    let l3 = l3.map(compile);
+    let l3s: Vec<Checked> = l3.map(compile).into_iter().collect();
     let l4 = compile(l4);
     let mut set = Set::build_many(
         &gpu.device,
         &gpu.queue,
         &[(&compile(MARK), 1)],
         &[],
-        l3.as_ref(),
+        &l3s.iter().collect::<Vec<_>>(),
         &[],
         &[&l4],
         Layering::Overdraw,
@@ -461,10 +461,12 @@ fn a_camera_does_not_shift_the_parameters_a_renderer_reads() {
     );
 }
 
-/// **The built-in orbit is not a second producer.** A Set whose camera is a
-/// procedure has the `camera` field still on it — a `camera` record and a Set
-/// file both set one — and it must reach nothing, because two producers writing
-/// one edge would resolve by whichever ran last.
+/// **The built-in orbit is not a second producer of a procedure's camera.** A
+/// Set whose files declare an L3 still has the `camera` field on it — a
+/// `camera` record and a Set file both set one — and it writes the orbit's own
+/// node, which is a different edge: this renderer declares no slot, so it draws
+/// from `L3:0`, which is the procedure. Two producers writing *one* edge would
+/// resolve by whichever ran last, which is what having a node apiece prevents.
 #[test]
 fn an_orbit_assigned_beside_a_camera_procedure_reaches_nothing() {
     let gpu = Gpu::headless().expect("no GPU available");
@@ -590,5 +592,361 @@ proc mixed {
         set.param("centre"),
         None,
         "a vector param has no scalar value to hold"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Several cameras, and which one each renderer reads
+// ---------------------------------------------------------------------------
+
+/// A camera on the `+x` axis or the `-x` axis, looking at the origin. **The two
+/// are mirror images**, so material off the view axis lands on opposite sides
+/// of the frame — which is a reading that cannot be produced by a Set that drew
+/// both renderers from one camera, whichever one it picked.
+fn from_x(name: &str, x: f32) -> String {
+    format!(
+        r#"
+proc {name} {{
+  kind L3
+  camera {{
+    eye    = vec3({x:?}, 0.0, 0.0);
+    target = vec3(0.0, 0.0, 0.0);
+  }}
+}}
+"#
+    )
+}
+
+/// A renderer that says which camera it draws from, in one colour channel so
+/// that two of them in one frame can be measured apart.
+fn through(name: &str, colour: [f32; 3]) -> String {
+    let (r, g, b) = (colour[0], colour[1], colour[2]);
+    format!(
+        r#"
+proc {name} {{
+  kind  L4
+  blend additive
+
+  uses view : Camera
+
+  consumes position
+
+  vertex {{
+    clip       = view.clip * vec4(position, 1.0);
+    point_size = 3.0;
+  }}
+
+  fragment {{
+    color = vec4({r:?}, {g:?}, {b:?}, 1.0);
+  }}
+}}
+"#
+    )
+}
+
+/// A renderer that names no camera and reads the Set's, which is what every
+/// renderer written before the slot existed does.
+const PLAIN: &str = r#"
+proc plain {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 3.0;
+  }
+
+  fragment {
+    color = vec4(0.0, 0.0, 1.0, 1.0);
+  }
+}
+"#;
+
+/// A Set of the one mark, `l3s` cameras and `l4s` renderers, wired by `edges`.
+fn wired(
+    gpu: &Gpu,
+    l3s: &[String],
+    l4s: &[&str],
+    edges: &[(&str, &str, &str)],
+    w: u32,
+    h: u32,
+) -> Result<Set, karakuri_engine::set::SetError> {
+    let l3s: Vec<Checked> = l3s.iter().map(|s| compile(s)).collect();
+    let l4s: Vec<Checked> = l4s.iter().map(|s| compile(s)).collect();
+    let edges: Vec<karakuri_engine::set::Edge> = edges
+        .iter()
+        .map(|(node, slot, to)| karakuri_engine::set::Edge {
+            node: node.to_string(),
+            slot: slot.to_string(),
+            to: to.to_string(),
+        })
+        .collect();
+    let set = Set::build_many(
+        &gpu.device,
+        &gpu.queue,
+        &[(&compile(MARK), 1)],
+        &[],
+        &l3s.iter().collect::<Vec<_>>(),
+        &[],
+        &l4s.iter().collect::<Vec<_>>(),
+        Layering::Overdraw,
+        7,
+        &[],
+        karakuri_engine::set::Wiring {
+            edges: &edges,
+            ..Default::default()
+        },
+    );
+    set.map(|mut set| {
+        set.resize(&gpu.device, w, h);
+        set.camera = pinned();
+        set
+    })
+}
+
+/// Brightness-weighted mean column of one colour channel's lit texels.
+fn column(px: &[f32], w: u32, channel: usize) -> f32 {
+    let (mut sx, mut weight) = (0.0f64, 0.0f64);
+    for (i, t) in px.chunks_exact(4).enumerate() {
+        if t[channel] > 0.01 {
+            sx += f64::from(t[channel]) * f64::from(i as u32 % w);
+            weight += f64::from(t[channel]);
+        }
+    }
+    assert!(weight > 0.0, "channel {channel} drew nothing to measure");
+    (sx / weight) as f32
+}
+
+/// **Two cameras in one Set, and two renderers drawing from different ones.**
+///
+/// The whole point of the slot: a Set could hold one viewpoint because a
+/// renderer had no way to say which of two it meant, and `camera` meant "the
+/// Set's" because there was only ever one. Two mirror-image cameras put the
+/// same element on opposite sides of the frame, so the two channels of one
+/// picture are the proof — a Set that drew both from one camera puts them in
+/// the same place whichever one it picked.
+///
+/// **And swapping the edges swaps the picture**, which is the half a static
+/// frame cannot show: without it, "each renderer read a different camera" and
+/// "each renderer read the camera at its own index" are the same measurement.
+#[test]
+fn two_renderers_draw_from_the_cameras_their_edges_name() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    const W: u32 = 96;
+    const H: u32 = 96;
+    let cameras = [from_x("east", 5.0), from_x("west", -5.0)];
+    let red = through("red", [1.0, 0.0, 0.0]);
+    let green = through("green", [0.0, 1.0, 0.0]);
+
+    let measure = |edges: &[(&str, &str, &str)]| {
+        let mut set = wired(&gpu, &cameras, &[&red, &green], edges, W, H).expect("two cameras");
+        let px = frame(&gpu, &mut set, W, H);
+        (
+            column(&px, W, 0) - W as f32 / 2.0,
+            column(&px, W, 1) - W as f32 / 2.0,
+        )
+    };
+
+    let (r, g) = measure(&[("red", "view", "east"), ("green", "view", "west")]);
+    assert!(
+        r.abs() > 4.0 && g.abs() > 4.0,
+        "the material is on the centre column in one of the two; nothing to measure: {r}, {g}"
+    );
+    assert!(
+        r.signum() != g.signum(),
+        "two mirror-image cameras left both renderers on the same side of the frame — \
+         {r} and {g} — so both drew from one camera"
+    );
+
+    // The same two renderers and the same two cameras, wired the other way
+    // round.
+    let (r2, g2) = measure(&[("red", "view", "west"), ("green", "view", "east")]);
+    assert!(
+        (r2 - g).abs() < 1.0 && (g2 - r).abs() < 1.0,
+        "swapping the edges left the picture at {r2}, {g2} where {g}, {r} was due — \
+         a renderer is reading the camera at its own index rather than the one it names"
+    );
+}
+
+/// **A renderer that declares no slot reads the Set's camera**, which is the
+/// first one — and that is what `camera`, `eye` and `ray` have always meant.
+///
+/// Every renderer in the library is this one, so it is the case that must not
+/// have moved: the slot is how a renderer says *which*, and saying nothing has
+/// to keep meaning what it meant.
+#[test]
+fn a_renderer_with_no_slot_reads_the_sets_camera() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    const W: u32 = 96;
+    const H: u32 = 96;
+    let cameras = [from_x("east", 5.0), from_x("west", -5.0)];
+    let bound = through("bound", [1.0, 0.0, 0.0]);
+
+    // The unbound renderer draws blue and the bound one draws red, in one
+    // frame, so the two readings come from one build and one camera pass.
+    let mut set = wired(
+        &gpu,
+        &cameras,
+        &[&bound, PLAIN],
+        &[("bound", "view", "east")],
+        W,
+        H,
+    )
+    .expect("a slot and a renderer that declares none");
+    let px = frame(&gpu, &mut set, W, H);
+    let named = column(&px, W, 0) - W as f32 / 2.0;
+    let silent = column(&px, W, 2) - W as f32 / 2.0;
+
+    assert!(
+        named.abs() > 4.0,
+        "the material is on the centre column; nothing to measure"
+    );
+    assert!(
+        (named - silent).abs() < 1.0,
+        "the renderer that named `east` drew at {named} and the one that named nothing at \
+         {silent} — a renderer with no slot has to read camera 0, which is `east`"
+    );
+}
+
+/// **The built-in camera is a node, and an edge can name it.**
+///
+/// It was a field on the `Set` and reachable from nowhere: a Set with no L3 had
+/// no L3 node at all, so a renderer could draw from the orbit only by saying
+/// nothing. Now it is `orbit` — a name like any other — and the proof that the
+/// edge reached the *producer* is that moving the orbit moves the material.
+#[test]
+fn the_built_in_camera_is_a_node_an_edge_can_name() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    const W: u32 = 96;
+    const H: u32 = 96;
+    let named = through("named", [1.0, 0.0, 0.0]);
+
+    let offset = |radius: f32| {
+        let mut set = wired(
+            &gpu,
+            &[],
+            &[&named],
+            &[("named", "view", karakuri_engine::set::BUILTIN_CAMERA)],
+            W,
+            H,
+        )
+        .expect("a renderer bound to the built-in camera");
+        set.camera = Orbit { radius, ..pinned() };
+        column(&frame(&gpu, &mut set, W, H), W, 0) - W as f32 / 2.0
+    };
+
+    let far = offset(5.0);
+    let near = offset(3.0);
+    assert!(
+        far.abs() > 4.0,
+        "the material is on the centre column; nothing to measure"
+    );
+    assert!(
+        near.abs() > far.abs() * 1.3,
+        "closing the orbit from 5 to 3 moved the material from {far} texels off centre to \
+         {near} — the edge did not reach the built-in producer"
+    );
+}
+
+/// **The built-in camera is addressable as `L3:0`, and `L4:0` still reaches the
+/// first renderer.**
+///
+/// This is the off-by-one this commit could have introduced. `slot_of` computes
+/// a layer's origin by summing the layers before it, so giving the camera layer
+/// a node in a Set that had none shifts every renderer's parameter map by one —
+/// unless [`Set::params`] grows an entry at the same position, which is a
+/// different file's job. Get it wrong and `--param L4:0:gain` writes the
+/// camera's map and the renderer keeps its default, silently.
+#[test]
+fn the_built_in_camera_takes_a_slot_without_moving_the_renderers() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let mut set = with_camera(&gpu, None, GAIN_DOT, 64, 64);
+
+    assert_eq!(
+        set.node_named(karakuri_engine::set::BUILTIN_CAMERA),
+        Some((karakuri_ir::Kind::L3, 0)),
+        "a Set with no camera procedure holds the built-in as its L3 node"
+    );
+    // The renderer is still the first node of L4, and its params are still
+    // reported as its own.
+    let declared: Vec<(karakuri_ir::Kind, u32, &str)> = set
+        .params()
+        .map(|(layer, index, name, _)| (layer, index, name))
+        .collect();
+    assert_eq!(
+        declared,
+        vec![(karakuri_ir::Kind::L4, 0, "gain")],
+        "the renderer's params are reported at the renderer's address"
+    );
+
+    // And a write at that address reaches it: the value moves and the picture
+    // moves with it.
+    let peak = |set: &mut Set| {
+        frame(&gpu, set, 64, 64)
+            .chunks_exact(4)
+            .map(|t| t[0])
+            .fold(0.0f32, f32::max)
+    };
+    assert!(peak(&mut set) > 0.5, "the renderer's default never drew");
+    assert!(
+        set.set_param_at(karakuri_ir::Kind::L4, 0, "gain", 0.0),
+        "`L4:0` addresses the first renderer"
+    );
+    assert!(
+        peak(&mut set) < 0.01,
+        "writing `L4:0:gain` did not reach the renderer — every L4 address is off by one"
+    );
+    // The camera's own address reaches a node that declares nothing, rather
+    // than reaching the renderer's map.
+    assert!(
+        !set.set_param_at(karakuri_ir::Kind::L3, 0, "gain", 1.0),
+        "the built-in camera declares no params, so there is no `gain` there to write"
+    );
+}
+
+/// **A declared Camera slot must be bound**, exactly as a geometry slot and a
+/// Field slot must be.
+///
+/// Filling it in from the Set's only camera would be right every time today and
+/// is the rule this notation exists to remove: "if there is exactly one, use
+/// it" is what capped a Set at one viewpoint, and a renderer that means the
+/// Set's camera says so by declaring no slot.
+#[test]
+fn an_unbound_camera_slot_is_refused() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let named = through("named", [1.0, 0.0, 0.0]);
+    // Matched rather than `expect_err`, which would want `Set` to be `Debug`.
+    let err = match wired(&gpu, &[], &[&named], &[], 64, 64) {
+        Err(e) => e,
+        Ok(_) => panic!("an unbound slot is not filled in from the Set's only camera"),
+    };
+    let text = format!("{err}");
+    assert!(
+        text.contains("`named` declares `view : Camera`"),
+        "the refusal has to name the slot and the type it takes: {text}"
+    );
+}
+
+/// **And bound to a camera**, rather than to whatever node the edge happened to
+/// name. The sentence says what the node it found actually is, because that is
+/// the half an operator cannot see from the edge.
+#[test]
+fn a_camera_slot_bound_to_something_that_is_not_a_camera_is_refused() {
+    let gpu = Gpu::headless().expect("no GPU available");
+    let named = through("named", [1.0, 0.0, 0.0]);
+    let err = match wired(&gpu, &[], &[&named], &[("named", "view", "mark")], 64, 64) {
+        Err(e) => e,
+        Ok(_) => panic!("a geometry is not a camera"),
+    };
+    let text = format!("{err}");
+    assert!(
+        text.contains("bound to `mark`") && text.contains("an L1"),
+        "the refusal has to say what was bound and what it is: {text}"
+    );
+    assert!(
+        text.contains(karakuri_engine::set::BUILTIN_CAMERA),
+        "and which cameras this Set holds: {text}"
     );
 }

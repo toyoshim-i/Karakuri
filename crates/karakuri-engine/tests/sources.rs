@@ -119,7 +119,7 @@ fn build_wired(
         &gpu.queue,
         &sources,
         &[&l2],
-        None,
+        &[],
         &[],
         &[&l4],
         Layering::Overdraw,
@@ -170,7 +170,7 @@ fn build_all(
         &gpu.queue,
         &sources,
         &[],
-        None,
+        &[],
         &[],
         &draw_refs,
         layering,
@@ -1022,7 +1022,7 @@ fn both_sides_of_a_pairing_share_the_element_struct() {
         &gpu.queue,
         &sources,
         &[&l2],
-        None,
+        &[],
         &[],
         &[&l4],
         Layering::Overdraw,
@@ -1086,7 +1086,7 @@ fn a_name_resolves_to_the_node_it_addresses() {
         &gpu.queue,
         &[(&near, 64), (&far, 64)],
         &[],
-        None,
+        &[],
         &[],
         &[&draw],
         Layering::Overdraw,
@@ -1100,10 +1100,11 @@ fn a_name_resolves_to_the_node_it_addresses() {
     .expect("builds");
 
     // What was written is what it is called; what was not is called after its
-    // procedure.
+    // procedure — and `orbit` is the built-in camera, which is a node in every
+    // Set whose files declare none, so that an edge can name it.
     assert_eq!(
         set.node_names(),
-        ["near", "far_grid", "dots"].map(String::from)
+        ["near", "far_grid", "orbit", "dots"].map(String::from)
     );
     assert_eq!(set.node_named("near"), Some((karakuri_ir::Kind::L1, 0)));
     assert_eq!(set.node_named("far_grid"), Some((karakuri_ir::Kind::L1, 1)));
@@ -1126,7 +1127,7 @@ fn a_procedure_used_twice_gives_its_second_node_a_different_name() {
         &gpu.queue,
         &[(&grid, 64), (&grid, 64)],
         &[],
-        None,
+        &[],
         &[],
         &[&draw, &draw],
         Layering::Overdraw,
@@ -1138,7 +1139,7 @@ fn a_procedure_used_twice_gives_its_second_node_a_different_name() {
 
     assert_eq!(
         set.node_names(),
-        ["grid", "grid-2", "dots", "dots-2"].map(String::from)
+        ["grid", "grid-2", "orbit", "dots", "dots-2"].map(String::from)
     );
     assert_eq!(set.node_named("grid-2"), Some((karakuri_ir::Kind::L1, 1)));
     assert_eq!(set.node_named("dots-2"), Some((karakuri_ir::Kind::L4, 1)));
@@ -1159,7 +1160,7 @@ fn two_written_names_that_collide_are_refused() {
         &gpu.queue,
         &[(&grid, 64)],
         &[],
-        None,
+        &[],
         &[],
         &[&draw],
         Layering::Overdraw,
@@ -1192,7 +1193,7 @@ fn a_derived_name_never_takes_one_that_was_written() {
         &gpu.queue,
         &[(&grid, 64)],
         &[],
-        None,
+        &[],
         &[],
         &[&draw, &draw],
         Layering::Overdraw,
@@ -1206,6 +1207,7 @@ fn a_derived_name_never_takes_one_that_was_written() {
     .expect("builds");
 
     assert_eq!(set.node_named("dots"), Some((karakuri_ir::Kind::L4, 1)));
-    // Node 0 is the geometry; node 1 is the renderer that had to give way.
-    assert_eq!(set.node_names()[1], "dots-2");
+    // Node 0 is the geometry, node 1 the built-in camera; node 2 is the
+    // renderer that had to give way.
+    assert_eq!(set.node_names()[2], "dots-2");
 }

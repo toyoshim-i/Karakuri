@@ -829,7 +829,7 @@ fn a_build_landing_on_a_slot_retires_its_meter() {
             id: 1,
             l1s: vec![(compile(L1), CAPACITY)],
             l2s: Vec::new(),
-            l3: None,
+            l3s: Vec::new(),
             fields: Vec::new(),
             layering: karakuri_engine::set::Layering::Overdraw,
             published: Vec::new(),

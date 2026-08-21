@@ -1,6 +1,6 @@
 //! The camera edge, as a GPU buffer: `() -> Camera`, or `Geometry -> Camera`.
 //!
-//! **One consumer, two kinds of producer.** A camera that reads only the clock —
+//! **Several consumers, two kinds of producer.** A camera that reads only the clock —
 //! the built-in orbit, and every L3 that jumps on a beat or sweeps on `t` — has
 //! its state written from the host with a `queue.write_buffer`. A camera that
 //! follows an element has it written by a compute pass, because the element's
@@ -77,9 +77,14 @@ struct Producer {
 
 impl Camera {
     /// **`l3` is the producer, and `None` means the built-in orbit.** The
-    /// buffers, the derivation and the bind group every renderer names are the
+    /// buffers, the derivation and the bind group its renderers name are the
     /// same in both cases — a procedure joins as a second writer of an edge that
     /// already exists.
+    ///
+    /// **One of these per camera node**, which is one per L3 procedure and one
+    /// for the built-in where a Set declares none. Everything a renderer binds
+    /// is per instance already, so several cameras are several of these and
+    /// nothing else — see [`crate::set::Set::cameras`].
     pub(crate) fn build(
         device: &wgpu::Device,
         l3: Option<&Checked>,
@@ -223,22 +228,16 @@ impl Camera {
         }
     }
 
-    /// **How many nodes this is**, for [`crate::set::Set::slot_of`]: one when a
-    /// procedure produces the camera, none when the built-in does. The built-in
-    /// is a field on the Set rather than a node, and a Set with no L3 has no L3
-    /// parameter map to address.
-    pub(crate) fn node_count(&self) -> usize {
-        usize::from(self.proc.is_some())
-    }
-
     /// What a renderer's pipeline layout names.
     pub(crate) fn layout(&self) -> &wgpu::BindGroupLayout {
         &self.read_bgl
     }
 
-    /// What a renderer's draw sets. One bind group for every L4 in the Set:
-    /// **one camera serves every node**, which is what stops two renderers in a
-    /// Set disagreeing about where the frame is being watched from.
+    /// What a renderer's draw sets. One bind group per *camera*, handed to
+    /// every renderer bound to it: two L4s reading one camera are one viewpoint
+    /// drawn two ways, and two reading different ones are two viewpoints in one
+    /// frame — which is what an `edge` per renderer made sayable, and it needed
+    /// no change here.
     pub(crate) fn bind_group(&self) -> &wgpu::BindGroup {
         &self.read_bg
     }
