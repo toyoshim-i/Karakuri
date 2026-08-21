@@ -138,6 +138,20 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
         .iter()
         .find(|u| u.ty == SlotTy::Geometry)
         .map(|u| u.name.as_str());
+    // **The third such fact, and the one that makes a name callable.** A Field
+    // slot is read as `shape(p)`, so what the header declared has to reach the
+    // expression checker or the call resolves against the builtin table and
+    // finds nothing.
+    //
+    // A list where the geometry one is an option, because the two arities
+    // differ: there is at most one second element buffer per node, and a
+    // marcher wanting a shape and a cutter is the ordinary case.
+    let fields: Vec<&str> = proc
+        .uses
+        .iter()
+        .filter(|u| u.ty == SlotTy::Field)
+        .map(|u| u.name.as_str())
+        .collect();
     let fullscreen =
         proc.kind == Kind::L4 && proc.blocks.iter().all(|b| b.kind != BlockKind::Vertex);
     let mut blocks = Vec::with_capacity(proc.blocks.len());
@@ -154,6 +168,7 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
             Some(block.kind),
             fullscreen,
             uses,
+            &fields,
             &params,
             &emit_set,
             &consumes_set,
@@ -253,33 +268,6 @@ pub fn check(proc: &Proc) -> IrResult<Checked> {
 /// A vertex block is required of every L4 and its absence was already reported,
 /// so a procedure with none falls back to `points` rather than being given a
 /// second diagnostic about a block it does not have.
-/// Whether these statements evaluate `field(p)` anywhere.
-///
-/// Over the *untyped* tree, because it is asked in `check_header` before the
-/// blocks are checked — and a `field` block that is refused for recursion should
-/// say so rather than first reporting whatever else went wrong inside it.
-fn calls_field(stmts: &[crate::ast::Stmt]) -> bool {
-    use crate::ast::{Expr, Stmt};
-    fn in_expr(e: &Expr) -> bool {
-        match e {
-            Expr::Call { name, args, .. } => name == "field" || args.iter().any(in_expr),
-            Expr::Unary { value, .. } => in_expr(value),
-            Expr::Binary { lhs, rhs, .. } => in_expr(lhs) || in_expr(rhs),
-            Expr::Swizzle { value, .. } => in_expr(value),
-            _ => false,
-        }
-    }
-    stmts.iter().any(|s| match s {
-        Stmt::Let { value, .. } | Stmt::Var { value, .. } => in_expr(value),
-        Stmt::Assign { value, .. } => in_expr(value),
-        Stmt::If {
-            cond, then, els, ..
-        } => in_expr(cond) || calls_field(then) || calls_field(els),
-        Stmt::For { body, .. } => calls_field(body),
-        Stmt::Kill { .. } => false,
-    })
-}
-
 fn drawn_topology(blocks: &[TBlock]) -> Topology {
     let Some(vertex) = blocks.iter().find(|b| b.kind == BlockKind::Vertex) else {
         // No per-element position to compute, so nothing per element to draw:
@@ -372,6 +360,13 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                              is nothing for a second one to be blended with",
                         ))
                     }
+                    // **A Field slot is legal here, and on L2, L3 and L4** —
+                    // the four kinds the engine already walks when it decides
+                    // who evaluates a field. A field has no node and no
+                    // elements, so naming one adds an input to the file and
+                    // nothing to the chain: what an L1 may not take is
+                    // *geometry*, and that is what the arm above says.
+                    SlotTy::Field => {}
                 }
             }
             if proc.blocks.iter().all(|b| b.kind != BlockKind::Element) {
@@ -482,7 +477,14 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             //
             // Refused rather than resolved, because nothing wants it yet and a
             // rule invented for no case is a rule nobody can check against one.
-            if let (Some(u), Some(_)) = (proc.uses.first(), &proc.amplify) {
+            // **A geometry slot specifically.** What the two break is the
+            // meaning of the invocation index, and a Field slot does not touch
+            // it: a field has no elements to walk, so an amplifier that
+            // evaluates one is an ordinary amplifier.
+            if let (Some(u), Some(_)) = (
+                proc.uses.iter().find(|u| u.ty == SlotTy::Geometry),
+                &proc.amplify,
+            ) {
                 errors.push(
                     IrError::contract(u.span, "`uses` and `amplify` cannot both apply").with_hint(
                         "split them: a node that takes a second geometry, and a node below \
@@ -497,27 +499,22 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             // on the node and a second `edge` per Set, neither of which is
             // built; refusing here is what keeps a file that asks for it a
             // refusal rather than a picture that is quietly wrong.
-            for u in proc.uses.iter().skip(1) {
-                errors.push(
-                    IrError::contract(u.span, "a node takes one second geometry").with_hint(
-                        format!(
-                            "`{}` is already declared. Chain two nodes instead — each takes \
-                             one and passes the result down",
-                            proc.uses[0].name
-                        ),
-                    ),
-                );
-            }
-            // **The slot name shares one scope with everything else nameable
-            // here.** It is read the way a local is — `far.position` — so a
-            // slot called `position` or `t` would make one spelling mean two
-            // things depending on whether a dot follows it.
-            for u in &proc.uses {
-                check_reserved(&u.name, u.name_span, proc.kind, "geometry slot", errors);
-                if proc.params.iter().any(|p| p.name == u.name) {
+            // **The count is a rule about geometry, not about `uses`**, which
+            // is why it asks the type. A second *Field* slot is the ordinary
+            // case — a marcher wanting a shape and a cutter — and costs
+            // nothing, because a field has no node and no buffer: it is a body
+            // spliced in once more under a second name.
+            let mut geometries = proc.uses.iter().filter(|u| u.ty == SlotTy::Geometry);
+            if let Some(first) = geometries.next() {
+                for u in geometries {
                     errors.push(
-                        IrError::contract(u.name_span, format!("`{}` is already a param", u.name))
-                            .with_hint("a slot and a param share one scope — rename one of them"),
+                        IrError::contract(u.span, "a node takes one second geometry").with_hint(
+                            format!(
+                                "`{}` is already declared. Chain two nodes instead — each takes \
+                                 one and passes the result down",
+                                first.name
+                            ),
+                        ),
                     );
                 }
             }
@@ -608,6 +605,9 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                         IrError::contract(u.span, "`uses` is L2 only")
                             .with_hint("remove it: an L3 produces a viewpoint, not geometry"),
                     ),
+                    // Legal: a camera that frames a shape evaluates a field,
+                    // and evaluating one is not producing geometry.
+                    SlotTy::Field => {}
                 }
             }
             if !proc.emit.is_empty() {
@@ -691,6 +691,27 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                              second geometry to be read beside",
                         ))
                     }
+                    // **A field is the one kind that may not take one**, and
+                    // the reason is the one the recursion refusal here used to
+                    // carry: a field bound to itself is a function calling
+                    // itself, which WGSL forbids outright and which reached the
+                    // driver as a shader-module panic from a `.kir` that
+                    // checked clean.
+                    //
+                    // Two fields naming each other is the same failure at one
+                    // remove, and telling that apart from a legal chain of
+                    // shapes is a walk over every edge in the Set — a graph
+                    // question, answerable where the Set is built and nowhere
+                    // in this file. Refused whole rather than half-checked,
+                    // because the half a single file can check is the half
+                    // nobody writes by accident.
+                    SlotTy::Field => errors.push(
+                        IrError::contract(u.span, "a field cannot take a field").with_hint(
+                            "inline what you wanted from it — a field is the one procedure \
+                             whose whole body is an expression over `point`, and one bound to \
+                             itself is a function calling itself",
+                        ),
+                    ),
                 }
             }
             if !proc.emit.is_empty() || !proc.consumes.is_empty() {
@@ -711,31 +732,6 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                     IrError::contract(proc.span, "Field procedures require a `field` block")
                         .with_hint("add `field { … }`: it is the whole of what a field does"),
                 );
-            }
-            // **A field cannot evaluate a field, and the one it would evaluate
-            // is itself.** There is one per Set, so `field(p)` inside a `field`
-            // block is a function calling itself — which WGSL forbids outright,
-            // and which reached it as a shader-module panic from a `.kir` that
-            // checked clean.
-            //
-            // Refused as recursion rather than as "not available here", because
-            // that is what it is: the day a Set holds two fields, one naming
-            // the other is a question worth asking, and this sentence will
-            // still be the right one about naming itself.
-            if let Some(block) = proc.block(BlockKind::Field) {
-                if calls_field(&block.stmts) {
-                    errors.push(
-                        IrError::contract(
-                            block.span,
-                            "a field cannot evaluate a field: there is one per Set, so this \
-                             would be a function calling itself",
-                        )
-                        .with_hint(
-                            "inline what you wanted from it — a field is the one procedure \
-                             whose whole body is an expression over `point`",
-                        ),
-                    );
-                }
             }
         }
         Kind::L4 => {
@@ -778,6 +774,9 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
                              geometry is a deformation, above the renderer rather than inside it",
                         ))
                     }
+                    // Legal, and this is the kind it is most for: a marcher
+                    // that contains no shape at all takes one here.
+                    SlotTy::Field => {}
                 }
             }
             // **A `vertex` block is what makes an L4 per-element**, and an L4
@@ -828,6 +827,8 @@ fn check_header(proc: &Proc, errors: &mut Vec<IrError>) {
             }
         }
     }
+
+    check_slot_names(proc, errors);
 
     for block in &proc.blocks {
         if block.kind.kind() != proc.kind {
@@ -881,10 +882,84 @@ fn shadows_output(name: &str, kind: Kind) -> bool {
 /// docs on shadowing.
 ///
 /// **A slot name goes through here for the same reason a param's does**: it is
-/// read the way a local is, `far.position`, so one spelling would otherwise mean
-/// two things depending on whether a dot follows it. What it is *not* is a
+/// read the way a local is — `far.position`, `shape(p)` — so one spelling would
+/// otherwise mean two things depending on what follows it. What it is *not* is a
 /// reserved word of its own — the name belongs to the procedure that declared
 /// it, and reserving one language-wide is what caps a procedure at one input.
+///
+/// A *callable* slot has one more collision than this function knows about, and
+/// it is checked beside the call in [`check_slot_names`] rather than added here:
+/// a param named `sin` is still a perfectly good param.
+/// **What every slot name has to be, whatever type it was declared with.**
+///
+/// Outside the per-kind arms above, because it is not a rule about a kind: a
+/// Field slot is legal on four of the five, so a check that lived in L2's arm
+/// would leave the other three able to declare a slot called `position` — and
+/// the arm it lived in is exactly where nobody would look for it.
+fn check_slot_names(proc: &Proc, errors: &mut Vec<IrError>) {
+    for (at, u) in proc.uses.iter().enumerate() {
+        // **The slot name shares one scope with everything else nameable
+        // here.** It is read the way a local is — `far.position`, `shape(p)` —
+        // so a slot called `position` or `t` would make one spelling mean two
+        // things depending on what follows it.
+        check_reserved(&u.name, u.name_span, proc.kind, "slot", errors);
+        if proc.params.iter().any(|p| p.name == u.name) {
+            errors.push(
+                IrError::contract(u.name_span, format!("`{}` is already a param", u.name))
+                    .with_hint("a slot and a param share one scope — rename one of them"),
+            );
+        }
+        // **Two slots of one name**, which nothing could ask before: one slot
+        // per procedure made this unreachable, and several Field slots make it
+        // the first thing a second declaration gets wrong. Refused rather than
+        // resolved by position, on the terms every other collision here is —
+        // one name that means two inputs is the failure the whole notation
+        // exists to end, arriving through the notation itself.
+        if let Some(first) = proc.uses[..at].iter().find(|p| p.name == u.name) {
+            errors.push(
+                IrError::contract(u.name_span, format!("`{}` is already a slot", u.name))
+                    .with_hint(format!(
+                        "it is declared as `{}` above — an edge names a slot, so two of one \
+                         name would be one address for two inputs",
+                        first.ty.name()
+                    )),
+            );
+        }
+        // **A Field slot's name is *called*, so it has one more way to
+        // collide.** `check_reserved` asks about names that are read — an
+        // attribute, an ambient, a stage output — and a builtin is none of
+        // those: `sin` was a perfectly good slot name while a slot was only
+        // ever read with a dot after it. It is not one now, because a call
+        // resolves against the header first and `sin(x)` would stop meaning
+        // the sine.
+        //
+        // Refused rather than ordered around, because either order is a
+        // spelling that silently means something else than it says.
+        if u.ty == SlotTy::Field {
+            let clashes_with = if Builtin::from_name(&u.name).is_some() {
+                Some("a builtin function")
+            } else if Ty::from_name(&u.name).is_some() {
+                Some("a type constructor")
+            } else {
+                None
+            };
+            if let Some(what) = clashes_with {
+                errors.push(
+                    IrError::contract(
+                        u.name_span,
+                        format!("`{}` is {what}, and a Field slot is called", u.name),
+                    )
+                    .with_hint(format!(
+                        "a field is evaluated as `{}(p)`, so the name would have to mean two \
+                         things at one call site — rename the slot",
+                        u.name
+                    )),
+                );
+            }
+        }
+    }
+}
+
 fn check_reserved(
     name: &str,
     span: Span,
@@ -951,6 +1026,7 @@ fn check_params(proc: &Proc, errors: &mut Vec<IrError>) -> HashMap<String, Ty> {
             None,
             false,
             None,
+            &[],
             &empty_params,
             &empty_attrs,
             &empty_attrs,
@@ -1198,6 +1274,10 @@ fn reads_carried(e: &TExpr, carried: &HashSet<Attr>) -> bool {
         TExprKind::Builtin { args, .. } | TExprKind::Construct { args } => {
             args.iter().any(|a| reads_carried(a, carried))
         }
+        // **The argument, and nothing behind it.** A field is a function of the
+        // position it is handed and holds no state of its own, so what decides
+        // this is whatever the caller computed the point from.
+        TExprKind::Field { point, .. } => reads_carried(point, carried),
         TExprKind::Swizzle { value, .. } => reads_carried(value, carried),
     }
 }
@@ -1243,6 +1323,10 @@ fn reads_beats(blocks: &[TBlock]) -> bool {
             TExprKind::Builtin { args, .. } | TExprKind::Construct { args } => {
                 args.iter().any(in_expr)
             }
+            // The field's own body is another file's answer to this question,
+            // and the Set asks it there — see `Checked::reads_beats`. What is
+            // this procedure's is the point it hands over.
+            TExprKind::Field { point, .. } => in_expr(point),
             TExprKind::Swizzle { value, .. } => in_expr(value),
         }
     }
@@ -1443,6 +1527,15 @@ struct Checker<'a> {
     /// declaration is in the header and a block checker sees only its own
     /// block.
     uses: Option<&'a str>,
+    /// **What this procedure calls the fields it evaluates**, from every
+    /// `uses <name> : Field` in its header.
+    ///
+    /// The list is what makes `shape(p)` mean anything, and it is consulted
+    /// ahead of the builtin table: a call resolves against what the header
+    /// declared, which is the whole of this notation. Several, because a
+    /// procedure may want a shape and a cutter, and neither of them is "the"
+    /// field.
+    fields: &'a [&'a str],
     params: &'a HashMap<String, Ty>,
     emit: &'a HashSet<Attr>,
     consumes: &'a HashSet<Attr>,
@@ -1459,11 +1552,17 @@ enum TargetRes {
 }
 
 impl<'a> Checker<'a> {
+    // Eight, and each one is a fact about the *procedure* that a block checker
+    // cannot see for itself — the header is not in the block. Bundling them
+    // into a struct would be the same eight fields under one name, and the
+    // struct would have exactly one constructor and one use.
+    #[allow(clippy::too_many_arguments)]
     fn new(
         kind: Kind,
         block: Option<BlockKind>,
         fullscreen: bool,
         uses: Option<&'a str>,
+        fields: &'a [&'a str],
         params: &'a HashMap<String, Ty>,
         emit: &'a HashSet<Attr>,
         consumes: &'a HashSet<Attr>,
@@ -1473,6 +1572,7 @@ impl<'a> Checker<'a> {
             block,
             fullscreen,
             uses,
+            fields,
             params,
             emit,
             consumes,
@@ -1612,6 +1712,15 @@ impl<'a> Checker<'a> {
                 Stage::Contract,
                 span,
                 format!("`{name}` is the geometry this procedure uses"),
+                "a slot and a local share one scope — rename one of them",
+            );
+            return;
+        }
+        if self.fields.contains(&name) {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{name}` is a field this procedure uses"),
                 "a slot and a local share one scope — rename one of them",
             );
             return;
@@ -2126,8 +2235,8 @@ impl<'a> Checker<'a> {
                     span,
                     "`seed` is per element, and a field has none",
                     "a field is a function of space — it is handed `point` and nothing else, \
-                     and it is spliced into every procedure that calls `field(p)`, including \
-                     fragment stages that have no element at all. Vary it with `t`, `beats` \
+                     and it is spliced into every procedure that declares a slot for it, \
+                     including fragment stages that have no element at all. Vary it with `t`, `beats` \
                      or a `param` instead",
                 );
                 return None;
@@ -2169,6 +2278,21 @@ impl<'a> Checker<'a> {
                 format!(
                     "read an attribute of the element it is paired with — `{name}.position` \
                      — which is the whole of what a used geometry offers"
+                ),
+            );
+            return None;
+        }
+        // **A field is not a value either**, and for the mirror reason: it is a
+        // function of space, so what can be had from it is its value *at* a
+        // point. The language has no function type and nothing to pass one to.
+        if self.fields.contains(&name) {
+            self.err_hint(
+                Stage::Contract,
+                span,
+                format!("`{name}` is a field, not a value"),
+                format!(
+                    "evaluate it at a point — `{name}(p)` — which is the whole of what a \
+                     field offers"
                 ),
             );
             return None;
@@ -2316,22 +2440,89 @@ impl<'a> Checker<'a> {
         None
     }
 
+    /// **What the header declared, before the table the language ships.**
+    ///
+    /// A field is reached through a slot, so the name at a call site is the
+    /// procedure's own — and this branch is the whole of that. It is first for
+    /// the reason it is a branch at all: a call resolves against what the file
+    /// said it takes, and asking the builtin table first would make the
+    /// language's vocabulary quietly outrank the header. Nothing is hidden by
+    /// the order, since a slot named after a builtin is refused where it is
+    /// declared — see `check_slot_names`.
     fn check_call(&mut self, name: &str, args: &[Expr], span: Span) -> Option<TExpr> {
+        if self.fields.contains(&name) {
+            return self.check_field_call(name, args, span);
+        }
         if let Some(builtin) = Builtin::from_name(name) {
             return self.check_builtin_call(builtin, args, span);
         }
         if let Some(ty) = Ty::from_name(name) {
             return self.check_constructor(ty, args, span);
         }
-        self.err(
-            Stage::Type,
-            span,
-            format!("`{name}` is not a builtin function or a type constructor"),
+        // **`field` is an ordinary name now**, and this is the sentence the
+        // person migrating a file reads. It was the reserved word a field was
+        // reached through, and reserving one is exactly what capped a procedure
+        // at a single input — so it is gone rather than kept as an alias for
+        // "the one field, if there is exactly one", which is the rule the slot
+        // exists to remove.
+        let hint = (name == "field").then_some(
+            "`field(p)` is no longer the way to evaluate one: declare which field this \
+             procedure takes — `uses shape : Field` — and call it by that name, `shape(p)`. \
+             The Set binds it with `--edge <node>.shape=<field>`",
         );
+        match hint {
+            Some(hint) => self.err_hint(
+                Stage::Type,
+                span,
+                format!("`{name}` is not a builtin function or a type constructor"),
+                hint,
+            ),
+            None => self.err(
+                Stage::Type,
+                span,
+                format!("`{name}` is not a builtin function or a type constructor"),
+            ),
+        }
         for a in args {
             self.check_expr(a);
         }
         None
+    }
+
+    /// **A field's signature is the field block's**: one `vec3` in, a `float`
+    /// out. It is not read off the bound procedure, because no single file
+    /// holds one — every `kind Field` has exactly this shape, which is what
+    /// makes a slot bindable at all.
+    fn check_field_call(&mut self, slot: &str, args: &[Expr], span: Span) -> Option<TExpr> {
+        if args.len() != 1 {
+            self.err_hint(
+                Stage::Type,
+                span,
+                format!("`{slot}` takes 1 argument, found {}", args.len()),
+                "a field is handed a position and returns the distance at it",
+            );
+            for a in args {
+                self.check_expr(a);
+            }
+            return None;
+        }
+        let point = self.check_expr(&args[0])?;
+        if point.ty != Ty::Vec3 {
+            self.err(
+                Stage::Type,
+                point.span,
+                format!("`{slot}` expects `vec3`, found `{}`", point.ty.name()),
+            );
+            return None;
+        }
+        Some(TExpr::new(
+            Ty::Float,
+            span,
+            TExprKind::Field {
+                slot: slot.to_string(),
+                point: Box::new(point),
+            },
+        ))
     }
 
     fn check_builtin_call(&mut self, b: Builtin, args_ast: &[Expr], span: Span) -> Option<TExpr> {

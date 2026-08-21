@@ -3,10 +3,17 @@
 // Every marcher before this one carried its own distance function inline —
 // `examples/field_march.kir` still does — which made the two inseparable: the
 // shape could not be reused and the marcher could not be pointed at anything
-// else. This one calls `field(p)` and takes whatever the Set gives it, so the
-// same file draws any `kind Field` procedure:
+// else. This one declares the shape it takes and calls it by that name, so the
+// same file draws any `kind Field` procedure and the Set says which:
 //
-//   karakuri-cli --set drift_shell.kir,melt_blob.kir,field_lens.kir
+//   karakuri-cli --set drift_shell.kir,melt_blob.kir,field_lens.kir \
+//                --edge field_lens.shape=melt_blob
+//
+// **The name is this file's own and the binding is the Set's** — the same rule
+// `uses far : Geometry` follows, and the reason a `.kir` never names a node. It
+// used to be `field(p)`, one reserved word, which is exactly what made a
+// procedure able to reach one field: a second would have had nothing to be
+// called.
 //
 // **The cost is the caller's**, and this file is the proof. A field is inlined
 // at every call site, so each step of the march is another copy of the field's
@@ -18,6 +25,8 @@
 proc field_lens {
   kind  L4
   blend additive
+
+  uses shape : Field
 
   param spin     : float [0.0, 2.0] = 0.3
   param exposure : float [0.0, 8.0] = 1.0
@@ -36,7 +45,7 @@ proc field_lens {
     var hit = 0.0;
 
     for i in 0..34 {
-      d = field(p);
+      d = shape(p);
       if d < 0.005 {
         hit = 1.0;
       }

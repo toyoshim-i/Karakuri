@@ -825,8 +825,11 @@ fn an_edge_that_does_not_resolve_is_refused_by_the_part_that_missed() {
         "a slot the node does not declare",
         &[edge("morph", "other", "far")],
     );
+    // **"slot", not "geometry".** A slot may take a field now, and an edge is
+    // resolved against whatever the node declares rather than against the L2s
+    // alone — so the sentence is about a slot and the type is in the hint.
     assert!(
-        text.contains("declares no geometry called `other`") && text.contains("declares `far`"),
+        text.contains("declares no slot called `other`") && text.contains("declares `far`"),
         "it names the slot that is missing and the one that is there: {text}"
     );
 
@@ -899,7 +902,7 @@ fn an_edge_about_another_set_is_passed_over() {
         .expect("nothing bound the slot");
     assert!(
         err.to_string()
-            .contains("nothing in this Set says which one"),
+            .contains("`far : Geometry` and nothing in this Set says what fills it"),
         "{err}"
     );
 }

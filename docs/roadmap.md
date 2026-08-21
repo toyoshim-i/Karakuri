@@ -1559,7 +1559,7 @@ than against one being taught to.
   `--set L1.kir,L4.kir,L4.kir` reaches it. What it *did* cost was the parameter model — every
   L4 in `examples/` declares `exposure`, so the collision refusal had to go first
 - ~~**The `Field` type**~~ — **built.** `kind Field`, a `field` block, `point` in and
-  `distance` out; `field(p)` evaluates the Set's field from any procedure;
+  `distance` out; a procedure declares `uses shape : Field` and evaluates it as `shape(p)`;
   `examples/melt_blob.kir` is a shape and `examples/field_lens.kir` is a marcher that
   contains no shape at all.
 
@@ -1568,8 +1568,9 @@ than against one being taught to.
   ambient and one more output — exactly what L2 and L3 added. What made that possible is the
   L5 argument run backwards: a `kind` says what a procedure *lowers to*, an L5 has no `kind`
   because it has no code to lower, and a field has *only* code to lower, so it has a file and
-  no node. A consumer evaluates it as `field(p)`, and one per Set is the same restriction the
-  camera already has — several would need naming, and naming is fan-in.
+  no node. A consumer evaluates it through a slot its own header declared, and one per Set is
+  what the *engine* still holds rather than what the language says — the naming that "several
+  would need" is built, and the `Option<Field>` behind it is not yet a `Vec`.
 - ~~Graph compiler~~. Node graph as authoring representation, render graph as execution
   representation, with fusion of `Field` chains into single shaders. **Split and rescheduled
   rather than built**: the authoring half opens M4 as "Naming what a Set holds", and fusion is
@@ -1712,7 +1713,7 @@ no name:**
 | ~~A slot holding a chain or a second geometry cannot be saved as a Set file~~ | **Closed.** One `slot` record per node, one `capacity` per geometry |
 | ~~MCP reaches an L1 and the renderers and no other node~~ | **Closed.** A model reads and writes every node at `(slot, layer, index)` |
 | ~~Which geometry a node's second input takes is `--set` order~~ | **Closed.** `uses far : Geometry` declares a named slot and an `edge` binds it; an unbound slot is refused |
-| One `kind Field` per Set, one L3 per Set | The notation exists and this layer does not use it yet: `field(p)` names the one field by being the only one, so calling several needs the *call* to carry a name as well as the header |
+| One `kind Field` per Set, one L3 per Set | **Half closed for the field.** The call carries a name now — `uses shape : Field` and `shape(p)`, bound by an `edge` — so nothing in the language caps a Set at one field. What still does is the plumbing: the engine and the CLI hold one `Option<Field>` apiece and a second `kind Field` file is refused. The camera has neither half |
 | A mask cannot say which source it applies to | Nothing exposes the `source` uniform to a procedure. The value is the salt, which is assigned, recorded and already in every uniform block; the read is what is missing |
 | ~~A source's salt is derived from `--set` order rather than assigned~~ | **Closed.** A `seed` record per geometry, written by `--save-set` and read by `--load-set` |
 

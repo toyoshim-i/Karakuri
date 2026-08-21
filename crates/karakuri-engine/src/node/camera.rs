@@ -83,7 +83,7 @@ impl Camera {
     pub(crate) fn build(
         device: &wgpu::Device,
         l3: Option<&Checked>,
-        field: Option<&karakuri_codegen::field::FieldShader>,
+        field: Option<&Checked>,
     ) -> Camera {
         let state = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("camera state"),
@@ -346,7 +346,7 @@ impl Producer {
         device: &wgpu::Device,
         l3: &Checked,
         state: &wgpu::Buffer,
-        field: Option<&karakuri_codegen::field::FieldShader>,
+        field: Option<&Checked>,
     ) -> Producer {
         let shader = generate_l3(l3, field);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {

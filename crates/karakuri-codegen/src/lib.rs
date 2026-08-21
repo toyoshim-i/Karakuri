@@ -29,13 +29,56 @@
 
 pub mod field;
 
-/// Whether `checked` evaluates `field(p)` anywhere.
+/// **Which of `checked`'s Field slots it actually evaluates**, in the order its
+/// header declared them.
 ///
-/// **Asked of the cost estimate**, which already walks every block and counts
-/// them — a second walk here would be a second answer to one question, and this
-/// file has paid for that shape before.
-pub(crate) fn evaluates_field(checked: &karakuri_ir::typed::Checked) -> bool {
-    karakuri_ir::cost::estimate(checked).is_ok_and(|c| c.field_calls.any())
+/// It used to be a yes-or-no — there was one field per Set and one spelling for
+/// it, so "does this procedure call one" was the whole question. A slot is a
+/// name now, and every consumer of this answer needs the name: a splice is
+/// named for its slot, and so are the params it reads.
+///
+/// **Declared, filtered by the cost estimate**, which already walks every block
+/// and counts the calls per slot — a second walk here would be a second answer
+/// to one question, and this file has paid for that shape before. Declaration
+/// order rather than first-call order, so that moving a call in a body does not
+/// reorder a uniform struct.
+///
+/// **Only the slots it evaluates**, because a splice is a body in the caller's
+/// module: a renderer that declares a field and never calls it would otherwise
+/// carry its params and fail to compile if the field's body did — a `.kir`
+/// taking down shaders that have nothing to do with it.
+pub(crate) fn evaluated_slots(checked: &karakuri_ir::typed::Checked) -> Vec<&str> {
+    let declared = checked.field_slots();
+    if declared.is_empty() {
+        return Vec::new();
+    }
+    let Ok(cost) = karakuri_ir::cost::estimate(checked) else {
+        return Vec::new();
+    };
+    declared
+        .into_iter()
+        .filter(|s| cost.field_calls.slot(s).is_some_and(|c| c.total > 0))
+        .collect()
+}
+
+/// The splices one caller needs: the bound field's body, once per slot the
+/// caller reaches it through.
+///
+/// One function per *slot* rather than per field, because the name at the call
+/// site is the caller's own. Two slots on one field are two identical bodies
+/// under two names in one module, which costs a few hundred bytes of WGSL and
+/// buys each of them its own params.
+pub(crate) fn splices(
+    checked: &karakuri_ir::typed::Checked,
+    field: Option<&karakuri_ir::typed::Checked>,
+) -> Vec<field::FieldShader> {
+    let Some(f) = field else {
+        return Vec::new();
+    };
+    evaluated_slots(checked)
+        .into_iter()
+        .map(|slot| field::generate_field(f, slot))
+        .collect()
 }
 pub mod l1;
 pub mod l2;

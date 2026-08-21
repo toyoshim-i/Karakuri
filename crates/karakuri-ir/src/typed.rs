@@ -192,6 +192,27 @@ impl Checked {
             .map(|s| s.name.as_str())
     }
 
+    /// **The fields this procedure declares**, in the order the header wrote
+    /// them, and empty for one that declares none.
+    ///
+    /// A list where [`Checked::geometry_slot`] is an option, and the difference
+    /// is the whole of what the type on a slot is for: there is at most one
+    /// second element buffer per node, and there is no such limit on fields —
+    /// a marcher wanting a shape and a cutter is the ordinary case, and a field
+    /// has no node for a second one to need.
+    ///
+    /// Every caller wants the Field ones specifically: a lowering splices a
+    /// body per name here, and a Set's edge resolves each against a `kind
+    /// Field` procedure. A slot of another type answers a different question
+    /// and must not answer this one by being in the list.
+    pub fn field_slots(&self) -> Vec<&str> {
+        self.uses
+            .iter()
+            .filter(|s| s.ty == SlotTy::Field)
+            .map(|s| s.name.as_str())
+            .collect()
+    }
+
     /// **Whether nothing ever moves an element between slots**, so that `seed`
     /// is the slot index for the whole run.
     ///
@@ -242,15 +263,18 @@ pub fn contains_kill(stmts: &[TStmt]) -> bool {
 /// evaluates a field. Adding them charges a one-off spawn cost on every frame
 /// for the life of the element, and charges fill rate as though it were
 /// geometry.
-/// Field evaluations per unit of each of [`Cost`]'s quantities.
+/// Field evaluations by **one slot**, per unit of each of [`Cost`]'s
+/// quantities.
 ///
 /// Three counters rather than one, because which ceiling an evaluation charges
 /// is decided by the block it sits in: one in a `vertex` happens per element
 /// and one in a `fragment` per covered pixel, and adding them would charge fill
 /// rate as though it were geometry — the same mistake the three op counts are
 /// separate to prevent.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct FieldCalls {
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SlotCalls {
+    /// What the procedure's header called the field these calls reach.
+    pub slot: String,
     pub per_element: u64,
     pub per_spawn: u64,
     pub per_fragment: u64,
@@ -262,22 +286,58 @@ pub struct FieldCalls {
     ///
     /// Counted separately rather than folded into one of the three, because
     /// the three are *rates* and this is not: what it answers is "does this
-    /// procedure evaluate a field", which has no denominator.
+    /// procedure evaluate this field", which has no denominator.
     pub total: u64,
 }
 
+/// How often a procedure evaluates each of the fields it declares.
+///
+/// **Labelled, where it used to be one anonymous set of counters.** A count
+/// with no slot on it was answerable while `field(p)` named the one field by
+/// being the only spelling there was; a procedure that takes a shape and a
+/// cutter multiplies two different `ops_per_evaluation` figures, and a sum
+/// across both cannot be attributed to either. So the ceiling arithmetic adds
+/// the slots up and the refusal names the one that dominates.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FieldCalls {
+    /// One entry per slot the procedure actually calls, in first-call order.
+    /// A declared slot nothing evaluates has no entry: what this counts is
+    /// calls, and the header is where the declaration is recorded.
+    pub slots: Vec<SlotCalls>,
+}
+
 impl FieldCalls {
-    /// Whether this procedure evaluates a field at all — which is what decides
-    /// whether a Set holding no field can build it.
+    /// Whether this procedure evaluates any field at all — which is what
+    /// decides whether its module needs one spliced into it.
     ///
-    /// **Asks the total, not the three rates.** A block charged to no ceiling
+    /// **Asks the totals, not the three rates.** A block charged to no ceiling
     /// still calls the function.
-    pub fn any(self) -> bool {
-        self.total > 0
+    pub fn any(&self) -> bool {
+        self.slots.iter().any(|s| s.total > 0)
+    }
+
+    /// The counters for one slot, and `None` for a slot this procedure declares
+    /// and never calls.
+    pub fn slot(&self, slot: &str) -> Option<&SlotCalls> {
+        self.slots.iter().find(|s| s.slot == slot)
+    }
+
+    /// The counters for `slot`, created empty if this is its first call.
+    pub(crate) fn entry(&mut self, slot: &str) -> &mut SlotCalls {
+        if let Some(at) = self.slots.iter().position(|s| s.slot == slot) {
+            return &mut self.slots[at];
+        }
+        self.slots.push(SlotCalls {
+            slot: slot.to_string(),
+            ..SlotCalls::default()
+        });
+        self.slots.last_mut().expect("just pushed")
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// **No longer `Copy`**, because [`FieldCalls`] carries the slot names — and a
+/// name is what makes a refusal about several fields say which one it is about.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Cost {
     /// Per live element, per frame: the L1 `element` block or the L4 `vertex`
     /// block. This is the figure the ceiling applies to and the one the
@@ -310,9 +370,9 @@ pub struct Cost {
     /// Not a cost: a count, which the Set multiplies by the field's
     /// `ops_per_evaluation` and adds to the figure on the matching axis. It is
     /// here rather than in the engine because it is what cost estimation
-    /// already knows and nothing else does — a `field(p)` inside `for i in
-    /// 0..48` is forty-eight evaluations, and only the pass that resolves loop
-    /// bounds can say so.
+    /// already knows and nothing else does — a `shape(p)` inside `for i in
+    /// 0..48` is forty-eight evaluations of `shape`, and only the pass that
+    /// resolves loop bounds can say so.
     pub field_calls: FieldCalls,
 }
 
@@ -415,6 +475,21 @@ pub enum TExprKind {
     Builtin {
         func: Builtin,
         args: Vec<TExpr>,
+    },
+    /// **The distance a field gives at a point** — `<slot>(p)`, where the slot
+    /// is whatever this procedure's `uses` called it.
+    ///
+    /// Its own variant rather than a builtin, because there is no body for it
+    /// here: it lowers to a call of the function another file was spliced in
+    /// as, so a Set that binds the slot to nothing cannot satisfy it. That was
+    /// true of `Builtin::Field` too, and the difference is the name — **which
+    /// is carried, unlike [`TExprKind::Far`]'s.** A geometry read has nowhere
+    /// else to point, because a node takes one second geometry; a field call
+    /// does, because a procedure may declare several, and the slot is what the
+    /// lowering addresses the function and the params under.
+    Field {
+        slot: String,
+        point: Box<TExpr>,
     },
     /// `vec3(a, b, c)`, `vec3(x)` broadcasting, and the scalar conversions
     /// `float(i)` / `int(x)` / `uint(x)`. All of them construct `ty` from

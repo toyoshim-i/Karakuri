@@ -43,17 +43,21 @@ proc ball {
 "#;
 
 /// Marches whatever the Set gives it. **It contains no shape at all**, which is
-/// the whole claim: the same renderer draws any field.
+/// the whole claim: the same renderer draws any field — and it says which field
+/// by declaring a slot the Set binds, rather than by naming a word the language
+/// reserved.
 const LENS: &str = r#"
 proc lens {
   kind  L4
   blend additive
 
+  uses shape : Field
+
   fragment {
     var p = eye;
     var hit = 0.0;
     for i in 0..40 {
-      let d = field(p);
+      let d = shape(p);
       if d < 0.005 {
         hit = 1.0;
       }
@@ -79,7 +83,37 @@ fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
         .join("\n")
 }
 
+/// One edge, pointing with the names nobody wrote: a node nothing names is
+/// called what its procedure declares, so the renderer is `lens` and the field
+/// is whatever its own `proc` line says.
+fn edge(node: &str, slot: &str, to: &str) -> karakuri_engine::set::Edge {
+    karakuri_engine::set::Edge {
+        node: node.to_string(),
+        slot: slot.to_string(),
+        to: to.to_string(),
+    }
+}
+
+/// The name a `.kir` gives its procedure, which is the name its node ends up
+/// with here — read off the source rather than repeated, so a test that swaps
+/// the field swaps what the edge points at.
+fn proc_name(src: &str) -> String {
+    compile(src).name
+}
+
 fn build(gpu: &Gpu, field: Option<&str>, l4: &str) -> Result<Set, SetError> {
+    let edges: Vec<karakuri_engine::set::Edge> = field
+        .map(|f| vec![edge("lens", "shape", &proc_name(f))])
+        .unwrap_or_default();
+    build_wired(gpu, field, l4, &edges)
+}
+
+fn build_wired(
+    gpu: &Gpu,
+    field: Option<&str>,
+    l4: &str,
+    edges: &[karakuri_engine::set::Edge],
+) -> Result<Set, SetError> {
     let field = field.map(compile);
     let mut set = Set::build_many(
         &gpu.device,
@@ -92,7 +126,10 @@ fn build(gpu: &Gpu, field: Option<&str>, l4: &str) -> Result<Set, SetError> {
         Layering::Overdraw,
         7,
         &[],
-        karakuri_engine::set::Wiring::default(),
+        karakuri_engine::set::Wiring {
+            edges,
+            ..Default::default()
+        },
     )?;
     set.resize(&gpu.device, W, H);
     set.camera = karakuri_engine::camera::Orbit {
@@ -198,19 +235,108 @@ fn a_fields_param_reaches_every_caller() {
     );
 }
 
-/// **A procedure that evaluates a field and a Set that has none is refused by
-/// name.** The call lowers to a function name, so a module without it is WGSL
-/// naga refuses — a panic on the thread that built it, from a `.kir` the
-/// checker accepted, which is the one shape a composition check exists to
+/// **A procedure that takes a field and a Set that binds it to nothing is
+/// refused by name.** The call lowers to a function name, so a module without
+/// it is WGSL naga refuses — a panic on the thread that built it, from a `.kir`
+/// the checker accepted, which is the one shape a composition check exists to
 /// prevent.
+///
+/// **Refused at the declaration rather than at the call**, which is the
+/// difference the slot makes: the sentence names the slot the file declared and
+/// the flag that would bind it, where the one it replaced could only say that
+/// some procedure somewhere evaluated a field.
 #[test]
-fn a_caller_with_no_field_is_refused_rather_than_fatal() {
+fn an_unbound_field_slot_is_refused_rather_than_fatal() {
     let gpu = Gpu::headless().expect("a GPU");
-    let err = build(&gpu, None, LENS)
+    let err = build_wired(&gpu, None, LENS, &[])
         .err()
-        .expect("nothing provides `field(p)`");
+        .expect("nothing fills `lens.shape`");
     let text = err.to_string();
-    assert!(text.contains("lens") && text.contains("field"), "{text}");
+    assert!(
+        text.contains("lens") && text.contains("shape") && text.contains("Field"),
+        "{text}"
+    );
+
+    // And a Set that *holds* a field still refuses one that says nothing about
+    // which: "there is exactly one, so use it" is the rule the slot removes.
+    let err = build_wired(&gpu, Some(BALL), LENS, &[])
+        .err()
+        .expect("an unbound slot is not filled in from what is lying around");
+    assert!(err.to_string().contains("shape"), "{err}");
+}
+
+/// **A slot bound to something that is not a field is refused**, and the
+/// refusal says what the node it names actually is.
+///
+/// The alternative is a Set that builds a renderer calling a function the
+/// bound node never produced — a geometry has no `_field_shape_at` to splice,
+/// and nothing below here would notice before naga did.
+#[test]
+fn a_field_slot_bound_to_something_that_is_not_a_field_is_refused() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let to_the_l1 = vec![edge("lens", "shape", "still")];
+    let err = build_wired(&gpu, Some(BALL), LENS, &to_the_l1)
+        .err()
+        .expect("an L1 is not a field");
+    let text = err.to_string();
+    assert!(
+        text.contains("still") && text.contains("an L1") && text.contains("Field"),
+        "{text}"
+    );
+}
+
+/// **Two Field slots on one procedure are accepted**, which is the rule a
+/// geometry slot does not follow and the reason the two are told apart by type.
+///
+/// A marcher wanting a shape and a cutter is the ordinary case, and a field has
+/// no node for a second one to need: each slot is another copy of a body under
+/// another name, with params of its own. Both are bound to the same field here
+/// because a Set holds one — what is being claimed is the *notation*, and that
+/// two names reach it independently.
+#[test]
+fn two_field_slots_on_one_procedure_are_accepted() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let two = r#"
+proc lens {
+  kind  L4
+  blend additive
+
+  uses shape  : Field
+  uses cutter : Field
+
+  fragment {
+    var p = eye;
+    var hit = 0.0;
+    for i in 0..40 {
+      let d = max(shape(p), -cutter(p + vec3(0.4, 0.0, 0.0)));
+      if d < 0.005 {
+        hit = 1.0;
+      }
+      p = p + ray * max(d, 0.005);
+    }
+    color = vec4(hit, hit, hit, 1.0);
+  }
+}
+"#;
+    let edges = vec![
+        edge("lens", "shape", "ball"),
+        edge("lens", "cutter", "ball"),
+    ];
+    let mut set = build_wired(&gpu, Some(BALL), two, &edges).expect("two slots, one field");
+    let hit = covered(&gpu, &mut set);
+    assert!(
+        hit > 0 && hit < (W * H) as usize,
+        "the two together carve a figure, and covered {hit} texels"
+    );
+
+    // **The two are addressed apart**, which is what the slot in the name is
+    // for: one set of params per slot, so a Set holding two fields would drive
+    // them separately. Both reach the same field today, so the picture is the
+    // proof that each name resolved to a body of its own.
+    assert!(
+        !set.node_names().is_empty(),
+        "and the Set built rather than collapsing the two names into one"
+    );
 }
 
 /// **Neither file is over budget and the pair is**, which is what a Set-level
@@ -276,7 +402,17 @@ fn two_renderers_in_one_set_agree_on_the_fields_value() {
         Layering::Overdraw,
         7,
         &[],
-        karakuri_engine::set::Wiring::default(),
+        karakuri_engine::set::Wiring {
+            // **Both, and separately.** Two uses of one procedure are two nodes
+            // — `lens` and `lens-2` — and a slot is bound per node, so "the same
+            // field everywhere" is a thing the Set says twice rather than a
+            // thing it assumes.
+            edges: &[
+                edge("lens", "shape", "ball"),
+                edge("lens-2", "shape", "ball"),
+            ],
+            ..Default::default()
+        },
     )
     .expect("two renderers over one field");
     both.resize(&gpu.device, W, H);

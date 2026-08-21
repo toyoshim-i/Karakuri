@@ -214,7 +214,7 @@ so a saved Set loads as overdraw. That one stays on the command line.
 | `--capacity N` | elements per geometry. **Without it each procedure's own declared default is used**, which is what a `.kir`'s `capacity [min, max] = N` line is for; give this and it overrides every source in every slot |
 | `--param name=value` | a uniform write, applied to every Set — and within a Set, to every node that declares the name |
 | `--param L4:1:name=value` | the same, addressed at one node. How two renderers over one geometry get different values; a bare name cannot, since it reaches both. `L1`, `L2`, `L3`, `L4` and `Field`, and the index is required |
-| `--edge NODE.SLOT=NODE` | bind a procedure's declared geometry input to a node of this Set — `--edge morph.far=sphere_shell`. A `.kir` that declares `uses far : Geometry` names the slot and never which node fills it, so this is where that is said. Both sides are node names. A declared slot nothing binds is refused rather than guessed at |
+| `--edge NODE.SLOT=NODE` | bind a procedure's declared input to a node of this Set — `--edge morph.far=sphere_shell` for a geometry, `--edge field_lens.shape=melt_blob` for a field. A `.kir` that declares `uses far : Geometry` or `uses shape : Field` names the slot and never which node fills it, so this is where that is said. Both sides are node names. A declared slot nothing binds is refused rather than guessed at, and so is one bound to the wrong sort of node |
 | `--publish NAME=key[LOW..HIGH]` | put one control on the console under a name the Set chose, over part of its declared range. Without any, every control is published — the first `--publish` makes the list *the* list. It narrows and never widens: a range outside what the procedure declared is refused |
 | `--publish NAME=L4:0:key[LOW..HIGH]` | the same, addressed at one node rather than every node declaring the key |
 | `--bind FIELDS` | attach a signal to a parameter — `layer=L1,key=turbulence,signal=energy,range=0.0..3.0`. `layer`, `key`, `signal` and `range` are required; `index=N`, `curve=lin\|pow2\|sqrt\|smooth` and the `noise.*` fields are optional. `--help` lists them all |
@@ -678,12 +678,23 @@ A path in the list may also be a **field** — a signed distance function, and n
 It draws nothing and holds no elements; it is a shape, and whoever wants one evaluates it:
 
 ```
-karakuri-cli --set examples/drift_shell.kir,examples/melt_blob.kir,examples/field_lens.kir
+karakuri-cli --set examples/drift_shell.kir,examples/melt_blob.kir,examples/field_lens.kir \
+             --edge field_lens.shape=melt_blob
 ```
 
 `field_lens.kir` is a renderer that **contains no shape at all**. It marches whatever the Set
 gives it, so the same file draws any field — and `melt_blob.kir` is a shape no renderer owns.
 Before this, a marcher carried its distance function inline and the two were inseparable.
+
+**The renderer says what it takes and you say which one it gets.** Its header declares
+`uses shape : Field` and its body calls `shape(p)`; the `--edge` above is where the Set
+answers. That is the same rule `--edge morph.far=sphere_shell` follows and it exists for the
+same reason: a `.kir` that named a node would be coupled to one Set and would stop being a
+file you can reuse. **A slot nothing binds is refused** rather than filled in from whatever
+field happens to be in the list.
+
+> It used to be `field(p)` — one reserved word, so one field, since a second would have had
+> nothing to be called. Files written against it need one `uses` line and one renamed call.
 
 Its `param`s are yours to ride like any other — an override, a fader, a signal
 binding, a published control — addressed by its kind:
@@ -692,10 +703,11 @@ binding, a published control — addressed by its kind:
 karakuri-cli --param Field:0:blend_k=1.2 --set ...
 ```
 
-One field per Set, the same as the camera. **The cost is the renderer's**: a field is inlined
-wherever it is evaluated, so a marcher that samples it forty times pays for it forty times —
-and a field that fits on its own and a marcher that fits on its own can still be refused
-together, with both figures in the message.
+One field per Set for now, the same as the camera — the notation no longer says so, but the
+`--set` list still refuses a second `kind Field`. **The cost is the renderer's**: a field is
+inlined wherever it is evaluated, so a marcher that samples it forty times pays for it forty
+times — and a field that fits on its own and a marcher that fits on its own can still be
+refused together, with both figures in the message.
 
 ### Two attributes you do not have to emit
 

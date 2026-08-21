@@ -501,7 +501,8 @@ pub enum Ambient {
     /// **Where the field is being evaluated**, in world space. `field` block
     /// only.
     ///
-    /// The argument of `field(p)`, seen from inside. It is an ambient rather
+    /// The argument a caller hands over — `shape(p)` — seen from inside. It
+    /// is an ambient rather
     /// than a declared parameter because a `.kir` procedure has no parameter
     /// list — every block reads its inputs by name, and this is that pattern
     /// with one input.
@@ -696,24 +697,23 @@ pub struct AmplifyDecl {
     pub span: Span,
 }
 
-/// `uses <name> : Geometry`
+/// `uses <name> : Geometry`, `uses <name> : Field`
 ///
-/// **L2 only: a second geometry this node takes, named by the procedure and
-/// bound by the Set.**
+/// **One input this node takes, named by the procedure and bound by the Set.**
 ///
 /// The name is the *procedure's own*, exactly as `consumes position` names an
 /// attribute without naming which L1 supplies it. That is what keeps a `.kir` a
 /// library part: a file that named a node would be coupled to one Set and could
-/// not be used in another. Which geometry fills the slot is written where the
-/// use is recorded — an `edge` in the Set file, `--edge <node>.<slot>=<geometry>`
-/// on the command line — and an unbound slot is refused rather than filled in
-/// from whatever happened to be lying around.
+/// not be used in another. What fills the slot is written where the use is
+/// recorded — an `edge` in the Set file, `--edge <node>.<slot>=<node>` on the
+/// command line — and an unbound slot is refused rather than filled in from
+/// whatever happened to be lying around.
 ///
-/// The type is `Geometry` and there is nothing else it can be yet. It is written
-/// anyway, and refused when it is anything else, because a slot that takes a
-/// camera or a field is the next thing this notation is for and a declaration
-/// with no type in it would have to grow one incompatibly. It is *carried*
-/// rather than checked and dropped — see [`SlotTy`].
+/// **The type decides every rule about it**, which is why it is written and
+/// carried rather than checked and dropped — see [`SlotTy`]. Which kinds may
+/// declare one, how many are legal, what an `edge` may bind it to and how it is
+/// read all differ between the two, and each of those refusals is a sentence
+/// about a type rather than about `uses`.
 #[derive(Debug, Clone)]
 pub struct UsesDecl {
     pub name: String,
@@ -727,31 +727,52 @@ pub struct UsesDecl {
 
 /// **What a `uses` slot takes** — the type in `uses far : Geometry`.
 ///
-/// One variant, because a Field slot and a Camera slot arrive with the work
-/// that binds them: a variant nothing constructs is a variant nothing checks,
-/// and an arm written ahead of the rule it stands for is a guess about a
-/// decision nobody has made.
-///
 /// **The value is what the rules are about.** "An L3 produces a viewpoint, not
 /// geometry" is a sentence about a *geometry* slot rather than about `uses`,
-/// and a checker matching on this says so — so the day a second variant exists,
-/// each such refusal grows an arm beside the one it has rather than being
-/// rewritten around a distinction it never drew.
+/// and a checker matching on this says so — which is why the second variant
+/// cost each such refusal one arm rather than a rewrite around a distinction
+/// nothing had drawn.
+///
+/// The two differ in every rule that mentions them, which is the argument for
+/// the type being written down at all: a geometry slot is L2's alone and there
+/// is at most one, because a second bound element buffer is not built; a Field
+/// slot is legal on the four kinds that can evaluate one and there may be
+/// several, because a marcher wanting a shape and a cutter is the ordinary
+/// case.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SlotTy {
     /// The elements of an L1, read beside the ones this node runs over.
     Geometry,
+    /// **A `kind Field` procedure, evaluated at a point.**
+    ///
+    /// Read as a *call* — `shape(p)` — because a field has no members and does
+    /// have an argument. That reuses `Expr::Call` the way a geometry slot's
+    /// read reuses `expr . ident`: one existing shape given a second meaning,
+    /// resolved against what the header declared rather than against a word the
+    /// language reserved. Reserving one is what capped a procedure at one
+    /// field, and there is no reserved word left to cap it.
+    Field,
 }
 
 impl SlotTy {
     /// The spelling a header uses, on [`Attr::from_name`]'s terms: one place
-    /// that knows which words are types, so a second type is a line here and
+    /// that knows which words are types, so a third type is a line here and
     /// nothing in the parser.
     pub fn from_name(s: &str) -> Option<SlotTy> {
         Some(match s {
             "Geometry" => SlotTy::Geometry,
+            "Field" => SlotTy::Field,
             _ => return None,
         })
+    }
+
+    /// The spelling, back — for a refusal that has to name the type the header
+    /// was written with rather than the one it is talking about.
+    pub fn name(self) -> &'static str {
+        match self {
+            SlotTy::Geometry => "Geometry",
+            SlotTy::Field => "Field",
+        }
     }
 }
 
@@ -766,20 +787,21 @@ pub struct Proc {
     pub capacity: Option<CapacityDecl>,
     /// L2 only.
     pub amplify: Option<AmplifyDecl>,
-    /// **L2 only: the named geometry inputs this procedure declares.**
+    /// **The named inputs this procedure declares**, of whichever types its
+    /// kind allows.
     ///
-    /// `L2 : Geometry -> Geometry` is an endomorphism, which is what makes a
-    /// chain stackable — and this breaks it in the second of the two possible
-    /// directions. `amplify` broke it on the *count* axis, one element in and
-    /// several out; this breaks it on the *arity* axis, two geometries in and
-    /// one out. Both stay in the same slot position and both are declared in the
-    /// header, because what a `deform` writes is decided before it runs.
+    /// A geometry slot is L2's alone and breaks `L2 : Geometry -> Geometry` on
+    /// the *arity* axis, two geometries in and one out, as `amplify` breaks it
+    /// on the count axis. A Field slot is legal on the four kinds that can
+    /// evaluate one and changes no signature at all: a field has no node, so
+    /// naming one adds an input to the file and nothing to the chain.
     ///
-    /// **A list here and at most one after the check.** The parser collects
-    /// every `uses` so that a second one is refused with a sentence about what
-    /// is missing rather than silently overwriting the first — see
-    /// `check_header`. This is the system's first *named* fan-in, and the
-    /// notation is what the rest of it will be spelled with.
+    /// **A list here and whatever the check pass allows after it.** The parser
+    /// collects every `uses` and decides nothing, so a declaration too many is
+    /// refused with a sentence about the type it was written with rather than
+    /// silently overwriting the first — see `check_header`. This is the
+    /// system's named fan-in, and the notation is what the rest of it will be
+    /// spelled with.
     pub uses: Vec<UsesDecl>,
     /// L4 only.
     pub blend: Option<Blend>,
