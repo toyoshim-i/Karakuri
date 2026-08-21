@@ -1311,8 +1311,9 @@ which geometry the second input takes was decided by `--set` order and written n
 paragraph promised that "when fan-in arrives it brings the notation with it"; fan-in arrived
 twice and brought none. The notation is now built: a procedure declares a named input slot
 (`uses far : Geometry`) and the Set binds it (an `edge` record, `--edge morph.far=sphere`).
-What is left is carrying it to the other capped-at-one places — the field, the camera, a
-mask's source. See "Naming what a Set holds".
+What is left is carrying it to the other capped-at-one places — ~~the field~~, the camera, a
+mask's source. The field is done: `uses shape : Field` declares it, an `edge` binds it, and a
+Set holds as many as its files declare. See "Naming what a Set holds".
 
 **How a param is addressed.** Under the hierarchy framing this was "layer and position";
 under nodes it is simply **the node**, which is the same key with a name that will still be
@@ -1713,7 +1714,7 @@ no name:**
 | ~~A slot holding a chain or a second geometry cannot be saved as a Set file~~ | **Closed.** One `slot` record per node, one `capacity` per geometry |
 | ~~MCP reaches an L1 and the renderers and no other node~~ | **Closed.** A model reads and writes every node at `(slot, layer, index)` |
 | ~~Which geometry a node's second input takes is `--set` order~~ | **Closed.** `uses far : Geometry` declares a named slot and an `edge` binds it; an unbound slot is refused |
-| One `kind Field` per Set, one L3 per Set | **Half closed for the field.** The call carries a name now — `uses shape : Field` and `shape(p)`, bound by an `edge` — so nothing in the language caps a Set at one field. What still does is the plumbing: the engine and the CLI hold one `Option<Field>` apiece and a second `kind Field` file is refused. The camera has neither half |
+| One `kind Field` per Set, one L3 per Set | **Closed for the field, and only for the field.** The call carries a name — `uses shape : Field` and `shape(p)`, bound by an `edge` — and the plumbing behind it is a list: a Set holds as many `kind Field` files as it is given, each a node with a name, an address (`Field:1:radius`) and a `slot` record of its own. **The camera is untouched and stays capped at one**, which is a rule rather than a limit: a Set is a grouping around one viewpoint, and compositing two of them is what an L5 is for — so this row closes half way and the half it leaves is the half that is meant to stay |
 | A mask cannot say which source it applies to | Nothing exposes the `source` uniform to a procedure. The value is the salt, which is assigned, recorded and already in every uniform block; the read is what is missing |
 | ~~A source's salt is derived from `--set` order rather than assigned~~ | **Closed.** A `seed` record per geometry, written by `--save-set` and read by `--load-set` |
 

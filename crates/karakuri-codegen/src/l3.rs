@@ -58,7 +58,7 @@ pub struct L3Shader {
 pub const ENTRY: &str = "produce";
 
 /// Generate the compute shader for one L3.
-pub fn generate_l3(checked: &Checked, field: Option<&Checked>) -> L3Shader {
+pub fn generate_l3(checked: &Checked, fields: crate::Bound<'_>) -> L3Shader {
     assert_eq!(
         checked.kind,
         Kind::L3,
@@ -92,7 +92,7 @@ pub fn generate_l3(checked: &Checked, field: Option<&Checked>) -> L3Shader {
     // if the field's body did — a `.kir` taking down shaders that have nothing
     // to do with it. The slot is in the name because two fields in one caller
     // are two independent sets of values.
-    let splices = crate::splices(checked, field);
+    let splices = crate::splices(checked, fields);
     for f in &splices {
         for (name, ty) in &f.params {
             b.field_param_field(&f.slot, name, ty);

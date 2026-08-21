@@ -42,6 +42,50 @@ proc ball {
 }
 "#;
 
+/// **A second shape, offset from the first along the up axis**, so that "which
+/// field" is a question with two different answers on screen. Up rather than
+/// across, because the orbit camera looks along a horizontal axis: a shape
+/// offset that way sits behind the first and adds no silhouette to count. It declares `radius` as well,
+/// deliberately: two fields sharing a param name is the case an address has to
+/// survive, and `Field:0:radius` and `Field:1:radius` are two numbers because
+/// they are two procedures.
+const SHELL: &str = r#"
+proc shell {
+  kind Field
+
+  param radius : float [0.1, 3.0] = 0.5
+
+  field {
+    distance = sd_sphere(point + vec3(0.0, 1.0, 0.0), radius);
+  }
+}
+"#;
+
+/// A marcher with two slots: a shape and something cut out of it. It names
+/// neither field, which is the point — the Set says which is which.
+const CARVE: &str = r#"
+proc lens {
+  kind  L4
+  blend additive
+
+  uses shape  : Field
+  uses cutter : Field
+
+  fragment {
+    var p = eye;
+    var hit = 0.0;
+    for i in 0..40 {
+      let d = max(shape(p), -cutter(p));
+      if d < 0.005 {
+        hit = 1.0;
+      }
+      p = p + ray * max(d, 0.005);
+    }
+    color = vec4(hit, hit, hit, 1.0);
+  }
+}
+"#;
+
 /// Marches whatever the Set gives it. **It contains no shape at all**, which is
 /// the whole claim: the same renderer draws any field — and it says which field
 /// by declaring a slot the Set binds, rather than by naming a word the language
@@ -105,24 +149,36 @@ fn build(gpu: &Gpu, field: Option<&str>, l4: &str) -> Result<Set, SetError> {
     let edges: Vec<karakuri_engine::set::Edge> = field
         .map(|f| vec![edge("lens", "shape", &proc_name(f))])
         .unwrap_or_default();
-    build_wired(gpu, field, l4, &edges)
+    build_wired(gpu, field.as_slice(), l4, &edges)
 }
 
+/// **A list of fields**, because a Set holds as many as it is given — and one
+/// renderer, because every claim here is about what a caller draws.
 fn build_wired(
     gpu: &Gpu,
-    field: Option<&str>,
+    fields: &[&str],
     l4: &str,
     edges: &[karakuri_engine::set::Edge],
 ) -> Result<Set, SetError> {
-    let field = field.map(compile);
+    build_many_wired(gpu, fields, &[l4], edges)
+}
+
+fn build_many_wired(
+    gpu: &Gpu,
+    fields: &[&str],
+    l4s: &[&str],
+    edges: &[karakuri_engine::set::Edge],
+) -> Result<Set, SetError> {
+    let fields: Vec<Checked> = fields.iter().map(|f| compile(f)).collect();
+    let l4s: Vec<Checked> = l4s.iter().map(|l4| compile(l4)).collect();
     let mut set = Set::build_many(
         &gpu.device,
         &gpu.queue,
         &[(&compile(STILL), 1)],
         &[],
         None,
-        field.as_ref(),
-        &[&compile(l4)],
+        &fields.iter().collect::<Vec<_>>(),
+        &l4s.iter().collect::<Vec<_>>(),
         Layering::Overdraw,
         7,
         &[],
@@ -248,7 +304,7 @@ fn a_fields_param_reaches_every_caller() {
 #[test]
 fn an_unbound_field_slot_is_refused_rather_than_fatal() {
     let gpu = Gpu::headless().expect("a GPU");
-    let err = build_wired(&gpu, None, LENS, &[])
+    let err = build_wired(&gpu, &[], LENS, &[])
         .err()
         .expect("nothing fills `lens.shape`");
     let text = err.to_string();
@@ -259,7 +315,7 @@ fn an_unbound_field_slot_is_refused_rather_than_fatal() {
 
     // And a Set that *holds* a field still refuses one that says nothing about
     // which: "there is exactly one, so use it" is the rule the slot removes.
-    let err = build_wired(&gpu, Some(BALL), LENS, &[])
+    let err = build_wired(&gpu, &[BALL], LENS, &[])
         .err()
         .expect("an unbound slot is not filled in from what is lying around");
     assert!(err.to_string().contains("shape"), "{err}");
@@ -275,7 +331,7 @@ fn an_unbound_field_slot_is_refused_rather_than_fatal() {
 fn a_field_slot_bound_to_something_that_is_not_a_field_is_refused() {
     let gpu = Gpu::headless().expect("a GPU");
     let to_the_l1 = vec![edge("lens", "shape", "still")];
-    let err = build_wired(&gpu, Some(BALL), LENS, &to_the_l1)
+    let err = build_wired(&gpu, &[BALL], LENS, &to_the_l1)
         .err()
         .expect("an L1 is not a field");
     let text = err.to_string();
@@ -322,7 +378,7 @@ proc lens {
         edge("lens", "shape", "ball"),
         edge("lens", "cutter", "ball"),
     ];
-    let mut set = build_wired(&gpu, Some(BALL), two, &edges).expect("two slots, one field");
+    let mut set = build_wired(&gpu, &[BALL], two, &edges).expect("two slots, one field");
     let hit = covered(&gpu, &mut set);
     assert!(
         hit > 0 && hit < (W * H) as usize,
@@ -330,12 +386,111 @@ proc lens {
     );
 
     // **The two are addressed apart**, which is what the slot in the name is
-    // for: one set of params per slot, so a Set holding two fields would drive
-    // them separately. Both reach the same field today, so the picture is the
-    // proof that each name resolved to a body of its own.
+    // for. Both reach one field here, so both read that field's values — one
+    // procedure is one set of numbers however many names reach it — and the
+    // picture is the proof that each name resolved to a body of its own.
     assert!(
         !set.node_names().is_empty(),
         "and the Set built rather than collapsing the two names into one"
+    );
+}
+
+/// **Two fields in one Set, one per slot on one renderer**, which is the thing
+/// this commit is for: the language stopped capping a Set at one field and the
+/// plumbing went on doing it, an `Option` at a time.
+///
+/// **Both declare `radius`**, on purpose. That is the case an address has to
+/// survive — `Field:0:radius` and `Field:1:radius` are two numbers because they
+/// are two procedures — and it is the one a param keyed by declared name alone
+/// could not tell apart.
+///
+/// The two assertions are each other's control. Growing the shape must grow the
+/// figure and growing the cutter must swallow it, so a Set that wrote one value
+/// into both slots fails whichever way round it got them.
+#[test]
+fn two_fields_reach_one_renderer_through_two_slots() {
+    let gpu = Gpu::headless().expect("a GPU");
+    let edges = vec![
+        edge("lens", "shape", "ball"),
+        edge("lens", "cutter", "shell"),
+    ];
+    let carved =
+        |gpu: &Gpu| build_wired(gpu, &[BALL, SHELL], CARVE, &edges).expect("two fields, two slots");
+
+    let mut base = carved(&gpu);
+    let plain = covered(&gpu, &mut base);
+    assert!(
+        plain > 100,
+        "the shape is there and the cutter misses its silhouette: {plain} texels"
+    );
+
+    let mut grown = carved(&gpu);
+    assert!(
+        grown.set_param_at(karakuri_ir::Kind::Field, 0, "radius", 2.0),
+        "`Field:0:radius` has to reach the first field"
+    );
+    let bigger = covered(&gpu, &mut grown);
+    assert!(
+        bigger > plain * 2,
+        "the first field is the shape, so growing it grows the figure: {bigger} against {plain}"
+    );
+
+    let mut cut = carved(&gpu);
+    assert!(
+        cut.set_param_at(karakuri_ir::Kind::Field, 1, "radius", 2.0),
+        "`Field:1:radius` has to reach the second field"
+    );
+    let swallowed = covered(&gpu, &mut cut);
+    assert!(
+        swallowed < plain / 4,
+        "the second field is the cutter, and at 2.0 it contains the shape: {swallowed} \
+         against {plain}"
+    );
+}
+
+/// **Two nodes, a field each**, which is the half a single renderer cannot
+/// show: the two slots are both called `shape`, so nothing about the *key* a
+/// value is written under says which field it came from — only the node does.
+///
+/// A Set that resolved a param by slot spelling alone would hand both renderers
+/// one field's numbers, and the picture would be right for whichever of them
+/// happened to be asked first.
+#[test]
+fn two_nodes_each_reach_the_field_their_own_edge_names() {
+    let gpu = Gpu::headless().expect("a GPU");
+    // `lens` and `lens-2`: two uses of one procedure are two nodes, and each
+    // one's slot is bound on its own.
+    let edges = vec![
+        edge("lens", "shape", "ball"),
+        edge("lens-2", "shape", "shell"),
+    ];
+    let mixed = |gpu: &Gpu| {
+        build_many_wired(gpu, &[BALL, SHELL], &[LENS, LENS], &edges).expect("a field each")
+    };
+
+    let mut both = mixed(&gpu);
+    let plain = covered(&gpu, &mut both);
+    let mut alone = build(&gpu, Some(BALL), LENS).expect("one renderer over the first field");
+    assert!(
+        plain > covered(&gpu, &mut alone),
+        "the second renderer draws a shape the first one does not: {plain} texels"
+    );
+
+    // **Each address moves its own node and only its own.** If both nodes read
+    // one field, one of these two is a Set nothing changed.
+    let mut first = mixed(&gpu);
+    assert!(first.set_param_at(karakuri_ir::Kind::Field, 0, "radius", 2.0));
+    assert!(
+        covered(&gpu, &mut first) > plain,
+        "`Field:0` has to reach `lens`, which is bound to the first field"
+    );
+
+    let mut second = mixed(&gpu);
+    assert!(second.set_param_at(karakuri_ir::Kind::Field, 1, "radius", 1.5));
+    assert!(
+        covered(&gpu, &mut second) > plain,
+        "`Field:1` has to reach `lens-2`, which is bound to the second — and a Set that \
+         resolved by slot name alone would have written it into neither"
     );
 }
 
@@ -397,7 +552,7 @@ fn two_renderers_in_one_set_agree_on_the_fields_value() {
         &[(&compile(STILL), 1)],
         &[],
         None,
-        Some(&field),
+        &[&field],
         &[&l4, &l4],
         Layering::Overdraw,
         7,

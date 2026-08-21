@@ -398,9 +398,10 @@ sets — one deck slot each, composited in the order given, at most 4:
                         second geometry, an L2 deforms, an L3 is the camera, a
                         `kind Field` is a shape the others can call, an L4
                         draws. Order within a kind is the order given. One
-                        camera and one field per slot. Any part may be written
-                        `name=file.kir`, which is what an --edge points at; a
-                        part written bare is named after its procedure
+                        camera per slot, and as many fields as you name. Any
+                        part may be written `name=file.kir`, which is what an
+                        --edge points at; a part written bare is named after
+                        its procedure
   L1.kir L4.kir         the same thing, positionally, for one pair. Given
                         alongside --set it becomes the last slot
   (nothing)             examples/drift_shell.kir + examples/soft_points.kir
@@ -1897,8 +1898,11 @@ struct Material {
     l2s: Vec<karakuri_ir::typed::Checked>,
     /// The camera, or `None` for the built-in orbit. At most one per slot.
     l3: Option<karakuri_ir::typed::Checked>,
-    /// The field, or `None`. At most one per slot, on the camera's terms.
-    field: Option<karakuri_ir::typed::Checked>,
+    /// **The fields, in the order their paths appeared.** Empty for a slot that
+    /// evaluates none, and a list rather than the camera's option: a slot looks
+    /// from one viewpoint, and the number of shapes it marches is a question
+    /// the edges answer.
+    fields: Vec<karakuri_ir::typed::Checked>,
     l4s: Vec<karakuri_ir::typed::Checked>,
     /// What each of those is called, in the same per-layer shape.
     names: Names,
@@ -1917,7 +1921,7 @@ pub struct Names {
     pub l2s: Vec<Option<String>>,
     pub l3: Option<String>,
     pub l4s: Vec<Option<String>>,
-    pub field: Option<String>,
+    pub fields: Vec<Option<String>>,
 }
 
 impl Names {
@@ -1931,7 +1935,7 @@ impl Names {
             .chain(self.l2s.iter().flatten())
             .chain(&self.l3)
             .chain(self.l4s.iter().flatten())
-            .chain(&self.field)
+            .chain(self.fields.iter().flatten())
     }
 
     /// **Unique within a slot**, which is the scope a name resolves in: a Set is
@@ -2037,7 +2041,7 @@ fn sort_compiled(
     let mut l1s = Vec::new();
     let mut l2s = Vec::new();
     let mut l3: Option<karakuri_ir::typed::Checked> = None;
-    let mut field: Option<karakuri_ir::typed::Checked> = None;
+    let mut fields: Vec<karakuri_ir::typed::Checked> = Vec::new();
     let mut l4s = Vec::new();
     let mut placed = Vec::new();
     for (named, checked) in compiled {
@@ -2071,24 +2075,18 @@ fn sort_compiled(
                 l3 = Some(checked);
                 (karakuri_ir::Kind::L3, 0)
             }
-            // **One field per slot, and this is now the only thing saying
-            // so.** The language stopped: a caller declares `uses shape :
-            // Field` and an `edge` binds it, so several fields would each have
-            // a name to be reached by. What has not moved is the plumbing here
-            // and in the engine — one `Option<Field>` apiece — and accepting
-            // two against it would build a slot that silently lost one of the
-            // files it was given. A `Vec` is the next commit.
-            karakuri_ir::Kind::Field if field.is_some() => {
-                return Err(format!(
-                    "{} is a second `kind Field` — a slot evaluates one \
-                     field, and naming several is the notation fan-in brings with it",
-                    named.path.display()
-                ));
-            }
+            // **A second field is a second field**, not a mistake — the last
+            // refusal in this file that said otherwise, and it said so about
+            // the plumbing rather than about the material. A caller declares
+            // `uses shape : Field` and an `edge` names which node fills it, so
+            // two fields are two nodes with two names and nothing has to
+            // arbitrate between them. What it took was a `Vec` here, in
+            // `Loaded`, in `Wiring` and in the engine — an `Option` apiece was
+            // all that was left of "there is exactly one, so it needs no name".
             karakuri_ir::Kind::Field => {
-                names.field = name;
-                field = Some(checked);
-                (karakuri_ir::Kind::Field, 0)
+                names.fields.push(name);
+                fields.push(checked);
+                (karakuri_ir::Kind::Field, fields.len() - 1)
             }
             // **A second L1 is a second source**, not a mistake. Each one
             // simulates independently — its own `seed` from zero, its own hash
@@ -2130,7 +2128,7 @@ fn sort_compiled(
             l1s,
             l2s,
             l3,
-            field,
+            fields,
             l4s,
             names,
         },
@@ -2272,7 +2270,7 @@ fn replay_session(args: &Args, id: &str) {
         // could carry a chain does.
         &loaded.l2s,
         loaded.l3.as_ref(),
-        loaded.field.as_ref(),
+        &loaded.fields,
         &loaded.l4s,
         // **A Set file does not record a layering**, on the same terms it
         // records neither a chain nor a camera: it names an L1 and its
@@ -2489,7 +2487,7 @@ fn rebuild(
         // renderers — see the note at the other `build` call site.
         &[],
         None,
-        None,
+        &[],
         &l4s,
         karakuri_engine::set::Layering::Overdraw,
         &Names::default(),
@@ -2987,7 +2985,7 @@ fn main() {
             l1s: loaded.l1s,
             l2s: loaded.l2s,
             l3: loaded.l3,
-            field: loaded.field,
+            fields: loaded.fields,
             l4s: loaded.l4s,
             names,
         });
@@ -3145,11 +3143,11 @@ fn build_deck(
         .iter()
         .enumerate()
         .map(|(slot, material)| {
-            let (l1, l2s, l3, field, l4s) = (
+            let (l1, l2s, l3, fields, l4s) = (
                 material.l1s.as_slice(),
                 &material.l2s,
                 material.l3.as_ref(),
-                material.field.as_ref(),
+                material.fields.as_slice(),
                 &material.l4s,
             );
             let set = build(
@@ -3157,7 +3155,7 @@ fn build_deck(
                 l1,
                 l2s,
                 l3,
-                field,
+                fields,
                 l4s,
                 if args.merge.contains(&slot) {
                     karakuri_engine::set::Layering::Composite
@@ -3308,7 +3306,9 @@ fn build(
     l1s: &[karakuri_ir::typed::Checked],
     l2s: &[karakuri_ir::typed::Checked],
     l3: Option<&karakuri_ir::typed::Checked>,
-    field: Option<&karakuri_ir::typed::Checked>,
+    // The fields, in node order — see `Material::fields`. Empty for a Set that
+    // evaluates none.
+    fields: &[karakuri_ir::typed::Checked],
     l4s: &[karakuri_ir::typed::Checked],
     layering: karakuri_engine::set::Layering,
     // What each node is called — see `Names`.
@@ -3332,6 +3332,7 @@ fn build(
     camera: Option<karakuri_engine::camera::Orbit>,
 ) -> Set {
     let deform: Vec<&karakuri_ir::typed::Checked> = l2s.iter().collect();
+    let shapes: Vec<&karakuri_ir::typed::Checked> = fields.iter().collect();
     let draw: Vec<&karakuri_ir::typed::Checked> = l4s.iter().collect();
     // **Each source at the capacity it declares**, and `--capacity` overrides
     // all of them — one number cannot serve two L1s with different ranges.
@@ -3359,7 +3360,7 @@ fn build(
         &sources,
         &deform,
         l3,
-        field,
+        &shapes,
         &draw,
         layering,
         seed,
@@ -3369,7 +3370,7 @@ fn build(
             l2s: &names.l2s,
             l3: names.l3.as_deref(),
             l4s: &names.l4s,
-            field: names.field.as_deref(),
+            fields: &names.fields,
             edges,
         },
     ) {
@@ -5787,7 +5788,7 @@ mod tests {
     /// The sentence names the file, because the file is what an operator can
     /// fix; the slot is prefixed by whichever caller is reporting it.
     #[test]
-    fn a_slot_refuses_a_second_camera_a_second_field_and_nothing_that_draws() {
+    fn a_slot_refuses_a_second_camera_and_nothing_that_draws_and_takes_a_second_field() {
         // Matched rather than `expect_err`, which would want `Material` to be
         // `Debug` — a derive on a production type to print something no test
         // reaching here ever prints.
@@ -5803,15 +5804,34 @@ mod tests {
         ]);
         assert!(two_cameras.contains("is a second L3"), "{two_cameras}");
         assert!(two_cameras.contains("beat_jump.kir"), "{two_cameras}");
-        let two_fields = refused(&[
+        // **A second field is not a refusal, and this is where that stopped
+        // being one.** The sort was the last thing in the tree saying a Set
+        // holds one, and it said so about the plumbing rather than about the
+        // material: two fields are two nodes, addressed as `Field:0` and
+        // `Field:1` and bound by name.
+        let two_fields = sort_compiled(compiled(&[
             "drift_shell.kir",
             "melt_blob.kir",
             "melt_blob.kir",
             "soft_points.kir",
-        ]);
-        assert!(
-            two_fields.contains("is a second `kind Field`"),
-            "{two_fields}"
+        ]));
+        let (material, placed) = match two_fields {
+            Ok(sorted) => sorted,
+            Err(e) => panic!("two fields are two nodes: {e}"),
+        };
+        assert_eq!(material.fields.len(), 2, "both were kept");
+        // **At its own index**, which is what `--param Field:1:x` and a Set
+        // file's `slot` record both address it by. The second used to be
+        // dropped, and before the refusal above it was dropped silently.
+        let addresses: Vec<(karakuri_ir::Kind, u32)> = placed
+            .iter()
+            .filter(|p| p.layer == karakuri_ir::Kind::Field)
+            .map(|p| (p.layer, p.index))
+            .collect();
+        assert_eq!(
+            addresses,
+            [(karakuri_ir::Kind::Field, 0), (karakuri_ir::Kind::Field, 1)],
+            "the fields are numbered from 0 with no gaps"
         );
         let no_renderer = refused(&["drift_shell.kir", "swirl_warp.kir"]);
         assert!(no_renderer.contains("nothing here draws"), "{no_renderer}");

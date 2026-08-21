@@ -51,12 +51,12 @@ impl Renderer {
         l4: &Checked,
         geometry: &Geometry<'_>,
         camera: &Camera,
-        field: Option<&Checked>,
+        fields: karakuri_codegen::Bound<'_>,
     ) -> Renderer {
         let fullscreen = l4.topology == Some(karakuri_ir::Topology::Fullscreen);
         let weighted = l4.blend == Some(karakuri_ir::Blend::Weighted);
 
-        let shader = generate_l4(l4, geometry.layout, field);
+        let shader = generate_l4(l4, geometry.layout, fields);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(&format!("{} (L4)", l4.name)),
             source: wgpu::ShaderSource::Wgsl(shader.source.as_str().into()),

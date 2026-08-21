@@ -411,7 +411,7 @@ impl Source for Watch {
             l1s,
             l2s,
             l3,
-            field,
+            fields,
             l4s,
             names,
         } = material;
@@ -432,7 +432,7 @@ impl Source for Watch {
                 .collect(),
             l2s,
             l3,
-            field,
+            fields,
             l4s,
             // **Restated, like every other part of a request.** A rebuild that
             // read the names off the outgoing Set would depend on what happened
@@ -445,7 +445,7 @@ impl Source for Watch {
                 l2s: names.l2s,
                 l3: names.l3,
                 l4s: names.l4s,
-                field: names.field,
+                fields: names.fields,
             },
             edges: self.edges.clone(),
             layering: self.layering,
@@ -719,7 +719,11 @@ mod tests {
         assert_eq!(procs(&request.l4s), procs(&material.l4s), "the renderers");
         let camera = |c: &Option<karakuri_ir::typed::Checked>| c.as_ref().map(|c| c.name.clone());
         assert_eq!(camera(&request.l3), camera(&material.l3), "the camera");
-        assert_eq!(camera(&request.field), camera(&material.field), "the field");
+        assert_eq!(
+            procs(&request.fields),
+            procs(&material.fields),
+            "the fields"
+        );
 
         // **The addresses, file by file**, which is the half a request cannot
         // show: a `procedure` record names a node by `(layer, index)`, and the

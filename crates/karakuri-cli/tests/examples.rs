@@ -214,7 +214,7 @@ fn the_pairs_the_docs_offer_compose() {
             &sources,
             &l2s,
             l3,
-            by(karakuri_ir::Kind::Field).next(),
+            &by(karakuri_ir::Kind::Field).collect::<Vec<_>>(),
             &l4s,
             karakuri_engine::set::Layering::Overdraw,
             0,

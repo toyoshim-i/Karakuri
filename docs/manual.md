@@ -184,8 +184,8 @@ cargo run -p karakuri-cli -- --replay take1 --seq frames/
 A replay reads a `tick` where a live run reads a clock, and the recorded audio where a live
 run reads a microphone — so what comes back is the performance and not just the material.
 
-**A Set file carries the whole chain.** A slot holding L2s, an L3, a `kind Field` or
-several geometries is saved as the chain it is — one `slot` record per node, on the layer
+**A Set file carries the whole chain.** A slot holding L2s, an L3, one or several
+`kind Field` files or several geometries is saved as the chain it is — one `slot` record per node, on the layer
 that node's own `kind` declares — and `--record-session` takes it too, since a session opens
 with a Set file. Each geometry's own capacity and its own hash salt are written down, and so
 is every `--edge`, so a cube morphing into a sphere is a Set you can keep and reload with
@@ -695,6 +695,7 @@ field happens to be in the list.
 
 > It used to be `field(p)` — one reserved word, so one field, since a second would have had
 > nothing to be called. Files written against it need one `uses` line and one renamed call.
+> Naming the call is what let a Set hold more than one of them.
 
 Its `param`s are yours to ride like any other — an override, a fader, a signal
 binding, a published control — addressed by its kind:
@@ -703,8 +704,13 @@ binding, a published control — addressed by its kind:
 karakuri-cli --param Field:0:blend_k=1.2 --set ...
 ```
 
-One field per Set for now, the same as the camera — the notation no longer says so, but the
-`--set` list still refuses a second `kind Field`. **The cost is the renderer's**: a field is
+**As many fields as you name.** A `--set` list may hold several `kind Field` files; each is a
+node with a name, and the `--edge` beside it says which slot gets which — so a marcher taking
+a shape and a cutter takes two files, and `--param Field:0:blend_k` and `--param
+Field:1:blend_k` are two knobs. The camera is still one per Set, and that one is a rule rather
+than a limit: a Set looks from one viewpoint, and compositing two of them is what an L5 does.
+
+**The cost is the renderer's**: a field is
 inlined wherever it is evaluated, so a marcher that samples it forty times pays for it forty
 times — and a field that fits on its own and a marcher that fits on its own can still be
 refused together, with both figures in the message.

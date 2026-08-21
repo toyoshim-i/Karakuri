@@ -99,8 +99,13 @@ pub struct Loaded {
     pub l2s: Vec<Checked>,
     /// The camera, or `None` for the built-in orbit. At most one per Set.
     pub l3: Option<Checked>,
-    /// The field, or `None`. At most one per Set, on the camera's terms.
-    pub field: Option<Checked>,
+    /// **The fields, by `slot` index.** Empty for a Set that evaluates none,
+    /// and a list rather than the camera's option: a Set looks from one
+    /// viewpoint, and how many shapes it marches is a question its edges
+    /// answer. **Several `slot` records on Field is how a file says so**, which
+    /// the format already allowed — nothing new had to be added, and a file
+    /// written before this commit still names exactly one.
+    pub fields: Vec<Checked>,
     /// The renderers, in the order their `slot` records indexed them — which is
     /// draw order. **Several `slot` records on L4 is how a file says a stack**;
     /// the format already allowed it and nothing new had to be added.
@@ -182,7 +187,7 @@ impl Loaded {
             .chain(at(&self.names.l2s, self.l2s.len()))
             .chain(self.l3.iter().map(|_| self.names.l3.clone()))
             .chain(at(&self.names.l4s, self.l4s.len()))
-            .chain(self.field.iter().map(|_| self.names.field.clone()))
+            .chain(at(&self.names.fields, self.fields.len()))
     }
 
     pub fn nodes(&self) -> impl Iterator<Item = (&Checked, &str)> {
@@ -191,7 +196,7 @@ impl Loaded {
             .chain(&self.l2s)
             .chain(&self.l3)
             .chain(&self.l4s)
-            .chain(&self.field)
+            .chain(&self.fields)
             .zip(self.srcs.iter().map(String::as_str))
     }
 }
@@ -955,32 +960,24 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     if l4_srcs.is_empty() {
         return Err(format!("set `{file_id}` has no L4 slot"));
     }
-    // **One camera and one field, which is what a Set is.** The format
-    // addresses nodes per layer, so it can say two of either; a slot looks from
-    // one viewpoint and evaluates one field, and compositing two viewpoints is
-    // what an L5 is for. Reported and left in the file rather than built into
-    // something nobody asked for — the same refusal `--set` makes, one step
-    // later.
-    for (layer, count, why) in [
-        (
-            "L3",
-            l3_srcs.len(),
-            "a Set looks from one camera, and compositing two viewpoints is what an L5 is for",
-        ),
-        (
-            "Field",
-            field_srcs.len(),
-            "a Set evaluates one field, and naming several is the notation fan-in brings with it",
-        ),
-    ] {
-        if count > 1 {
-            notes.push(format!(
-                "{} {layer} slot{} past index 0 {} skipped: {why}",
-                count - 1,
-                if count == 2 { "" } else { "s" },
-                if count == 2 { "was" } else { "were" }
-            ));
-        }
+    // **One camera, which is what a Set is.** The format addresses nodes per
+    // layer, so it can say two; a Set looks from one viewpoint, and compositing
+    // two of them is what an L5 is for. Reported and left in the file rather
+    // than built into something nobody asked for — the same refusal `--set`
+    // makes, one step later.
+    //
+    // **Field is no longer beside it.** It was here for the plumbing's sake and
+    // said so: a caller names the slot it reaches a field through, so several
+    // fields are several nodes with names of their own and there is nothing for
+    // this to arbitrate. A file naming two now loads two.
+    if l3_srcs.len() > 1 {
+        notes.push(format!(
+            "{} L3 slot{} past index 0 {} skipped: a Set looks from one camera, and \
+             compositing two viewpoints is what an L5 is for",
+            l3_srcs.len() - 1,
+            if l3_srcs.len() == 2 { "" } else { "s" },
+            if l3_srcs.len() == 2 { "was" } else { "were" }
+        ));
     }
     // A capacity for a geometry the file does not name has nothing to size.
     // Said rather than dropped, because it is the file describing a source that
@@ -1009,10 +1006,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         .map(|s| crate::compile::check(s))
         .transpose()?;
     let l4s = check(&l4_srcs)?;
-    let field = field_srcs
-        .first()
-        .map(|s| crate::compile::check(s))
-        .transpose()?;
+    let fields = check(&field_srcs)?;
 
     // Node order, which is what [`Loaded::srcs`] promises: the same order the
     // procedures above are chained in, so the two walk in step.
@@ -1021,7 +1015,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         .chain(l2_srcs)
         .chain(l3_srcs.into_iter().take(1))
         .chain(l4_srcs)
-        .chain(field_srcs.into_iter().take(1))
+        .chain(field_srcs)
         .collect();
 
     // **Trimmed to the nodes that came back**, so the two lists cannot
@@ -1035,21 +1029,19 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             .cloned()
             .flatten(),
         l4s: std::mem::take(&mut slot_names[layer_ordinal(Kind::L4) as usize]),
-        field: slot_names[layer_ordinal(Kind::Field) as usize]
-            .first()
-            .cloned()
-            .flatten(),
+        fields: std::mem::take(&mut slot_names[layer_ordinal(Kind::Field) as usize]),
     };
     names.l1s.truncate(l1s.len());
     names.l2s.truncate(l2s.len());
     names.l4s.truncate(l4s.len());
+    names.fields.truncate(fields.len());
 
     Ok(Loaded {
         id: file_id,
         l1s,
         l2s,
         l3,
-        field,
+        fields,
         l4s,
         srcs,
         capacities,
@@ -1755,7 +1747,7 @@ proc blob {
         assert_eq!(named(&loaded.l1s), ["ring", "ring_two"]);
         assert_eq!(named(&loaded.l2s), ["warp"]);
         assert_eq!(loaded.l3.as_ref().map(|c| c.name.as_str()), Some("look"));
-        assert_eq!(loaded.field.as_ref().map(|c| c.name.as_str()), Some("blob"));
+        assert_eq!(named(&loaded.fields), ["blob"]);
         assert_eq!(named(&loaded.l4s), ["points", "streaks"]);
         // Node order, which is what the scratch places them in — see
         // [`Loaded::nodes`].
@@ -1775,6 +1767,97 @@ proc blob {
         // rather than on whichever node the walk happened to reach.
         assert_eq!(loaded.names.l1s, [Some("veil".to_string()), None]);
         assert_eq!(loaded.names.l2s, [None]);
+    }
+
+    /// **Two fields, each at its own index, through the file and back.**
+    ///
+    /// The format could always say it — a `slot` record carries a layer and an
+    /// index, and Field is a layer like any other — and the loader would not:
+    /// it took `field_srcs.first()` and filed the rest under a note. So a Set
+    /// whose marcher took a shape and a cutter saved as a Set that came back
+    /// with one of them, and the edge naming the missing one no longer
+    /// resolved.
+    ///
+    /// **Index as well as count**, because a pair that came back in the other
+    /// order is a Set whose `--param Field:1:…` moves the wrong shape, and a
+    /// count would not have noticed.
+    #[test]
+    fn two_fields_come_back_at_their_own_indices() {
+        let (dir, store, l1, l4) = fixture();
+        let shape = beside(&dir, "shape.kir", FIELD);
+        let cutter = beside(&dir, "cutter.kir", &FIELD.replace("proc blob", "proc bite"));
+        let nodes = vec![
+            Node {
+                path: &l1,
+                layer: Kind::L1,
+                index: 0,
+                name: None,
+            },
+            Node {
+                path: &l4,
+                layer: Kind::L4,
+                index: 0,
+                name: None,
+            },
+            Node {
+                path: &shape,
+                layer: Kind::Field,
+                index: 0,
+                name: None,
+            },
+            // Named, because an edge points with names and a Set holding two
+            // fields is the first one that has to tell them apart.
+            Node {
+                path: &cutter,
+                layer: Kind::Field,
+                index: 1,
+                name: Some("knife"),
+            },
+        ];
+        save(
+            &store,
+            "two_fields",
+            Saving {
+                nodes: &nodes,
+                capacities: &[4096],
+                params: &[],
+                bindings: &[],
+                edges: &[karakuri_engine::set::Edge {
+                    node: "points".to_string(),
+                    slot: "cutter".to_string(),
+                    to: "knife".to_string(),
+                }],
+                camera: &DEFAULT_CAMERA,
+                seeds: &[1],
+            },
+        )
+        .expect("save");
+
+        let loaded = load(&store, "two_fields").expect("load");
+        let named = |procs: &[Checked]| procs.iter().map(|c| c.name.clone()).collect::<Vec<_>>();
+        assert_eq!(named(&loaded.fields), ["blob", "bite"]);
+        assert!(
+            loaded.notes.is_empty(),
+            "nothing was skipped: {:?}",
+            loaded.notes
+        );
+        // The names, on the nodes they belong to — `None` for the one written
+        // bare, which is what an edge pointing at `knife` needs to resolve.
+        assert_eq!(loaded.names.fields, [None, Some("knife".to_string())]);
+        // Node order, which is what the scratch places sources in: the fields
+        // are last and they are in index order.
+        assert_eq!(
+            loaded
+                .nodes()
+                .map(|(checked, _)| checked.name.clone())
+                .collect::<Vec<_>>(),
+            ["ring", "points", "blob", "bite"]
+        );
+        assert_eq!(
+            loaded.node_names().collect::<Vec<_>>(),
+            [None, None, None, Some("knife".to_string())]
+        );
+        assert_eq!(loaded.edges.len(), 1, "the edge that binds the second");
     }
 
     /// **Each geometry runs at the number written against it.**
