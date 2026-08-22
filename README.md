@@ -539,6 +539,7 @@ crates/
                       enable with `git config core.hooksPath .githooks`
 docs/
   architecture.md     the codebase architecture, multi-crate map, and pipeline
+  contributing.md     engineering principles, build/test commands, and verification rules
   ir-spec.md          the IR. Settled; open questions are empty
   manual.md           how to play it: flags, keys, and what each does
   plugins.md          out-of-process helpers, and why they are out of process
@@ -557,6 +558,7 @@ examples/             app presets: seven L1, four L2, one L3, one Field,
 |---|---|
 | This file | What exists, how to run it, and the rules that hold now |
 | [docs/architecture.md](docs/architecture.md) | Source code structure, multi-crate breakdown, compilation pipeline, threading model, and extension guide |
+| [docs/contributing.md](docs/contributing.md) | Engineering principles, build/test commands, clippy/fmt rules, and verification checklist |
 | [docs/ir-spec.md](docs/ir-spec.md) | The IR: grammar, semantics, lowering, record formats. Its Resolved section records the decisions and why, including the ones implementation forced |
 | [docs/manual.md](docs/manual.md) | VJ operation manual: command-line flags, keyboard controls, session recording, and latency offset |
 | [docs/plugins.md](docs/plugins.md) | Plugin model for out-of-process helpers (e.g. Ableton Link tempo sources) |
