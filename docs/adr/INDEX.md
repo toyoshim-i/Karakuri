@@ -11,7 +11,7 @@ index is maintained by hand — see ADR-0000 for when that stops being enough.
 rule it states.
 
 **Reconstruction is in progress.** Records are being recovered in date order from the session
-history that runs from 2026-07-25. Everything through **2026-08-10** is written; the numbering
+history that runs from 2026-07-25. Everything through **2026-08-11** is written; the numbering
 is chronological, so later dates take later numbers.
 
 ## Records
@@ -92,6 +92,16 @@ is chronological, so later dates take later numbers.
 | [ADR-0071](0071-there-is-no-panic-key.md) | There is no panic key | 2026-08-08 | accepted |
 | [ADR-0072](0072-auditioning-adds-a-draw-and-never-a-step.md) | Auditioning adds a draw and never a step | 2026-08-10 | accepted |
 | [ADR-0073](0073-a-control-surface-is-a-test-of-the-invariant.md) | A control surface is a test of the invariant, not a feature | 2026-08-10 | accepted |
+| [ADR-0074](0074-a-plugin-boundary-is-drawn-by-the-deterministic-path.md) | A plugin boundary is drawn by the deterministic path, not by the platform | 2026-08-11 | accepted |
+| [ADR-0075](0075-the-plugin-abi-passes-a-handle-and-only-what-crosses-a-process.md) | The plugin ABI passes a native handle, and only what can cross a process | 2026-08-11 | accepted |
+| [ADR-0076](0076-commit-a-manifest-not-a-binary.md) | Commit a manifest, not a binary, and never fetch from build.rs | 2026-08-11 | accepted |
+| [ADR-0077](0077-the-canvas-belongs-to-the-session-and-the-window-gets-no-vote.md) | The canvas belongs to the session; the window gets no vote | 2026-08-11 | accepted |
+| [ADR-0078](0078-a-frame-that-is-discarded-must-not-already-have-been-recorded.md) | A frame that is discarded must not already have been recorded | 2026-08-11 | accepted |
+| [ADR-0079](0079-the-status-line-is-a-display-not-a-log.md) | The status line is a display, not a log | 2026-08-11 | accepted |
+| [ADR-0080](0080-the-gpl-boundary-is-a-process-and-the-protocol-is-generic.md) | The GPL boundary is a process, and the protocol is generic | 2026-08-11 | accepted |
+| [ADR-0081](0081-ndjson-over-a-pipe-and-not-protobuf.md) | ndjson over a pipe, and not protobuf | 2026-08-11 | accepted |
+| [ADR-0082](0082-link-is-not-automatic-and-it-is-shared.md) | Link is not automatic, and it is shared | 2026-08-11 | accepted |
+| [ADR-0083](0083-mcp-is-the-only-prompt-surface.md) | MCP is the only prompt surface | 2026-08-11 | accepted |
 
 ## Retired numbers
 
@@ -174,6 +184,16 @@ never reused.
 | [ADR-0071](0071-there-is-no-panic-key.md) | There is no panic key | 2026-08-08 | accepted |
 | [ADR-0072](0072-auditioning-adds-a-draw-and-never-a-step.md) | Auditioning adds a draw and never a step | 2026-08-10 | accepted |
 | [ADR-0073](0073-a-control-surface-is-a-test-of-the-invariant.md) | A control surface is a test of the invariant, not a feature | 2026-08-10 | accepted |
+| [ADR-0074](0074-a-plugin-boundary-is-drawn-by-the-deterministic-path.md) | A plugin boundary is drawn by the deterministic path, not by the platform | 2026-08-11 | accepted |
+| [ADR-0075](0075-the-plugin-abi-passes-a-handle-and-only-what-crosses-a-process.md) | The plugin ABI passes a native handle, and only what can cross a process | 2026-08-11 | accepted |
+| [ADR-0076](0076-commit-a-manifest-not-a-binary.md) | Commit a manifest, not a binary, and never fetch from build.rs | 2026-08-11 | accepted |
+| [ADR-0077](0077-the-canvas-belongs-to-the-session-and-the-window-gets-no-vote.md) | The canvas belongs to the session; the window gets no vote | 2026-08-11 | accepted |
+| [ADR-0078](0078-a-frame-that-is-discarded-must-not-already-have-been-recorded.md) | A frame that is discarded must not already have been recorded | 2026-08-11 | accepted |
+| [ADR-0079](0079-the-status-line-is-a-display-not-a-log.md) | The status line is a display, not a log | 2026-08-11 | accepted |
+| [ADR-0080](0080-the-gpl-boundary-is-a-process-and-the-protocol-is-generic.md) | The GPL boundary is a process, and the protocol is generic | 2026-08-11 | accepted |
+| [ADR-0081](0081-ndjson-over-a-pipe-and-not-protobuf.md) | ndjson over a pipe, and not protobuf | 2026-08-11 | accepted |
+| [ADR-0082](0082-link-is-not-automatic-and-it-is-shared.md) | Link is not automatic, and it is shared | 2026-08-11 | accepted |
+| [ADR-0083](0083-mcp-is-the-only-prompt-surface.md) | MCP is the only prompt surface | 2026-08-11 | accepted |
 
 Re-pointing the records that cited a retired principle is permitted, and why, is
 [ADR-0059](0059-a-records-pointer-into-the-principles-registry-is-metadata.md).
