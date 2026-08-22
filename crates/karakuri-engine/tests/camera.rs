@@ -544,7 +544,7 @@ fn an_address_past_a_layers_last_node_reaches_nothing() {
 /// thread for it.**
 ///
 /// The language allows `param centre : vec3 …`; the engine has never driven one
-/// — `Set::default_scalar` reads a scalar out of a declaration and skips
+/// — `Param::default_scalar` reads a scalar out of a declaration and skips
 /// anything else, so a vector param never enters a node's value map. Every
 /// node's uniform path nonetheless wrote *every* declared name as an `f32`, and
 /// the packer panics on a field its layout says is a `vec3<f32>`. So a `.kir`

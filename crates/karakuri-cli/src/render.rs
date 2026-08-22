@@ -41,9 +41,11 @@ pub fn to_png(
 }
 
 /// Every frame from 0 to `frames`, into `dir/%05d.png`. The metadata format
-/// carries a preview path per artifact, so rendering a sequence offline is a
-/// thing the store will want; it is also the only way to look at motion without
-/// a window.
+/// carries a `thumbnail` path per artifact — a stored short loop and a still,
+/// rendered at promotion time and nothing to do with the deck's `preview`,
+/// which auditions a running slot and has no path at all — so rendering a
+/// sequence offline is a thing the store will want; it is also the only way to
+/// look at motion without a window.
 pub fn to_sequence(
     gpu: &Gpu,
     deck: &mut Deck,

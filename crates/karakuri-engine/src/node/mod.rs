@@ -120,12 +120,12 @@ pub(crate) struct View<'a> {
     /// cannot write; see `Set::resolve_bindings`, which already says so about the
     /// same map.
     ///
-    /// It is not only vector params that land here. `Set::default_scalar` reads
-    /// a *literal* float out of the declaration, so any `float` param whose
-    /// default is an expression — `-0.35`, which parses as a negation of a
-    /// literal — misses too. That is a defect of `default_scalar` rather than of
-    /// this signature, and `0.0` is the wrong answer for it either way; it is
-    /// merely a quieter wrong answer than the panic it replaced.
+    /// It is not only vector params that land here. `Param::default_scalar`
+    /// reads a *literal* float out of the declaration, so any `float` param
+    /// whose default is an expression it does not fold misses too. That is a
+    /// defect of the fold rather than of this signature, and `0.0` is the wrong
+    /// answer for it either way; it is merely a quieter wrong answer than the
+    /// panic it replaced.
     pub param: &'a dyn Fn(&str) -> Option<f32>,
     /// **The spliced field's params, already under their WGSL names.**
     ///
@@ -192,7 +192,7 @@ pub(crate) struct Tick<'a> {
 /// A `float` gets the value the Set resolved for it — a binding's, an override's
 /// or the declaration's default — and `0.0` when it has none, on the terms
 /// [`View::param`] states. **A vector param gets zeroes**, because nothing in
-/// this engine drives one: `Set::default_scalar` reads a scalar out of a
+/// this engine drives one: `Param::default_scalar` reads a scalar out of a
 /// declaration and skips anything else, so a `vec3` param never enters a node's
 /// value map at all.
 ///

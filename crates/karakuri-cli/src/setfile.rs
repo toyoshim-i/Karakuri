@@ -366,7 +366,7 @@ fn kind_of(layer: Layer) -> Kind {
 /// The record `Layer` an engine [`Kind`] names. The inverse of [`kind_of`], and
 /// total for the same reason: every layer a Set can hold is a layer a record
 /// can address.
-fn layer_of(kind: Kind) -> Layer {
+pub(crate) fn layer_of(kind: Kind) -> Layer {
     match kind {
         Kind::L1 => Layer::L1,
         Kind::L2 => Layer::L2,
@@ -1000,6 +1000,22 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             // would be a load that goes looking for another file.
             | Record::Save { .. } => notes.push(
                 "a record that belongs to a session rather than to a Set was skipped".to_string(),
+            ),
+            // **An artifact's card, in a Set file.** `Store::write_set`
+            // refuses to write one, so this is a hand-edited or hand-assembled
+            // file — and it is skipped with a sentence of its own rather than
+            // under the session one above, because the confusion it comes from
+            // is a different confusion: `param_decl` says what a procedure
+            // offers and `param` says what this Set turned it to, and an
+            // operator who wrote the first meaning the second wants to be told
+            // which one they wrote.
+            Record::Meta { .. }
+            | Record::ParamDecl { .. }
+            | Record::CapacityDecl { .. }
+            | Record::Emit { .. } => notes.push(
+                "a record that belongs to an artifact's metadata rather than to a Set was \
+                 skipped — a Set file records what a value is, not what a procedure declares"
+                    .to_string(),
             ),
             Record::Unknown => notes.push(
                 "a record type this build does not know was skipped, as the format says to"

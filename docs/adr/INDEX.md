@@ -153,6 +153,10 @@ number; new records continue from the end.
 | [ADR-0131](0131-one-refusal-sentence-per-mistake-across-the-surfaces-that-face-a-person.md) | One refusal sentence per mistake, across the surfaces that face a person | 2026-08-22 | accepted |
 | [ADR-0132](0132-a-rebuild-restates-the-camera-it-was-aimed-with.md) | A rebuild restates the camera it was aimed with | 2026-08-22 | accepted |
 | [ADR-0133](0133-what-was-fed-to-a-generator-is-a-field-not-an-object.md) | What was fed to a generator is a field, not an object | 2026-08-22 | accepted |
+| [ADR-0134](0134-the-metadata-preview-becomes-thumbnail.md) | The metadata `preview` becomes `thumbnail` | 2026-08-22 | accepted |
+| [ADR-0135](0135-one-record-enum-and-one-classifier-behind-both-predicates.md) | One record enum, and one classifier behind both predicates | 2026-08-22 | accepted |
+| [ADR-0136](0136-the-store-keeps-bytes-and-whoever-compiled-them-writes-the-card.md) | The store keeps bytes, and whoever compiled them writes the card | 2026-08-22 | accepted |
+| [ADR-0137](0137-an-unfoldable-default-writes-the-key-absent-not-the-record-absent.md) | An unfoldable default writes the key absent, not the record absent | 2026-08-22 | accepted |
 
 ## Retired numbers
 

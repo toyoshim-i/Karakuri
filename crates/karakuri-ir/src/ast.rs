@@ -710,6 +710,60 @@ pub struct Param {
     pub span: Span,
 }
 
+impl Param {
+    /// **The declared default as a number**, or `None` where the declaration is
+    /// an expression this does not fold.
+    ///
+    /// **A negation is folded, because the parser does not fold it.** `= -0.35`
+    /// is `Unary { Neg, Lit }` and not a literal, so matching [`Expr::Lit`]
+    /// alone silently dropped every negative default: the engine's param never
+    /// entered its uniform, its declared value was discarded, binding refused
+    /// it, and the shader got whatever the miss produced — a panic on the render
+    /// thread before that reader returned an `Option`, and a quiet `0.0` after.
+    /// A `.kir` declaring `param drift : float [-1.0, 1.0] = -0.35` is legal and
+    /// none of that is a reader's to decide.
+    ///
+    /// **Not general constant folding**, deliberately. A default is checked in
+    /// an empty scope, so it is *some* constant, but the useful set is one
+    /// literal with an optional sign in front of it. Widening it is a language
+    /// question — what a default may say — rather than a convenience for one
+    /// caller, and it belongs here where every caller gets the same answer.
+    ///
+    /// **It lives here rather than in a reader, and that is the whole point.**
+    /// It was private to `karakuri-engine`'s `Set`, with a note saying a second
+    /// evaluator elsewhere would agree with the shader only by coincidence.
+    /// There is now a second reader — `karakuri-cli`'s metadata writer records
+    /// this number in a `param_decl` — and a metadata file whose `default`
+    /// disagreed with the uniform the run actually loaded would be a card
+    /// describing a procedure nobody ran. One function, so they cannot differ.
+    ///
+    /// `None` is *"this default is not a number I can state"*, and never
+    /// *"there is no default"*: the grammar makes `= <expr>` mandatory. What a
+    /// caller does with that is the caller's — the engine leaves the param out
+    /// of its uniform, the metadata writer writes the declaration with no
+    /// `default` key.
+    pub fn default_scalar(&self) -> Option<f32> {
+        match &self.default {
+            Expr::Lit {
+                value: Lit::Float(v),
+                ..
+            } => Some(*v),
+            Expr::Unary {
+                op: UnOp::Neg,
+                value,
+                ..
+            } => match value.as_ref() {
+                Expr::Lit {
+                    value: Lit::Float(v),
+                    ..
+                } => Some(-v),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+}
+
 /// `capacity [<min>, <max>] = <default>`
 ///
 /// A range rather than a constant, because a Set overrides the value and the

@@ -2230,29 +2230,31 @@ impl Set {
 
         // One map per node, in the order [`Set::slot_of`] addresses them: the
         // L1's, then each renderer's. Two nodes declaring one name now hold two
-        // values, which is what a name meaning "this node's" buys.
-        let declared = |p: &&karakuri_ir::Param| default_scalar(p).map(|v| (p.name.clone(), v));
-        let map = |node: &Checked| -> HashMap<String, f32> {
-            node.params.iter().filter_map(|p| declared(&p)).collect()
-        };
+        // values, which is what a name meaning "this node's" buys. The fold
+        // behind it is [`declared_defaults`], which is `karakuri-ir`'s.
+        //
         // **One map per L1 procedure**, which is one per source: each source
         // *is* an L1, and `--param L1:1:spawn_rate` names the second one.
         let params = l1s
             .iter()
-            .map(|(l1, _)| map(l1))
-            .chain(l2s.iter().map(|n| map(n)))
+            .map(|(l1, _)| declared_defaults(l1))
+            .chain(l2s.iter().map(|n| declared_defaults(n)))
             // **One map per camera node, including the built-in's**, which is
             // empty: it is not a procedure and declares no params. Empty rather
             // than absent is the whole of what makes this list addressable —
             // `slot_of` sums the layers before it, so a Set whose camera
             // contributed no entry would put the first renderer's map at the
             // camera's index and hand every `L4:n` the node before it.
-            .chain(cameras.iter().map(|n| n.map(map).unwrap_or_default()))
-            .chain(l4s.iter().map(|n| map(n)))
+            .chain(
+                cameras
+                    .iter()
+                    .map(|n| n.map(declared_defaults).unwrap_or_default()),
+            )
+            .chain(l4s.iter().map(|n| declared_defaults(n)))
             // **Last, and by declared name.** The prefix belongs to the WGSL
             // spelling and to nothing else: an operator writes
             // `--param Field:0:ball`, which is the name the file declares.
-            .chain(fields.iter().map(|n| map(n)))
+            .chain(fields.iter().map(|n| declared_defaults(n)))
             .collect();
         // The same walk, so a node's values and its ranges cannot end up at
         // different indices — the defect this file has already paid for twice.
@@ -4009,6 +4011,34 @@ fn field_value(
     maps.get(*ordinal)?.get(declared).copied()
 }
 
+/// **The declared defaults one node enters a Set with**, keyed by the name the
+/// `.kir` declares.
+///
+/// **The fold is `karakuri-ir`'s, not this file's.** It was a private function
+/// here with a note saying a second evaluator elsewhere would agree with the
+/// shader only by coincidence; `karakuri-cli`'s metadata writer is that
+/// elsewhere, and it records the same number in a `param_decl`. Two folds could
+/// disagree, and the disagreement would be a metadata file describing a run
+/// that never happened.
+///
+/// **A function rather than the closure inside [`Set::build`] it used to be**,
+/// and that is the whole of what it buys: `Set::build` needs a device, so the
+/// engine's *use* of the one fold could only be reached through a GPU. The
+/// closure was named and lifted out so that
+/// `tests::the_engines_param_map_reads_a_negative_default_through_the_ir_fold`
+/// can ask this function the same question
+/// `a_negative_param_default_is_read_as_its_declared_value` asks
+/// `Param::default_scalar`, on a machine with no adapter. A param this cannot state a number for is left out of the
+/// map entirely — the node then has no value for it and its uniform never packs
+/// one, which is how a `vec3` param stays undriven rather than being packed as
+/// a scalar.
+fn declared_defaults(node: &Checked) -> HashMap<String, f32> {
+    node.params
+        .iter()
+        .filter_map(|p| p.default_scalar().map(|v| (p.name.clone(), v)))
+        .collect()
+}
+
 /// **Which geometry a declared Source slot names, as its assigned identity** —
 /// the answer behind one uniform key, for the node that declared the slot.
 ///
@@ -4033,45 +4063,6 @@ fn source_value(
     salts.get(*at).copied()
 }
 
-/// The scalar default of a param, for the uniform. Vector params are not yet
-/// driven from here — every param the examples declare is a float.
-///
-/// **A negation is folded, because the parser does not fold it.** `= -0.35` is
-/// `Unary { Neg, Lit }` and not a literal, so matching `Expr::Lit` alone silently
-/// dropped every negative default: the param never entered [`Set::params`], so
-/// its declared value was discarded, [`Set::bind`] refused it, and the uniform
-/// got whatever the miss produced — a panic on the render thread before
-/// `effective` returned an `Option`, and a quiet `0.0` after. A `.kir` declaring
-/// `param drift : float [-1.0, 1.0] = -0.35` is legal and none of that is the
-/// engine's to decide.
-///
-/// **Not general constant folding**, deliberately. A default is checked in an
-/// empty scope, so it is *some* constant, but the useful set is one literal with
-/// an optional sign in front of it; anything past that wants folding in
-/// `karakuri-ir` where the checker could also use it, rather than a second
-/// evaluator here that agrees with the shader by coincidence.
-fn default_scalar(p: &karakuri_ir::Param) -> Option<f32> {
-    use karakuri_ir::{Expr, Lit, UnOp};
-    match &p.default {
-        Expr::Lit {
-            value: Lit::Float(v),
-            ..
-        } => Some(*v),
-        Expr::Unary {
-            op: UnOp::Neg,
-            value,
-            ..
-        } => match value.as_ref() {
-            Expr::Lit {
-                value: Lit::Float(v),
-                ..
-            } => Some(-v),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     //! The two things `Set::build` does that no node does: put the two halves
@@ -4083,11 +4074,24 @@ mod tests {
 
     /// **A negative default is a value, not an absence.**
     ///
-    /// `= -0.35` parses as a negation of a literal rather than as one, and
-    /// [`default_scalar`] matched `Expr::Lit` alone — so a legal `.kir` had its
-    /// declared default silently discarded, could not be bound, and reached the
-    /// shader as whatever the miss produced. No example declares one, which is
-    /// the only reason it was never seen; nothing in the language forbids it.
+    /// `= -0.35` parses as a negation of a literal rather than as one, and the
+    /// fold matched `Expr::Lit` alone — so a legal `.kir` had its declared
+    /// default silently discarded, could not be bound, and reached the shader as
+    /// whatever the miss produced. No example declares one, which is the only
+    /// reason it was never seen; nothing in the language forbids it.
+    ///
+    /// **Asked of `karakuri_ir::Param::default_scalar`, which is where the fold
+    /// now lives** — it was private here until the metadata writer needed the
+    /// same number. This stays because it is the *engine's* reading that broke,
+    /// and the value it reads is what a uniform is packed from.
+    ///
+    /// **It does not, on its own, pin the engine to that fold.** This doc used
+    /// to say the map a uniform is packed from "is built from exactly this
+    /// call", and after the fold moved out that stopped being true of anything
+    /// here: replacing `Set::build`'s call with a divergent local fold left
+    /// every lib test in this crate green. The engine's *use* is pinned by
+    /// `the_engines_param_map_reads_a_negative_default_through_the_ir_fold`
+    /// below, which is why [`declared_defaults`] is a function.
     ///
     /// No GPU: this is about reading a declaration, and pinning it here rather
     /// than through a built `Set` is what keeps the failure legible.
@@ -4116,13 +4120,12 @@ proc signed_defaults {
         let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("parse: {e:?}"));
         let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("check: {e:?}"));
         let of = |name: &str| {
-            default_scalar(
-                checked
-                    .params
-                    .iter()
-                    .find(|p| p.name == name)
-                    .expect("the param is declared"),
-            )
+            checked
+                .params
+                .iter()
+                .find(|p| p.name == name)
+                .expect("the param is declared")
+                .default_scalar()
         };
         assert_eq!(
             of("drift"),
@@ -4133,6 +4136,67 @@ proc signed_defaults {
             of("plain"),
             Some(0.25),
             "a positive default stopped being read"
+        );
+    }
+
+    /// **The engine reads its declared defaults through `karakuri-ir`'s fold
+    /// and through no reader of its own.**
+    ///
+    /// The number a node enters a Set with and the number
+    /// `karakuri-cli`'s metadata writer puts in a `param_decl` are one
+    /// declaration read twice, and the rule that keeps them equal is that both
+    /// call `karakuri_ir::Param::default_scalar`. Nothing in this crate held
+    /// the engine to that: the fold moved to `karakuri-ir`, the test above
+    /// followed it there, and a divergent local fold in
+    /// [`declared_defaults`] passed every lib test here — the disagreement
+    /// showed up only in `karakuri-cli`'s
+    /// `the_engine_and_the_metadata_writer_cannot_disagree_about_a_default`,
+    /// which builds a `Set` and so needs an adapter. On a machine with no GPU
+    /// the engine half of the one-fold rule was unguarded.
+    ///
+    /// [`declared_defaults`] is that map's builder, lifted out of `Set::build`
+    /// so this question can be asked without a device. **A negative default is
+    /// what asks it**, because that is the one declaration the two folds have
+    /// actually disagreed about: a reader matching `Expr::Lit` alone reads
+    /// `-0.35` as an absence, and an absent entry is a param the uniform never
+    /// packs.
+    ///
+    /// What is still only in `karakuri-cli` is the *packing* and the card
+    /// beside it — this pins the map, not the bytes in the uniform buffer.
+    #[test]
+    fn the_engines_param_map_reads_a_negative_default_through_the_ir_fold() {
+        let src = r#"
+proc signed_defaults {
+  kind  L4
+  blend additive
+
+  param drift  : float [-1.0, 1.0] = -0.35
+  param plain  : float [ 0.0, 1.0] =  0.25
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 1.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 1.0, 1.0, drift + plain);
+  }
+}
+"#;
+        let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("parse: {e:?}"));
+        let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("check: {e:?}"));
+        let map = declared_defaults(&checked);
+        assert_eq!(
+            map.get("drift").copied(),
+            Some(-0.35),
+            "the map a uniform is packed from has stopped agreeing with              `karakuri_ir::Param::default_scalar`: a fold of this file's own read `-0.35`              as an absence, so the run loads a default the `param_decl` beside it does not              state"
+        );
+        assert_eq!(
+            map.get("plain").copied(),
+            Some(0.25),
+            "the map a uniform is packed from has stopped agreeing with              `karakuri_ir::Param::default_scalar` about an ordinary positive default"
         );
     }
 

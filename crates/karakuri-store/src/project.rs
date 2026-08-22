@@ -50,7 +50,7 @@ enum Key {
 }
 
 /// The fold key for a record, or `None` for one that does not belong in a Set
-/// file. **Three kinds of `None`, and the second is the one that is easy to get
+/// file. **Four kinds of `None`, and the second is the one that is easy to get
 /// wrong.**
 ///
 /// The first is a record that carries no state at all: `Record::Tick`, which
@@ -78,6 +78,19 @@ enum Key {
 /// into, because what it names is a whole file this function's output is one
 /// of. See the arm itself, and "Records with an effect outside the stream" in
 /// `docs/ir-spec.md`.
+///
+/// The fourth is a **third file's vocabulary**: `Meta`, `ParamDecl`,
+/// `CapacityDecl` and `Emit` say what an *artifact* declares, which is neither
+/// this Set's state nor the deck's nor a fact about a file this one writes. A
+/// session stream is a performance and nothing here puts one in one, so meeting
+/// one means a hand-edited stream — see the arm, and `Record::is_metadata`.
+///
+/// **This count is prose and nothing checks it**, which is how it went on
+/// saying three after the fourth arm was written below — the same drift
+/// `Record`'s own group comment confesses to for its "seven" and "twelve". What
+/// cannot drift that way is the classification: this match carries no wildcard,
+/// so a new record stops this function compiling until somebody gives it an
+/// arm, and `Record::vocabulary` is exhaustive for the same reason.
 fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
     match record {
         Record::Set { .. } => Some(Key::Set),
@@ -137,6 +150,19 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         // this function's job and it is not the job of the file it names. Two
         // saves in a session are two files, not one with a later answer.
         | Record::Save { .. } => None,
+        // **A fourth reason to drop, and it is not a fourth kind of state.** A
+        // metadata record describes what an *artifact* declares; a session
+        // stream is a performance and no writer here puts one in one. Meeting
+        // one means a hand-edited stream, and the answer is to drop it rather
+        // than to pass it through: passed through it would reach
+        // `Store::write_set`, which refuses it — so a whole save would fail on
+        // a line that says nothing about the Set being saved. There is also
+        // nothing to fold it onto, which is the same thing said from the other
+        // side. See `Record::is_metadata`.
+        Record::Meta { .. }
+        | Record::ParamDecl { .. }
+        | Record::CapacityDecl { .. }
+        | Record::Emit { .. } => None,
         Record::Unknown => Some(Key::Passthrough(ordinal)),
     }
 }

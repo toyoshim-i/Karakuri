@@ -428,6 +428,20 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
                 white_point: *white_point,
             })))
         }
+        // **A wildcard rather than an exhaustive match, and it is the one
+        // place a new record is placed silently.** Everything not named above
+        // is not this module's to act on — a `tick`, an `audio`, a
+        // `param_decl` — and refusing what it does not recognise would make a
+        // session written by a newer build unreplayable, which is the promise
+        // the format makes and this arm keeps. The cost is that a new *deck*
+        // record added to `Record` compiles here and quietly does nothing,
+        // where `project::key_for`, `setfile::from_lines` and
+        // `Record::vocabulary` would all stop compiling until it was
+        // classified; the note in `Record::is_set_state` says so rather than
+        // leaving that claim reading as absolute. Naming the ignored records
+        // instead was rejected for the reason above: the list would have to
+        // grow for every record in the format, including the ones no build
+        // here has heard of.
         _ => Ok(None),
     }
 }

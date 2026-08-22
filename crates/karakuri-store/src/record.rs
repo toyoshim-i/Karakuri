@@ -1,7 +1,7 @@
 //! ndjson records.
 //!
 //! One record per line, and concatenation is composition. The same record types
-//! serve two files:
+//! serve three files:
 //!
 //! - a **Set file** (`.set.ndjson`) is a state projection — what is loaded and
 //!   what every value currently is. It carries no time, so it never contains
@@ -9,9 +9,34 @@
 //! - a **session stream** is a timeline — a Set file followed by ticks and the
 //!   edits between them. Every edit lands at an exact frame position because it
 //!   sits between two known ticks.
+//! - an **artifact's metadata** (`<hash>.meta.ndjson`) is what one procedure
+//!   *declares*, regenerated from its `.kir` plus a compile pass. It is neither
+//!   of the other two and is read by a decoder of its own — see
+//!   [`Record::is_metadata`].
 //!
 //! A Set file is the session stream with the ticks dropped and the state folded
-//! down. See the Set file and session stream sections of `docs/ir-spec.md`.
+//! down. See the Set file, session stream and metadata file sections of
+//! `docs/ir-spec.md`.
+//!
+//! **One type for all three, and the names disjoint across them.** The
+//! specification's rule is that one `t` means one shape in every file, which is
+//! a rule about *names* — `param_decl` beside `param` — and sharing the Rust
+//! type is what lets a decoder tell a record in the wrong file from a record it
+//! has never heard of. Three enums could not: a `param_decl` read by the Set
+//! decoder would come back [`Record::Unknown`], and the format promises to pass
+//! over exactly that.
+//!
+//! **The one collision there was is settled, and it is the metadata name that
+//! moved.** `docs/ir-spec.md` listed a metadata `preview` carrying a `path`
+//! beside [`Record::Preview`], the deck's record for which slot is being
+//! auditioned. Two shapes under one `t`, and silently so: the deck record's
+//! `slot` is an `Option`, so the specified line decoded as
+//! `Preview { slot: None }` with its `path` dropped and nothing said — the one
+//! record for which "an unknown `t` is ignored" protected nothing, because the
+//! `t` was not unknown. The library asset is spelled `thumbnail` now, which is
+//! the word `docs/roadmap.md` already used for it. The deck record could not be
+//! the one to move: it is written into session streams that exist on disk,
+//! where nothing has ever written the metadata one.
 
 use serde::{Deserialize, Serialize};
 
@@ -311,13 +336,22 @@ pub enum Record {
     },
     // -- The mix: durable state that belongs to the *session* -------------
     //
-    // Everything above describes one Set and goes into a Set file. These seven
+    // Everything above describes one Set and goes into a Set file. These twelve
     // describe the deck the Sets are playing on, and a Set file must not
     // contain them — a Set does not know what fader it is under or whether it
     // is on air, and one that carried its gain would restore that gain
     // wherever it was next loaded. They are state all the same, which is what
     // separates them from the three below: `is_set_state` says no to all
-    // twelve and means two different things by it.
+    // fifteen of them and means two different things by it. (It says no to the
+    // four metadata records further down as well, for a third reason that is
+    // not about state at all — see the group comment above `Record::Meta`; the
+    // count here is these fifteen and not that nineteen. It read "seven" and
+    // "twelve" from the commit that gave the mix a vocabulary until this one:
+    // every record added since went in without the count moving, because a
+    // prose count is not checked by anything. Both are counted off the
+    // variants above, and the classification behind `is_set_state` is an
+    // exhaustive match now, so that at least the *classification* cannot drift
+    // the same way silently.)
     /// A deck slot's linear gain into the mix.
     ///
     /// The slot is an index into the deck rather than anything about the Set
@@ -654,6 +688,119 @@ pub enum Record {
         /// different event from the same numbers applied at high confidence.
         confidence: f32,
     },
+    // -- A third file's vocabulary: an artifact's metadata ----------------
+    //
+    // `<hash>.meta.ndjson` — what an artifact *declares*, regenerated from its
+    // `.kir` plus a compile pass and never hand-authored. Neither Set state nor
+    // session state: a Set file says what a value *is* and a session says what a
+    // performance *did*, and these say what a procedure *offers* before anything
+    // has instantiated it. `Store::write_set` refuses them, and
+    // `Record::is_metadata` is the question it asks — a separate one from
+    // `is_set_state`, which asks *may this go in a Set file* and now answers no
+    // to these for a third reason. See the head of `Record::is_set_state`.
+    //
+    // **The same enum, and the names disjoint from both other vocabularies** —
+    // `param_decl` beside `param`, `capacity_decl` beside `capacity`, which is
+    // what `docs/ir-spec.md`'s "one `t` means one shape, across every file"
+    // asks. That rule is about names; sharing the *type* is what makes the
+    // refusal possible at all. A separate enum was tried on paper and cannot
+    // work: a metadata line fed to the Set decoder would deserialise to
+    // [`Record::Unknown`], which is precisely the value the format promises to
+    // pass over — so a Set file with a `param_decl` in it would be written
+    // without complaint, and read back as a line nobody could name.
+    //
+    // **The one name that was not disjoint is the one that moved.** The
+    // specification's ninth record was a metadata `preview` carrying a `path`,
+    // against [`Record::Preview`] above, which is the deck's and carries a
+    // `slot` — and sharing one enum made that collision *silent*, because the
+    // deck record's `slot` is an `Option` and the specified line decoded as
+    // `Preview { slot: None }` with `path` dropped. It is `thumbnail` now.
+    // Renaming the deck record instead was the alternative and is worse: it is
+    // written into session streams that exist on disk, so moving it would break
+    // reading them, where nothing has ever written the metadata one. A suffix —
+    // `preview_path` — was the other, and it would say these are two versions
+    // of one concept, which is what `param_decl` beside `param` legitimately is
+    // and what a stored asset beside a live audition is not.
+    //
+    // Four of the nine records the specification lists, because four is what a
+    // compile pass can produce. `perf` is a measurement and wants a probe;
+    // `origin`, `parent` and `tag` have no producer until something generates
+    // procedures, and `thumbnail` names a stored asset nothing renders yet.
+    // Writing an empty `parent` would be worse than leaving room for it — see
+    // `docs/ir-spec.md`, "Metadata file format".
+    /// **The head of a metadata file**: which artifact this describes, and what
+    /// it calls itself.
+    ///
+    /// `hash` is the content address of the `.kir` the rest of the file was
+    /// read off, and it is written down rather than left implicit in the file
+    /// name: a metadata file copied, renamed or quoted out of context still
+    /// says what it is about, and a reader can tell a stale card from a current
+    /// one without trusting a path.
+    ///
+    /// `name` is the procedure's own declared name — the `.kir`'s `proc <name>`
+    /// — and never a name a Set gave a node, which belongs to the *use* and is
+    /// recorded in a Set file's [`Record::Slot`].
+    Meta {
+        hash: Hash,
+        name: String,
+        kind: Layer,
+        v: u32,
+    },
+    /// **One parameter a procedure declares**: its range and, where the
+    /// declaration is a number this build can state, its default.
+    ///
+    /// A declaration and not a value, which is the whole of what separates it
+    /// from [`Record::Param`] — that one says what a Set turned a knob to, this
+    /// one says the knob exists and what it may be turned between.
+    ParamDecl {
+        key: String,
+        /// The declared type's spelling, as `.kir` writes it: `float`, `vec3`.
+        /// A `String` rather than an enum because the metadata file is read by
+        /// a decoder that does not parse `.kir` and has no use for a closed set
+        /// — and because a type the language grows is then a value this crate
+        /// carries without a release.
+        #[serde(rename = "type")]
+        ty: String,
+        min: f32,
+        max: f32,
+        /// **Absent means the default is not a number this build can state**,
+        /// never that there is no default: `param <name> : <ty> [<min>, <max>]
+        /// = <expr>` makes the expression mandatory, so every declared param
+        /// has one. `karakuri_ir::Param::default_scalar` folds a literal and a
+        /// leading negation and nothing else.
+        ///
+        /// **The record is still written, which is the decision.** Dropping it
+        /// instead would make a reader believe the artifact declares no such
+        /// param, and that is a false statement about the declaration where a
+        /// missing key is a true statement about what is known. It also has to
+        /// survive the unknown-key rule: a decoder that ignores keys it does
+        /// not recognise cannot tell an absent `default` from one it skipped,
+        /// and under either reading the answer is *"not known"* — which is the
+        /// answer. Under the other choice the two readings differ, because a
+        /// record that is not there cannot be skipped into existence.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        default: Option<f32>,
+    },
+    /// **The element count an L1 declares it can run between**, and what it runs
+    /// at when nothing says otherwise.
+    ///
+    /// One per file at most: `capacity` is a header declaration and only an L1
+    /// has one. No record at all is a procedure that declares none — every kind
+    /// but L1, and an L1 written before the declaration existed.
+    CapacityDecl {
+        min: u32,
+        max: u32,
+        default: u32,
+    },
+    /// **The attributes a procedure writes**, in declaration order.
+    ///
+    /// Absent rather than empty where a procedure declares no `emit` — an L4
+    /// emits nothing, and a record saying so tells a reader exactly what its
+    /// absence tells them. The rule across this group is one record per
+    /// declaration, and a declaration nobody wrote produces none.
+    Emit {
+        attrs: Vec<String>,
+    },
     /// Forward compatibility: an unrecognised `t` is ignored, not an error.
     #[serde(other)]
     Unknown,
@@ -663,8 +810,43 @@ pub enum Record {
 /// Unbounded catch-up turns a load spike into a death spiral.
 pub const MAX_STEPS: u8 = 4;
 
+/// **Which of the three files' vocabularies a record belongs to**, decided in
+/// one exhaustive match that both of the questions below are read off.
+///
+/// **One classification and two questions, because the two drifted apart
+/// once.** [`Record::is_set_state`] and [`Record::is_metadata`] ask different
+/// things — *may this go in a Set file* and *does this belong in a card* — and
+/// each owes an operator a different sentence, which is why there are two of
+/// them. What there is not is two answers: the four metadata variants were
+/// added to the enum and classified in neither function, and because
+/// `is_set_state` was a `matches!` over the exceptions it answered *true* for
+/// all four, under a headline saying they belong in a Set file.
+///
+/// Two exhaustive matches would have caught that and would still leave the next
+/// record classifiable one way here and another way there. Classified once,
+/// they cannot disagree, and a variant with no arm does not compile —
+/// `origin`, `parent`, `perf`, `tag` and `thumbnail` are specified and will
+/// arrive.
+enum Vocabulary {
+    /// What a Set *is*: written to a Set file and read back out of one.
+    Set,
+    /// Not state at all — what a *frame* saw or decided.
+    Frame,
+    /// The **session's** state rather than any Set's: the deck the Sets are
+    /// playing on.
+    Session,
+    /// What an *artifact* declares, in its `<hash>.meta.ndjson`.
+    Metadata,
+    /// A `t` this build does not know. **Not a vocabulary but the absence of
+    /// one**, and it is a case of its own because every reader treats it as a
+    /// line to carry rather than a line to place: passing it over is the
+    /// format's promise, so a Set file round-tripped through a build that does
+    /// not know every record in it comes back with all of them.
+    Unknown,
+}
+
 impl Record {
-    /// Whether this record belongs in a Set file. **Fifteen say no, for two
+    /// Whether this record belongs in a Set file. **Nineteen say no, for three
     /// different reasons, and keeping them apart is the point of the name** —
     /// it is `is_set_state` rather than `is_state` because most of what it
     /// refuses is state.
@@ -697,37 +879,137 @@ impl Record {
     ///   about a performance and about no Set. A Set file carrying one would
     ///   claim, every time it was loaded, that a save had just happened.
     ///
-    /// **Two reasons, and `Record::Save` does not add a third.** This function
-    /// asks *whose state is this* — the session's or a Set's — and answers it
-    /// for fifteen records with the two paragraphs above. Whether a record
-    /// **reaches outside the stream** is a different question about the same
-    /// vocabulary, and `Record::Save` is so far the only record for which the
-    /// answer is yes. Folding that into this taxonomy would give one function
-    /// two jobs and would make the count above mean two things at once; it
-    /// lives in `docs/ir-spec.md` under "Records with an effect outside the
-    /// stream", where a replay reads it.
+    /// - [`Record::Meta`], [`Record::ParamDecl`], [`Record::CapacityDecl`] and
+    ///   [`Record::Emit`] are a **third file's** vocabulary: what an artifact
+    ///   *declares*, before anything has instantiated it. Not the session's and
+    ///   not any Set's, which is why they are a third reason rather than a
+    ///   longer second one.
     ///
-    /// A session stream carries all fifteen. That is the difference between
-    /// the two files, stated from this side.
+    /// **Three reasons for one answer, and `Record::Save` still does not add a
+    /// fourth.** The question here is *may this line go in a Set file*, and it
+    /// has one answer per record however many reasons stand behind a no.
+    /// Whether a record **reaches outside the stream** is a different question
+    /// about the same vocabulary, and `Record::Save` is so far the only record
+    /// for which the answer is yes; folding that in would give one function two
+    /// jobs. It lives in `docs/ir-spec.md` under "Records with an effect
+    /// outside the stream", where a replay reads it.
+    ///
+    /// A session stream carries the fifteen of the first two groups and none of
+    /// the third. That is the difference between the two files, stated from
+    /// this side, and it is what [`Record::is_metadata`] is a separate function
+    /// for: `Store::write_set` refuses a `param_decl` through *that* question so
+    /// that the sentence it prints is about declarations. `!is_set_state()`
+    /// refuses it too — the third bullet is what that means — but the refusal it
+    /// reaches is the one naming a tick, and telling an operator a
+    /// `capacity_decl` was rejected for carrying time sends them looking in the
+    /// wrong place. Two questions, two sentences, one classification.
+    ///
+    /// **What this said before, because an inverted reason outlives the code it
+    /// was written about.** The four metadata variants were added to the enum
+    /// and not to this function, which was a `matches!` over the exceptions —
+    /// so `is_set_state()` answered *true* for all four, under a headline that
+    /// says they belong in a Set file. The paragraph here claimed a bare
+    /// `!is_set_state()` "would refuse them for the wrong reason": it would not
+    /// have refused them at all, it would have written them to disk, and only
+    /// `Store::write_set` asking [`Record::is_metadata`] first kept that from
+    /// happening. Neither question is answered by hand any more — both are read
+    /// off [`Vocabulary`], whose match is exhaustive — so the next record
+    /// cannot arrive the same way, and cannot be classified one way here and
+    /// another way there. `origin`, `parent`, `perf`, `tag` and `thumbnail` are
+    /// specified and will arrive; `project::key_for` and `setfile::from_lines`
+    /// already stop compiling until somebody classifies them, and this does
+    /// too now.
+    ///
+    /// **That is a claim about the readers that have to place a record, and
+    /// not about every match on `Record` in the workspace.** `karakuri-cli`'s
+    /// `mix::change` ends with `_ => Ok(None)`, so a new variant silently
+    /// becomes "not a mix change" there. It is deliberate and it is the safe
+    /// default — that function's whole contract is that a record it does not
+    /// act on is not an error, so that a stream from a newer build replays
+    /// rather than failing — but it means a new *deck* record can arrive,
+    /// be classified `Session` here, and still go unacted on with nothing
+    /// saying so. The exhaustive matches are the ones that decide which file a
+    /// record belongs in; the wildcard is in the one that decides what to do
+    /// with it.
+    ///
+    /// **[`Record::Unknown`] is the one `true` that is not a claim about
+    /// state.**
+    /// An unrecognised `t` is passed over rather than refused, which is the
+    /// format's promise and the reason `project::key_for` gives one its own
+    /// passthrough key. Answering false for it would make `Store::write_set`
+    /// reject a file it had just read.
     pub fn is_set_state(&self) -> bool {
-        !matches!(
-            self,
-            Record::Tick { .. }
-                | Record::Audio { .. }
-                | Record::Tempo { .. }
-                | Record::Gain { .. }
-                | Record::Opacity { .. }
-                | Record::Blend { .. }
-                | Record::Residency { .. }
-                | Record::Look { .. }
-                | Record::Canvas { .. }
-                | Record::Procedure { .. }
-                | Record::Transport { .. }
-                | Record::Preview { .. }
-                | Record::Transition { .. }
-                | Record::Mask { .. }
-                | Record::Save { .. }
-        )
+        matches!(self.vocabulary(), Vocabulary::Set | Vocabulary::Unknown)
+    }
+
+    /// Which file's vocabulary this record is part of. **The one place any
+    /// record is classified** — see [`Vocabulary`] for why it is one place.
+    fn vocabulary(&self) -> Vocabulary {
+        match self {
+            // Written to a Set file and read back out of one, and this is the
+            // arm that grows when the Set vocabulary does.
+            Record::Set { .. }
+            | Record::Slot { .. }
+            | Record::Capacity { .. }
+            | Record::Param { .. }
+            | Record::Bind { .. }
+            | Record::Camera { .. }
+            | Record::Seed { .. }
+            | Record::Edge { .. }
+            | Record::Src { .. } => Vocabulary::Set,
+            Record::Tick { .. } | Record::Audio { .. } | Record::Tempo { .. } => Vocabulary::Frame,
+            Record::Gain { .. }
+            | Record::Opacity { .. }
+            | Record::Blend { .. }
+            | Record::Residency { .. }
+            | Record::Look { .. }
+            | Record::Canvas { .. }
+            | Record::Procedure { .. }
+            | Record::Transport { .. }
+            | Record::Preview { .. }
+            | Record::Transition { .. }
+            | Record::Mask { .. }
+            | Record::Save { .. } => Vocabulary::Session,
+            // The arm `is_set_state` was missing when it was a `matches!` over
+            // the exceptions: these were added to the enum without being
+            // classified anywhere, and nothing said so.
+            Record::Meta { .. }
+            | Record::ParamDecl { .. }
+            | Record::CapacityDecl { .. }
+            | Record::Emit { .. } => Vocabulary::Metadata,
+            Record::Unknown => Vocabulary::Unknown,
+        }
+    }
+
+    /// **Whether this record belongs in an artifact's `<hash>.meta.ndjson`.**
+    /// Four say yes, and they are the four a compile pass can produce.
+    ///
+    /// A separate question from [`Record::is_set_state`], which asks *may this
+    /// go in a Set file* and answers no to these as well. Two functions because
+    /// two **sentences** are owed, not because the classification is in doubt:
+    /// `Store::write_set` asks this one first so that a rejected `param_decl`
+    /// is told it is a declaration, rather than told it carries time. One
+    /// classification behind both, [`Vocabulary`], because the two drifted
+    /// apart once already — see the head of [`Record::is_set_state`].
+    ///
+    /// The specification lists five more — `origin`, `parent`, `perf`, `tag`
+    /// and `thumbnail` — and nothing produces any of them yet. When one arrives
+    /// it joins [`Vocabulary::Metadata`]'s arm and this doc's count moves with
+    /// it; it cannot be forgotten on the way, because a variant with no arm
+    /// does not compile.
+    ///
+    /// **`thumbnail` is the fifth name because `preview` was taken**, by
+    /// [`Record::Preview`] — the deck's, for which slot is being auditioned.
+    /// The specification called the library asset `preview` too, and one `t`
+    /// cannot carry two shapes: the deck record's `slot` is an `Option`, so the
+    /// specified line decoded as `Preview { slot: None }` and lost its `path`
+    /// without a word. The metadata name moved rather than the deck's, which is
+    /// written into session streams that exist on disk. Nothing here has a
+    /// `Thumbnail` variant, because nothing renders one yet — it joins
+    /// `origin`, `parent`, `perf` and `tag` on the list of records the
+    /// specification describes and nothing writes.
+    pub fn is_metadata(&self) -> bool {
+        matches!(self.vocabulary(), Vocabulary::Metadata)
     }
 }
 
@@ -1117,6 +1399,111 @@ mod tests {
                 confidence: 0.0,
             }
         );
+    }
+
+    /// The wire line the spec prints, parsed and written back.
+    ///
+    /// **Byte for byte, with the `hash` filled in**: the specification prints
+    /// this line with the address elided — `"sha256:a3f2c1…"` — so the one
+    /// value that cannot be copied off the page is the artifact's identity, and
+    /// it is built here the way `karakuri-store`'s metadata tests build it. The
+    /// order of the keys around it is the specification's.
+    ///
+    /// The head of a card is the record with the most to lose by drifting: it
+    /// says *which* artifact everything below it describes, so a reordered
+    /// field is a file every reader still parses and no reader can match
+    /// against the `.kir` it was read off.
+    #[test]
+    fn a_meta_round_trips_through_the_line_the_spec_prints() {
+        let hash = Hash::of(b"proc drift_shell { kind L1 }");
+        let line =
+            format!(r#"{{"t":"meta","hash":"{hash}","name":"drift_shell","kind":"L1","v":1}}"#);
+        let rec = round_trip_verbatim(&line);
+        assert_eq!(
+            rec,
+            Record::Meta {
+                hash,
+                name: "drift_shell".to_string(),
+                kind: Layer::L1,
+                v: 1,
+            }
+        );
+        assert!(rec.is_metadata());
+        assert!(!rec.is_set_state());
+    }
+
+    /// The wire line the spec prints, parsed and written back.
+    ///
+    /// **Byte for byte**, because a metadata file is written by one build and
+    /// read by another: `round_trip` compares the parsed values and would not
+    /// notice the keys coming back in a different order, which is a different
+    /// file for every card ever regenerated. Nothing optional here, so the
+    /// whole line is the record.
+    #[test]
+    fn a_param_decl_round_trips_through_the_line_the_spec_prints() {
+        let line =
+            r#"{"t":"param_decl","key":"radius","type":"float","min":0.1,"max":8.0,"default":2.0}"#;
+        let rec = round_trip_verbatim(line);
+        assert_eq!(
+            rec,
+            Record::ParamDecl {
+                key: "radius".to_string(),
+                ty: "float".to_string(),
+                min: 0.1,
+                max: 8.0,
+                default: Some(2.0),
+            }
+        );
+        // A declaration and not a value: it is the artifact's vocabulary, so a
+        // Set file must not carry it and `Store::write_set` asks this.
+        assert!(rec.is_metadata());
+        assert!(!rec.is_set_state());
+    }
+
+    /// The wire line the spec prints, parsed and written back.
+    ///
+    /// **Byte for byte**, for the reason above — and this is the record with
+    /// the most to lose by it: three bare numbers under three interchangeable
+    /// keys, where a reordered field produces a file that still parses
+    /// everywhere and says a capacity nobody declared.
+    #[test]
+    fn a_capacity_decl_round_trips_through_the_line_the_spec_prints() {
+        let line = r#"{"t":"capacity_decl","min":65536,"max":1048576,"default":262144}"#;
+        let rec = round_trip_verbatim(line);
+        assert_eq!(
+            rec,
+            Record::CapacityDecl {
+                min: 65536,
+                max: 1048576,
+                default: 262144,
+            }
+        );
+        assert!(rec.is_metadata());
+        assert!(!rec.is_set_state());
+    }
+
+    /// The wire line the spec prints, parsed and written back.
+    ///
+    /// **Byte for byte**, which for one field is the key and the order of the
+    /// list inside it: the attributes are written in declaration order, so a
+    /// card that reordered them would describe a struct the procedure does not
+    /// write.
+    #[test]
+    fn an_emit_round_trips_through_the_line_the_spec_prints() {
+        let line = r#"{"t":"emit","attrs":["position","velocity","age"]}"#;
+        let rec = round_trip_verbatim(line);
+        assert_eq!(
+            rec,
+            Record::Emit {
+                attrs: vec![
+                    "position".to_string(),
+                    "velocity".to_string(),
+                    "age".to_string(),
+                ],
+            }
+        );
+        assert!(rec.is_metadata());
+        assert!(!rec.is_set_state());
     }
 
     #[test]

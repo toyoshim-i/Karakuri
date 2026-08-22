@@ -121,7 +121,7 @@ same shape as a `param` — because a Set overrides it:
 ```
 
 **`capacity` is not part of a procedure's identity.** The same procedure at 65536 and at
-524288 is one artifact with one hash and one preview, not two. It is a performance dial
+524288 is one artifact with one hash and one thumbnail, not two. It is a performance dial
 turned per Set, and the range is what the artifact declares it can be turned to. A Set
 asking for a value outside that range is rejected at build time; the engine keeps its own
 hard ceiling on top, from the VRAM budget.
@@ -2937,13 +2937,46 @@ name drawn around some nodes.
 
 ### Metadata file format — M4
 
-Nothing writes or reads one. `karakuri-store`'s record vocabulary covers the Set file
-— `set`, `slot`, `capacity`, `param`, `bind`, `camera`, `seed`, `edge`, `src` — and the
-session stream, which adds `tick` and the mix and measurement records listed above, and
-**none of the records below**. The store is content-addressed from
-M1, which is half of what M4 asks of it; the separate metadata file is the other half
-and does not exist yet. `parent` in particular has to start being recorded with the
-first generated artifact or the genealogy has a hole at its root.
+**Four of the nine records below are written; nothing reads one back yet, and five have no
+producer.** Both of the paths that store an artifact *from a compile* write a
+`<hash>.meta.ndjson` beside its `.kir`, carrying `meta`, `param_decl`, `capacity_decl` and
+`emit` — which is exactly what *"the `.kir` plus a compile pass"* can answer, because every
+one of them is a declaration the check pass already resolved. `Store::put_artifact` itself
+writes no card and is not one of those paths: the store holds bytes under their address and
+does not compile, so the card is the caller's to write — `karakuri-cli`'s `put_meta`, which
+`Placed::put` and `Sources::into_nodes` both go through. A `put_artifact` with no card
+after it leaves a store that is uncarded rather than damaged — `Store::read_meta` says so,
+and `crates/karakuri-store/tests/store.rs` both puts artifacts that get no card and writes a
+card beside one by hand.
+
+`karakuri-store` decodes all four, `Store::write_meta` and `Store::read_meta` are the file,
+and `Store::write_set` refuses them from a Set file **on the same terms as a `tick` and for a
+different reason, so with a sentence of its own**: a `tick` is refused because a Set file
+carries no time, and these because a Set file records what a value *is* where a declaration
+says what a procedure *declares*. The check is `Record::is_metadata` and not
+`!Record::is_set_state` — the latter refuses them too, but under the message naming a tick,
+and telling an operator a `capacity_decl` was rejected for carrying time sends them looking
+in the wrong place.
+
+**`Store::read_meta` has no caller outside the tests**, which is the honest shape of this:
+the library that reads a card is M4's and the producing half arrived first.
+
+**The other five wait on a producer, and an empty one would be worse than none.** `perf`
+is a measurement and wants the stage-7 probe — what a compile pass can answer is
+`ops_per_element`, from `cost::estimate`, a different quantity in different units, and
+publishing one under the other's name is the mistake this section already withdrew a
+`bytes_per_element` for. Not `Checked::cost`, which is the field named for that number and
+is unconditionally `None`: the estimator returns its answer to a caller rather than storing
+it there, and its own doc says to ask `cost::estimate` instead of reading the field.
+`origin`, `parent` and `tag` describe where an artifact came from, and nothing generates
+procedures yet; `thumbnail` names a stored asset and nothing renders one. `parent` in
+particular has to start being recorded with the first generated artifact or the genealogy
+has a hole at its root — which is a demand on whatever writes the first one, not a line to
+write empty now.
+
+The store is content-addressed from M1, which is half of what M4 asks of it. This is the
+producing half of the other; the reading half — a library that searches, groups and walks
+genealogy over these files — is still M4's.
 
 Artifact metadata lives in a separate file, not in the `.kir` header. The `.kir` stays
 purely a source file that a human or an LLM can read and edit.
@@ -2959,11 +2992,33 @@ purely a source file that a human or an LLM can read and edit.
 {"t":"emit","attrs":["position","velocity","age"]}
 {"t":"perf","kind":"L1","ns_per_element":0.9}
 {"t":"tag","values":["organic","slow","volumetric"]}
-{"t":"preview","path":"previews/a3f2c1….mp4"}
+{"t":"thumbnail","path":"thumbnails/a3f2c1….mp4"}
 ```
 
 The store regenerates metadata from the `.kir` plus a compile pass, so metadata files are
 reproducible artifacts rather than hand-authored ones.
+
+**A `param_decl` may omit `default`, and that never means the param has no default.** The
+grammar makes `= <expr>` mandatory, so every declared param has one; the writer folds a
+literal with an optional leading sign and states nothing it cannot fold. The alternative —
+omitting the whole record — was rejected: it would tell a reader the artifact declares no
+such param, which is false, where a missing key says only that the value is not known,
+which is true. It also has to survive the unknown-key rule above. A decoder that skips keys
+it does not recognise cannot tell an absent `default` from one it skipped, and under both
+readings the answer is *"not known"*; under the other choice the two readings differ,
+because a record that is not there cannot be skipped into existence.
+
+**`capacity_decl` and `emit` are absent where nothing was declared**, on the same rule: one
+record per declaration, and a declaration nobody wrote produces none. Only an L1 declares a
+capacity, and a renderer emits nothing — an `emit` with an empty list would read exactly as
+its absence reads, and would be a line somebody has to explain.
+
+**The number in a `param_decl` is the number the engine loads.** Both are the declared
+expression folded, and they are folded by one function in `karakuri-ir` rather than one
+apiece: a writer with a fold of its own agrees with the shader by coincidence, and the
+coincidence breaks first on a negative default, which parses as a negation of a literal
+rather than as one. A card claiming `0.0` where the run loaded `-0.35` would describe a
+procedure nobody ran, with nothing downstream able to say which of the two was wrong.
 
 `origin` records what produced *this* revision, not the original intent. When an artifact
 came from revising another one, `parent` points at what it was revised from and `prompt`
@@ -2980,12 +3035,34 @@ alternative, reusing a `t` for two different shapes in two different files, cann
 by a decoder that dispatches on `t` alone, which every ndjson reader does. It is not enough
 for the two vocabularies to be disjoint in practice; they have to be disjoint by name.
 
+**The library asset is `thumbnail` and not `preview`, because the deck already has a
+`preview`.** This list carried `{"t":"preview","path":…}` while the session vocabulary above
+carries `{"t":"preview","slot":2}` — two shapes under one `t`, which is what the rule
+immediately above forbids, and a *silent* collision rather than a loud one: the deck
+record's `slot` is optional, so a decoder holding one vocabulary reads the metadata line as
+the deck's and drops the `path` without a word. `thumbnail` is what `docs/roadmap.md`
+already calls this under M4's Adds — *"distinct from the live slot preview built in M2 —
+that one renders a running instance, this one is a stored asset"* — so they were two words
+for two things everywhere but here. **The metadata name is the one that moved**, because
+nothing writes or reads it and no file anywhere holds that line, where the deck's `preview`
+is written into session streams that exist on disk and renaming *that* would break reading
+them. A suffix — `preview_path` — was the other candidate and was rejected: a suffix says
+two versions of one concept, which is what `param_decl` beside `param` and `capacity_decl`
+beside `capacity` are, and a stored asset beside a live audition is not that.
+
 **Unknown `t` values are ignored, and so is an unknown key inside a record whose `t` is
 known.** The Set file section above states the first rule for its own vocabulary; this is a
 separate list read by a separate decoder, so the rule is stated here rather than inherited by
-being nearby. The second half is the one a *removed* key needs — `perf` carried a
-`bytes_per_element` and does not any more, and a reader meeting one in a file written before
-that should pass over it exactly as it passes over a `t` it does not recognise. Ignoring
+being nearby. Both halves hold in the code, and the *decoder* being separate is not the same
+question as the record type being separate: the four implemented records share one Rust enum
+with the Set and session vocabularies, because that is what lets a `param_decl` met in a Set
+file be **recognised and refused** rather than passed over as a `t` nobody knows. The rule
+this section states — one `t`, one shape, across every file — is a rule about names, and the
+names are disjoint across all three vocabularies: `param_decl` beside `param`,
+`capacity_decl` beside `capacity`, `thumbnail` beside the deck's `preview`. The second half
+is the one a *removed* key needs — `perf` carried a `bytes_per_element` and does not any
+more, and a reader meeting one in a file written before that should pass over it exactly as
+it passes over a `t` it does not recognise. Ignoring
 costs nothing here because a metadata file is a derived artifact: the store regenerates it
 from the `.kir` plus a compile pass, so a key that still means something comes back on the
 next regeneration and a key that does not is gone on purpose.
@@ -3018,9 +3095,10 @@ instantiated the procedures and never of any one of them — where `ns_per_eleme
 intrinsic to a procedure, which is what keeps it here.
 
 **A record format is an authored thing in this project**, so this is a change to the
-vocabulary and not a value going missing. Nothing reads `perf` yet — the metadata file is
-M4 and does not exist — so there is nothing to migrate, and a decoder meeting the key in an
-older file passes over it under the unknown-key rule stated above.
+vocabulary and not a value going missing. Nothing writes or reads `perf` yet — the metadata
+file exists and no compile pass can produce this record, which needs the stage-7 probe — so
+there is nothing to migrate, and a decoder meeting the key in an older file passes over it
+under the unknown-key rule stated above.
 
 **L4 is a measurement at reference conditions.** Point sprite cost is dominated by fill
 rate: `point_size` and resolution decide the overdraw, so it is not linear in element count
