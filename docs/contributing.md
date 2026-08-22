@@ -6,16 +6,27 @@ This document outlines the engineering principles, workflow guidelines, build/te
 
 ## 1. Project Invariants & Core Rules
 
-Any change to the codebase MUST respect the following foundational invariants:
+Every change MUST respect the standing rules in [docs/principles/](principles/) — **one file each**,
+so a rule is stated once and cannot drift between documents. `ls docs/principles/` is the index,
+because each filename is the rule it states.
 
-1. **Zero Allocations & Zero Shader Compilations on the Render Thread**
-   - The frame rendering path (inside `karakuri-engine::deck` / `present`) MUST NOT allocate heap memory or trigger synchronous WGSL compilation. All buffer management and pipeline creation happen asynchronously or during initialization.
-2. **Deterministic Step-Based Time (`tick` and `dt`)**
-   - Time in simulation moves forward strictly via integer `tick` increments and fixed `dt` (`1.0 / 60.0` seconds). Never query system wall clocks inside the engine; external time is only supplied as oscillator drift correction.
-3. **Immutability & Structural Forking**
-   - Live `Set` structures are immutable when node topology or procedures change. A structural modification MUST fork a new `Set` instance. Uniform parameter updates are the only allowed in-place modification.
-4. **Order-Preserving Compaction**
-   - Element indices and execution order MUST be strictly preserved during dead-element compaction to ensure bit-exact reproducibility across runs.
+They were previously copied here and into [architecture.md](architecture.md), and the two copies had
+already stopped agreeing on which four were foundational, which is what moved them.
+
+Start with these, and read the rest before changing anything they touch:
+
+- [Nothing allocates or compiles a shader on the render thread](principles/0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md)
+- [Simulation time comes from a record, never from a clock](principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md)
+- [Compaction preserves order](principles/0003-compaction-preserves-order.md)
+- [A live Set is never mutated in place](principles/0004-a-live-set-is-never-mutated-in-place.md)
+- [Nothing checks clean and comes up short at runtime](principles/0024-nothing-checks-clean-and-comes-up-short-at-runtime.md)
+- [A test meant to catch something is run against the defect](principles/0025-a-test-meant-to-catch-something-is-run-against-the-defect.md)
+- [Only reviewed work enters history](principles/0017-only-reviewed-work-enters-history.md)
+- [Run what the question needs, when it is asked](principles/0057-run-what-the-question-needs-when-it-is-asked.md)
+
+**Why** each is the way it is, and what was rejected on the way, is in [docs/adr/](adr/). A rule that
+stops being true is deleted and re-recorded under a new number rather than edited — see
+[ADR-0000](adr/0000-record-decisions-here-and-standing-rules-in-principles.md).
 
 ---
 

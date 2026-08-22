@@ -6,14 +6,22 @@ This document describes the source code structure, multi-crate architecture, com
 
 ## 1. Core Principles & Design Goals
 
-1. **Zero Allocations & Zero Shader Compilations on the Render Thread**
-   - The real-time frame render loop never allocates on the heap or compiles WGSL shaders synchronously. Pipeline compilation and buffer allocation are handled asynchronously on background threads or at initialization.
-2. **Deterministic Time & Step-Based Simulation (`tick` and `dt`)**
-   - The engine does not read a wall clock directly. Time advances by deterministic integer `tick` records and a fixed time step `dt` (`1.0 / 60.0`s). This guarantees bit-exact reproduction and session replays.
-3. **Double-Buffered HotSwapping & Governor Rollbacks**
-   - Dynamic pipeline updates (`HotSwap`) swap atomically at frame boundaries. If a newly compiled pipeline exceeds the frame budget (default 16ms), the `Governor` detects the budget overrun and automatically rolls back to the previous stable pipeline.
-4. **Set Immutability & Structural Forking**
-   - Live `Set` structures are never mutated in place when node topology or procedures change (with the sole exception of parameter uniform updates). Any structural change forks a new `Set`.
+The rules this architecture is built on are **one file each** in
+[docs/principles/](principles/), so that they are stated in a single place and cannot drift between
+documents. They were previously copied here and into [contributing.md](contributing.md), and the two
+copies had already stopped agreeing on which four were the foundational ones.
+
+The ones a reader of this document needs first:
+
+- [Nothing allocates or compiles a shader on the render thread](principles/0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md)
+- [Simulation time comes from a record, never from a clock](principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md)
+- [Compaction preserves order](principles/0003-compaction-preserves-order.md)
+- [A live Set is never mutated in place](principles/0004-a-live-set-is-never-mutated-in-place.md)
+- [A swap happens on a frame boundary, and an over-budget Set rolls back on its own](principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md)
+- [The workspace stays closed to Rust](principles/0006-the-workspace-stays-closed-to-rust.md)
+
+Why each is the way it is — and what was rejected to get there — is in
+[docs/adr/](adr/).
 
 ---
 
