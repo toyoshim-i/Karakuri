@@ -2016,17 +2016,27 @@ it with an `assert_eq!` — and nothing about the save assumes a pair of hands.
 The difference this closes is still worth stating: a library you can put things
 into, rather than one you can only put things into before you start playing.
 
-**A known gap the saver runs into and does not cause: a rebuild resets the
-camera.** `swap::Request` carries no camera and `Set::build_many` starts every
-built Set from `Orbit::default()`, so under `--load-set X --watch` the first
-rebuild of a `.kir` silently puts a loaded camera back to its defaults. The
-saver is faithful — it records `set.camera`, which is what the Set on screen
-holds — so the first `k` after any rebuild writes the defaults into a new preset
-and the loss stops being a display accident and becomes a file. **This predates
-the save control and is not fixed by it**; closing it means the request carrying
-a camera the way it already carries the salts and the params, and for the same
-reason those are restated: a rebuild that lets a value be re-derived is a
-rebuild that quietly discards what was loaded. Recorded in the Set file format
+~~**A known gap the saver runs into and does not cause: a rebuild resets the
+camera.**~~ **Closed.** `swap::Request` carried no camera and `Set::build_many`
+starts every built Set from `Orbit::default()`, so under `--load-set X --watch`
+the first rebuild of a `.kir` silently put a loaded camera back to its defaults.
+The saver was faithful — it records `set.camera`, which is what the Set on
+screen holds — so the first `k` after any rebuild wrote the defaults into a new
+preset, and the loss stopped being a display accident and became a file. **It
+predated the save control and was not caused by it**, and closing it cost
+exactly what this paragraph said it would: the request carries the camera the
+way it already carries the salts and the params, `watch::Watch` restates it on
+every rebuild, and the build worker applies it where the loader does — for the
+reason those are restated, that a rebuild which lets a value be re-derived is a
+rebuild that quietly discards what was loaded.
+
+**An `Orbit` and not an `Option<Orbit>`**, which is where it parts company with
+the `capacity` beside it: a capacity may come from the *new* file's declaration,
+so `None` there is an answer only the rebuild knows, while a Set holds a
+built-in camera whatever its files declare and is built at exactly that default.
+A slot that loaded no `camera` record states the default and means it —
+"nothing loaded" is not a second case, and an option would have been a
+distinction nothing downstream could act on. Recorded in the Set file format
 section of `docs/ir-spec.md`, where a reader meets the `camera` record.
 
 **Adds**

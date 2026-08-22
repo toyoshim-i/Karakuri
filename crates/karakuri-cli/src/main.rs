@@ -3538,6 +3538,22 @@ fn recorded_salts(args: &Args, slot: usize) -> &[Option<u32>] {
     }
 }
 
+/// Where a loaded Set file aimed the built-in camera, for the slot it filled.
+/// **Slot 0 and nothing else**, on the same terms as its capacities and its
+/// salts — and `None` for a file that recorded no `camera` record, or one whose
+/// record named a camera that is a procedure and was reported and dropped on
+/// the way in.
+///
+/// **One reading, used twice.** The Set built at startup takes it and so does
+/// the watcher that restates it on every rebuild; working it out in two places
+/// is how a rebuild came to aim somewhere the startup did not.
+fn recorded_camera(args: &Args, slot: usize) -> Option<karakuri_engine::camera::Orbit> {
+    match (slot, args.from_set.as_ref()) {
+        (0, Some(from_set)) => from_set.camera,
+        _ => None,
+    }
+}
+
 /// `meters` is false for the offscreen paths: a `--render` has nobody to show
 /// a level to, and a meter that nothing reads is a compute pass and a staging
 /// ring per frame for no reason. That is the whole point of it being opt-in.
@@ -3592,6 +3608,9 @@ fn build_deck(
                 material.fields.as_slice(),
                 &material.l4s,
             );
+            // **Read once for both the Set and its watcher** — see
+            // [`recorded_camera`].
+            let camera = recorded_camera(args, slot);
             let set = build(
                 gpu,
                 l1,
@@ -3623,10 +3642,7 @@ fn build_deck(
                     .copied()
                     .unwrap_or_else(|| seed_for(slot)),
                 &salts[slot],
-                match (slot, args.from_set.as_ref()) {
-                    (0, Some(from_set)) => from_set.camera,
-                    _ => None,
-                },
+                camera,
             );
             if watch {
                 // One worker and one watcher per slot, over that slot's own
@@ -3658,6 +3674,14 @@ fn build_deck(
                         // derived its own would change every colour in it on the
                         // next save of a `.kir`.
                         salts[slot].clone(),
+                        // **The same reading the Set was built with**, and
+                        // stated as an `Orbit` rather than as the `Option` it
+                        // was read as: a slot that loaded no `camera` record is
+                        // running at `Orbit::default()`, because that is what
+                        // `Set::build_many` builds and what leaving it
+                        // unassigned above therefore means. See `Watch::camera`
+                        // for why the option buys nothing past this line.
+                        camera.unwrap_or_default(),
                         args.overrides.clone(),
                         args.published.clone(),
                         args.bindings.clone(),
@@ -8128,15 +8152,20 @@ mod live_save_tests {
         sort_slot(0, &Named::bare(paths[0].clone()), &rest)
     }
 
-    /// A Set built from that material, at the capacities and salts given —
-    /// which is what a run hands `build`, and what a save has to read back off
-    /// the Set rather than off these arguments.
+    /// A Set built from that material, at the capacities, salts and camera
+    /// given — which is what a run hands `build`, and what a save has to read
+    /// back off the Set rather than off these arguments.
+    ///
+    /// **`camera` is an `Option` because `build`'s is**: `None` is a slot no
+    /// `camera` record reached, which leaves the Set at the built-in orbit's
+    /// defaults. See `recorded_camera`.
     fn set_of(
         gpu: &Gpu,
         material: &Material,
         capacities: &[u32],
         salts: &[u32],
         overrides: &[ParamWrite],
+        camera: Option<karakuri_engine::camera::Orbit>,
     ) -> Set {
         let mut attached = vec![false; 0];
         build(
@@ -8156,7 +8185,7 @@ mod live_save_tests {
             &[],
             salts[0],
             salts,
-            None,
+            camera,
         )
     }
 
@@ -8233,7 +8262,7 @@ mod live_save_tests {
         // wrong rather than accidentally right.
         let capacities = [8192, 16384];
         let salts = [11, 22];
-        let set = set_of(&gpu, &material, &capacities, &salts, &[]);
+        let set = set_of(&gpu, &material, &capacities, &salts, &[], None);
 
         let root = dir.path().join("store");
         let running = launched(&placed);
@@ -8273,6 +8302,119 @@ mod live_save_tests {
         );
     }
 
+    /// **A save after a rebuild records the camera the slot was loaded with**,
+    /// and not the built-in orbit's defaults.
+    ///
+    /// This is the whole path and deliberately not a piece of it: a slot aimed
+    /// by a `camera` record, the watcher a `--watch` run gives it, an edit to a
+    /// file, the build worker, the swap — and then the same `playing_values`
+    /// the `k` key reads through. Every link in it was correct on its own while
+    /// the chain silently re-aimed the slot, because the one that was missing
+    /// was the request in the middle: `Set::build_many` starts every Set from
+    /// `Orbit::default()`, so the rebuilt Set was aimed at the defaults and the
+    /// saver recorded exactly what it found. That is why the loss stopped being
+    /// a wrong picture and became a file — the operator's next preset was
+    /// written with a camera nobody had chosen.
+    ///
+    /// **Driven through `HotSwap` rather than by calling the worker's code**,
+    /// for the reason [`save_and_load`] goes through [`Save::run`]: a rebuild
+    /// assembled by hand here would be a second copy of the rebuild, and a test
+    /// of a copy is a test of nothing. `begin_frame` is the only place a build
+    /// is installed, and it is enough on its own — nothing here has to render.
+    #[test]
+    fn a_save_after_a_rebuild_records_the_camera_the_slot_was_loaded_with() {
+        let gpu = Gpu::headless().expect("no GPU");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let l1 = example("drift_shell.kir");
+        let paths = vec![
+            kir(&dir, "a.kir", &l1),
+            kir(&dir, "r.kir", &example("soft_points.kir")),
+        ];
+        let (material, _placed) = slot(&paths);
+        // Six numbers no default produces. A `camera` record spells two of them
+        // and the loader fills the rest from `Orbit::default()`, so a Set file
+        // cannot actually deliver these four — they are here because what is
+        // under test is the *carrying*, and a value that differs in every field
+        // says which fields were carried.
+        let aimed = karakuri_engine::camera::Orbit {
+            radius: 3.25,
+            speed: 0.75,
+            height: -1.5,
+            fov_y: 0.9,
+            near: 0.25,
+            far: 250.0,
+        };
+        let capacity = 8192;
+        let salts = [11];
+        let set = set_of(&gpu, &material, &[capacity], &salts, &[], Some(aimed));
+
+        // The watcher `build_deck` gives the slot, stating what the slot is
+        // running at — the camera among it, from the one reading the Set above
+        // was built with.
+        let watcher = watch::Watch::new(
+            0,
+            Named::bare(paths[0].clone()),
+            vec![Named::bare(paths[1].clone())],
+            karakuri_engine::set::Layering::Overdraw,
+            Some(capacity),
+            salts[0],
+            salts.to_vec(),
+            aimed,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        let mut swap = HotSwap::new(
+            &gpu.device,
+            &gpu.queue,
+            set,
+            DEFAULT_BUDGET_MS,
+            Box::new(watcher),
+        );
+
+        // The edit an operator makes, in the one form that changes nothing
+        // about the material: the watcher compares contents, so a comment is
+        // enough to make this a save it wakes on — and it keeps the rebuilt Set
+        // the same Set, so the only thing that can differ is what was carried.
+        std::fs::write(&paths[0], format!("{l1}\n// an edit\n")).expect("edit the geometry");
+
+        // Bounded, and generous: this covers two poll intervals of debouncing,
+        // four compiler stages, two shader modules and a whole-capacity upload,
+        // on whatever machine is running the suite.
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let mut seen: Vec<String> = Vec::new();
+        loop {
+            swap.begin_frame(&gpu.device);
+            let mut swapped = false;
+            for event in swap.events() {
+                swapped |= matches!(event, Event::Swapped { .. });
+                seen.push(event.to_string());
+            }
+            // **Read at the swap and not a frame later.** The outgoing Set is
+            // aimed correctly too, so a rollback would put the right camera
+            // back and hide exactly the defect this is about.
+            if swapped {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "the edit never rebuilt; saw {seen:?}"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+
+        let recorded = playing_values(swap.set(), &[]).camera;
+        let six = |o: &karakuri_engine::camera::Orbit| {
+            (o.radius, o.speed, o.height, o.fov_y, o.near, o.far)
+        };
+        assert_eq!(
+            six(&recorded),
+            six(&aimed),
+            "the save after a rebuild would have written a camera the operator never aimed"
+        );
+    }
+
     /// **A save after a parameter moved records the moved value.**
     ///
     /// The Set is built with `radius` at 1.0, which is what a `--param
@@ -8295,7 +8437,14 @@ mod live_save_tests {
         ];
         let (material, placed) = slot(&paths);
         let flag = ParamWrite::everywhere("radius", 1.0);
-        let mut set = set_of(&gpu, &material, &[4096], &[7], std::slice::from_ref(&flag));
+        let mut set = set_of(
+            &gpu,
+            &material,
+            &[4096],
+            &[7],
+            std::slice::from_ref(&flag),
+            None,
+        );
         assert_eq!(
             set.param("radius"),
             Some(1.0),
@@ -8362,7 +8511,7 @@ mod live_save_tests {
         let renderer = example("soft_points.kir");
         let paths = vec![kir(&dir, "a.kir", &at_start), kir(&dir, "r.kir", &renderer)];
         let (material, placed) = slot(&paths);
-        let set = set_of(&gpu, &material, &[4096], &[7], &[]);
+        let set = set_of(&gpu, &material, &[4096], &[7], &[], None);
         let root = dir.path().join("store");
 
         let mut running = launched(&placed);
@@ -8448,7 +8597,7 @@ mod live_save_tests {
         let renderer = example("soft_points.kir");
         let paths = vec![kir(&dir, "a.kir", &at_start), kir(&dir, "r.kir", &renderer)];
         let (material, placed) = slot(&paths);
-        let set = set_of(&gpu, &material, &[4096], &[7], &[]);
+        let set = set_of(&gpu, &material, &[4096], &[7], &[], None);
         let root = dir.path().join("store");
 
         let mut running = launched(&placed);
@@ -8579,7 +8728,7 @@ mod live_save_tests {
             kir(&dir, "r.kir", &example("soft_points.kir")),
         ];
         let (material, placed) = slot(&paths);
-        let set = set_of(&gpu, &material, &[4096], &[7], &[]);
+        let set = set_of(&gpu, &material, &[4096], &[7], &[], None);
         let root = dir.path().join("store");
 
         let running = launched(&placed);
@@ -8733,7 +8882,7 @@ mod live_save_tests {
         // The compile. Everything the run says about these nodes from here on
         // is a function of the bytes this read.
         let (material, placed) = slot(&paths);
-        let set = set_of(&gpu, &material, &[4096], &[7], &[]);
+        let set = set_of(&gpu, &material, &[4096], &[7], &[], None);
 
         // Startup is not finished. Something rewrites the file — a formatter on
         // save, an editor, a model over MCP that connected as the server came

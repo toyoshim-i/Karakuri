@@ -2003,14 +2003,15 @@ honoured the index on every layer rather than on one.
 the flag parses its fields into a `Record::Bind` and hands it to the same decoder a Set
 file uses, so a command line and a file cannot mean different things by the same fields.
 
-**One thing a `camera` record does not survive is a rebuild**, and it is a known gap rather
-than a property of the format. `swap::Request` carries no camera, so a Set built by a hot
-swap starts from the built-in orbit's defaults however the Set it replaces was aimed. Under
-`--load-set X --watch` that means the first edit to any `.kir` in the slot resets a camera
-the file had set, with nothing said — and a live save afterwards records `set.camera`
-faithfully, so the defaults are written into a new preset and the loss outlives the run. The
-record means what it has always meant and the loader applies it; what does not carry it is
-the rebuild request. See `docs/roadmap.md`, where it is listed with what closing it costs.
+**A `camera` record survives a rebuild**, which it did not at first and which was a defect
+rather than a property of the format. `swap::Request` carried no camera, so a Set built by a
+hot swap started from the built-in orbit's defaults however the Set it replaced was aimed:
+under `--load-set X --watch` the first edit to any `.kir` in the slot reset a camera the file
+had set, with nothing said — and a live save afterwards recorded `set.camera` faithfully, so
+the defaults went into a new preset and the loss outlived the run. The request carries the
+orbit now, restated on every rebuild the way the salts and the bindings are, and the build
+worker applies it at the point the loader does. The record means what it has always meant;
+what changed is that the rebuild no longer discards it.
 
 **Two places this format is finer than the engine**, both reported on load rather than
 dropped: a `param` may be a vector while the engine's map holds `f32`, and `camera` carries

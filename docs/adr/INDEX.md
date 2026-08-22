@@ -150,6 +150,7 @@ number; new records continue from the end.
 | [ADR-0128](0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md) | A Set saved under a name the caller chose overwrites | 2026-08-22 | accepted |
 | [ADR-0129](0129-a-vendor-file-is-ignored-and-removed-from-history.md) | A vendor file is ignored, and removed from history | 2026-08-22 | accepted |
 | [ADR-0131](0131-one-refusal-sentence-per-mistake-across-the-surfaces-that-face-a-person.md) | One refusal sentence per mistake, across the surfaces that face a person | 2026-08-22 | accepted |
+| [ADR-0132](0132-a-rebuild-restates-the-camera-it-was-aimed-with.md) | A rebuild restates the camera it was aimed with | 2026-08-22 | accepted |
 | [ADR-0130](0130-a-wrapper-that-needs-a-gpu-does-not-excuse-the-decision-inside-it.md) | A wrapper that needs a GPU does not excuse the decision inside it | 2026-08-22 | accepted |
 
 ## Retired numbers
@@ -290,6 +291,7 @@ never reused.
 | [ADR-0128](0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md) | A Set saved under a name the caller chose overwrites | 2026-08-22 | accepted |
 | [ADR-0129](0129-a-vendor-file-is-ignored-and-removed-from-history.md) | A vendor file is ignored, and removed from history | 2026-08-22 | accepted |
 | [ADR-0131](0131-one-refusal-sentence-per-mistake-across-the-surfaces-that-face-a-person.md) | One refusal sentence per mistake, across the surfaces that face a person | 2026-08-22 | accepted |
+| [ADR-0132](0132-a-rebuild-restates-the-camera-it-was-aimed-with.md) | A rebuild restates the camera it was aimed with | 2026-08-22 | accepted |
 | [ADR-0130](0130-a-wrapper-that-needs-a-gpu-does-not-excuse-the-decision-inside-it.md) | A wrapper that needs a GPU does not excuse the decision inside it | 2026-08-22 | accepted |
 
 Re-pointing the records that cited a retired principle is permitted, and why, is
