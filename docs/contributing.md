@@ -32,8 +32,21 @@ Karakuri provides pre-commit and pre-push hooks under `.githooks/`. Enable them 
 git config core.hooksPath .githooks
 ```
 
-- **`pre-commit`**: Runs `cargo fmt --check` on staged files.
-- **`pre-push`**: Runs `cargo fmt`, `cargo clippy`, and all test suites (`cargo test`).
+- **`pre-commit`**: Runs `cargo fmt --check` on the **staged content**, and nothing else. It
+  reads what is being committed rather than the working tree, so a half-finished edit on
+  disk neither blocks a good commit nor hides a bad one.
+- **`pre-push`**: Runs `cargo fmt --check`, `cargo clippy` and the whole suite **on a tag
+  push, and on nothing else**. A tag is the deploy; a branch push is part of working —
+  backing up, moving between machines, opening something for review — and a gate there asks
+  whether the work is good at a moment nobody was claiming it was.
+
+Neither hook runs tests on an ordinary commit or branch push, and that is a decision rather
+than an omission: this workspace has nearly nine hundred tests and most want a GPU, so any
+fixed subset spends minutes answering a question nobody asked. What replaces it is
+deliberate: whoever makes a change names the smallest suite that answers it and runs that
+(§3 lists them per crate), and the whole workspace runs at a boundary — before a tag, after
+a refactor, and before a change is called done (§4). The reasoning is written into the hooks
+themselves.
 
 ---
 
@@ -82,3 +95,4 @@ Before marking a task or pull request as complete, ensure the following checklis
 - [manual.md](manual.md): CLI arguments and VJ keyboard controls reference
 - [plugins.md](plugins.md): Out-of-process helper plugin specification
 - [roadmap.md](roadmap.md): Architectural roadmap and future milestones
+
