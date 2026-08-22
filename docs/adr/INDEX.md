@@ -11,7 +11,7 @@ index is maintained by hand — see ADR-0000 for when that stops being enough.
 rule it states.
 
 **Reconstruction is in progress.** Records are being recovered in date order from the session
-history that runs from 2026-07-25. Everything through **2026-08-03** is written; the numbering
+history that runs from 2026-07-25. Everything through **2026-08-10** is written; the numbering
 is chronological, so later dates take later numbers.
 
 ## Records
@@ -87,6 +87,11 @@ is chronological, so later dates take later numbers.
 | [ADR-0066](0066-a-flag-becomes-a-record-writer.md) | A flag becomes a record writer, and a Set file matches it byte for byte | 2026-08-03 | accepted |
 | [ADR-0067](0067-the-session-writer-never-blocks-grows-or-silently-drops.md) | The session writer never blocks, never grows, and never silently drops | 2026-08-03 | accepted |
 | [ADR-0068](0068-a-timestamp-is-checked-against-a-second-measurement-not-a-constant.md) | A timestamp is checked against a second measurement, not against a constant | 2026-08-03 | accepted |
+| [ADR-0069](0069-blend-modes-are-chosen-by-the-pipeline-not-by-vocabulary.md) | Blend modes are chosen by the pipeline, not by the vocabulary | 2026-08-08 | accepted |
+| [ADR-0070](0070-a-channel-nobody-reads-is-a-free-variable.md) | A channel nobody reads is a free variable | 2026-08-08 | accepted |
+| [ADR-0071](0071-there-is-no-panic-key.md) | There is no panic key | 2026-08-08 | accepted |
+| [ADR-0072](0072-auditioning-adds-a-draw-and-never-a-step.md) | Auditioning adds a draw and never a step | 2026-08-10 | accepted |
+| [ADR-0073](0073-a-control-surface-is-a-test-of-the-invariant.md) | A control surface is a test of the invariant, not a feature | 2026-08-10 | accepted |
 
 ## Retired numbers
 
@@ -164,6 +169,11 @@ never reused.
 | [ADR-0066](0066-a-flag-becomes-a-record-writer.md) | A flag becomes a record writer, and a Set file matches it byte for byte | 2026-08-03 | accepted |
 | [ADR-0067](0067-the-session-writer-never-blocks-grows-or-silently-drops.md) | The session writer never blocks, never grows, and never silently drops | 2026-08-03 | accepted |
 | [ADR-0068](0068-a-timestamp-is-checked-against-a-second-measurement-not-a-constant.md) | A timestamp is checked against a second measurement, not against a constant | 2026-08-03 | accepted |
+| [ADR-0069](0069-blend-modes-are-chosen-by-the-pipeline-not-by-vocabulary.md) | Blend modes are chosen by the pipeline, not by the vocabulary | 2026-08-08 | accepted |
+| [ADR-0070](0070-a-channel-nobody-reads-is-a-free-variable.md) | A channel nobody reads is a free variable | 2026-08-08 | accepted |
+| [ADR-0071](0071-there-is-no-panic-key.md) | There is no panic key | 2026-08-08 | accepted |
+| [ADR-0072](0072-auditioning-adds-a-draw-and-never-a-step.md) | Auditioning adds a draw and never a step | 2026-08-10 | accepted |
+| [ADR-0073](0073-a-control-surface-is-a-test-of-the-invariant.md) | A control surface is a test of the invariant, not a feature | 2026-08-10 | accepted |
 
 Re-pointing the records that cited a retired principle is permitted, and why, is
 [ADR-0059](0059-a-records-pointer-into-the-principles-registry-is-metadata.md).
