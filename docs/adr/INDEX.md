@@ -11,7 +11,7 @@ index is maintained by hand — see ADR-0000 for when that stops being enough.
 rule it states.
 
 **Reconstruction is in progress.** Records are being recovered in date order from the session
-history that runs from 2026-07-25. Everything through **2026-08-16** is written; the numbering
+history that runs from 2026-07-25. Everything through **2026-08-19** is written; the numbering
 is chronological, so later dates take later numbers.
 
 ## Records
@@ -122,6 +122,16 @@ is chronological, so later dates take later numbers.
 | [ADR-0101](0101-a-sources-number-is-recorded-not-derived.md) | A source's number is recorded, not derived | 2026-08-16 | accepted |
 | [ADR-0102](0102-a-renderers-address-is-layer-and-index.md) | A renderer's address is `(layer, index)`, and `layer` alone means nothing | 2026-08-16 | accepted |
 | [ADR-0103](0103-a-trailer-missed-fifteen-times.md) | A trailer missed fifteen times, because I never read my own commits | 2026-08-16 | accepted |
+| [ADR-0104](0104-the-slot-contract-is-the-element-layout.md) | The slot contract is the element layout | 2026-08-17 | accepted |
+| [ADR-0105](0105-field-is-a-kind-with-no-node.md) | `Field` is a kind with no node | 2026-08-18 | accepted |
+| [ADR-0106](0106-an-error-scope-not-a-second-process.md) | An error scope, not a second process | 2026-08-18 | accepted |
+| [ADR-0107](0107-a-chain-is-materialised-per-source.md) | A chain is materialised per source | 2026-08-18 | accepted |
+| [ADR-0108](0108-cross-source-pairing-is-a-set-level-operation.md) | Cross-source pairing is a Set-level operation | 2026-08-18 | accepted |
+| [ADR-0109](0109-format-the-workspace-and-split-the-gate.md) | Format the workspace, and split the gate | 2026-08-19 | accepted |
+| [ADR-0110](0110-this-machine-is-not-the-reference.md) | This machine is not the reference | 2026-08-19 | accepted |
+| [ADR-0111](0111-a-name-lives-in-the-set-file-and-may-be-written-on-the-command-line.md) | A name lives in the Set file and may be written on the command line | 2026-08-19 | accepted |
+| [ADR-0112](0112-what-complete-required-and-what-m3-cost.md) | What "complete" required, and what M3 cost | 2026-08-19 | accepted |
+| [ADR-0113](0113-the-slot-narrowing-beat-its-estimate.md) | The slot narrowing beat its estimate, and why is the finding | 2026-08-19 | accepted |
 
 ## Retired numbers
 
@@ -234,6 +244,16 @@ never reused.
 | [ADR-0101](0101-a-sources-number-is-recorded-not-derived.md) | A source's number is recorded, not derived | 2026-08-16 | accepted |
 | [ADR-0102](0102-a-renderers-address-is-layer-and-index.md) | A renderer's address is `(layer, index)`, and `layer` alone means nothing | 2026-08-16 | accepted |
 | [ADR-0103](0103-a-trailer-missed-fifteen-times.md) | A trailer missed fifteen times, because I never read my own commits | 2026-08-16 | accepted |
+| [ADR-0104](0104-the-slot-contract-is-the-element-layout.md) | The slot contract is the element layout | 2026-08-17 | accepted |
+| [ADR-0105](0105-field-is-a-kind-with-no-node.md) | `Field` is a kind with no node | 2026-08-18 | accepted |
+| [ADR-0106](0106-an-error-scope-not-a-second-process.md) | An error scope, not a second process | 2026-08-18 | accepted |
+| [ADR-0107](0107-a-chain-is-materialised-per-source.md) | A chain is materialised per source | 2026-08-18 | accepted |
+| [ADR-0108](0108-cross-source-pairing-is-a-set-level-operation.md) | Cross-source pairing is a Set-level operation | 2026-08-18 | accepted |
+| [ADR-0109](0109-format-the-workspace-and-split-the-gate.md) | Format the workspace, and split the gate | 2026-08-19 | accepted |
+| [ADR-0110](0110-this-machine-is-not-the-reference.md) | This machine is not the reference | 2026-08-19 | accepted |
+| [ADR-0111](0111-a-name-lives-in-the-set-file-and-may-be-written-on-the-command-line.md) | A name lives in the Set file and may be written on the command line | 2026-08-19 | accepted |
+| [ADR-0112](0112-what-complete-required-and-what-m3-cost.md) | What "complete" required, and what M3 cost | 2026-08-19 | accepted |
+| [ADR-0113](0113-the-slot-narrowing-beat-its-estimate.md) | The slot narrowing beat its estimate, and why is the finding | 2026-08-19 | accepted |
 
 Re-pointing the records that cited a retired principle is permitted, and why, is
 [ADR-0059](0059-a-records-pointer-into-the-principles-registry-is-metadata.md).
