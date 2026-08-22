@@ -10,8 +10,9 @@ index is maintained by hand — see ADR-0000 for when that stops being enough.
 `principles/` has no index. `ls docs/principles/` is the index, because each filename is the
 rule it states.
 
-**The reconstruction is complete.** Every day of the session history from 2026-07-25 to 2026-08-22
-has been read and its decisions recovered. Numbering is chronological, so a later date takes a later
+**The reconstruction is complete**, including the work of 2026-08-22 itself, which was still being
+committed in another session while this was being written. Every day of the session history from
+2026-07-25 onward has been read and its decisions recovered. Numbering is chronological, so a later date takes a later
 number; new records continue from the end.
 
 ## Records
@@ -140,6 +141,10 @@ number; new records continue from the end.
 | [ADR-0119](0119-source-binds-a-uniform-and-is-read-as-a-value.md) | `Source` binds a uniform and is read as a value | 2026-08-21 | accepted |
 | [ADR-0120](0120-a-record-may-reach-outside-the-stream.md) | A record may reach outside the stream, and a replay is a sandbox | 2026-08-22 | accepted |
 | [ADR-0121](0121-moving-code-leaves-its-reasoning-behind.md) | Moving code leaves its reasoning behind | 2026-08-20 | accepted |
+| [ADR-0122](0122-a-save-writes-the-bytes-that-are-on-screen.md) | A save writes the bytes that are on screen | 2026-08-22 | accepted |
+| [ADR-0123](0123-a-fix-brief-names-the-property-not-the-shape.md) | A fix brief names the property, not the shape | 2026-08-22 | accepted |
+| [ADR-0124](0124-a-save-from-mcp-does-not-wait-under-the-lock.md) | A save from MCP does not wait under the lock, and answers truthfully | 2026-08-22 | accepted |
+| [ADR-0125](0125-a-client-named-id-is-an-allow-list.md) | A client-named id is an allow-list | 2026-08-22 | accepted |
 
 ## Retired numbers
 
@@ -270,6 +275,10 @@ never reused.
 | [ADR-0119](0119-source-binds-a-uniform-and-is-read-as-a-value.md) | `Source` binds a uniform and is read as a value | 2026-08-21 | accepted |
 | [ADR-0120](0120-a-record-may-reach-outside-the-stream.md) | A record may reach outside the stream, and a replay is a sandbox | 2026-08-22 | accepted |
 | [ADR-0121](0121-moving-code-leaves-its-reasoning-behind.md) | Moving code leaves its reasoning behind | 2026-08-20 | accepted |
+| [ADR-0122](0122-a-save-writes-the-bytes-that-are-on-screen.md) | A save writes the bytes that are on screen | 2026-08-22 | accepted |
+| [ADR-0123](0123-a-fix-brief-names-the-property-not-the-shape.md) | A fix brief names the property, not the shape | 2026-08-22 | accepted |
+| [ADR-0124](0124-a-save-from-mcp-does-not-wait-under-the-lock.md) | A save from MCP does not wait under the lock, and answers truthfully | 2026-08-22 | accepted |
+| [ADR-0125](0125-a-client-named-id-is-an-allow-list.md) | A client-named id is an allow-list | 2026-08-22 | accepted |
 
 Re-pointing the records that cited a retired principle is permitted, and why, is
 [ADR-0059](0059-a-records-pointer-into-the-principles-registry-is-metadata.md).
