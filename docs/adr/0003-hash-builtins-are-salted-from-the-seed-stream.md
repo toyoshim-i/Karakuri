@@ -1,10 +1,10 @@
 ---
 id: 0003
 title: Hash builtins are salted from the layer's seed stream
-status: accepted
+status: superseded
 date: 2026-07-25
 supersedes: []
-superseded_by: []   # a later record moves the salt per source; number assigned when it is written
+superseded_by: [0024]
 principles: [0008]
 tags: [ir, determinism]
 ---
@@ -39,12 +39,14 @@ re-seeding a Set changes its dust without moving its lattice.
   the builtins section, because it is surprising and would otherwise be discovered.
 - Satisfies the standing invariant that randomness comes only from an explicit seed stream.
 
-## Status note
+## Superseded
 
-This holds **per layer**, and stops being the whole truth once a Set can hold more than one
-geometry: two geometries built from the same procedure would draw the same dust. The salt
-moves to **per source** on 2026-08-16, and this record is superseded there — the front
-matter is updated when that record is written.
+This holds **per layer**, which stops being enough as soon as a Set can hold more than one
+geometry: two geometries built from the same procedure draw the same dust, and no mask can tell
+them apart. The salt moves to **per source** in
+[ADR-0024](0024-each-source-counts-from-zero-and-carries-a-source-attribute.md). The property
+this record exists for — that re-seeding moves the dust and not the lattice — is unchanged
+there; only the scope of the salt is.
 
 ## Evidence
 
