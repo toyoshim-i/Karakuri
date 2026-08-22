@@ -11,7 +11,7 @@ index is maintained by hand — see ADR-0000 for when that stops being enough.
 rule it states.
 
 **Reconstruction is in progress.** Records are being recovered in date order from the session
-history that runs from 2026-07-25. Everything through **2026-07-26** is written; the numbering
+history that runs from 2026-07-25. Everything through **2026-07-30** is written; the numbering
 is chronological, so later dates take later numbers.
 
 ## Records
@@ -48,6 +48,15 @@ is chronological, so later dates take later numbers.
 | [ADR-0027](0027-a-set-value-is-immutable-and-its-compiled-instance-is-not.md) | A Set value is immutable; its compiled instance is not | 2026-07-26 | accepted |
 | [ADR-0028](0028-closed-form-and-accumulating-is-a-static-classification.md) | Closed-form and accumulating is a static classification | 2026-07-26 | accepted |
 | [ADR-0029](0029-amplification-is-a-second-kind-of-l2-not-a-new-layer.md) | Amplification is a second kind of L2, not a new layer | 2026-07-26 | accepted |
+| [ADR-0030](0030-simulation-time-comes-from-an-integer-step-count.md) | Simulation time comes from an integer step count, and advances per substep | 2026-07-27 | accepted |
+| [ADR-0031](0031-a-document-describing-replaced-behaviour-is-worse-than-none.md) | A document describing replaced behaviour is worse than none | 2026-07-27 | accepted |
+| [ADR-0032](0032-nothing-checks-clean-and-comes-up-short-at-runtime.md) | Nothing checks clean and comes up short at runtime | 2026-07-30 | accepted |
+| [ADR-0033](0033-freeing-on-the-render-thread-is-the-same-invariant-as-allocating.md) | Freeing on the render thread is the same invariant as allocating | 2026-07-27 | accepted |
+| [ADR-0034](0034-the-frame-guard-owns-the-encoder.md) | The frame guard owns the encoder | 2026-07-30 | accepted |
+| [ADR-0035](0035-claude-is-removed-from-history-while-there-is-no-remote.md) | `.claude/` is removed from history while there is no remote | 2026-07-30 | accepted |
+| [ADR-0036](0036-the-first-m2-slice-is-two-sets-mixed-through-a-tone-mapper.md) | The first M2 slice is two Sets, mixed, through a tone mapper | 2026-07-30 | accepted |
+| [ADR-0037](0037-tone-mapping-is-a-uniform-and-the-default-is-chosen-by-looking.md) | Tone mapping is a uniform, and the default is chosen by looking | 2026-07-30 | accepted |
+| [ADR-0038](0038-a-deck-of-one-is-bit-identical-to-a-bare-set.md) | A deck of one is bit-identical to a bare Set | 2026-07-30 | accepted |
 
 ## Retired numbers
 
@@ -59,7 +68,6 @@ None yet. A superseded record keeps its row above; a **deleted principle** is re
 A principle with no ADR is one whose reasoning is still only in the code and the specification.
 These predate the reconstruction reaching their decision date.
 
-- [P-0001](../principles/0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md) — Nothing allocates or compiles a shader on the render thread
 - [P-0002](../principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md) — Simulation time comes from a record, never from a clock *(ADR-0006 covers the tick record; the clock-for-cost exception is still unrecorded)*
 - [P-0005](../principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md) — A swap happens on a frame boundary, and an over-budget Set rolls back on its own
 - [P-0006](../principles/0006-the-workspace-stays-closed-to-rust.md) — The workspace stays closed to Rust
