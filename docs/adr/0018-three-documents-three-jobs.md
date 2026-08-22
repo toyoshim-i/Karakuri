@@ -4,7 +4,7 @@ title: Three documents, three jobs
 status: accepted
 date: 2026-07-26
 supersedes: []
-superseded_by: [0000]
+superseded_by: []
 principles: []
 tags: [docs, process]
 ---
@@ -37,6 +37,9 @@ detail without implying it exists.
 
 ## Consequences
 
+- **Not superseded, despite the note below.** The front matter briefly said otherwise; ADR-0000 did
+  not replace this split, it added two homes beside it, and all three documents still do what this
+  record says they do.
 - Explicitly *not history*, which is correct for these three and is what leaves the project
   with nowhere to record a supersession. That gap is what
   [ADR-0000](0000-record-decisions-here-and-standing-rules-in-principles.md) closes almost a
