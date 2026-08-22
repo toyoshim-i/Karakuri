@@ -87,9 +87,38 @@ cargo fmt --check
 
 ---
 
-## 4. Verification Checklist for Code Changes
+## 4. Recording a Decision
+
+**When a decision is made, write it down then — not later.** These records exist because they were
+once reconstructed from four weeks of session transcripts, and reconstruction only works while the
+transcripts still exist and someone remembers to look.
+
+**Write an ADR when a plausible alternative lost.** Not for every change — for a choice someone could
+reasonably re-propose in three months. The record's job is the *rejected* alternative and why it lost;
+the conclusion alone does not stop anyone re-proposing it. Number it after the highest existing one,
+add a row to [docs/adr/INDEX.md](adr/INDEX.md), and follow the shape in
+[ADR-0000](adr/0000-record-decisions-here-and-standing-rules-in-principles.md).
+
+**Add a principle only if a future proposal could violate it.** *An element is never identified by its
+buffer slot* is a rule somebody will otherwise re-propose; *rekordbox never publishes its deck BPM* is
+a fact about the world and belongs in the ADR alone. Every principle has an ADR; not every ADR yields
+a principle.
+
+**When a rule stops being true, delete its file and re-record it under a new number** — never edit it
+into something else, and never reuse the retired number. Record the retirement in `INDEX.md` and
+re-point the ADRs that cited it
+([ADR-0059](adr/0059-a-records-pointer-into-the-principles-registry-is-metadata.md)).
+
+**An ADR is not edited after it lands**, except to set `status` and `superseded_by`. If the reasoning
+would have to change, that is a new record.
+
+---
+
+## 5. Verification Checklist for Code Changes
 
 Before marking a task or pull request as complete, ensure the following checklist is satisfied:
+
+- [ ] **A decision with a losing alternative has a record**: see §4. If nothing was decided, nothing is owed.
 
 - [ ] **All workspace tests pass**: `cargo test --workspace` returns 0 exit code.
 - [ ] **Naga validation passes**: Any modifications to `karakuri-codegen` MUST be verified against `naga_test.rs` to guarantee generated WGSL text parses and validates cleanly.
@@ -99,11 +128,13 @@ Before marking a task or pull request as complete, ensure the following checklis
 
 ---
 
-## 5. Related Architecture & Specification Reference
+## 6. Related Architecture & Specification Reference
 
 - [architecture.md](architecture.md): Source code structure, multi-crate map, pipeline, and threading model
 - [ir-spec.md](ir-spec.md): `.kir` DSL specification and language invariants
 - [manual.md](manual.md): CLI arguments and VJ keyboard controls reference
 - [plugins.md](plugins.md): Out-of-process helper plugin specification
 - [roadmap.md](roadmap.md): Architectural roadmap and future milestones
+- [adr/](adr/): Every decision, with the alternatives that lost — append-only
+- [principles/](principles/): The rules in force, one per file — current only
 
