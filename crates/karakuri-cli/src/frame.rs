@@ -426,133 +426,6 @@ mod tests {
         Deck::new(&gpu.device, vec![HotSwap::fixed(set)], SIZE, SIZE)
     }
 
-    /// **A frame with nowhere to draw commits nothing.**
-    ///
-    /// The defect this replaces was invisible: the loop read the clock, wrote a
-    /// `tick` claiming those steps, measured the audio, and only then found the
-    /// swapchain had no texture — so an abandoned frame told the session it had
-    /// simulated steps the deck never took, and a replay obeyed the record.
-    /// `Outdated` arrives on every resize, so resizing during a recording was
-    /// enough to make the replay diverge.
-    ///
-    /// It cannot happen now because the committing work is a closure `compose`
-    /// only calls once a target exists, and this is that claim: refuse, and the
-    /// closure never runs.
-    #[test]
-    fn a_refused_frame_never_reaches_the_committing_work() {
-        let gpu = Gpu::headless().expect("no GPU");
-        let mut deck = one_slot_deck(&gpu);
-        let present = Present::new(&gpu.device, FORMAT, SIZE, SIZE);
-        let mut sink = TestSink::new(
-            &gpu,
-            vec![
-                Err(Skip::Transient),
-                Err(Skip::Fault("gone".into())),
-                Ok(()),
-            ],
-        );
-        let commits = RefCell::new(0);
-
-        for expected in [false, false, true] {
-            let before = *commits.borrow();
-            let outcome = compose(&gpu, &mut deck, &present, &mut sink, |_| {
-                *commits.borrow_mut() += 1;
-                Committed {
-                    steps: 1,
-                    look: look(),
-                }
-            })
-            .expect("compose");
-            let committed = *commits.borrow() > before;
-            assert_eq!(
-                committed, expected,
-                "committing on a refused frame is the whole defect: {outcome:?}"
-            );
-        }
-        assert_eq!(*commits.borrow(), 1, "only the accepted frame committed");
-        assert_eq!(sink.presented, 1, "and only it was presented");
-    }
-
-    /// A refused frame does not advance the deck either — the other half of the
-    /// same promise, seen from the material rather than from the stream.
-    #[test]
-    fn a_refused_frame_does_not_advance_the_simulation() {
-        let gpu = Gpu::headless().expect("no GPU");
-        let mut deck = one_slot_deck(&gpu);
-        let present = Present::new(&gpu.device, FORMAT, SIZE, SIZE);
-        let mut sink = TestSink::new(&gpu, vec![Err(Skip::Transient)]);
-
-        let before = deck.slot(0).set().time();
-        compose(&gpu, &mut deck, &present, &mut sink, |_| Committed {
-            steps: 4,
-            look: look(),
-        })
-        .expect("compose");
-        assert_eq!(
-            deck.slot(0).set().time(),
-            before,
-            "a frame with nowhere to draw stepped the simulation"
-        );
-
-        // And an accepted one does, so the assertion above is about the refusal
-        // rather than about a deck that never moves.
-        compose(&gpu, &mut deck, &present, &mut sink, |_| Committed {
-            steps: 4,
-            look: look(),
-        })
-        .expect("compose");
-        assert!(
-            deck.slot(0).set().time() > before,
-            "an accepted frame did not step either — the test proves nothing"
-        );
-    }
-
-    /// The committing closure runs **before** anything is drawn, seen in the
-    /// pixels rather than in the deck.
-    ///
-    /// This test was vacuous first, and the mutation is what said so: it set a
-    /// gain in the closure and asserted the deck held it afterwards, which is
-    /// true whichever side of the draw the closure ran on. It was testing that
-    /// `set_gain` works. **A claim about order has to be read off the thing the
-    /// order affects**, so it reads the frame: a slot faded to nothing in the
-    /// closure must produce a dark frame, and it only does if the closure ran
-    /// first.
-    #[test]
-    fn a_frame_commits_before_it_draws() {
-        let gpu = Gpu::headless().expect("no GPU");
-        let present = Present::new(&gpu.device, FORMAT, SIZE, SIZE);
-
-        // The control, and it is not optional: if this material drew nothing at
-        // this size the assertion below would hold for the wrong reason.
-        let mut deck = one_slot_deck(&gpu);
-        let mut sink = TestSink::new(&gpu, vec![]);
-        compose(&gpu, &mut deck, &present, &mut sink, |_| Committed {
-            steps: 1,
-            look: look(),
-        })
-        .expect("compose");
-        assert_eq!(sink.lit, Some(true), "the fixture drew nothing to darken");
-
-        // The same frame, with the fader taken to zero inside the closure.
-        // Opacity rather than gain because opacity silences a layer under every
-        // blend mode and gain does not silence `over`.
-        let mut deck = one_slot_deck(&gpu);
-        let mut sink = TestSink::new(&gpu, vec![]);
-        compose(&gpu, &mut deck, &present, &mut sink, |deck| {
-            deck.set_opacity(0, 0.0);
-            Committed {
-                steps: 1,
-                look: look(),
-            }
-        })
-        .expect("compose");
-        assert_eq!(
-            sink.lit,
-            Some(false),
-            "the frame was drawn before the closure that faded it"
-        );
-    }
-
     /// **An abandoned frame's interval is not lost — the next frame counts it.**
     ///
     /// The claim the frame loop's ordering rests on, and until `steps` could be
@@ -614,5 +487,136 @@ mod tests {
         let mut clock = Clock::new(start);
         let steps = clock.steps(start + std::time::Duration::from_secs(5));
         assert_eq!(steps, MAX_STEPS, "five seconds is not four steps' worth");
+    }
+
+    // Three of the six drive a real `Present`; the refusal arithmetic above does not.
+    // See `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs`.
+    mod gpu {
+        use super::*;
+
+        /// **A frame with nowhere to draw commits nothing.**
+        ///
+        /// The defect this replaces was invisible: the loop read the clock, wrote a
+        /// `tick` claiming those steps, measured the audio, and only then found the
+        /// swapchain had no texture — so an abandoned frame told the session it had
+        /// simulated steps the deck never took, and a replay obeyed the record.
+        /// `Outdated` arrives on every resize, so resizing during a recording was
+        /// enough to make the replay diverge.
+        ///
+        /// It cannot happen now because the committing work is a closure `compose`
+        /// only calls once a target exists, and this is that claim: refuse, and the
+        /// closure never runs.
+        #[test]
+        fn a_refused_frame_never_reaches_the_committing_work() {
+            let gpu = Gpu::headless().expect("no GPU");
+            let mut deck = one_slot_deck(&gpu);
+            let present = Present::new(&gpu.device, FORMAT, SIZE, SIZE);
+            let mut sink = TestSink::new(
+                &gpu,
+                vec![
+                    Err(Skip::Transient),
+                    Err(Skip::Fault("gone".into())),
+                    Ok(()),
+                ],
+            );
+            let commits = RefCell::new(0);
+
+            for expected in [false, false, true] {
+                let before = *commits.borrow();
+                let outcome = compose(&gpu, &mut deck, &present, &mut sink, |_| {
+                    *commits.borrow_mut() += 1;
+                    Committed {
+                        steps: 1,
+                        look: look(),
+                    }
+                })
+                .expect("compose");
+                let committed = *commits.borrow() > before;
+                assert_eq!(
+                    committed, expected,
+                    "committing on a refused frame is the whole defect: {outcome:?}"
+                );
+            }
+            assert_eq!(*commits.borrow(), 1, "only the accepted frame committed");
+            assert_eq!(sink.presented, 1, "and only it was presented");
+        }
+        /// A refused frame does not advance the deck either — the other half of the
+        /// same promise, seen from the material rather than from the stream.
+        #[test]
+        fn a_refused_frame_does_not_advance_the_simulation() {
+            let gpu = Gpu::headless().expect("no GPU");
+            let mut deck = one_slot_deck(&gpu);
+            let present = Present::new(&gpu.device, FORMAT, SIZE, SIZE);
+            let mut sink = TestSink::new(&gpu, vec![Err(Skip::Transient)]);
+
+            let before = deck.slot(0).set().time();
+            compose(&gpu, &mut deck, &present, &mut sink, |_| Committed {
+                steps: 4,
+                look: look(),
+            })
+            .expect("compose");
+            assert_eq!(
+                deck.slot(0).set().time(),
+                before,
+                "a frame with nowhere to draw stepped the simulation"
+            );
+
+            // And an accepted one does, so the assertion above is about the refusal
+            // rather than about a deck that never moves.
+            compose(&gpu, &mut deck, &present, &mut sink, |_| Committed {
+                steps: 4,
+                look: look(),
+            })
+            .expect("compose");
+            assert!(
+                deck.slot(0).set().time() > before,
+                "an accepted frame did not step either — the test proves nothing"
+            );
+        }
+        /// The committing closure runs **before** anything is drawn, seen in the
+        /// pixels rather than in the deck.
+        ///
+        /// This test was vacuous first, and the mutation is what said so: it set a
+        /// gain in the closure and asserted the deck held it afterwards, which is
+        /// true whichever side of the draw the closure ran on. It was testing that
+        /// `set_gain` works. **A claim about order has to be read off the thing the
+        /// order affects**, so it reads the frame: a slot faded to nothing in the
+        /// closure must produce a dark frame, and it only does if the closure ran
+        /// first.
+        #[test]
+        fn a_frame_commits_before_it_draws() {
+            let gpu = Gpu::headless().expect("no GPU");
+            let present = Present::new(&gpu.device, FORMAT, SIZE, SIZE);
+
+            // The control, and it is not optional: if this material drew nothing at
+            // this size the assertion below would hold for the wrong reason.
+            let mut deck = one_slot_deck(&gpu);
+            let mut sink = TestSink::new(&gpu, vec![]);
+            compose(&gpu, &mut deck, &present, &mut sink, |_| Committed {
+                steps: 1,
+                look: look(),
+            })
+            .expect("compose");
+            assert_eq!(sink.lit, Some(true), "the fixture drew nothing to darken");
+
+            // The same frame, with the fader taken to zero inside the closure.
+            // Opacity rather than gain because opacity silences a layer under every
+            // blend mode and gain does not silence `over`.
+            let mut deck = one_slot_deck(&gpu);
+            let mut sink = TestSink::new(&gpu, vec![]);
+            compose(&gpu, &mut deck, &present, &mut sink, |deck| {
+                deck.set_opacity(0, 0.0);
+                Committed {
+                    steps: 1,
+                    look: look(),
+                }
+            })
+            .expect("compose");
+            assert_eq!(
+                sink.lit,
+                Some(false),
+                "the frame was drawn before the closure that faded it"
+            );
+        }
     }
 }

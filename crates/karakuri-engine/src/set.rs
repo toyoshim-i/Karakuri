@@ -4200,15 +4200,22 @@ proc signed_defaults {
         );
     }
 
-    /// End-to-end smoke test that a procedure *with* a `spawn` block builds
-    /// a `Set` successfully and starts with a zero live count —
-    /// exercising the real `generate_l1`/`generate_l4` path (not the
-    /// hand-built `ElementLayout` the two tests above use) for the one
-    /// shape `crates/karakuri-engine/tests/generated.rs` never covers.
-    #[test]
-    fn a_procedure_with_a_spawn_block_builds_and_starts_empty() {
-        let gpu = Gpu::headless().expect("no GPU available");
-        let l1_src = r#"
+    // The two that build a Set for real. The two above check the layout arithmetic
+    // `Set::build` would go on to use, and take no device — which is most of what
+    // `cargo test -p karakuri-engine --lib -- --skip gpu::` is for.
+    // See `../tests/gpu_tests_are_under_mod_gpu.rs`.
+    mod gpu {
+        use super::*;
+
+        /// End-to-end smoke test that a procedure *with* a `spawn` block builds
+        /// a `Set` successfully and starts with a zero live count —
+        /// exercising the real `generate_l1`/`generate_l4` path (not the
+        /// hand-built `ElementLayout` the two tests above use) for the one
+        /// shape `crates/karakuri-engine/tests/generated.rs` never covers.
+        #[test]
+        fn a_procedure_with_a_spawn_block_builds_and_starts_empty() {
+            let gpu = Gpu::headless().expect("no GPU available");
+            let l1_src = r#"
 proc probe_spawn_l1 {
   kind     L1
   topology points
@@ -4229,7 +4236,7 @@ proc probe_spawn_l1 {
   }
 }
 "#;
-        let l4_src = r#"
+            let l4_src = r#"
 proc probe_l4 {
   kind  L4
   blend additive
@@ -4246,54 +4253,55 @@ proc probe_l4 {
   }
 }
 "#;
-        let compile = |src: &str| -> Checked {
-            let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("parse: {e:?}"));
-            let checked =
-                karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("check: {e:?}"));
-            karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("cost: {e:?}"));
-            checked
-        };
-        let l1 = compile(l1_src);
-        let l4 = compile(l4_src);
-        let set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, 8, 1).expect("compatible pair");
+            let compile = |src: &str| -> Checked {
+                let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("parse: {e:?}"));
+                let checked =
+                    karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("check: {e:?}"));
+                karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("cost: {e:?}"));
+                checked
+            };
+            let l1 = compile(l1_src);
+            let l4 = compile(l4_src);
+            let set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, 8, 1).expect("compatible pair");
 
-        assert_eq!(
-            set.live_count(&gpu.device, &gpu.queue),
-            0,
-            "a spawn-block procedure starts empty"
-        );
-    }
+            assert_eq!(
+                set.live_count(&gpu.device, &gpu.queue),
+                0,
+                "a spawn-block procedure starts empty"
+            );
+        }
+        /// **Every field of a derived `Counts` means what its name says**, including
+        /// the ones nothing below an amplifier reads.
+        ///
+        /// `survivors` is the scan's output and no pass below a deformation looks at
+        /// it, so a wrong value there is invisible in every picture — a fact
+        /// confirmed the hard way: dropping its multiplication left the whole
+        /// GPU test file green. It is still wrong. A `Counts` is handed on as a
+        /// whole, and one whose fields are true only where they happen to be read is
+        /// a buffer whose meaning depends on where it came from.
+        ///
+        /// Here rather than in `tests/amplify.rs` because the buffers are the node's
+        /// own and reaching them from outside the crate would mean widening the API
+        /// to say something only a test wants to know.
+        #[test]
+        fn an_amplifiers_derived_counts_multiply_every_element_count_and_no_other_field() {
+            // Was a silent `return` — the one test in the workspace that
+            // reported success for having done nothing at all. Now the same
+            // panic as the rest; a machine without an adapter uses
+            // `--skip gpu::` rather than a test that lies to it.
+            let gpu = Gpu::headless().expect("no GPU available");
+            const FACTOR: u32 = 4;
+            const CAPACITY: u32 = 64;
 
-    /// **Every field of a derived `Counts` means what its name says**, including
-    /// the ones nothing below an amplifier reads.
-    ///
-    /// `survivors` is the scan's output and no pass below a deformation looks at
-    /// it, so a wrong value there is invisible in every picture — a fact
-    /// confirmed the hard way: dropping its multiplication left the whole
-    /// GPU test file green. It is still wrong. A `Counts` is handed on as a
-    /// whole, and one whose fields are true only where they happen to be read is
-    /// a buffer whose meaning depends on where it came from.
-    ///
-    /// Here rather than in `tests/amplify.rs` because the buffers are the node's
-    /// own and reaching them from outside the crate would mean widening the API
-    /// to say something only a test wants to know.
-    #[test]
-    fn an_amplifiers_derived_counts_multiply_every_element_count_and_no_other_field() {
-        let Some(gpu) = Gpu::headless().ok() else {
-            return;
-        };
-        const FACTOR: u32 = 4;
-        const CAPACITY: u32 = 64;
-
-        let compile = |src: &str| -> Checked {
-            let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("parse: {e:?}"));
-            let checked =
-                karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("check: {e:?}"));
-            karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("cost: {e:?}"));
-            checked
-        };
-        let l1 = compile(
-            r#"
+            let compile = |src: &str| -> Checked {
+                let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("parse: {e:?}"));
+                let checked =
+                    karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("check: {e:?}"));
+                karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("cost: {e:?}"));
+                checked
+            };
+            let l1 = compile(
+                r#"
 proc still {
   kind     L1
   topology points
@@ -4306,9 +4314,9 @@ proc still {
   }
 }
 "#,
-        );
-        let l2 = compile(
-            r#"
+            );
+            let l2 = compile(
+                r#"
 proc mirror {
   kind    L2
   amplify 4
@@ -4320,9 +4328,9 @@ proc mirror {
   }
 }
 "#,
-        );
-        let l4 = compile(
-            r#"
+            );
+            let l4 = compile(
+                r#"
 proc dots {
   kind  L4
   blend additive
@@ -4339,69 +4347,70 @@ proc dots {
   }
 }
 "#,
-        );
-        let set = Set::build_many(
-            &gpu.device,
-            &gpu.queue,
-            &[(&l1, CAPACITY)],
-            &[&l2],
-            &[],
-            &[],
-            &[&l4],
-            Layering::Overdraw,
-            1,
-            &[],
-            Wiring::default(),
-        )
-        .expect("a chain of one L1, one amplifying L2 and one L4");
+            );
+            let set = Set::build_many(
+                &gpu.device,
+                &gpu.queue,
+                &[(&l1, CAPACITY)],
+                &[&l2],
+                &[],
+                &[],
+                &[&l4],
+                Layering::Overdraw,
+                1,
+                &[],
+                Wiring::default(),
+            )
+            .expect("a chain of one L1, one amplifying L2 and one L4");
 
-        // `build_many` primes the chain, so the derived counts are current
-        // without a step — which is the other thing this asserts.
-        let read = |buf: &wgpu::Buffer| -> [u32; 12] {
-            let size = karakuri_codegen::layout::counts::SIZE;
-            let readback = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("counts readback"),
-                size,
-                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-                mapped_at_creation: false,
-            });
-            let mut encoder = gpu.device.create_command_encoder(&Default::default());
-            encoder.copy_buffer_to_buffer(buf, 0, &readback, 0, size);
-            gpu.queue.submit([encoder.finish()]);
-            let slice = readback.slice(..);
-            slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
-            gpu.device.poll(wgpu::PollType::Wait).expect("poll");
-            let data = slice.get_mapped_range();
-            let mut out = [0u32; 12];
-            for (i, w) in data.chunks_exact(4).take(12).enumerate() {
-                out[i] = u32::from_le_bytes([w[0], w[1], w[2], w[3]]);
-            }
-            drop(data);
-            readback.unmap();
-            out
-        };
+            // `build_many` primes the chain, so the derived counts are current
+            // without a step — which is the other thing this asserts.
+            let read = |buf: &wgpu::Buffer| -> [u32; 12] {
+                let size = karakuri_codegen::layout::counts::SIZE;
+                let readback = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("counts readback"),
+                    size,
+                    usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                    mapped_at_creation: false,
+                });
+                let mut encoder = gpu.device.create_command_encoder(&Default::default());
+                encoder.copy_buffer_to_buffer(buf, 0, &readback, 0, size);
+                gpu.queue.submit([encoder.finish()]);
+                let slice = readback.slice(..);
+                slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
+                gpu.device.poll(wgpu::PollType::Wait).expect("poll");
+                let data = slice.get_mapped_range();
+                let mut out = [0u32; 12];
+                for (i, w) in data.chunks_exact(4).take(12).enumerate() {
+                    out[i] = u32::from_le_bytes([w[0], w[1], w[2], w[3]]);
+                }
+                drop(data);
+                readback.unmap();
+                out
+            };
 
-        let source = &set.sources[0];
-        let from = read(source.sim.counts());
-        let derived = read(source.deforms[0].counts().expect("the node amplifies"));
+            let source = &set.sources[0];
+            let from = read(source.sim.counts());
+            let derived = read(source.deforms[0].counts().expect("the node amplifies"));
 
-        // Field order is `counts::WGSL`'s: elem_xyz, range, vertex_count,
-        // instance_count, first_vertex, first_instance, survivors.
-        assert_eq!(derived[3], from[3] * FACTOR, "range");
-        assert_eq!(derived[5], from[5] * FACTOR, "instance_count");
-        assert_eq!(derived[8], from[8] * FACTOR, "survivors");
-        assert_eq!(
-            derived[0],
-            from[3] * FACTOR / karakuri_codegen::layout::WORKGROUP_SIZE,
-            "workgroups, over the amplified range"
-        );
-        assert_eq!((derived[1], derived[2]), (1, 1), "the other two dimensions");
+            // Field order is `counts::WGSL`'s: elem_xyz, range, vertex_count,
+            // instance_count, first_vertex, first_instance, survivors.
+            assert_eq!(derived[3], from[3] * FACTOR, "range");
+            assert_eq!(derived[5], from[5] * FACTOR, "instance_count");
+            assert_eq!(derived[8], from[8] * FACTOR, "survivors");
+            assert_eq!(
+                derived[0],
+                from[3] * FACTOR / karakuri_codegen::layout::WORKGROUP_SIZE,
+                "workgroups, over the amplified range"
+            );
+            assert_eq!((derived[1], derived[2]), (1, 1), "the other two dimensions");
 
-        // **And the two that are not counts of elements.** `vertex_count` is the
-        // corners of one primitive, which is a property of how a renderer
-        // expands an element; the two `first_*` are where a draw starts.
-        assert_eq!(derived[4], from[4], "vertex_count");
-        assert_eq!(derived[6], from[6], "first_vertex");
-        assert_eq!(derived[7], from[7], "first_instance");
+            // **And the two that are not counts of elements.** `vertex_count` is the
+            // corners of one primitive, which is a property of how a renderer
+            // expands an element; the two `first_*` are where a draw starts.
+            assert_eq!(derived[4], from[4], "vertex_count");
+            assert_eq!(derived[6], from[6], "first_vertex");
+            assert_eq!(derived[7], from[7], "first_instance");
+        }
     }
 }

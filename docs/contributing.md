@@ -52,8 +52,9 @@ git config core.hooksPath .githooks
   whether the work is good at a moment nobody was claiming it was.
 
 Neither hook runs tests on an ordinary commit or branch push, and that is a decision rather
-than an omission: this workspace has over nine hundred and fifty tests and most want a GPU, so any
-fixed subset spends minutes answering a question nobody asked. What replaces it is
+than an omission: this workspace has nearly a thousand tests, and while only about three
+hundred of them want a GPU those three hundred are ~99% of the five minutes the suite costs,
+so any fixed subset spends minutes answering a question nobody asked. What replaces it is
 deliberate: whoever makes a change names the smallest suite that answers it and runs that
 (§3 lists them per crate), and the whole workspace runs at a boundary — before a tag, after
 a refactor, and before a change is called done (§5). The reasoning is written into the hooks
@@ -72,15 +73,52 @@ workspace belongs at a boundary, not at every step.
 cargo test -p karakuri-ir          # IR: lexer, parser, checker, cost
 cargo test -p karakuri-codegen     # WGSL generation and naga validation
 cargo test -p karakuri-engine      # render graph, Set lifecycle, deck (needs a GPU)
-cargo test -p karakuri-engine --lib   # the part of it that does not
 cargo test -p karakuri-audio       # analysis, tempo tracking, beat lock
 cargo test -p karakuri-signal      # oscillator, synthesized bus, noise
 cargo test -p karakuri-store       # records, ndjson, content addressing
 cargo test -p karakuri-midi        # wire parsing and the map
-cargo test -p karakuri-cli         # flags, replay, MCP, live save
+cargo test -p karakuri-cli         # flags, replay, MCP, live save (needs a GPU)
 ```
 
-Most of `karakuri-engine`'s integration suites take a GPU device; every other crate is pure CPU.
+**Two crates take a device, not one.** Most of `karakuri-engine`'s integration suites do,
+and so does part of `karakuri-cli`: eleven tests in the binary build a Set, and the five in
+`tests/replay.rs` drive `karakuri-cli` as a subprocess, which takes a device of its own. The
+other six crates are pure CPU.
+
+### Running only the part that needs no GPU
+
+**Every test that reaches a device lives under a module called `gpu`**, so the whole CPU-only
+set is one filter away:
+
+```sh
+cargo test --workspace -- --skip gpu::          # 696 of the 997, in about three seconds
+cargo test -p karakuri-engine -- --skip gpu::   # the render graph's own arithmetic
+cargo test -p karakuri-engine --lib -- --skip gpu::
+cargo test -p karakuri-cli --bins -- --skip gpu::   # `karakuri-cli` has no library target
+```
+
+The GPU tests are 301 of 997 and about 99% of the roughly 306 seconds the whole workspace
+costs, so this is nearly all of the suite for nearly none of the time. `--skip` is a
+substring match on the full test path, which is why the module is named `gpu` and nothing
+else is.
+
+`cargo test -p <crate>` keeps its exact meaning — everything runs, and the pre-push hook is
+untouched. The filter only ever subtracts. `#[ignore]` would have inverted that default, so
+`cargo test` would have quietly stopped meaning "everything"; that is why this is a module
+path and not an attribute.
+
+The convention is enforced by
+[`crates/karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs`](../crates/karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs),
+which reads the workspace's own source and fails both ways round: a GPU test outside `mod
+gpu` would be run by the filtered command, and a CPU test inside one would silently stop
+running whenever anyone filtered. It counts spawning a binary that reaches `Gpu::headless`
+as reaching one, which is the only way `tests/replay.rs` can be seen at all.
+
+**There is no in-test skip, in either direction.** A test that needs a device and cannot get
+one panics — all 301 of them do. Eight used to print a message and return instead, and one
+of those returned in silence; they were changed when this filter landed, because on a machine
+with no adapter `--skip gpu::` is a better answer than a green run that measured nothing. If
+you are on such a machine, the filtered command is the suite you have, and it says as much.
 
 ### At a boundary — before a tag, after a refactor, before calling a change done
 ```sh

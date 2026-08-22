@@ -16,14 +16,18 @@
 //! - **The targets follow a resize**, since they are frame-sized and a Set is
 //!   built before it is sized.
 
-use karakuri_engine::mix::Input;
-use karakuri_engine::set::Layering;
-use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
-use karakuri_ir::typed::Checked;
+// Every test here takes a device, so the whole file is one `mod gpu` — the
+// prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
+// that enforces it, are in `tests/gpu_tests_are_under_mod_gpu.rs`.
+mod gpu {
+    use karakuri_engine::mix::Input;
+    use karakuri_engine::set::Layering;
+    use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
+    use karakuri_ir::typed::Checked;
 
-/// A lattice with no motion of its own, so the picture is a function of the
-/// renderers alone.
-const GRID: &str = r#"
+    /// A lattice with no motion of its own, so the picture is a function of the
+    /// renderers alone.
+    const GRID: &str = r#"
 proc grid {
   kind     L1
   topology points
@@ -39,13 +43,13 @@ proc grid {
 }
 "#;
 
-/// One flat colour per renderer, so what each contributes to the mix is a
-/// number a test can name. Additive, which is the mode the two layerings agree
-/// under.
-fn dots(name: &str, rgb: (f32, f32, f32)) -> String {
-    let (r, g, b) = rgb;
-    format!(
-        r#"
+    /// One flat colour per renderer, so what each contributes to the mix is a
+    /// number a test can name. Additive, which is the mode the two layerings agree
+    /// under.
+    fn dots(name: &str, rgb: (f32, f32, f32)) -> String {
+        let (r, g, b) = rgb;
+        format!(
+            r#"
 proc {name} {{
   kind  L4
   blend additive
@@ -62,274 +66,33 @@ proc {name} {{
   }}
 }}
 "#
-    )
-}
-
-fn compile(src: &str) -> Checked {
-    let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
-    karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)))
-}
-
-fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
-    errs.iter()
-        .map(|e| e.render(src))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-/// **Not square, deliberately.** The merge's targets are frame-sized and
-/// allocated from a `(width, height)` pair, so a transposition between the two
-/// is invisible to any square fixture — and what it produces is a target that
-/// is short in one axis, which `textureLoad` answers with zeros rather than an
-/// error. Half a frame goes black and nothing says so.
-const W: u32 = 96;
-const H: u32 = 64;
-
-fn build(gpu: &Gpu, l4s: &[String], layering: Layering) -> Set {
-    let compiled: Vec<Checked> = l4s.iter().map(|s| compile(s)).collect();
-    let refs: Vec<&Checked> = compiled.iter().collect();
-    let mut set = Set::build_many(
-        &gpu.device,
-        &gpu.queue,
-        &[(&compile(GRID), 16)],
-        &[],
-        &[],
-        &[],
-        &refs,
-        layering,
-        5,
-        &[],
-        karakuri_engine::set::Wiring::default(),
-    )
-    .expect("one L1 and some L4s");
-    set.resize(&gpu.device, W, H);
-    // Still and level, so a frame is a frame rather than a moment in a sweep.
-    set.camera = karakuri_engine::camera::Orbit {
-        radius: 6.0,
-        speed: 0.0,
-        height: 0.0,
-        ..Default::default()
-    };
-    set
-}
-
-/// RGBA f32 per texel, after one frame.
-fn frame(gpu: &Gpu, set: &mut Set) -> Vec<f32> {
-    let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba16Float, W, H);
-    set.prepare(&gpu.queue, 1, &Signals::default());
-
-    let bytes_per_row = W * 8;
-    let readback = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("readback"),
-        size: u64::from(bytes_per_row * H),
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-    let mut encoder = gpu.device.create_command_encoder(&Default::default());
-    set.render(&mut encoder, present.hdr_view(), 1);
-    encoder.copy_texture_to_buffer(
-        present.hdr_texture().as_image_copy(),
-        wgpu::TexelCopyBufferInfo {
-            buffer: &readback,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(bytes_per_row),
-                rows_per_image: Some(H),
-            },
-        },
-        wgpu::Extent3d {
-            width: W,
-            height: H,
-            depth_or_array_layers: 1,
-        },
-    );
-    gpu.queue.submit([encoder.finish()]);
-
-    let slice = readback.slice(..);
-    slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
-    gpu.device.poll(wgpu::PollType::Wait).expect("poll");
-    let data = slice.get_mapped_range();
-    let out: Vec<f32> = data
-        .chunks_exact(2)
-        .map(|b| f16(u16::from_le_bytes([b[0], b[1]])))
-        .collect();
-    drop(data);
-    readback.unmap();
-    out
-}
-
-fn f16(bits: u16) -> f32 {
-    let sign = f32::from_bits(u32::from(bits & 0x8000) << 16);
-    let exp = (bits >> 10) & 0x1f;
-    let mant = u32::from(bits & 0x3ff);
-    let v = match exp {
-        0 => f32::from_bits(mant << 13) * 2.0f32.powi(-112),
-        0x1f => f32::from_bits(0x7f80_0000 | (mant << 13)),
-        _ => f32::from_bits(((u32::from(exp) + 112) << 23) | (mant << 13)),
-    };
-    f32::from_bits(v.to_bits() | sign.to_bits())
-}
-
-/// Sum of one channel over the frame — how much of a colour reached the mix.
-fn total(px: &[f32], channel: usize) -> f64 {
-    px.chunks_exact(4).map(|t| f64::from(t[channel])).sum()
-}
-
-// ---------------------------------------------------------------------------
-
-/// **A merge of one is exact.** The mix of a single input at unity is
-/// `0.0 + 1.0 * src`, which is `src` for every finite texel — so a Set built to
-/// composite and a Set built to overdraw draw the same frame when there is only
-/// one renderer to fold.
-///
-/// Byte-for-byte rather than within a tolerance, because "exact" is the claim.
-/// It is what makes adding a second renderer later a change to the second
-/// renderer and not to the first.
-#[test]
-fn a_merge_of_one_input_hands_the_material_on_unchanged() {
-    let gpu = Gpu::headless().expect("no GPU available");
-    let one = [dots("only", (0.4, 0.7, 0.2))];
-    let over = frame(&gpu, &mut build(&gpu, &one, Layering::Overdraw));
-    let composited = frame(&gpu, &mut build(&gpu, &one, Layering::Composite));
-
-    assert_eq!(over.len(), composited.len());
-    let differing = over
-        .iter()
-        .zip(&composited)
-        .filter(|(a, b)| a.to_bits() != b.to_bits())
-        .count();
-    assert_eq!(
-        differing,
-        0,
-        "{differing} of {} channels differ",
-        over.len()
-    );
-}
-
-/// **Additive renderers agree either way**, which is what says the node is
-/// wired correctly rather than merely producing a picture. Overdraw accumulates
-/// the second renderer onto the first's target through its blend state;
-/// compositing gives each a cleared target and adds them in the fold. Addition
-/// is addition, and the order is the draw order both times.
-///
-/// Within a tolerance rather than exactly, because the two take the sum in
-/// different places: overdraw adds in the blend unit at `f16`, and compositing
-/// adds in the shader at `f32` and stores once. The agreement is the claim; the
-/// last bits are not.
-#[test]
-fn additive_renderers_composite_to_what_they_overdraw_to() {
-    let gpu = Gpu::headless().expect("no GPU available");
-    let two = [dots("warm", (0.5, 0.2, 0.0)), dots("cool", (0.0, 0.2, 0.5))];
-    let over = frame(&gpu, &mut build(&gpu, &two, Layering::Overdraw));
-    let composited = frame(&gpu, &mut build(&gpu, &two, Layering::Composite));
-
-    for channel in 0..3 {
-        let (a, b) = (total(&over, channel), total(&composited, channel));
-        assert!(a > 1.0, "channel {channel} is empty in the overdrawn frame");
-        assert!(
-            (a - b).abs() < a * 0.01,
-            "channel {channel}: overdraw totals {a} and compositing totals {b}"
-        );
+        )
     }
-}
 
-/// **Each input has its own edge**, which is the whole reason to pay for a
-/// target apiece. Pulling one renderer's opacity to zero takes its colour out
-/// of the frame and leaves the other's exactly where it was — the second half
-/// being what separates a per-input fader from a fader on the Set.
-#[test]
-fn an_inputs_own_fader_reaches_only_that_input() {
-    let gpu = Gpu::headless().expect("no GPU available");
-    let two = [dots("warm", (0.5, 0.0, 0.0)), dots("cool", (0.0, 0.0, 0.5))];
-    let mut set = build(&gpu, &two, Layering::Composite);
-    let full = frame(&gpu, &mut set);
-    let (warm, cool) = (total(&full, 0), total(&full, 2));
-    assert!(
-        warm > 1.0 && cool > 1.0,
-        "both renderers must reach the frame first"
-    );
+    fn compile(src: &str) -> Checked {
+        let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
+        karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)))
+    }
 
-    assert!(
-        set.set_input(
-            1,
-            Input {
-                opacity: 0.0,
-                ..Input::unity()
-            }
-        ),
-        "this Set draws with two renderers"
-    );
-    let muted = frame(&gpu, &mut set);
-    assert!(
-        total(&muted, 2) < cool * 0.01,
-        "the silenced input still reached the mix"
-    );
-    assert!(
-        (total(&muted, 0) - warm).abs() < warm * 0.01,
-        "silencing one input moved the other"
-    );
+    fn render(errs: &[karakuri_ir::IrError], src: &str) -> String {
+        errs.iter()
+            .map(|e| e.render(src))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
 
-    // And half is half: a fader's middle is the middle, which an on/off test
-    // cannot see.
-    assert!(set.set_input(
-        1,
-        Input {
-            opacity: 0.5,
-            ..Input::unity()
-        }
-    ));
-    let half = total(&frame(&gpu, &mut set), 2);
-    assert!(
-        (half - cool * 0.5).abs() < cool * 0.05,
-        "half opacity gave {half} where half of {cool} was due"
-    );
-}
+    /// **Not square, deliberately.** The merge's targets are frame-sized and
+    /// allocated from a `(width, height)` pair, so a transposition between the two
+    /// is invisible to any square fixture — and what it produces is a target that
+    /// is short in one axis, which `textureLoad` answers with zeros rather than an
+    /// error. Half a frame goes black and nothing says so.
+    const W: u32 = 96;
+    const H: u32 = 64;
 
-/// **The targets are frame-sized and a Set is built before it is sized**, so a
-/// merge that did not follow a resize would fold one-texel inputs into a full
-/// frame for the rest of the run. Drawing at two sizes is the whole test.
-#[test]
-fn the_merge_targets_follow_a_resize() {
-    let gpu = Gpu::headless().expect("no GPU available");
-    let two = [dots("warm", (0.5, 0.0, 0.0)), dots("cool", (0.0, 0.0, 0.5))];
-    let mut set = build(&gpu, &two, Layering::Composite);
-    let small = total(&frame(&gpu, &mut set), 0);
-    assert!(small > 1.0, "nothing was drawn at the first size");
-
-    // `frame` reads back at W by H, so the readback still matches; what changes
-    // is what the merge allocated between the two.
-    set.resize(&gpu.device, W * 2, H * 2);
-    set.resize(&gpu.device, W, H);
-    let again = total(&frame(&gpu, &mut set), 0);
-    assert!(
-        (again - small).abs() < small * 0.01,
-        "after a resize and back the frame totals {again} where it totalled {small}"
-    );
-}
-
-/// **An L5 folds at most as many inputs as its shader binds**, and more is
-/// refused rather than truncated.
-///
-/// `shaders/composite.wgsl` declares four textures, which is the same number a
-/// deck holds and for the same reason. A Set that quietly dropped its fifth
-/// renderer would draw a picture nobody asked for, with no error and no log —
-/// and the fifth is the one an author added last, so it is the one they are
-/// looking at.
-///
-/// **Overdrawing has no such limit**, which is the other half: the renderers
-/// share one attachment and run in order, so a hundred of them cost a hundred
-/// passes and one target. The refusal is about compositing alone.
-#[test]
-fn compositing_refuses_more_renderers_than_an_l5_can_fold() {
-    let gpu = Gpu::headless().expect("no GPU available");
-    let five: Vec<String> = (0..5)
-        .map(|i| dots(&format!("r{i}"), (0.1 * i as f32, 0.0, 0.0)))
-        .collect();
-
-    let err = {
-        let compiled: Vec<Checked> = five.iter().map(|s| compile(s)).collect();
+    fn build(gpu: &Gpu, l4s: &[String], layering: Layering) -> Set {
+        let compiled: Vec<Checked> = l4s.iter().map(|s| compile(s)).collect();
         let refs: Vec<&Checked> = compiled.iter().collect();
-        Set::build_many(
+        let mut set = Set::build_many(
             &gpu.device,
             &gpu.queue,
             &[(&compile(GRID), 16)],
@@ -337,26 +100,268 @@ fn compositing_refuses_more_renderers_than_an_l5_can_fold() {
             &[],
             &[],
             &refs,
-            Layering::Composite,
+            layering,
             5,
             &[],
             karakuri_engine::set::Wiring::default(),
         )
-        .err()
-        .expect("five inputs is one more than an L5 folds")
-    };
-    let message = err.to_string();
-    assert!(message.contains('5') && message.contains('4'), "{message}");
-    assert!(
-        message.contains("overdraw"),
-        "the hint does not offer the layering that has no limit: {message}"
-    );
+        .expect("one L1 and some L4s");
+        set.resize(&gpu.device, W, H);
+        // Still and level, so a frame is a frame rather than a moment in a sweep.
+        set.camera = karakuri_engine::camera::Orbit {
+            radius: 6.0,
+            speed: 0.0,
+            height: 0.0,
+            ..Default::default()
+        };
+        set
+    }
 
-    // And the same five overdraw without complaint.
-    let mut set = build(&gpu, &five, Layering::Overdraw);
-    let px = frame(&gpu, &mut set);
-    assert!(
-        total(&px, 0) > 1.0,
-        "five renderers drew nothing when overdrawing"
-    );
+    /// RGBA f32 per texel, after one frame.
+    fn frame(gpu: &Gpu, set: &mut Set) -> Vec<f32> {
+        let present = Present::new(&gpu.device, wgpu::TextureFormat::Rgba16Float, W, H);
+        set.prepare(&gpu.queue, 1, &Signals::default());
+
+        let bytes_per_row = W * 8;
+        let readback = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("readback"),
+            size: u64::from(bytes_per_row * H),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        set.render(&mut encoder, present.hdr_view(), 1);
+        encoder.copy_texture_to_buffer(
+            present.hdr_texture().as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(bytes_per_row),
+                    rows_per_image: Some(H),
+                },
+            },
+            wgpu::Extent3d {
+                width: W,
+                height: H,
+                depth_or_array_layers: 1,
+            },
+        );
+        gpu.queue.submit([encoder.finish()]);
+
+        let slice = readback.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
+        gpu.device.poll(wgpu::PollType::Wait).expect("poll");
+        let data = slice.get_mapped_range();
+        let out: Vec<f32> = data
+            .chunks_exact(2)
+            .map(|b| f16(u16::from_le_bytes([b[0], b[1]])))
+            .collect();
+        drop(data);
+        readback.unmap();
+        out
+    }
+
+    fn f16(bits: u16) -> f32 {
+        let sign = f32::from_bits(u32::from(bits & 0x8000) << 16);
+        let exp = (bits >> 10) & 0x1f;
+        let mant = u32::from(bits & 0x3ff);
+        let v = match exp {
+            0 => f32::from_bits(mant << 13) * 2.0f32.powi(-112),
+            0x1f => f32::from_bits(0x7f80_0000 | (mant << 13)),
+            _ => f32::from_bits(((u32::from(exp) + 112) << 23) | (mant << 13)),
+        };
+        f32::from_bits(v.to_bits() | sign.to_bits())
+    }
+
+    /// Sum of one channel over the frame — how much of a colour reached the mix.
+    fn total(px: &[f32], channel: usize) -> f64 {
+        px.chunks_exact(4).map(|t| f64::from(t[channel])).sum()
+    }
+
+    // ---------------------------------------------------------------------------
+
+    /// **A merge of one is exact.** The mix of a single input at unity is
+    /// `0.0 + 1.0 * src`, which is `src` for every finite texel — so a Set built to
+    /// composite and a Set built to overdraw draw the same frame when there is only
+    /// one renderer to fold.
+    ///
+    /// Byte-for-byte rather than within a tolerance, because "exact" is the claim.
+    /// It is what makes adding a second renderer later a change to the second
+    /// renderer and not to the first.
+    #[test]
+    fn a_merge_of_one_input_hands_the_material_on_unchanged() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let one = [dots("only", (0.4, 0.7, 0.2))];
+        let over = frame(&gpu, &mut build(&gpu, &one, Layering::Overdraw));
+        let composited = frame(&gpu, &mut build(&gpu, &one, Layering::Composite));
+
+        assert_eq!(over.len(), composited.len());
+        let differing = over
+            .iter()
+            .zip(&composited)
+            .filter(|(a, b)| a.to_bits() != b.to_bits())
+            .count();
+        assert_eq!(
+            differing,
+            0,
+            "{differing} of {} channels differ",
+            over.len()
+        );
+    }
+
+    /// **Additive renderers agree either way**, which is what says the node is
+    /// wired correctly rather than merely producing a picture. Overdraw accumulates
+    /// the second renderer onto the first's target through its blend state;
+    /// compositing gives each a cleared target and adds them in the fold. Addition
+    /// is addition, and the order is the draw order both times.
+    ///
+    /// Within a tolerance rather than exactly, because the two take the sum in
+    /// different places: overdraw adds in the blend unit at `f16`, and compositing
+    /// adds in the shader at `f32` and stores once. The agreement is the claim; the
+    /// last bits are not.
+    #[test]
+    fn additive_renderers_composite_to_what_they_overdraw_to() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let two = [dots("warm", (0.5, 0.2, 0.0)), dots("cool", (0.0, 0.2, 0.5))];
+        let over = frame(&gpu, &mut build(&gpu, &two, Layering::Overdraw));
+        let composited = frame(&gpu, &mut build(&gpu, &two, Layering::Composite));
+
+        for channel in 0..3 {
+            let (a, b) = (total(&over, channel), total(&composited, channel));
+            assert!(a > 1.0, "channel {channel} is empty in the overdrawn frame");
+            assert!(
+                (a - b).abs() < a * 0.01,
+                "channel {channel}: overdraw totals {a} and compositing totals {b}"
+            );
+        }
+    }
+
+    /// **Each input has its own edge**, which is the whole reason to pay for a
+    /// target apiece. Pulling one renderer's opacity to zero takes its colour out
+    /// of the frame and leaves the other's exactly where it was — the second half
+    /// being what separates a per-input fader from a fader on the Set.
+    #[test]
+    fn an_inputs_own_fader_reaches_only_that_input() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let two = [dots("warm", (0.5, 0.0, 0.0)), dots("cool", (0.0, 0.0, 0.5))];
+        let mut set = build(&gpu, &two, Layering::Composite);
+        let full = frame(&gpu, &mut set);
+        let (warm, cool) = (total(&full, 0), total(&full, 2));
+        assert!(
+            warm > 1.0 && cool > 1.0,
+            "both renderers must reach the frame first"
+        );
+
+        assert!(
+            set.set_input(
+                1,
+                Input {
+                    opacity: 0.0,
+                    ..Input::unity()
+                }
+            ),
+            "this Set draws with two renderers"
+        );
+        let muted = frame(&gpu, &mut set);
+        assert!(
+            total(&muted, 2) < cool * 0.01,
+            "the silenced input still reached the mix"
+        );
+        assert!(
+            (total(&muted, 0) - warm).abs() < warm * 0.01,
+            "silencing one input moved the other"
+        );
+
+        // And half is half: a fader's middle is the middle, which an on/off test
+        // cannot see.
+        assert!(set.set_input(
+            1,
+            Input {
+                opacity: 0.5,
+                ..Input::unity()
+            }
+        ));
+        let half = total(&frame(&gpu, &mut set), 2);
+        assert!(
+            (half - cool * 0.5).abs() < cool * 0.05,
+            "half opacity gave {half} where half of {cool} was due"
+        );
+    }
+
+    /// **The targets are frame-sized and a Set is built before it is sized**, so a
+    /// merge that did not follow a resize would fold one-texel inputs into a full
+    /// frame for the rest of the run. Drawing at two sizes is the whole test.
+    #[test]
+    fn the_merge_targets_follow_a_resize() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let two = [dots("warm", (0.5, 0.0, 0.0)), dots("cool", (0.0, 0.0, 0.5))];
+        let mut set = build(&gpu, &two, Layering::Composite);
+        let small = total(&frame(&gpu, &mut set), 0);
+        assert!(small > 1.0, "nothing was drawn at the first size");
+
+        // `frame` reads back at W by H, so the readback still matches; what changes
+        // is what the merge allocated between the two.
+        set.resize(&gpu.device, W * 2, H * 2);
+        set.resize(&gpu.device, W, H);
+        let again = total(&frame(&gpu, &mut set), 0);
+        assert!(
+            (again - small).abs() < small * 0.01,
+            "after a resize and back the frame totals {again} where it totalled {small}"
+        );
+    }
+
+    /// **An L5 folds at most as many inputs as its shader binds**, and more is
+    /// refused rather than truncated.
+    ///
+    /// `shaders/composite.wgsl` declares four textures, which is the same number a
+    /// deck holds and for the same reason. A Set that quietly dropped its fifth
+    /// renderer would draw a picture nobody asked for, with no error and no log —
+    /// and the fifth is the one an author added last, so it is the one they are
+    /// looking at.
+    ///
+    /// **Overdrawing has no such limit**, which is the other half: the renderers
+    /// share one attachment and run in order, so a hundred of them cost a hundred
+    /// passes and one target. The refusal is about compositing alone.
+    #[test]
+    fn compositing_refuses_more_renderers_than_an_l5_can_fold() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let five: Vec<String> = (0..5)
+            .map(|i| dots(&format!("r{i}"), (0.1 * i as f32, 0.0, 0.0)))
+            .collect();
+
+        let err = {
+            let compiled: Vec<Checked> = five.iter().map(|s| compile(s)).collect();
+            let refs: Vec<&Checked> = compiled.iter().collect();
+            Set::build_many(
+                &gpu.device,
+                &gpu.queue,
+                &[(&compile(GRID), 16)],
+                &[],
+                &[],
+                &[],
+                &refs,
+                Layering::Composite,
+                5,
+                &[],
+                karakuri_engine::set::Wiring::default(),
+            )
+            .err()
+            .expect("five inputs is one more than an L5 folds")
+        };
+        let message = err.to_string();
+        assert!(message.contains('5') && message.contains('4'), "{message}");
+        assert!(
+            message.contains("overdraw"),
+            "the hint does not offer the layering that has no limit: {message}"
+        );
+
+        // And the same five overdraw without complaint.
+        let mut set = build(&gpu, &five, Layering::Overdraw);
+        let px = frame(&gpu, &mut set);
+        assert!(
+            total(&px, 0) > 1.0,
+            "five renderers drew nothing when overdrawing"
+        );
+    }
 }

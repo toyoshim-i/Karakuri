@@ -159,6 +159,8 @@ number; new records continue from the end.
 | [ADR-0137](0137-an-unfoldable-default-writes-the-key-absent-not-the-record-absent.md) | An unfoldable default writes the key absent, not the record absent | 2026-08-22 | accepted |
 | [ADR-0138](0138-a-model-names-a-set-not-a-hash.md) | A model names a Set, not a hash | 2026-08-22 | accepted |
 | [ADR-0139](0139-a-card-states-what-a-procedure-declares-and-not-what-a-set-turned-it-to.md) | A card states what a procedure declares, and not what a Set turned it to | 2026-08-22 | accepted |
+| [ADR-0140](0140-a-gpu-test-lives-under-mod-gpu-and-the-rule-is-enforced-both-ways.md) | A GPU test lives under `mod gpu`, and the rule is enforced both ways | 2026-08-22 | accepted |
+| [ADR-0141](0141-a-gpu-test-with-no-adapter-fails-rather-than-skipping.md) | A GPU test with no adapter fails rather than skipping | 2026-08-22 | accepted |
 
 ## Retired numbers
 
