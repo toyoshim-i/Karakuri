@@ -37,10 +37,10 @@ number; new records continue from the end.
 | [ADR-0015](0015-a-measurement-carries-how-it-was-taken.md) | A measurement carries how it was taken | 2026-07-25 | accepted |
 | [ADR-0016](0016-agents-leave-work-in-the-tree-and-the-reviewer-commits.md) | Agents leave work in the tree; the reviewer commits | 2026-07-25 | accepted |
 | [ADR-0017](0017-an-invariant-that-can-be-tested-is-a-test.md) | An invariant that can be tested is a test, not a sentence | 2026-07-25 | accepted |
-| [ADR-0018](0018-three-documents-three-jobs.md) | Three documents, three jobs | 2026-07-26 | **superseded by ADR-0000** |
+| [ADR-0018](0018-three-documents-three-jobs.md) | Three documents, three jobs | 2026-07-26 | accepted |
 | [ADR-0019](0019-exposure-is-three-things-and-none-stands-in-for-another.md) | Exposure is three things, and none of them stands in for another | 2026-07-26 | accepted |
 | [ADR-0020](0020-a-corpus-expresses-taste-and-never-a-missing-feature.md) | A corpus expresses taste, and never a missing feature | 2026-07-26 | accepted |
-| [ADR-0021](0021-a-palette-is-the-library-filtered-not-a-new-object.md) | A palette is the library filtered, not a new object | 2026-07-26 | accepted |
+| [ADR-0021](0021-a-palette-is-the-library-filtered-not-a-new-object.md) | A palette is the library filtered, not a new object | 2026-07-26 | **superseded by ADR-0133** |
 | [ADR-0022](0022-revision-goes-param-then-range-then-regeneration.md) | Revision goes param, then range, then regeneration | 2026-07-26 | accepted |
 | [ADR-0023](0023-regeneration-is-destructive-in-a-slot-and-safe-in-the-library.md) | Regeneration is destructive in a slot and non-destructive in the library | 2026-07-26 | accepted |
 | [ADR-0024](0024-each-source-counts-from-zero-and-carries-a-source-attribute.md) | Each source counts from zero and carries a `source` attribute | 2026-07-26 | accepted |
@@ -152,8 +152,10 @@ number; new records continue from the end.
 | [ADR-0130](0130-a-wrapper-that-needs-a-gpu-does-not-excuse-the-decision-inside-it.md) | A wrapper that needs a GPU does not excuse the decision inside it | 2026-08-22 | accepted |
 | [ADR-0131](0131-one-refusal-sentence-per-mistake-across-the-surfaces-that-face-a-person.md) | One refusal sentence per mistake, across the surfaces that face a person | 2026-08-22 | accepted |
 | [ADR-0132](0132-a-rebuild-restates-the-camera-it-was-aimed-with.md) | A rebuild restates the camera it was aimed with | 2026-08-22 | accepted |
+| [ADR-0133](0133-what-was-fed-to-a-generator-is-a-field-not-an-object.md) | What was fed to a generator is a field, not an object | 2026-08-22 | accepted |
 
 ## Retired numbers
+
 
 A superseded record keeps its row above. A **deleted principle** is recorded here, and its number is
 never reused.
