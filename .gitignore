@@ -3,3 +3,7 @@
 .DS_Store
 /.claude/
 .karakuri/
+# Vendor-specific agent files: kept out of the repository, see docs/adr/0129.
+CLAUDE.md
+AGENTS.md
+GEMINI.md

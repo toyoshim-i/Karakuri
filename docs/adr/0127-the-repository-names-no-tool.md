@@ -1,10 +1,10 @@
 ---
 id: 0127
 title: The repository names no tool
-status: accepted
+status: superseded
 date: 2026-08-22
 supersedes: []
-superseded_by: []
+superseded_by: [0129]
 principles: [0043, 0006]
 tags: [process]
 ---
