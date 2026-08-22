@@ -835,6 +835,7 @@ fn a_build_landing_on_a_slot_retires_its_meter() {
             published: Vec::new(),
             l4s: vec![compile(&L4.replace("{{EXPOSURE}}", "0.000"))],
             seed_salt: SEED,
+            camera: karakuri_engine::camera::Orbit::default(),
             salts: Vec::new(),
             params: Vec::new(),
             bindings: Vec::new(),

@@ -185,6 +185,7 @@ fn request_many(l4_srcs: &[&str], capacity: u32, label: &str) -> Request {
         published: Vec::new(),
         l4s: l4_srcs.iter().map(|s| compile(s)).collect(),
         seed_salt: 19274,
+        camera: karakuri_engine::camera::Orbit::default(),
         salts: Vec::new(),
         params: Vec::new(),
         bindings: Vec::new(),
@@ -457,6 +458,61 @@ fn a_swapped_in_set_carries_the_bindings_the_request_stated() {
         "the swapped-in Set lost the binding the request stated"
     );
     assert_eq!(set.bindings()[0].signal, "beat");
+}
+
+/// **A swapped-in Set is aimed where the request says**, and not at
+/// `Orbit::default()`.
+///
+/// The camera is Set state the way the params and the bindings are, and it was
+/// the one piece of it a request did not carry. `Set::build_many` starts every
+/// Set it builds from the default orbit, so a swap silently re-aimed the slot —
+/// and it stayed silent, because the picture still moved and nothing was
+/// refused. Downstream of that, a caller that *records* `Set::camera` — which
+/// is what `karakuri-cli`'s live save does — writes the defaults into a file
+/// the operator asked to keep, so the loss outlives the run.
+///
+/// Asserted on all six numbers rather than on the two a `camera` record spells:
+/// a request that carried half of them would be as wrong as one that carried
+/// none, and only quieter.
+#[test]
+fn a_swapped_in_set_is_aimed_where_the_request_states() {
+    let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
+
+    for _ in 0..3 {
+        h.frame();
+    }
+    // Six numbers no default produces, so a Set aimed by `Orbit::default()`
+    // cannot pass this by accident.
+    let aimed = karakuri_engine::camera::Orbit {
+        radius: 3.25,
+        speed: 0.75,
+        height: -1.5,
+        fov_y: 0.9,
+        near: 0.25,
+        far: 250.0,
+    };
+    let six =
+        |o: &karakuri_engine::camera::Orbit| (o.radius, o.speed, o.height, o.fov_y, o.near, o.far);
+    assert_ne!(
+        six(&h.swap.set().camera),
+        six(&aimed),
+        "the live Set was already aimed there, so this asserts nothing"
+    );
+
+    tx.send(Request {
+        camera: aimed,
+        ..request(L4, SECOND, "aimed")
+    })
+    .expect("worker alive");
+    h.frames_until(is_swapped, "the swap");
+
+    let set = h.swap.set();
+    assert_eq!(set.capacity(), SECOND, "the swap did not land");
+    assert_eq!(
+        six(&set.camera),
+        six(&aimed),
+        "the swapped-in Set was aimed somewhere the request did not ask for"
+    );
 }
 
 /// A build that fails leaves the running Set **completely** untouched: not

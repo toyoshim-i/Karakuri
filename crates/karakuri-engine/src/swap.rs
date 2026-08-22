@@ -294,6 +294,30 @@ pub struct Request {
     /// salts of its own, and every colour in it would change on the next save
     /// of a `.kir` that had nothing to do with the geometry.
     pub salts: Vec<Option<u32>>,
+    /// **The built-in orbit's six numbers**, assigned to the new Set as soon as
+    /// it is built — which is where the startup path puts a `camera` record,
+    /// and before the params for that path's reason.
+    ///
+    /// **Restated on every rebuild**, on exactly the terms the salts and the
+    /// bindings are, and with the sharpest consequence of any of them.
+    /// [`Set::build_many`] starts every Set it builds from `Orbit::default()`,
+    /// so while this field did not exist a `--load-set X --watch` put the
+    /// camera back to its defaults on the first save of any `.kir`, saying
+    /// nothing — and the live save that reads `Set::camera` faithfully then
+    /// wrote those defaults into the operator's next preset. A rebuild that
+    /// lets a value be re-derived is a rebuild that quietly discards what was
+    /// loaded, and here the loss stopped being a wrong picture and became a
+    /// file.
+    ///
+    /// **An `Orbit` rather than an `Option<Orbit>`, unlike the salts above.** A
+    /// `None` salt means something: it derives from `seed_salt` and the
+    /// source's ordinal, which is a different number from any a caller would
+    /// have written. A `None` here would mean nothing — a Set holds a built-in
+    /// camera whatever its files declare, and `build_many` starts it at exactly
+    /// this default, so "no camera stated" and "the default stated" build the
+    /// same Set. A caller that loaded none says so by sending the default,
+    /// which is what it is.
+    pub camera: crate::camera::Orbit,
     /// Applied to the new Set once it is built. Parameter values are the one
     /// piece of Set state that is not structural, so they are the one thing
     /// worth carrying across a swap — and they are carried by being *restated*
@@ -1131,6 +1155,14 @@ fn run_worker(
                 },
             )
             .map(|mut set| {
+                // **The camera the request states, into the node it is about**,
+                // at the point the startup path assigns a `camera` record — see
+                // `Request::camera`. Before the params, as it is there: the
+                // built-in orbit declares no parameters of its own, so nothing
+                // in `params` can address it and the order is not a contest,
+                // but the two paths agreeing about where this lands is what
+                // keeps a rebuilt Set the same Set as a started one.
+                set.camera = request.camera;
                 for write in &request.params {
                     // Addressed or not — `Set::write_param` is the one place
                     // that decides, so this path and the command line's cannot

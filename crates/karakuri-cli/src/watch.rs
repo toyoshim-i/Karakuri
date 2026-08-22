@@ -151,6 +151,28 @@ pub struct Watch {
     /// that were already there keep their colours, and the new one is salted
     /// like a source nobody recorded, because that is what it is.
     salts: Vec<u32>,
+    /// **The six numbers the slot's camera is aimed with**, restated on every
+    /// rebuild rather than left to be taken from the outgoing Set — for the
+    /// reason `Request::bindings` gives, and with the symptom that outlives the
+    /// run: `Set::build_many` starts every Set from `Orbit::default()`, so a
+    /// slot filled by `--load-set` used to lose the camera its file recorded on
+    /// the first save of any `.kir`, and the next live save wrote the defaults
+    /// into a new preset. The picture came back; the file did not.
+    ///
+    /// **One resolved `Orbit`, on `salts`' side of the question above rather
+    /// than `capacity`'s.** A capacity is `Option` because the *new* file may
+    /// declare one, so there is an answer only the rebuild can know; nothing in
+    /// a `.kir` declares the built-in orbit's six numbers, so the run's own are
+    /// the answer for as long as the run lasts and resolving them once at
+    /// startup pins nothing.
+    ///
+    /// **And not an `Option<Orbit>` either**, which is where this parts company
+    /// with both of them: a Set holds a built-in camera whatever its files
+    /// declare and it is built at exactly this default, so a slot that loaded no
+    /// `camera` record carries `Orbit::default()` and states it. "Nothing
+    /// loaded" and "the default loaded" are the same Set, and an `Option` here
+    /// would be a distinction nothing downstream could act on.
+    camera: karakuri_engine::camera::Orbit,
     overrides: Vec<karakuri_engine::ParamWrite>,
     /// The interface, restated on every rebuild for the same reason the
     /// bindings are — and the more urgent one: a `control:` binding whose
@@ -185,10 +207,10 @@ pub struct Watch {
 }
 
 impl Watch {
-    // Nine, where clippy's line is seven. Seven of them are one slot's identity
-    // — its files, its layering, its capacity, its seed, its salts and the
-    // values it was started with — and a struct to carry them would be `Watch`
-    // itself, constructed one field short.
+    // Twelve, where clippy's line is seven. Every one of them is a piece of one
+    // slot's identity — its files, its layering, its capacity, its seed, its
+    // salts, its camera and the values it was started with — and a struct to
+    // carry them would be `Watch` itself, constructed one field short.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         slot: usize,
@@ -198,6 +220,7 @@ impl Watch {
         capacity: Option<u32>,
         seed_salt: u32,
         salts: Vec<u32>,
+        camera: karakuri_engine::camera::Orbit,
         overrides: Vec<karakuri_engine::ParamWrite>,
         published: Vec<karakuri_engine::set::Published>,
         bindings: Vec<Binding>,
@@ -214,6 +237,7 @@ impl Watch {
             capacity,
             seed_salt,
             salts,
+            camera,
             overrides,
             published,
             bindings,
@@ -477,6 +501,12 @@ impl Source for Watch {
             // material, and the material is what changed — not which geometry
             // gets which randomness.
             salts: self.salts.iter().copied().map(Some).collect(),
+            // **The run's own, restated**, like the salts above it and for a
+            // louder reason — see `Watch::camera`. Nothing in the files this
+            // watcher just recompiled says where the built-in camera is
+            // pointing, so a request that left this out would hand the engine a
+            // Set aimed at `Orbit::default()` however the operator loaded it.
+            camera: self.camera,
             params: self.overrides.clone(),
             published: self.published.clone(),
             bindings: self.bindings.clone(),
@@ -498,6 +528,7 @@ mod tests {
             Some(4096),
             1,
             vec![1],
+            karakuri_engine::camera::Orbit::default(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -548,6 +579,7 @@ mod tests {
             Some(4096),
             1,
             vec![1],
+            karakuri_engine::camera::Orbit::default(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -596,6 +628,7 @@ mod tests {
             Some(4096),
             salts[0],
             salts.clone(),
+            karakuri_engine::camera::Orbit::default(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -611,6 +644,63 @@ mod tests {
             request.salts,
             vec![Some(salts[0]), Some(salts[1])],
             "a rebuild handed the engine salts other than the ones the slot is running at"
+        );
+    }
+
+    /// **A rebuild restates the camera the slot is aimed with**, rather than
+    /// leaving the Set it builds to start from `Orbit::default()`.
+    ///
+    /// Nothing in a `.kir` says where the built-in orbit is pointing — a
+    /// `camera` record does, and `--load-set` is what brings one in. So a
+    /// request that left this out handed `Set::build_many` a Set aimed at the
+    /// defaults, and the first save of any file in the slot re-aimed a camera
+    /// the operator had loaded, with nothing said. The live save then recorded
+    /// `Set::camera` faithfully, which is how a wrong picture turned into a
+    /// wrong file.
+    #[test]
+    fn a_rebuild_restates_the_camera_the_slot_is_aimed_with() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let files = ["drift_shell.kir", "soft_points.kir"];
+        let paths: Vec<PathBuf> = files.iter().map(|f| tmp.path().join(f)).collect();
+        // Six numbers no default produces, so a request that let the camera be
+        // re-derived cannot pass by accident.
+        let aimed = karakuri_engine::camera::Orbit {
+            radius: 3.25,
+            speed: 0.75,
+            height: -1.5,
+            fov_y: 0.9,
+            near: 0.25,
+            far: 250.0,
+        };
+        let mut watch = Watch::new(
+            0,
+            crate::Named::bare(paths[0].clone()),
+            paths[1..].iter().cloned().map(crate::Named::bare).collect(),
+            karakuri_engine::set::Layering::Overdraw,
+            Some(4096),
+            1,
+            vec![1],
+            aimed,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        for (file, path) in files.iter().zip(&paths) {
+            std::fs::copy(root.join("examples").join(file), path).expect("copy an example");
+        }
+
+        let request = rebuild(&mut watch).expect("a build");
+        // All six, not the two a `camera` record spells: a rebuild that carried
+        // half of them would be as wrong as one that carried none, and quieter.
+        let six = |o: &karakuri_engine::camera::Orbit| {
+            (o.radius, o.speed, o.height, o.fov_y, o.near, o.far)
+        };
+        assert_eq!(
+            six(&request.camera),
+            six(&aimed),
+            "a rebuild asked for a Set aimed somewhere other than where the slot is aimed"
         );
     }
 
@@ -658,6 +748,7 @@ mod tests {
             Some(32768),
             1,
             vec![1, 2],
+            karakuri_engine::camera::Orbit::default(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -819,6 +910,7 @@ mod tests {
                 Some(4096),
                 1,
                 vec![1],
+                karakuri_engine::camera::Orbit::default(),
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
