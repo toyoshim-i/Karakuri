@@ -11,7 +11,7 @@ index is maintained by hand — see ADR-0000 for when that stops being enough.
 rule it states.
 
 **Reconstruction is in progress.** Records are being recovered in date order from the session
-history that runs from 2026-07-25. Everything through **2026-07-30** is written; the numbering
+history that runs from 2026-07-25. Everything through **2026-07-31** is written; the numbering
 is chronological, so later dates take later numbers.
 
 ## Records
@@ -57,6 +57,17 @@ is chronological, so later dates take later numbers.
 | [ADR-0036](0036-the-first-m2-slice-is-two-sets-mixed-through-a-tone-mapper.md) | The first M2 slice is two Sets, mixed, through a tone mapper | 2026-07-30 | accepted |
 | [ADR-0037](0037-tone-mapping-is-a-uniform-and-the-default-is-chosen-by-looking.md) | Tone mapping is a uniform, and the default is chosen by looking | 2026-07-30 | accepted |
 | [ADR-0038](0038-a-deck-of-one-is-bit-identical-to-a-bare-set.md) | A deck of one is bit-identical to a bare Set | 2026-07-30 | accepted |
+| [ADR-0039](0039-the-artifacts-exposure-returns-to-one-as-a-convention.md) | The artifact's exposure returns to 1.0, as a convention | 2026-07-31 | accepted |
+| [ADR-0040](0040-a-gain-of-zero-means-no-contribution-so-the-slot-is-skipped.md) | A gain of zero means no contribution, so the slot is skipped | 2026-07-31 | accepted |
+| [ADR-0041](0041-a-candidate-is-judged-only-on-frames-it-contributed-to.md) | A candidate is judged only on the frames it contributed to | 2026-07-31 | accepted |
+| [ADR-0042](0042-a-silently-wrong-image-loses-to-a-loud-failure.md) | A silently wrong image loses to a loud failure | 2026-07-31 | accepted |
+| [ADR-0043](0043-the-meter-never-waits-and-the-deck-owns-it.md) | The meter never waits, and the deck owns it | 2026-07-31 | accepted |
+| [ADR-0044](0044-a-test-that-survives-mutation-is-not-a-test.md) | A test that survives mutation is not a test | 2026-07-31 | accepted |
+| [ADR-0045](0045-the-cli-is-an-instrument-not-a-demo.md) | The CLI is an instrument, not a demo | 2026-07-31 | accepted |
+| [ADR-0046](0046-a-flag-writes-into-the-record-it-does-not-invent-one.md) | A flag writes into the record; it does not invent one | 2026-07-31 | accepted |
+| [ADR-0047](0047-a-binding-blends-on-confidence.md) | A binding blends on confidence | 2026-07-31 | accepted |
+| [ADR-0048](0048-four-curves-because-a-fifth-is-a-re-parameterisation.md) | Four curves, because a fifth is a re-parameterisation | 2026-07-31 | accepted |
+| [ADR-0049](0049-slot-means-two-things-and-the-clash-is-recorded.md) | `Slot` means two things, and the clash is recorded rather than resolved | 2026-07-31 | accepted |
 
 ## Retired numbers
 
