@@ -1,7 +1,12 @@
 //! The render graph, Set lifecycle, and pipeline management.
 //!
 //! The invariants here are the ones that break the project if they are broken
-//! later, so they are worth restating where the code lives:
+//! later, so they are worth restating where the code lives. **These are
+//! one-line restatements; the canonical text is one file each in
+//! `docs/principles/`, and where these disagree with it, this comment is the
+//! one that is wrong.** They were kept here rather than replaced by a pointer
+//! because whoever is reading this crate is exactly who needs them, and a link
+//! out of the workspace does not resolve in rendered docs.
 //!
 //! - **Never allocate on the render thread. Never compile shaders on it.**
 //! - Pipelines are double-buffered; swaps happen only on frame boundaries.
