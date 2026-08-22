@@ -136,14 +136,16 @@ impl Router {
         &self.notices
     }
 
+    /// **The keys' own refusal**, from [`crate::no_such_slot`] rather than
+    /// spelled again here. It was spelled again here — with an em dash where the
+    /// keys use a colon — which made a map pointing at slot 9 and a digit key
+    /// pressed at slot 9 two sentences about one mistake. Said once per slot per
+    /// run; see `seen_no_slot`.
     fn report_no_slot(&mut self, slot: usize, slot_count: usize) {
         if !self.seen_no_slot.insert(slot) {
             return;
         }
-        self.notices.push(format!(
-            "no slot {slot} — this deck holds slots 0-{}",
-            slot_count.saturating_sub(1)
-        ));
+        self.notices.push(crate::no_such_slot(slot, slot_count));
     }
 }
 
@@ -345,7 +347,14 @@ mod tests {
             said.extend(r.notices().iter().cloned());
         }
         assert_eq!(said.len(), 2, "{said:?}");
-        assert!(said.iter().any(|s| s.contains("no slot 9")), "{said:?}");
+        // **The keys' own sentence, word for word.** This asked only for
+        // `contains("no slot 9")`, which passed while this module said `no slot
+        // 9 — this deck holds slots 0-3` and every other surface said `no slot
+        // 9: …`. See [`crate::no_such_slot`].
+        assert!(
+            said.iter().any(|s| *s == crate::no_such_slot(9, 4)),
+            "{said:?}"
+        );
         assert!(said.iter().any(|s| s.contains("cc 2")), "{said:?}");
     }
 
