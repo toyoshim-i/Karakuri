@@ -420,8 +420,8 @@ mod tests {
     /// test in this crate reaches for when it needs real material.
     fn one_slot_deck(gpu: &Gpu) -> Deck {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let l1 = crate::compile::load(&root.join("examples/drift_shell.kir")).expect("L1");
-        let l4 = crate::compile::load(&root.join("examples/soft_points.kir")).expect("L4");
+        let (l1, _) = crate::compile::load(&root.join("examples/drift_shell.kir")).expect("L1");
+        let (l4, _) = crate::compile::load(&root.join("examples/soft_points.kir")).expect("L4");
         let set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, 4096, 7).expect("set");
         Deck::new(&gpu.device, vec![HotSwap::fixed(set)], SIZE, SIZE)
     }

@@ -154,17 +154,21 @@ graph LR
         AUDIO[Audio Processing Thread<br>cpal Input & FFT Analyzer]
         WATCH[Watch Worker Thread<br>notify File Watcher]
         MCP[MCP Server Threads<br>JSON-RPC / Agent Interface]
+        SAVE[Save Thread<br>one per live save]
     end
 
     AUDIO -- "Lock-free Queue<br>(AudioFrame & Correction)" --> MAIN
     WATCH -- "File Change Events" --> MAIN
     MCP -- "Commands & Sets" --> MAIN
+    MAIN -- "Material to keep" --> SAVE
+    SAVE -- "Outcome" --> MAIN
 ```
 
 - **Main / Render Thread**: Drives the `winit` event loop and encodes `wgpu` render passes. Must never block or allocate during frame rendering.
 - **Audio Thread**: Runs `cpal` callbacks, FFT band analysis, and beat tracking, sending measurements across a lock-free channel.
 - **Watch Worker Thread**: Monitors `.kir` files via `notify`, triggering background parsing and lowering upon edits.
 - **MCP Server Threads**: Handles incoming Model Context Protocol connections from external AI agents.
+- **Save Thread**: One per live save (the `k` key), spawned and detached. It writes the Set file into the store — which may not happen on a frame. **Nothing here reads a `.kir`**: the run keeps the text it compiled, so what a slot is running is a content hash from launch onward and this thread puts those bytes in the store as it writes the file that names them. That is what makes a save follow the picture rather than the disk, and it is also why a windowed run that saves nothing creates no store at all — only `--record-session`, whose `procedure` records a replay has to resolve, needs the launch sources on disk before the first frame. The outcome comes back over a channel the frame loop drains, and the `save` record is written there rather than at the key press, so a stream never claims a file the disk refused. No frame waits for one; the *run* waits once, at exit, bounded, so a save pressed in the last second is still recorded and a hung disk still cannot prevent quitting. A pool would be machinery for a rate of a few an hour.
 
 ---
 

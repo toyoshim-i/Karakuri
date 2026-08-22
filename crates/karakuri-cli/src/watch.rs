@@ -87,9 +87,22 @@ pub struct Watch {
     /// How many builds this watcher has requested, which with the slot makes
     /// an id no other build in the run shares.
     builds: u64,
-    /// Where to record what was built, when a session is being recorded.
-    /// `None` and nothing here reads or writes a store at all.
-    recording: Option<(
+    /// Where to put what was built, and who to tell. `None` and nothing here
+    /// reads or writes a store at all.
+    ///
+    /// **Wired whenever the run is editable, not only when a session is being
+    /// recorded.** The two were the same switch because the session stream was
+    /// the only reader: [`Built::nodes`] existed to become `procedure` records,
+    /// so there was no reason to store a build nobody would name. A live save
+    /// is the second reader and it wants exactly the same fact — *which sources
+    /// landed* — and it wants it in the ordinary case, which is `--watch` with
+    /// no recording at all. Coupling them meant the one control that saves what
+    /// is on screen worked only for a run that was already recording itself.
+    ///
+    /// Nothing about the session moved with it: `Live::record_procedure` still
+    /// writes a record only when there is a recorder. What changed is that the
+    /// hashes exist either way.
+    stored: Option<(
         std::sync::Arc<karakuri_store::store::Store>,
         std::sync::mpsc::Sender<Built>,
     )>,
@@ -163,11 +176,11 @@ pub struct Watch {
     /// Where every version that compiled is kept, so an edit can be undone.
     /// `None` when no store root was given, which is the offscreen paths.
     ///
-    /// **Separate from `recording`, and not folded into it.** A session
-    /// recording names what reached the *screen*; this keeps what reached the
-    /// *compiler*, and the difference is the whole value — a build that was
-    /// rolled back for costing too much never becomes a `Record::Procedure`
-    /// and is exactly the version an operator wants back.
+    /// **Separate from `stored`, and not folded into it.** That one keeps what
+    /// reached the *screen*; this keeps what reached the *compiler*, and the
+    /// difference is the whole value — a build that was rolled back for costing
+    /// too much never becomes a `Record::Procedure`, never reaches a save, and
+    /// is exactly the version an operator wants back.
     snapshots: Option<crate::history::Shared>,
 }
 
@@ -192,7 +205,7 @@ impl Watch {
     ) -> Watch {
         let mut watch = Watch {
             builds: 0,
-            recording: None,
+            stored: None,
             snapshots: None,
             slot,
             head,
@@ -232,13 +245,13 @@ impl Watch {
 }
 
 impl Watch {
-    /// Record what this watcher builds, into `store`, reported on `tx`.
-    pub fn recording_to(
+    /// Put what this watcher builds into `store`, and report it on `tx`.
+    pub fn storing_to(
         mut self,
         store: std::sync::Arc<karakuri_store::store::Store>,
         tx: std::sync::mpsc::Sender<Built>,
     ) -> Watch {
-        self.recording = Some((store, tx));
+        self.stored = Some((store, tx));
         self
     }
 
@@ -293,12 +306,20 @@ impl Source for Watch {
         let mut compiled = Vec::with_capacity(paths.len());
         for (named, src) in named.iter().zip(&srcs) {
             match compile::check(src) {
-                // **With the name the slot was spelled with.** A watcher used
-                // to hand the sort bare paths, so every rebuild called each
-                // node whatever its procedure declared — harmless while the
-                // only thing a name did was print, and not harmless once an
-                // `edge` resolves against one.
-                Ok(checked) => compiled.push(((*named).clone(), checked)),
+                // **With the name the slot was spelled with, and with the text
+                // it compiled.** A watcher used to hand the sort bare paths, so
+                // every rebuild called each node whatever its procedure
+                // declared — harmless while the only thing a name did was
+                // print, and not harmless once an `edge` resolves against one.
+                // The source rides along for the reason [`crate::Placed`]
+                // gives: everything said about a node afterwards is a function
+                // of the bytes that were compiled, and the file may have moved
+                // by the time anything asks.
+                Ok(checked) => compiled.push((
+                    (*named).clone(),
+                    checked,
+                    std::sync::Arc::from(src.as_str()),
+                )),
                 Err(report) => {
                     eprintln!(
                         "{}:\n{report}\nslot {slot} unchanged; its Set is still running",
@@ -348,16 +369,18 @@ impl Source for Watch {
                     // drops the ones that did not change, which is what keeps
                     // the untouched renderers' chains from becoming rows of
                     // identical files.
-                    // **`placed` and `srcs` are both in the slot's file
-                    // order**, which the sort deliberately did not disturb: what
-                    // a version is recorded under is the layer and the position
-                    // it was *built* at, and which file it came from is how it
-                    // is found again.
-                    for (node, src) in placed.iter().zip(&srcs) {
+                    // **The bytes come off the node, not off a second list
+                    // zipped onto it.** `placed` carries the text each file was
+                    // compiled from — see [`crate::Placed`] — so what a version
+                    // is filed under and what is written into it are read from
+                    // one place. Zipping `srcs` back on was a second way to
+                    // pair a node with its source, correct only for as long as
+                    // the sort kept file order.
+                    for node in &placed {
                         let layer = crate::setfile::kind_name(node.layer);
                         let index = node.index as usize;
                         if let Err(e) =
-                            snapshots.record(slot, layer, index, &node.proc, src.as_bytes())
+                            snapshots.record(slot, layer, index, &node.proc, node.source.as_bytes())
                         {
                             eprintln!("slot {slot}: this version is not in the edit history: {e}");
                         }
@@ -380,30 +403,30 @@ impl Source for Watch {
         // **On this thread, which is the worker's.** A few artifacts of a few
         // kilobytes, written where a whole Set is about to be compiled anyway
         // — rather than on the frame that installs it.
-        if let Some((store, tx)) = &self.recording {
-            let stored: Result<Vec<_>, _> = srcs
+        if let Some((store, tx)) = &self.stored {
+            // **Each node put from its own carried source**, which is also what
+            // its address is derived from — see [`crate::Placed::put`]. This
+            // used to put `srcs` and zip the hashes back onto `placed` by
+            // position, which paired a node with its bytes a second way.
+            let stored: Result<Vec<_>, _> = placed
                 .iter()
-                .map(|src| store.put_artifact(src.as_bytes()))
+                .map(|node| {
+                    node.put(store)
+                        .map(|hash| (crate::setfile::kind_name(node.layer), node.index, hash))
+                })
                 .collect();
             match stored {
-                Ok(hashes) => {
-                    // **Every hash takes the address the sort gave its file**,
-                    // the head included. `placed` and `srcs` are both in file
-                    // order, which the sort deliberately did not disturb, so
-                    // zipping the hashes onto it names each node the way a
-                    // `procedure` record does.
-                    let nodes = placed
-                        .iter()
-                        .zip(&hashes)
-                        .map(|(node, hash)| {
-                            (crate::setfile::kind_name(node.layer), node.index, *hash)
-                        })
-                        .collect();
+                Ok(nodes) => {
                     let _ = tx.send(Built { id, nodes });
                 }
+                // **Named against both readers.** A build whose sources are
+                // not in the store is one a session cannot name and one a live
+                // save cannot write down — and an operator who has just pressed
+                // save needs to know which of those they are looking at.
                 Err(e) => eprintln!(
-                    "slot {slot}: this build is not in the session's record: {e} — \
-                     a replay will show the procedure it started with"
+                    "slot {slot}: this build's sources are not in the store: {e} — \
+                     a replay will show the procedure it started with, and a save \
+                     of this slot will write the files it started from"
                 ),
             }
         }
@@ -691,7 +714,7 @@ mod tests {
             karakuri_store::store::Store::open(store_dir.path()).expect("store"),
         );
         let (tx, rx) = std::sync::mpsc::channel();
-        let mut watch = watch.recording_to(store, tx);
+        let mut watch = watch.storing_to(store, tx);
         let request = rebuild(&mut watch).expect("the stack compiles, so it rebuilds");
 
         let rest: Vec<crate::Named> = paths[1..]

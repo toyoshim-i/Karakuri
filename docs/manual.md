@@ -194,6 +194,11 @@ the colours and the pairing it had.
 What a Set file still leaves behind is the *layering*: `--merge` is not one of the records,
 so a saved Set loads as overdraw. That one stays on the command line.
 
+**And you do not have to decide before you start.** `--save-set` writes the material and
+stops, which is right for building a preset and no use once the set is running; the `k` key
+writes the focused slot as a Set file *from* a running session, named after the moment you
+pressed it. See the keys below.
+
 ---
 
 ## Reference
@@ -320,9 +325,58 @@ so a saved Set loads as overdraw. That one stays on the command line.
 | | |
 |---|---|
 | `a` | size the window to the canvas, 1:1 |
+| `k` | **keep the focused slot** — write what it is playing right now as a Set file |
 | `s` | print the status line |
 | `h` | print the keys |
 | `esc` | quit |
+
+**`k` is the one that saves your work mid-set.** It writes the focused slot's material as a
+Set file named after the moment you pressed it — `20260816-143052-271`, local time to the
+millisecond, on the same convention the edit history uses and for the same reason: a key
+press cannot type a name, so the thing you will look for it by is when you saved it. The
+line saying where it went arrives a moment later, because the file is written on a thread of
+its own rather than on a frame. Quitting before it arrives does not lose it: the run waits up
+to five seconds for a save still being written, and says so if it gives up.
+
+What it records is **what is on screen**, and that is the whole difference from `--save-set`:
+
+|  | `--save-set ID` | `k` |
+|---|---|---|
+| when | before a run, and the run then stops | during one, as often as you like |
+| named by | you | the clock |
+| which slot | slot 0 | the focused one |
+| the values | what the flags say | what the Set is playing — a param you moved, a capacity or a salt a reloaded Set brought with it |
+| the sources | the files named on the command line, read now | the versions **on screen**, by content hash |
+
+That last row is the one worth understanding, and it is why `k` never reads a `.kir` at save
+time. A path and the picture it produced come apart in three ordinary ways. Under `--watch` a
+build that compiles and is then refused for costing too much leaves the newer `.kir` sitting
+on disk. An edit that does not compile stays on disk until you fix it, and the slot goes on
+drawing the last version that did. And without `--watch` nothing picks a file up at all, so
+anything that rewrites one — your editor, or an `--mcp` client with no watcher behind it — is
+invisible to the run for as long as it lasts. **In all three, what `k` writes is the
+picture.** The run keeps the text it compiled and addresses every node by its content hash
+before the first frame, and every build that lands is stored and addressed the same way — so
+what a slot is running is a hash from the first frame to the last, which is also the only
+reason it can be saved at all when the bytes on screen are on no disk under any name. There
+is a fourth way a path stops being true and it is the one `k` never sees: a `.kir` rewritten
+in the seconds between the compile and the first frame. The bytes the deck was built from are
+the ones it kept.
+
+**One slot cannot be kept**: one filled by `--load-set` in a run with **neither `--watch`
+nor `--mcp`**. Its material came out of the store by hash with no files behind it and nothing
+in the run that could rebuild it, so `k` refuses and names the set it came from. Either flag
+at startup is enough — both put the Set's procedures into the scratch as real files — and
+that slot then saves like any other.
+
+Reload it exactly as you would any other preset:
+
+```sh
+cargo run -p karakuri-cli -- --load-set 20260816-143052-271
+```
+
+`--merge` is still not one of the records, so a saved Set loads as overdraw whichever way it
+was written.
 
 ### The status line
 
@@ -374,7 +428,7 @@ Three places, and only one of them is written to.
 | | where | who writes it |
 |---|---|---|
 | **App presets** | `examples/` | nobody. They ship with the program |
-| **Your presets** | `<store>/sets/<id>.set.ndjson` | `--save-set`, and nothing else |
+| **Your presets** | `<store>/sets/<id>.set.ndjson` | `--save-set`, and the `k` key |
 | **Scratch** | `<store>/scratch/` | `--watch`, `--mcp`, and your editor |
 
 **A run that can be edited copies its material into the scratch and runs from
@@ -395,6 +449,16 @@ A run that *cannot* be edited — `--render`, `--seq`, `--replay`, or a window w
 neither `--watch` nor `--mcp` — copies nothing and creates no directory. It opens
 every file read-only, so there is nothing to protect them from.
 
+**`k` is the one thing that changes that, and only once you press it.** Such a run
+holds the text it compiled in memory and knows what every slot is playing by its
+content hash from the first frame; the bytes go into `<store>/<hash>.kir` at the
+moment a Set file names them, and not before. So the store appears when you keep
+something, and a run you never saved from leaves nothing behind at all. (A run
+with `--watch` or `--mcp` opens the store at startup either way — the scratch
+lives in it.) `--record-session` is the other writer: a session has to be
+replayable, so it puts every slot's starting material in the store before the
+first frame, whether or not anything is ever saved.
+
 **A Set loaded with `--load-set` is materialised here too**, under its procedures'
 own names, even though it has no `.kir` anywhere — it names them by hash and the
 sources come out of the store. So a saved Set can be watched, edited and driven
@@ -406,11 +470,12 @@ cargo run -p karakuri-cli -- --load-set night01 --watch --mcp 8737
 
 That used to be refused, because there was nothing on disk for a model to read.
 
-**What is still missing is the other end of that loop.** `--save-set` writes
-what the flags say and exits, so there is no way to save the version you like
-*from a running session* — you can load, edit and watch, but keeping the result
-means noting which file in the history you wanted and starting a run from it.
-A control that saves the current material is not built.
+**The other end of that loop is the `k` key.** `--save-set` writes what the
+flags say and exits; `k` writes what the focused slot is playing, right now,
+into `<store>/sets/` under a timestamp. So load, edit, watch, and keep the
+version you liked without leaving the run. What is still missing is the same
+control over MCP: a model that has just rewritten a procedure cannot ask for the
+result to be saved, and has to ask a hand to press the key.
 
 ### The edit history
 

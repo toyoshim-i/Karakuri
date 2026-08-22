@@ -279,3 +279,77 @@ fn png_size(bytes: &[u8]) -> (u32, u32) {
     assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n", "not a PNG");
     (at(16), at(20))
 }
+
+/// **A replay meeting a `save` renders its frames and writes no Set file.**
+///
+/// The one record in the vocabulary whose subject is outside the stream. Every
+/// other record here describes the deck, and obeying it is what replaying
+/// means; obeying this one would mean creating a file in a store nobody asked
+/// this run to touch — under an id that may already exist, holding somebody
+/// else's material. So `--replay` stops being a function from a stream to some
+/// frames.
+///
+/// Three claims, and the third is the one this file's method is for:
+///
+/// - **no file appears** under the id the record names;
+/// - **the skip is said out loud**, naming that id, because a replay that
+///   passed over an outside effect in silence would be the one place in this
+///   program where something did not happen and nothing mentioned it;
+/// - **the frames are unaffected** — byte for byte the same as the same
+///   session without the record. Without that last one, "nothing was written"
+///   would be consistent with a replay that had refused the whole stream.
+#[test]
+fn a_save_record_is_skipped_out_loud_and_writes_nothing() {
+    let dir = scratch("save");
+    let (store, head) = store_with_a_set(&dir);
+    let id = "20260816-143052-271";
+    let save = format!(r#"{{"t":"save","slot":0,"id":"{id}"}}"#);
+
+    write_session(&store, "plain", &head, &[CANVAS, TICK, TICK, TICK]);
+    write_session(
+        &store,
+        "saved",
+        &head,
+        &[CANVAS, TICK, save.as_str(), TICK, TICK],
+    );
+
+    let plain = replay(&store, "plain", &dir.join("plain.png"));
+
+    let out = dir.join("saved.png");
+    let said = run(&[
+        "--store",
+        &store,
+        "--replay",
+        "saved",
+        "--render",
+        out.to_str().expect("utf-8 path"),
+    ]);
+    let saved = std::fs::read(&out).expect("the rendered PNG");
+
+    assert!(
+        !Path::new(&store)
+            .join("sets")
+            .join(format!("{id}.set.ndjson"))
+            .exists(),
+        "a replay wrote a Set file"
+    );
+    // **The whole sentence, not two substrings of it.** Asserting only that
+    // "save" and the id appear is an assertion the in-frame and after-the-last-
+    // tick spellings could drift apart under: both would keep passing while
+    // saying different things about the same event. The words below are one
+    // function's — `skipped_save` — and this is the reader that holds it still.
+    assert!(
+        said.contains(&format!(
+            "a `save` of slot 0 was skipped: a replay writes no Set files. \
+             The material it named is set `{id}`"
+        )),
+        "the skip was silent, or no longer says what a replay does with a \
+         `save` and which id it passed over:\n{said}"
+    );
+    assert_eq!(
+        plain, saved,
+        "the `save` record changed the picture — it is being applied to the deck \
+         rather than passed over"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

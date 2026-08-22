@@ -631,6 +631,18 @@ keys:
              canvas nor a clean crop of it is worse than useless. The canvas
              itself is --canvas and does not move — resizing the window
              changes what you can see and nothing about what is drawn
+  k          keep the focused slot: write what it is playing right now as a
+             Set file, named after the moment you pressed this. The capacities,
+             the params, the bindings, the camera, the seeds and the sources
+             are read off the Set on screen rather than off the flags the run
+             started with, so a param you moved and a `.kir` you rewrote are
+             both in it. Two are not on the Set to read and come from the run
+             instead: the edges, because an edge is consumed where a Set is
+             built and no control rewires one, and each node's name, which
+             belongs to the way the file was spelled rather than to the
+             procedure. The store write happens on a thread of its own and the
+             line saying where it went arrives when it lands. `--save-set` is
+             the same file written before a run instead of during one
   s          print the status line now
   h          print these bindings
   esc        quit
@@ -1988,16 +2000,70 @@ struct Placed {
     proc: String,
     layer: karakuri_ir::Kind,
     index: u32,
+    /// **The text this node was compiled from**, carried from the read that
+    /// produced the `Checked` beside it.
+    ///
+    /// This is the *one* derivation of "what bytes is this node running", and
+    /// everything downstream is a function of it: [`Placed::hash`] is the
+    /// address a live save writes and a `procedure` record names,
+    /// [`Placed::put`] is how those bytes reach the store, and the edit history
+    /// files this same buffer. It used to be re-read from `named.path` by each
+    /// of them, which made the answer whatever the disk happened to hold at the
+    /// moment they asked — and between the compile and the first frame sit the
+    /// adapter request, the deck build, `measure_slots`, and the audio, MIDI,
+    /// tempo and **MCP server** starts. Anything rewriting a `.kir` in that
+    /// window moved the launch hash onto bytes the deck had never compiled; if
+    /// the rewrite did not compile, no watcher ever corrected it, and `k` wrote
+    /// a Set naming a procedure that had never reached the screen and did not
+    /// load back.
+    ///
+    /// **Shared rather than copied**, because a slot's `Placed` list is cloned
+    /// into [`Live::startup`] and crosses onto a save thread; the bytes
+    /// themselves are read once and never again.
+    source: std::sync::Arc<str>,
 }
 
 impl Placed {
-    fn node(&self) -> setfile::Node<'_> {
+    /// **Where this node's source is addressed**, derived from the bytes above
+    /// and from nothing else.
+    ///
+    /// A method rather than a field beside `source`, because a hash is a pure
+    /// function of the bytes: computed here it cannot disagree with them, where
+    /// a stored copy would be a second thing to keep true. It is a few
+    /// kilobytes hashed at launch and again per save, which is not a rate
+    /// anything here is bounded by.
+    fn hash(&self) -> karakuri_store::hash::Hash {
+        karakuri_store::hash::Hash::of(self.source.as_bytes())
+    }
+
+    /// This node as [`setfile::Node`]. **No store and no disk** — the address
+    /// comes off the bytes the compile read.
+    fn node(&self) -> setfile::Node {
         setfile::Node {
-            path: &self.named.path,
+            hash: self.hash(),
             layer: self.layer,
             index: self.index,
-            name: self.named.name.as_deref(),
+            name: self.named.name.clone(),
         }
+    }
+
+    /// **Put this node's source in `store`**, so that a file or a record naming
+    /// [`Placed::hash`] resolves on the way back in.
+    ///
+    /// **Separate from [`Placed::node`], and called later than it.** Knowing
+    /// what a slot is running costs nothing and every windowed run needs it;
+    /// writing the bytes down creates a directory and a file, and only two
+    /// callers need that — a save that actually happened, and a run recording a
+    /// session, whose `procedure` records a replay has to resolve. Folding the
+    /// two together is what made a plain windowed run create a store it was
+    /// never asked for; see [`Running::at_launch`].
+    fn put(
+        &self,
+        store: &karakuri_store::store::Store,
+    ) -> Result<karakuri_store::hash::Hash, String> {
+        store
+            .put_artifact(self.source.as_bytes())
+            .map_err(|e| format!("{}: {e}", self.named.path.display()))
     }
 }
 
@@ -2030,14 +2096,14 @@ impl Placed {
 /// stops, while a rebuild that cannot leaves the Set that *is* running alone.
 /// Each prefixes the slot it is about and decides.
 fn sort_compiled(
-    compiled: Vec<(Named, karakuri_ir::typed::Checked)>,
+    compiled: Vec<(Named, karakuri_ir::typed::Checked, std::sync::Arc<str>)>,
 ) -> Result<(Material, Vec<Placed>), String> {
     // Taken before the loop consumes the list. The "nothing draws" refusal
     // names the file the slot was given, which is the one an operator looks at
     // first — and by then it has been moved from.
     let head = compiled
         .first()
-        .map(|(named, _)| named.path.display().to_string());
+        .map(|(named, ..)| named.path.display().to_string());
     // **A name per node, in the same per-layer shape the engine takes its
     // procedures in.** Not one flat list in node order: that order is the
     // engine's, and a caller that reproduced it would be the second place a
@@ -2049,7 +2115,7 @@ fn sort_compiled(
     let mut fields: Vec<karakuri_ir::typed::Checked> = Vec::new();
     let mut l4s = Vec::new();
     let mut placed = Vec::new();
-    for (named, checked) in compiled {
+    for (named, checked, source) in compiled {
         let name = named.name.clone();
         let proc = checked.name.clone();
         let (layer, index) = match checked.kind {
@@ -2109,6 +2175,7 @@ fn sort_compiled(
             proc,
             layer,
             index: index as u32,
+            source,
         });
     }
     if l4s.is_empty() {
@@ -2151,16 +2218,20 @@ fn sort_slot(slot: usize, l1: &Named, rest: &[Named]) -> (Material, Vec<Placed>)
         l1.path.display(),
         named.join(" + ")
     );
-    let compiled: Vec<(Named, karakuri_ir::typed::Checked)> = std::iter::once(l1)
-        .chain(rest)
-        .map(|named| match compile::load(&named.path) {
-            Ok(checked) => (named.clone(), checked),
-            Err(report) => {
-                eprintln!("{report}");
-                std::process::exit(1);
-            }
-        })
-        .collect();
+    // **The text each file was compiled from travels with it**, because it is
+    // the only copy this run will ever make of those bytes — see [`Placed`],
+    // which is where it lands and why re-reading the path later was wrong.
+    let compiled: Vec<(Named, karakuri_ir::typed::Checked, std::sync::Arc<str>)> =
+        std::iter::once(l1)
+            .chain(rest)
+            .map(|named| match compile::load(&named.path) {
+                Ok((checked, src)) => (named.clone(), checked, std::sync::Arc::from(src.as_str())),
+                Err(report) => {
+                    eprintln!("{report}");
+                    std::process::exit(1);
+                }
+            })
+            .collect();
     match sort_compiled(compiled) {
         Ok(sorted) => sorted,
         Err(e) => {
@@ -2178,6 +2249,53 @@ fn sort_slot(slot: usize, l1: &Named, rest: &[Named]) -> (Material, Vec<Placed>)
 /// Offscreen only. A window would add a clock back at the one place a replay
 /// must not have one: `RedrawRequested` arrives when the display says so, and a
 /// replay's frames belong to the stream.
+/// **What to say about the records after the last tick.**
+///
+/// Said rather than dropped, on the same terms as everything else here: a
+/// session that ended between frames recorded what the operator last did, and
+/// nothing renders it because there is no frame it belongs to.
+///
+/// **A `save` among them is named**, which counting alone did not do. The rule
+/// in `docs/ir-spec.md` is that a replay says *which* effects outside the stream
+/// it skipped, and this path was obeying half of it: a `save` inside a frame was
+/// named and a `save` after the last tick was folded into a number. That is the
+/// wrong half to lose, because the last thing an operator does before quitting
+/// is press `k` — a save at the end of a set lands here rather than inside a
+/// frame, so the same key press was reported two different ways depending on
+/// whether another frame followed it.
+/// **What a replay says about a `save` it passed over**, in one place.
+///
+/// A save reaches a replay two ways — inside a frame, and after the last tick —
+/// and each used to spell this sentence for itself. Two literals of one
+/// sentence is the shape this codebase keeps removing, and the only test
+/// reaching either of them asserted that the output contained "save" and the
+/// id, so the two were free to drift apart without anything failing. `ir-spec`
+/// requires that a replay say *which* effects outside the stream it skipped;
+/// what it does not require is that the answer depend on where in the stream
+/// the record sat.
+fn skipped_save(slot: u8, id: &str) -> String {
+    format!(
+        "  a `save` of slot {slot} was skipped: a replay writes no Set files. \
+         The material it named is set `{id}`"
+    )
+}
+
+fn trailing_notes(trailing: &[Record]) -> Vec<String> {
+    if trailing.is_empty() {
+        return Vec::new();
+    }
+    let mut notes = vec![format!(
+        "{} record{} after the last tick belong to no frame and are not replayed",
+        trailing.len(),
+        if trailing.len() == 1 { "" } else { "s" }
+    )];
+    notes.extend(trailing.iter().filter_map(|record| match record {
+        Record::Save { slot, id } => Some(skipped_save(*slot, id)),
+        _ => None,
+    }));
+    notes
+}
+
 fn replay_session(args: &Args, id: &str) {
     let store = open_store(args);
     let lines = match store.read_session(id) {
@@ -2198,15 +2316,8 @@ fn replay_session(args: &Args, id: &str) {
     for note in &loaded.notes {
         eprintln!("  {note}");
     }
-    // Said rather than dropped, on the same terms as everything else here: a
-    // session that ended between frames recorded what the operator last did,
-    // and nothing renders it because there is no frame it belongs to.
-    if !stream.trailing.is_empty() {
-        eprintln!(
-            "  {} record{} after the last tick belong to no frame and are not replayed",
-            stream.trailing.len(),
-            if stream.trailing.len() == 1 { "" } else { "s" }
-        );
+    for note in trailing_notes(&stream.trailing) {
+        eprintln!("  {note}");
     }
 
     let Some(out) = args.render_to.clone().or(args.seq_to.clone()) else {
@@ -2417,6 +2528,24 @@ fn replay_session(args: &Args, id: &str) {
                     if !changed.contains(&slot) {
                         changed.push(slot);
                     }
+                    continue;
+                }
+                // **A replay is a sandbox, and this is the record that makes
+                // that a rule rather than a description.** Every other record
+                // here describes the deck, and obeying it is what replaying
+                // means; a `save` describes a file in a store, and obeying it
+                // would mean writing into an id that already exists in a
+                // library nobody asked this run to touch — so `--replay` would
+                // stop being a function from a stream to some frames.
+                //
+                // **Said, not silently dropped.** `load_set` prints every note
+                // it could not honour and the session writer counts the batches
+                // it lost; a replay that skipped an outside effect in silence
+                // would be the one place in this program where something
+                // happened and nothing said so. The id is named because it is
+                // what an operator would go and load by hand.
+                if let karakuri_store::record::Record::Save { slot, id } = record {
+                    eprintln!("{}", skipped_save(*slot, id));
                     continue;
                 }
                 apply_replayed(deck, &mut look, record);
@@ -2679,11 +2808,21 @@ fn session_head(
     };
     let material = format!("{id}-material");
     let camera = karakuri_engine::camera::Orbit::default();
+    // **Every source into the store before the file that references them.**
+    // The writer takes hashes now — see `setfile::Node` — and this is the
+    // caller whose paths are still exactly what the run compiled a moment ago.
+    let nodes = match saving_nodes(store, nodes) {
+        Ok(nodes) => nodes,
+        Err(e) => {
+            eprintln!("karakuri-cli: writing the session's material: {e}");
+            std::process::exit(2);
+        }
+    };
     if let Err(e) = setfile::save(
         store,
         &material,
         setfile::Saving {
-            nodes: &saving_nodes(nodes),
+            nodes: &nodes,
             capacities: &saving_capacities(args, l1s),
             params: &args.overrides,
             bindings: &args.bindings,
@@ -2711,9 +2850,290 @@ fn session_head(
     }
 }
 
-/// One slot's nodes as the records they will be written as.
-fn saving_nodes(placed: &[Placed]) -> Vec<setfile::Node<'_>> {
-    placed.iter().map(Placed::node).collect()
+/// **Every slot's launch sources into the store, because this run records one.**
+///
+/// A rollback onto the launch version writes `procedure` records naming those
+/// hashes — see [`Running::rolled_back`] — and a replay meeting them resolves
+/// each by reading the artifact back. A record naming bytes nobody kept is the
+/// same silence as no record at all, so a recorded run owes the store those
+/// bytes before the first frame.
+///
+/// **And only a recorded run owes them**, which is the judgement this function
+/// exists to hold. The seeding used to happen for every windowed run on exactly
+/// this reasoning, and the reasoning does not reach that far: a run with no
+/// recorder names no hash anywhere outside itself, and a save that does name
+/// one puts its own bytes as it writes the file — see [`Sources::into_nodes`].
+/// What the wider version cost was a `.karakuri` directory created by a plain
+/// windowed run, which `docs/manual.md` promises does not happen.
+///
+/// [`session_head`] has already put slot 0's material here on its way past;
+/// `put_artifact` is content-addressed, so this repeats nothing and exists for
+/// the other slots, which a session head cannot describe but a `procedure`
+/// record can still name.
+///
+/// **Reported and not fatal.** The recorder itself is fatal on failure because
+/// a run that continued would be a performance nobody can replay with nothing
+/// saying so; this is narrower — one slot's *rollback* would be unresolvable —
+/// and the sentence is the saying.
+fn seed_store_for_replay(store: &karakuri_store::store::Store, placed: &[Vec<Placed>]) {
+    for (slot, nodes) in placed.iter().enumerate() {
+        for node in nodes {
+            if let Err(e) = node.put(store) {
+                eprintln!(
+                    "  slot {slot}: {e} — a rollback of this slot onto the version it \
+                     launched with will name a source this session's replay cannot resolve"
+                );
+            }
+        }
+    }
+}
+
+/// **Where one slot's sources come from at save time**: the hashes of what it is
+/// running, and nothing else.
+///
+/// A slot is running a version whose bytes need not be on disk under any name.
+/// A build rolled back for costing too much leaves a *newer* `.kir` behind it,
+/// an edit that fails to compile stays on disk untouched, and a run without
+/// `--watch` never picks a file up at all — so the path and the picture can
+/// disagree in three ordinary ways, and in each of them a save that re-read the
+/// path would write down a version nobody had seen. The hash is what still
+/// points at what is on screen, which is why it is the *only* thing this reads
+/// and why every slot has one from launch — see [`Running::at_launch`]. The
+/// bytes behind a launch hash travel with it, because on a run that has saved
+/// nothing they exist nowhere else; see [`SavedNode::source`].
+///
+/// `None` is a slot with no address to name: one filled straight from a Set file
+/// with nothing to watch it, or one that has just taken a build whose sources
+/// could not be stored and said so at the time. It saves nothing rather than
+/// guessing, and `Live::save_set` says which it was.
+///
+/// **The operator's names are zipped on by position.** Both lists are in the
+/// order the files were spelled — `sort_slot` keeps that deliberately and the
+/// watcher zips its hashes onto the same list — so entry `n` of one is entry
+/// `n` of the other. A name cannot come from the hashes: it belongs to the
+/// *use* rather than to the procedure, so nothing a `procedure` record carries
+/// could hold it.
+///
+/// A free function rather than a method, so that the choice — which is the
+/// whole of what a live save gets right or wrong about what is on screen — can
+/// be checked without a window and a GPU.
+fn live_sources(playing: Option<&Nodes>, startup: &[Placed]) -> Sources {
+    Sources(playing.map_or_else(Vec::new, |nodes| {
+        nodes
+            .iter()
+            .enumerate()
+            .map(|(at, (layer, index, hash))| {
+                let placed = startup.get(at);
+                SavedNode {
+                    layer,
+                    index: *index,
+                    hash: *hash,
+                    name: placed.and_then(|p| p.named.name.clone()),
+                    // **Carried only where the address says these are the bytes
+                    // on screen.** Equal hashes mean the slot is still running
+                    // what it launched with at this node, so the compiled text
+                    // this process is holding is what the file will reference
+                    // and the store has to be given it. Unequal means a build
+                    // put that version there, and the watcher stored it as it
+                    // built it — there is nothing here to add.
+                    source: placed
+                        .filter(|p| p.hash() == *hash)
+                        .map(|p| std::sync::Arc::clone(&p.source)),
+                }
+            })
+            .collect()
+    }))
+}
+
+/// **What every slot is running, and what a rollback would bring back.**
+///
+/// One representation of "what bytes is this node running", held per slot as the
+/// addresses a `procedure` record names — so a slot holding a chain and two
+/// geometries has a line for each rather than an L1 and some renderers.
+///
+/// **It is seeded before the first frame**, which is the property [`Sources`]
+/// leans on: every slot with files behind it has a hash from the outset. It was
+/// previously seeded from nothing and filled in only by the watcher, so a slot
+/// nothing had rebuilt had no hash anywhere and the live saver reached for the
+/// *paths* instead. That gave the question two answers, and they disagree in
+/// every state where something has rewritten a file the run is not drawing
+/// from. A slot that is still `None` here is one with no files behind it at
+/// all — see [`Running::at_launch`] — and it saves nothing rather than guessing.
+///
+/// **A type of its own rather than two fields on `Live`**, because the pair is
+/// one fact with one transition rule: a swap moves `playing` into `previous`, a
+/// rollback moves it back, and the two halves are never right apart. It is also
+/// what lets the transition be tested — the whole of it happens without a
+/// window, a GPU or a governor.
+///
+/// **And the whole rule is in here**, which is a repair rather than a
+/// restatement: the caller used to decide that a build it could not name was
+/// not a swap at all, so it skipped the one half and took the other, and the
+/// pair came apart in exactly the way this paragraph says it cannot. See
+/// [`Running::landed`].
+struct Running {
+    playing: Vec<Option<Nodes>>,
+    /// What a rollback restores, and the only way to name it: a rollback brings
+    /// back a Set the stream never named again.
+    previous: Vec<Option<Nodes>>,
+}
+
+impl Running {
+    /// **Seed every slot from the material the run compiled**, addressed by the
+    /// bytes that compile read.
+    ///
+    /// **At launch and for every windowed run**, not on `editable()`. A run with
+    /// neither `--watch` nor `--mcp` is exactly the run where nothing will ever
+    /// pick an edit up, so it is the run whose disk is most free to drift away
+    /// from its picture — gating on `editable()` would leave that hole open.
+    ///
+    /// **No store, no disk, and nothing that can fail.** This used to open the
+    /// store and write one artifact per node, which cost a plain windowed run a
+    /// `.karakuri` directory it had never asked for — `docs/manual.md` says such
+    /// a run "copies nothing and creates no directory", and it did until this
+    /// function existed. The reason given for writing at launch was that a
+    /// rollback onto the launch version emits `procedure` records naming these
+    /// hashes and a replay must resolve them; that is true, and it is true only
+    /// of a run with a recorder. So the bytes go in where a recorder is opened
+    /// (see `App::resumed`) and where a save actually happens (see
+    /// [`Sources::into_nodes`]), and a run that does neither writes nothing.
+    ///
+    /// It also used to *re-read* each `.kir` here, seconds after the compile
+    /// that produced the deck. [`Placed::source`] is why it no longer can.
+    fn at_launch(placed: &[Vec<Placed>], slots: usize) -> Running {
+        let mut playing: Vec<Option<Nodes>> = vec![None; slots];
+        for (slot, nodes) in placed.iter().enumerate().take(slots) {
+            if nodes.is_empty() {
+                continue;
+            }
+            playing[slot] = Some(stored_nodes(nodes.iter().map(Placed::node).collect()));
+        }
+        Running {
+            previous: vec![None; playing.len()],
+            playing,
+        }
+    }
+
+    /// What `slot` is running, or `None` for a slot whose sources are not in the
+    /// store.
+    fn playing(&self, slot: usize) -> Option<&Nodes> {
+        self.playing.get(slot).and_then(Option::as_ref)
+    }
+
+    /// **A build landed.** What the slot is now running, for the stream to say.
+    ///
+    /// `nodes` is `None` when that build's sources never reached the store —
+    /// the watcher says so at the time, and the addresses it would have named
+    /// do not exist. **That is still a swap**, and taking it as one is the
+    /// whole of what this argument is for: the slot is on something new, so the
+    /// version it was on becomes what a rollback restores, and the slot itself
+    /// has no address until the next build lands. `None` comes back and no
+    /// `procedure` record is written, because there is nothing to name.
+    ///
+    /// **The decision used to live in the caller**, which returned early on a
+    /// build it could not name and so applied half a transition rule: the swap
+    /// was skipped here and the matching rollback was not, and after one such
+    /// pair the slot was recorded as running the version *before* the one on
+    /// screen. `k` then wrote that version down and a recorded run put
+    /// `procedure` records naming it into the stream — the picture and the file
+    /// disagreeing, silently, which is the failure this whole type exists to
+    /// make impossible. The first build of a run made it worse: `previous` was
+    /// still `None`, so the rollback left the slot with no address at all and
+    /// every later save refused on the grounds that the launch sources were not
+    /// in the store, which was false.
+    fn landed(&mut self, slot: usize, nodes: Option<Nodes>) -> Option<Nodes> {
+        self.previous[slot] = self.playing[slot].take();
+        self.playing[slot] = nodes;
+        self.playing[slot].clone()
+    }
+
+    /// **A build was rolled back**, so the slot is running what it was running
+    /// before it. What that is, for the stream to say.
+    ///
+    /// `None` where the version being restored has no address: a slot with
+    /// nothing behind it at launch, or one whose `previous` is itself a build
+    /// that never reached the store. With the launch version in `previous`, the
+    /// first rollback of a slot restores it like any other, which is the case
+    /// that used to fall through to nothing.
+    fn rolled_back(&mut self, slot: usize) -> Option<Nodes> {
+        let restored = self.previous[slot].take();
+        self.playing[slot] = restored.clone();
+        restored
+    }
+}
+
+/// [`setfile::Node`]s as the addresses [`Nodes`] holds — the layer spelled the
+/// way a record spells it, so a slot seeded at launch and a slot the watcher
+/// rebuilt are the same shape.
+fn stored_nodes(nodes: Vec<setfile::Node>) -> Nodes {
+    nodes
+        .into_iter()
+        .map(|node| (setfile::kind_name(node.layer), node.index, node.hash))
+        .collect()
+}
+
+/// **What a Set file says about the Set that is playing**, read off that Set.
+///
+/// Everything except the nodes, which are the one part a store has to be
+/// involved in — see [`Save`].
+///
+/// **Five of the six are read from the Set and not from `Args`**, and the sixth
+/// is the exception that has to earn itself — which is the decision this
+/// function exists to hold. The reason is [`saving_capacities`]'s,
+/// stated once and true of all of them: a writer with its own copy of the rule
+/// records numbers the run was not using, and the file then describes a picture
+/// nobody has seen. A run that has been *played* makes that concrete rather than
+/// theoretical — a param moves through a record, and a slot rebuilt from an
+/// edited `.kir` can change its own declared capacity underneath the flag that
+/// was never given.
+///
+/// - **capacities** come per geometry from [`Set::source_capacities`] and not
+///   from `Set::capacity`, which is the sum. One number for a two-geometry Set
+///   is neither geometry's, and the writer refuses it.
+/// - **params** are written *addressed*, every declaration of every node,
+///   where `--save-set` writes only the `--param`s it was given. That is more
+///   lines and it is the right ones: the Set holds a value per node whether an
+///   operator wrote it or a `.kir` declared it, and a file that recorded only
+///   the overrides would come back different the day the declaration changed.
+/// - **bindings** come back with the ranges and curves they are riding at.
+/// - **edges** are the run's — see `Live::edges` for why this one is not the
+///   Set's, and why that is a copy of a value rather than of a rule.
+/// - **camera** is the built-in orbit's six numbers, which a `camera` record
+///   and a Set file both set from outside.
+/// - **seeds** are [`Set::source_salts`], one per geometry: what it *is* salted
+///   with rather than what a position in `--set` would derive.
+fn playing_values(
+    set: &karakuri_engine::Set,
+    edges: &[karakuri_engine::set::Edge],
+) -> setfile::Owned {
+    setfile::Owned {
+        // Filled where a store is open, and nowhere else.
+        nodes: Vec::new(),
+        capacities: set.source_capacities(),
+        params: set
+            .params()
+            .map(|(layer, index, key, value)| {
+                karakuri_engine::ParamWrite::at(layer, index, key, value)
+            })
+            .collect(),
+        bindings: set.bindings().to_vec(),
+        edges: edges.to_vec(),
+        camera: set.camera,
+        seeds: set.source_salts().to_vec(),
+    }
+}
+
+/// One slot's nodes as the records they will be written as, with every source
+/// put in the store first — which is what makes the hashes the file references
+/// resolve on the way back in.
+fn saving_nodes(
+    store: &karakuri_store::store::Store,
+    placed: &[Placed],
+) -> Result<Vec<setfile::Node>, String> {
+    placed
+        .iter()
+        .map(|node| node.put(store).map(|_| node.node()))
+        .collect()
 }
 
 /// What a saved Set says each of its geometries runs at: **what the run was
@@ -2769,15 +3189,24 @@ fn save_set(args: &Args, placed: &[Vec<Placed>], l1s: &[karakuri_ir::typed::Chec
         );
     }
     let camera = karakuri_engine::camera::Orbit::default();
+    // **Every node, on the layer its own `kind` put it on**, and its source in
+    // the store before the file that references it. The sorter already answered
+    // the layer question for the engine — see [`sort_slot`] — so an L2, an L3
+    // or a field is saved as what it is rather than refused for want of a slot
+    // to write it in; the `put` is here rather than in the writer because this
+    // is the caller holding paths that are still true. See `setfile::Node`.
+    let nodes = match saving_nodes(&store, nodes) {
+        Ok(nodes) => nodes,
+        Err(e) => {
+            eprintln!("karakuri-cli: {e}");
+            std::process::exit(1);
+        }
+    };
     match setfile::save(
         &store,
         id,
         setfile::Saving {
-            // **Every node, on the layer its own `kind` put it on.** The sorter
-            // already answered that for the engine — see [`sort_slot`] — so an
-            // L2, an L3 or a field is saved as what it is rather than refused
-            // for want of a slot to write it in.
-            nodes: &saving_nodes(nodes),
+            nodes: &nodes,
             capacities: &saving_capacities(args, l1s),
             params: &args.overrides,
             bindings: &args.bindings,
@@ -2866,6 +3295,21 @@ fn load_set(args: &mut Args, id: &str) -> setfile::Loaded {
     loaded
 }
 
+/// **Whether anything in this run can write a `.kir`.** `--watch` and `--mcp`
+/// are the two things that edit a procedure; a render or a replay opens every
+/// file read-only.
+///
+/// A function rather than a `let`, because three things turn on it and they
+/// have to turn on the same one: what gets copied into the scratch, what gets
+/// compiled out of `args.sets` rather than out of the Set file directly, and —
+/// since a rebuilt slot's sources are what a live save writes — whether the
+/// watchers put what they build into the store. The third arrived on the far
+/// side of `main`, in `App::resumed`, which is what made the copy worth
+/// removing.
+fn editable(args: &Args) -> bool {
+    args.watch || args.mcp.is_some()
+}
+
 fn main() {
     let args = parse_args();
 
@@ -2891,11 +3335,7 @@ fn main() {
     // for the same reason: nothing writes a `.kir`, so there is no version to
     // preserve and no directory to leave behind.
     let mut snapshots: Option<history::Shared> = None;
-    // Whether anything in this run can write a `.kir`. Named because two things
-    // turn on it and they have to turn on the same one: what gets copied into
-    // the scratch, and what gets compiled out of `args.sets` rather than out of
-    // the Set file directly.
-    let editable = args.watch || args.mcp.is_some();
+    let editable = editable(&args);
     if editable {
         let root = args.store.clone();
         // A loaded Set names its procedures by hash and has no file anywhere,
@@ -3110,9 +3550,10 @@ fn build_deck(
     meters: bool,
     width: u32,
     height: u32,
-    // Where a rebuilt procedure is stored and reported, when a session is
-    // being recorded. `None` and no watcher touches a store.
-    recording: Option<(
+    // Where a rebuilt procedure's sources are put and reported. `None` and no
+    // watcher touches a store. See `watch::Watch::stored` for why this is no
+    // longer the recorder's switch.
+    stored: Option<(
         std::sync::Arc<karakuri_store::store::Store>,
         std::sync::mpsc::Sender<watch::Built>,
     )>,
@@ -3222,9 +3663,6 @@ fn build_deck(
                         args.bindings.clone(),
                         args.edges.clone(),
                     );
-                    // **Only when a session is being recorded.** Without
-                    // one there is nothing to name and no store to name it
-                    // in, and the watcher does no I/O it did not do before.
                     // The history is kept whether or not a session is
                     // being recorded: the two answer different questions —
                     // see `Watch::snapshots`. One `Shared` across every
@@ -3234,8 +3672,12 @@ fn build_deck(
                         Some(shared) => watcher.snapshotting_to(shared.clone()),
                         None => watcher,
                     };
-                    Box::new(match &recording {
-                        Some((store, tx)) => watcher.recording_to(store.clone(), tx.clone()),
+                    // **Whenever the run is editable**, which is where the
+                    // caller decides it — the watcher only has to be told
+                    // where. This used to be "only when a session is being
+                    // recorded", and see `Watch::stored` for what that cost.
+                    Box::new(match &stored {
+                        Some((store, tx)) => watcher.storing_to(store.clone(), tx.clone()),
                         None => watcher,
                     })
                 })
@@ -3667,6 +4109,199 @@ impl Clock {
     }
 }
 
+/// One node of a live save: its layer as a record spells it, which node of that
+/// layer, the address its source has, the name the operator gave the file, and
+/// — for a node still at the version the run launched with — the bytes to put
+/// in the store on the way past.
+///
+/// **The name is the part no hash could carry**, which is why this is not
+/// [`Nodes`]: a name belongs to the *use* rather than to the procedure, so it
+/// comes from the command line and travels beside the address rather than
+/// inside it.
+struct SavedNode {
+    layer: &'static str,
+    index: u32,
+    hash: karakuri_store::hash::Hash,
+    name: Option<String>,
+    /// The launch source, when this node is still running it, and `None` when a
+    /// build put the version there instead.
+    ///
+    /// **Which is the whole of what "lazily" means.** The watcher puts what it
+    /// builds in the store as it builds it, so a rebuilt node's bytes are
+    /// already there and there is nothing to carry. A node still on its launch
+    /// version has bytes that live only in this process — see [`Placed`] — so
+    /// they ride along and reach the store at the moment a file names them.
+    /// That is why a windowed run creates nothing until somebody presses `k`.
+    ///
+    /// These are the *compiled* bytes and never a re-read of the path, so a
+    /// `.kir` rewritten since launch cannot reach a saved file.
+    source: Option<std::sync::Arc<str>>,
+}
+
+/// **Where one live save's sources come from**: the hashes of the versions this
+/// slot is running, with the name the operator gave each file beside them.
+///
+/// **One answer, not two.** This used to be an enum — the landed hashes where a
+/// build had landed, and the startup *paths* where none had — and the second arm
+/// was a save that read the disk. Reading the disk answers a different question:
+/// a slot rolled back to what it launched with, an edit that never compiled, and
+/// a run with no watcher at all are all states where the file and the picture
+/// disagree, and every one of them wrote down a version nobody had seen. The
+/// hashes are seeded at launch instead — see [`Running::at_launch`] — so there
+/// is one representation of "what bytes is this node running", derived once
+/// from the text the compile read and a hash from the first frame onward.
+///
+/// See `Live::save_set`. Owned, because it crosses onto the thread that does the
+/// store I/O.
+struct Sources(Vec<SavedNode>);
+
+impl Sources {
+    /// How many nodes this names. Zero is a slot with nothing behind it — see
+    /// `Live::save_set`, which refuses rather than writing a file describing no
+    /// Set.
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// The nodes a Set file will name, **with every one of them in the store**.
+    ///
+    /// **Nothing here reads a `.kir`**, which is what collapsing the two arms
+    /// bought: a node a build put there was stored by the watcher that built
+    /// it, and a node still on its launch version carries the bytes the compile
+    /// read. Either way the address was derived from bytes this process has
+    /// held all along, and the only thing left to do is make sure the store has
+    /// them — `put_artifact` is content-addressed, so putting one that is
+    /// already there costs an `exists` and writes nothing.
+    ///
+    /// **This is the moment a windowed run first touches the store.** Seeding
+    /// it at launch instead created a directory for every run whether or not
+    /// anything was ever saved; see [`Running::at_launch`].
+    fn into_nodes(
+        self,
+        store: &karakuri_store::store::Store,
+    ) -> Result<Vec<setfile::Node>, String> {
+        self.0
+            .into_iter()
+            .map(|node| {
+                let SavedNode {
+                    layer,
+                    index,
+                    hash,
+                    name,
+                    source,
+                } = node;
+                let layer = layer_named(layer)
+                    .ok_or_else(|| format!("a node on layer `{layer}` cannot be saved"))?;
+                if let Some(source) = source {
+                    store
+                        .put_artifact(source.as_bytes())
+                        .map_err(|e| format!("the source of a `{layer:?}` node: {e}"))?;
+                }
+                Ok(setfile::Node {
+                    hash,
+                    layer,
+                    index,
+                    name,
+                })
+            })
+            .collect()
+    }
+}
+
+/// **Every save still in flight, collected until they are all in or `deadline`
+/// passes.**
+///
+/// A free function over the channel rather than a loop inside
+/// [`Live::awaited_saves`], so that the bound — which is the whole of what makes
+/// waiting at the end of a run safe rather than a way to hang on a bad disk —
+/// can be checked without a window and a GPU. That is the same reason
+/// [`live_sources`] is a free function.
+fn drained_saves(
+    rx: &std::sync::mpsc::Receiver<Saved>,
+    in_flight: usize,
+    deadline: Instant,
+) -> Vec<Saved> {
+    let mut landed = Vec::new();
+    while landed.len() < in_flight {
+        let Some(left) = deadline.checked_duration_since(Instant::now()) else {
+            break;
+        };
+        match rx.recv_timeout(left) {
+            Ok(saved) => landed.push(saved),
+            // Timed out, or every sender is gone and nothing more can arrive.
+            // Either way there is nothing left to wait for.
+            Err(_) => break,
+        }
+    }
+    landed
+}
+
+/// **How long the end of a run waits for saves still being written.**
+///
+/// Long enough that a save of a few dozen lines and a handful of artifacts
+/// finishes on any disk that is answering, and short enough that one which is
+/// not answering costs a quit five seconds rather than the window. See
+/// [`Live::awaited_saves`] for why the wait exists at all.
+const SAVE_WAIT: Duration = Duration::from_secs(5);
+
+/// **One live save, from the frame that asked for it to the file on disk.**
+struct Save {
+    slot: usize,
+    id: String,
+    /// The store root, not an open store: opening it creates directories, which
+    /// is I/O, which belongs on the thread below rather than on a frame.
+    root: PathBuf,
+    sources: Sources,
+    /// **What the file will say, with `nodes` still empty.** The nodes are the
+    /// one part of a Set file that needs a store — a hash per source — so they
+    /// are filled in where one is opened and never here.
+    ///
+    /// A half-built value crossing a thread boundary is worth a sentence,
+    /// because the alternative was considered and is worse: a second struct
+    /// holding "the other six fields" is a type whose whole content is which
+    /// field it is missing, and it would have to be kept in step with
+    /// `setfile::Owned` by hand forever.
+    values: setfile::Owned,
+}
+
+impl Save {
+    /// Write it. **Everything here is off the render thread**: opening a store
+    /// creates directories, and the Set file itself is written and renamed into
+    /// place.
+    fn run(self) -> Result<(), String> {
+        let Save {
+            id,
+            root,
+            sources,
+            mut values,
+            ..
+        } = self;
+        let store = karakuri_store::store::Store::open(&root)
+            .map_err(|e| format!("store `{}`: {e}", root.display()))?;
+        // **Before the file that references them**, which is what
+        // [`setfile::Node`] carrying a hash asks of every caller: the writer
+        // cannot check that a hash resolves without reading the store back, so
+        // putting them is the caller's promise. See [`Sources::into_nodes`].
+        values.nodes = sources.into_nodes(&store)?;
+        setfile::save(&store, &id, values.saving())
+    }
+}
+
+/// What a live save came back with, at the frame it arrives.
+struct Saved {
+    slot: usize,
+    id: String,
+    /// `Ok` and the file is on disk under `id`. **A failure is printed and no
+    /// record is written**: a stream saying a save happened when the disk
+    /// refused is exactly the shape of lie this codebase spends its comments
+    /// refusing.
+    outcome: Result<(), String>,
+}
+
 struct Live {
     window: Arc<Window>,
     gpu: Gpu,
@@ -3703,14 +4338,61 @@ struct Live {
     /// dropped when a newer one supersedes it.
     rebuilds: Option<std::sync::mpsc::Receiver<watch::Built>>,
     pending_builds: std::collections::HashMap<u64, watch::Built>,
-    /// The procedure each slot is recorded as playing, and the one before it.
-    /// The second is what a rollback restores, and the only way to name it: a
-    /// rollback brings back a Set the stream never named again.
-    /// What each slot is playing, as one entry per node — the address a
-    /// `procedure` record names, so a slot holding a chain and two geometries
-    /// records a line for each rather than an L1 and some renderers.
-    playing: Vec<Option<Nodes>>,
-    previous: Vec<Option<Nodes>>,
+    /// **What each slot is running**, and what a rollback of it would bring
+    /// back. Seeded before the first frame from the text the compile read, so
+    /// there is exactly one way to answer the question a live save asks — see
+    /// [`Running`].
+    running: Running,
+    /// **Where each slot's files were at launch**, one entry per node, in the
+    /// order they were spelled.
+    ///
+    /// **The names, and the bytes each node was compiled from.** A name belongs
+    /// to the use rather than to the procedure, so `--set veil=shell.kir` is a
+    /// fact about the command line that no rebuild restates and no hash
+    /// carries, and `Live::save_set` zips these onto the hashes by position.
+    ///
+    /// **Not the paths, which is the distinction that matters.** This used to
+    /// answer "what is this slot running" by re-reading `named.path`, and that
+    /// was a second answer to a question [`Running`] already held. What is here
+    /// now is [`Placed::source`] — the text the compile read — and it is not a
+    /// second answer but the *first*: every hash in `Running` was derived from
+    /// it, and a save hands the same buffer to the store so the file it writes
+    /// resolves. There is one derivation, and this is where its input lives.
+    ///
+    /// Empty for a slot filled straight from a Set file without `--watch` or
+    /// `--mcp`, which has no files behind it at all — see where `placed` is
+    /// built.
+    startup: Vec<Vec<Placed>>,
+    /// The Set file this run was loaded from, for the one refusal that has to
+    /// name it: a slot filled from a file with nothing watching it has no
+    /// sources to save, and an operator asking why is owed the id and the flag
+    /// that would change the answer.
+    loaded_set: Option<String>,
+    /// **Which node fills each declared input slot**, for the whole run.
+    ///
+    /// Read from the arguments rather than from the live Set, which is the one
+    /// place `Live::save_set` does that and needs its reason. An edge is
+    /// consumed where a Set is *built* and is not kept on it, so there is
+    /// nothing to read back; and unlike a param or a salt it cannot move during
+    /// a run — no key and no MCP tool rewires a `uses` slot, and every rebuild
+    /// restates this same list. So this is a copy of a value, not a second copy
+    /// of a rule, which is the distinction `saving_capacities` was fixed over.
+    edges: Vec<karakuri_engine::set::Edge>,
+    /// The store root a live save writes into. The *root* and not an open
+    /// store: every part of a save that touches a disk happens on the thread
+    /// that does it — see [`Save::run`].
+    store_root: PathBuf,
+    /// **Where a save reports back.** One thread per save writes into the
+    /// sender's clone; the frame loop drains the receiver, which is the shape
+    /// `rebuilds` already has and for the same reason: an outcome arrives when
+    /// it arrives, and a frame must not wait for it.
+    save_tx: std::sync::mpsc::Sender<Saved>,
+    saves: std::sync::mpsc::Receiver<Saved>,
+    /// **How many saves have been started and not yet reported back.** The
+    /// threads are detached, so this is the only thing that knows a file is
+    /// still being written — see [`Live::awaited_saves`], which is why anything
+    /// counts them at all.
+    saves_in_flight: usize,
     /// The MCP server's half of the channel, when `--mcp` asked for one. Told
     /// what the swap machinery said, and nothing else — see [`crate::mcp`].
     mcp: Option<mcp::Reporter>,
@@ -3811,13 +4493,19 @@ impl ApplicationHandler for App {
         // procedure has to reach the store from the worker thread that built
         // it; by the time the swap lands on a frame, the file may have changed
         // again and the render thread is the wrong place for file I/O.
-        let (rebuilds, rebuild_rx) = match &self.args.record_session {
-            Some(_) => {
+        //
+        // **Whenever the run is editable**, rather than only when a session is
+        // being recorded. Two things read these hashes now — the `procedure`
+        // records and `Live::save_set` — and the second is wanted in the
+        // ordinary `--watch` case, which records nothing. See
+        // `watch::Watch::stored`.
+        let (rebuilds, rebuild_rx) = match editable(&self.args) {
+            true => {
                 let store = std::sync::Arc::new(open_store(&self.args));
                 let (tx, rx) = std::sync::mpsc::channel();
                 (Some((store, tx)), Some(rx))
             }
-            None => (None, None),
+            false => (None, None),
         };
         let mut deck = build_deck(
             &gpu,
@@ -3989,6 +4677,7 @@ impl ApplicationHandler for App {
                     .map(|m| m.l1s.as_slice())
                     .unwrap_or(&[]);
                 let head = session_head(&self.args, &self.placed, geometries, &store, id);
+                seed_store_for_replay(&store, &self.placed);
                 match session::Recorder::open(&store, id, &head) {
                     Ok(recorder) => {
                         eprintln!(
@@ -4009,6 +4698,15 @@ impl ApplicationHandler for App {
         };
 
         let slot_count = deck.slot_count();
+        // Opened before the first frame like every other channel here, and
+        // never on one. Nothing is spawned until a key is pressed.
+        let (save_tx, saves) = std::sync::mpsc::channel();
+        // **Before the first frame, and for every windowed run.** This is what
+        // makes "what is this slot running" a hash from the outset rather than
+        // a path some later state contradicts. No I/O and nothing that can
+        // fail: the addresses come off the bytes the compile read — see
+        // [`Running::at_launch`].
+        let running = Running::at_launch(&self.placed, slot_count);
         let live = Live {
             window,
             gpu,
@@ -4023,8 +4721,17 @@ impl ApplicationHandler for App {
             tempo_source,
             rebuilds: rebuild_rx,
             pending_builds: std::collections::HashMap::new(),
-            playing: vec![None; slot_count],
-            previous: vec![None; slot_count],
+            running,
+            // **Cloned rather than moved**, because `self.placed` is what
+            // `session_head` above was handed and `App` outlives this. It is a
+            // handful of paths per slot, once, at startup.
+            startup: self.placed.clone(),
+            loaded_set: self.args.load_set.clone(),
+            edges: self.args.edges.clone(),
+            store_root: self.args.store.clone(),
+            save_tx,
+            saves,
+            saves_in_flight: 0,
             mcp,
             actions: Vec::new(),
             quantum: QUANTA[0].0,
@@ -4087,6 +4794,11 @@ impl ApplicationHandler for App {
             if let Some(source) = live.tempo_source.take() {
                 source.close();
             }
+            // **Before the recorder is finished**, so a save that landed after
+            // the last frame is still in the stream it belongs to — including
+            // one that was still being written when the window closed, which is
+            // what the bounded wait is for. See [`Live::awaited_saves`].
+            live.awaited_saves();
             if let Some(recorder) = live.recorder.take() {
                 match recorder.finish() {
                     Ok(w) => {
@@ -4293,6 +5005,7 @@ impl Live {
                 'o' => self.nudge_latency_offset(-audio::LATENCY_OFFSET_STEP_MS),
                 'p' => self.nudge_latency_offset(audio::LATENCY_OFFSET_STEP_MS),
                 'a' => self.snap_to_canvas(),
+                'k' => self.save_set(),
                 's' => self.print_status(),
                 'h' | '?' => eprint!("{BINDINGS}"),
                 _ => {}
@@ -4383,6 +5096,276 @@ impl Live {
         self.record(mix::residency_record(slot, want));
     }
 
+    /// **Take up what a slot is now playing**, and say so in the stream if a
+    /// session is being recorded.
+    ///
+    /// `landed` is the build id when a swap went in, or `None` when one was
+    /// rolled back — which is the case [`Running::previous`] exists for. A
+    /// rollback brings back a Set the stream will never name again, so the only
+    /// way to say what came back is to have remembered it.
+    ///
+    /// **The bookkeeping is unconditional and the record is not**, and the two
+    /// used to be one function that began by returning when there was no
+    /// recorder. What a slot is playing was therefore a fact only a recorded run
+    /// had — and `Live::save_set` needs exactly that fact in the ordinary
+    /// `--watch` case, where nothing is being recorded. Splitting it is the
+    /// whole of what widening `watch::Watch::stored` is for on this side of the
+    /// channel.
+    fn took_up(&mut self, slot: usize, landed: Option<u64>) {
+        // Drained here rather than per frame: the channel only has anything in
+        // it when a build has just been requested, and this runs when one has
+        // just landed.
+        if let Some(rx) = &self.rebuilds {
+            while let Ok(built) = rx.try_recv() {
+                self.pending_builds.insert(built.id, built);
+            }
+        }
+
+        let pair = match landed {
+            // **Missing means the watcher could not store this build's
+            // sources**, which it said at the time. Handed to `landed` as
+            // `None` rather than returned on, because the swap happened either
+            // way: a slot that took a version nobody can name is a slot with no
+            // address, not a slot still on its old one. See
+            // [`Running::landed`], which is where that used to go wrong.
+            Some(id) => {
+                let built = self.pending_builds.remove(&id);
+                self.running.landed(slot, built.map(|built| built.nodes))
+            }
+            None => self.running.rolled_back(slot),
+        };
+        let Some(nodes) = pair else {
+            // A slot with nothing in the store behind it — one filled from a Set
+            // file with nothing watching it, or one that has just taken a build
+            // whose sources could not be stored, which was said at the time.
+            // There is no hash to name, so there is nothing this could record.
+            //
+            // **A rollback to the launch version is no longer this case.** It
+            // used to be, and the stream then said nothing at all about it, so a
+            // replay went on drawing the build that had just been withdrawn.
+            // The launch version is in `previous` from the first swap onward, so
+            // it comes back like any other and is recorded like any other.
+            return;
+        };
+        self.record_procedure(slot, &nodes);
+    }
+
+    /// Say what a slot is playing, now that it changed.
+    ///
+    /// **One thing this cannot carry.** The rollback restores the outgoing Set
+    /// at the `t` it was parked at; a replay meeting these records builds
+    /// afresh, so `t` restarts there. A swap *in* is documented to start cold
+    /// and so replays exactly. Only a rollback differs, and a rollback means
+    /// the candidate was over budget — an exceptional frame already.
+    fn record_procedure(&mut self, slot: usize, nodes: &Nodes) {
+        if self.recorder.is_none() {
+            return;
+        }
+        // One record per node, each at the address the watcher gave it — so a
+        // slot with one renderer writes exactly the two lines it always did,
+        // and a slot with a chain and two geometries writes a line for each.
+        for (layer, index, hash) in nodes {
+            let Some(record) = layer_named(layer).map(record_layer) else {
+                eprintln!("  a node on layer `{layer}` is not in the record vocabulary");
+                continue;
+            };
+            self.record_only(karakuri_store::record::Record::Procedure {
+                slot: slot as u8,
+                layer: record,
+                index: *index,
+                proc_hash: *hash,
+            });
+        }
+    }
+
+    /// Push a record without applying it.
+    ///
+    /// **Two records are right here, and they are right for one reason**: each
+    /// *describes* a change that has already happened rather than asking for
+    /// one. A `procedure` says what a slot became when a swap landed, and a
+    /// `save` says a file exists — applying either would mean doing the thing a
+    /// second time. Everything else goes through `Live::record`, which applies
+    /// what it wrote.
+    fn record_only(&mut self, record: karakuri_store::record::Record) {
+        if let Some(recorder) = &mut self.recorder {
+            recorder.push(record);
+        }
+    }
+
+    /// **Write what this run is playing as a Set file**, from the focused slot.
+    ///
+    /// The control `docs/roadmap.md` names as M4's open gap: `--save-set`
+    /// writes what the *flags* say and exits, so the loop that lets an operator
+    /// load a preset, edit it and watch it had no way to keep the result. This
+    /// is the render-loop half of closing that. Every surface ends here — the
+    /// key below, and whatever M5 builds — for the same reason every mix
+    /// control ends in one method.
+    ///
+    /// **The focused slot, not slot 0.** A Set file describes one Set and a
+    /// deck holds four; the one the operator means is the one their hands are
+    /// already on, which is what focus is.
+    ///
+    /// **Read off the live Set, not off `Args`.** `saving_seeds` states the
+    /// hazard from the other side: a writer with its own copy of the rule
+    /// records numbers the run was not using. Every number a Set file carries
+    /// can have moved since the flags were parsed — a param through a record, a
+    /// capacity or a salt through a rebuilt Set file — so the only reading that
+    /// cannot be stale is the Set's own.
+    ///
+    /// **A name is a stamp, because a key press cannot type one.** See
+    /// `history::stamped_id`, whose convention this is and whose reason it
+    /// borrows: an operator looks for the time they saved it.
+    ///
+    /// **Gathered here, written elsewhere.** Everything below this line is a
+    /// read off values already in memory; the store I/O goes to a thread of its
+    /// own — one per save, since saves are rare and a pool would be machinery
+    /// for a rate of a few an hour. The outcome comes back over `saves` and the
+    /// record is written at the frame it arrives, not at this key press. See
+    /// `Live::finished_saves`.
+    fn save_set(&mut self) {
+        let slot = self.focus;
+        let startup = self.startup.get(slot).map_or(&[][..], Vec::as_slice);
+        let sources = live_sources(self.running.playing(slot), startup);
+        if sources.is_empty() {
+            // **Named, and with the flag that changes the answer.** Every
+            // refusal around this one names the file or the range it is about;
+            // this one used to name neither the id the run came from nor
+            // anything the operator could do, which leaves them pressing a key
+            // that reports a fact about the world rather than a way out of it.
+            match &self.loaded_set {
+                // **Both flags, because `editable()` is both.** It is
+                // `editable()` that materialises a loaded Set into the scratch
+                // and puts it in `args.sets`, and that is `--watch ||
+                // --mcp` — so `--load-set X --mcp PORT` with no `--watch`
+                // already saves like any other slot. Naming only `--watch` sent
+                // an operator who had `--mcp` off to restart a set for a flag
+                // they did not need.
+                Some(id) if startup.is_empty() => eprintln!(
+                    "slot {slot}: nothing to save — it was filled from set `{id}` by hash, \
+                     with no files behind it and nothing able to rebuild it. Start the run \
+                     with `--watch` or `--mcp` and this slot saves like any other"
+                ),
+                _ => eprintln!(
+                    "slot {slot}: nothing to save — this slot's sources are not in the \
+                     store, which was said at startup, and no rebuild of it has landed since"
+                ),
+            }
+            return;
+        }
+        let id = history::stamped_id();
+        let values = playing_values(self.deck.slot(slot).set(), &self.edges);
+        // Said before the thread starts, because the operator pressed a key and
+        // the answer to "did it take" is owed now rather than when the disk
+        // gets round to it. Where it went is said on arrival.
+        eprintln!(
+            "slot {slot}: saving {} node{} as set `{id}` in {}",
+            sources.len(),
+            if sources.len() == 1 { "" } else { "s" },
+            self.store_root.display()
+        );
+        let save = Save {
+            slot,
+            id,
+            root: self.store_root.clone(),
+            sources,
+            values,
+        };
+        let tx = self.save_tx.clone();
+        // **A thread per save**, and detached: no frame waits for it. The *run*
+        // waits, once, at the end and under a bound — see
+        // [`Live::awaited_saves`], which is what this count is for.
+        self.saves_in_flight += 1;
+        std::thread::spawn(move || {
+            let (slot, id) = (save.slot, save.id.clone());
+            let outcome = save.run();
+            let _ = tx.send(Saved { slot, id, outcome });
+        });
+    }
+
+    /// **Every save that has landed since the last frame, said and recorded.**
+    ///
+    /// Called from the frame loop beside the swap events, and drained rather
+    /// than waited on for the same reason: a frame owes the display a picture
+    /// and owes a disk nothing.
+    ///
+    /// **The record is written here, at the frame the outcome arrived**, which
+    /// is the pattern `record_procedure` already follows — a record that
+    /// describes a change already made. Writing one at the key press would be a
+    /// stream claiming a file that the disk then refused, which is the failure
+    /// this whole codebase is arranged against.
+    fn finished_saves(&mut self) {
+        let mut landed: Vec<Saved> = Vec::new();
+        while let Ok(saved) = self.saves.try_recv() {
+            landed.push(saved);
+        }
+        for saved in landed {
+            self.took_save(saved);
+        }
+    }
+
+    /// One save's outcome, said and recorded.
+    fn took_save(&mut self, saved: Saved) {
+        let Saved { slot, id, outcome } = saved;
+        self.saves_in_flight = self.saves_in_flight.saturating_sub(1);
+        match outcome {
+            Ok(()) => {
+                eprintln!("slot {slot}: saved as set `{id}` — load it with `--load-set {id}`");
+                self.record_only(karakuri_store::record::Record::Save {
+                    slot: slot as u8,
+                    id,
+                });
+            }
+            // **Printed, and nothing written.** See `Saved::outcome`.
+            Err(e) => eprintln!("slot {slot}: set `{id}` was not saved: {e}"),
+        }
+    }
+
+    /// **Every save still being written, waited for — up to [`SAVE_WAIT`].**
+    ///
+    /// A frame owes the disk nothing, which is why [`finished_saves`] drains and
+    /// never blocks. The end of the run is the one moment where that is the
+    /// wrong trade: a save pressed in the last second reached the disk under an
+    /// id nothing in the stream ever named, so `README.md`'s claim that a `save`
+    /// record exists for every live save that reached the disk was false in
+    /// exactly the window an operator is most likely to be in — press `k`, see
+    /// it took, quit.
+    ///
+    /// **Bounded, because a disk can hang and quitting must not depend on one.**
+    /// The alternative was joining the threads, which is unbounded by
+    /// construction: a store on a network mount that stops answering would take
+    /// the window with it. Past the bound the run says how many saves it left
+    /// behind and exits, which is the same trade the recorder makes when it
+    /// counts the batches it lost rather than waiting for them.
+    ///
+    /// The wait is only ever paid by a run that pressed `k` and quit within a
+    /// few frames; the count is zero for every other run and this returns
+    /// without blocking.
+    fn awaited_saves(&mut self) {
+        self.finished_saves();
+        if self.saves_in_flight == 0 {
+            return;
+        }
+        eprintln!(
+            "waiting up to {:.0}s for {} save{} still being written",
+            SAVE_WAIT.as_secs_f32(),
+            self.saves_in_flight,
+            if self.saves_in_flight == 1 { "" } else { "s" }
+        );
+        let deadline = Instant::now() + SAVE_WAIT;
+        for saved in drained_saves(&self.saves, self.saves_in_flight, deadline) {
+            self.took_save(saved);
+        }
+        if self.saves_in_flight > 0 {
+            eprintln!(
+                "  {} save{} still unfinished after {:.0}s — each is written or it is not, \
+                 and no record claims either way",
+                self.saves_in_flight,
+                if self.saves_in_flight == 1 { "" } else { "s" },
+                SAVE_WAIT.as_secs_f32(),
+            );
+        }
+    }
+
     /// One governor pass and what it decided, printed.
     ///
     /// Called when something the decision depends on moved — a residency
@@ -4394,81 +5377,6 @@ impl Live {
     /// different actions: `NoHeadroom` waits for a slot to come off air,
     /// `CommittedUnknown` for a measurement, and `NoPrimingNeeded` for nothing
     /// at all — that Set is closed form and can go straight on air.
-    /// Say what a slot is playing, now that it changed.
-    ///
-    /// `landed` is the build id when a swap went in, or `None` when one was
-    /// rolled back — which is the case the pair kept in `previous` exists for.
-    /// A rollback brings back a Set the stream will never name again, so the
-    /// only way to say what came back is to have remembered it.
-    ///
-    /// **One thing this cannot carry.** The rollback restores the outgoing Set
-    /// at the `t` it was parked at; a replay meeting these records builds
-    /// afresh, so `t` restarts there. A swap *in* is documented to start cold
-    /// and so replays exactly. Only a rollback differs, and a rollback means
-    /// the candidate was over budget — an exceptional frame already.
-    fn record_procedure(&mut self, slot: usize, landed: Option<u64>) {
-        if self.recorder.is_none() {
-            return;
-        }
-        // Drained here rather than per frame: the channel only has anything in
-        // it when a build has just been requested, and this runs when one has
-        // just landed.
-        if let Some(rx) = &self.rebuilds {
-            while let Ok(built) = rx.try_recv() {
-                self.pending_builds.insert(built.id, built);
-            }
-        }
-
-        let pair = match landed {
-            Some(id) => {
-                let Some(built) = self.pending_builds.remove(&id) else {
-                    // The watcher could not store this build's source and said
-                    // so at the time. Nothing to name.
-                    return;
-                };
-                self.previous[slot] = self.playing[slot].take();
-                self.playing[slot] = Some(built.nodes);
-                self.playing[slot].clone()
-            }
-            None => {
-                let restored = self.previous[slot].take();
-                self.playing[slot] = restored.clone();
-                restored
-            }
-        };
-        let Some(nodes) = pair else {
-            // A rollback to the procedure the run started with, which the head
-            // already names. Nothing changed that the stream does not say.
-            return;
-        };
-        // One record per node, each at the address the watcher gave it — so a
-        // slot with one renderer writes exactly the two lines it always did,
-        // and a slot with a chain and two geometries writes a line for each.
-        for (layer, index, hash) in nodes {
-            let Some(layer) = layer_named(layer).map(record_layer) else {
-                eprintln!("  a node on layer `{layer}` is not in the record vocabulary");
-                continue;
-            };
-            self.record_only(karakuri_store::record::Record::Procedure {
-                slot: slot as u8,
-                layer,
-                index,
-                proc_hash: hash,
-            });
-        }
-    }
-
-    /// Push a record without applying it.
-    ///
-    /// The one place this is right: a `procedure` record *describes* a change
-    /// the engine has already made, rather than asking for one. Everything else
-    /// goes through `Live::record`, which applies what it wrote.
-    fn record_only(&mut self, record: karakuri_store::record::Record) {
-        if let Some(recorder) = &mut self.recorder {
-            recorder.push(record);
-        }
-    }
-
     fn govern(&mut self, why: &str) {
         report_governing(&self.deck.govern(), why);
     }
@@ -5137,8 +6045,12 @@ impl Live {
             }
         }
         for (slot, landed) in procedures {
-            self.record_procedure(slot, landed);
+            self.took_up(slot, landed);
         }
+        // Beside the swap events and for the same reason: something asked for
+        // off this thread has finished, and the frame that notices is the frame
+        // that writes it down.
+        self.finished_saves();
         if set_changed {
             self.govern("build landed");
         }
@@ -5774,15 +6686,20 @@ mod tests {
         assert!(loaded.notes.is_empty(), "{:?}", loaded.notes);
     }
 
-    /// One slot's examples, compiled, as [`sort_compiled`] takes them.
-    fn compiled(files: &[&str]) -> Vec<(Named, karakuri_ir::typed::Checked)> {
+    /// One slot's examples, compiled, as [`sort_compiled`] takes them — with
+    /// the text each was compiled from, which is what a node is addressed by.
+    fn compiled(files: &[&str]) -> Vec<(Named, karakuri_ir::typed::Checked, std::sync::Arc<str>)> {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
         files
             .iter()
             .map(|file| {
                 let path = root.join(file);
-                let checked = compile::load(&path).expect("the examples compile");
-                (Named::bare(path), checked)
+                let (checked, src) = compile::load(&path).expect("the examples compile");
+                (
+                    Named::bare(path),
+                    checked,
+                    std::sync::Arc::from(src.as_str()),
+                )
             })
             .collect()
     }
@@ -6650,6 +7567,51 @@ mod tests {
         wire.dedup();
         assert_eq!(before, wire.len(), "two operators share a wire spelling");
     }
+
+    /// **A `save` after the last tick is named, not counted.**
+    ///
+    /// The `ir-spec` rule is that a replay says which effects outside the stream
+    /// it skipped, and a save at the end of a set is the one that lands after
+    /// the last tick rather than inside a frame. Paired with its control — a
+    /// trailing record that is *not* a save gets the count and nothing more, so
+    /// the assertion is about the `save` arm rather than about a function that
+    /// prints an extra line whatever it is given.
+    #[test]
+    fn a_trailing_save_is_named_and_not_only_counted() {
+        let notes = trailing_notes(&[
+            Record::Gain {
+                slot: 1,
+                value: 0.5,
+            },
+            Record::Save {
+                slot: 2,
+                id: "20260816-143052-271".to_string(),
+            },
+        ]);
+        assert_eq!(notes.len(), 2, "the skipped save was not named: {notes:?}");
+        assert!(
+            notes[0].starts_with("2 records after the last tick"),
+            "{notes:?}"
+        );
+        assert!(
+            notes[1].contains("slot 2") && notes[1].contains("20260816-143052-271"),
+            "a skipped save has to name the slot and the set an operator would \
+             go and load: {notes:?}"
+        );
+
+        // **The control.** Nothing to name and the count stands alone.
+        let counted = trailing_notes(&[Record::Gain {
+            slot: 1,
+            value: 0.5,
+        }]);
+        assert_eq!(
+            counted.len(),
+            1,
+            "a trailing record that reaches nothing outside the stream is counted \
+             and no more: {counted:?}"
+        );
+        assert!(counted[0].starts_with("1 record after"), "{counted:?}");
+    }
 }
 
 #[cfg(test)]
@@ -6887,6 +7849,885 @@ mod value_tests {
         assert!(
             err.contains("positive"),
             "rejected for the wrong reason: {err}"
+        );
+    }
+}
+
+/// **What a live save actually writes**, through a Set that has been built and
+/// then played with.
+///
+/// Everything else about saving is checked against flags — see the `--save-set`
+/// tests above and `setfile`'s own. The claim a *live* save makes is a
+/// different one and no flag can stand in for it: **what reaches the file is
+/// what is on screen**, after a parameter has moved and after a build has been
+/// rolled back. So these build a real Set, disturb it the way a run disturbs
+/// one, and read the file back through the loader `--load-set` uses.
+#[cfg(test)]
+mod live_save_tests {
+    use super::*;
+    use std::path::Path;
+
+    /// Integration tests get the *package* as their working directory, and unit
+    /// tests get it too — so `examples/` is two levels up from here.
+    fn workspace() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("workspace root")
+    }
+
+    fn example(name: &str) -> String {
+        std::fs::read_to_string(workspace().join("examples").join(name)).expect("an example")
+    }
+
+    /// Write `src` into `dir` and hand back the path, so a test can edit a
+    /// procedure the way an operator does — by replacing the file.
+    fn kir(dir: &tempfile::TempDir, name: &str, src: &str) -> PathBuf {
+        let path = dir.path().join(name);
+        std::fs::write(&path, src).expect("write");
+        path
+    }
+
+    /// One slot's files, compiled and sorted exactly as a run compiles them —
+    /// so `Placed` here carries the layers and indices the real thing carries.
+    fn slot(paths: &[PathBuf]) -> (Material, Vec<Placed>) {
+        let rest: Vec<Named> = paths[1..].iter().cloned().map(Named::bare).collect();
+        sort_slot(0, &Named::bare(paths[0].clone()), &rest)
+    }
+
+    /// A Set built from that material, at the capacities and salts given —
+    /// which is what a run hands `build`, and what a save has to read back off
+    /// the Set rather than off these arguments.
+    fn set_of(
+        gpu: &Gpu,
+        material: &Material,
+        capacities: &[u32],
+        salts: &[u32],
+        overrides: &[ParamWrite],
+    ) -> Set {
+        let mut attached = vec![false; 0];
+        build(
+            gpu,
+            &material.l1s,
+            &material.l2s,
+            &material.l3s,
+            &material.fields,
+            &material.l4s,
+            karakuri_engine::set::Layering::Overdraw,
+            &material.names,
+            &[],
+            capacities,
+            &mut attached,
+            overrides,
+            &[],
+            &[],
+            salts[0],
+            salts,
+            None,
+        )
+    }
+
+    /// **What a run does to one slot before its first frame**: the slot
+    /// recorded as running the material that was compiled for it.
+    ///
+    /// Through [`Running::at_launch`] rather than around it, for the reason
+    /// [`save_and_load`] goes through [`Save::run`]: assembling the seeding by
+    /// hand here would be a second copy of it, and the whole of what these tests
+    /// are about is that there is only one.
+    ///
+    /// **No store root, because there is no store.** A windowed run touches one
+    /// when a save happens and not before — see [`Running::at_launch`].
+    fn launched(placed: &[Placed]) -> Running {
+        Running::at_launch(&[placed.to_vec()], 1)
+    }
+
+    /// One node as the watcher hands it over when a build lands: the source in
+    /// the store, and its address beside the hash.
+    fn stored(store: &karakuri_store::store::Store, layer: &'static str, src: &str) -> Landed {
+        (layer, 0, store.put_artifact(src.as_bytes()).expect("put"))
+    }
+
+    type Landed = (&'static str, u32, karakuri_store::hash::Hash);
+
+    /// Gather, write, and read back — the whole of what pressing `k` does,
+    /// minus the thread and the channel.
+    ///
+    /// **Through [`Save::run`] rather than around it**, so that what a test
+    /// exercises is the function the spawned thread calls. Assembling the same
+    /// three steps by hand here would be a second copy of the save, and a test
+    /// of a copy is a test of nothing.
+    fn save_and_load(store_root: &Path, id: &str, set: &Set, sources: Sources) -> setfile::Loaded {
+        Save {
+            slot: 0,
+            id: id.to_string(),
+            root: store_root.to_path_buf(),
+            sources,
+            values: playing_values(set, &[]),
+        }
+        .run()
+        .expect("the Set file is written");
+        let store = karakuri_store::store::Store::open(store_root).expect("store");
+        setfile::load(&store, id).expect("and reads back")
+    }
+
+    /// **A live save writes a file that loads back into the same material** —
+    /// and does it for a Set of *two* geometries, which is where the numbers
+    /// stop being interchangeable.
+    ///
+    /// Two geometries at two different capacities and two different salts,
+    /// because that is the shape a single number cannot describe: a saver
+    /// reaching for `Set::capacity` gets the sum, which is neither geometry's,
+    /// and the file it writes is refused for having one capacity where the Set
+    /// has two. `Set::source_capacities` is the reading that is per geometry,
+    /// which is what the record is.
+    #[test]
+    fn a_live_save_reads_back_into_the_material_it_was_taken_from() {
+        let gpu = Gpu::headless().expect("no GPU");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let l1 = example("drift_shell.kir");
+        let paths = vec![
+            kir(&dir, "a.kir", &l1),
+            kir(
+                &dir,
+                "b.kir",
+                &l1.replace("proc drift_shell", "proc drift_two"),
+            ),
+            kir(&dir, "r.kir", &example("soft_points.kir")),
+        ];
+        let (material, placed) = slot(&paths);
+        // Different from each other and from the declared default, so that a
+        // file which recorded either the sum or the declaration is visibly
+        // wrong rather than accidentally right.
+        let capacities = [8192, 16384];
+        let salts = [11, 22];
+        let set = set_of(&gpu, &material, &capacities, &salts, &[]);
+
+        let root = dir.path().join("store");
+        let running = launched(&placed);
+        let loaded = save_and_load(
+            &root,
+            "live",
+            &set,
+            live_sources(running.playing(0), &placed),
+        );
+
+        assert_eq!(
+            loaded
+                .l1s
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
+            ["drift_shell", "drift_two"],
+            "the geometries came back as something else"
+        );
+        assert_eq!(
+            loaded
+                .l4s
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
+            ["soft_points"]
+        );
+        assert_eq!(
+            loaded.capacities,
+            vec![Some(8192), Some(16384)],
+            "each geometry's own capacity is what the file has to carry"
+        );
+        assert_eq!(
+            loaded.salts,
+            vec![Some(11), Some(22)],
+            "each geometry's own salt is what the file has to carry"
+        );
+    }
+
+    /// **A save after a parameter moved records the moved value.**
+    ///
+    /// The Set is built with `radius` at 1.0, which is what a `--param
+    /// radius=1.0` would have put there, and then moved to 2.6 the way a record
+    /// moves it mid-run. The file has to say 2.6: a writer holding its own copy
+    /// of what the run was started with records a number nobody has seen, which
+    /// is the failure `saving_capacities` was fixed over, arriving one surface
+    /// further along.
+    ///
+    /// Addressed rather than wildcard, because that is what the Set holds — a
+    /// value per node — and because it is the only form that can be checked
+    /// against the node that has it.
+    #[test]
+    fn a_live_save_records_a_param_where_the_run_moved_it_to() {
+        let gpu = Gpu::headless().expect("no GPU");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let paths = vec![
+            kir(&dir, "a.kir", &example("drift_shell.kir")),
+            kir(&dir, "r.kir", &example("soft_points.kir")),
+        ];
+        let (material, placed) = slot(&paths);
+        let flag = ParamWrite::everywhere("radius", 1.0);
+        let mut set = set_of(&gpu, &material, &[4096], &[7], std::slice::from_ref(&flag));
+        assert_eq!(
+            set.param("radius"),
+            Some(1.0),
+            "the run started at the flag"
+        );
+
+        // What a `param` record does mid-set, through the one entry point both
+        // a record and a key press come through.
+        set.write_param(&ParamWrite::everywhere("radius", 2.6));
+
+        let root = dir.path().join("store");
+        let running = launched(&placed);
+        let loaded = save_and_load(
+            &root,
+            "moved",
+            &set,
+            live_sources(running.playing(0), &placed),
+        );
+
+        let radius: Vec<&ParamWrite> = loaded.params.iter().filter(|p| p.key == "radius").collect();
+        assert_eq!(
+            radius.len(),
+            1,
+            "one geometry declares `radius`, so one line records it: {radius:?}"
+        );
+        assert_eq!(
+            radius[0].value, 2.6,
+            "the file recorded the value the run was started with, not the one it \
+             was playing"
+        );
+        assert_eq!(
+            radius[0].at,
+            Some((karakuri_ir::Kind::L1, 0)),
+            "a param is recorded against the node that declares it"
+        );
+    }
+
+    /// **A save after a rollback onto an earlier rebuild records that
+    /// rebuild**, not the version left on disk and not the one it launched with.
+    ///
+    /// This is the whole reason the writer stopped reading files. A build that
+    /// compiles and is then refused for cost leaves a newer `.kir` sitting on
+    /// disk under the same path — so the path and the picture disagree, and they
+    /// disagree in exactly the situation where an operator most wants to keep
+    /// what they can see.
+    ///
+    /// **Three versions, all distinguishable**, which is what makes the
+    /// assertion about the answer that was chosen rather than about a file that
+    /// could only ever have said one thing. The slot launches on `drift_shell`,
+    /// a rebuild to `drift_two` lands, a rebuild to `refused_edit` lands and is
+    /// then rolled back — so the picture is `drift_two`, the disk is
+    /// `refused_edit`, and the launch version is neither. The control is the
+    /// save taken before any of it, which the same slot answers `drift_shell`.
+    ///
+    /// This test used to build what the slot was playing by hand, which is why
+    /// it only ever reached the rollback that lands on an *earlier rebuild*. The
+    /// first rollback of a slot is the case below, and the transition is driven
+    /// through [`Running`] here so that the two are the same machinery.
+    #[test]
+    fn a_save_after_a_rollback_records_what_is_on_screen() {
+        let gpu = Gpu::headless().expect("no GPU");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let at_start = example("drift_shell.kir");
+        let renderer = example("soft_points.kir");
+        let paths = vec![kir(&dir, "a.kir", &at_start), kir(&dir, "r.kir", &renderer)];
+        let (material, placed) = slot(&paths);
+        let set = set_of(&gpu, &material, &[4096], &[7], &[]);
+        let root = dir.path().join("store");
+
+        let mut running = launched(&placed);
+
+        // **The control**, taken before anything has rebuilt: the slot answers
+        // with what it launched on. Without it, the assertion below would be
+        // about a file that had only one version to name.
+        let at_launch = save_and_load(
+            &root,
+            "at_launch",
+            &set,
+            live_sources(running.playing(0), &placed),
+        );
+        assert_eq!(
+            at_launch.l1s[0].name, "drift_shell",
+            "a slot nothing has rebuilt runs what it launched with"
+        );
+
+        // What the watcher does on the worker thread when a build lands: the
+        // sources it compiled go into the store, and their hashes are what the
+        // slot is recorded as running.
+        let store = karakuri_store::store::Store::open(&root).expect("store");
+        let on_screen = at_start.replace("proc drift_shell", "proc drift_two");
+        std::fs::write(&paths[0], &on_screen).expect("the edit that stayed");
+        running.landed(
+            0,
+            Some(vec![
+                stored(&store, "L1", &on_screen),
+                stored(&store, "L4", &renderer),
+            ]),
+        );
+
+        // The edit that compiled and was then refused for cost. The file on
+        // disk is this from here on; the picture goes back to the one above.
+        let refused = at_start.replace("proc drift_shell", "proc refused_edit");
+        std::fs::write(&paths[0], &refused).expect("the rolled-back edit");
+        running.landed(
+            0,
+            Some(vec![
+                stored(&store, "L1", &refused),
+                stored(&store, "L4", &renderer),
+            ]),
+        );
+        running.rolled_back(0);
+
+        let kept = save_and_load(
+            &root,
+            "kept",
+            &set,
+            live_sources(running.playing(0), &placed),
+        );
+        assert_eq!(
+            kept.l1s[0].name, "drift_two",
+            "the save wrote down something other than the rebuild the slot fell \
+             back onto"
+        );
+        assert!(
+            std::fs::read_to_string(&paths[0])
+                .expect("the file")
+                .contains("proc refused_edit"),
+            "the path still has to hold the refused version, or this test is \
+             checking nothing"
+        );
+    }
+
+    /// **The first rollback of a slot saves what is on screen.**
+    ///
+    /// The case a rollback onto an earlier rebuild cannot reach, and the one
+    /// that had no hash anywhere pointing at it. Nothing has swapped into this
+    /// slot before the build that is refused, so what comes back is the version
+    /// the run launched on — and until those bytes were put in the store at
+    /// launch, the saver answered by reading the path, which by then holds the
+    /// refused version.
+    ///
+    /// **It fails in the worst direction**, which is why this is the test the
+    /// fix is measured by: the operator is told the save took, and the file it
+    /// wrote names a version that was never on screen.
+    #[test]
+    fn the_first_rollback_of_a_slot_saves_what_is_on_screen() {
+        let gpu = Gpu::headless().expect("no GPU");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let at_start = example("drift_shell.kir");
+        let renderer = example("soft_points.kir");
+        let paths = vec![kir(&dir, "a.kir", &at_start), kir(&dir, "r.kir", &renderer)];
+        let (material, placed) = slot(&paths);
+        let set = set_of(&gpu, &material, &[4096], &[7], &[]);
+        let root = dir.path().join("store");
+
+        let mut running = launched(&placed);
+
+        // The operator edits, it compiles, the watcher stores it and the swap
+        // lands. The file on disk is the edit from here on.
+        let refused = at_start.replace("proc drift_shell", "proc refused_edit");
+        std::fs::write(&paths[0], &refused).expect("the edit");
+        let store = karakuri_store::store::Store::open(&root).expect("store");
+        running.landed(
+            0,
+            Some(vec![
+                stored(&store, "L1", &refused),
+                stored(&store, "L4", &renderer),
+            ]),
+        );
+        // The governor refuses it. **The first rollback of this slot**: nothing
+        // swapped in before the build that just went out.
+        running.rolled_back(0);
+
+        let kept = save_and_load(
+            &root,
+            "kept",
+            &set,
+            live_sources(running.playing(0), &placed),
+        );
+        assert_eq!(
+            kept.l1s[0].name, "drift_shell",
+            "the save wrote down the version the governor refused — the one left \
+             on disk, which never reached the screen"
+        );
+    }
+
+    /// **A rollback onto the launch version restores the launch addresses** —
+    /// the value a `procedure` record would be written from, not the record.
+    ///
+    /// The name used to claim the stream, which this cannot reach: writing a
+    /// record needs a `Live`, and a `Live` needs a window and a GPU. What it
+    /// pins is one step earlier and is the step that was wrong — on the *first*
+    /// rollback of a slot there was nothing to write a record from: `previous`
+    /// was seeded from nothing, the restore produced `None`, and
+    /// `Live::took_up` returned before reaching a record. The stream then said
+    /// nothing at all about a swap that had visibly gone out, and a replay
+    /// meeting it went on drawing the refused build.
+    ///
+    /// So the claim here is that the restore names the **launch** sources, not
+    /// the refused edit that is on disk and was on screen a frame ago. That
+    /// those addresses resolve in a recorded run's store is the other half, and
+    /// it is [`a_recorded_run_puts_its_launch_sources_where_a_replay_looks`].
+    ///
+    /// No GPU: nothing here builds a Set, and nothing here opens a store —
+    /// which is itself the point of [`Running::at_launch`] no longer doing so.
+    #[test]
+    fn a_rollback_onto_the_launch_version_restores_the_launch_addresses() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let at_start = example("drift_shell.kir");
+        let renderer = example("soft_points.kir");
+        let paths = vec![kir(&dir, "a.kir", &at_start), kir(&dir, "r.kir", &renderer)];
+        let (_material, placed) = slot(&paths);
+        let root = dir.path().join("store");
+
+        let mut running = launched(&placed);
+        // **What those bytes hash to, without putting them anywhere.** The
+        // address is a function of the source and of nothing else — see
+        // [`Placed::hash`] — so a test can state the expected one without a
+        // store, which is exactly the property a windowed run leans on.
+        let launch_l1 = karakuri_store::hash::Hash::of(at_start.as_bytes());
+        let launch_l4 = karakuri_store::hash::Hash::of(renderer.as_bytes());
+
+        // The operator edits, it compiles, the watcher stores it and the swap
+        // lands. The file on disk is the edit from here on.
+        let store = karakuri_store::store::Store::open(&root).expect("store");
+        let refused = at_start.replace("proc drift_shell", "proc refused_edit");
+        std::fs::write(&paths[0], &refused).expect("the edit");
+        running.landed(
+            0,
+            Some(vec![
+                stored(&store, "L1", &refused),
+                stored(&store, "L4", &renderer),
+            ]),
+        );
+
+        // The governor refuses it. **The first rollback of this slot**: nothing
+        // swapped in before the build that just went out, which is the case
+        // that used to fall through to no record at all.
+        let restored = running
+            .rolled_back(0)
+            .expect("a rollback onto the launch version came back as nothing to say");
+
+        assert_eq!(
+            restored,
+            vec![("L1", 0, launch_l1), ("L4", 0, launch_l4)],
+            "the stream would name something other than the launch sources the \
+             slot fell back onto"
+        );
+        assert!(
+            std::fs::read_to_string(&paths[0])
+                .expect("the file")
+                .contains("proc refused_edit"),
+            "the path still has to hold the refused version, or this test is \
+             checking nothing"
+        );
+    }
+
+    /// **A run with no watcher saves the version it is still drawing**, however
+    /// far the file underneath it has moved.
+    ///
+    /// Nothing picks a `.kir` up without `--watch`: an editor writing over the
+    /// path, an `--mcp` write with no watcher behind it — which `mcp.rs` says
+    /// out loud when it takes one — and an edit that failed to compile all leave
+    /// the same state, and it is a state that never resolves on its own. The
+    /// disk moved and the picture did not.
+    ///
+    /// **This is why the launch addresses are seeded for every windowed run and
+    /// not only an editable one.** There is no watcher here to hash anything
+    /// later, so a run gated on `editable()` would have nothing to save from
+    /// and would go on answering with the path. The bytes behind those
+    /// addresses reach the store here, at the save — see
+    /// [`a_windowed_run_creates_no_store_until_something_is_saved`] for the
+    /// other half of that, which is that nothing reaches it before.
+    #[test]
+    fn a_run_with_no_watcher_saves_the_version_it_is_still_drawing() {
+        let gpu = Gpu::headless().expect("no GPU");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let at_start = example("drift_shell.kir");
+        let paths = vec![
+            kir(&dir, "a.kir", &at_start),
+            kir(&dir, "r.kir", &example("soft_points.kir")),
+        ];
+        let (material, placed) = slot(&paths);
+        let set = set_of(&gpu, &material, &[4096], &[7], &[]);
+        let root = dir.path().join("store");
+
+        let running = launched(&placed);
+
+        // Something else rewrote the file. Nothing in this run is watching it,
+        // so no build is requested, nothing lands, and the deck goes on drawing
+        // what it built at startup for as long as the run lasts.
+        std::fs::write(
+            &paths[0],
+            at_start.replace("proc drift_shell", "proc edited_outside"),
+        )
+        .expect("the edit nothing picked up");
+
+        let kept = save_and_load(
+            &root,
+            "kept",
+            &set,
+            live_sources(running.playing(0), &placed),
+        );
+        assert_eq!(
+            kept.l1s[0].name, "drift_shell",
+            "the save read the path and wrote down an edit this run never \
+             compiled, let alone drew"
+        );
+    }
+
+    /// **A build whose sources never reached the store is still a swap.**
+    ///
+    /// The watcher compiles, fails to `put_artifact`, says so, and returns the
+    /// `Request` anyway — so the build goes on screen with no address anybody
+    /// can name. `Live::took_up` used to answer that by returning before
+    /// touching [`Running`] at all, while the matching rollback went through
+    /// `rolled_back` unconditionally. **Half a transition rule**: the swap did
+    /// not move `playing` into `previous` and the rollback moved `previous`
+    /// back anyway, so one such pair left every later reader one generation
+    /// behind the screen. `k` wrote that version down and a recorded run put
+    /// `procedure` records naming it into the stream, with nothing anywhere
+    /// saying the file and the picture had come apart.
+    ///
+    /// Two shapes, and the second is the worse one:
+    ///
+    /// - **mid-run**, where the slot skews by a generation: launch, build A
+    ///   lands, build B is unstored, B is refused for cost — the screen is back
+    ///   on A and so must the slot be, where it used to read as the launch
+    ///   version;
+    /// - **on the first build**, where `previous` is still `None`, so the
+    ///   rollback left the slot with no address at all and `k` refused for the
+    ///   rest of the run on the grounds that the launch sources were not in the
+    ///   store — which was false, and the operator had no way to find that out.
+    ///
+    /// No GPU and no window: the transition is the whole subject, which is what
+    /// [`Running`] being its own type is for.
+    #[test]
+    fn a_build_whose_sources_never_reached_the_store_is_still_a_swap() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let at_start = example("drift_shell.kir");
+        let renderer = example("soft_points.kir");
+        let paths = vec![kir(&dir, "a.kir", &at_start), kir(&dir, "r.kir", &renderer)];
+        let (_material, placed) = slot(&paths);
+        let root = dir.path().join("store");
+        let store = karakuri_store::store::Store::open(&root).expect("store");
+
+        let launch: Vec<Landed> = vec![
+            ("L1", 0, karakuri_store::hash::Hash::of(at_start.as_bytes())),
+            ("L4", 0, karakuri_store::hash::Hash::of(renderer.as_bytes())),
+        ];
+
+        let mut running = launched(&placed);
+        assert_eq!(
+            running.playing(0),
+            Some(&launch),
+            "the slot did not start on what it launched with, so nothing below \
+             is about the transition"
+        );
+
+        // Build A: it compiled, the watcher stored it, the swap landed.
+        let build_a = at_start.replace("proc drift_shell", "proc build_a");
+        let a: Vec<Landed> = vec![
+            stored(&store, "L1", &build_a),
+            stored(&store, "L4", &renderer),
+        ];
+        running.landed(0, Some(a.clone()));
+
+        // Build B: it compiled, the store refused it, and the deck installed it
+        // regardless — which is what `watch::Watch::poll` does, and what makes
+        // this a state the run can actually be in.
+        running.landed(0, None);
+        assert!(
+            running.playing(0).is_none(),
+            "a slot showing a version nothing can name reported an address, and \
+             whatever it reported is not what is on screen"
+        );
+
+        // The governor refuses B for cost. The screen goes back to A.
+        let restored = running.rolled_back(0);
+        assert_eq!(
+            restored.as_ref(),
+            Some(&a),
+            "the rollback restored a generation further back than the screen did"
+        );
+        assert_eq!(
+            running.playing(0),
+            Some(&a),
+            "the slot reads as running something other than the build the deck \
+             put back — a save and a `procedure` record would both name it"
+        );
+
+        // **The same rule on the first build of a run**, where the skew took
+        // the slot's address away entirely rather than moving it.
+        let mut first = launched(&placed);
+        first.landed(0, None);
+        first.rolled_back(0);
+        assert_eq!(
+            first.playing(0),
+            Some(&launch),
+            "a rollback onto the launch version left the slot unsavable for the \
+             rest of the run, and the refusal said the launch sources were not \
+             in the store"
+        );
+    }
+
+    /// **A `.kir` rewritten between the compile and the first frame cannot
+    /// reach a save.**
+    ///
+    /// The window is real and it is not short: between `sort_slot` and the
+    /// first frame sit the adapter request, the deck build, `measure_slots`,
+    /// and the audio, MIDI, tempo and **MCP server** starts. The launch seeding
+    /// used to `std::fs::read` each path again at the end of that, so anything
+    /// rewriting a file in between moved the slot's address onto bytes the deck
+    /// had never compiled. If the rewrite did not compile, no watcher ever
+    /// corrected it — `k` then wrote a Set naming a procedure that had never
+    /// been on screen, and the file did not load back at all.
+    ///
+    /// **Distinct from
+    /// [`a_run_with_no_watcher_saves_the_version_it_is_still_drawing`]**, which
+    /// rewrites the file after the run is under way. This one rewrites it
+    /// inside the startup sequence, which is the window a second read opens and
+    /// carrying the bytes closes.
+    ///
+    /// Two assertions, the first crisp and the second end to end: the address
+    /// the slot reports, and the file that comes back off the disk.
+    #[test]
+    fn a_rewrite_between_the_compile_and_the_first_frame_cannot_reach_a_save() {
+        let gpu = Gpu::headless().expect("no GPU");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let at_start = example("drift_shell.kir");
+        let paths = vec![
+            kir(&dir, "a.kir", &at_start),
+            kir(&dir, "r.kir", &example("soft_points.kir")),
+        ];
+        // The compile. Everything the run says about these nodes from here on
+        // is a function of the bytes this read.
+        let (material, placed) = slot(&paths);
+        let set = set_of(&gpu, &material, &[4096], &[7], &[]);
+
+        // Startup is not finished. Something rewrites the file — a formatter on
+        // save, an editor, a model over MCP that connected as the server came
+        // up — and this one does not compile, so nothing will ever correct it.
+        std::fs::write(
+            &paths[0],
+            at_start.replace("proc drift_shell", "proc rewritten_between {{{"),
+        )
+        .expect("the rewrite inside the startup sequence");
+
+        let root = dir.path().join("store");
+        let running = launched(&placed);
+        let sources = live_sources(running.playing(0), &placed);
+        assert_eq!(
+            sources.0[0].hash,
+            karakuri_store::hash::Hash::of(at_start.as_bytes()),
+            "the slot is addressed by bytes this run never compiled, so what it \
+             saves is a version that was never on screen"
+        );
+
+        let kept = save_and_load(&root, "kept", &set, sources);
+        assert_eq!(
+            kept.l1s[0].name, "drift_shell",
+            "the save wrote down the rewrite rather than the material the deck \
+             was built from"
+        );
+    }
+
+    /// **A windowed run creates no store until something is saved.**
+    ///
+    /// `docs/manual.md` promises that a run which cannot be edited "copies
+    /// nothing and creates no directory", and the launch seeding falsified it:
+    /// it opened the store — which `create_dir_all`s the root and its
+    /// subdirectories — and wrote one artifact per node, so a plain
+    /// `karakuri-cli examples/...` left a `.karakuri` behind in whatever
+    /// directory it was run from.
+    ///
+    /// **The seeding costs nothing because an address is not a file.** The
+    /// second assertion is what makes the first mean something: the slot knows
+    /// exactly what it is running, it simply has not written it anywhere. The
+    /// bytes reach the store at the moment a file names them — see
+    /// [`Sources::into_nodes`], which
+    /// [`a_rewrite_between_the_compile_and_the_first_frame_cannot_reach_a_save`]
+    /// reads back off the disk.
+    #[test]
+    fn a_windowed_run_creates_no_store_until_something_is_saved() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let paths = vec![
+            kir(&dir, "a.kir", &example("drift_shell.kir")),
+            kir(&dir, "r.kir", &example("soft_points.kir")),
+        ];
+        let (_material, placed) = slot(&paths);
+        let root = dir.path().join("store");
+
+        let running = launched(&placed);
+        assert!(
+            !root.exists(),
+            "a run that was asked to draw a window and nothing else created a \
+             store, which `docs/manual.md` promises it does not"
+        );
+        assert_eq!(
+            running.playing(0).map(Vec::len),
+            Some(2),
+            "the slot has no address, so `k` would refuse — which is not the \
+             way to create no directory"
+        );
+    }
+
+    /// **A recorded run puts every slot's launch sources where a replay looks.**
+    ///
+    /// The one reader that needs those bytes on disk before anything is saved.
+    /// A rollback onto the launch version emits `procedure` records naming its
+    /// hashes — see
+    /// [`a_rollback_onto_the_launch_version_restores_the_launch_addresses`] —
+    /// and a replay rebuilds by reading each back out of the store. A record
+    /// naming bytes nobody kept is the same silence as no record at all.
+    ///
+    /// **Slot 1, deliberately.** `session_head` writes slot 0's material and
+    /// says out loud that a session stream cannot describe a deck, so slot 0
+    /// would pass on the head's I/O alone and prove nothing about the seeding.
+    /// A `procedure` record, unlike a head, does address any slot.
+    ///
+    /// Paired with its control: nothing is in the store before the seeding, so
+    /// this is about the seeding rather than about a store that had the bytes
+    /// from somewhere else.
+    #[test]
+    fn a_recorded_run_puts_its_launch_sources_where_a_replay_looks() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let at_start = example("drift_shell.kir");
+        let renderer = example("soft_points.kir");
+        // Slot 1's geometry is a different procedure, so the two slots are two
+        // addresses rather than one shared by a content-addressed store.
+        let other = at_start.replace("proc drift_shell", "proc slot_one_shell");
+        let first = vec![kir(&dir, "a.kir", &at_start), kir(&dir, "r.kir", &renderer)];
+        let second = vec![kir(&dir, "b.kir", &other), kir(&dir, "s.kir", &renderer)];
+        let (_m0, slot0) = slot(&first);
+        let (_m1, slot1) = slot(&second);
+        let placed = vec![slot0, slot1];
+
+        let root = dir.path().join("store");
+        let store = karakuri_store::store::Store::open(&root).expect("store");
+        // **The control.** Opening a store does not fill it, so everything
+        // below is about the seeding.
+        for nodes in &placed {
+            for node in nodes {
+                assert!(
+                    store.get_artifact(&node.hash()).is_err(),
+                    "the store already held this run's sources, so the seeding \
+                     below could not be what put them there"
+                );
+            }
+        }
+
+        seed_store_for_replay(&store, &placed);
+
+        // Slot 1 takes a build and the governor refuses it, which is the state
+        // that makes the stream name the launch version.
+        let mut running = Running::at_launch(&placed, 2);
+        let refused = other.replace("proc slot_one_shell", "proc refused_edit");
+        running.landed(
+            1,
+            Some(vec![
+                stored(&store, "L1", &refused),
+                stored(&store, "L4", &renderer),
+            ]),
+        );
+        let restored = running
+            .rolled_back(1)
+            .expect("a rollback onto the launch version came back as nothing to say");
+        for (_, _, hash) in &restored {
+            assert!(
+                store.get_artifact(hash).is_ok(),
+                "a `procedure` record for slot 1 names a source this session's \
+                 replay cannot resolve, so the replay rebuilds nothing where the \
+                 run showed the version it launched with"
+            );
+        }
+    }
+
+    /// **Every `Kind` survives the round trip a saved node makes.**
+    ///
+    /// A node's layer is written out by [`setfile::kind_name`] and read back by
+    /// [`layer_named`], and nothing pinned them as inverses. A sixth `Kind`
+    /// would have compiled — `kind_name`'s match is exhaustive and would be
+    /// updated, `layer_named`'s ends in a wildcard and would not — and surfaced
+    /// as `a node on layer ... cannot be saved` at the moment an operator
+    /// pressed `k`, which is the worst place in the program to find out.
+    ///
+    /// **The `match` is what makes this exhaustive**, not the array. A list can
+    /// fall one short in silence; a sixth variant stops this file compiling,
+    /// which is the failure that was wanted in place of the runtime one.
+    #[test]
+    fn every_kind_survives_the_round_trip_a_saved_node_makes() {
+        use karakuri_ir::Kind;
+        for kind in [Kind::L1, Kind::L2, Kind::L3, Kind::L4, Kind::Field] {
+            match kind {
+                Kind::L1 | Kind::L2 | Kind::L3 | Kind::L4 | Kind::Field => {}
+            }
+            assert_eq!(
+                layer_named(setfile::kind_name(kind)),
+                Some(kind),
+                "a node on this layer is written into a Set file under a name \
+                 nothing reads back, so saving it refuses at the key press"
+            );
+        }
+    }
+
+    /// **A slot with nothing in the store behind it saves nothing**, rather than
+    /// writing a file describing no Set.
+    ///
+    /// The `--load-set` without `--watch` case: the material came out of the
+    /// store by hash with no files behind it, and `placed` is empty for that
+    /// slot. There is no version to name, which is a different thing from
+    /// naming the wrong one, and `Live::save_set` refuses it by name — see the
+    /// refusal there, which says which set the run came from and what would
+    /// make the slot savable.
+    #[test]
+    fn a_slot_with_no_sources_of_its_own_has_nothing_to_save() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().join("store");
+        let running = Running::at_launch(&[Vec::new()], 1);
+        assert!(
+            live_sources(running.playing(0), &[]).is_empty(),
+            "a slot with no files behind it has no sources to write"
+        );
+        assert!(
+            !root.exists(),
+            "a deck with no files behind it opened a store to write nothing into"
+        );
+    }
+
+    /// **A save still being written when the run ends is waited for**, so the
+    /// `save` record README.md promises for every save that reached the disk is
+    /// in the stream.
+    ///
+    /// The window is small and it is exactly the one an operator is in: press
+    /// `k`, read that it took, quit. The wait is bounded — see [`SAVE_WAIT`] —
+    /// and the bound is what the second half of this checks: a save that never
+    /// reports back costs the quit the bound and no more.
+    #[test]
+    fn a_save_in_flight_at_the_end_of_a_run_is_waited_for() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let late = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(120));
+            tx.send(Saved {
+                slot: 0,
+                id: "late".to_string(),
+                outcome: Ok(()),
+            })
+        });
+        let landed = drained_saves(&rx, 1, Instant::now() + SAVE_WAIT);
+        late.join().expect("the save thread").expect("it sent");
+        assert_eq!(
+            landed.len(),
+            1,
+            "the run quit before the save it was told to wait for reported back"
+        );
+
+        // **The bound, held against a save that never arrives.** The sender is
+        // still alive, so there is nothing but the deadline to end this.
+        let (_alive, rx) = std::sync::mpsc::channel::<Saved>();
+        let started = Instant::now();
+        let landed = drained_saves(&rx, 1, started + Duration::from_millis(80));
+        assert!(landed.is_empty());
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "a save that never reports back held the quit past its deadline"
         );
     }
 }

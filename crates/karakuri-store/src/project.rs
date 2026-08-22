@@ -50,7 +50,7 @@ enum Key {
 }
 
 /// The fold key for a record, or `None` for one that does not belong in a Set
-/// file. **Two kinds of `None`, and the second is the one that is easy to get
+/// file. **Three kinds of `None`, and the second is the one that is easy to get
 /// wrong.**
 ///
 /// The first is a record that carries no state at all: `Record::Tick`, which
@@ -71,6 +71,13 @@ enum Key {
 /// Set in the deck. **The projection that would fold them — a session down to
 /// the deck state it ends at — does not exist**, and nothing needs it: a
 /// session is replayed from the top rather than resumed from its end.
+///
+/// The third is `Save`, which is neither: it is not state at all and it is not
+/// the deck's, it is a fact about something *outside* the stream — a Set file
+/// that already exists under an id of its own. There is nothing here to fold
+/// into, because what it names is a whole file this function's output is one
+/// of. See the arm itself, and "Records with an effect outside the stream" in
+/// `docs/ir-spec.md`.
 fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
     match record {
         Record::Set { .. } => Some(Key::Set),
@@ -124,7 +131,12 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         | Record::Transport { .. }
         | Record::Preview { .. }
         | Record::Transition { .. }
-        | Record::Mask { .. } => None,
+        | Record::Mask { .. }
+        // **Nothing to fold, and nothing that could be.** A `save` names a Set
+        // file that already exists; folding a session down to a Set file is
+        // this function's job and it is not the job of the file it names. Two
+        // saves in a session are two files, not one with a later answer.
+        | Record::Save { .. } => None,
         Record::Unknown => Some(Key::Passthrough(ordinal)),
     }
 }

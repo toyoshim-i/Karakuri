@@ -2729,6 +2729,35 @@ impl Set {
         &self.source_salts
     }
 
+    /// **What each geometry was allocated at**, in the order its L1 procedures
+    /// were given — one entry per geometry, exactly the shape
+    /// [`Set::source_salts`] has and for the same reason.
+    ///
+    /// **Not [`Set::capacity`], which is the sum.** That one answers "how many
+    /// elements does this Set hold", which is the question a population figure
+    /// is asked beside; this one answers "what is each geometry running at",
+    /// which is what a `capacity` record says — one per L1 node, since each
+    /// source declares its own range and one number cannot size two of them. A
+    /// writer handed the sum would record a two-geometry Set as a single number
+    /// that is neither geometry's.
+    ///
+    /// **Placed by the procedure's ordinal rather than appended**, on the same
+    /// terms as the `Kind::L1` arm of [`Set::bind`]: an `edge` decides which of
+    /// a pairing Set's two geometries is the far one, so the order the
+    /// simulations are walked in is not the order the procedures were given in.
+    pub fn source_capacities(&self) -> Vec<u32> {
+        let mut out = vec![0; self.l1_count];
+        for source in &self.sources {
+            for (k, sim) in std::iter::once(&source.sim)
+                .chain(source.paired.iter())
+                .enumerate()
+            {
+                out[source.procedures[k]] = sim.capacity();
+            }
+        }
+        out
+    }
+
     /// The node a name addresses, as the `(layer, index)` every other surface
     /// in this system uses.
     ///

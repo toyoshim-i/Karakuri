@@ -546,6 +546,35 @@ pub enum Record {
         anchor_bpm: f32,
         offset_beats: f64,
     },
+    /// **A deck slot's material was written out as a Set file**, under `id`.
+    ///
+    /// The first record in this vocabulary whose subject is **outside the
+    /// stream**. Everything else here describes the deck, and a reader that
+    /// obeys it reproduces the performance; this one describes a file that was
+    /// created in a store, and a reader that obeyed it would create a file
+    /// instead. So a replay does not perform it and says which id it passed
+    /// over — see `docs/ir-spec.md`, "Records with an effect outside the
+    /// stream".
+    ///
+    /// **The slot and the id, and deliberately not the node hashes.** The Set
+    /// file under that id already names every node it holds, and a copy of them
+    /// here would be a second place for one fact — free to be right on the day
+    /// it was written and wrong the moment the two are read apart. What this
+    /// record is for is saying *that* a save happened and *what it is called*;
+    /// what was saved is a question the Set file answers.
+    ///
+    /// **Written at the frame the save landed, not at the key press.** The
+    /// store write is off the render thread, so it finishes some frames later
+    /// and can fail; a record written at the press would claim a file that the
+    /// disk went on to refuse. This is the same rule [`Record::Procedure`]
+    /// follows — a record that describes a change already made.
+    Save {
+        slot: u8,
+        /// What the Set file is called in the store: `sets/<id>.set.ndjson`.
+        /// A `String` because it is a name somebody chose, and the only thing
+        /// in this record that can be looked up.
+        id: String,
+    },
     // -- What a frame saw or decided --------------------------------------
     /// How far this frame advances. Emitted from real time when live, read back
     /// verbatim on replay — which is what keeps substepping deterministic.
@@ -635,7 +664,7 @@ pub enum Record {
 pub const MAX_STEPS: u8 = 4;
 
 impl Record {
-    /// Whether this record belongs in a Set file. **Fourteen say no, for two
+    /// Whether this record belongs in a Set file. **Fifteen say no, for two
     /// different reasons, and keeping them apart is the point of the name** —
     /// it is `is_set_state` rather than `is_state` because most of what it
     /// refuses is state.
@@ -663,7 +692,22 @@ impl Record {
     ///   a Set renders at whatever size it is given, and one that carried a
     ///   canvas would make loading it resize every *other* Set in the deck.
     ///
-    /// A session stream carries all fourteen. That is the difference between
+    ///   [`Record::Save`] joins that second group and is the newest member of
+    ///   it: it says a deck slot's material was written out, which is a fact
+    ///   about a performance and about no Set. A Set file carrying one would
+    ///   claim, every time it was loaded, that a save had just happened.
+    ///
+    /// **Two reasons, and `Record::Save` does not add a third.** This function
+    /// asks *whose state is this* — the session's or a Set's — and answers it
+    /// for fifteen records with the two paragraphs above. Whether a record
+    /// **reaches outside the stream** is a different question about the same
+    /// vocabulary, and `Record::Save` is so far the only record for which the
+    /// answer is yes. Folding that into this taxonomy would give one function
+    /// two jobs and would make the count above mean two things at once; it
+    /// lives in `docs/ir-spec.md` under "Records with an effect outside the
+    /// stream", where a replay reads it.
+    ///
+    /// A session stream carries all fifteen. That is the difference between
     /// the two files, stated from this side.
     pub fn is_set_state(&self) -> bool {
         !matches!(
@@ -682,6 +726,7 @@ impl Record {
                 | Record::Preview { .. }
                 | Record::Transition { .. }
                 | Record::Mask { .. }
+                | Record::Save { .. }
         )
     }
 }
@@ -748,6 +793,27 @@ mod tests {
         // one it would do the most damage in: a Set renders at whatever size it
         // is handed, so a Set file carrying a canvas would resize every *other*
         // Set in the deck by being loaded.
+        assert!(!rec.is_set_state());
+    }
+
+    /// The wire line the spec prints, parsed and written back.
+    ///
+    /// **And the one assertion this record exists to make**: it is not Set
+    /// state, so `Store::write_set` refuses it. A `save` folded into a Set file
+    /// would be a file claiming, every time it was opened, that a save had just
+    /// happened — which is the outside-the-stream effect a replay is defined
+    /// not to perform, arriving by the one door nobody watches.
+    #[test]
+    fn a_save_round_trips_through_the_line_the_spec_prints() {
+        let line = r#"{"t":"save","slot":1,"id":"20260816-143052-271"}"#;
+        let rec = round_trip(line);
+        assert_eq!(
+            rec,
+            Record::Save {
+                slot: 1,
+                id: "20260816-143052-271".to_string(),
+            }
+        );
         assert!(!rec.is_set_state());
     }
 
