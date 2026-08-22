@@ -22,6 +22,7 @@ mod compile;
 mod frame;
 mod history;
 mod mcp;
+mod meta;
 mod midi;
 mod mix;
 mod render;
@@ -1986,7 +1987,12 @@ impl Names {
 /// layer is this file on" once for the engine and once for the file it saves
 /// would hold two answers to one question — the shape this project has been
 /// bitten by twice. See [`setfile::Node`], which is this as the record.
-#[derive(Clone, Debug, PartialEq, Eq)]
+// **`Eq` and not merely `PartialEq` is what the metadata card costs**: a record
+// carries the declared range as `f32`, so the lines are comparable and not
+// totally so. Nothing asks for `Eq` — no `Placed` is a map key — and the
+// comparison that is used, in the tests below, is unchanged: two nodes with the
+// same source have the same card, because the card is a function of it.
+#[derive(Clone, Debug, PartialEq)]
 struct Placed {
     named: Named,
     /// The name the procedure itself declares, which is not the name in
@@ -2021,6 +2027,22 @@ struct Placed {
     /// into [`Live::startup`] and crosses onto a save thread; the bytes
     /// themselves are read once and never again.
     source: std::sync::Arc<str>,
+    /// **This node's metadata card**, built from the `Checked` the compile
+    /// produced — see [`crate::meta::card`].
+    ///
+    /// It rides here for the reason `source` does, and it is the same reason
+    /// twice: this is the one compile the run will do of these bytes, and the
+    /// card is a function of it. The alternative was to build it where the
+    /// artifact is written, which would mean **re-compiling the source at save
+    /// time** — a second pass whose answer can differ from the one on screen
+    /// the moment anything about the checker is version-dependent, and a
+    /// compile on the path of a keypress besides. `Checked` itself is not
+    /// carried: what a card says is decided once, and holding the whole checked
+    /// tree per node to re-derive it would be holding the question instead of
+    /// the answer.
+    ///
+    /// Shared, because a slot's list is cloned onto the save thread.
+    meta: std::sync::Arc<[karakuri_store::ndjson::Line]>,
 }
 
 impl Placed {
@@ -2057,14 +2079,56 @@ impl Placed {
     /// session, whose `procedure` records a replay has to resolve. Folding the
     /// two together is what made a plain windowed run create a store it was
     /// never asked for; see [`Running::at_launch`].
+    ///
+    /// **The card goes down beside the artifact, and a card that will not write
+    /// does not fail the put.** The artifact is the thing; its metadata is
+    /// derived from the `.kir` plus a compile pass and regenerates on the next
+    /// one, so a store holding the source and no card holds everything that
+    /// cannot be recovered. Failing here instead would mean an operator losing
+    /// a save — or a session losing a `procedure` record's source — over a file
+    /// nothing has read yet. It is still said out loud: silence would leave a
+    /// library quietly thinning out as it grew.
     fn put(
         &self,
         store: &karakuri_store::store::Store,
     ) -> Result<karakuri_store::hash::Hash, String> {
-        store
+        let hash = store
             .put_artifact(self.source.as_bytes())
-            .map_err(|e| format!("{}: {e}", self.named.path.display()))
+            .map_err(|e| format!("{}: {e}", self.named.path.display()))?;
+        put_meta(store, &hash, &self.meta);
+        Ok(hash)
     }
+}
+
+/// **Write an artifact's metadata card, and never let it stop a save.**
+///
+/// The one place either put path says this, so that the judgement — the card is
+/// derived and the artifact is not — is made once and the sentence is one
+/// sentence. See [`Placed::put`], which is the other caller's other half.
+///
+/// The hash is passed rather than recomputed: the caller has just put the bytes
+/// under it, and deriving it again here would be a second answer to which
+/// artifact this card is for.
+///
+/// **It hands back what it said, and both callers drop it.** The policy — a
+/// card that will not write is reported and does not fail the save — was
+/// asserted in prose and nowhere else, because a sentence that is only printed
+/// is a sentence no test can hold. Returning it costs one `Option` and buys
+/// `live_save_tests::a_card_that_will_not_write_is_said_and_does_not_fail_the_save`,
+/// which reads it back. `None` is a card on disk.
+fn put_meta(
+    store: &karakuri_store::store::Store,
+    hash: &karakuri_store::hash::Hash,
+    card: &[karakuri_store::ndjson::Line],
+) -> Option<String> {
+    let e = store.write_meta(hash, card).err()?;
+    let said = format!(
+        "  the metadata for {}: {e} — the artifact is stored and the library will \
+         regenerate its card from the source on the next compile",
+        hash.short(12)
+    );
+    eprintln!("{said}");
+    Some(said)
 }
 
 /// **Sort one slot's compiled procedures by the `kind` each declares**, keeping
@@ -2118,16 +2182,21 @@ fn sort_compiled(
     for (named, checked, source) in compiled {
         let name = named.name.clone();
         let proc = checked.name.clone();
-        let (layer, index) = match checked.kind {
+        // **Each arm hands back the `Checked` it just filed**, because the
+        // card below is read off it and the arm is where it otherwise goes out
+        // of reach. This loop is the last point in the run holding both the
+        // checked procedure and the bytes it came from — see [`Placed::meta`]
+        // for why the card is kept and the tree is not.
+        let (layer, index, filed) = match checked.kind {
             karakuri_ir::Kind::L2 => {
                 names.l2s.push(name);
                 l2s.push(checked);
-                (karakuri_ir::Kind::L2, l2s.len() - 1)
+                (karakuri_ir::Kind::L2, l2s.len() - 1, l2s.last())
             }
             karakuri_ir::Kind::L4 => {
                 names.l4s.push(name);
                 l4s.push(checked);
-                (karakuri_ir::Kind::L4, l4s.len() - 1)
+                (karakuri_ir::Kind::L4, l4s.len() - 1, l4s.last())
             }
             // **A second camera is a second camera**, and this was the last
             // refusal in this file that said otherwise. It said a slot looks
@@ -2140,7 +2209,7 @@ fn sort_compiled(
             karakuri_ir::Kind::L3 => {
                 names.l3s.push(name);
                 l3s.push(checked);
-                (karakuri_ir::Kind::L3, l3s.len() - 1)
+                (karakuri_ir::Kind::L3, l3s.len() - 1, l3s.last())
             }
             // **A second field is a second field**, not a mistake — the last
             // refusal in this file that said otherwise, and it said so about
@@ -2153,7 +2222,7 @@ fn sort_compiled(
             karakuri_ir::Kind::Field => {
                 names.fields.push(name);
                 fields.push(checked);
-                (karakuri_ir::Kind::Field, fields.len() - 1)
+                (karakuri_ir::Kind::Field, fields.len() - 1, fields.last())
             }
             // **A second L1 is a second source**, not a mistake. Each one
             // simulates independently — its own `seed` from zero, its own hash
@@ -2167,16 +2236,28 @@ fn sort_compiled(
             karakuri_ir::Kind::L1 => {
                 names.l1s.push(name);
                 l1s.push(checked);
-                (karakuri_ir::Kind::L1, l1s.len() - 1)
+                (karakuri_ir::Kind::L1, l1s.len() - 1, l1s.last())
             }
         };
-        placed.push(Placed {
+        let checked = filed.expect("the procedure was pushed onto that layer's list above");
+        // **The node first, and its card read off the node.** A card names the
+        // artifact it describes by its hash, and [`Placed::hash`] is where a
+        // node's address is derived — spelling `Hash::of(source)` here as well
+        // would be a second derivation of one fact, which is the defect this
+        // file has been bitten by twice and the reason `hash` is a method
+        // rather than a field beside `source`. `meta` is therefore empty for
+        // exactly one statement, and nothing can observe a `Placed` in that
+        // state: the node is not reachable until it is pushed.
+        let mut node = Placed {
             named,
             proc,
             layer,
             index: index as u32,
             source,
-        });
+            meta: Vec::new().into(),
+        };
+        node.meta = meta::card(&node.hash(), checked).into();
+        placed.push(node);
     }
     if l4s.is_empty() {
         return Err(match head {
@@ -2924,21 +3005,38 @@ fn live_sources(playing: Option<&Nodes>, startup: &[Placed]) -> Sources {
             .enumerate()
             .map(|(at, (layer, index, hash))| {
                 let placed = startup.get(at);
+                // **Carried only where the address says these are the bytes on
+                // screen.** Equal hashes mean the slot is still running what it
+                // launched with at this node, so the compiled text this process
+                // is holding is what the file will reference and the store has
+                // to be given it. Unequal means a build put that version there,
+                // and the watcher stored it as it built it — there is nothing
+                // here to add.
+                //
+                // **One predicate asked once, yielding the pair.** The card and
+                // the bytes travel on exactly the same condition, and
+                // `SavedNode::meta` states that as an invariant —
+                // `Sources::into_nodes` writes the card inside the `if let` for
+                // the source and would silently drop a card that outlived its
+                // bytes. Asked twice it was two derivations of one question with
+                // nothing holding them together, which is the defect this file
+                // has already paid for in `Running` and in `Sources`.
+                let (source, meta) = placed
+                    .filter(|p| p.hash() == *hash)
+                    .map(|p| {
+                        (
+                            std::sync::Arc::clone(&p.source),
+                            std::sync::Arc::clone(&p.meta),
+                        )
+                    })
+                    .unzip();
                 SavedNode {
                     layer,
                     index: *index,
                     hash: *hash,
                     name: placed.and_then(|p| p.named.name.clone()),
-                    // **Carried only where the address says these are the bytes
-                    // on screen.** Equal hashes mean the slot is still running
-                    // what it launched with at this node, so the compiled text
-                    // this process is holding is what the file will reference
-                    // and the store has to be given it. Unequal means a build
-                    // put that version there, and the watcher stored it as it
-                    // built it — there is nothing here to add.
-                    source: placed
-                        .filter(|p| p.hash() == *hash)
-                        .map(|p| std::sync::Arc::clone(&p.source)),
+                    source,
+                    meta,
                 }
             })
             .collect()
@@ -4160,6 +4258,22 @@ struct SavedNode {
     /// These are the *compiled* bytes and never a re-read of the path, so a
     /// `.kir` rewritten since launch cannot reach a saved file.
     source: Option<std::sync::Arc<str>>,
+    /// The card that goes down with those bytes, carried on exactly the same
+    /// condition and for the same reason — see [`Placed::meta`]. `None`
+    /// wherever `source` is `None`: a rebuilt node's card was written by the
+    /// build that stored it, and there is nothing here to add.
+    ///
+    /// **That is held by construction rather than asserted.** [`live_sources`]
+    /// asks the one predicate once and takes the pair off it, because it used
+    /// to ask it twice — two derivations of "are these the bytes on screen"
+    /// with nothing keeping them equal, where [`Sources::into_nodes`] writes the
+    /// card *inside* the branch that puts the source and would have dropped a
+    /// card whose `source` had gone `None` without a word.
+    ///
+    /// A field beside `source` rather than derived from it, because deriving it
+    /// would mean re-compiling the source on the save thread — see
+    /// [`Placed::meta`], which declined the same thing on the same grounds.
+    meta: Option<std::sync::Arc<[karakuri_store::ndjson::Line]>>,
 }
 
 /// **Where one live save's sources come from**: the hashes of the versions this
@@ -4217,6 +4331,7 @@ impl Sources {
                     hash,
                     name,
                     source,
+                    meta,
                 } = node;
                 let layer = layer_named(layer)
                     .ok_or_else(|| format!("a node on layer `{layer}` cannot be saved"))?;
@@ -4224,6 +4339,14 @@ impl Sources {
                     store
                         .put_artifact(source.as_bytes())
                         .map_err(|e| format!("the source of a `{layer:?}` node: {e}"))?;
+                    // **Beside the bytes, on [`Placed::put`]'s terms**: the
+                    // card is derived and the artifact is not, so a card that
+                    // will not write is said and not raised. Inside the `if`
+                    // because it is the same condition — a node whose bytes
+                    // were already in the store has a card there too.
+                    if let Some(meta) = meta {
+                        put_meta(store, &hash, &meta);
+                    }
                 }
                 Ok(setfile::Node {
                     hash,
@@ -8230,6 +8353,257 @@ mod live_save_tests {
         .expect("the Set file is written");
         let store = karakuri_store::store::Store::open(store_root).expect("store");
         setfile::load(&store, id).expect("and reads back")
+    }
+
+    /// **A geometry with a negative default**, which is the declaration the
+    /// fold exists for and the one no example in the tree carries.
+    ///
+    /// `drift_shell` with one param added and read, so the procedure still
+    /// compiles, still draws, and now declares a default that is `Unary { Neg,
+    /// Lit }` rather than a literal.
+    fn signed_l1() -> String {
+        let src = example("drift_shell.kir");
+        let with_param = src.replace(
+            "  param drift      : float [0.0, 2.0] = 0.6",
+            "  param drift      : float [0.0, 2.0] = 0.6\n  \
+             param signed     : float [-1.0, 1.0] = -0.35",
+        );
+        assert_ne!(with_param, src, "the example's params moved");
+        let with_use = with_param.replace(
+            "    position = p;",
+            "    position = p + vec3(signed, 0.0, 0.0);",
+        );
+        assert_ne!(with_use, with_param, "the example's element block moved");
+        with_use
+    }
+
+    /// **A stored artifact has a card beside it, and the card says what the
+    /// `.kir` declares** — every param with its range, the capacity range and
+    /// its default, and the emitted attributes.
+    ///
+    /// `docs/ir-spec.md`'s metadata section opened with "nothing writes or reads
+    /// one" for the whole of M1 to M3, so every claim it makes was unenforced
+    /// prose. This is the half a compile pass can produce, pinned against a
+    /// source a reader can check it against by eye.
+    ///
+    /// **Including a negative default**, which is the one declaration a second
+    /// reader of defaults gets wrong — see
+    /// [`the_engine_and_the_metadata_writer_cannot_disagree_about_a_default`],
+    /// which is the other half of that and needs a GPU. This one needs none:
+    /// putting an artifact is a compile and two files.
+    ///
+    /// **Through [`Placed::put`] rather than around it.** That is the funnel
+    /// every stored artifact goes through — the watcher's builds, a recorded
+    /// run's seeding, and `--save-set` — so a test that assembled the write by
+    /// hand would be a test of a copy.
+    #[test]
+    fn a_stored_artifact_has_a_card_saying_what_its_source_declares() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let paths = vec![
+            kir(&dir, "a.kir", &signed_l1()),
+            kir(&dir, "r.kir", &example("soft_points.kir")),
+        ];
+        let (_material, placed) = slot(&paths);
+        let store =
+            karakuri_store::store::Store::open(dir.path().join("store")).expect("a store opens");
+
+        let hash = placed[0].put(&store).expect("the artifact is stored");
+        let card = store
+            .read_meta(&hash)
+            .expect("an artifact that was put has a card beside it");
+        let records: Vec<Record> = card.iter().map(|l| l.record().clone()).collect();
+
+        assert_eq!(
+            records.first(),
+            Some(&Record::Meta {
+                hash,
+                name: "drift_shell".to_string(),
+                kind: Layer::L1,
+                v: 1,
+            }),
+            "a card's head names the artifact it describes and the procedure's \
+             own name"
+        );
+
+        let declared: Vec<(&str, f32, f32, Option<f32>)> = records
+            .iter()
+            .filter_map(|r| match r {
+                Record::ParamDecl {
+                    key,
+                    ty,
+                    min,
+                    max,
+                    default,
+                } => {
+                    assert_eq!(ty, "float", "`{key}` is declared a float in the source");
+                    Some((key.as_str(), *min, *max, *default))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            declared,
+            vec![
+                ("radius", 0.1, 8.0, Some(2.6)),
+                ("turbulence", 0.0, 3.0, Some(1.1)),
+                ("swirl", 0.0, 2.0, Some(0.35)),
+                ("drift", 0.0, 2.0, Some(0.6)),
+                // The one the fold exists for: `= -0.35` is a negation of a
+                // literal, and a card that read `Expr::Lit` alone would carry
+                // no `default` here at all.
+                ("signed", -1.0, 1.0, Some(-0.35)),
+            ],
+            "the params a card declares are not the source's, in the source's order"
+        );
+
+        assert!(
+            records.contains(&Record::CapacityDecl {
+                min: 4096,
+                max: 1048576,
+                default: 262144,
+            }),
+            "the declared capacity range is not on the card: {records:?}"
+        );
+        assert!(
+            records.contains(&Record::Emit {
+                attrs: vec![
+                    "position".to_string(),
+                    "velocity".to_string(),
+                    "age".to_string(),
+                ],
+            }),
+            "the emitted attributes are not on the card: {records:?}"
+        );
+    }
+
+    /// **A card that will not write is said out loud and does not fail the
+    /// save.**
+    ///
+    /// The policy [`Placed::put`] states: the artifact is the thing, its card is
+    /// derived from the `.kir` plus a compile pass and regenerates on the next
+    /// one, so a store holding the source and no card holds everything that
+    /// cannot be recovered — and failing the put instead would lose an operator
+    /// a save over a file nothing has read yet. Both halves were prose until
+    /// here, and the half that rots quietly is the second: a `put` that started
+    /// returning the card's error would be caught by any test that saves, while
+    /// a `put_meta` that swallowed it would be caught by none.
+    ///
+    /// **The card's own path taken by a directory**, because that is the one
+    /// failure that reaches the card and nothing else. A read-only store root
+    /// would fail `put_artifact` first and prove the opposite thing. The path is
+    /// spelled here the way `Store::meta_path` spells it — it is private — as
+    /// `karakuri-store`'s own metadata tests spell it.
+    #[test]
+    fn a_card_that_will_not_write_is_said_and_does_not_fail_the_save() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let paths = vec![
+            kir(&dir, "a.kir", &example("drift_shell.kir")),
+            kir(&dir, "r.kir", &example("soft_points.kir")),
+        ];
+        let (_material, placed) = slot(&paths);
+        let root = dir.path().join("store");
+        let store = karakuri_store::store::Store::open(&root).expect("a store opens");
+
+        let hash = placed[0].hash();
+        std::fs::create_dir(root.join(format!("{}.meta.ndjson", hash.short(64))))
+            .expect("the card's path is taken");
+
+        assert_eq!(
+            placed[0]
+                .put(&store)
+                .expect("the save is not failed by a card"),
+            hash,
+            "a put that survived its card came back with another artifact"
+        );
+        assert!(
+            store.get_artifact(&hash).is_ok(),
+            "the source did not reach the store, so nothing here was recoverable"
+        );
+        assert!(
+            store.read_meta(&hash).is_err(),
+            "the card was written after all, and this test proves nothing"
+        );
+
+        // The same call the put makes, read back rather than watched on a
+        // terminal — see [`put_meta`], which returns what it printed for this.
+        let said = put_meta(&store, &hash, &placed[0].meta)
+            .expect("a card that would not write is reported");
+        assert!(
+            said.contains(&hash.short(12)),
+            "the operator is not told which artifact: {said}"
+        );
+        assert!(
+            said.contains("the artifact is stored"),
+            "the operator is not told the save survived: {said}"
+        );
+    }
+
+    /// **One fold, so the card and the uniform cannot disagree.**
+    ///
+    /// The number in a `param_decl` and the number the engine loads into a
+    /// node's uniform are the same declaration read twice, and until this
+    /// commit there was exactly one reader of it — private to
+    /// `karakuri-engine`, with a note saying a second evaluator elsewhere would
+    /// agree with the shader by coincidence. The metadata writer is that
+    /// elsewhere. So the fold moved to `karakuri_ir::Param::default_scalar` and
+    /// both call it, and this is what fails if either grows a reader of its own:
+    /// a card claiming `0.0` where the run loaded `-0.35` describes a procedure
+    /// nobody ran, and nothing downstream could say which of the two was wrong.
+    ///
+    /// **Both directions.** Every default the card states must be the value the
+    /// built Set is running, *and* every value the Set is running must be
+    /// stated — one of those alone passes when a writer silently drops the
+    /// declaration it cannot fold.
+    ///
+    /// The Set is built with no overrides and no Set file, so what a node holds
+    /// is exactly what its `.kir` declared.
+    #[test]
+    fn the_engine_and_the_metadata_writer_cannot_disagree_about_a_default() {
+        let gpu = Gpu::headless().expect("no GPU");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let paths = vec![
+            kir(&dir, "a.kir", &signed_l1()),
+            kir(&dir, "r.kir", &example("soft_points.kir")),
+        ];
+        let (material, placed) = slot(&paths);
+        let set = set_of(&gpu, &material, &[16384], &[3], &[], None);
+        let store =
+            karakuri_store::store::Store::open(dir.path().join("store")).expect("a store opens");
+        let hash = placed[0].put(&store).expect("the artifact is stored");
+
+        let mut on_the_card: Vec<(String, f32)> = store
+            .read_meta(&hash)
+            .expect("a card beside the artifact")
+            .iter()
+            .filter_map(|l| match l.record() {
+                Record::ParamDecl {
+                    key,
+                    default: Some(v),
+                    ..
+                } => Some((key.clone(), *v)),
+                _ => None,
+            })
+            .collect();
+        let mut in_the_uniform: Vec<(String, f32)> = set
+            .params()
+            .filter(|(layer, index, ..)| *layer == karakuri_ir::Kind::L1 && *index == 0)
+            .map(|(_, _, key, value)| (key.to_string(), value))
+            .collect();
+        on_the_card.sort_by(|a, b| a.0.cmp(&b.0));
+        in_the_uniform.sort_by(|a, b| a.0.cmp(&b.0));
+
+        assert_eq!(
+            on_the_card, in_the_uniform,
+            "the card and the uniform read the same declaration and came back with \
+             different numbers, which means there are two folds again"
+        );
+        // Not a vacuous agreement: both have to have folded the negation. Two
+        // readers that both dropped it would be equal and both wrong.
+        assert!(
+            on_the_card.contains(&("signed".to_string(), -0.35)),
+            "neither reader folded the negation, so they agree about nothing: \
+             {on_the_card:?}"
+        );
     }
 
     /// **A live save writes a file that loads back into the same material** —

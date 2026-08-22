@@ -25,7 +25,7 @@ fn open_establishes_layout_and_is_idempotent() {
     Store::open(&root).unwrap();
 
     assert!(root.is_dir());
-    assert!(root.join("previews").is_dir());
+    assert!(root.join("thumbnails").is_dir());
     assert!(root.join("sets").is_dir());
     assert!(root.join("sessions").is_dir());
 }
@@ -329,4 +329,152 @@ fn write_set_rejects_an_audio_frame_and_a_tempo_correction() {
             .join(format!("{name}.set.ndjson"))
             .exists());
     }
+}
+
+/// **A metadata record is refused from a Set file**, and refused in its own
+/// words.
+///
+/// `param_decl` and `param` are one letter apart in a hand-edited file and
+/// nothing alike in meaning: one says a knob exists and what it may be turned
+/// between, the other says what this Set turned it to. A Set file carrying the
+/// first would describe an artifact rather than a Set — and a *reader* meeting
+/// one would take a declaration for a value.
+///
+/// **The gate is [`Record::is_metadata`] and not `!is_set_state`**, which is
+/// what the separate error variant is here to pin: these records are not Set
+/// state and would fall through the older check, but the sentence it says is
+/// about time, and telling an operator a `capacity_decl` was rejected for
+/// carrying time sends them looking in the wrong place.
+///
+/// All four, because the refusal is about the group and a check written against
+/// one of them would pass while the other three went to disk.
+#[test]
+fn write_set_rejects_an_artifacts_metadata() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    for (name, record) in [
+        (
+            "meta",
+            Record::Meta {
+                hash: Hash::of(b"proc p { kind L1 }"),
+                name: "p".into(),
+                kind: Layer::L1,
+                v: 1,
+            },
+        ),
+        (
+            "param_decl",
+            Record::ParamDecl {
+                key: "radius".into(),
+                ty: "float".into(),
+                min: 0.1,
+                max: 8.0,
+                default: Some(2.0),
+            },
+        ),
+        (
+            "capacity_decl",
+            Record::CapacityDecl {
+                min: 65536,
+                max: 1048576,
+                default: 262144,
+            },
+        ),
+        (
+            "emit",
+            Record::Emit {
+                attrs: vec!["position".into()],
+            },
+        ),
+    ] {
+        let lines = vec![
+            Line::new(Record::Set {
+                id: "drift_01".into(),
+                v: 1,
+            }),
+            Line::new(record),
+        ];
+        match store.write_set(name, &lines) {
+            Err(StoreError::MetaInSet { index }) => assert_eq!(index, 1),
+            other => panic!("a `{name}` record in a Set file was accepted: {other:?}"),
+        }
+        assert!(!dir
+            .path()
+            .join("sets")
+            .join(format!("{name}.set.ndjson"))
+            .exists());
+    }
+}
+
+/// **Both halves of the metadata decoder's forward-compatibility rule**, on a
+/// file the store did not write.
+///
+/// `docs/ir-spec.md` states them for this file separately from the Set file's,
+/// because it is a separate list read by a separate decoder: an unknown `t` is
+/// ignored, and so is an unknown key inside a record whose `t` *is* known.
+///
+/// The second is the one a *removed* key needs, and the specification names the
+/// case — `perf` carried a `bytes_per_element` and does not any more. `perf`
+/// itself has no producer yet, so the removed key is put where a known `t` can
+/// hold it: a `param_decl` written by a build that recorded something this one
+/// does not. Reading it must yield the declaration and pass over the key,
+/// rather than failing the whole file over a field nobody asks for.
+///
+/// Ignoring costs nothing here because the file is derived: a key that still
+/// means something comes back on the next regeneration.
+#[test]
+fn a_metadata_file_survives_an_unknown_t_and_an_unknown_key() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    let hash = store.put_artifact(b"proc drift_shell { kind L1 }").unwrap();
+    let path = dir.path().join(format!("{}.meta.ndjson", hash.short(64)));
+    let original = format!(
+        concat!(
+            r#"{{"t":"meta","hash":"{hash}","name":"drift_shell","kind":"L1","v":1}}"#,
+            "\n",
+            // A `t` this build has never heard of — `origin` is specified and
+            // has no producer, so a file written by something that generates
+            // procedures will carry exactly this.
+            r#"{{"t":"origin","prompt":"organic drifting shell","seed":19274}}"#,
+            "\n",
+            // A known `t` carrying a key this build does not know, which is the
+            // removed-key case.
+            r#"{{"t":"param_decl","key":"radius","type":"float","min":0.1,"max":8.0,"#,
+            r#""default":2.0,"units":"metres"}}"#,
+            "\n",
+        ),
+        hash = hash
+    );
+    fs::write(&path, &original).unwrap();
+
+    let lines = store.read_meta(&hash).unwrap();
+    assert_eq!(lines.len(), 3, "a line was dropped rather than passed over");
+    assert_eq!(
+        lines[1].record(),
+        &Record::Unknown,
+        "an unrecognised `t` was not ignored"
+    );
+    assert_eq!(
+        lines[2].record(),
+        &Record::ParamDecl {
+            key: "radius".into(),
+            ty: "float".into(),
+            min: 0.1,
+            max: 8.0,
+            default: Some(2.0),
+        },
+        "a known `t` carrying an unknown key did not read back as itself"
+    );
+
+    // And writing it back preserves both — the unknown line verbatim, because
+    // re-serialising `Record::Unknown` would fabricate a line that never
+    // existed, and the known one without the key it never held.
+    store.write_meta(&hash, &lines).unwrap();
+    let contents = fs::read_to_string(&path).unwrap();
+    assert!(
+        contents.contains(r#"{"t":"origin","prompt":"organic drifting shell","seed":19274}"#),
+        "the unknown line did not survive the write: {contents}"
+    );
 }

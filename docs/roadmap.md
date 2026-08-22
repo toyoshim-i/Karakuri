@@ -70,9 +70,9 @@ Orthogonal to the layers:
   the same records a key press writes is M6's stated demand, arriving from outside the
   process. What it does not cover is the autonomous half — an agent that prepares material
   unasked has no chat window to be asked in
-- **Library** — search, genealogy, embeddings, previews (M4), on top of the content
-  addressing that exists from M1. The separate metadata file it also wants does not exist
-  yet — see M4's demands
+- **Library** — search, genealogy, embeddings, thumbnails (M4), on top of the content
+  addressing that exists from M1. The separate metadata file it also wants is now written
+  for every stored artifact, and nothing reads one yet — see M4's demands
 
 ### Three clocks
 
@@ -2043,9 +2043,10 @@ section of `docs/ir-spec.md`, where a reader meets the `camera` record.
 
 - Library thumbnails. Every artifact gets a short loop and a still at promotion time, for
   browsing. Distinct from the live slot preview built in M2 — that one renders a running
-  instance, this one is a stored asset
+  instance, this one is a stored asset, and it is `thumbnail` in the metadata vocabulary
+  for exactly that reason — see "Metadata file format" in `docs/ir-spec.md`
 - Dual embeddings. Text embedding of prompt and tags, plus a visual embedding of the
-  preview. Visual search matters more than it sounds — under stage conditions people
+  thumbnail. Visual search matters more than it sounds — under stage conditions people
   search by look, not by words
 - Genealogy. Derivation graph via `parent`, enabling "make ten variations of this"
   evolutionary workflows
@@ -2059,13 +2060,29 @@ section of `docs/ir-spec.md`, where a reader meets the `camera` record.
 
 **Demands on earlier work**
 
-- Content addressing and separate metadata files from M1. **Half done.** The store is
-  content-addressed and tested; the metadata file is specified and does not exist — no
-  record type for it is in the vocabulary `karakuri-store` decodes. See "Metadata file
-  format" under Beyond v0.2 in `docs/ir-spec.md`
+- Content addressing and separate metadata files from M1. **The store is content-addressed
+  and tested, and the metadata file now has a producer.** Both of the paths that store an
+  artifact from a compile — `Placed::put` and `Sources::into_nodes`, through `put_meta` —
+  write a `<hash>.meta.ndjson` beside it carrying `meta`, `param_decl`, `capacity_decl` and
+  `emit`, the four of the nine records a compile pass can answer; and `karakuri-store`
+  decodes them, can read the file back and refuses them from a Set file. `Store::put_artifact`
+  writes no card of its own: it is content-addressed bytes and does not compile, so a card
+  is the caller's to add, and `crates/karakuri-store/tests/store.rs` is full of puts that
+  add none — an artifact with no card is uncarded, not damaged. What is left of this demand is the *reading* half: `Store::read_meta`
+  has no caller outside the tests, and nothing searches, groups or walks these files, which
+  is the library this milestone is named for. See "Metadata file format" in
+  `docs/ir-spec.md`
 - `parent` recorded from the first generated artifact, or the genealogy has a hole at the
-  root. Nothing is recorded yet, and the first generated artifact is close — this is the
-  demand most likely to be missed by simply arriving late
+  root. **Untouched, deliberately.** Nothing generates procedures, so `parent` has no
+  producer and the first generated artifact is still close — an empty one written now
+  would fill the hole rather than leave it visible. This stays the demand most likely to
+  be missed by simply arriving late, and the file it goes in exists now, which removes the
+  only excuse for missing it
+- `perf` needs the stage-7 probe, and is not a compile pass's to write. What a compile
+  pass can answer is `ops_per_element`, returned by `cost::estimate` — and not held by
+  `Checked::cost`, the field named for it, which is unconditionally `None`; the record's
+  field is `ns_per_element`, which is a measurement — see "Metadata file format" in
+  `docs/ir-spec.md`, which withdrew a published number for exactly this once already
 
 ~4–6 weeks.
 

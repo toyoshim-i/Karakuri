@@ -3,8 +3,17 @@
 //! An artifact is identified by the SHA-256 of its `.kir` source and nothing
 //! else. Notably `capacity` does not enter into it beyond appearing in the
 //! source as a declared range: the same procedure at 65536 and at 524288 is one
-//! artifact with one hash and one preview, because capacity is a performance
-//! dial turned per Set rather than part of a procedure's identity.
+//! artifact with one hash, because capacity is a performance dial turned per
+//! Set rather than part of a procedure's identity.
+//!
+//! **The rest of that sentence is not repeated here.** `docs/ir-spec.md`,
+//! "`capacity` is not part of a procedure's identity", counts the stored assets
+//! one identity gets as well — "one hash and one thumbnail" — and this file
+//! carried a word-for-word copy of it that went on saying `preview` for a whole
+//! rename, because a sentence in two places is not checked by anything. What a
+//! stored asset is *called* is the metadata vocabulary's, named in
+//! `Record::is_metadata` and in the specification; what the address is computed
+//! over is this file's, and that half stays.
 
 use std::fmt;
 use std::str::FromStr;

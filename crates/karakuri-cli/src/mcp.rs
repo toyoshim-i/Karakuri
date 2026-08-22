@@ -3013,6 +3013,7 @@ mod tests {
             hash: karakuri_store::hash::Hash::of(b"kind L1"),
             name: None,
             source: None,
+            meta: None,
         }]);
         let id = crate::accepted_save(
             1,
