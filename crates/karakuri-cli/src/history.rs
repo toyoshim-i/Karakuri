@@ -63,6 +63,76 @@ use std::path::{Path, PathBuf};
 /// The subdirectory of the store this lives in.
 pub const DIR: &str = "history";
 
+/// **The clock a name is taken off**: local time to the millisecond.
+///
+/// Milliseconds, because two writes inside one second is an ordinary thing for
+/// an editor that formats on write — and a name that collided would overwrite
+/// the thing it was supposed to be preserving.
+const TIME: &str = "%H%M%S-%3f";
+
+/// A name for something an operator will look for by **when they made it**.
+///
+/// This module's convention, borrowed rather than reinvented, and borrowed for
+/// its stated reason: a live save has no way to be given a name — a key press
+/// cannot type one — so the only thing it can be filed under is the moment it
+/// happened, and an operator goes looking for the time they pressed the key.
+/// Local for the reason the date directory is local: the answer has to be the
+/// one the person would say out loud, and a UTC name is the wrong one for half
+/// the world and half the day.
+///
+/// The date is spelled `20260816` rather than `2026/08/16` because this is a
+/// Set id and a Set id is one path component; the *time* half is [`TIME`], the
+/// same string a snapshot is named with, so the two cannot drift.
+pub fn stamped_id() -> String {
+    let now = chrono::Local::now();
+    let stamp = format!("{}-{}", now.format("%Y%m%d"), now.format(TIME));
+    static ISSUED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+        std::sync::OnceLock::new();
+    let issued = ISSUED.get_or_init(Default::default);
+    match issued.lock() {
+        Ok(mut issued) => unused(&mut issued, stamp),
+        // A poisoned lock means a caller panicked holding it. The stamp is
+        // still a name, and refusing to save over it would be this bookkeeping
+        // deciding whether an operator keeps their work.
+        Err(_) => stamp,
+    }
+}
+
+/// `stamp`, or `stamp-1`, `stamp-2` — **the first spelling nothing in this run
+/// has been given yet.**
+///
+/// [`TIME`] resolves to a millisecond because two writes inside one second is
+/// ordinary, and [`Snapshots::record`] gets away with that alone: it dedups on
+/// content, and its names carry the slot, layer and node index, so the writers
+/// that could collide are already spelled apart. A Set id carries none of that.
+/// Two saves of the same run in the same millisecond produced one id, and the
+/// second Set file overwrote the first — the operator was told both had been
+/// kept. Out of reach for a key press, and not out of reach for the MCP control
+/// this is about to grow.
+///
+/// **A set of what this run has issued, rather than a look in the store.**
+/// Checking the store is the stronger answer and it is a different function:
+/// this one has no store to check, `Live::save_set` names the id on the render
+/// thread and the store is only opened on the save thread, and a check there
+/// would still race the write. What is left over is narrow and worth stating:
+/// an id already on disk from an *earlier* run is not detected here, and two
+/// runs saving in the same millisecond can still collide. Both need the store,
+/// and neither is the case that arrived with a control that can be called twice
+/// in a frame.
+fn unused(issued: &mut std::collections::HashSet<String>, stamp: String) -> String {
+    if issued.insert(stamp.clone()) {
+        return stamp;
+    }
+    let mut nth = 1u32;
+    loop {
+        let candidate = format!("{stamp}-{nth}");
+        if issued.insert(candidate.clone()) {
+            return candidate;
+        }
+        nth += 1;
+    }
+}
+
 /// Takes a snapshot per **node** — slot, layer, and which node of that layer —
 /// and remembers what it last took, so an unchanged procedure is not written
 /// again.
@@ -120,10 +190,7 @@ impl Snapshots {
         let dir = self.root.join(now.format("%Y/%m/%d").to_string());
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
 
-        // Milliseconds, because two saves inside one second is an ordinary
-        // thing for an editor that formats on write — and a name that collided
-        // would overwrite the version it was supposed to be preserving.
-        let stamp = now.format("%H%M%S-%3f").to_string();
+        let stamp = now.format(TIME).to_string();
         // The index is in the name only when it is not the first, so every
         // name a one-renderer run has ever written is the name it still writes.
         // A file is read by a person looking for what they changed, and a `_0`
@@ -596,6 +663,46 @@ mod tests {
                 .expect("record")
                 .is_some(),
             "the edited L4 was skipped"
+        );
+    }
+
+    /// **Two saves inside one millisecond get two ids**, so the second does not
+    /// write over the first.
+    ///
+    /// The clock is the only thing a live save can be named by — a key press
+    /// cannot type a name — and it resolves to a millisecond, which is finer
+    /// than a hand and not finer than a program. `Live::save_set` prints the id
+    /// and reports that the file was kept, so a collision is not a lost save
+    /// but a save reported as kept and then overwritten by the next one.
+    ///
+    /// Driven through [`unused`] with a fixed stamp rather than by calling
+    /// `stamped_id` in a tight loop: this is about the rule, and a test that
+    /// depended on two calls landing in the same millisecond would pass by
+    /// accident on a slow machine.
+    #[test]
+    fn two_ids_taken_off_one_millisecond_are_two_ids() {
+        let mut issued = std::collections::HashSet::new();
+        let stamp = "20260816-143052-271".to_string();
+        let ids: Vec<String> = (0..3).map(|_| unused(&mut issued, stamp.clone())).collect();
+
+        assert_eq!(
+            ids,
+            vec![
+                "20260816-143052-271",
+                "20260816-143052-271-1",
+                "20260816-143052-271-2"
+            ],
+            "a second save in the same millisecond was handed the first one's \
+             id, so its Set file wrote over a file the operator was told had \
+             been kept"
+        );
+
+        // **The control.** A different millisecond is left exactly as it is —
+        // an operator looks for the time they pressed the key, and an index on
+        // every id would be noise in the way of that.
+        assert_eq!(
+            unused(&mut issued, "20260816-143052-272".to_string()),
+            "20260816-143052-272"
         );
     }
 

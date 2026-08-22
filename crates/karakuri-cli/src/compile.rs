@@ -9,9 +9,20 @@ use std::path::Path;
 
 use karakuri_ir::typed::Checked;
 
-pub fn load(path: &Path) -> Result<Checked, String> {
+/// **The compiled procedure and the text it was compiled from**, together.
+///
+/// The source is handed back rather than dropped, and that is the whole reason
+/// this returns a pair. A `.kir` is read here exactly once per run, and what
+/// the run goes on to say about that node — the address a live save writes, the
+/// hash a `procedure` record names, the artifact a replay resolves — is a
+/// function of *these* bytes. A second reader asking the path again is a second
+/// answer to "what is this node running", and it is a different answer the
+/// moment anything has rewritten the file in between: an editor, a model over
+/// MCP, a formatter. See [`crate::Placed`], which is where these bytes are kept.
+pub fn load(path: &Path) -> Result<(Checked, String), String> {
     let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    compile(&src).map_err(|report| format!("{}:\n{report}", path.display()))
+    let checked = compile(&src).map_err(|report| format!("{}:\n{report}", path.display()))?;
+    Ok((checked, src))
 }
 
 /// The same five stages, over source already in hand rather than a path.

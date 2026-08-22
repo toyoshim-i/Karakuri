@@ -1947,16 +1947,54 @@ better code immediately. So resources stay a curated few and *search* over a lar
 a tool call — which is also the only way round the fact that `resources/list` is a list a
 client reads in full.
 
-**One gap the three-place layout opened and did not close.** A user preset can
+**One gap the three-place layout opened, now half closed.** A user preset can
 now be loaded into the scratch, edited by a hand or a model, and every version
-that compiles is kept — but **nothing saves the result from a running session**.
-`--save-set` writes what the flags say and exits, so the loop ends at "find the
-version you liked in `<store>/history/` and start a run from it". What it wants
-is one control that writes the current material as a Set, reachable from a key,
-from MCP, and from whatever surface M5 builds — the same three-way reach every
-other control in this system has. Small, and it is the difference between a
-library you can put things into and one you can only put things into before you
-start playing.
+that compiles is kept — but ~~**nothing saves the result from a running
+session**. `--save-set` writes what the flags say and exits, so the loop ends at
+"find the version you liked in `<store>/history/` and start a run from it".~~
+The `k` key writes the focused slot's current material as a Set file, named
+after the moment it was pressed, reading everything the Set holds off the Set on
+screen rather than off the flags — which is what makes it a save of what was
+*played* rather than of what was started. Two things it cannot read that way,
+because the Set does not hold them: the edges, which nothing rewires mid-run,
+and each node's spelled name, which belongs to the use rather than the
+procedure. `Live::edges` says why that is a copy of a value and not of a rule.
+It goes into the session stream as a `save` record, and a replay skips it and
+says so: see "Records with an effect outside the stream" in `docs/ir-spec.md`.
+
+**What is left is the other two ways in, and this is the first control to want
+all three.** No control in this system has three-way reach today, which is worth
+stating plainly rather than assuming: keys and MIDI converge, because every
+action a surface produces ends in the method a key press ends in — `midi.rs`
+says so at its head — and MCP's whole surface is `read_procedure`,
+`write_procedure` and `swap_outcome`, none of which a key can reach and none of
+which reaches a procedure from the other side. So there has never been one
+control that a hand, a model and a future surface all wanted, and that is
+exactly why the channel it needs does not exist yet.
+
+**MCP is the one that is missing and costing something**, because a model that
+has just rewritten a procedure is exactly the caller with something worth
+keeping and no way to ask for it. It is not the same shape of work as the key:
+the save has to happen on the render thread's terms, where the live Set is, and
+the MCP server is a thread that cannot reach it — so it needs a server-to-loop
+request channel, which nothing in this program has yet. The M5 surface then
+costs nothing beyond that channel.
+
+The difference this closes is still worth stating: a library you can put things
+into, rather than one you can only put things into before you start playing.
+
+**A known gap the saver runs into and does not cause: a rebuild resets the
+camera.** `swap::Request` carries no camera and `Set::build_many` starts every
+built Set from `Orbit::default()`, so under `--load-set X --watch` the first
+rebuild of a `.kir` silently puts a loaded camera back to its defaults. The
+saver is faithful — it records `set.camera`, which is what the Set on screen
+holds — so the first `k` after any rebuild writes the defaults into a new preset
+and the loss stops being a display accident and becomes a file. **This predates
+the save control and is not fixed by it**; closing it means the request carrying
+a camera the way it already carries the salts and the params, and for the same
+reason those are restated: a rebuild that lets a value be re-derived is a
+rebuild that quietly discards what was loaded. Recorded in the Set file format
+section of `docs/ir-spec.md`, where a reader meets the `camera` record.
 
 **Adds**
 

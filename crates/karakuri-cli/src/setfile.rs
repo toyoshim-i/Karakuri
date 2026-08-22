@@ -8,9 +8,9 @@
 //!
 //! Two directions, and both are needed or neither is worth anything:
 //!
-//! - [`save`] puts every node's source into the store as a content-addressed
-//!   artifact and writes a Set file that references them by hash, with the
-//!   capacities, parameters, bindings, camera and seed the run was using.
+//! - [`save`] writes a Set file that references every node's source by hash,
+//!   with the capacities, parameters, bindings, camera and seed the run was
+//!   using. Getting the bytes into the store is the caller's — see [`Node`].
 //! - [`load`] reads one back and returns everything `Set::build_many` and the
 //!   flags used to supply.
 //!
@@ -61,7 +61,6 @@
 //! param name is the same disagreement seen from the other side.
 
 use std::collections::BTreeMap;
-use std::path::Path;
 
 use karakuri_engine::binding::{Curve, NOISE_SIGNAL};
 use karakuri_engine::camera::Orbit;
@@ -414,24 +413,43 @@ fn layer_name(layer: Layer) -> &'static str {
     }
 }
 
-/// One node of a Set on its way into a file: where its source is, which layer
-/// its `kind` declaration puts it on, which node of that layer it is, and what
-/// the operator called it.
+/// One node of a Set on its way into a file: **the content address its source
+/// is already stored under**, which layer its `kind` declaration puts it on,
+/// which node of that layer it is, and what the operator called it.
 ///
 /// **The layer is read where the chain was sorted, not worked out again here.**
 /// `main.rs` already sorts a `--set` list by the `kind` each file declares —
 /// that is how the engine gets its nodes — so asking the same question a second
 /// time is how a Set file comes to disagree with the run it was saved from.
 /// A `slot` record is exactly this, which is why the fields are these four.
-pub struct Node<'a> {
-    pub path: &'a Path,
+///
+/// **A hash and not a path, and moving `put_artifact` out to the callers is the
+/// point of the change.** The writer's job is to write records; where the bytes
+/// came from is the caller's, and the two callers have genuinely different
+/// answers. A one-shot `--save-set` holds paths that are still true, so it
+/// reads them and puts them. A live save holds the hashes the *watcher* stored
+/// when the build it is playing landed — and re-reading those paths would
+/// record whatever is on disk now, which after a rolled-back build is a version
+/// that is not on screen. A writer that read files could only ever have served
+/// the first of those.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Node {
+    /// The store's address for this node's source. Already `put`, because a
+    /// hash nothing has stored is a Set file that does not load.
+    pub hash: Hash,
     pub layer: Kind,
     /// Which node of that layer, numbered from 0 with no gaps. Index is
     /// position: the L2s deform in it and the L4s draw in it.
     pub index: u32,
     /// `None` for a path written bare, which is the ordinary case — a name is a
     /// cost paid when something wants to point at the node. See `Named`.
-    pub name: Option<&'a str>,
+    ///
+    /// **Owned, unlike everything else [`Saving`] borrows.** A live save
+    /// gathers on the render thread and writes on another one, so this value
+    /// has to be able to outlive the frame that read it; the writer copies it
+    /// into the record either way, so owning it costs a save one allocation
+    /// per node and buys a whole borrow-free [`Owned`].
+    pub name: Option<String>,
 }
 
 /// Everything a Set file records, gathered so [`save`] takes one argument for
@@ -440,7 +458,7 @@ pub struct Node<'a> {
 pub struct Saving<'a> {
     /// Every node of the Set, in any order — [`save`] writes them by layer and
     /// index, so the file is the same bytes however the caller gathered them.
-    pub nodes: &'a [Node<'a>],
+    pub nodes: &'a [Node],
     /// What each geometry runs at, one per L1 node in index order.
     ///
     /// **Per geometry, because the record is.** A Set holds several sources,
@@ -464,12 +482,45 @@ pub struct Saving<'a> {
     pub seeds: &'a [u32],
 }
 
-/// **Write a Set file, and the artifacts it references.**
+/// [`Saving`] with every part owned: the same seven facts, gathered where they
+/// live and able to leave the thread that gathered them.
 ///
-/// The sources go into the store first and the file references them by hash,
-/// so a Set file is a few dozen lines a human can read rather than a copy of
-/// the material. Content addressing means saving the same procedure twice
-/// stores it once.
+/// **It exists because a live save is two threads.** The values are read off
+/// the running deck, which only the render thread may touch, and the store
+/// write must not happen on a frame — so what crosses between them cannot be a
+/// bundle of borrows into a `Set`. Everything here is a `Vec` or a `Copy` of
+/// what [`Saving`] points at, which is also why it is this type and not a
+/// second writer: [`saving`](Owned::saving) hands the borrows back and the one
+/// function that knows the file format stays the one function.
+///
+/// **Not what `--save-set` uses**, and deliberately not made to be: that path
+/// has every value in hand on one thread with nothing to outlive, and copying
+/// them to write them would be a cost paid for nothing.
+pub struct Owned {
+    pub nodes: Vec<Node>,
+    pub capacities: Vec<u32>,
+    pub params: Vec<ParamWrite>,
+    pub bindings: Vec<Binding>,
+    pub edges: Vec<karakuri_engine::set::Edge>,
+    pub camera: Orbit,
+    pub seeds: Vec<u32>,
+}
+
+impl Owned {
+    /// What [`save`] takes, borrowed out of this.
+    pub fn saving(&self) -> Saving<'_> {
+        Saving {
+            nodes: &self.nodes,
+            capacities: &self.capacities,
+            params: &self.params,
+            bindings: &self.bindings,
+            edges: &self.edges,
+            camera: &self.camera,
+            seeds: &self.seeds,
+        }
+    }
+}
+
 /// **Refused rather than written into a file that cannot be read back.**
 ///
 /// This used to refuse an L2, an L3 or a `kind Field` outright, because a Set
@@ -484,7 +535,7 @@ pub struct Saving<'a> {
 /// address fold to one node — see `key_for` in `project.rs` — and a gap in an
 /// index describes a chain with a hole in it, which [`from_lines`] refuses on
 /// the way back in rather than closing up.
-fn refuse_unwritable(nodes: &[Node<'_>], capacities: &[u32], seeds: &[u32]) -> Result<(), String> {
+fn refuse_unwritable(nodes: &[Node], capacities: &[u32], seeds: &[u32]) -> Result<(), String> {
     let count = |layer: Kind| nodes.iter().filter(|n| n.layer == layer).count();
     let geometries = count(Kind::L1);
     if geometries == 0 {
@@ -567,6 +618,17 @@ pub(crate) fn kind_name(kind: Kind) -> &'static str {
     }
 }
 
+/// **Write a Set file.**
+///
+/// The file references its sources by hash rather than carrying them, so a Set
+/// file is a few dozen lines a human can read rather than a copy of the
+/// material. Content addressing means saving the same procedure twice stores it
+/// once.
+///
+/// **Putting them there is the caller's** — see [`Node`] for why the writer
+/// stopped reading files. What this owes is that every hash it writes was
+/// already stored, and it cannot check that without reading the store back,
+/// which is the caller's promise instead.
 pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
     let Saving {
         nodes,
@@ -578,13 +640,6 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
         seeds,
     } = set;
     refuse_unwritable(nodes, capacities, seeds)?;
-    let put = |path: &Path| -> Result<Hash, String> {
-        let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        store
-            .put_artifact(&bytes)
-            .map_err(|e| format!("{}: {e}", path.display()))
-    };
-
     let mut lines = vec![Line::new(Record::Set {
         id: id.to_string(),
         v: VERSION,
@@ -597,10 +652,9 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
     //
     // Sorted here rather than trusted from the caller, so that the file is a
     // function of the Set rather than of the order somebody walked it in.
-    let mut ordered: Vec<&Node<'_>> = nodes.iter().collect();
+    let mut ordered: Vec<&Node> = nodes.iter().collect();
     ordered.sort_by_key(|n| (layer_ordinal(n.layer), n.index));
     for node in ordered {
-        let proc_hash = put(node.path)?;
         lines.push(Line::new(Record::Slot {
             layer: layer_of(node.layer),
             index: node.index,
@@ -609,8 +663,8 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
             // record, and an absent name is written as nothing — which is what
             // keeps a file this build saves byte for byte the file it saved
             // before the field existed.
-            name: node.name.map(str::to_string),
-            proc_hash,
+            name: node.name.clone(),
+            proc_hash: node.hash,
         }));
     }
     // On L1, because that is the layer whose element buffers a capacity sizes,
@@ -940,7 +994,11 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             | Record::Transport { .. }
             | Record::Preview { .. }
             | Record::Transition { .. }
-            | Record::Mask { .. } => notes.push(
+            | Record::Mask { .. }
+            // A `save` is here for a second reason as well as that one: it
+            // names a Set file, and this *is* the Set file reader. Obeying it
+            // would be a load that goes looking for another file.
+            | Record::Save { .. } => notes.push(
                 "a record that belongs to a session rather than to a Set was skipped".to_string(),
             ),
             Record::Unknown => notes.push(
@@ -1184,17 +1242,27 @@ proc blob {
         path
     }
 
+    /// **A fixture's source, in the store, as [`save`] now wants it.** The
+    /// tests here are written against files on disk, because a file is what a
+    /// fixture is; the writer takes hashes. This is the one line that bridges
+    /// them, rather than every test growing its own `put`.
+    fn stored(store: &Store, path: &std::path::Path) -> Hash {
+        store
+            .put_artifact(&std::fs::read(path).expect("read"))
+            .expect("put")
+    }
+
     /// The nodes of an ordinary Set — one geometry, and the renderers over it
     /// in draw order.
-    fn ordinary<'a>(l1: &'a std::path::Path, l4s: &'a [std::path::PathBuf]) -> Vec<Node<'a>> {
+    fn ordinary(store: &Store, l1: &std::path::Path, l4s: &[std::path::PathBuf]) -> Vec<Node> {
         std::iter::once(Node {
-            path: l1,
+            hash: stored(store, l1),
             layer: Kind::L1,
             index: 0,
             name: None,
         })
         .chain(l4s.iter().enumerate().map(|(at, path)| Node {
-            path,
+            hash: stored(store, path),
             layer: Kind::L4,
             index: at as u32,
             name: None,
@@ -1230,7 +1298,7 @@ proc blob {
     /// its fields; `LazyLock` keeps that to one place rather than one per call.
     static DEFAULT_CAMERA: std::sync::LazyLock<Orbit> = std::sync::LazyLock::new(Orbit::default);
 
-    fn plain<'a>(nodes: &'a [Node<'a>], bindings: &'a [Binding]) -> Saving<'a> {
+    fn plain<'a>(nodes: &'a [Node], bindings: &'a [Binding]) -> Saving<'a> {
         Saving {
             nodes,
             capacities: &[4096],
@@ -1257,26 +1325,26 @@ proc blob {
         let l2 = beside(&dir, "l2.kir", L2);
         let nodes = vec![
             Node {
-                path: &l1,
+                hash: stored(&store, &l1),
                 layer: Kind::L1,
                 index: 0,
                 name: None,
             },
             Node {
-                path: &l1b,
+                hash: stored(&store, &l1b),
                 layer: Kind::L1,
                 index: 1,
                 // Written, because it is what the edge points with.
-                name: Some("far"),
+                name: Some("far".to_string()),
             },
             Node {
-                path: &l2,
+                hash: stored(&store, &l2),
                 layer: Kind::L2,
                 index: 0,
                 name: None,
             },
             Node {
-                path: &l4,
+                hash: stored(&store, &l4),
                 layer: Kind::L4,
                 index: 0,
                 name: None,
@@ -1358,27 +1426,27 @@ proc dissolve {
         let l2 = beside(&dir, "l2.kir", DISSOLVE);
         let nodes = vec![
             Node {
-                path: &l1,
+                hash: stored(&store, &l1),
                 layer: Kind::L1,
                 index: 0,
                 name: None,
             },
             Node {
-                path: &l1b,
+                hash: stored(&store, &l1b),
                 layer: Kind::L1,
                 index: 1,
                 // Written, because it is what the edge points with — and here
                 // it is what the mask *means*, rather than a second buffer.
-                name: Some("victim"),
+                name: Some("victim".to_string()),
             },
             Node {
-                path: &l2,
+                hash: stored(&store, &l2),
                 layer: Kind::L2,
                 index: 0,
                 name: None,
             },
             Node {
-                path: &l4,
+                hash: stored(&store, &l4),
                 layer: Kind::L4,
                 index: 0,
                 name: None,
@@ -1448,7 +1516,7 @@ proc dissolve {
             &store,
             "s1",
             Saving {
-                nodes: &ordinary(&l1, std::slice::from_ref(&l4)),
+                nodes: &ordinary(&store, &l1, std::slice::from_ref(&l4)),
                 capacities: &[65_536],
                 params: &params,
                 bindings: &[a_binding()],
@@ -1493,7 +1561,7 @@ proc dissolve {
         save(
             &store,
             "s1",
-            plain(&ordinary(&l1, std::slice::from_ref(&l4)), &[]),
+            plain(&ordinary(&store, &l1, std::slice::from_ref(&l4)), &[]),
         )
         .expect("save");
         let lines = store.read_set("s1").expect("read");
@@ -1516,7 +1584,7 @@ proc dissolve {
         save(
             &store,
             "s1",
-            plain(&ordinary(&l1, std::slice::from_ref(&l4)), &[]),
+            plain(&ordinary(&store, &l1, std::slice::from_ref(&l4)), &[]),
         )
         .expect("save");
         let mut lines = store.read_set("s1").expect("read");
@@ -1606,7 +1674,7 @@ proc dissolve {
         save(
             &store,
             "s1",
-            plain(&ordinary(&l1, std::slice::from_ref(&l4)), &[]),
+            plain(&ordinary(&store, &l1, std::slice::from_ref(&l4)), &[]),
         )
         .expect("save");
         let mut lines = store.read_set("s1").expect("read");
@@ -1646,7 +1714,10 @@ proc dissolve {
         save(
             &store,
             "s1",
-            plain(&ordinary(&l1, std::slice::from_ref(&l4)), &[a_binding()]),
+            plain(
+                &ordinary(&store, &l1, std::slice::from_ref(&l4)),
+                &[a_binding()],
+            ),
         )
         .expect("save");
         let mut lines = store.read_set("s1").expect("read");
@@ -1811,45 +1882,45 @@ proc dissolve {
 
         let nodes = vec![
             Node {
-                path: &l1,
+                hash: stored(&store, &l1),
                 layer: Kind::L1,
                 index: 0,
                 // A name the operator wrote, which is what `--set veil=l1.kir`
                 // spells and what nothing here could record before.
-                name: Some("veil"),
+                name: Some("veil".to_string()),
             },
             Node {
-                path: &l1b,
+                hash: stored(&store, &l1b),
                 layer: Kind::L1,
                 index: 1,
                 name: None,
             },
             Node {
-                path: &l2,
+                hash: stored(&store, &l2),
                 layer: Kind::L2,
                 index: 0,
                 name: None,
             },
             Node {
-                path: &l3,
+                hash: stored(&store, &l3),
                 layer: Kind::L3,
                 index: 0,
                 name: None,
             },
             Node {
-                path: &field,
+                hash: stored(&store, &field),
                 layer: Kind::Field,
                 index: 0,
                 name: None,
             },
             Node {
-                path: &l4,
+                hash: stored(&store, &l4),
                 layer: Kind::L4,
                 index: 0,
                 name: None,
             },
             Node {
-                path: &l4b,
+                hash: stored(&store, &l4b),
                 layer: Kind::L4,
                 index: 1,
                 name: None,
@@ -1921,19 +1992,19 @@ proc dissolve {
         let cutter = beside(&dir, "cutter.kir", &FIELD.replace("proc blob", "proc bite"));
         let nodes = vec![
             Node {
-                path: &l1,
+                hash: stored(&store, &l1),
                 layer: Kind::L1,
                 index: 0,
                 name: None,
             },
             Node {
-                path: &l4,
+                hash: stored(&store, &l4),
                 layer: Kind::L4,
                 index: 0,
                 name: None,
             },
             Node {
-                path: &shape,
+                hash: stored(&store, &shape),
                 layer: Kind::Field,
                 index: 0,
                 name: None,
@@ -1941,10 +2012,10 @@ proc dissolve {
             // Named, because an edge points with names and a Set holding two
             // fields is the first one that has to tell them apart.
             Node {
-                path: &cutter,
+                hash: stored(&store, &cutter),
                 layer: Kind::Field,
                 index: 1,
-                name: Some("knife"),
+                name: Some("knife".to_string()),
             },
         ];
         save(
@@ -2005,19 +2076,19 @@ proc dissolve {
         let l1b = beside(&dir, "l1b.kir", &L1.replace("proc ring", "proc ring_two"));
         let nodes = vec![
             Node {
-                path: &l1,
+                hash: stored(&store, &l1),
                 layer: Kind::L1,
                 index: 0,
                 name: None,
             },
             Node {
-                path: &l1b,
+                hash: stored(&store, &l1b),
                 layer: Kind::L1,
                 index: 1,
                 name: None,
             },
             Node {
-                path: &l4,
+                hash: stored(&store, &l4),
                 layer: Kind::L4,
                 index: 0,
                 name: None,
@@ -2059,19 +2130,19 @@ proc dissolve {
         let l1b = beside(&dir, "l1b.kir", &L1.replace("proc ring", "proc ring_two"));
         let nodes = vec![
             Node {
-                path: &l1,
+                hash: stored(&store, &l1),
                 layer: Kind::L1,
                 index: 0,
                 name: None,
             },
             Node {
-                path: &l1b,
+                hash: stored(&store, &l1b),
                 layer: Kind::L1,
                 index: 1,
                 name: None,
             },
             Node {
-                path: &l4,
+                hash: stored(&store, &l4),
                 layer: Kind::L4,
                 index: 0,
                 name: None,
@@ -2158,7 +2229,7 @@ proc dissolve {
         save(
             &store,
             "s1",
-            plain(&ordinary(&l1, std::slice::from_ref(&l4)), &[]),
+            plain(&ordinary(&store, &l1, std::slice::from_ref(&l4)), &[]),
         )
         .expect("save");
         let hash = |path: &std::path::Path| {
@@ -2190,16 +2261,20 @@ proc dissolve {
     #[test]
     fn what_the_file_cannot_hold_is_refused_rather_than_written() {
         let (_dir, store, l1, l4) = fixture();
-        let node = |path: &'static std::path::Path, layer, index| Node {
-            path,
+        // **Stored once and addressed many times**, which is exactly what a
+        // content address buys: the two fixtures go in here, and every case
+        // below is a different arrangement of the same two hashes. This used to
+        // leak both paths to `'static` so that a borrowing `Node` could outlive
+        // them; a `Hash` is `Copy` and there is nothing left to outlive.
+        let (l1, l4) = (stored(&store, &l1), stored(&store, &l4));
+        let node = |hash: Hash, layer, index| Node {
+            hash,
             layer,
             index,
             name: None,
         };
-        let l1: &'static std::path::Path = Box::leak(l1.into_boxed_path());
-        let l4: &'static std::path::Path = Box::leak(l4.into_boxed_path());
 
-        let cases: Vec<(Vec<Node<'static>>, &[u32], &str)> = vec![
+        let cases: Vec<(Vec<Node>, &[u32], &str)> = vec![
             (
                 vec![node(l4, Kind::L4, 0)],
                 &[],
@@ -2378,7 +2453,7 @@ proc dissolve {
             &store,
             "written_back",
             Saving {
-                nodes: &ordinary(&l1, std::slice::from_ref(&l4)),
+                nodes: &ordinary(&store, &l1, std::slice::from_ref(&l4)),
                 capacities: &[65_536],
                 params: &[],
                 bindings: &[],

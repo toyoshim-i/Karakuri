@@ -2003,6 +2003,15 @@ honoured the index on every layer rather than on one.
 the flag parses its fields into a `Record::Bind` and hands it to the same decoder a Set
 file uses, so a command line and a file cannot mean different things by the same fields.
 
+**One thing a `camera` record does not survive is a rebuild**, and it is a known gap rather
+than a property of the format. `swap::Request` carries no camera, so a Set built by a hot
+swap starts from the built-in orbit's defaults however the Set it replaces was aimed. Under
+`--load-set X --watch` that means the first edit to any `.kir` in the slot resets a camera
+the file had set, with nothing said — and a live save afterwards records `set.camera`
+faithfully, so the defaults are written into a new preset and the loss outlives the run. The
+record means what it has always meant and the loader applies it; what does not carry it is
+the rebuild request. See `docs/roadmap.md`, where it is listed with what closing it costs.
+
 **Two places this format is finer than the engine**, both reported on load rather than
 dropped: a `param` may be a vector while the engine's map holds `f32`, and `camera` carries
 two of the six fields the engine's orbit has. Each is a disagreement between the format and
@@ -2452,6 +2461,54 @@ Levels are `[0, 1]` because `curve` and `range` are defined over that: they are 
 dBFS, mapped from −60 dBFS to −6 dBFS, and a band reads the level of the part of the signal
 inside it on the same scale. So a full-scale tone pins, a well-mastered track lives in the
 top third, and silence is exactly 0.0.
+
+### Records with an effect outside the stream — `save`
+
+Every record above describes the deck, and a reader that obeys it reproduces the
+performance. **One record describes something else: a file that was created.**
+
+```ndjson
+{"t":"save","slot":0,"id":"20260816-143052-271"}
+```
+
+**`save` says a deck slot's material was written out as a Set file**, under that id, at that
+point in the timeline. It carries the slot and the id and deliberately nothing else — the
+Set file under that id already names every node it holds, and a copy of them here would be
+one fact in two places, free to be right on the day it was written and wrong the moment the
+two are read apart. What this record is for is saying *that* a save happened and *what it is
+called*; what was saved is a question the Set file answers.
+
+That makes the general rule worth stating, because it is the first record to need it:
+
+> **A replay is a sandbox.** Some records have an effect outside the stream. A replay does
+> not perform those effects, and it says which ones it skipped. Bringing outside state into
+> a replay environment is the operator's responsibility.
+
+For `save` the reasoning is concrete. A replay that wrote Set files would be writing into
+ids that already exist, in a store nobody asked that run to touch, holding somebody else's
+material — and `--replay` would stop being a function from a stream to some frames. So it
+renders the frames and prints the id it passed over. **Said rather than silently dropped**,
+on the terms everything else in this system follows: a Set file load prints every note it
+could not honour, and the session writer counts the batches it lost rather than losing them
+quietly. The id is named because it is the thing an operator would go and load by hand if
+they wanted the material that record is about.
+
+**This is a second question about the vocabulary, not a third reason inside `is_set_state`.**
+That function asks *whose state is this* — the session's or a Set's — and `save` is refused
+by it for the ordinary reason: a save is a fact about a performance, and a Set file carrying
+one would claim, every time it was opened, that a save had just happened. *Does this reach
+outside the stream* is orthogonal, `save` is so far the only record for which the answer is
+yes, and folding the two together would give one function two jobs.
+
+**Written at the frame the save landed, not at the key press.** The store write happens off
+the render thread, so it finishes some frames later and can fail; a record written when the
+key was pressed would claim a file the disk then refused. That is the same rule `procedure`
+follows — a record that describes a change already made — and it is why **a failed save
+writes no record at all** and prints instead.
+
+What this record does *not* do is make a replay reconstruct the library. There is no
+`--replay` mode that writes the Sets a session saved, and there should not be: reconstructing
+them means writing into a store, which is the effect the rule above exists to keep out.
 
 ---
 
@@ -3362,6 +3419,7 @@ elements than one workgroup covers sees neither mistake.
 - **Noise rate under tempo correction.** Stays cycles per beat, follows a tempo
   correction, ignores a phase one. The alternatives made two kinds of noise and left every
   existing `bind` record ambiguous. See [Binding noise](#binding-noise).
+
 Everything above concerns the measured signals, which are the newest part of the language.
 **The rest of what this specification settled — element identity, compaction, `var`, spawn
 quantization, substepping, sorting and runtime capacity — has moved to
