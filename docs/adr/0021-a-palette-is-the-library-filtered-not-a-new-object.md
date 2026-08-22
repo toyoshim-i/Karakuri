@@ -1,10 +1,10 @@
 ---
 id: 0021
 title: A palette is the library filtered, not a new object
-status: accepted
+status: superseded
 date: 2026-07-26
 supersedes: []
-superseded_by: []
+superseded_by: [0133]
 principles: [0019]
 tags: [store, process]
 ---

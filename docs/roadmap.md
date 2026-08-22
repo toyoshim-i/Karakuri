@@ -2305,15 +2305,10 @@ This section said *reference, not history*, and that was the right split; what i
 the history, which is what `docs/adr/` is. It also had to carry supersessions inline — *this said per
 layer until a Set could hold two geometries* — which a record's front matter now carries instead.
 
-One entry did not move, because it is not settled:
-
-- **Reference material handed to a generator belongs in `origin` with the prompt.** Two artifacts from
-  the same words that differ because different examples were supplied are otherwise unexplainable.
-  **This is not reconciled with
-  [ADR-0021](adr/0021-a-palette-is-the-library-filtered-not-a-new-object.md)**, which rejected
-  recording what was supplied — on the ground that this material is sampled rather than reproduced,
-  so machinery explaining why two outputs differ answers a question nobody has. One of the two is
-  wrong and neither has been retired. Left visible rather than resolved by whoever noticed it last.
+Nothing was left behind. The one entry that had been held here as unsettled — whether reference
+material handed to a generator belongs in `origin` — is settled in
+[ADR-0133](adr/0133-what-was-fed-to-a-generator-is-a-field-not-an-object.md): the object stays
+rejected, the field does not.
 
 ---
 
