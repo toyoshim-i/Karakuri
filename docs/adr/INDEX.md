@@ -146,6 +146,7 @@ number; new records continue from the end.
 | [ADR-0124](0124-a-save-from-mcp-does-not-wait-under-the-lock.md) | A save from MCP does not wait under the lock, and answers truthfully | 2026-08-22 | accepted |
 | [ADR-0125](0125-a-client-named-id-is-an-allow-list.md) | A client-named id is an allow-list | 2026-08-22 | accepted |
 | [ADR-0126](0126-a-noise-rate-follows-a-tempo-correction-and-not-a-phase-one.md) | A noise rate follows a tempo correction and not a phase one | 2026-08-02 | accepted |
+| [ADR-0127](0127-the-repository-names-no-tool.md) | The repository names no tool | 2026-08-22 | accepted |
 
 ## Retired numbers
 
@@ -281,6 +282,7 @@ never reused.
 | [ADR-0124](0124-a-save-from-mcp-does-not-wait-under-the-lock.md) | A save from MCP does not wait under the lock, and answers truthfully | 2026-08-22 | accepted |
 | [ADR-0125](0125-a-client-named-id-is-an-allow-list.md) | A client-named id is an allow-list | 2026-08-22 | accepted |
 | [ADR-0126](0126-a-noise-rate-follows-a-tempo-correction-and-not-a-phase-one.md) | A noise rate follows a tempo correction and not a phase one | 2026-08-02 | accepted |
+| [ADR-0127](0127-the-repository-names-no-tool.md) | The repository names no tool | 2026-08-22 | accepted |
 
 Re-pointing the records that cited a retired principle is permitted, and why, is
 [ADR-0059](0059-a-records-pointer-into-the-principles-registry-is-metadata.md).
