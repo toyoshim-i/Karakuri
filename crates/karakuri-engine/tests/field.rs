@@ -19,7 +19,7 @@ mod gpu {
 
     /// One element, so the paired geometry costs nothing. A fullscreen renderer
     /// reads no element, but a Set always has an L1.
-    const STILL: &str = r#"
+    pub(super) const STILL: &str = r#"
 proc still {
   kind     L1
   topology points
@@ -34,7 +34,7 @@ proc still {
 "#;
 
     /// A sphere of a declared radius, and nothing else.
-    const BALL: &str = r#"
+    pub(super) const BALL: &str = r#"
 proc ball {
   kind Field
 
@@ -94,7 +94,7 @@ proc lens {
     /// the whole claim: the same renderer draws any field — and it says which field
     /// by declaring a slot the Set binds, rather than by naming a word the language
     /// reserved.
-    const LENS: &str = r#"
+    pub(super) const LENS: &str = r#"
 proc lens {
   kind  L4
   blend additive
@@ -116,7 +116,7 @@ proc lens {
 }
 "#;
 
-    fn compile(src: &str) -> Checked {
+    pub(super) fn compile(src: &str) -> Checked {
         let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
         let checked =
             karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
@@ -134,7 +134,7 @@ proc lens {
     /// One edge, pointing with the names nobody wrote: a node nothing names is
     /// called what its procedure declares, so the renderer is `lens` and the field
     /// is whatever its own `proc` line says.
-    fn edge(node: &str, slot: &str, to: &str) -> karakuri_engine::set::Edge {
+    pub(super) fn edge(node: &str, slot: &str, to: &str) -> karakuri_engine::set::Edge {
         karakuri_engine::set::Edge {
             node: node.to_string(),
             slot: slot.to_string(),
@@ -145,7 +145,7 @@ proc lens {
     /// The name a `.kir` gives its procedure, which is the name its node ends up
     /// with here — read off the source rather than repeated, so a test that swaps
     /// the field swaps what the edge points at.
-    fn proc_name(src: &str) -> String {
+    pub(super) fn proc_name(src: &str) -> String {
         compile(src).name
     }
 
@@ -305,46 +305,12 @@ proc lens {
     /// difference the slot makes: the sentence names the slot the file declared and
     /// the flag that would bind it, where the one it replaced could only say that
     /// some procedure somewhere evaluated a field.
-    #[test]
-    fn an_unbound_field_slot_is_refused_rather_than_fatal() {
-        let gpu = Gpu::headless().expect("a GPU");
-        let err = build_wired(&gpu, &[], LENS, &[])
-            .err()
-            .expect("nothing fills `lens.shape`");
-        let text = err.to_string();
-        assert!(
-            text.contains("lens") && text.contains("shape") && text.contains("Field"),
-            "{text}"
-        );
-
-        // And a Set that *holds* a field still refuses one that says nothing about
-        // which: "there is exactly one, so use it" is the rule the slot removes.
-        let err = build_wired(&gpu, &[BALL], LENS, &[])
-            .err()
-            .expect("an unbound slot is not filled in from what is lying around");
-        assert!(err.to_string().contains("shape"), "{err}");
-    }
-
     /// **A slot bound to something that is not a field is refused**, and the
     /// refusal says what the node it names actually is.
     ///
     /// The alternative is a Set that builds a renderer calling a function the
     /// bound node never produced — a geometry has no `_field_shape_at` to splice,
     /// and nothing below here would notice before naga did.
-    #[test]
-    fn a_field_slot_bound_to_something_that_is_not_a_field_is_refused() {
-        let gpu = Gpu::headless().expect("a GPU");
-        let to_the_l1 = vec![edge("lens", "shape", "still")];
-        let err = build_wired(&gpu, &[BALL], LENS, &to_the_l1)
-            .err()
-            .expect("an L1 is not a field");
-        let text = err.to_string();
-        assert!(
-            text.contains("still") && text.contains("an L1") && text.contains("Field"),
-            "{text}"
-        );
-    }
-
     /// **Two Field slots on one procedure are accepted**, which is the rule a
     /// geometry slot does not follow and the reason the two are told apart by type.
     ///
@@ -499,44 +465,6 @@ proc lens {
         );
     }
 
-    /// **Neither file is over budget and the pair is**, which is what a Set-level
-    /// check exists for: a `field(p)` weighs nothing where a single procedure is
-    /// estimated, so the ceiling each of them passed was applied to a figure
-    /// missing the other.
-    #[test]
-    fn a_caller_and_its_field_are_costed_together() {
-        let gpu = Gpu::headless().expect("a GPU");
-        // Expensive on its own terms and nowhere near any ceiling: a field has no
-        // ceiling of its own, precisely because what it costs is the caller's.
-        let heavy = r#"
-proc heavy {
-  kind Field
-
-  field {
-    var d = 0.0;
-    for i in 0..64 {
-      d = d + fbm(point, 4) * 0.01;
-    }
-    distance = length(point) - 1.0 + d;
-  }
-}
-"#;
-        let cost = karakuri_ir::cost::estimate(&compile(heavy)).expect("a field has no ceiling");
-        assert!(
-            cost.ops_per_evaluation > 0,
-            "the field costs something per evaluation"
-        );
-
-        let err = build(&gpu, Some(heavy), LENS)
-            .err()
-            .expect("forty evaluations of an expensive field is over the fragment ceiling");
-        let text = err.to_string();
-        assert!(
-            text.contains("heavy") && text.contains("lens") && text.contains("evaluations"),
-            "the refusal names both and says how many evaluations: {text}"
-        );
-    }
-
     /// **Two renderers in one Set read the same field value.** A field has no node,
     /// so nothing owns the value: every caller writes it into its own uniform, and
     /// "the same answer everywhere" is a property of the Set rather than of any one
@@ -633,6 +561,131 @@ proc heavy {
             set.published().iter().any(|p| p.key == "radius"),
             "and the published interface has to show it: {:?}",
             set.published()
+        );
+    }
+}
+
+/// **The refusals, which reach no device.**
+///
+/// A slot nothing binds, a slot bound to the wrong kind of node, and a caller
+/// too expensive with its field inlined are all decided before a pipeline
+/// exists — and were only reachable through a constructor that took one.
+/// `Set::validate` is that check pass on its own, and `Set::build_many` reaches
+/// these rules by calling it rather than by holding a copy.
+mod refused {
+    use super::gpu::{compile, edge, proc_name, BALL, LENS, STILL};
+    use karakuri_engine::set::{Edge, Layering, SetError, Wiring};
+    use karakuri_engine::Set;
+    use karakuri_ir::typed::Checked;
+
+    /// The Set `build_many_wired` above describes — one `STILL` at capacity 1,
+    /// these fields, these renderers — minus the device and everything
+    /// downstream of it.
+    fn validate_wired(fields: &[&str], l4s: &[&str], edges: &[Edge]) -> Result<(), SetError> {
+        let fields: Vec<Checked> = fields.iter().map(|f| compile(f)).collect();
+        let l4s: Vec<Checked> = l4s.iter().map(|l4| compile(l4)).collect();
+        Set::validate(
+            &[(&compile(STILL), 1)],
+            &[],
+            &[],
+            &fields.iter().collect::<Vec<_>>(),
+            &l4s.iter().collect::<Vec<_>>(),
+            Layering::Overdraw,
+            7,
+            &[],
+            Wiring {
+                edges,
+                ..Default::default()
+            },
+        )
+        .map(|_| ())
+    }
+
+    /// One renderer over the field its own edge names, which is how every
+    /// accepting test in this file is wired.
+    fn validate(field: Option<&str>, l4: &str) -> Result<(), SetError> {
+        let edges: Vec<Edge> = field
+            .map(|f| vec![edge("lens", "shape", &proc_name(f))])
+            .unwrap_or_default();
+        validate_wired(field.as_slice(), &[l4], &edges)
+    }
+
+    /// **A `.kir` that checks clean and a Set that cannot be built.** A marcher
+    /// evaluating a field nothing bound would compile a call to a function
+    /// nothing spliced in: it is WGSL naga refuses — a panic on the thread that
+    /// built it, from a `.kir` the checker accepted, which is the one shape a
+    /// composition check exists to prevent.
+    ///
+    /// **Refused at the declaration rather than at the call**, which is the
+    /// difference the slot makes: the sentence names the slot the file declared
+    /// and the flag that would bind it, where the one it replaced could only say
+    /// that some procedure somewhere evaluated a field.
+    #[test]
+    fn an_unbound_field_slot_is_refused_rather_than_fatal() {
+        let err = validate_wired(&[], &[LENS], &[]).expect_err("nothing fills `lens.shape`");
+        let text = err.to_string();
+        assert!(
+            text.contains("lens") && text.contains("shape") && text.contains("Field"),
+            "{text}"
+        );
+
+        // And a Set that *holds* a field still refuses one that says nothing about
+        // which: "there is exactly one, so use it" is the rule the slot removes.
+        let err = validate_wired(&[BALL], &[LENS], &[])
+            .expect_err("an unbound slot is not filled in from what is lying around");
+        assert!(err.to_string().contains("shape"), "{err}");
+    }
+
+    /// **A slot bound to something that is not a field is refused**, and the
+    /// refusal says what the node it names actually is.
+    ///
+    /// The alternative is a Set that builds a renderer calling a function the
+    /// bound node never produced — a geometry has no `_field_shape_at` to splice,
+    /// and nothing below here would notice before naga did.
+    #[test]
+    fn a_field_slot_bound_to_something_that_is_not_a_field_is_refused() {
+        let to_the_l1 = vec![edge("lens", "shape", "still")];
+        let err = validate_wired(&[BALL], &[LENS], &to_the_l1).expect_err("an L1 is not a field");
+        let text = err.to_string();
+        assert!(
+            text.contains("still") && text.contains("an L1") && text.contains("Field"),
+            "{text}"
+        );
+    }
+
+    /// **Neither file is over budget and the pair is**, which is what a Set-level
+    /// check exists for: a `field(p)` weighs nothing where a single procedure is
+    /// estimated, so the ceiling each of them passed was applied to a figure
+    /// missing the other.
+    #[test]
+    fn a_caller_and_its_field_are_costed_together() {
+        // Expensive on its own terms and nowhere near any ceiling: a field has no
+        // ceiling of its own, precisely because what it costs is the caller's.
+        let heavy = r#"
+proc heavy {
+  kind Field
+
+  field {
+    var d = 0.0;
+    for i in 0..64 {
+      d = d + fbm(point, 4) * 0.01;
+    }
+    distance = length(point) - 1.0 + d;
+  }
+}
+"#;
+        let cost = karakuri_ir::cost::estimate(&compile(heavy)).expect("a field has no ceiling");
+        assert!(
+            cost.ops_per_evaluation > 0,
+            "the field costs something per evaluation"
+        );
+
+        let err = validate(Some(heavy), LENS)
+            .expect_err("forty evaluations of an expensive field is over the fragment ceiling");
+        let text = err.to_string();
+        assert!(
+            text.contains("heavy") && text.contains("lens") && text.contains("evaluations"),
+            "the refusal names both and says how many evaluations: {text}"
         );
     }
 }

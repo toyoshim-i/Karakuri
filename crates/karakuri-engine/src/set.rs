@@ -125,7 +125,7 @@ impl ElementStorage {
     /// declared `capacity` minimum is below 1 — `karakuri_ir::check`,
     /// "`capacity` minimum must be at least 1; a Set of no elements has nothing
     /// to run" — so no range a build can be asked for contains zero.
-    /// `Simulation::build` refusing a capacity outside the declared range is
+    /// [`capacity_in_range`] refusing a capacity outside the declared range is
     /// *not* what rules it out, because a range is only as strong as its own
     /// minimum and one written `[0, …]` would admit it.
     ///
@@ -1014,6 +1014,70 @@ impl Bound {
     }
 }
 
+/// **What [`Set::validate`] worked out, on the way to deciding the Set is
+/// buildable.**
+///
+/// Opaque on purpose. It is not a result a caller asked for — the answer to
+/// "is this Set legal?" is the `Result`, and everything in here is the working
+/// [`Set::build_many`] would otherwise have to do a second time: the node
+/// names, which node fills each declared slot, which geometry is the far side
+/// of a pairing, what each source is salted with, and which attributes are
+/// synthesised for each chain.
+///
+/// **It exists so the checks have one home.** A `validate` that returned
+/// nothing would leave `build_inner` re-deriving every one of these to build
+/// against, and a re-derivation is one edit away from being a re-check — which
+/// is the defect this split was made to remove rather than to spread.
+pub struct Plan<'a> {
+    /// Every node's name, in node order: the geometries, the deformations, the
+    /// cameras, the renderers, the fields.
+    names: Vec<String>,
+    /// One per camera node — a procedure, or `None` for the built-in orbit,
+    /// which is last and always present.
+    cameras: Vec<Option<&'a Checked>>,
+    /// Where the cameras sit in `names`.
+    camera_range: std::ops::Range<usize>,
+    /// Node index, slot name, and the field ordinal bound to it.
+    field_bound: Vec<(usize, String, usize)>,
+    /// Node index and the camera ordinal bound to its `Camera` slot.
+    camera_bound: Vec<(usize, usize)>,
+    /// Node index, slot name, and the `l1s` index bound to it.
+    source_bound: Vec<(usize, String, usize)>,
+    /// The geometry a pairing L2's slot names, as an index into `l1s`.
+    far_at: Option<usize>,
+    /// The geometries a chain is instantiated over — every one the pairing
+    /// edge did not name.
+    heads: Vec<usize>,
+    /// What each geometry is salted with, in `l1s` order.
+    source_salts: Vec<u32>,
+    /// The attributes synthesised for each head's chain, in `heads` order.
+    derived: Vec<Vec<karakuri_ir::Attr>>,
+}
+
+/// **`capacity` against the range the L1 artifact declares.**
+///
+/// Here rather than in `Simulation::build`, where it used to be. The range is
+/// that node's own, but the comparison is between two integers and a
+/// constructor that takes a `&wgpu::Device` was the only way to reach it — so
+/// being told 999999 is above a declared 262144 cost an adapter and a compiled
+/// pipeline. `Simulation::build` does not look any more, and is infallible
+/// because of it: nothing it can be handed is refusable, which is the type
+/// system saying this rule has one home.
+fn capacity_in_range(l1: &Checked, capacity: u32) -> Result<(), SetError> {
+    let range = l1
+        .capacity
+        .ok_or_else(|| SetError::NoCapacity(l1.name.clone()))?;
+    if !range.contains(capacity) {
+        return Err(SetError::Capacity {
+            proc: l1.name.clone(),
+            requested: capacity,
+            min: range.min,
+            max: range.max,
+        });
+    }
+    Ok(())
+}
+
 impl Set {
     /// Compile two checked procedures into a runnable Set.
     ///
@@ -1146,20 +1210,38 @@ impl Set {
         }
     }
 
+    /// **Every refusal a Set can decide without a device**, and the working
+    /// that produced them.
+    ///
+    /// This is the whole of [`Set::build_many`]'s check pass. Of the refusals
+    /// a build can return, three need hardware — [`SetError::Invalid`] is a
+    /// wgpu validation error captured from a scope, [`SetError::TooManyElements`]
+    /// is a comparison against `device.limits()`, and [`SetError::Panicked`] is
+    /// a build that died on the swap worker — and every other variant is a
+    /// statement about the `.kir` files, the capacities and the wiring, all of
+    /// which are in hand here.
+    ///
+    /// **`build` reaches these rules by calling this**, and re-checks nothing:
+    /// what it gets back is a [`Plan`], and it builds against that. A copy of
+    /// any check below living on the build path would be a second home for a
+    /// rule, which is the shape this file has already paid for twice.
+    ///
+    /// The payoff is that asking "is this Set legal?" costs no adapter: a
+    /// caller with two `.kir` files and a wiring can be told before anything is
+    /// compiled, and a test that asserts a refusal stops paying for a pipeline
+    /// it never reaches.
     #[allow(clippy::too_many_arguments)]
-    fn build_inner(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        l1s: &[(&Checked, u32)],
-        l2s: &[&Checked],
-        l3s: &[&Checked],
-        fields: &[&Checked],
-        l4s: &[&Checked],
+    pub fn validate<'a>(
+        l1s: &[(&'a Checked, u32)],
+        l2s: &[&'a Checked],
+        l3s: &[&'a Checked],
+        fields: &[&'a Checked],
+        l4s: &[&'a Checked],
         layering: Layering,
         seed_salt: u32,
         salts: &[Option<u32>],
         wiring: Wiring<'_>,
-    ) -> Result<Set, SetError> {
+    ) -> Result<Plan<'a>, SetError> {
         let Some(&(first_l1, _)) = l1s.first() else {
             return Err(SetError::NoGeometry);
         };
@@ -1730,18 +1812,6 @@ impl Set {
                 });
             }
         }
-        // **What each node's Field slots are bound to**, ready to hand to a
-        // generator. Built once here rather than per node build, because the
-        // near geometry, the far geometry, every deform and every renderer all
-        // want the same answer and three of them are inside loops.
-        let bound_at = |at: usize| -> Vec<(&str, &Checked)> {
-            field_bound
-                .iter()
-                .filter(|(node, _, _)| *node == at)
-                .map(|(_, slot, ordinal)| (slot.as_str(), fields[*ordinal]))
-                .collect()
-        };
-
         // **The ceiling every caller passed was applied to an incomplete
         // figure**, because a `field(p)` weighs nothing where a single file is
         // estimated. This is where it is completed.
@@ -1830,33 +1900,10 @@ impl Set {
                 });
             }
         }
-        // **Each camera's own field bindings, asked at its own node index.**
-        // `bound_at` is keyed by node, and the built-in's index holds a node
-        // that declares nothing — so this is the same call for both kinds of
-        // camera and comes back empty for the one with no procedure.
-        let camera_nodes: Vec<crate::node::Camera> = cameras
-            .iter()
-            .enumerate()
-            .map(|(k, l3)| {
-                crate::node::Camera::build(device, *l3, &bound_at(camera_range.start + k))
-            })
-            .collect();
-
-        // **Everything below is per source**, because everything below depends
-        // on what that source emits: which attributes are derived, which the
-        // chain may consume, what the element layout is, and therefore what
-        // every node over it compiles against. Two sources that emit different
-        // things are two different chains — which is the whole reason the chain
-        // is instantiated per source rather than the geometry concatenated into
-        // one buffer.
-        // **One target per renderer *procedure*** under compositing, not per
-        // instance: every source draws into the target its renderer owns, and
-        // the first source is the one that clears it.
-        let renderer_count = l4s.len();
         // **A bound geometry collapses the list.** Two sources become one
-        // `Source` with two simulations in it, so the loop below runs once and
-        // everything under it — one chain, one set of renderers — is what a Set
-        // of one source has.
+        // `Source` with two simulations in it, so the loop below — and the one
+        // `build_inner` runs over the same heads — runs once, and everything
+        // under it is what a Set of one source has.
         //
         // **The drawn one is whichever the edge did not name.** Not position 0:
         // an edge exists so that the order of the list decides nothing, and a
@@ -1876,14 +1923,13 @@ impl Set {
         // so that whatever writes a Set file can record the value rather than
         // work it out a second time — see [`Set::source_salts`].
         //
-        // In `l1s` order and not in the order the loop below builds them,
+        // In `l1s` order and not in the order `build_inner` builds them,
         // because the order it builds them in is no longer the list's: with a
         // slot bound to the first geometry the far side is built first.
         let source_salts: Vec<u32> = (0..l1s.len()).map(salt_of).collect();
-        let mut sources: Vec<Source> = Vec::with_capacity(heads.len());
+        let mut derived_per_head: Vec<Vec<karakuri_ir::Attr>> = Vec::with_capacity(heads.len());
         for &at in &heads {
             let (l1, capacity) = l1s[at];
-            let salt = salt_of(at);
             // **The plan, before anything is built.**
             //
             // A consumed attribute nothing emits used to be an unconditional error.
@@ -2061,11 +2107,135 @@ impl Set {
                 }
             }
 
-            // **The L1 node**, generated, compiled and allocated at `capacity` —
-            // which is where the range check lives, because the range is that
-            // node's own. Everything the simulation needs is inside it.
+            // **The near geometry's capacity against its own declared range.**
+            // Where `Simulation::build` used to check it, in the order it used
+            // to: this is the point the near source was built at.
+            capacity_in_range(l1, capacity)?;
+            if let Some(far_at) = far_at {
+                let (far, far_capacity) = l1s[far_at];
+                // A rule the far side cannot support is refused here rather
+                // than producing a slot nothing fills: `velocity` is derived
+                // from `position`, and a geometry emitting neither has
+                // nothing to derive it from.
+                for attr in &derived {
+                    if attr
+                        .derivation()
+                        .and_then(|d| d.source())
+                        .is_some_and(|from| !far.emit.contains(&from))
+                    {
+                        return Err(SetError::PairingDerivation {
+                            l2: l2s
+                                [pairing.expect("a bound geometry is a node that declared a slot")]
+                            .name
+                            .clone(),
+                            l1: far.name.clone(),
+                            attr: attr.name().to_string(),
+                        });
+                    }
+                }
+                // **The far geometry's own**, on the same terms as the near
+                // one, and after the pairing rule exactly as it was when the
+                // far side was built here.
+                capacity_in_range(far, far_capacity)?;
+            }
+            derived_per_head.push(derived);
+        }
 
-            let sim = Simulation::build(device, l1, capacity, salt, &derived, &bound_at(at))?;
+        Ok(Plan {
+            names,
+            cameras,
+            camera_range,
+            field_bound,
+            camera_bound,
+            source_bound,
+            far_at,
+            heads,
+            source_salts,
+            derived: derived_per_head,
+        })
+    }
+
+    /// **The device half**, and nothing else: every refusal that can be decided
+    /// without hardware was decided by [`Set::validate`] one line down, and
+    /// what is left here builds against the [`Plan`] it returned. Nothing below
+    /// re-checks any of it — a rule with two homes is what this split removed.
+    #[allow(clippy::too_many_arguments)]
+    fn build_inner(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        l1s: &[(&Checked, u32)],
+        l2s: &[&Checked],
+        l3s: &[&Checked],
+        fields: &[&Checked],
+        l4s: &[&Checked],
+        layering: Layering,
+        seed_salt: u32,
+        salts: &[Option<u32>],
+        wiring: Wiring<'_>,
+    ) -> Result<Set, SetError> {
+        let Plan {
+            names,
+            cameras,
+            camera_range,
+            field_bound,
+            camera_bound,
+            source_bound,
+            far_at,
+            heads,
+            source_salts,
+            derived: derived_per_head,
+        } = Set::validate(
+            l1s, l2s, l3s, fields, l4s, layering, seed_salt, salts, wiring,
+        )?;
+        // **What each node's Field slots are bound to**, ready to hand to a
+        // generator — read off the plan's bindings rather than walked out of
+        // the edges again. The near geometry, the far geometry, every deform
+        // and every renderer all want the same answer and three of them are
+        // inside loops.
+        let bound_at = |at: usize| -> Vec<(&str, &Checked)> {
+            field_bound
+                .iter()
+                .filter(|(node, _, _)| *node == at)
+                .map(|(_, slot, ordinal)| (slot.as_str(), fields[*ordinal]))
+                .collect()
+        };
+
+        // **Each camera's own field bindings, asked at its own node index.**
+        // `bound_at` is keyed by node, and the built-in's index holds a node
+        // that declares nothing — so this is the same call for both kinds of
+        // camera and comes back empty for the one with no procedure.
+        let camera_nodes: Vec<crate::node::Camera> = cameras
+            .iter()
+            .enumerate()
+            .map(|(k, l3)| {
+                crate::node::Camera::build(device, *l3, &bound_at(camera_range.start + k))
+            })
+            .collect();
+
+        // **Everything below is per source**, because everything below depends
+        // on what that source emits: which attributes are derived, which the
+        // chain may consume, what the element layout is, and therefore what
+        // every node over it compiles against. Two sources that emit different
+        // things are two different chains — which is the whole reason the chain
+        // is instantiated per source rather than the geometry concatenated into
+        // one buffer.
+        // **One target per renderer *procedure*** under compositing, not per
+        // instance: every source draws into the target its renderer owns, and
+        // the first source is the one that clears it.
+        let renderer_count = l4s.len();
+        let mut sources: Vec<Source> = Vec::with_capacity(heads.len());
+        for (head, &at) in heads.iter().enumerate() {
+            let (l1, capacity) = l1s[at];
+            let salt = source_salts[at];
+            // **The attributes this chain synthesises**, worked out by
+            // `Set::validate` — the same list every node over this
+            // source is generated against.
+            let derived = &derived_per_head[head];
+
+            // **The L1 node**, generated, compiled and allocated at `capacity`
+            // — which `Set::validate` has already checked against the range
+            // the artifact declares, so this constructor cannot refuse.
+            let sim = Simulation::build(device, l1, capacity, salt, derived, &bound_at(at));
 
             // **The far geometry is built with the same `derived` list**, and
             // that is not a convenience: the node addresses its buffer with a
@@ -2076,29 +2246,11 @@ impl Set {
             let paired: Option<(Vec<karakuri_ir::Attr>, Simulation)> = match far_at {
                 None => None,
                 Some(far_at) => {
-                    let at = pairing.expect("a bound geometry is a node that declared a slot");
                     let (far, far_capacity) = l1s[far_at];
-                    // A rule the far side cannot support is refused here rather
-                    // than producing a slot nothing fills: `velocity` is derived
-                    // from `position`, and a geometry emitting neither has
-                    // nothing to derive it from.
-                    for attr in &derived {
-                        if attr
-                            .derivation()
-                            .and_then(|d| d.source())
-                            .is_some_and(|from| !far.emit.contains(&from))
-                        {
-                            return Err(SetError::PairingDerivation {
-                                l2: l2s[at].name.clone(),
-                                l1: far.name.clone(),
-                                attr: attr.name().to_string(),
-                            });
-                        }
-                    }
-                    // **The far geometry's own**, on the same terms as the
+                    // **The far geometry's own salt**, on the same terms as the
                     // near one: a Set with a slot bound is two geometries and
                     // one `Source`, and a Set file records a salt per geometry.
-                    let far_salt = salt_of(far_at);
+                    let far_salt = source_salts[far_at];
                     Some((
                         far.emit.clone(),
                         Simulation::build(
@@ -2106,9 +2258,9 @@ impl Set {
                             far,
                             far_capacity,
                             far_salt,
-                            &derived,
+                            derived,
                             &bound_at(far_at),
-                        )?,
+                        ),
                     ))
                 }
             };
@@ -2159,7 +2311,7 @@ impl Set {
                         l2,
                         &upstream,
                         synthetic,
-                        &derived,
+                        derived,
                         far.as_ref().map(|(a, g)| (*a, g)),
                         &bound_at(l1s.len() + k),
                         &input,

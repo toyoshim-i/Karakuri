@@ -27,7 +27,7 @@ mod gpu {
     /// structure — `seed % side` — and has to be *identical* between two sources;
     /// the tint is randomness and has to *differ*. One procedure gives both, which
     /// is what makes the pair of assertions below a pair rather than two fixtures.
-    fn lattice(name: &str, z: f32) -> String {
+    pub(super) fn lattice(name: &str, z: f32) -> String {
         format!(
             r#"
 proc {name} {{
@@ -48,7 +48,7 @@ proc {name} {{
         )
     }
 
-    const DOTS: &str = r#"
+    pub(super) const DOTS: &str = r#"
 proc dots {
   kind  L4
   blend additive
@@ -66,7 +66,7 @@ proc dots {
 }
 "#;
 
-    fn compile(src: &str) -> Checked {
+    pub(super) fn compile(src: &str) -> Checked {
         let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
         let checked =
             karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
@@ -98,7 +98,7 @@ proc dots {
         build_wired(gpu, l1s, l2, &[edge("morph", "far", &far)])
     }
 
-    fn edge(node: &str, slot: &str, to: &str) -> karakuri_engine::set::Edge {
+    pub(super) fn edge(node: &str, slot: &str, to: &str) -> karakuri_engine::set::Edge {
         karakuri_engine::set::Edge {
             node: node.to_string(),
             slot: slot.to_string(),
@@ -591,11 +591,11 @@ proc lit {
     }
 
     /// A lattice offset along the screen's horizontal, so that a morph *moves*.
-    fn lattice_at(name: &str, z: f32) -> String {
+    pub(super) fn lattice_at(name: &str, z: f32) -> String {
         lattice(name, 0.0).replace("0.0);\n    tint", &format!("{z:?});\n    tint"))
     }
 
-    const MORPH: &str = r#"
+    pub(super) const MORPH: &str = r#"
 proc morph {
   kind L2
   uses far : Geometry
@@ -696,29 +696,6 @@ proc morph {
         );
     }
 
-    /// **Pairing is by slot index, so a source that compacts cannot be paired.**
-    /// After a compaction element 5 of one source is not element 5 of the other,
-    /// and the pairing would match each element with a stranger without changing a
-    /// line of the `.kir`.
-    #[test]
-    fn a_source_that_compacts_cannot_be_paired() {
-        let gpu = Gpu::headless().expect("a GPU");
-        let near = lattice_at("near", -1.2);
-        let culled = lattice_at("culled", 1.2).replace(
-            "    tint     =",
-            "    if seed == 3u { kill(); }\n    tint     =",
-        );
-
-        let err = build_paired(&gpu, &[&near, &culled], MORPH)
-            .err()
-            .expect("a killing source moves its elements between slots");
-        let text = err.to_string();
-        assert!(
-            text.contains("culled") && text.contains("slot"),
-            "the refusal names the source and why: {text}"
-        );
-    }
-
     /// **The edge decides which geometry the slot is bound to, and the list's order
     /// decides nothing.**
     ///
@@ -779,103 +756,6 @@ proc morph {
         );
     }
 
-    /// **A declared slot that nothing binds is refused**, and this is the refusal
-    /// the notation exists for.
-    ///
-    /// The rule it replaced was "there is exactly one, so it needs no name", which
-    /// is exactly what capped fan-in at one — so filling the slot from whatever
-    /// geometry happened to be lying around would put that rule back under a new
-    /// spelling, and a Set that was silently wired to something nobody chose would
-    /// look like one that was.
-    #[test]
-    fn an_unbound_slot_is_refused_and_says_what_would_bind_it() {
-        let gpu = Gpu::headless().expect("a GPU");
-        let near = lattice_at("near", -1.2);
-        let far = lattice_at("far", 1.2);
-
-        let err = build_wired(&gpu, &[&near, &far], MORPH, &[])
-            .err()
-            .expect("nothing says which geometry `far` is");
-        let text = err.to_string();
-        assert!(
-            text.contains("morph") && text.contains("far") && text.contains("--edge morph.far="),
-            "the refusal names the node, the slot and how to bind it: {text}"
-        );
-        assert!(
-            text.contains("near") && text.contains("far"),
-            "and what there is to bind it to: {text}"
-        );
-    }
-
-    /// **Every part of an edge whose node is in this Set has to resolve.**
-    ///
-    /// Each of these is a `.kir` that checks clean and a Set that cannot be built,
-    /// which is the shape this repository refuses one hole at a time: what must
-    /// never happen is a Set that builds and reads the wrong buffer.
-    #[test]
-    fn an_edge_that_does_not_resolve_is_refused_by_the_part_that_missed() {
-        let gpu = Gpu::headless().expect("a GPU");
-        let near = lattice_at("near", -1.2);
-        let far = lattice_at("far", 1.2);
-        let both = [near.as_str(), far.as_str()];
-
-        // Labelled, because four wirings come through here and a bare `expect`
-        // would say the same sentence about whichever of them built.
-        let refused = |what: &str, edges: &[karakuri_engine::set::Edge]| -> String {
-            build_wired(&gpu, &both, MORPH, edges)
-                .err()
-                .unwrap_or_else(|| panic!("{what} has to be refused"))
-                .to_string()
-        };
-
-        // A slot the node does not declare. The node *is* here, so the sentence is
-        // about it and is wrong — unlike an edge whose node is another Set's.
-        let text = refused(
-            "a slot the node does not declare",
-            &[edge("morph", "other", "far")],
-        );
-        // **"slot", not "geometry".** A slot may take a field now, and an edge is
-        // resolved against whatever the node declares rather than against the L2s
-        // alone — so the sentence is about a slot and the type is in the hint.
-        assert!(
-            text.contains("declares no slot called `other`") && text.contains("declares `far`"),
-            "it names the slot that is missing and the one that is there: {text}"
-        );
-
-        // A far end that is no node at all.
-        let text = refused(
-            "a far end that is no node",
-            &[edge("morph", "far", "sphere")],
-        );
-        assert!(
-            text.contains("`sphere`") && text.contains("not a node of this Set"),
-            "it names what was asked for and what there is: {text}"
-        );
-
-        // A far end that is a node and holds no elements. A slot declared
-        // `: Geometry` takes an L1, and reading the deformer's own buffer would be
-        // reading whatever instant the chain had reached.
-        let text = refused(
-            "a far end that is not geometry",
-            &[edge("morph", "far", "morph")],
-        );
-        assert!(
-            text.contains("`: Geometry` takes an L1"),
-            "it says what a geometry slot takes: {text}"
-        );
-
-        // And a slot bound twice, which is two pictures with one discarded in
-        // silence — refused on a duplicate node name's terms.
-        let text = refused(
-            "a slot bound twice",
-            &[edge("morph", "far", "far"), edge("morph", "far", "near")],
-        );
-        assert!(
-            text.contains("bound twice") && text.contains("`far`") && text.contains("`near`"),
-            "it names both answers: {text}"
-        );
-    }
-
     /// **An edge naming a node this Set has not got is about another Set.**
     ///
     /// A deck is several Sets and a flag is one command line, so `--edge` reaches
@@ -914,19 +794,6 @@ proc morph {
                 .contains("`far : Geometry` and nothing in this Set says what fills it"),
             "{err}"
         );
-    }
-
-    /// A pairing L2 needs exactly two sources, and it has to be first in the chain
-    /// because its second input is a *source* rather than whatever reached it.
-    #[test]
-    fn a_pairing_l2_states_what_it_needs() {
-        let gpu = Gpu::headless().expect("a GPU");
-        let near = lattice_at("near", -1.2);
-
-        let err = build_wired(&gpu, &[&near], MORPH, &[edge("morph", "far", "near")])
-            .err()
-            .expect("one source is not two");
-        assert!(err.to_string().contains("this Set has 1"), "{err}");
     }
 
     /// **The paired geometry's own `param`s reach it.**
@@ -1154,40 +1021,6 @@ proc morph {
         assert_eq!(set.node_named("dots-2"), Some((karakuri_ir::Kind::L4, 1)));
     }
 
-    /// **Two *written* names that collide are refused**, where two derived ones are
-    /// told apart. A written name is an address somebody chose, so picking one of
-    /// the two for them would leave whatever was pointed at it following a
-    /// tie-break.
-    #[test]
-    fn two_written_names_that_collide_are_refused() {
-        let gpu = Gpu::headless().expect("a GPU");
-        let grid = compile(&lattice("grid", 0.0));
-        let draw = compile(DOTS);
-
-        let err = Set::build_many(
-            &gpu.device,
-            &gpu.queue,
-            &[(&grid, 64)],
-            &[],
-            &[],
-            &[],
-            &[&draw],
-            Layering::Overdraw,
-            0,
-            &[],
-            karakuri_engine::set::Wiring {
-                l1s: &[Some("shape".to_string())],
-                l4s: &[Some("shape".to_string())],
-                ..Default::default()
-            },
-        );
-        let err = match err {
-            Err(e) => e,
-            Ok(_) => panic!("two nodes cannot share a name"),
-        };
-        assert!(format!("{err}").contains("both called `shape`"), "{err}");
-    }
-
     /// **A written name is not stolen by a derived one that reaches it first.**
     /// `dots` is written on the *second* renderer, so the first — which would
     /// otherwise derive `dots` from its procedure — has to take `dots-2`.
@@ -1231,7 +1064,7 @@ proc morph {
     /// The mask is the whole point: `source` is the chain instance's own identity
     /// and `only` is the one an edge bound, so one `.kir` in one Set behaves
     /// differently in each of the two instances the Set runs it in.
-    const DISSOLVE: &str = r#"
+    pub(super) const DISSOLVE: &str = r#"
 proc dissolve {
   kind L2
 
@@ -1409,19 +1242,197 @@ proc dissolve {
             );
         }
     }
+}
+
+/// **The refusals, which reach no device.**
+///
+/// Every claim below is about the wiring — a slot nothing binds, an edge whose
+/// far end resolves to the wrong sort of node, two written names that collide,
+/// a pairing over a source that compacts. `Set::validate` decides all of them
+/// before a pipeline exists, and `Set::build_many` reaches them by calling it:
+/// one copy of each rule, and both doors go through it.
+mod refused {
+    use super::gpu::{compile, edge, lattice, lattice_at, DISSOLVE, DOTS, MORPH};
+    use karakuri_engine::set::{Edge, Layering, SetError, Wiring};
+    use karakuri_engine::Set;
+    use karakuri_ir::typed::Checked;
+
+    /// The Set `build_wired` above describes — these geometries at 64 apiece,
+    /// one L2 over them, one `DOTS` renderer — minus the device and everything
+    /// downstream of it.
+    fn validate_wired(l1s: &[&str], l2: &str, edges: &[Edge]) -> Result<(), SetError> {
+        let compiled: Vec<Checked> = l1s.iter().map(|s| compile(s)).collect();
+        let sources: Vec<(&Checked, u32)> = compiled.iter().map(|c| (c, 64)).collect();
+        let l2 = compile(l2);
+        let l4 = compile(DOTS);
+        Set::validate(
+            &sources,
+            &[&l2],
+            &[],
+            &[],
+            &[&l4],
+            Layering::Overdraw,
+            7,
+            &[],
+            Wiring {
+                edges,
+                ..Default::default()
+            },
+        )
+        .map(|_| ())
+    }
+
+    /// The same, with the slot bound to the last source named — the ordinary
+    /// spelling `build_paired` uses, and not a rule the engine knows.
+    fn validate_paired(l1s: &[&str], l2: &str) -> Result<(), SetError> {
+        let far = compile(l1s[l1s.len() - 1]).name;
+        validate_wired(l1s, l2, &[edge("morph", "far", &far)])
+    }
+
+    /// **A declared slot that nothing binds is refused**, and this is the refusal
+    /// the notation exists for.
+    ///
+    /// The rule it replaced was "there is exactly one, so it needs no name", which
+    /// is exactly what capped fan-in at one — so filling the slot from whatever
+    /// geometry happened to be lying around would put that rule back under a new
+    /// spelling, and a Set that was silently wired to something nobody chose would
+    /// look like one that was.
+    #[test]
+    fn an_unbound_slot_is_refused_and_says_what_would_bind_it() {
+        let near = lattice_at("near", -1.2);
+        let far = lattice_at("far", 1.2);
+
+        let err = validate_wired(&[&near, &far], MORPH, &[])
+            .expect_err("nothing says which geometry `far` is");
+        let text = err.to_string();
+        assert!(
+            text.contains("morph") && text.contains("far") && text.contains("--edge morph.far="),
+            "the refusal names the node, the slot and how to bind it: {text}"
+        );
+        assert!(
+            text.contains("near") && text.contains("far"),
+            "and what there is to bind it to: {text}"
+        );
+    }
+
+    /// **Every part of an edge whose node is in this Set has to resolve.**
+    ///
+    /// Each of these is a `.kir` that checks clean and a Set that cannot be built,
+    /// which is the shape this repository refuses one hole at a time: what must
+    /// never happen is a Set that builds and reads the wrong buffer.
+    #[test]
+    fn an_edge_that_does_not_resolve_is_refused_by_the_part_that_missed() {
+        let near = lattice_at("near", -1.2);
+        let far = lattice_at("far", 1.2);
+        let both = [near.as_str(), far.as_str()];
+
+        // Labelled, because four wirings come through here and a bare `expect`
+        // would say the same sentence about whichever of them built.
+        let refused = |what: &str, edges: &[Edge]| -> String {
+            validate_wired(&both, MORPH, edges)
+                .err()
+                .unwrap_or_else(|| panic!("{what} has to be refused"))
+                .to_string()
+        };
+
+        // A slot the node does not declare. The node *is* here, so the sentence is
+        // about it and is wrong — unlike an edge whose node is another Set's.
+        let text = refused(
+            "a slot the node does not declare",
+            &[edge("morph", "other", "far")],
+        );
+        // **"slot", not "geometry".** A slot may take a field now, and an edge is
+        // resolved against whatever the node declares rather than against the L2s
+        // alone — so the sentence is about a slot and the type is in the hint.
+        assert!(
+            text.contains("declares no slot called `other`") && text.contains("declares `far`"),
+            "it names the slot that is missing and the one that is there: {text}"
+        );
+
+        // A far end that is no node at all.
+        let text = refused(
+            "a far end that is no node",
+            &[edge("morph", "far", "sphere")],
+        );
+        assert!(
+            text.contains("`sphere`") && text.contains("not a node of this Set"),
+            "it names what was asked for and what there is: {text}"
+        );
+
+        // A far end that is a node and holds no elements. A slot declared
+        // `: Geometry` takes an L1, and reading the deformer's own buffer would be
+        // reading whatever instant the chain had reached.
+        let text = refused(
+            "a far end that is not geometry",
+            &[edge("morph", "far", "morph")],
+        );
+        assert!(
+            text.contains("`: Geometry` takes an L1"),
+            "it says what a geometry slot takes: {text}"
+        );
+
+        // And a slot bound twice, which is two pictures with one discarded in
+        // silence — refused on a duplicate node name's terms.
+        let text = refused(
+            "a slot bound twice",
+            &[edge("morph", "far", "far"), edge("morph", "far", "near")],
+        );
+        assert!(
+            text.contains("bound twice") && text.contains("`far`") && text.contains("`near`"),
+            "it names both answers: {text}"
+        );
+    }
+
+    /// A pairing L2 needs exactly two sources, and it has to be first in the chain
+    /// because its second input is a *source* rather than whatever reached it.
+    #[test]
+    fn a_pairing_l2_states_what_it_needs() {
+        let near = lattice_at("near", -1.2);
+
+        let err = validate_wired(&[&near], MORPH, &[edge("morph", "far", "near")])
+            .expect_err("one source is not two");
+        assert!(err.to_string().contains("this Set has 1"), "{err}");
+    }
+
+    /// **Two *written* names that collide are refused**, where two derived ones are
+    /// told apart. A written name is an address somebody chose, so picking one of
+    /// the two for them would leave whatever was pointed at it following a
+    /// tie-break.
+    #[test]
+    fn two_written_names_that_collide_are_refused() {
+        let grid = compile(&lattice("grid", 0.0));
+        let draw = compile(DOTS);
+
+        let err = Set::validate(
+            &[(&grid, 64)],
+            &[],
+            &[],
+            &[],
+            &[&draw],
+            Layering::Overdraw,
+            0,
+            &[],
+            Wiring {
+                l1s: &[Some("shape".to_string())],
+                l4s: &[Some("shape".to_string())],
+                ..Default::default()
+            },
+        )
+        .err()
+        .expect("two nodes cannot share a name");
+        assert!(format!("{err}").contains("both called `shape`"), "{err}");
+    }
 
     /// **An unbound Source slot is refused**, on the terms every other slot's is:
     /// "if there is exactly one, use it" is the rule this whole notation removes,
     /// and a Set of one geometry could satisfy every mask by guessing.
     #[test]
     fn an_unbound_source_slot_is_refused() {
-        let gpu = Gpu::headless().expect("a GPU");
         let left = lattice_at("left", -1.2);
         let right = lattice_at("right", 1.2);
 
-        let err = build_wired(&gpu, &[&left, &right], DISSOLVE, &[])
-            .err()
-            .expect("a declared slot that nothing binds is refused");
+        let err = validate_wired(&[&left, &right], DISSOLVE, &[])
+            .expect_err("a declared slot that nothing binds is refused");
         let text = err.to_string();
         assert!(
             text.contains("`dissolve` declares `only : Source`"),
@@ -1434,9 +1445,8 @@ proc dissolve {
 
         // And a Set of *one* source is refused just the same, which is the half
         // that matters: there is one right answer and it is still not guessed.
-        let err = build_wired(&gpu, &[&left], DISSOLVE, &[])
-            .err()
-            .expect("one source is not an excuse to fill the slot in");
+        let err = validate_wired(&[&left], DISSOLVE, &[])
+            .expect_err("one source is not an excuse to fill the slot in");
         assert!(err
             .to_string()
             .contains("nothing in this Set says what fills it"));
@@ -1451,19 +1461,16 @@ proc dissolve {
     /// a mask's comparand to a renderer is not told about buffers.
     #[test]
     fn a_source_slot_bound_to_something_that_is_not_a_geometry_is_refused() {
-        let gpu = Gpu::headless().expect("a GPU");
         let left = lattice_at("left", -1.2);
         let right = lattice_at("right", 1.2);
 
         // Bound to the renderer, which is a node of this Set and has no identity.
-        let err = build_wired(
-            &gpu,
+        let err = validate_wired(
             &[&left, &right],
             DISSOLVE,
             &[edge("dissolve", "only", "dots")],
         )
-        .err()
-        .expect("a renderer is not a source");
+        .expect_err("a renderer is not a source");
         let text = err.to_string();
         assert!(
             text.contains("which is an L4"),
@@ -1480,28 +1487,45 @@ proc dissolve {
 
         // Bound to the deforming node itself, which has elements and still no
         // identity of its own — an L2 runs *inside* a source rather than being one.
-        let err = build_wired(
-            &gpu,
+        let err = validate_wired(
             &[&left, &right],
             DISSOLVE,
             &[edge("dissolve", "only", "dissolve")],
         )
-        .err()
-        .expect("an L2 is not a source either");
+        .expect_err("an L2 is not a source either");
         assert!(err.to_string().contains("which is an L2"), "{err}");
 
         // And a name that is in no Set at all is the other refusal, unchanged.
-        let err = build_wired(
-            &gpu,
+        let err = validate_wired(
             &[&left, &right],
             DISSOLVE,
             &[edge("dissolve", "only", "nowhere")],
         )
-        .err()
-        .expect("a name nothing answers to");
+        .expect_err("a name nothing answers to");
         assert!(
             err.to_string().contains("is not a node of this Set"),
             "{err}"
+        );
+    }
+
+    /// **Pairing is by slot index, so a source that compacts cannot be paired.**
+    /// After a compaction element 5 of one source is not element 5 of the other,
+    /// and the pairing would match each element with a stranger without changing a
+    /// line of the `.kir`.
+    #[test]
+    fn a_source_that_compacts_cannot_be_paired() {
+        let near = lattice_at("near", -1.2);
+        let culled = lattice_at("culled", 1.2).replace(
+            "    tint     =",
+            "    if seed == 3u { kill(); }\n    tint     =",
+        );
+
+        let err = validate_paired(&[&near, &culled], MORPH)
+            .expect_err("a killing source moves its elements between slots");
+        let text = err.to_string();
+        assert!(
+            text.contains("culled") && text.contains("slot"),
+            "the refusal names the source and why: {text}"
         );
     }
 }

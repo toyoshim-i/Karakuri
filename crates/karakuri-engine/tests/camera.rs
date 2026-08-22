@@ -41,7 +41,7 @@ mod gpu {
     /// centre of the frame however far the camera swings — a first fixture at
     /// `(0, 0, -1)` moved four texels over a fifth of a revolution, which reads
     /// exactly like a camera that never reached the draw.
-    const MARK: &str = r#"
+    pub(super) const MARK: &str = r#"
 proc mark {
   kind     L1
   topology points
@@ -73,7 +73,7 @@ proc dot {
 }
 "#;
 
-    fn compile(src: &str) -> Checked {
+    pub(super) fn compile(src: &str) -> Checked {
         let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
         let checked =
             karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
@@ -623,7 +623,7 @@ proc {name} {{
 
     /// A renderer that says which camera it draws from, in one colour channel so
     /// that two of them in one frame can be measured apart.
-    fn through(name: &str, colour: [f32; 3]) -> String {
+    pub(super) fn through(name: &str, colour: [f32; 3]) -> String {
         let (r, g, b) = (colour[0], colour[1], colour[2]);
         format!(
             r#"
@@ -909,6 +909,54 @@ proc plain {
             "the built-in camera declares no params, so there is no `gain` there to write"
         );
     }
+}
+
+/// **The refusals, which reach no device.**
+///
+/// A Camera slot nothing binds, and one bound to a node that is not a camera:
+/// both are decided by the edge walk in `Set::validate`, before any pipeline
+/// exists. They used to take an adapter apiece because `Set::build_many` was
+/// the only door to the rule; it reaches the same rule by calling `validate`.
+mod refused {
+    use super::gpu::{compile, through, MARK};
+    use karakuri_engine::set::{Edge, Layering, SetError, Wiring};
+    use karakuri_engine::Set;
+    use karakuri_ir::typed::Checked;
+
+    /// The Set `wired` above describes — one `MARK` at capacity 1, these
+    /// cameras and these renderers — minus the device and everything
+    /// downstream of it.
+    fn validate_wired(
+        l3s: &[String],
+        l4s: &[&str],
+        edges: &[(&str, &str, &str)],
+    ) -> Result<(), SetError> {
+        let l3s: Vec<Checked> = l3s.iter().map(|s| compile(s)).collect();
+        let l4s: Vec<Checked> = l4s.iter().map(|s| compile(s)).collect();
+        let edges: Vec<Edge> = edges
+            .iter()
+            .map(|(node, slot, to)| Edge {
+                node: node.to_string(),
+                slot: slot.to_string(),
+                to: to.to_string(),
+            })
+            .collect();
+        Set::validate(
+            &[(&compile(MARK), 1)],
+            &[],
+            &l3s.iter().collect::<Vec<_>>(),
+            &[],
+            &l4s.iter().collect::<Vec<_>>(),
+            Layering::Overdraw,
+            7,
+            &[],
+            Wiring {
+                edges: &edges,
+                ..Default::default()
+            },
+        )
+        .map(|_| ())
+    }
 
     /// **A declared Camera slot must be bound**, exactly as a geometry slot and a
     /// Field slot must be.
@@ -919,13 +967,9 @@ proc plain {
     /// Set's camera says so by declaring no slot.
     #[test]
     fn an_unbound_camera_slot_is_refused() {
-        let gpu = Gpu::headless().expect("no GPU available");
         let named = through("named", [1.0, 0.0, 0.0]);
-        // Matched rather than `expect_err`, which would want `Set` to be `Debug`.
-        let err = match wired(&gpu, &[], &[&named], &[], 64, 64) {
-            Err(e) => e,
-            Ok(_) => panic!("an unbound slot is not filled in from the Set's only camera"),
-        };
+        let err = validate_wired(&[], &[&named], &[])
+            .expect_err("an unbound slot is not filled in from the Set's only camera");
         let text = format!("{err}");
         assert!(
             text.contains("`named` declares `view : Camera`"),
@@ -938,12 +982,9 @@ proc plain {
     /// the half an operator cannot see from the edge.
     #[test]
     fn a_camera_slot_bound_to_something_that_is_not_a_camera_is_refused() {
-        let gpu = Gpu::headless().expect("no GPU available");
         let named = through("named", [1.0, 0.0, 0.0]);
-        let err = match wired(&gpu, &[], &[&named], &[("named", "view", "mark")], 64, 64) {
-            Err(e) => e,
-            Ok(_) => panic!("a geometry is not a camera"),
-        };
+        let err = validate_wired(&[], &[&named], &[("named", "view", "mark")])
+            .expect_err("a geometry is not a camera");
         let text = format!("{err}");
         assert!(
             text.contains("bound to `mark`") && text.contains("an L1"),
