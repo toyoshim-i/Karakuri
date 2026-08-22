@@ -11,7 +11,7 @@ index is maintained by hand — see ADR-0000 for when that stops being enough.
 rule it states.
 
 **Reconstruction is in progress.** Records are being recovered in date order from the session
-history that runs from 2026-07-25. Everything through **2026-08-11** is written; the numbering
+history that runs from 2026-07-25. Everything through **2026-08-15** is written; the numbering
 is chronological, so later dates take later numbers.
 
 ## Records
@@ -102,6 +102,16 @@ is chronological, so later dates take later numbers.
 | [ADR-0081](0081-ndjson-over-a-pipe-and-not-protobuf.md) | ndjson over a pipe, and not protobuf | 2026-08-11 | accepted |
 | [ADR-0082](0082-link-is-not-automatic-and-it-is-shared.md) | Link is not automatic, and it is shared | 2026-08-11 | accepted |
 | [ADR-0083](0083-mcp-is-the-only-prompt-surface.md) | MCP is the only prompt surface | 2026-08-11 | accepted |
+| [ADR-0084](0084-a-procedure-change-goes-into-the-record-stream.md) | A procedure change goes into the record stream | 2026-08-12 | accepted |
+| [ADR-0085](0085-a-build-carries-an-id-because-a-label-is-not-an-identity.md) | A build carries an id, because a label is not an identity | 2026-08-12 | accepted |
+| [ADR-0086](0086-a-hint-says-why.md) | A hint says why | 2026-08-15 | accepted |
+| [ADR-0087](0087-a-fixture-the-product-can-rewrite-is-not-a-fixture.md) | A fixture the product can rewrite is not a fixture | 2026-08-15 | accepted |
+| [ADR-0088](0088-what-ships-what-you-saved-and-what-you-are-editing.md) | What ships, what you saved, and what you are editing are three places | 2026-08-15 | accepted |
+| [ADR-0089](0089-history-is-gated-on-compiling-not-on-landing.md) | History is gated on compiling, not on landing | 2026-08-15 | accepted |
+| [ADR-0090](0090-a-ceiling-calibrated-for-one-shape-rejects-the-next.md) | A ceiling calibrated for one shape rejects the next | 2026-08-15 | accepted |
+| [ADR-0091](0091-declaration-by-absence-and-an-empty-consumes-is-a-rule.md) | Declaration by absence, and an empty `consumes` is a rule | 2026-08-15 | accepted |
+| [ADR-0092](0092-a-resource-listing-is-a-curriculum-not-an-index.md) | A resource listing is a curriculum, not an index | 2026-08-15 | accepted |
+| [ADR-0093](0093-a-verification-that-measures-the-wrong-tree-verifies-nothing.md) | A verification that measures the wrong tree verifies nothing | 2026-08-15 | accepted |
 
 ## Retired numbers
 
@@ -194,6 +204,16 @@ never reused.
 | [ADR-0081](0081-ndjson-over-a-pipe-and-not-protobuf.md) | ndjson over a pipe, and not protobuf | 2026-08-11 | accepted |
 | [ADR-0082](0082-link-is-not-automatic-and-it-is-shared.md) | Link is not automatic, and it is shared | 2026-08-11 | accepted |
 | [ADR-0083](0083-mcp-is-the-only-prompt-surface.md) | MCP is the only prompt surface | 2026-08-11 | accepted |
+| [ADR-0084](0084-a-procedure-change-goes-into-the-record-stream.md) | A procedure change goes into the record stream | 2026-08-12 | accepted |
+| [ADR-0085](0085-a-build-carries-an-id-because-a-label-is-not-an-identity.md) | A build carries an id, because a label is not an identity | 2026-08-12 | accepted |
+| [ADR-0086](0086-a-hint-says-why.md) | A hint says why | 2026-08-15 | accepted |
+| [ADR-0087](0087-a-fixture-the-product-can-rewrite-is-not-a-fixture.md) | A fixture the product can rewrite is not a fixture | 2026-08-15 | accepted |
+| [ADR-0088](0088-what-ships-what-you-saved-and-what-you-are-editing.md) | What ships, what you saved, and what you are editing are three places | 2026-08-15 | accepted |
+| [ADR-0089](0089-history-is-gated-on-compiling-not-on-landing.md) | History is gated on compiling, not on landing | 2026-08-15 | accepted |
+| [ADR-0090](0090-a-ceiling-calibrated-for-one-shape-rejects-the-next.md) | A ceiling calibrated for one shape rejects the next | 2026-08-15 | accepted |
+| [ADR-0091](0091-declaration-by-absence-and-an-empty-consumes-is-a-rule.md) | Declaration by absence, and an empty `consumes` is a rule | 2026-08-15 | accepted |
+| [ADR-0092](0092-a-resource-listing-is-a-curriculum-not-an-index.md) | A resource listing is a curriculum, not an index | 2026-08-15 | accepted |
+| [ADR-0093](0093-a-verification-that-measures-the-wrong-tree-verifies-nothing.md) | A verification that measures the wrong tree verifies nothing | 2026-08-15 | accepted |
 
 Re-pointing the records that cited a retired principle is permitted, and why, is
 [ADR-0059](0059-a-records-pointer-into-the-principles-registry-is-metadata.md).
