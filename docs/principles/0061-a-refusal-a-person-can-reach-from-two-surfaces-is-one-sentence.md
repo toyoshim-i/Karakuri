@@ -11,4 +11,4 @@ equality against the shared function instead.
 The rule is about **surfaces that face a person or a model**. Panic and `assert!` text
 addressed to whoever is holding a debugger is a different register and may differ; say so
 where it differs, so the exclusion reads as a decision rather than as the drift this rules
-out. See [ADR-0129](../adr/0129-one-refusal-sentence-per-mistake-across-the-surfaces-that-face-a-person.md).
+out. See [ADR-0131](../adr/0131-one-refusal-sentence-per-mistake-across-the-surfaces-that-face-a-person.md).

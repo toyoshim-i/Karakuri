@@ -1,5 +1,5 @@
 ---
-id: 0129
+id: 0131
 title: One refusal sentence per mistake, across the surfaces that face a person
 status: accepted
 date: 2026-08-22
