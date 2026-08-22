@@ -491,150 +491,6 @@ fn steps_taken(set: &Set) -> u64 {
     (set.time() * 60.0).round() as u64
 }
 
-/// **The verdict is applied, not merely reported.**
-///
-/// A demoted slot has to actually stop stepping and an untouched Live slot has
-/// to actually keep going — a `govern` that returned a correct report and wrote
-/// nothing back would satisfy every assertion in the first half of this file.
-/// `t` is what says so: it advances only through `Set::prepare`, so a slot the
-/// governor parked is one whose clock stands still.
-#[test]
-fn govern_applies_its_verdict_to_the_deck_and_leaves_the_live_slot_running() {
-    let gpu = Gpu::headless().expect("no GPU available");
-    let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
-    const FRAMES: usize = 12;
-
-    let mut deck = Deck::new(
-        &gpu.device,
-        vec![
-            swap_of(&gpu, L1, 1, Some(12.0)),
-            swap_of(&gpu, L1, 2, Some(40.0)),
-        ],
-        WIDTH,
-        HEIGHT,
-    );
-    deck.set_compute_budget_ms(16.0);
-    deck.set_residency(1, Residency::Priming);
-
-    let report = deck.govern();
-    assert_eq!(report.decisions[1].reason, Reason::NoHeadroom);
-    assert_eq!(
-        deck.residency(1),
-        Residency::Allocated,
-        "the governor decided to demote and the deck did not move"
-    );
-    assert_eq!(
-        deck.residency(0),
-        Residency::Live,
-        "the governor moved a Live slot"
-    );
-
-    for _ in 0..FRAMES {
-        frame(&gpu, &mut deck, &present, 1);
-    }
-    assert_eq!(
-        steps_taken(deck.slot(0).set()),
-        FRAMES as u64,
-        "the Live slot stopped stepping"
-    );
-    assert_eq!(
-        steps_taken(deck.slot(1).set()),
-        0,
-        "the demoted slot is still stepping, so the demotion was a report and not \
-         an action"
-    );
-
-    // The negative control on the same deck: raise the budget and the same slot
-    // is admitted and does step. Without this, the assertions above would pass
-    // on a `govern` that parked everything it was ever shown. Nothing re-asks
-    // for priming here — the request outlived the demotion, which is
-    // `a_parked_slot_primes_again_by_itself_when_the_deck_empties`'s subject.
-    deck.set_compute_budget_ms(100.0);
-    assert_eq!(deck.govern().decisions[1].reason, Reason::Fits);
-    for _ in 0..FRAMES {
-        frame(&gpu, &mut deck, &present, 1);
-    }
-    assert_eq!(steps_taken(deck.slot(1).set()), FRAMES as u64);
-    assert_eq!(steps_taken(deck.slot(0).set()), 2 * FRAMES as u64);
-}
-
-/// The closed-form flag reaches the governor **off the Set**, through the check
-/// pass and `Set::build`, rather than being handed to it by a test. Two decks
-/// differing only in which L1 they hold, at a budget that fits either.
-#[test]
-fn a_closed_form_set_is_recognised_through_the_deck() {
-    let gpu = Gpu::headless().expect("no GPU available");
-
-    let verdict = |l1: &str| {
-        let mut deck = Deck::new(
-            &gpu.device,
-            vec![swap_of(&gpu, l1, 1, Some(1.0))],
-            WIDTH,
-            HEIGHT,
-        );
-        deck.set_compute_budget_ms(1000.0);
-        deck.set_residency(0, Residency::Priming);
-        deck.govern().decisions[0].reason
-    };
-
-    assert_eq!(
-        verdict(L1_CLOSED_FORM),
-        Reason::NoPrimingNeeded,
-        "a closed-form Set was primed; `Checked::closed_form` is not reaching the \
-         governor"
-    );
-    assert_eq!(
-        verdict(L1),
-        Reason::Fits,
-        "an accumulating Set was refused priming as though it were closed form"
-    );
-}
-
-/// **`govern` is idempotent, so calling it often does not stall priming.**
-///
-/// A caller that runs it every frame — which is the shape a status line
-/// invites — must not reset the priming counter every frame, because
-/// `prime_phase = 0` on every call means "one frame in four" becomes "every
-/// frame" and the budget the governor just computed is spent four times over.
-/// The reset belongs to a *change*, and this is what says so.
-#[test]
-fn calling_govern_every_frame_does_not_stall_a_slowed_priming_slot() {
-    let gpu = Gpu::headless().expect("no GPU available");
-    let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
-    const FRAMES: usize = 12;
-
-    let mut deck = Deck::new(
-        &gpu.device,
-        vec![
-            swap_of(&gpu, L1, 1, Some(8.0)),
-            swap_of(&gpu, L1, 2, Some(8.0)),
-        ],
-        WIDTH,
-        HEIGHT,
-    );
-    // 8 ms on air against 10 leaves 2, which takes the 8 ms candidate at one
-    // frame in four.
-    deck.set_compute_budget_ms(10.0);
-    deck.set_residency(1, Residency::Priming);
-    assert_eq!(deck.govern().decisions[1].prime_one_in, 4);
-
-    for _ in 0..FRAMES {
-        let report = deck.govern();
-        assert_eq!(
-            report.decisions[1].prime_one_in, 4,
-            "the rate changed under a repeated call with nothing else changing"
-        );
-        frame(&gpu, &mut deck, &present, 1);
-    }
-
-    assert_eq!(
-        steps_taken(deck.slot(1).set()),
-        (FRAMES / 4) as u64,
-        "a slot priming one frame in four stepped more often than that; `govern` \
-         is resetting the counter it should only reset on a change"
-    );
-}
-
 /// **A rate can spread a cost; it cannot shrink one.**
 ///
 /// The amortisation is an average — a slot stepping one frame in `n` costs
@@ -664,252 +520,397 @@ fn a_slot_costing_more_than_the_whole_budget_is_refused_at_every_rate() {
     assert_eq!(fits.decisions[0].prime_one_in, 1);
 }
 
-/// **A slot parked for lack of headroom primes again by itself.**
-///
-/// The deck empties and nobody says anything about slot 1: no `set_residency`,
-/// no re-request, nothing. The next pass primes it, because the request was
-/// never the governor's to consume — a demotion writes the *effective*
-/// residency and leaves the operator's ask where it was.
-///
-/// The version of this that does not work writes `Allocated` back through
-/// `Deck::set_residency`. The slot then reads `Allocated` on every later pass,
-/// is reported as a slot nobody asked about, and never primes again however
-/// empty the deck gets.
-#[test]
-fn a_parked_slot_primes_again_by_itself_when_the_deck_empties() {
-    let gpu = Gpu::headless().expect("no GPU available");
-    let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
-    const FRAMES: usize = 8;
+// The seven of twenty-two that take a device. The rest reason over a budget and
+// a verdict, which is arithmetic — so the majority of this file stays in the set
+// `cargo test -- --skip gpu::` runs. See `tests/gpu_tests_are_under_mod_gpu.rs`.
+mod gpu {
+    use super::*;
 
-    let mut deck = Deck::new(
-        &gpu.device,
-        vec![
-            swap_of(&gpu, L1, 1, Some(15.0)),
-            swap_of(&gpu, L1, 2, Some(16.0)),
-        ],
-        WIDTH,
-        HEIGHT,
-    );
-    // 15 ms on air against 16 leaves 1 ms, and 16/8 is 2: no rate fits. The
-    // same 16 ms candidate on an empty deck fits whole, which is what makes
-    // this a park rather than a Set that is simply too expensive.
-    deck.set_compute_budget_ms(16.0);
-    deck.set_residency(1, Residency::Priming);
+    /// **The verdict is applied, not merely reported.**
+    ///
+    /// A demoted slot has to actually stop stepping and an untouched Live slot has
+    /// to actually keep going — a `govern` that returned a correct report and wrote
+    /// nothing back would satisfy every assertion in the first half of this file.
+    /// `t` is what says so: it advances only through `Set::prepare`, so a slot the
+    /// governor parked is one whose clock stands still.
+    #[test]
+    fn govern_applies_its_verdict_to_the_deck_and_leaves_the_live_slot_running() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+        const FRAMES: usize = 12;
 
-    assert_eq!(deck.govern().decisions[1].reason, Reason::NoHeadroom);
-    assert_eq!(deck.residency(1), Residency::Allocated);
-    assert!(
-        deck.is_parked(1),
-        "a refused request reads as a slot nobody asked about"
-    );
-    assert_eq!(deck.parked_slots(), 1);
-    assert_eq!(
-        deck.requested_residency(1),
-        Residency::Priming,
-        "the demotion destroyed the operator's request"
-    );
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![
+                swap_of(&gpu, L1, 1, Some(12.0)),
+                swap_of(&gpu, L1, 2, Some(40.0)),
+            ],
+            WIDTH,
+            HEIGHT,
+        );
+        deck.set_compute_budget_ms(16.0);
+        deck.set_residency(1, Residency::Priming);
 
-    for _ in 0..FRAMES {
-        frame(&gpu, &mut deck, &present, 1);
+        let report = deck.govern();
+        assert_eq!(report.decisions[1].reason, Reason::NoHeadroom);
+        assert_eq!(
+            deck.residency(1),
+            Residency::Allocated,
+            "the governor decided to demote and the deck did not move"
+        );
+        assert_eq!(
+            deck.residency(0),
+            Residency::Live,
+            "the governor moved a Live slot"
+        );
+
+        for _ in 0..FRAMES {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        assert_eq!(
+            steps_taken(deck.slot(0).set()),
+            FRAMES as u64,
+            "the Live slot stopped stepping"
+        );
+        assert_eq!(
+            steps_taken(deck.slot(1).set()),
+            0,
+            "the demoted slot is still stepping, so the demotion was a report and not \
+         an action"
+        );
+
+        // The negative control on the same deck: raise the budget and the same slot
+        // is admitted and does step. Without this, the assertions above would pass
+        // on a `govern` that parked everything it was ever shown. Nothing re-asks
+        // for priming here — the request outlived the demotion, which is
+        // `a_parked_slot_primes_again_by_itself_when_the_deck_empties`'s subject.
+        deck.set_compute_budget_ms(100.0);
+        assert_eq!(deck.govern().decisions[1].reason, Reason::Fits);
+        for _ in 0..FRAMES {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        assert_eq!(steps_taken(deck.slot(1).set()), FRAMES as u64);
+        assert_eq!(steps_taken(deck.slot(0).set()), 2 * FRAMES as u64);
     }
-    assert_eq!(steps_taken(deck.slot(1).set()), 0, "a parked slot stepped");
+    /// The closed-form flag reaches the governor **off the Set**, through the check
+    /// pass and `Set::build`, rather than being handed to it by a test. Two decks
+    /// differing only in which L1 they hold, at a budget that fits either.
+    #[test]
+    fn a_closed_form_set_is_recognised_through_the_deck() {
+        let gpu = Gpu::headless().expect("no GPU available");
 
-    // The deck empties. Slot 1 is not mentioned.
-    deck.set_residency(0, Residency::Allocated);
-    let report = deck.govern();
+        let verdict = |l1: &str| {
+            let mut deck = Deck::new(
+                &gpu.device,
+                vec![swap_of(&gpu, l1, 1, Some(1.0))],
+                WIDTH,
+                HEIGHT,
+            );
+            deck.set_compute_budget_ms(1000.0);
+            deck.set_residency(0, Residency::Priming);
+            deck.govern().decisions[0].reason
+        };
 
-    assert_eq!(
-        report.decisions[1].reason,
-        Reason::Fits,
-        "the slot never primed again after the deck emptied; the request did not \
+        assert_eq!(
+            verdict(L1_CLOSED_FORM),
+            Reason::NoPrimingNeeded,
+            "a closed-form Set was primed; `Checked::closed_form` is not reaching the \
+         governor"
+        );
+        assert_eq!(
+            verdict(L1),
+            Reason::Fits,
+            "an accumulating Set was refused priming as though it were closed form"
+        );
+    }
+    /// **`govern` is idempotent, so calling it often does not stall priming.**
+    ///
+    /// A caller that runs it every frame — which is the shape a status line
+    /// invites — must not reset the priming counter every frame, because
+    /// `prime_phase = 0` on every call means "one frame in four" becomes "every
+    /// frame" and the budget the governor just computed is spent four times over.
+    /// The reset belongs to a *change*, and this is what says so.
+    #[test]
+    fn calling_govern_every_frame_does_not_stall_a_slowed_priming_slot() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+        const FRAMES: usize = 12;
+
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![
+                swap_of(&gpu, L1, 1, Some(8.0)),
+                swap_of(&gpu, L1, 2, Some(8.0)),
+            ],
+            WIDTH,
+            HEIGHT,
+        );
+        // 8 ms on air against 10 leaves 2, which takes the 8 ms candidate at one
+        // frame in four.
+        deck.set_compute_budget_ms(10.0);
+        deck.set_residency(1, Residency::Priming);
+        assert_eq!(deck.govern().decisions[1].prime_one_in, 4);
+
+        for _ in 0..FRAMES {
+            let report = deck.govern();
+            assert_eq!(
+                report.decisions[1].prime_one_in, 4,
+                "the rate changed under a repeated call with nothing else changing"
+            );
+            frame(&gpu, &mut deck, &present, 1);
+        }
+
+        assert_eq!(
+            steps_taken(deck.slot(1).set()),
+            (FRAMES / 4) as u64,
+            "a slot priming one frame in four stepped more often than that; `govern` \
+         is resetting the counter it should only reset on a change"
+        );
+    }
+    /// **A slot parked for lack of headroom primes again by itself.**
+    ///
+    /// The deck empties and nobody says anything about slot 1: no `set_residency`,
+    /// no re-request, nothing. The next pass primes it, because the request was
+    /// never the governor's to consume — a demotion writes the *effective*
+    /// residency and leaves the operator's ask where it was.
+    ///
+    /// The version of this that does not work writes `Allocated` back through
+    /// `Deck::set_residency`. The slot then reads `Allocated` on every later pass,
+    /// is reported as a slot nobody asked about, and never primes again however
+    /// empty the deck gets.
+    #[test]
+    fn a_parked_slot_primes_again_by_itself_when_the_deck_empties() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+        const FRAMES: usize = 8;
+
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![
+                swap_of(&gpu, L1, 1, Some(15.0)),
+                swap_of(&gpu, L1, 2, Some(16.0)),
+            ],
+            WIDTH,
+            HEIGHT,
+        );
+        // 15 ms on air against 16 leaves 1 ms, and 16/8 is 2: no rate fits. The
+        // same 16 ms candidate on an empty deck fits whole, which is what makes
+        // this a park rather than a Set that is simply too expensive.
+        deck.set_compute_budget_ms(16.0);
+        deck.set_residency(1, Residency::Priming);
+
+        assert_eq!(deck.govern().decisions[1].reason, Reason::NoHeadroom);
+        assert_eq!(deck.residency(1), Residency::Allocated);
+        assert!(
+            deck.is_parked(1),
+            "a refused request reads as a slot nobody asked about"
+        );
+        assert_eq!(deck.parked_slots(), 1);
+        assert_eq!(
+            deck.requested_residency(1),
+            Residency::Priming,
+            "the demotion destroyed the operator's request"
+        );
+
+        for _ in 0..FRAMES {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        assert_eq!(steps_taken(deck.slot(1).set()), 0, "a parked slot stepped");
+
+        // The deck empties. Slot 1 is not mentioned.
+        deck.set_residency(0, Residency::Allocated);
+        let report = deck.govern();
+
+        assert_eq!(
+            report.decisions[1].reason,
+            Reason::Fits,
+            "the slot never primed again after the deck emptied; the request did not \
          survive the demotion"
-    );
-    assert_eq!(deck.residency(1), Residency::Priming);
-    assert!(!deck.is_parked(1));
-    for _ in 0..FRAMES {
-        frame(&gpu, &mut deck, &present, 1);
+        );
+        assert_eq!(deck.residency(1), Residency::Priming);
+        assert!(!deck.is_parked(1));
+        for _ in 0..FRAMES {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        assert_eq!(
+            steps_taken(deck.slot(1).set()),
+            FRAMES as u64,
+            "the report said Priming and the slot did not step"
+        );
     }
-    assert_eq!(
-        steps_taken(deck.slot(1).set()),
-        FRAMES as u64,
-        "the report said Priming and the slot did not step"
-    );
-}
+    /// **One over-budget pass defers every priming request and cancels none.**
+    ///
+    /// `over_budget` clamps the headroom to zero, so every Priming slot on the deck
+    /// is refused in the same pass — which is correct, and is exactly why the
+    /// refusal must not be written over the requests. A single heavy Set put on air
+    /// for one pass would otherwise cancel the whole deck's worth of priming, and
+    /// the operator would find out by noticing that nothing ever warmed up again.
+    ///
+    /// The transient is an operator action with a natural end: a fourth Set goes on
+    /// air, and comes off again.
+    #[test]
+    fn a_transient_over_budget_pass_cancels_nothing() {
+        let gpu = Gpu::headless().expect("no GPU available");
 
-/// **One over-budget pass defers every priming request and cancels none.**
-///
-/// `over_budget` clamps the headroom to zero, so every Priming slot on the deck
-/// is refused in the same pass — which is correct, and is exactly why the
-/// refusal must not be written over the requests. A single heavy Set put on air
-/// for one pass would otherwise cancel the whole deck's worth of priming, and
-/// the operator would find out by noticing that nothing ever warmed up again.
-///
-/// The transient is an operator action with a natural end: a fourth Set goes on
-/// air, and comes off again.
-#[test]
-fn a_transient_over_budget_pass_cancels_nothing() {
-    let gpu = Gpu::headless().expect("no GPU available");
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![
+                swap_of(&gpu, L1, 1, Some(4.0)),
+                swap_of(&gpu, L1, 2, Some(1.0)),
+                swap_of(&gpu, L1, 3, Some(1.0)),
+                swap_of(&gpu, L1, 4, Some(30.0)),
+            ],
+            WIDTH,
+            HEIGHT,
+        );
+        deck.set_compute_budget_ms(16.0);
+        deck.set_residency(1, Residency::Priming);
+        deck.set_residency(2, Residency::Priming);
+        deck.set_residency(3, Residency::Allocated);
 
-    let mut deck = Deck::new(
-        &gpu.device,
-        vec![
-            swap_of(&gpu, L1, 1, Some(4.0)),
-            swap_of(&gpu, L1, 2, Some(1.0)),
-            swap_of(&gpu, L1, 3, Some(1.0)),
-            swap_of(&gpu, L1, 4, Some(30.0)),
-        ],
-        WIDTH,
-        HEIGHT,
-    );
-    deck.set_compute_budget_ms(16.0);
-    deck.set_residency(1, Residency::Priming);
-    deck.set_residency(2, Residency::Priming);
-    deck.set_residency(3, Residency::Allocated);
+        let before = deck.govern();
+        assert!(!before.over_budget);
+        assert_eq!(deck.priming_slots(), 2);
 
-    let before = deck.govern();
-    assert!(!before.over_budget);
-    assert_eq!(deck.priming_slots(), 2);
+        // The heavy Set goes on air: 34 ms committed against 16.
+        deck.set_residency(3, Residency::Live);
+        let during = deck.govern();
+        assert!(
+            during.over_budget,
+            "34 ms of Live against 16 ms was not flagged"
+        );
+        assert_eq!(
+            deck.priming_slots(),
+            0,
+            "priming continued on a deck whose Live slots are already over budget"
+        );
+        assert_eq!(
+            deck.parked_slots(),
+            2,
+            "the requests were cancelled, not parked"
+        );
+        for slot in [1, 2] {
+            assert_eq!(deck.requested_residency(slot), Residency::Priming);
+        }
 
-    // The heavy Set goes on air: 34 ms committed against 16.
-    deck.set_residency(3, Residency::Live);
-    let during = deck.govern();
-    assert!(
-        during.over_budget,
-        "34 ms of Live against 16 ms was not flagged"
-    );
-    assert_eq!(
-        deck.priming_slots(),
-        0,
-        "priming continued on a deck whose Live slots are already over budget"
-    );
-    assert_eq!(
-        deck.parked_slots(),
-        2,
-        "the requests were cancelled, not parked"
-    );
-    for slot in [1, 2] {
-        assert_eq!(deck.requested_residency(slot), Residency::Priming);
-    }
+        // And off again. Nothing is re-requested.
+        deck.set_residency(3, Residency::Allocated);
+        let after = deck.govern();
 
-    // And off again. Nothing is re-requested.
-    deck.set_residency(3, Residency::Allocated);
-    let after = deck.govern();
-
-    assert!(!after.over_budget);
-    assert_eq!(
-        deck.priming_slots(),
-        2,
-        "one over-budget pass permanently cancelled every priming request on the \
+        assert!(!after.over_budget);
+        assert_eq!(
+            deck.priming_slots(),
+            2,
+            "one over-budget pass permanently cancelled every priming request on the \
          deck"
-    );
-    assert_eq!(deck.parked_slots(), 0);
-    for slot in [1, 2] {
-        assert_eq!(after.decisions[slot].reason, Reason::Fits);
+        );
+        assert_eq!(deck.parked_slots(), 0);
+        for slot in [1, 2] {
+            assert_eq!(after.decisions[slot].reason, Reason::Fits);
+        }
     }
-}
+    /// **A deck of Sets nobody measured refuses to prime, and measuring them is
+    /// what unblocks it.**
+    ///
+    /// Every `HotSwap::fixed` Set and every Set `HotSwap::new` is constructed with
+    /// arrives unmeasured, so this is the state a deck comes up in — and while a
+    /// *Live* slot is in it, the committed cost is unknown and there is no headroom
+    /// to admit against. `Deck::measure_slots` is the startup call that fixes it,
+    /// and this is the whole round trip: refused, measured, admitted, with the
+    /// budget never moving.
+    ///
+    /// The measurement here is a real probe run rather than a number handed in,
+    /// because what is being asserted is that the fix is *reachable* — a rule that
+    /// turns priming off by default with no pleasant way to turn it back on is not
+    /// a fix.
+    #[test]
+    fn measuring_the_live_slots_is_what_lets_an_unmeasured_deck_prime() {
+        let gpu = Gpu::headless().expect("no GPU available");
 
-/// **A deck of Sets nobody measured refuses to prime, and measuring them is
-/// what unblocks it.**
-///
-/// Every `HotSwap::fixed` Set and every Set `HotSwap::new` is constructed with
-/// arrives unmeasured, so this is the state a deck comes up in — and while a
-/// *Live* slot is in it, the committed cost is unknown and there is no headroom
-/// to admit against. `Deck::measure_slots` is the startup call that fixes it,
-/// and this is the whole round trip: refused, measured, admitted, with the
-/// budget never moving.
-///
-/// The measurement here is a real probe run rather than a number handed in,
-/// because what is being asserted is that the fix is *reachable* — a rule that
-/// turns priming off by default with no pleasant way to turn it back on is not
-/// a fix.
-#[test]
-fn measuring_the_live_slots_is_what_lets_an_unmeasured_deck_prime() {
-    let gpu = Gpu::headless().expect("no GPU available");
+        // Only the Live slot is unmeasured. The candidate carries a measurement, so
+        // nothing about *it* is in question and the refusal below can only be about
+        // the deck it is asking to prime on.
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![swap_of(&gpu, L1, 1, None), swap_of(&gpu, L1, 2, Some(1.0))],
+            WIDTH,
+            HEIGHT,
+        );
+        // Generous, so that "no room" can never be the explanation for anything
+        // below: whatever this machine measures the Live Set at, it fits.
+        deck.set_compute_budget_ms(10_000.0);
+        deck.set_residency(1, Residency::Priming);
 
-    // Only the Live slot is unmeasured. The candidate carries a measurement, so
-    // nothing about *it* is in question and the refusal below can only be about
-    // the deck it is asking to prime on.
-    let mut deck = Deck::new(
-        &gpu.device,
-        vec![swap_of(&gpu, L1, 1, None), swap_of(&gpu, L1, 2, Some(1.0))],
-        WIDTH,
-        HEIGHT,
-    );
-    // Generous, so that "no room" can never be the explanation for anything
-    // below: whatever this machine measures the Live Set at, it fits.
-    deck.set_compute_budget_ms(10_000.0);
-    deck.set_residency(1, Residency::Priming);
+        let refused = deck.govern();
+        assert_eq!(
+            refused.decisions[1].reason,
+            Reason::CommittedUnknown,
+            "a candidate was admitted against an on-air cost nobody has measured"
+        );
+        assert_eq!(refused.unmeasured_live, 1);
+        assert_eq!(refused.headroom_ms(), None);
+        assert_eq!(deck.priming_slots(), 0);
+        assert!(deck.is_parked(1), "the refusal cancelled the request");
 
-    let refused = deck.govern();
-    assert_eq!(
-        refused.decisions[1].reason,
-        Reason::CommittedUnknown,
-        "a candidate was admitted against an on-air cost nobody has measured"
-    );
-    assert_eq!(refused.unmeasured_live, 1);
-    assert_eq!(refused.headroom_ms(), None);
-    assert_eq!(deck.priming_slots(), 0);
-    assert!(deck.is_parked(1), "the refusal cancelled the request");
+        // The one call a caller owes at startup.
+        assert_eq!(deck.measure_slots(&gpu.device, &gpu.queue), 1);
+        assert_eq!(
+            deck.measure_slots(&gpu.device, &gpu.queue),
+            0,
+            "a second call re-measured Sets that already had a measurement"
+        );
 
-    // The one call a caller owes at startup.
-    assert_eq!(deck.measure_slots(&gpu.device, &gpu.queue), 1);
-    assert_eq!(
-        deck.measure_slots(&gpu.device, &gpu.queue),
-        0,
-        "a second call re-measured Sets that already had a measurement"
-    );
-
-    let admitted = deck.govern();
-    assert!(admitted.committed_known());
-    assert!(
-        admitted.committed_ms > 0.0,
-        "a measured Set was recorded as free"
-    );
-    assert!(admitted.headroom_ms().is_some());
-    assert_eq!(
-        admitted.decisions[1].reason,
-        Reason::Fits,
-        "the deck was measured and priming stayed refused"
-    );
-    assert_eq!(deck.priming_slots(), 1);
-}
-
-/// **Measuring is stepping, so a Set that has already stepped is left alone.**
-///
-/// `swap::measure` ends in `Set::rewind`, which restores what `Set::build`
-/// left — cold, `t` at zero — rather than what it found. That is correct for
-/// the cold Set it is meant for and is a state reset for any other, so a
-/// `measure_slots` called late must skip a running slot rather than take an
-/// hour of simulation off it to fill in a budget figure. The governor already
-/// has a way to say it cannot budget a slot; it has no way to undo this.
-#[test]
-fn measuring_never_resets_a_slot_that_has_already_stepped() {
-    let gpu = Gpu::headless().expect("no GPU available");
-    let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
-    const FRAMES: usize = 6;
-
-    let mut deck = Deck::new(&gpu.device, vec![swap_of(&gpu, L1, 1, None)], WIDTH, HEIGHT);
-    for _ in 0..FRAMES {
-        frame(&gpu, &mut deck, &present, 1);
+        let admitted = deck.govern();
+        assert!(admitted.committed_known());
+        assert!(
+            admitted.committed_ms > 0.0,
+            "a measured Set was recorded as free"
+        );
+        assert!(admitted.headroom_ms().is_some());
+        assert_eq!(
+            admitted.decisions[1].reason,
+            Reason::Fits,
+            "the deck was measured and priming stayed refused"
+        );
+        assert_eq!(deck.priming_slots(), 1);
     }
-    assert_eq!(steps_taken(deck.slot(0).set()), FRAMES as u64);
+    /// **Measuring is stepping, so a Set that has already stepped is left alone.**
+    ///
+    /// `swap::measure` ends in `Set::rewind`, which restores what `Set::build`
+    /// left — cold, `t` at zero — rather than what it found. That is correct for
+    /// the cold Set it is meant for and is a state reset for any other, so a
+    /// `measure_slots` called late must skip a running slot rather than take an
+    /// hour of simulation off it to fill in a budget figure. The governor already
+    /// has a way to say it cannot budget a slot; it has no way to undo this.
+    #[test]
+    fn measuring_never_resets_a_slot_that_has_already_stepped() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+        const FRAMES: usize = 6;
 
-    assert_eq!(
-        deck.measure_slots(&gpu.device, &gpu.queue),
-        0,
-        "a running Set was measured, which rewinds it"
-    );
-    assert_eq!(
-        steps_taken(deck.slot(0).set()),
-        FRAMES as u64,
-        "measuring a running slot reset it to cold; `Set::rewind` restores what \
+        let mut deck = Deck::new(&gpu.device, vec![swap_of(&gpu, L1, 1, None)], WIDTH, HEIGHT);
+        for _ in 0..FRAMES {
+            frame(&gpu, &mut deck, &present, 1);
+        }
+        assert_eq!(steps_taken(deck.slot(0).set()), FRAMES as u64);
+
+        assert_eq!(
+            deck.measure_slots(&gpu.device, &gpu.queue),
+            0,
+            "a running Set was measured, which rewinds it"
+        );
+        assert_eq!(
+            steps_taken(deck.slot(0).set()),
+            FRAMES as u64,
+            "measuring a running slot reset it to cold; `Set::rewind` restores what \
          `build` left, not what `measure` found"
-    );
+        );
 
-    // The negative control: the same deck before it ever ran does get measured,
-    // so the skip above is about the Set having stepped and not about
-    // `measure_slots` doing nothing at all.
-    let mut cold = Deck::new(&gpu.device, vec![swap_of(&gpu, L1, 1, None)], WIDTH, HEIGHT);
-    assert_eq!(cold.measure_slots(&gpu.device, &gpu.queue), 1);
-    assert_eq!(steps_taken(cold.slot(0).set()), 0);
+        // The negative control: the same deck before it ever ran does get measured,
+        // so the skip above is about the Set having stepped and not about
+        // `measure_slots` doing nothing at all.
+        let mut cold = Deck::new(&gpu.device, vec![swap_of(&gpu, L1, 1, None)], WIDTH, HEIGHT);
+        assert_eq!(cold.measure_slots(&gpu.device, &gpu.queue), 1);
+        assert_eq!(steps_taken(cold.slot(0).set()), 0);
+    }
 }

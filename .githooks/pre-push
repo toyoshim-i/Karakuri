@@ -15,8 +15,15 @@
 #
 # The tests need a GPU. There is no skip: a test that passes by not running is
 # worse than one that fails, which is what every GPU test in this workspace says
-# for itself, and a gate that quietly checks nothing is the same claim one level
-# up.
+# for itself — eight of them used to print and return instead, and were made to
+# panic when `--skip gpu::` gave an adapterless machine a better answer than a
+# green run that measured nothing.
+#
+# **That filter is for the working day, not for here.** Every GPU test lives
+# under a `mod gpu`, so `cargo test -- --skip gpu::` runs the ~70% of the suite
+# that needs no device in about three seconds — which is the right thing to run
+# while working and the wrong thing to run at a tag, because a gate that quietly
+# checks nothing is the same claim one level up.
 set -e
 
 # The refs being pushed arrive on stdin, one line each. **Reading them is what

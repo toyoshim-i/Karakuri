@@ -495,80 +495,86 @@ mod tests {
         assert!((a - b).abs() <= tol, "{what}: host {a}, gpu {b}");
     }
 
-    #[test]
-    fn the_pass_derives_what_the_host_would_have() {
-        let Ok(gpu) = Gpu::headless() else {
-            eprintln!("no adapter; skipping");
-            return;
-        };
-        // Nothing axis-aligned and nothing at the origin: a camera looking down
-        // an axis at (0,0,0) with `up` exactly +Y makes several columns of the
-        // view matrix zero, and a transcription error in the ones that stayed
-        // zero would not show.
-        let state = State {
-            eye: [3.0, -1.5, 4.25],
-            target: [-0.5, 0.75, 1.0],
-            up: [0.1, 0.9, -0.2],
-            fov_y: 0.9,
-            near: 0.25,
-            far: 60.0,
-        };
-        let aspect = 16.0 / 9.0;
+    // All four compare a derived block the GPU wrote against one the host computed,
+    // so all four take a device. Wrapped rather than left alone anyway: the rule is
+    // the same everywhere, and a target nobody wrapped is indistinguishable from one
+    // nobody checked. See `../../tests/gpu_tests_are_under_mod_gpu.rs`.
+    mod gpu {
+        use super::*;
 
-        let cam = Camera::build(&gpu.device, None, &[]);
-        cam.write_state(&gpu.queue, &state);
-        cam.write_canvas(&gpu.queue, aspect);
-        let mut encoder = gpu.device.create_command_encoder(&Default::default());
-        cam.record(&mut encoder);
-        gpu.queue.submit([encoder.finish()]);
-        let bytes = read_buffer(&gpu.device, &gpu.queue, &cam.derived, wire::SIZE);
+        #[test]
+        fn the_pass_derives_what_the_host_would_have() {
+            // Panics rather than skipping when there is no adapter, as every
+            // other GPU test in this workspace does. These four used to print
+            // and return, so a machine with no device ran them green — and the
+            // reason that was tolerable (there was no other way to get a run
+            // out of such a machine) stopped being true when `--skip gpu::`
+            // arrived. See `../../tests/gpu_tests_are_under_mod_gpu.rs`.
+            let gpu = Gpu::headless().expect("no GPU available");
+            // Nothing axis-aligned and nothing at the origin: a camera looking down
+            // an axis at (0,0,0) with `up` exactly +Y makes several columns of the
+            // view matrix zero, and a transcription error in the ones that stayed
+            // zero would not show.
+            let state = State {
+                eye: [3.0, -1.5, 4.25],
+                target: [-0.5, 0.75, 1.0],
+                up: [0.1, 0.9, -0.2],
+                fov_y: 0.9,
+                near: 0.25,
+                far: 60.0,
+            };
+            let aspect = 16.0 / 9.0;
 
-        // Column-major, so `(c * 4 + r) * 4` is the byte offset of the entry in
-        // row `r` of column `c` — the order both `Mat4` and WGSL store one in.
-        for (c, col) in state.view_proj(aspect).iter().enumerate() {
-            for (r, want) in col.iter().enumerate() {
-                close(
-                    *want,
-                    f32_at(&bytes, (c * 4 + r) * 4),
-                    &format!("view_proj[{c}][{r}]"),
-                );
+            let cam = Camera::build(&gpu.device, None, &[]);
+            cam.write_state(&gpu.queue, &state);
+            cam.write_canvas(&gpu.queue, aspect);
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            cam.record(&mut encoder);
+            gpu.queue.submit([encoder.finish()]);
+            let bytes = read_buffer(&gpu.device, &gpu.queue, &cam.derived, wire::SIZE);
+
+            // Column-major, so `(c * 4 + r) * 4` is the byte offset of the entry in
+            // row `r` of column `c` — the order both `Mat4` and WGSL store one in.
+            for (c, col) in state.view_proj(aspect).iter().enumerate() {
+                for (r, want) in col.iter().enumerate() {
+                    close(
+                        *want,
+                        f32_at(&bytes, (c * 4 + r) * 4),
+                        &format!("view_proj[{c}][{r}]"),
+                    );
+                }
             }
-        }
 
-        let basis = state.basis(aspect);
-        for (at, (name, want)) in [
-            (64, ("eye", basis.eye)),
-            (80, ("fwd", basis.forward)),
-            (96, ("right", basis.right)),
-            (112, ("up", basis.up)),
-        ] {
-            let got = vec3_at(&bytes, at);
-            for i in 0..3 {
-                close(want[i], got[i], &format!("{name}[{i}]"));
+            let basis = state.basis(aspect);
+            for (at, (name, want)) in [
+                (64, ("eye", basis.eye)),
+                (80, ("fwd", basis.forward)),
+                (96, ("right", basis.right)),
+                (112, ("up", basis.up)),
+            ] {
+                let got = vec3_at(&bytes, at);
+                for i in 0..3 {
+                    close(want[i], got[i], &format!("{name}[{i}]"));
+                }
             }
+
+            let range = state.depth_range();
+            close(range[0], f32_at(&bytes, 128), "depth_range.near");
+            close(range[1], f32_at(&bytes, 132), "depth_range.span");
         }
-
-        let range = state.depth_range();
-        close(range[0], f32_at(&bytes, 128), "depth_range.near");
-        close(range[1], f32_at(&bytes, 132), "depth_range.span");
-    }
-
-    /// **A camera procedure's defaults are the built-in's**, which is the claim
-    /// `karakuri_codegen::l3` makes and cannot check: the four values it writes
-    /// before an author's block runs are literals in a WGSL string, and
-    /// `Orbit::default` is a Rust struct. Here both exist.
-    ///
-    /// What it buys is that swapping the built-in orbit for the simplest L3
-    /// anyone would write — two lines, `eye` and `target` — changes where the
-    /// camera is and nothing else. A different field of view underneath would
-    /// read as the procedure having done something it did not.
-    #[test]
-    fn a_camera_procedure_that_writes_two_outputs_matches_the_built_in_in_the_other_four() {
-        let Ok(gpu) = Gpu::headless() else {
-            eprintln!("no adapter; skipping");
-            return;
-        };
-        let src = r#"
+        /// **A camera procedure's defaults are the built-in's**, which is the claim
+        /// `karakuri_codegen::l3` makes and cannot check: the four values it writes
+        /// before an author's block runs are literals in a WGSL string, and
+        /// `Orbit::default` is a Rust struct. Here both exist.
+        ///
+        /// What it buys is that swapping the built-in orbit for the simplest L3
+        /// anyone would write — two lines, `eye` and `target` — changes where the
+        /// camera is and nothing else. A different field of view underneath would
+        /// read as the procedure having done something it did not.
+        #[test]
+        fn a_camera_procedure_that_writes_two_outputs_matches_the_built_in_in_the_other_four() {
+            let gpu = Gpu::headless().expect("no GPU available");
+            let src = r#"
 proc two {
   kind L3
   camera {
@@ -577,81 +583,77 @@ proc two {
   }
 }
 "#;
-        let parsed = karakuri_ir::parse(src).expect("parses");
-        let l3 = karakuri_ir::check::check(&parsed).expect("checks");
-        let aspect = 16.0 / 9.0;
+            let parsed = karakuri_ir::parse(src).expect("parses");
+            let l3 = karakuri_ir::check::check(&parsed).expect("checks");
+            let aspect = 16.0 / 9.0;
 
-        let mut cam = Camera::build(&gpu.device, Some(&l3), &[]);
-        cam.write_canvas(&gpu.queue, aspect);
-        cam.prepare(
-            &gpu.queue,
-            &View {
-                t: 0.0,
-                beats: 0.0,
-                seed_salt: 0,
-                viewport: [16.0, 9.0],
-                param: &|_| None,
-                field_params: &[],
-                field_value: &|_| None,
-                // A camera declares no Source slot — `uses … : Source` is
-                // refused on an L3 — so nothing here can ask for one.
-                source_value: &|_| None,
-            },
-            crate::set::DT,
-            // Unread: this node has a procedure, so the built-in is not its
-            // producer. Passed as what it would have been.
-            &crate::camera::Orbit::default().state(0.0),
-        );
-        let mut encoder = gpu.device.create_command_encoder(&Default::default());
-        cam.record(&mut encoder);
-        gpu.queue.submit([encoder.finish()]);
-        let bytes = read_buffer(&gpu.device, &gpu.queue, &cam.derived, wire::SIZE);
+            let mut cam = Camera::build(&gpu.device, Some(&l3), &[]);
+            cam.write_canvas(&gpu.queue, aspect);
+            cam.prepare(
+                &gpu.queue,
+                &View {
+                    t: 0.0,
+                    beats: 0.0,
+                    seed_salt: 0,
+                    viewport: [16.0, 9.0],
+                    param: &|_| None,
+                    field_params: &[],
+                    field_value: &|_| None,
+                    // A camera declares no Source slot — `uses … : Source` is
+                    // refused on an L3 — so nothing here can ask for one.
+                    source_value: &|_| None,
+                },
+                crate::set::DT,
+                // Unread: this node has a procedure, so the built-in is not its
+                // producer. Passed as what it would have been.
+                &crate::camera::Orbit::default().state(0.0),
+            );
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            cam.record(&mut encoder);
+            gpu.queue.submit([encoder.finish()]);
+            let bytes = read_buffer(&gpu.device, &gpu.queue, &cam.derived, wire::SIZE);
 
-        // The same eye and target the procedure writes, and every other field
-        // from the struct that documents the built-in's answers.
-        let orbit = crate::camera::Orbit::default();
-        let want = State {
-            eye: [3.0, 2.0, 7.0],
-            target: [-1.0, 0.5, 0.0],
-            up: [0.0, 1.0, 0.0],
-            fov_y: orbit.fov_y,
-            near: orbit.near,
-            far: orbit.far,
-        };
-        for (c, col) in want.view_proj(aspect).iter().enumerate() {
-            for (r, v) in col.iter().enumerate() {
-                close(
-                    *v,
-                    f32_at(&bytes, (c * 4 + r) * 4),
-                    &format!("view_proj[{c}][{r}]"),
-                );
+            // The same eye and target the procedure writes, and every other field
+            // from the struct that documents the built-in's answers.
+            let orbit = crate::camera::Orbit::default();
+            let want = State {
+                eye: [3.0, 2.0, 7.0],
+                target: [-1.0, 0.5, 0.0],
+                up: [0.0, 1.0, 0.0],
+                fov_y: orbit.fov_y,
+                near: orbit.near,
+                far: orbit.far,
+            };
+            for (c, col) in want.view_proj(aspect).iter().enumerate() {
+                for (r, v) in col.iter().enumerate() {
+                    close(
+                        *v,
+                        f32_at(&bytes, (c * 4 + r) * 4),
+                        &format!("view_proj[{c}][{r}]"),
+                    );
+                }
             }
+            let range = want.depth_range();
+            close(range[0], f32_at(&bytes, 128), "depth_range.near");
+            close(range[1], f32_at(&bytes, 132), "depth_range.span");
         }
-        let range = want.depth_range();
-        close(range[0], f32_at(&bytes, 128), "depth_range.near");
-        close(range[1], f32_at(&bytes, 132), "depth_range.span");
-    }
-
-    /// **All six outputs, each to a value nothing else would produce.**
-    ///
-    /// Every other fixture in this tree writes `eye` and `target` and leaves the
-    /// rest defaulted, so `up`, `fov_y`, `near` and `far` were lowered by four
-    /// lines of `output_local` that no test reached: permuting them — `up` into
-    /// the eye's local, `near` and `far` swapped — left the whole workspace
-    /// green. A `.kir` writing `up = vec3(0, 0, 1)` would have moved the camera
-    /// instead of rolling it, and swapped planes invert `blend weighted`'s depth
-    /// normalisation, which is a wrong picture rather than a missing one.
-    ///
-    /// The values are deliberately unlike the defaults *and* unlike each other,
-    /// so a lowering that crossed two of them cannot land on a matrix that
-    /// happens to agree.
-    #[test]
-    fn every_camera_output_reaches_the_state_it_names() {
-        let Ok(gpu) = Gpu::headless() else {
-            eprintln!("no adapter; skipping");
-            return;
-        };
-        let src = r#"
+        /// **All six outputs, each to a value nothing else would produce.**
+        ///
+        /// Every other fixture in this tree writes `eye` and `target` and leaves the
+        /// rest defaulted, so `up`, `fov_y`, `near` and `far` were lowered by four
+        /// lines of `output_local` that no test reached: permuting them — `up` into
+        /// the eye's local, `near` and `far` swapped — left the whole workspace
+        /// green. A `.kir` writing `up = vec3(0, 0, 1)` would have moved the camera
+        /// instead of rolling it, and swapped planes invert `blend weighted`'s depth
+        /// normalisation, which is a wrong picture rather than a missing one.
+        ///
+        /// The values are deliberately unlike the defaults *and* unlike each other,
+        /// so a lowering that crossed two of them cannot land on a matrix that
+        /// happens to agree.
+        #[test]
+        fn every_camera_output_reaches_the_state_it_names() {
+            let gpu = Gpu::headless().expect("no GPU available");
+            let src = r#"
 proc six {
   kind L3
   camera {
@@ -664,123 +666,120 @@ proc six {
   }
 }
 "#;
-        let parsed = karakuri_ir::parse(src).expect("parses");
-        let l3 = karakuri_ir::check::check(&parsed).expect("checks");
-        let aspect = 4.0 / 3.0;
+            let parsed = karakuri_ir::parse(src).expect("parses");
+            let l3 = karakuri_ir::check::check(&parsed).expect("checks");
+            let aspect = 4.0 / 3.0;
 
-        let mut cam = Camera::build(&gpu.device, Some(&l3), &[]);
-        cam.write_canvas(&gpu.queue, aspect);
-        cam.prepare(
-            &gpu.queue,
-            &View {
-                t: 0.0,
-                beats: 0.0,
-                seed_salt: 0,
-                viewport: [4.0, 3.0],
-                param: &|_| None,
-                field_params: &[],
-                field_value: &|_| None,
-                // A camera declares no Source slot — `uses … : Source` is
-                // refused on an L3 — so nothing here can ask for one.
-                source_value: &|_| None,
-            },
-            crate::set::DT,
-            &crate::camera::Orbit::default().state(0.0),
-        );
-        let mut encoder = gpu.device.create_command_encoder(&Default::default());
-        cam.record(&mut encoder);
-        gpu.queue.submit([encoder.finish()]);
-        let bytes = read_buffer(&gpu.device, &gpu.queue, &cam.derived, wire::SIZE);
-
-        let want = State {
-            eye: [2.0, -1.0, 6.0],
-            target: [0.5, 1.5, -0.5],
-            up: [0.2, 0.3, 0.9],
-            fov_y: 0.62,
-            near: 0.4,
-            far: 37.0,
-        };
-        for (c, col) in want.view_proj(aspect).iter().enumerate() {
-            for (r, v) in col.iter().enumerate() {
-                close(
-                    *v,
-                    f32_at(&bytes, (c * 4 + r) * 4),
-                    &format!("view_proj[{c}][{r}]"),
-                );
-            }
-        }
-        // The projection carries `fov_y` and the planes; the basis is what
-        // carries `up`, and an `up` that never arrived would show here and not
-        // above — `view_proj` and the ray basis are two derivations of it.
-        let basis = want.basis(aspect);
-        for (at, (name, want)) in [
-            (64, ("eye", basis.eye)),
-            (80, ("fwd", basis.forward)),
-            (96, ("right", basis.right)),
-            (112, ("up", basis.up)),
-        ] {
-            let got = vec3_at(&bytes, at);
-            for i in 0..3 {
-                close(want[i], got[i], &format!("{name}[{i}]"));
-            }
-        }
-        let range = want.depth_range();
-        close(range[0], f32_at(&bytes, 128), "depth_range.near");
-        close(range[1], f32_at(&bytes, 132), "depth_range.span");
-    }
-
-    /// **The aspect ratio is the canvas's and not the camera's**, which is only
-    /// visible as the two places it reaches: the horizontal scale of the
-    /// projection, and the pre-scaled `right` a marching ray is built from.
-    /// Nothing else in the derived block may move with it.
-    #[test]
-    fn the_canvas_widens_the_projection_and_leaves_the_camera_where_it_is() {
-        let Ok(gpu) = Gpu::headless() else {
-            eprintln!("no adapter; skipping");
-            return;
-        };
-        let state = State {
-            eye: [0.0, 1.0, 5.0],
-            target: [0.0, 0.0, 0.0],
-            up: [0.0, 1.0, 0.0],
-            fov_y: 1.0,
-            near: 0.1,
-            far: 50.0,
-        };
-        let cam = Camera::build(&gpu.device, None, &[]);
-        let derive = |aspect: f32| {
-            cam.write_state(&gpu.queue, &state);
+            let mut cam = Camera::build(&gpu.device, Some(&l3), &[]);
             cam.write_canvas(&gpu.queue, aspect);
+            cam.prepare(
+                &gpu.queue,
+                &View {
+                    t: 0.0,
+                    beats: 0.0,
+                    seed_salt: 0,
+                    viewport: [4.0, 3.0],
+                    param: &|_| None,
+                    field_params: &[],
+                    field_value: &|_| None,
+                    // A camera declares no Source slot — `uses … : Source` is
+                    // refused on an L3 — so nothing here can ask for one.
+                    source_value: &|_| None,
+                },
+                crate::set::DT,
+                &crate::camera::Orbit::default().state(0.0),
+            );
             let mut encoder = gpu.device.create_command_encoder(&Default::default());
             cam.record(&mut encoder);
             gpu.queue.submit([encoder.finish()]);
-            read_buffer(&gpu.device, &gpu.queue, &cam.derived, wire::SIZE)
-        };
-        let square = derive(1.0);
-        let wide = derive(2.0);
+            let bytes = read_buffer(&gpu.device, &gpu.queue, &cam.derived, wire::SIZE);
 
-        // Twice as wide a canvas halves the horizontal scale of the projection
-        // and doubles the ray basis's `right` — the same field of view spread
-        // over more pixels either way.
-        close(
-            f32_at(&square, 0) * 0.5,
-            f32_at(&wide, 0),
-            "view_proj[0][0]",
-        );
-        for i in 0..3 {
-            close(
-                vec3_at(&square, 96)[i] * 2.0,
-                vec3_at(&wide, 96)[i],
-                "right",
-            );
-        }
-        // And nothing else: the eye, the direction, the vertical half-angle and
-        // the depth range are the camera's own.
-        for at in [64, 80, 112, 128] {
-            for i in 0..3 {
-                close(vec3_at(&square, at)[i], vec3_at(&wide, at)[i], "unmoved");
+            let want = State {
+                eye: [2.0, -1.0, 6.0],
+                target: [0.5, 1.5, -0.5],
+                up: [0.2, 0.3, 0.9],
+                fov_y: 0.62,
+                near: 0.4,
+                far: 37.0,
+            };
+            for (c, col) in want.view_proj(aspect).iter().enumerate() {
+                for (r, v) in col.iter().enumerate() {
+                    close(
+                        *v,
+                        f32_at(&bytes, (c * 4 + r) * 4),
+                        &format!("view_proj[{c}][{r}]"),
+                    );
+                }
             }
+            // The projection carries `fov_y` and the planes; the basis is what
+            // carries `up`, and an `up` that never arrived would show here and not
+            // above — `view_proj` and the ray basis are two derivations of it.
+            let basis = want.basis(aspect);
+            for (at, (name, want)) in [
+                (64, ("eye", basis.eye)),
+                (80, ("fwd", basis.forward)),
+                (96, ("right", basis.right)),
+                (112, ("up", basis.up)),
+            ] {
+                let got = vec3_at(&bytes, at);
+                for i in 0..3 {
+                    close(want[i], got[i], &format!("{name}[{i}]"));
+                }
+            }
+            let range = want.depth_range();
+            close(range[0], f32_at(&bytes, 128), "depth_range.near");
+            close(range[1], f32_at(&bytes, 132), "depth_range.span");
         }
-        close(f32_at(&square, 20), f32_at(&wide, 20), "view_proj[1][1]");
+        /// **The aspect ratio is the canvas's and not the camera's**, which is only
+        /// visible as the two places it reaches: the horizontal scale of the
+        /// projection, and the pre-scaled `right` a marching ray is built from.
+        /// Nothing else in the derived block may move with it.
+        #[test]
+        fn the_canvas_widens_the_projection_and_leaves_the_camera_where_it_is() {
+            let gpu = Gpu::headless().expect("no GPU available");
+            let state = State {
+                eye: [0.0, 1.0, 5.0],
+                target: [0.0, 0.0, 0.0],
+                up: [0.0, 1.0, 0.0],
+                fov_y: 1.0,
+                near: 0.1,
+                far: 50.0,
+            };
+            let cam = Camera::build(&gpu.device, None, &[]);
+            let derive = |aspect: f32| {
+                cam.write_state(&gpu.queue, &state);
+                cam.write_canvas(&gpu.queue, aspect);
+                let mut encoder = gpu.device.create_command_encoder(&Default::default());
+                cam.record(&mut encoder);
+                gpu.queue.submit([encoder.finish()]);
+                read_buffer(&gpu.device, &gpu.queue, &cam.derived, wire::SIZE)
+            };
+            let square = derive(1.0);
+            let wide = derive(2.0);
+
+            // Twice as wide a canvas halves the horizontal scale of the projection
+            // and doubles the ray basis's `right` — the same field of view spread
+            // over more pixels either way.
+            close(
+                f32_at(&square, 0) * 0.5,
+                f32_at(&wide, 0),
+                "view_proj[0][0]",
+            );
+            for i in 0..3 {
+                close(
+                    vec3_at(&square, 96)[i] * 2.0,
+                    vec3_at(&wide, 96)[i],
+                    "right",
+                );
+            }
+            // And nothing else: the eye, the direction, the vertical half-angle and
+            // the depth range are the camera's own.
+            for at in [64, 80, 112, 128] {
+                for i in 0..3 {
+                    close(vec3_at(&square, at)[i], vec3_at(&wide, at)[i], "unmoved");
+                }
+            }
+            close(f32_at(&square, 20), f32_at(&wide, 20), "view_proj[1][1]");
+        }
     }
 }

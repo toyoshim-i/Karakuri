@@ -108,106 +108,6 @@ fn texel(pixels: &[u8], target_w: u32, x: u32, y: u32) -> u8 {
     pixels[((y * target_w + x) * 4) as usize]
 }
 
-/// A square canvas in a target twice as wide: a quarter of black, a half of
-/// canvas, a quarter of black, and the canvas reaching both of its own edges.
-///
-/// The last clause is the one that catches a viewport that is right about the
-/// bars and wrong about the fill.
-#[test]
-fn a_wide_window_gets_bars_at_the_sides() {
-    let gpu = Gpu::headless().expect("no GPU");
-    let (w, h) = (CANVAS * 2, CANVAS);
-    let pixels = fit(&gpu, w, h);
-
-    let mid = h / 2;
-    assert_eq!(texel(&pixels, w, 0, mid), 0, "the left edge is a bar");
-    assert_eq!(
-        texel(&pixels, w, CANVAS / 2 - 1, mid),
-        0,
-        "the texel before the canvas starts is still a bar"
-    );
-    assert_eq!(
-        texel(&pixels, w, CANVAS / 2, mid),
-        255,
-        "the canvas starts at a quarter of the way across"
-    );
-    assert_eq!(
-        texel(&pixels, w, CANVAS + CANVAS / 2 - 1, mid),
-        255,
-        "and reaches its own right edge"
-    );
-    assert_eq!(
-        texel(&pixels, w, CANVAS + CANVAS / 2, mid),
-        0,
-        "the texel after it is a bar again"
-    );
-    assert_eq!(texel(&pixels, w, w - 1, mid), 0, "the right edge is a bar");
-
-    // Full height, because only the width had to give: bars on the wrong axis
-    // is a whole class of defect and this is what refuses it.
-    assert_eq!(texel(&pixels, w, w / 2, 0), 255, "the top is canvas");
-    assert_eq!(texel(&pixels, w, w / 2, h - 1), 255, "so is the bottom");
-}
-
-/// The same case with the axes exchanged. Present because a fit that returns
-/// its offsets or its extents in the wrong order passes the test above.
-#[test]
-fn a_tall_window_gets_bars_at_the_top_and_bottom() {
-    let gpu = Gpu::headless().expect("no GPU");
-    let (w, h) = (CANVAS, CANVAS * 2);
-    let pixels = fit(&gpu, w, h);
-
-    let mid = w / 2;
-    assert_eq!(texel(&pixels, w, mid, 0), 0, "the top edge is a bar");
-    assert_eq!(
-        texel(&pixels, w, mid, CANVAS / 2 - 1),
-        0,
-        "the texel before the canvas starts is still a bar"
-    );
-    assert_eq!(
-        texel(&pixels, w, mid, CANVAS / 2),
-        255,
-        "the canvas starts a quarter of the way down"
-    );
-    assert_eq!(
-        texel(&pixels, w, mid, CANVAS + CANVAS / 2 - 1),
-        255,
-        "and reaches its own bottom edge"
-    );
-    assert_eq!(
-        texel(&pixels, w, mid, CANVAS + CANVAS / 2),
-        0,
-        "the texel after it is a bar again"
-    );
-    assert_eq!(texel(&pixels, w, mid, h - 1), 0, "the bottom edge is a bar");
-
-    assert_eq!(texel(&pixels, w, 0, h / 2), 255, "full width");
-    assert_eq!(texel(&pixels, w, w - 1, h / 2), 255, "to both edges");
-}
-
-/// A window the canvas's own shape has no bars anywhere — the case every
-/// offscreen render is in, and the one a fit must not disturb.
-#[test]
-fn a_window_the_canvas_shape_is_all_canvas() {
-    let gpu = Gpu::headless().expect("no GPU");
-    let pixels = fit(&gpu, CANVAS, CANVAS);
-    for (i, corner) in [
-        (0, 0),
-        (CANVAS - 1, 0),
-        (0, CANVAS - 1),
-        (CANVAS - 1, CANVAS - 1),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        assert_eq!(
-            texel(&pixels, CANVAS, corner.0, corner.1),
-            255,
-            "corner {i} is canvas, not a bar"
-        );
-    }
-}
-
 /// The arithmetic on its own, over shapes a GPU test would take a minute to
 /// cover.
 ///
@@ -255,4 +155,108 @@ fn the_tighter_axis_fills_exactly() {
     assert_eq!((y, h), (0.0, 1200.0), "height is the tighter axis here");
     assert_eq!(w, 675.0);
     assert_eq!(x, 462.5, "and the leftover width is split in two");
+}
+
+// The three that render a frame to look at the bars; the two above compute the
+// letterbox rectangle and need nothing. See `tests/gpu_tests_are_under_mod_gpu.rs`.
+mod gpu {
+    use super::*;
+
+    /// A square canvas in a target twice as wide: a quarter of black, a half of
+    /// canvas, a quarter of black, and the canvas reaching both of its own edges.
+    ///
+    /// The last clause is the one that catches a viewport that is right about the
+    /// bars and wrong about the fill.
+    #[test]
+    fn a_wide_window_gets_bars_at_the_sides() {
+        let gpu = Gpu::headless().expect("no GPU");
+        let (w, h) = (CANVAS * 2, CANVAS);
+        let pixels = fit(&gpu, w, h);
+
+        let mid = h / 2;
+        assert_eq!(texel(&pixels, w, 0, mid), 0, "the left edge is a bar");
+        assert_eq!(
+            texel(&pixels, w, CANVAS / 2 - 1, mid),
+            0,
+            "the texel before the canvas starts is still a bar"
+        );
+        assert_eq!(
+            texel(&pixels, w, CANVAS / 2, mid),
+            255,
+            "the canvas starts at a quarter of the way across"
+        );
+        assert_eq!(
+            texel(&pixels, w, CANVAS + CANVAS / 2 - 1, mid),
+            255,
+            "and reaches its own right edge"
+        );
+        assert_eq!(
+            texel(&pixels, w, CANVAS + CANVAS / 2, mid),
+            0,
+            "the texel after it is a bar again"
+        );
+        assert_eq!(texel(&pixels, w, w - 1, mid), 0, "the right edge is a bar");
+
+        // Full height, because only the width had to give: bars on the wrong axis
+        // is a whole class of defect and this is what refuses it.
+        assert_eq!(texel(&pixels, w, w / 2, 0), 255, "the top is canvas");
+        assert_eq!(texel(&pixels, w, w / 2, h - 1), 255, "so is the bottom");
+    }
+    /// The same case with the axes exchanged. Present because a fit that returns
+    /// its offsets or its extents in the wrong order passes the test above.
+    #[test]
+    fn a_tall_window_gets_bars_at_the_top_and_bottom() {
+        let gpu = Gpu::headless().expect("no GPU");
+        let (w, h) = (CANVAS, CANVAS * 2);
+        let pixels = fit(&gpu, w, h);
+
+        let mid = w / 2;
+        assert_eq!(texel(&pixels, w, mid, 0), 0, "the top edge is a bar");
+        assert_eq!(
+            texel(&pixels, w, mid, CANVAS / 2 - 1),
+            0,
+            "the texel before the canvas starts is still a bar"
+        );
+        assert_eq!(
+            texel(&pixels, w, mid, CANVAS / 2),
+            255,
+            "the canvas starts a quarter of the way down"
+        );
+        assert_eq!(
+            texel(&pixels, w, mid, CANVAS + CANVAS / 2 - 1),
+            255,
+            "and reaches its own bottom edge"
+        );
+        assert_eq!(
+            texel(&pixels, w, mid, CANVAS + CANVAS / 2),
+            0,
+            "the texel after it is a bar again"
+        );
+        assert_eq!(texel(&pixels, w, mid, h - 1), 0, "the bottom edge is a bar");
+
+        assert_eq!(texel(&pixels, w, 0, h / 2), 255, "full width");
+        assert_eq!(texel(&pixels, w, w - 1, h / 2), 255, "to both edges");
+    }
+    /// A window the canvas's own shape has no bars anywhere — the case every
+    /// offscreen render is in, and the one a fit must not disturb.
+    #[test]
+    fn a_window_the_canvas_shape_is_all_canvas() {
+        let gpu = Gpu::headless().expect("no GPU");
+        let pixels = fit(&gpu, CANVAS, CANVAS);
+        for (i, corner) in [
+            (0, 0),
+            (CANVAS - 1, 0),
+            (0, CANVAS - 1),
+            (CANVAS - 1, CANVAS - 1),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            assert_eq!(
+                texel(&pixels, CANVAS, corner.0, corner.1),
+                255,
+                "corner {i} is canvas, not a bar"
+            );
+        }
+    }
 }
