@@ -2286,139 +2286,24 @@ queries.
 
 ## Settled decisions
 
-Reference, not history. These are in force, they constrain what later milestones can
-choose, and changing one is a redesign rather than an edit. The reasoning behind each is in
-`docs/ir-spec.md`; what follows is the shape.
+**These moved.** Every rule that was listed here is now one file in
+[docs/principles/](principles/) — stated once, so it cannot drift between documents — and the
+decision behind each, with the alternative that lost, is one record in [docs/adr/](adr/).
+`ls docs/principles/` is the index, because each filename is the rule it states.
 
-**Identity and randomness**
+This section said *reference, not history*, and that was the right split; what it had no room for was
+the history, which is what `docs/adr/` is. It also had to carry supersessions inline — *this said per
+layer until a Set could hold two geometries* — which a record's front matter now carries instead.
 
-- Element identity is `seed`, a monotone spawn ordinal carried per element. There is no
-  `id`: a buffer slot index stops being an identity the moment compaction moves elements.
-- `seed` is an ordinal, not a random number. Randomness comes from the hash builtins, which
-  are salted **per source** from the seed stream — so re-seeding a Set changes its randomness
-  without touching anything structural, and two geometries built from the same procedure do
-  not draw the same dust. This said *per layer* until a Set could hold two geometries;
-  changing it was the redesign this section warns that changing one of these is.
+One entry did not move, because it is not settled:
 
-**Time**
-
-- `t` is simulation time, never wall clock. It advances by `steps * dt` where `steps` comes
-  from a `tick` record: emitted from real time when live, read back verbatim on replay.
-  Nothing in the engine measures anything, and the record is written and read back: a
-  recorded session closes each frame with a `tick`, and `--replay` takes the step count from
-  it rather than deriving it again — which is why a replay is frame-exact on a machine that
-  runs at a different speed.
-- Two tick histories reaching the same elapsed time are the same point in the session.
-  Substepping exists so that state at a given time does not depend on frame rate, so
-  nothing downstream may distinguish them.
-- A **Set file** is a state projection with no time in it. A **session stream** is the
-  timeline. Keeping them apart is what stops saving a Set from saving a performance.
-
-**Ordering**
-
-- Compaction is order preserving. Bit-exact reproduction depends on elements being combined
-  in the same order every run — floating-point addition is not associative, so this holds
-  under additive blending as much as anything else. Atomic allocation is cheaper and
-  forfeits it.
-
-**The IR surface**
-
-- The signal bus is unreachable from IR. External values arrive as a `param` with a `bind`
-  record, which is what keeps every external coupling declarative and adjustable. **`beats`
-  is the one exception and is deliberate**: it reaches IR as an ambient with no `param` and
-  no `bind`, because what follows a tempo is not a parameter value but the passage of time,
-  and a binding writes one number where a clock has to move everything the procedure does.
-- Every name the language gives meaning to is reserved against params and locals:
-  attributes, ambients, `id`, and — within the layer that writes it — stage outputs. A name
-  the *procedure* gives meaning to joins that scope for that procedure only, which is what a
-  declared geometry slot is. Generated WGSL additionally mangles all IR-derived identifiers, so a procedure cannot capture a generated name whatever it is
-  called.
-- One `t` value means one record shape, across every file. A decoder dispatches on `t`
-  alone, and every ndjson decoder does.
-- **A machine's size decides what an operator may spend, never what the engine wastes.** No
-  ceiling is chosen here: more memory buys more capacity, more resident Sets and longer
-  chains, and capping that would make the smallest machine's experience the only one. Slack
-  that buys nothing at any size is a different thing and is tightened on sight. 4 GiB of
-  dedicated VRAM is the reference a design is checked against — the size a default has to be
-  comfortable on, not a limit anything is held to. The development machine is not that
-  reference and is not evidence about it; a performance is likelier a laptop than the desktop
-  this is written on.
-- `capacity` is a **per-source** dial with a range declared by the artifact, passed as a
-  uniform. It was Set-level while a Set held one geometry; each source now runs at the default
-  its own procedure declares, and `--capacity` overrides every source at once.
-  It is not part of a procedure's identity — otherwise the library multiplies by every size
-  anyone wanted.
-- Spawn timing is engine-side. No ambient exposes the birth fraction: an exposed one is
-  forgotten by half the generators that need it and applied twice by the other half.
-
-**Surfaces, and where an authored value lives**
-
-- **The destination is a GUI application and the CLI is scaffolding.** Every decision about
-  where a value lives follows from that: **anything authored lives in a record, and a flag
-  is a way to write into the record rather than a second place the truth lives.** A design
-  that puts a value only on the command line is building on the part that gets replaced.
-- The rule is already load-bearing and was not written down. Every control — a key press, a
-  MIDI knob, an MCP tool call — ends in the **same record**, which is what makes a session
-  replay with none of them attached. That is not tidiness: it is what will let a GUI replace
-  the CLI without touching the engine.
-- **"The command line cannot express it" is never a reason a value cannot exist.** It is a
-  reason to check that the *record* can, and then to give the flag whatever spelling the
-  record needs. The naming decision at the head of M4 is the worked example: a name lives in
-  a Set file, and the command line writes one because it is the only authoring surface that
-  exists yet.
-- When a flag and a loaded file both say something, **the flag wins** — the rule `--param`
-  and `--bind` already follow beside `--load-set`, where the file's values are applied first
-  and the command line's are appended after.
-- A surface may narrow what is *shown* and never what is *reachable*. Publishing decides
-  attention, not authority; `--param` still addresses any control in any node. Whatever M5
-  builds inherits that.
-
-**Editing and revision**
-
-- A Set **value** is immutable and content-addressed; a **compiled instance** is not. Every
-  structural change produces a new value and a record, which is what makes replay work.
-  Whether the engine rebuilds the instance or updates it in place is an implementation
-  choice, and it may update in place whenever the change needs no reallocation and no
-  recompilation. In practice only parameter values take that path today: a `bind` change
-  needs neither and still rebuilds, because a rebuild restates the whole slot. Editing in the background is therefore fast without punching a hole in the
-  record stream. "Never mutate a live Set in place" reads as a weaker claim than the rule
-  it belongs to; the rule is about values.
-- The cheapest correct answer to a revision request is usually not regeneration. Try the
-  existing parameter range first — a uniform write, effective within the frame — then a
-  range change, which needs a fork but no compile, and only then new code. This is what
-  makes mandatory parameter ranges pay off a fourth time.
-- Regeneration is destructive at slot granularity and that is fine. The other slots are
-  untouched by construction, the previous artifact is still in the library, and a slot
-  record points back at it. What guards against a bad generation is not caution in the
-  prompt but the validation pipeline, the probe, and automatic rollback.
-- Reference material handed to a generator is part of what produced an artifact and belongs
-  in `origin` with the prompt. Two artifacts from the same words that differ because
-  different examples were supplied are otherwise unexplainable.
-
-**Craft knowledge**
-
-- What a user saves is the prompt that worked, alongside the thing it produced. That is a
-  view over the library — favourites, their `origin.prompt`, and their thumbnails — rather
-  than a subsystem. Generation assembles a fixed preamble the system owns (the language,
-  the viewing conditions, the reserved names) plus whatever the operator supplied.
-- Such a palette expresses taste and nothing else. The moment an entry is compensating for
-  a missing engine feature — an exposure value that only works at one element count, say —
-  it has become a tone mapper written in prose and shipped to every prompt forever. Fix the
-  feature instead.
-
-**Diagnostics and cost**
-
-- One severity. No warnings, because the response to a rejection is to regenerate rather
-  than proceed with a caveat. That puts the burden on the diagnostic: a cost rejection
-  states the estimate, the ceiling, and what dominated, since "over budget" gives a repair
-  prompt nothing to aim at.
-- Cost is three separate figures, each counted against a different unit — the mistake to
-  avoid is calling them all "per element". `element` scales with live population,
-  `spawn` with spawn rate, `fragment` with covered pixels. They share a unit and must never
-  be summed.
-- An artifact records cost per element; total cost is a function of capacity and therefore
-  belongs to the Set. For L4 the published figure is a measurement at stated resolution and
-  parameters, because fill-rate-bound cost has no meaningful per-element form.
+- **Reference material handed to a generator belongs in `origin` with the prompt.** Two artifacts from
+  the same words that differ because different examples were supplied are otherwise unexplainable.
+  **This is not reconciled with
+  [ADR-0021](adr/0021-a-palette-is-the-library-filtered-not-a-new-object.md)**, which rejected
+  recording what was supplied — on the ground that this material is sampled rather than reproduced,
+  so machinery explaining why two outputs differ answers a question nobody has. One of the two is
+  wrong and neither has been retired. Left visible rather than resolved by whoever noticed it last.
 
 ---
 
