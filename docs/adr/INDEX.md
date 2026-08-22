@@ -147,7 +147,10 @@ number; new records continue from the end.
 | [ADR-0125](0125-a-client-named-id-is-an-allow-list.md) | A client-named id is an allow-list | 2026-08-22 | accepted |
 | [ADR-0126](0126-a-noise-rate-follows-a-tempo-correction-and-not-a-phase-one.md) | A noise rate follows a tempo correction and not a phase one | 2026-08-02 | accepted |
 | [ADR-0127](0127-the-repository-names-no-tool.md) | The repository names no tool | 2026-08-22 | **superseded by ADR-0129** |
+| [ADR-0128](0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md) | A Set saved under a name the caller chose overwrites | 2026-08-22 | accepted |
 | [ADR-0129](0129-a-vendor-file-is-ignored-and-removed-from-history.md) | A vendor file is ignored, and removed from history | 2026-08-22 | accepted |
+| [ADR-0129](0129-one-refusal-sentence-per-mistake-across-the-surfaces-that-face-a-person.md) | One refusal sentence per mistake, across the surfaces that face a person | 2026-08-22 | accepted |
+| [ADR-0130](0130-a-wrapper-that-needs-a-gpu-does-not-excuse-the-decision-inside-it.md) | A wrapper that needs a GPU does not excuse the decision inside it | 2026-08-22 | accepted |
 
 ## Retired numbers
 
@@ -284,7 +287,10 @@ never reused.
 | [ADR-0125](0125-a-client-named-id-is-an-allow-list.md) | A client-named id is an allow-list | 2026-08-22 | accepted |
 | [ADR-0126](0126-a-noise-rate-follows-a-tempo-correction-and-not-a-phase-one.md) | A noise rate follows a tempo correction and not a phase one | 2026-08-02 | accepted |
 | [ADR-0127](0127-the-repository-names-no-tool.md) | The repository names no tool | 2026-08-22 | **superseded by ADR-0129** |
+| [ADR-0128](0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md) | A Set saved under a name the caller chose overwrites | 2026-08-22 | accepted |
 | [ADR-0129](0129-a-vendor-file-is-ignored-and-removed-from-history.md) | A vendor file is ignored, and removed from history | 2026-08-22 | accepted |
+| [ADR-0129](0129-one-refusal-sentence-per-mistake-across-the-surfaces-that-face-a-person.md) | One refusal sentence per mistake, across the surfaces that face a person | 2026-08-22 | accepted |
+| [ADR-0130](0130-a-wrapper-that-needs-a-gpu-does-not-excuse-the-decision-inside-it.md) | A wrapper that needs a GPU does not excuse the decision inside it | 2026-08-22 | accepted |
 
 Re-pointing the records that cited a retired principle is permitted, and why, is
 [ADR-0059](0059-a-records-pointer-into-the-principles-registry-is-metadata.md).

@@ -263,15 +263,16 @@ fn residency_wire_names() -> String {
 /// `slot_count` is the deck's, so a record naming a slot that does not exist is
 /// caught here rather than panicking in an index four frames later.
 pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, String> {
+    // **The keys' own refusal**, from [`crate::no_such_slot`] rather than
+    // spelled again here. It was spelled again — `slot 9:` where every other
+    // surface says `no slot 9:` — and a stream naming a slot this deck does not
+    // hold is the same mistake as a hand or a model naming one.
     let in_range = |slot: u8| -> Result<usize, String> {
         let slot = usize::from(slot);
         if slot < slot_count {
             Ok(slot)
         } else {
-            Err(format!(
-                "slot {slot}: this deck holds slots 0-{}",
-                slot_count.saturating_sub(1)
-            ))
+            Err(crate::no_such_slot(slot, slot_count))
         }
     };
     match record {
@@ -738,17 +739,23 @@ mod tests {
             change(&preview_record(None), 1).expect("the mix is always available"),
             Some(Change::Preview { slot: None })
         );
-        // And a real slot past the deck still is.
+        // And a real slot past the deck still is, in the one sentence.
         let message = change(&preview_record(Some(4)), 4).expect_err("slot 4 of a deck of 4");
-        assert!(message.contains("slots 0-3"), "{message}");
+        assert_eq!(message, crate::no_such_slot(4, 4));
     }
 
     /// **A slot the deck does not have is caught in the decode**, where there
     /// is something to say about it, rather than four frames later in an index.
+    ///
+    /// **In the words every other surface says it in**, which is the assertion
+    /// that had to be an `assert_eq!`: this module spelled the refusal itself,
+    /// as `slot 4: this deck holds slots 0-3` against the keys' `no slot 4:`,
+    /// and `contains("slots 0-3")` passed under both. See
+    /// [`crate::no_such_slot`].
     #[test]
     fn a_slot_past_the_deck_is_refused_with_the_range_it_missed() {
         let message = change(&gain_record(4, 1.0), 4).expect_err("slot 4 of a deck of 4");
-        assert!(message.contains("slots 0-3"), "{message}");
+        assert_eq!(message, crate::no_such_slot(4, 4));
         // And the boundary either side of it, which is where the off-by-one
         // this shares with the digit keys would live.
         assert!(change(&gain_record(3, 1.0), 4).is_ok());

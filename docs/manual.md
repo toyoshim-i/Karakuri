@@ -117,12 +117,24 @@ Point a chat client at `http://127.0.0.1:8737/` and it can **read a slot's proce
 it, and be told what happened**. "The one that's showing now, a bit more vivid" is a small
 edit to a declarative file, and hot-swapping that file is what `--watch` already does.
 
-Three tools. `read_procedure` gives you the source; `write_procedure` checks it and, if it
+Four tools. `read_procedure` gives you the source; `write_procedure` checks it and, if it
 compiles, writes it — **and if it does not compile, what comes back is the checker's
 diagnostics, against the source**, which is what lets a model fix its own mistake;
 `swap_outcome` says whether the result landed, was rolled back for costing too much, or
 failed to build. A write returning cleanly means it compiled, not that it is on screen, so
 the third tool is where the loop closes.
+
+`save_set` is the fourth, and it is the `k` key reachable from a client: **it keeps what a
+slot is playing** as a Set file you can reload with `--load-set`. Give it a `slot`, and an
+`id` if you want to name the result — leave the `id` out and it is named after the moment it
+was saved, exactly as the key press is. **An `id` you choose overwrites a set already under
+that name**, exactly as `--save-set ID` does: a name you typed is an instruction, and nothing
+is quietly renamed behind you, so give each keeper its own name or leave the `id` out and let
+the clock do it. It writes the material *on screen* and not what is on disk, which is the
+same distinction the key makes and is worth re-reading below under [Keep it](#keep-it).
+**It waits for the disk before it answers**, so what comes back names the id the set was
+written under; a model that has just made something worth keeping can ask for it to be kept
+and be told whether that worked, instead of asking a hand to press a key.
 
 Two resources come with it: the IR specification, and a vocabulary page — every built-in,
 every topology, and every stage output — **generated from the checker's own tables** rather
@@ -135,7 +147,7 @@ attached**: `--record-session` writes a `procedure` record whenever a swap lands
 `--replay` rebuilds the slot at the frame it changed on. That was not true when this surface
 was first built, and it is the one thing it needed of the format.
 
-Five things worth knowing before you rely on it:
+Six things worth knowing before you rely on it:
 
 - **It reaches every node of a slot.** A read and a write are addressed `(slot, layer,
   index)`, and the layer is any of `L1`, `L2`, `L3`, `L4` and `Field` — so a deformation, a
@@ -157,6 +169,16 @@ Five things worth knowing before you rely on it:
 - **There is still no undo *tool*.** The versions are on disk and nothing walks them for you
   yet: putting one back is copying a file from the history over the scratch. If the client
   read the source before it wrote, the previous version is also in the conversation.
+- **A `save_set` that comes back without an outcome is not a `save_set` that failed.** The
+  call waits ten seconds for the render loop and the disk, and there are four ways it can end
+  without one. They come in two pairs, and which pair you got is written in the answer. If
+  the loop **took** the save and then went quiet — ten seconds passed, or the run shut down
+  under the call — what comes back names the id it was accepted under and says it is neither
+  a success nor a failure: it is being written or it is not, nothing can claim either yet,
+  and the thing to do is look under that id. If the loop **never took it** — ten seconds with
+  no frame running, or a run already ending — what comes back names no id and says *nothing
+  was saved and asking again is safe*, which is the better of the two answers and the one you
+  can act on. Do not report a set as kept until a call says it is.
 
 **Loopback only, and deliberately.** A venue network is shared and a port that can rewrite
 the projector is not something to expose with a flag. Reaching a render machine from a
@@ -247,7 +269,7 @@ pressed it. See the keys below.
 
 | | |
 |---|---|
-| `--mcp PORT` | serve the Model Context Protocol on `127.0.0.1:PORT`, so a chat client can rewrite what is playing. See below |
+| `--mcp PORT` | serve the Model Context Protocol on `127.0.0.1:PORT`, so a chat client can rewrite what is playing, and keep it. See below |
 | `--tempo-source CMD` | run `CMD` as a child process and follow the beat it reports. See below |
 | `--audio-in DEVICE` | open a microphone. Without it the signal bus answers with invented values at low confidence |
 | `--bpm N` | the tempo the grid starts at, and the centre of the octave the tracker looks in |
@@ -338,13 +360,21 @@ line saying where it went arrives a moment later, because the file is written on
 its own rather than on a frame. Quitting before it arrives does not lose it: the run waits up
 to five seconds for a save still being written, and says so if it gives up.
 
+**The same save is the `save_set` tool over MCP**, which is the one control in this system a
+hand, a model and the interface M5 builds all want. It is one control and not three: a tool
+call names the slot instead of using your focus and may name the file, and everything after
+that — what is read, what is refused and in whose words, what goes into the session stream —
+is the same code path the key press takes. The one thing a call can do that the key cannot is
+name the file, and that carries `--save-set`'s rule with it: **a name given twice overwrites**
+the set already under it, while a stamped name cannot collide.
+
 What it records is **what is on screen**, and that is the whole difference from `--save-set`:
 
 |  | `--save-set ID` | `k` |
 |---|---|---|
 | when | before a run, and the run then stops | during one, as often as you like |
-| named by | you | the clock |
-| which slot | slot 0 | the focused one |
+| named by | you, and a name reused overwrites | the clock, or an MCP call — which also overwrites a name it reuses |
+| which slot | slot 0 | the focused one, or the one an MCP call names |
 | the values | what the flags say | what the Set is playing — a param you moved, a capacity or a salt a reloaded Set brought with it |
 | the sources | the files named on the command line, read now | the versions **on screen**, by content hash |
 
@@ -470,12 +500,11 @@ cargo run -p karakuri-cli -- --load-set night01 --watch --mcp 8737
 
 That used to be refused, because there was nothing on disk for a model to read.
 
-**The other end of that loop is the `k` key.** `--save-set` writes what the
-flags say and exits; `k` writes what the focused slot is playing, right now,
-into `<store>/sets/` under a timestamp. So load, edit, watch, and keep the
-version you liked without leaving the run. What is still missing is the same
-control over MCP: a model that has just rewritten a procedure cannot ask for the
-result to be saved, and has to ask a hand to press the key.
+**The other end of that loop is the `k` key**, and the `save_set` tool beside
+it. `--save-set` writes what the flags say and exits; `k` writes what the focused
+slot is playing, right now, into `<store>/sets/` under a timestamp, and a model
+asks for the same thing by naming a slot. So load, edit, watch — by hand or by
+asking — and keep the version you liked without leaving the run.
 
 ### The edit history
 

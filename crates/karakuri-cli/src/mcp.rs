@@ -37,8 +37,21 @@
 //! that writes something too expensive is caught by the machinery that already
 //! catches a human who does.**
 //!
-//! Only the outcome comes from the render loop, and it arrives over a channel
-//! rather than a lock, so the frame path neither blocks nor waits.
+//! ## Two channels, and neither of them is a lock
+//!
+//! The outcome of a swap comes from the render loop over a channel rather than
+//! a lock, so the frame path neither blocks nor waits. `save_set` is the first
+//! tool that needs the *other* direction: what a slot is playing lives on the
+//! render thread and is reachable from nowhere else, so a request goes back the
+//! same way, is taken where the MIDI surface is taken, and ends in the method
+//! the `k` key ends in. **There is one save path in this program**, and it is
+//! `Live::save_set`; this is a way to ask for it and not a second copy of it.
+//!
+//! **The wait for its answer happens with [`State`] unlocked.** There is a
+//! thread per connection and one mutex over the state, so a tool that waited
+//! for a disk while holding it would stop every other connection — including
+//! one that only wanted to read a procedure — for as long as the loop took.
+//! [`Pending`] exists for no other reason.
 //!
 //! ## Loopback only
 //!
@@ -65,9 +78,69 @@ pub enum Event {
     Swap { slot: usize, said: String },
 }
 
+/// **A save one client is asking the render loop for.**
+///
+/// The channel this travels on is the one this module did not have, and the
+/// reason a fourth tool cost more than the first three: reading and writing a
+/// procedure are files, and this is the *live Set* — which only the render
+/// thread holds. So the request goes to the loop and the answer comes back,
+/// rather than this module growing a second idea of what a slot is playing.
+pub struct SaveRequest {
+    /// Which deck slot. Checked against [`Slots`] before it is sent, so a slot
+    /// this deck does not hold meets the refusal `read_procedure` gives it; the
+    /// loop checks the range again, because it is the only thing that knows how
+    /// many slots the *deck* has.
+    pub slot: usize,
+    /// What to file it under, or `None` to let the loop name it after the
+    /// moment — which is what a key press gets, for the reason
+    /// [`crate::history::stamped_id`] states: a key cannot type a name.
+    pub id: Option<String>,
+    /// Where the answer goes.
+    pub reply: Reply,
+}
+
+/// **The half of one [`SaveRequest`] the render loop answers on.**
+///
+/// Two messages rather than one, because the loop already says two things: that
+/// it has started a save, at the frame it was asked, and what became of it, at
+/// the frame the disk answered. A client still waiting when the deadline passes
+/// has the first of them — which is what makes a truthful timeout possible at
+/// all, since "accepted, under this id, outcome not yet known" is a different
+/// fact from either success or failure.
+pub struct Reply(mpsc::Sender<News>);
+
+impl Reply {
+    /// The loop has taken it and named the set, in the words it printed.
+    ///
+    /// **Never blocks**: the channel is unbounded and one save puts at most two
+    /// messages in it. This is called from a frame.
+    pub fn accepted(&self, said: &str) {
+        let _ = self.0.send(News::Accepted(said.to_string()));
+    }
+
+    /// What the save came to, in the words the operator was given for it.
+    ///
+    /// Sent from the frame the outcome landed on, which is the frame the `save`
+    /// record is written on — so what a model is told and what the stream says
+    /// come from one place. `Err` is a refusal or a disk that said no, and both
+    /// reach the client as a failed tool call.
+    pub fn settled(self, said: Result<String, String>) {
+        let _ = self.0.send(News::Settled(said));
+    }
+}
+
+/// What a [`Reply`] carries, in the order it carries it.
+enum News {
+    Accepted(String),
+    Settled(Result<String, String>),
+}
+
 /// The half of the server the render loop holds.
 pub struct Reporter {
     sender: mpsc::SyncSender<Event>,
+    /// What clients have asked the loop to do. The receiving half, because this
+    /// is the direction [`Event`] does not go in.
+    requests: mpsc::Receiver<SaveRequest>,
     /// Reports the queue had no room for. **Counted rather than lost quietly**:
     /// a client that is told what happened must be told when it is not the
     /// whole story.
@@ -91,6 +164,16 @@ impl Reporter {
             self.dropped
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
+    }
+
+    /// **Every save a client has asked for since this was last called.**
+    ///
+    /// Drained and never waited on, from the frame path, exactly as the MIDI
+    /// surface is drained beside it: a frame owes a client nothing, and each
+    /// request ends in the same method the `k` key ends in. Empty on almost
+    /// every frame, and an empty `collect` allocates nothing.
+    pub fn saves(&self) -> impl Iterator<Item = SaveRequest> + '_ {
+        self.requests.try_iter()
     }
 
     /// The port actually bound, which is not the one asked for when that was 0.
@@ -137,14 +220,17 @@ impl Slots {
         let pair = self
             .0
             .get(slot)
-            // `len() - 1` underflowed on an empty deck and took the whole
-            // surface with it: the panic unwound out of the listener thread, so
-            // a process that had announced a port was silently no longer on it.
-            // `serve` refuses an empty deck now; this stays correct anyway.
-            .ok_or_else(|| match self.0.len() {
-                0 => format!("no slot {slot}: this deck holds none"),
-                n => format!("no slot {slot}: this deck holds 0-{}", n - 1),
-            })?;
+            // **The one sentence, from [`crate::no_such_slot`].** This used to
+            // be its own spelling — `this deck holds 0-3` against the keys'
+            // `this deck holds slots 0-3` — so a model calling `save_set` and
+            // an operator pressing a digit were told the same mistake in
+            // different words about the same control. It also handled the empty
+            // deck for its own reason, which that function has too: `len() - 1`
+            // underflowed on an empty deck and took the whole surface with it,
+            // the panic unwinding out of the listener thread so that a process
+            // which had announced a port was silently no longer on it. `serve`
+            // refuses an empty deck now; this stays correct anyway.
+            .ok_or_else(|| crate::no_such_slot(slot, self.0.len()))?;
         let mut nodes = vec![(Kind::L1, 0, &pair.0)];
         // The next free index per layer, which the head has already taken one
         // of: a `--set` chain naming a second `kind L1` is a second source, and
@@ -170,6 +256,23 @@ impl Slots {
             nodes.push((layer, index, path));
         }
         Ok(nodes)
+    }
+
+    /// **Whether this deck holds `slot` at all, without reading a byte off
+    /// disk.**
+    ///
+    /// [`Slots::nodes`] answers this too, and costs a `read` per file of the
+    /// slot to do it, because it works each node's layer out of the file's own
+    /// `kind` line. `save_set` wants nothing but the range and was calling
+    /// `nodes` for it — **under the state mutex**, which is the one lock in this
+    /// server a slow disk can be held across, and it is held across every other
+    /// connection's request as well. The number was `self.0.len()` all along.
+    fn holds(&self, slot: usize) -> Result<(), String> {
+        if slot < self.0.len() {
+            Ok(())
+        } else {
+            Err(crate::no_such_slot(slot, self.0.len()))
+        }
     }
 
     /// The file one `(slot, layer, index)` address names.
@@ -291,6 +394,32 @@ const IDLE: std::time::Duration = std::time::Duration::from_secs(30);
 /// a hole in it must say so.
 const QUEUED: usize = 256;
 
+/// How many save requests may be waiting for the render loop at once.
+///
+/// [`QUEUED`]'s trade in the other direction, and the same one: a bound, and a
+/// refusal rather than a wait when it is reached. The loop takes every request
+/// it has on the next frame, so this is only ever full when the loop has
+/// stopped running frames — which is a thing to *answer*, because a client
+/// queued behind a loop that will never take its request would wait forever.
+const ASKED: usize = 16;
+
+/// The longest an `id` a client names may be.
+///
+/// It becomes a file name under `<store>/sets/`, and a stamp is twenty
+/// characters.
+const MAX_ID: usize = 64;
+
+/// **How long a `save_set` call waits for the render loop before it answers
+/// without an outcome.**
+///
+/// The run's own bound on a save is [`crate::SAVE_WAIT`] — how long quitting
+/// will wait for a disk that is not answering — and this is that, plus room for
+/// the frame that takes the request and the frame that reports it back. Under
+/// the run's own bound it would give up on saves the run itself would still
+/// have finished, which is the one number this must not be below.
+const SAVE_REPLY: std::time::Duration =
+    std::time::Duration::from_secs(crate::SAVE_WAIT.as_secs() + 5);
+
 /// Serve MCP on `port`, loopback only, until the process ends.
 ///
 /// Returns the [`Reporter`] the render loop keeps. The listener and everything
@@ -308,11 +437,16 @@ pub fn serve(port: u16, slots: Slots, watching: bool) -> Result<Reporter, String
         .local_addr()
         .map_err(|e| format!("port {port}: {e}"))?;
     let (tx, rx) = mpsc::sync_channel(QUEUED);
+    // The other direction, made here for the same reason: the render loop is
+    // handed one half of everything it shares with this server, once, before a
+    // frame has run.
+    let (asked, requests) = mpsc::sync_channel(ASKED);
 
     let state = std::sync::Arc::new(std::sync::Mutex::new(State {
         slots,
         watching,
         events: rx,
+        asked,
         recent: Vec::new(),
         dropped: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
     }));
@@ -346,6 +480,7 @@ pub fn serve(port: u16, slots: Slots, watching: bool) -> Result<Reporter, String
 
     Ok(Reporter {
         sender: tx,
+        requests,
         dropped,
         port: bound.port(),
     })
@@ -358,6 +493,11 @@ struct State {
     /// to be told.
     watching: bool,
     events: mpsc::Receiver<Event>,
+    /// Where a save a client asks for goes. **Bounded and never blocked on** —
+    /// see [`ASKED`]: this is sent into from a connection thread, and a render
+    /// loop that has stopped taking requests must produce an answer rather than
+    /// a thread that never returns.
+    asked: mpsc::SyncSender<SaveRequest>,
     /// What the swap machinery has said, newest last, bounded.
     recent: Vec<String>,
     dropped: std::sync::Arc<std::sync::atomic::AtomicU64>,
@@ -517,7 +657,17 @@ fn handle(stream: std::net::TcpStream, state: &std::sync::Mutex<State>) -> Resul
         let reply = match serde_json::from_slice::<Value>(&body) {
             Ok(request) => {
                 let mut state = state.lock().map_err(|_| "the mcp state is poisoned")?;
-                dispatch(&request, &mut state)
+                let pending = dispatch(&request, &mut state);
+                // **The lock, let go before anything is waited for.** There is
+                // a thread per connection and one mutex over the state, so a
+                // `save_set` that waited for the render loop and the disk here
+                // would hold up every other connection for as long as it took —
+                // including a client that only wanted to read a procedure, and
+                // including the client that would have asked what the swap did.
+                // Dropped by name rather than by a scope, because a scope is a
+                // thing somebody widens later without noticing what it was for.
+                drop(state);
+                pending.settled()
             }
             Err(e) => Some(error(&Value::Null, -32700, &format!("parse error: {e}"))),
         };
@@ -595,7 +745,51 @@ fn respond(
 /// The version of MCP this speaks.
 const PROTOCOL: &str = "2024-11-05";
 
-fn dispatch(request: &Value, state: &mut State) -> Option<Value> {
+/// **A reply, or the one step of a reply that must happen with [`State`]
+/// unlocked.**
+///
+/// This type is the whole of the concurrency design, so it is worth stating
+/// plainly what it buys. `handle` locks the state around [`dispatch`], and there
+/// is a thread per connection: anything waited for under that lock is waited for
+/// by every other client too. Three of the four tools are a file read or a file
+/// write and finish under it; `save_set` waits for a render loop and then for a
+/// disk, which is unbounded in the only sense that matters — it depends on
+/// somebody else's frame rate.
+///
+/// So the send happens under the lock, where the channel is, and the *wait*
+/// comes back out here. Returning a value that still has work in it is the
+/// smallest thing that makes the boundary visible: a comment saying "do not
+/// wait here" would be a comment.
+enum Pending {
+    /// Nothing left to do. `None` is a notification, which is answered with no
+    /// body at all.
+    Done(Option<Value>),
+    /// A save the render loop has been asked for, and the JSON-RPC id it is
+    /// answered under.
+    Saving {
+        id: Value,
+        news: mpsc::Receiver<News>,
+    },
+}
+
+impl Pending {
+    /// The reply, waiting for the render loop if that is what is left.
+    ///
+    /// **Called with the state unlocked**, which is the entire reason this type
+    /// exists — see above.
+    fn settled(self) -> Option<Value> {
+        match self {
+            Pending::Done(reply) => reply,
+            Pending::Saving { id, news } => Some(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": tool_result(awaited(&news, SAVE_REPLY)),
+            })),
+        }
+    }
+}
+
+fn dispatch(request: &Value, state: &mut State) -> Pending {
     let id = request.get("id").cloned();
     let method = request.get("method").and_then(Value::as_str).unwrap_or("");
     // **No `id` is a notification: never answered, and this server acts on none
@@ -603,7 +797,9 @@ fn dispatch(request: &Value, state: &mut State) -> Option<Value> {
     // nothing below this line runs — and the test asserting `is_none()` could
     // not tell the difference. There is nothing a notification asks of this
     // server today; when there is, it goes above this line.
-    let id = id?;
+    let Some(id) = id else {
+        return Pending::Done(None);
+    };
 
     let result = match method {
         "initialize" => Ok(json!({
@@ -615,18 +811,25 @@ fn dispatch(request: &Value, state: &mut State) -> Option<Value> {
         "tools/list" => Ok(json!({ "tools": tools() })),
         "resources/list" => Ok(json!({ "resources": resources() })),
         "resources/read" => read_resource(request).map_err(Refused::BadParams),
-        "tools/call" => call_tool(request, state).map_err(Refused::BadParams),
+        "tools/call" => match call_tool(request, state) {
+            // **Out from under the lock before it is waited for.** See
+            // [`Pending`]; this `return` is the only thing carrying that
+            // decision, so it is the one line here worth reading twice.
+            Ok(Called::Saving(news)) => return Pending::Saving { id, news },
+            Ok(Called::Answered(outcome)) => Ok(tool_result(outcome)),
+            Err(e) => Err(Refused::BadParams(e)),
+        },
         other => Err(Refused::NoMethod(format!("no method `{other}`"))),
     };
 
-    Some(match result {
+    Pending::Done(Some(match result {
         Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
         // **The code says which kind of wrong.** Everything used to come back
         // as "method not found", so a client could not tell a method it had
         // invented from arguments it had got wrong.
         Err(Refused::NoMethod(m)) => error(&id, -32601, &m),
         Err(Refused::BadParams(m)) => error(&id, -32602, &m),
-    })
+    }))
 }
 
 /// Why a request could not be answered, in the two shapes JSON-RPC has codes
@@ -713,10 +916,49 @@ fn tools() -> Value {
                  compiled, not that it is on screen.",
             "inputSchema": { "type": "object", "properties": {} },
         },
+        {
+            "name": "save_set",
+            "description":
+                "Keep what a slot is playing, as a Set file that can be loaded again with \
+                 `--load-set ID`. It writes the material **on screen** — the versions the \
+                 slot is running, by content hash, with the parameters, capacities and \
+                 salts the live Set holds now — and not what any file on disk says, which \
+                 is exactly what the operator's `k` key writes. That distinction is the \
+                 point: a procedure that was written and then rolled back for cost is on \
+                 disk and not on screen, and this saves the screen. **It waits for the \
+                 disk and tells you what happened**, so what comes back names the id it \
+                 was saved under; do not report a set as kept until it does.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "slot": { "type": "integer", "description": "deck slot, from 0" },
+                    "id": {
+                        "type": "string",
+                        "description":
+                            "what to file it under: letters, digits, `-` and `_`, and it \
+                             becomes a file name. **An id that already names a set is \
+                             overwritten**, as `--save-set ID` overwrites — a name you \
+                             choose is an instruction and nothing is renamed behind you, so \
+                             use a new one for each keeper. Omit it and the set is named \
+                             after the moment it was saved, which is what the key press \
+                             gets — a name an operator can find by the time they saved it, \
+                             and one that cannot collide.",
+                    },
+                },
+                "required": ["slot"],
+            },
+        },
     ])
 }
 
-fn call_tool(request: &Value, state: &mut State) -> Result<Value, String> {
+/// What one tool call came to: an answer, or a wait that belongs outside the
+/// state lock. See [`Pending`].
+enum Called {
+    Answered(Result<String, String>),
+    Saving(mpsc::Receiver<News>),
+}
+
+fn call_tool(request: &Value, state: &mut State) -> Result<Called, String> {
     let params = request.get("params").ok_or("no params")?;
     let name = params
         .get("name")
@@ -724,20 +966,36 @@ fn call_tool(request: &Value, state: &mut State) -> Result<Value, String> {
         .ok_or("no tool name")?;
     let args = params.get("arguments").cloned().unwrap_or(json!({}));
 
-    let outcome = match name {
-        "read_procedure" => read_procedure(&args, state),
-        "write_procedure" => write_procedure(&args, state),
-        "swap_outcome" => swap_outcome(state),
+    Ok(match name {
+        "read_procedure" => Called::Answered(read_procedure(&args, state)),
+        "write_procedure" => Called::Answered(write_procedure(&args, state)),
+        "swap_outcome" => Called::Answered(swap_outcome(state)),
+        // **Refused here and waited for elsewhere.** Everything this module can
+        // decide by itself — a slot that does not exist, an `id` that is not a
+        // name — is decided under the lock like any other tool's arguments, and
+        // only the wait for somebody else's thread is deferred.
+        "save_set" => match save_set(&args, state) {
+            Ok(news) => Called::Saving(news),
+            Err(refusal) => Called::Answered(Err(refusal)),
+        },
         other => return Err(format!("no tool `{other}`")),
-    };
+    })
+}
 
-    // **A tool failure is a result, not a protocol error.** A model that is
-    // told "the call was malformed" learns nothing; one handed the checker's
-    // diagnostics can fix its own source, which is the whole loop.
-    Ok(match outcome {
+/// One tool call's answer, in the shape the protocol gives a tool.
+///
+/// **A tool failure is a result, not a protocol error.** A model that is told
+/// "the call was malformed" learns nothing; one handed the checker's
+/// diagnostics can fix its own source, which is the whole loop.
+///
+/// A function rather than a `json!` at each call site, because `save_set`'s
+/// answer is built after the lock is gone — see [`Pending`] — and two spellings
+/// of this shape would be two chances to disagree about `isError`.
+fn tool_result(outcome: Result<String, String>) -> Value {
+    match outcome {
         Ok(text) => json!({ "content": [{ "type": "text", "text": text }], "isError": false }),
         Err(text) => json!({ "content": [{ "type": "text", "text": text }], "isError": true }),
-    })
+    }
 }
 
 /// **`index` is optional and defaults to 0**, unlike the wildcard an absent
@@ -881,6 +1139,204 @@ fn swap_outcome(state: &mut State) -> Result<String, String> {
         )
     } else {
         format!("{}{missing}", state.recent.join("\n"))
+    })
+}
+
+/// Ask the render loop to keep what a slot is playing.
+///
+/// **`slot` is required and `id` is not**, which is [`slot_layer_index`]'s
+/// convention and its reason: an argument a client says nothing about should
+/// mean the obvious thing, and the obvious thing here is the name a key press
+/// gets. Unlike `index` there is no default written down — the loop stamps it,
+/// and stamping it here would be a second answer to what a nameless save is
+/// called.
+///
+/// Nothing about the Set is read here and nothing could be: this thread does not
+/// hold it. What this does is check what it can check, hand the request over,
+/// and give the caller back the half it waits on.
+fn save_set(args: &Value, state: &State) -> Result<mpsc::Receiver<News>, String> {
+    let slot = args
+        .get("slot")
+        .and_then(Value::as_u64)
+        .ok_or("`slot` is required and is a number")? as usize;
+    // **The refusal `read_procedure` gives for a slot this deck does not hold,
+    // from the same place.** The loop checks the range again — it is the only
+    // thing that knows the *deck*'s slot count — but a model that asked for slot
+    // 9 is owed the answer now rather than after a round trip. See
+    // [`Slots::holds`] on why this is not [`Slots::nodes`].
+    state.slots.holds(slot)?;
+    let id = match args.get("id") {
+        // **`null` is absent, not a bad string.** A client that builds its
+        // arguments from a record with an empty field sends `"id": null`, and
+        // that is a caller saying nothing about the id rather than one getting
+        // its type wrong — "`id` is a string" is a refusal about a mistake it
+        // did not make. Every other optional argument here reads an absent one
+        // as its default; `null` is the second spelling of absent and gets the
+        // same answer. It is *not* the same as `""`, which is a caller naming a
+        // file with no name and is still refused — see [`checked_id`].
+        None | Some(Value::Null) => None,
+        Some(id) => Some(checked_id(
+            id.as_str()
+                .ok_or("`id` is a string: what to file the set under")?,
+        )?),
+    };
+
+    let (tx, rx) = mpsc::channel();
+    state
+        .asked
+        .try_send(SaveRequest {
+            slot,
+            id,
+            reply: Reply(tx),
+        })
+        // **Answered rather than waited for**, both ways. A model must never be
+        // left holding a call on a loop that will not answer it, and these are
+        // the two shapes of "it will not": one that has stopped taking requests,
+        // and one that is gone.
+        .map_err(|e| match e {
+            // **What `Full` proves and no more.** It used to say the loop "has
+            // taken none of them", which the error does not support: the queue
+            // holds [`ASKED`] requests nobody has taken *yet*, and a loop
+            // running slowly reaches that as surely as one that has stopped.
+            // Naming the second as though it were the fact would send a model
+            // looking for a dead render thread when the answer is to ask again.
+            mpsc::TrySendError::Full(_) => format!(
+                "the render loop has {ASKED} save requests queued and no room for another: \
+                 it is taking them slower than they are arriving, or it is not running \
+                 frames at all. Nothing was saved, and asking again is safe"
+            ),
+            mpsc::TrySendError::Disconnected(_) => {
+                "the render loop has ended: this run is shutting down and nothing was saved"
+                    .to_string()
+            }
+        })?;
+    Ok(rx)
+}
+
+/// A Set id a client may name, or why not.
+///
+/// **A Set id is one path component.** [`crate::history::stamped_id`] says so
+/// where it explains why the date is spelled `20260816` rather than
+/// `2026/08/16`, and `Store::set_path` spells the file `sets/<id>.set.ndjson`
+/// without checking that what it was handed is one. That is the operator's own
+/// business on `--save-set`, where the id came out of their own shell. It is not
+/// a model's: this is the same rule [`Slots`] exists for — **paths never cross
+/// the protocol** — and `../../../somewhere/else` is a path.
+///
+/// Letters, digits, `-` and `_`, which is what a stamp is made of and what a
+/// name anybody would type is made of. **Refused rather than sanitised**: a set
+/// filed under a name its caller did not ask for is a worse answer than one that
+/// is told to pick another.
+///
+/// **A name a client picks twice overwrites, and that is the decision rather
+/// than an oversight.** [`crate::history::unused`] exists because two saves in
+/// one millisecond produced one stamp and the second file replaced the first
+/// while the operator was told both were kept, and its own doc names this
+/// control as the reach that would make that matter. It is not reached from
+/// here, and it must not be: it renames — `keeper` becomes `keeper-1` — which is
+/// exactly the sanitising the paragraph above refuses, and it would rename only
+/// inside one run, so the same call in tomorrow's run would overwrite anyway.
+/// A *stamp* is a name nobody chose and renaming one loses nothing; a name a
+/// caller typed is an instruction, and `--save-set ID` has always obeyed it by
+/// overwriting. So `save_set` does what `--save-set` does, and says so — in the
+/// tool description a model reads, in `docs/manual.md` and in
+/// `docs/roadmap.md`. Undocumented was the thing that was not allowed.
+///
+/// **No `con`, `nul`, `aux`, `com1` check.** They are reserved device names on
+/// Windows and would be a file that is not a file. There is no Windows target
+/// today and no `cfg` for one here; this sentence is the record that the case is
+/// known, so that whoever ports this finds it written down rather than finds it
+/// on a projector.
+fn checked_id(id: &str) -> Result<String, String> {
+    if id.is_empty() {
+        return Err(
+            "`id` is empty: a set is filed under a name, or under none at all if \
+                    `id` is left out"
+                .into(),
+        );
+    }
+    // **Bytes, and the message says bytes.** `str::len` is bytes and this said
+    // "characters", which is the same number for everything that gets past the
+    // charset check below and a different one for what does not — so the one
+    // caller the message existed for, the one sending something this refuses,
+    // was told a number it could not count to.
+    if id.len() > MAX_ID {
+        return Err(format!(
+            "`id` is {} bytes and the most is {MAX_ID}: it becomes a file name",
+            id.len()
+        ));
+    }
+    if let Some(bad) = id
+        .chars()
+        .find(|c| !c.is_ascii_alphanumeric() && *c != '-' && *c != '_')
+    {
+        return Err(format!(
+            "`id` holds `{bad}`, and a set id is letters, digits, `-` and `_`: it is one \
+             path component and it names a file under `<store>/sets/`"
+        ));
+    }
+    Ok(id.to_string())
+}
+
+/// **Wait for one save's outcome, and say something true when it does not
+/// come.**
+///
+/// A free function over the channel rather than a loop inside [`Pending`], for
+/// the reason `main.rs`'s `drained_saves` is one: the bound is the whole of what
+/// makes waiting here safe, and it has to be checkable without a render loop, a
+/// window or a disk.
+///
+/// **It waits, rather than returning on acceptance, and that was the decision
+/// worth arguing.** Answering the moment the loop has the request would make
+/// this tool cheap and its answer worthless: a model told "saved" before the
+/// disk has spoken will tell its user the set is kept, and the cases where that
+/// is a lie — a full store, a network mount that stopped answering, a slot whose
+/// sources are not savable — are precisely the ones anybody would want to hear
+/// about. The other three tools already work this way: `write_procedure` hands
+/// back the checker's verdict and not "it is being checked".
+///
+/// **A timeout is neither success nor failure, and the text says so.** The
+/// protocol has one boolean and it cannot carry a third state, so `isError` is
+/// set — a model reading `isError: false` reports the set as kept, which is the
+/// one thing that must not happen here, while a model reading `true` looks
+/// again. What the flag cannot carry, the sentence does.
+fn awaited(news: &mpsc::Receiver<News>, wait: std::time::Duration) -> Result<String, String> {
+    let deadline = std::time::Instant::now() + wait;
+    let mut accepted: Option<String> = None;
+    while let Some(left) = deadline.checked_duration_since(std::time::Instant::now()) {
+        match news.recv_timeout(left) {
+            Ok(News::Accepted(said)) => accepted = Some(said),
+            Ok(News::Settled(outcome)) => return outcome,
+            Err(mpsc::RecvTimeoutError::Timeout) => break,
+            // **The loop dropped the request without answering it**, which is
+            // what the end of a run looks like from here. Which of the two
+            // sentences depends on whether it was ever taken: one that was
+            // never taken saved nothing, and one that was may well have reached
+            // the disk on the way out.
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(match accepted {
+                    Some(said) => format!(
+                        "{said}\n\nThe render loop then ended without saying what became of \
+                         it. Whether that file was written is not something this server can \
+                         still find out."
+                    ),
+                    None => "the render loop ended before it took this save: nothing was saved"
+                        .to_string(),
+                })
+            }
+        }
+    }
+    Err(match accepted {
+        Some(said) => format!(
+            "{said}\n\n**This is neither a success nor a failure.** The save was accepted \
+             and had not reported back after {wait:?}. It is being written or it is not; \
+             nothing here knows which, and no `save` record claims either way until it \
+             lands. Do not report the set as kept — look for it under that id."
+        ),
+        None => format!(
+            "the render loop had not taken this save after {wait:?} — it is running slowly \
+             or not at all. Nothing was saved, and asking again is safe."
+        ),
     })
 }
 
@@ -1186,11 +1642,19 @@ proc probe_source_b {
         ];
         let reporter = serve(0, Slots(vec![(head, rest)]), true).expect("serve");
         let port = reporter.port();
-        std::mem::forget(reporter);
+        stand_in(reporter, no_loop);
         Server { port, dir }
     }
 
     fn start(watching: bool) -> Server {
+        let (server, reporter) = started(watching);
+        stand_in(reporter, no_loop);
+        server
+    }
+
+    /// The same fixture with the loop's half handed back, for the tests that
+    /// are about what the loop says.
+    fn started(watching: bool) -> (Server, Reporter) {
         let dir = tempfile::tempdir().expect("tempdir");
         let l1 = dir.path().join("l1.kir");
         let l4 = dir.path().join("l4.kir");
@@ -1200,9 +1664,43 @@ proc probe_source_b {
         // which is also the fix for `--mcp 0` naming a port that is not the port.
         let reporter = serve(0, Slots(vec![(l1, vec![l4])]), watching).expect("serve");
         let port = reporter.port();
-        // Held for the life of the test: dropping it closes the channel.
-        std::mem::forget(reporter);
-        Server { port, dir }
+        (Server { port, dir }, reporter)
+    }
+
+    /// **A stand-in for the render loop**, holding the [`Reporter`] the real one
+    /// holds and answering the saves the server sends it.
+    ///
+    /// It also replaces the `std::mem::forget` that used to keep the reporter
+    /// alive, and says what that was: the loop is the other half of this
+    /// surface, and a `forget` is a loop that is present and permanently asleep
+    /// — which is now a thing a client can wait on rather than only a channel
+    /// that stays open.
+    ///
+    /// **Nothing here saves anything.** What a save *is* belongs to
+    /// `Live::save_set` and needs a window and a GPU; what these tests are about
+    /// is that a request crosses with its arguments intact and that whatever the
+    /// loop says comes back to the client unchanged. So each fixture decides
+    /// what the loop says.
+    ///
+    /// The thread never ends, which is what keeps the reporter alive.
+    fn stand_in(reporter: Reporter, answer: impl Fn(SaveRequest) + Send + 'static) {
+        std::thread::spawn(move || loop {
+            for request in reporter.saves() {
+                answer(request);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        });
+    }
+
+    /// What the stand-in says for the tests that are not about saving — and it
+    /// is true of the fixture rather than a stub of a real answer, because a
+    /// test that met this by accident should read as a fixture problem and not
+    /// as a save that failed.
+    fn no_loop(request: SaveRequest) {
+        let SaveRequest { slot, reply, .. } = request;
+        reply.settled(Err(format!(
+            "slot {slot}: this fixture has no render loop behind it"
+        )));
     }
 
     /// One request, one reply, over TCP exactly as a client would.
@@ -1224,7 +1722,14 @@ proc probe_source_b {
         stream.write_all(request.as_bytes()).expect("write");
         let mut reader = BufReader::new(stream);
         let mut status_line = String::new();
-        reader.read_line(&mut status_line).expect("status");
+        // **Named, because the interesting way for this to fail is a timeout.**
+        // A connection held up by another one reaches the client's own read
+        // timeout and comes out here, and `expect("status")` reported that as an
+        // errno rather than as what it is.
+        reader.read_line(&mut status_line).expect(
+            "no status line: the server did not answer this connection within the \
+                     client's read timeout",
+        );
         let status: u16 = status_line
             .split_whitespace()
             .nth(1)
@@ -1752,6 +2257,220 @@ proc probe_source_b {
         }
     }
 
+    /// **The save tool is offered, and a call reaches the loop with what it was
+    /// given and comes back with what the loop said.**
+    ///
+    /// The whole of the new channel in one pass: advertised, sent, answered.
+    /// The stand-in asserts the arguments it was handed, because a request that
+    /// arrived with the wrong slot or no id would still have produced an answer.
+    #[test]
+    fn the_save_tool_is_offered_and_a_call_reaches_the_loop() {
+        // **Two slots**, so that the slot the loop is handed is a fact about
+        // the call rather than the only slot there is: a request that carried a
+        // constant would pass against a one-slot deck.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let l1 = dir.path().join("l1.kir");
+        let l4 = dir.path().join("l4.kir");
+        std::fs::write(&l1, PROBE_L1).expect("l1");
+        std::fs::write(&l4, PROBE_L4).expect("l4");
+        let pair = (l1, vec![l4]);
+        let reporter = serve(0, Slots(vec![pair.clone(), pair]), true).expect("serve");
+        let server = Server {
+            port: reporter.port(),
+            dir,
+        };
+        stand_in(reporter, |request| {
+            let SaveRequest { slot, id, reply } = request;
+            assert_eq!(slot, 1, "the request reached the loop naming another slot");
+            let id = id.expect("the id the client named did not reach the loop");
+            reply.accepted(&format!(
+                "slot {slot}: saving 2 nodes as set `{id}` in <store>"
+            ));
+            reply.settled(Ok(format!(
+                "slot {slot}: saved as set `{id}` — load it with `--load-set {id}`"
+            )));
+        });
+
+        let (_, listed) = post(
+            server.port,
+            &json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}).to_string(),
+        );
+        let listed: Value = serde_json::from_str(&listed).expect("json");
+        let names: Vec<&str> = listed["result"]["tools"]
+            .as_array()
+            .expect("tools")
+            .iter()
+            .filter_map(|t| t["name"].as_str())
+            .collect();
+        assert!(
+            names.contains(&"save_set"),
+            "a model cannot call what it is not offered: {names:?}"
+        );
+
+        let (failed, said) = call(server.port, "save_set", json!({"slot":1,"id":"keeper"}));
+        assert!(!failed, "{said}");
+        assert!(
+            said.contains("--load-set keeper"),
+            "the call came back without the id it was saved under: {said}"
+        );
+    }
+
+    /// **A slot that cannot be saved comes back with the loop's own refusal**,
+    /// unchanged.
+    ///
+    /// The sentence comes from [`crate::nothing_to_save`] rather than being
+    /// written out here: a copy would go on passing after the real refusal was
+    /// corrected, which is exactly what happened to this wording once already —
+    /// it named `--watch` alone for as long as `--mcp` also made a slot savable.
+    #[test]
+    fn a_slot_that_cannot_be_saved_comes_back_with_the_loops_own_words() {
+        let (server, reporter) = started(true);
+        stand_in(reporter, |request| {
+            let SaveRequest { slot, reply, .. } = request;
+            reply.settled(Err(crate::nothing_to_save(slot, Some("night01"), true)));
+        });
+        let (failed, said) = call(server.port, "save_set", json!({"slot":0}));
+        assert!(failed, "a refusal came back as a success: {said}");
+        assert_eq!(
+            said,
+            crate::nothing_to_save(0, Some("night01"), true),
+            "the refusal was rewritten on its way to the client"
+        );
+    }
+
+    /// **A slot this deck does not hold meets the refusal `read_procedure`
+    /// gives it — which is the refusal a key press meets**, without troubling
+    /// the render loop at all.
+    ///
+    /// `contains("no slot 7")` was all this asked, and it passed under all four
+    /// spellings this program had of one sentence: the keys' `no slot 7: this
+    /// deck holds slots 0-6`, this module's `holds 0-6`, MIDI's `no slot 7 —
+    /// …`, and a record's `slot 7: …`. It is `assert_eq!` against
+    /// [`crate::no_such_slot`] now, on both surfaces of this module, because
+    /// `save_set` is the control a model and a hand both reach and the wording
+    /// they get for one mistake has to be one wording. See that function.
+    #[test]
+    fn a_save_for_a_slot_that_does_not_exist_is_refused_here() {
+        let (server, reporter) = started(true);
+        stand_in(reporter, |request| {
+            let SaveRequest { slot, reply, .. } = request;
+            reply.settled(Err(format!(
+                "slot {slot}: the loop was asked about a slot this deck does not hold"
+            )));
+        });
+        let (failed, said) = call(server.port, "save_set", json!({"slot":7}));
+        assert!(failed, "{said}");
+        assert_eq!(
+            said,
+            crate::no_such_slot(7, 1),
+            "a bad slot was not refused in the words every other surface refuses it in"
+        );
+        assert!(
+            !said.contains("the loop"),
+            "a slot this deck does not hold was sent to the render loop: {said}"
+        );
+
+        // The other door to the same refusal, which is where this module's own
+        // spelling used to live.
+        let (failed, said) = call(
+            server.port,
+            "read_procedure",
+            json!({"slot":7,"layer":"L1"}),
+        );
+        assert!(failed, "{said}");
+        assert_eq!(said, crate::no_such_slot(7, 1));
+    }
+
+    /// **`"id": null` is a caller saying nothing about the id**, not a caller
+    /// getting its type wrong.
+    ///
+    /// A client that builds its arguments from a record with an empty field
+    /// sends `null` for an argument it is not using, and this refused it with
+    /// "`id` is a string" — a refusal about a mistake the caller had not made,
+    /// and one it cannot act on, since what it wanted was the default. Every
+    /// other optional argument on this surface reads an absent one as its
+    /// default; `null` is absent's second spelling.
+    #[test]
+    fn a_null_id_is_an_absent_id_and_not_a_bad_one() {
+        let (server, reporter) = started(true);
+        stand_in(reporter, |request| {
+            let SaveRequest { slot, id, reply } = request;
+            // What the loop makes of `None` is a stamp; what this test is about
+            // is that it was handed `None` rather than the call being refused
+            // before it got there.
+            reply.settled(Ok(match id {
+                None => format!("slot {slot}: the loop was left to name it"),
+                Some(id) => format!("slot {slot}: the loop was handed `{id}`"),
+            }));
+        });
+
+        let (failed, said) = call(server.port, "save_set", json!({"slot":0,"id":null}));
+        assert!(!failed, "{said}");
+        assert!(
+            said.contains("left to name it"),
+            "`null` was refused as a bad string rather than read as an absent id: {said}"
+        );
+
+        // And an argument that really is the wrong type still is one.
+        let (failed, said) = call(server.port, "save_set", json!({"slot":0,"id":7}));
+        assert!(failed, "{said}");
+        assert!(said.contains("`id` is a string"), "{said}");
+    }
+
+    /// **A save in flight does not hold up another connection**, which is the
+    /// evidence rather than a comment saying the lock was dropped.
+    ///
+    /// `handle` locks one mutex around `dispatch` and runs a thread per
+    /// connection, so a tool that waited for the render loop under that lock
+    /// would stop every other client for as long as the loop took. Here the
+    /// stand-in has taken a save and is holding it; a second connection asks for
+    /// a procedure and must be answered before the first is released.
+    ///
+    /// The second call is not merely *started* while the first is in flight —
+    /// it is started only once the stand-in has the request in its hands, so
+    /// there is no ordering in which this passes by racing ahead of the wait.
+    #[test]
+    fn a_save_in_flight_does_not_block_another_connection() {
+        let (server, reporter) = started(true);
+        let (entered, arrived) = mpsc::channel::<()>();
+        let (release, released) = mpsc::channel::<()>();
+        let released = std::sync::Mutex::new(released);
+        stand_in(reporter, move |request| {
+            let SaveRequest { slot, id, reply } = request;
+            let id = id.unwrap_or_else(|| "stamped".to_string());
+            reply.accepted(&format!(
+                "slot {slot}: saving 2 nodes as set `{id}` in <store>"
+            ));
+            entered.send(()).expect("the test is listening");
+            released.lock().expect("release").recv().expect("released");
+            reply.settled(Ok(format!(
+                "slot {slot}: saved as set `{id}` — load it with `--load-set {id}`"
+            )));
+        });
+
+        let port = server.port;
+        let waiting =
+            std::thread::spawn(move || call(port, "save_set", json!({"slot":0,"id":"slow"})));
+        arrived
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("the save never reached the stand-in loop");
+
+        // The evidence. Under a held lock this blocks until the client's own
+        // read timeout gives up on it.
+        let (failed, source) = call(
+            server.port,
+            "read_procedure",
+            json!({"slot":0,"layer":"L4"}),
+        );
+        assert!(!failed, "a second connection was refused: {source}");
+        assert!(source.contains("proc probe_l4"), "{source}");
+
+        release.send(()).expect("release the save");
+        let (failed, said) = waiting.join().expect("the waiting call");
+        assert!(!failed, "{said}");
+        assert!(said.contains("--load-set slow"), "{said}");
+    }
+
     /// `initialize` answers with what a client needs to proceed.
     #[test]
     fn initialize_answers_with_a_protocol_version_and_capabilities() {
@@ -1790,6 +2509,23 @@ proc probe_source_b {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A state with the loop's half of both channels missing, for the tests
+    /// that are about what one method answers rather than about a render loop.
+    ///
+    /// The save channel's receiver is dropped on the way out, which is exactly
+    /// the "the loop is gone" case: anything that tried to ask for a save here
+    /// would be told so rather than wait.
+    fn state(events: mpsc::Receiver<Event>) -> State {
+        State {
+            slots: slots(),
+            watching: true,
+            events,
+            asked: mpsc::sync_channel(ASKED).0,
+            recent: Vec::new(),
+            dropped: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        }
+    }
 
     /// Two slots of a head and one more file, and **none of these paths
     /// exists**.
@@ -1957,7 +2693,14 @@ mod tests {
         let past_the_end = slots
             .path(2, Kind::L1, 0)
             .expect_err("slot 2 does not exist");
-        assert!(past_the_end.contains("0-1"), "{past_the_end}");
+        assert_eq!(past_the_end, crate::no_such_slot(2, 2));
+        // And the cheap door to the same answer, which is what `save_set` asks
+        // rather than reading every file of a slot to learn a length.
+        assert_eq!(
+            slots.holds(2).expect_err("slot 2 does not exist"),
+            past_the_end
+        );
+        assert!(slots.holds(1).is_ok());
 
         // **A layer this slot does not use is a different answer from a layer
         // this surface cannot reach**, and it used to give the second: "no
@@ -2128,13 +2871,7 @@ mod tests {
     fn a_refused_write_returns_the_diagnostics_as_content() {
         let (tx, rx) = mpsc::channel();
         drop(tx);
-        let mut state = State {
-            slots: slots(),
-            watching: true,
-            events: rx,
-            recent: Vec::new(),
-            dropped: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        };
+        let mut state = state(rx);
         let request = json!({
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {
@@ -2142,7 +2879,9 @@ mod tests {
                 "arguments": { "slot": 0, "layer": "L4", "source": "not a procedure" },
             },
         });
-        let reply = dispatch(&request, &mut state).expect("a call is answered");
+        let reply = dispatch(&request, &mut state)
+            .settled()
+            .expect("a call is answered");
         let result = reply.get("result").expect("a result, not an error");
         assert_eq!(result["isError"], json!(true));
         let text = result["content"][0]["text"].as_str().expect("text");
@@ -2159,32 +2898,20 @@ mod tests {
     #[test]
     fn a_notification_is_acted_on_and_not_answered() {
         let (_tx, rx) = mpsc::channel();
-        let mut state = State {
-            slots: slots(),
-            watching: true,
-            events: rx,
-            recent: Vec::new(),
-            dropped: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        };
+        let mut state = state(rx);
         let notification = json!({ "jsonrpc": "2.0", "method": "notifications/initialized" });
-        assert!(dispatch(&notification, &mut state).is_none());
+        assert!(dispatch(&notification, &mut state).settled().is_none());
         // And one that *does* carry an id is answered, so the test above is
         // about the notification rather than about the method being unknown.
         let request = json!({ "jsonrpc": "2.0", "id": 7, "method": "ping" });
-        assert!(dispatch(&request, &mut state).is_some());
+        assert!(dispatch(&request, &mut state).settled().is_some());
     }
 
     /// The swap history is bounded and is a report on the present.
     #[test]
     fn the_swap_history_does_not_grow_without_end() {
         let (tx, rx) = mpsc::sync_channel(RECENT * 4);
-        let mut state = State {
-            slots: slots(),
-            watching: true,
-            events: rx,
-            recent: Vec::new(),
-            dropped: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        };
+        let mut state = state(rx);
         for i in 0..(RECENT * 3) {
             tx.send(Event::Swap {
                 slot: 0,
@@ -2199,5 +2926,162 @@ mod tests {
             "the newest event was dropped"
         );
         assert!(!said.contains("event 0"), "the oldest event was kept");
+    }
+
+    /// **A save the render loop does not answer ends, and says something true.**
+    ///
+    /// Three ways a model can be left waiting, and none of them may end in a
+    /// call that never returns or in a claim nobody can support. Over the
+    /// channel rather than over a socket for the reason `drained_saves` is
+    /// tested that way: the bound is the whole point and a render loop is not
+    /// needed to see it.
+    #[test]
+    fn a_save_the_loop_does_not_answer_ends_and_says_something_true() {
+        // Never taken. Nothing was saved and saying so is safe.
+        let (kept, news) = mpsc::channel::<News>();
+        let started = std::time::Instant::now();
+        let said = awaited(&news, std::time::Duration::from_millis(60))
+            .expect_err("a save nobody took came back as a success");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(1),
+            "the wait ran past its bound"
+        );
+        assert!(said.contains("Nothing was saved"), "{said}");
+        drop(kept);
+
+        // Taken and named, then silence. **The id is in the answer** — that is
+        // what the first message is for — and the answer claims neither success
+        // nor failure.
+        let (tx, news) = mpsc::channel();
+        tx.send(News::Accepted(
+            "slot 0: saving 2 nodes as set `keeper` in <store>".to_string(),
+        ))
+        .expect("accepted");
+        let said = awaited(&news, std::time::Duration::from_millis(60))
+            .expect_err("a save with no outcome came back as a success");
+        assert!(
+            said.contains("`keeper`"),
+            "a timed-out save did not name the id it was accepted under: {said}"
+        );
+        assert!(
+            said.contains("neither a success nor a failure"),
+            "a timed-out save was reported as one or the other: {said}"
+        );
+
+        // The loop ended without answering: told at once rather than at the
+        // deadline, which the long wait here is what proves.
+        let (tx, news) = mpsc::channel();
+        tx.send(News::Accepted(
+            "slot 0: saving 2 nodes as set `keeper` in <store>".to_string(),
+        ))
+        .expect("accepted");
+        drop(tx);
+        let started = std::time::Instant::now();
+        let said = awaited(&news, std::time::Duration::from_secs(60))
+            .expect_err("a loop that ended came back as a success");
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(1),
+            "a client waited out the deadline on a loop that was already gone"
+        );
+        assert!(said.contains("`keeper`"), "{said}");
+    }
+
+    /// **The render loop's own accept reaches a client that times out**, and
+    /// names the id it will find the set under.
+    ///
+    /// The two halves of a truthful timeout meeting for the first time:
+    /// [`crate::accepted_save`] is what the loop says at the frame it takes a
+    /// save, and [`awaited`] is what this server does with it. Every other test
+    /// that reaches a save drives a stand-in loop which sends `accepted`
+    /// *itself* — so deleting `reply.accepted` from the real loop left the whole
+    /// suite green, while a client whose deadline passed was told **"Nothing was
+    /// saved, and asking again is safe"** about a save that was running and
+    /// would land. That is a false claim to a model about a disk, and preventing
+    /// exactly it is why [`Reply`] carries two messages rather than one.
+    ///
+    /// The reply is deliberately still alive at the deadline: this is a slow
+    /// save, not a dead loop, and the two have different answers.
+    #[test]
+    fn a_save_the_loop_has_taken_names_its_id_to_a_client_that_times_out() {
+        let (tx, news) = mpsc::channel();
+        let reply = Reply(tx);
+        // One node, because the sentence counts them and a fixture that agreed
+        // with a hardcoded plural would be checking the fixture.
+        let sources = crate::Sources(vec![crate::SavedNode {
+            layer: "L1",
+            index: 0,
+            hash: karakuri_store::hash::Hash::of(b"kind L1"),
+            name: None,
+            source: None,
+        }]);
+        let id = crate::accepted_save(
+            1,
+            Some("keeper".to_string()),
+            &sources,
+            std::path::Path::new("/nowhere/store"),
+            Some(&reply),
+        );
+        assert_eq!(
+            id, "keeper",
+            "a client's own id is what the set is filed under"
+        );
+
+        let said = awaited(&news, std::time::Duration::from_millis(60))
+            .expect_err("a save with no outcome yet came back as a success");
+        assert!(
+            said.starts_with("slot 1: saving 1 node as set `keeper` in /nowhere/store"),
+            "the loop's acceptance did not reach the client, so a timeout has no id \
+             to offer: {said}"
+        );
+        assert!(
+            said.contains("neither a success nor a failure"),
+            "a save with no outcome was reported as one or the other: {said}"
+        );
+        assert!(
+            !said.contains("Nothing was saved"),
+            "a save that had been taken and is being written was reported to a model \
+             as one that never happened: {said}"
+        );
+        drop(reply);
+    }
+
+    /// **An id from a client is one path component**, which is what a Set id is
+    /// everywhere else in this program.
+    #[test]
+    fn a_set_id_from_a_client_is_one_path_component() {
+        assert_eq!(checked_id("keeper-01"), Ok("keeper-01".to_string()));
+        assert_eq!(checked_id("a_B_9"), Ok("a_B_9".to_string()));
+        // What a save with no id is called, so a client can name one the same
+        // way the run would have.
+        let stamp = crate::history::stamped_id();
+        assert_eq!(checked_id(&stamp), Ok(stamp.clone()), "{stamp}");
+
+        for bad in [
+            "../../../etc/passwd",
+            "sets/../../elsewhere",
+            "a/b",
+            "",
+            "a b",
+            "night.01",
+            "~/mine",
+        ] {
+            assert!(
+                checked_id(bad).is_err(),
+                "`{bad}` was accepted as the name of a file under `<store>/sets/`"
+            );
+        }
+        assert!(checked_id(&"x".repeat(MAX_ID + 1)).is_err());
+
+        // **The over-length refusal counts what it measures.** `str::len` is
+        // bytes and the message said "characters", which agree for everything
+        // that would get past the charset check and disagree for exactly the
+        // caller this message exists for. Thirty-three two-byte characters is
+        // sixty-six bytes, so the two readings cannot both be right here.
+        let multibyte = "é".repeat(33);
+        let refusal = checked_id(&multibyte).expect_err("66 bytes is past the cap");
+        assert!(
+            refusal.contains("is 66 bytes"),
+            "an id was refused for a length its caller cannot count to: {refusal}"
+        );
     }
 }

@@ -254,9 +254,11 @@ and the honest answer today is probably not: it carries tempo and beat phase, wh
 the octave problem and leaves the bar where it was.
 
 **MCP landed inside this milestone rather than M5 or M6**, and it is worth saying why it
-was cheap. `--mcp` serves three tools — read a procedure, write one, ask what the swap
-machinery did — and every hard part was already built for something else. The hot-swap
-watchdog was written so a *human* editing a file could not wreck a set; it now catches a
+was cheap. `--mcp` served three tools — read a procedure, write one, ask what the swap
+machinery did — and every hard part was already built for something else. (M4 added a
+fourth, `save_set`, and that one was *not* free: see the save control at the head of M4,
+where the channel it needed is what it cost.) The hot-swap watchdog was written so a
+*human* editing a file could not wreck a set; it now catches a
 model doing the same, unchanged. The record invariant was written so a session would replay;
 it now means an AI-driven set replays with no AI attached. The IR was designed so a model
 could write it from the specification alone, which was tested in M1 with three models and is
@@ -1947,38 +1949,69 @@ better code immediately. So resources stay a curated few and *search* over a lar
 a tool call — which is also the only way round the fact that `resources/list` is a list a
 client reads in full.
 
-**One gap the three-place layout opened, now half closed.** A user preset can
-now be loaded into the scratch, edited by a hand or a model, and every version
-that compiles is kept — but ~~**nothing saves the result from a running
-session**. `--save-set` writes what the flags say and exits, so the loop ends at
-"find the version you liked in `<store>/history/` and start a run from it".~~
-The `k` key writes the focused slot's current material as a Set file, named
-after the moment it was pressed, reading everything the Set holds off the Set on
-screen rather than off the flags — which is what makes it a save of what was
-*played* rather than of what was started. Two things it cannot read that way,
+**One gap the three-place layout opened, now closed for the two surfaces that
+exist.** A user preset can now be loaded into the scratch, edited by a hand or a
+model, and every version that compiles is kept — but ~~**nothing saves the
+result from a running session**. `--save-set` writes what the flags say and
+exits, so the loop ends at "find the version you liked in `<store>/history/` and
+start a run from it".~~ The `k` key writes the focused slot's current material as
+a Set file, named after the moment it was pressed, reading everything the Set
+holds off the Set on screen rather than off the flags — which is what makes it a
+save of what was *played* rather than of what was started. The `save_set` MCP
+tool asks for exactly that, for a slot it names: one control and one code path,
+whichever end it is reached from. Two things it cannot read that way,
 because the Set does not hold them: the edges, which nothing rewires mid-run,
 and each node's spelled name, which belongs to the use rather than the
 procedure. `Live::edges` says why that is a copy of a value and not of a rule.
 It goes into the session stream as a `save` record, and a replay skips it and
 says so: see "Records with an effect outside the stream" in `docs/ir-spec.md`.
 
-**What is left is the other two ways in, and this is the first control to want
-all three.** No control in this system has three-way reach today, which is worth
+**This was the first control to want three ways in, and two of them are
+built.** No control in this system had three-way reach before it, which is worth
 stating plainly rather than assuming: keys and MIDI converge, because every
 action a surface produces ends in the method a key press ends in — `midi.rs`
-says so at its head — and MCP's whole surface is `read_procedure`,
-`write_procedure` and `swap_outcome`, none of which a key can reach and none of
-which reaches a procedure from the other side. So there has never been one
-control that a hand, a model and a future surface all wanted, and that is
-exactly why the channel it needs does not exist yet.
+says so at its head — and MCP's surface was `read_procedure`, `write_procedure`
+and `swap_outcome`, none of which a key can reach and none of which reaches a
+procedure from the other side. So nothing had ever needed the channel this did.
 
-**MCP is the one that is missing and costing something**, because a model that
+**MCP was the one that was missing and costing something**, because a model that
 has just rewritten a procedure is exactly the caller with something worth
-keeping and no way to ask for it. It is not the same shape of work as the key:
+keeping and no way to ask for it. It was not the same shape of work as the key:
 the save has to happen on the render thread's terms, where the live Set is, and
-the MCP server is a thread that cannot reach it — so it needs a server-to-loop
-request channel, which nothing in this program has yet. The M5 surface then
-costs nothing beyond that channel.
+the MCP server is a thread that cannot reach it. ~~So it needs a server-to-loop
+request channel, which nothing in this program has yet.~~ The `save_set` tool is
+built and that channel is what it cost — a request carrying the slot, an optional
+id and a one-shot reply, taken where the MIDI surface is taken, ending in
+`Live::save_set` itself rather than in a second saver. Two things it had to get
+right and they are worth naming, because the next thing over this channel
+inherits both. **The wait for the outcome happens with the server's state
+unlocked**: `handle` runs a thread per connection under one mutex, so a call
+that waited while holding it would have stopped a client that only wanted to
+read a procedure. And **the tool waits rather than answering on acceptance**,
+because a model told "saved" before the disk has answered reports a set as kept
+that may not be — with a bounded wait, after which what comes back says it is
+neither a success nor a failure and names the id to look for. That second one is
+two messages and not one, and the *first* of them is the load-bearing half: the
+loop says "taken, under this id" at the frame it takes the save, so a client
+whose deadline passes has something to look for. Without it the honest answer to
+a timeout collapses into the dishonest one — "nothing was saved, asking again is
+safe" — about a save that is running and will land.
+
+**A name a caller chooses overwrites**, which is a decision rather than an
+omission. `--save-set ID` has always obeyed the name it was given, and
+`history::unused` — which exists because two saves in one millisecond produced
+one stamp and the second file replaced the first — deliberately does not run over
+a client's id: it *renames*, `keeper` becoming `keeper-1`, and a name somebody
+typed is an instruction rather than a suggestion. It is in the tool description
+and in `docs/manual.md`, because the thing that was not allowed was leaving it
+undocumented.
+
+**The M5 surface still costs nothing beyond that channel, and is not built.**
+What it needs from here is a caller: the slot is an argument now rather than the
+focus, the refusals are the same sentences whoever meets them — literally so, as
+of this change: `no_such_slot` had four spellings across the keys, `--mcp`, MIDI
+and the record decoder, and the four surfaces now call one function and each pin
+it with an `assert_eq!` — and nothing about the save assumes a pair of hands.
 
 The difference this closes is still worth stating: a library you can put things
 into, rather than one you can only put things into before you start playing.

@@ -4300,6 +4300,156 @@ struct Saved {
     /// refused is exactly the shape of lie this codebase spends its comments
     /// refusing.
     outcome: Result<(), String>,
+    /// Where a client that asked for this save is waiting, and `None` when a
+    /// hand pressed `k`.
+    ///
+    /// **It rides the save rather than being looked up when the outcome lands.**
+    /// A map from an id to whoever asked would be a second place that knows
+    /// which save is which, and the outcome already carries everything needed to
+    /// find its way home.
+    reply: Option<mcp::Reply>,
+}
+
+/// A save that will not happen, to the terminal and to whoever asked if it was
+/// not a hand.
+///
+/// **One sentence and one home.** Every refusal here reaches two audiences now,
+/// and the way that goes wrong is a copy of the words for the second one — which
+/// is free to be right on the day it is written and wrong at the next
+/// correction. The wording of the refusal below has already needed one.
+fn refused(reply: Option<mcp::Reply>, said: String) {
+    eprintln!("{said}");
+    if let Some(reply) = reply {
+        reply.settled(Err(said));
+    }
+}
+
+/// **No such slot**, in the words every surface says it in.
+///
+/// Extracted where a second caller appeared, rather than copied to it: focusing
+/// a slot that does not exist and saving one are the same mistake and were about
+/// to be two sentences about it.
+///
+/// **And "every surface" is now literally every one of them**, which it was not
+/// when this sentence was first written. There were four spellings of one
+/// refusal — the keys said `no slot 9: this deck holds slots 0-3`, `--mcp` said
+/// `holds 0-3`, MIDI said `no slot 9 — this deck holds slots 0-3`, and a `gain`
+/// record naming a slot said `slot 9: this deck holds slots 0-3` — so a model
+/// calling `save_set {"slot":9}` and an operator pressing `9` got different
+/// sentences for the same mistake on the same control. That was tolerable while
+/// each surface reached different controls; it stopped being tolerable when
+/// `save_set` made one control reachable from two of them, and
+/// `docs/roadmap.md` now offers "the refusals are the same sentences whoever
+/// meets them" as the thing M5's surface inherits. `mcp.rs`, `midi.rs` and
+/// `mix.rs` all call this now. Each of them pins it with an `assert_eq!`
+/// against this function rather than trusting this comment — see
+/// `mcp::tests::a_slot_a_layer_and_a_renderer_resolve_and_anything_else_is_refused`,
+/// `mcp::wire_tests::a_save_for_a_slot_that_does_not_exist_is_refused_here`,
+/// `midi::tests::an_unmapped_control_and_a_missing_slot_are_each_reported_once`
+/// and `mix::tests::a_slot_past_the_deck_is_refused_with_the_range_it_missed`.
+/// Every one of them asked only `contains(...)` before, which is why four
+/// spellings could live side by side unnoticed.
+///
+/// The engine's own `no slot` messages are deliberately *not* routed here: they
+/// are `assert!`s on a call that should never have been made, addressed to
+/// whoever is holding the debugger, and a refusal an operator reads and a panic
+/// a programmer reads are two audiences that happen to share a phrase.
+fn no_such_slot(slot: usize, slot_count: usize) -> String {
+    match slot_count {
+        // Cannot happen — a run with no slots does not reach a window — and
+        // written anyway, because `slot_count - 1` on it is an underflow and a
+        // panic, which is what the arm that "cannot happen" costs when the shape
+        // around it changes.
+        0 => format!("no slot {slot}: this deck holds none"),
+        n => format!("no slot {slot}: this deck holds slots 0-{}", n - 1),
+    }
+}
+
+/// **Why a slot has nothing to save**, in the words the operator is given.
+///
+/// **Named, and with the flag that changes the answer.** Every refusal around
+/// this one names the file or the range it is about; this one used to name
+/// neither the id the run came from nor anything the operator could do, which
+/// leaves them pressing a key that reports a fact about the world rather than a
+/// way out of it.
+///
+/// A free function over the two facts it turns on, for the reason
+/// [`drained_saves`] is one: it has to reach a model as well as a terminal now,
+/// which makes it worth a test, and `Live` needs a window and a GPU.
+///
+/// `no_files` is whether this slot has any startup sources at all — see
+/// `Live::startup`, which is empty exactly for a slot filled straight from a Set
+/// file by hash.
+fn nothing_to_save(slot: usize, loaded_set: Option<&str>, no_files: bool) -> String {
+    match loaded_set {
+        // **Both flags, because `editable()` is both.** It is `editable()` that
+        // materialises a loaded Set into the scratch and puts it in
+        // `args.sets`, and that is `--watch || --mcp` — so `--load-set X --mcp
+        // PORT` with no `--watch` already saves like any other slot. Naming only
+        // `--watch` sent an operator who had `--mcp` off to restart a set for a
+        // flag they did not need.
+        Some(id) if no_files => format!(
+            "slot {slot}: nothing to save — it was filled from set `{id}` by hash, with no \
+             files behind it and nothing able to rebuild it. Start the run with `--watch` \
+             or `--mcp` and this slot saves like any other"
+        ),
+        _ => format!(
+            "slot {slot}: nothing to save — this slot's sources are not in the store, which \
+             was said at startup, and no rebuild of it has landed since"
+        ),
+    }
+}
+
+/// **A save has been taken and named**, said to the terminal and to whoever
+/// asked for it if that was not a hand. Returns the id it will be filed under.
+///
+/// Said before the store thread starts, because the operator pressed a key and
+/// the answer to "did it take" is owed now rather than when the disk gets round
+/// to it. Where it went is said on arrival — see [`Live::took_save`].
+///
+/// **The same sentence to a waiting client, and this half is the one a timeout
+/// depends on.** [`mcp::Reply`] carries two messages because "accepted, under
+/// this id, outcome not yet known" is a third fact the protocol's one boolean
+/// cannot hold: a client whose deadline passes with this message in hand is
+/// told to go looking under the id, and one without it is told *nothing was
+/// saved and asking again is safe* — which is a false claim to a model about a
+/// save that is running and will land.
+///
+/// **A free function over the four facts it turns on**, for the reason
+/// [`nothing_to_save`] and [`drained_saves`] are, and the reason bites harder
+/// here. Those are refusals — said *instead of* a save, and reachable without a
+/// window. This is said *during* one, and inline it sat below
+/// [`playing_values`], which reads `deck.slot(slot)` and is the single line of
+/// [`Live::save_set`] that genuinely needs a GPU. So it was the one half of the
+/// accept-then-settle sequence no test could reach: deleting the `accepted`
+/// call left the whole suite green, because every `--mcp` test drives a
+/// stand-in loop that sends `accepted` itself. Above that line it is testable,
+/// and `mcp::tests::a_save_the_loop_has_taken_names_its_id_to_a_client_that_times_out`
+/// is what deleting the call now costs.
+fn accepted_save(
+    slot: usize,
+    id: Option<String>,
+    sources: &Sources,
+    root: &std::path::Path,
+    reply: Option<&mcp::Reply>,
+) -> String {
+    // **A name is a stamp, because a key press cannot type one.** See
+    // `history::stamped_id`, whose convention this is: an operator looks for
+    // the time they saved it. A client that named one gets the name it named —
+    // see `mcp::checked_id` on why a set filed under a name its caller did not
+    // ask for is the worse answer.
+    let id = id.unwrap_or_else(history::stamped_id);
+    let said = format!(
+        "slot {slot}: saving {} node{} as set `{id}` in {}",
+        sources.len(),
+        if sources.len() == 1 { "" } else { "s" },
+        root.display()
+    );
+    eprintln!("{said}");
+    if let Some(reply) = reply {
+        reply.accepted(&said);
+    }
+    id
 }
 
 struct Live {
@@ -4965,6 +5115,37 @@ impl Live {
         self.actions = actions;
     }
 
+    /// **What a model has asked for since the last frame.**
+    ///
+    /// Beside [`Live::run_surface`] and on the same terms: a surface is polled
+    /// at the top of a frame and every request it produces ends in the method a
+    /// key press ends in. That is what makes `--mcp` a third pair of hands
+    /// rather than a second way to do anything.
+    ///
+    /// **Collected out of the borrow before any of it is acted on**, exactly as
+    /// the MIDI actions are, because every arm below takes `&mut self`. Nothing
+    /// is allocated on a frame that was asked for nothing: collecting an empty
+    /// iterator makes no allocation.
+    ///
+    /// Here rather than beside the swap drain below `frame::compose`, which was
+    /// the other candidate: a frame that finds no surface to draw on returns
+    /// early, and a client asking to keep what is playing should not be waiting
+    /// on a swapchain. Nothing a request reaches needs the GPU.
+    ///
+    /// **[`Live::finished_saves`] is here for the same reason and used to be
+    /// down there**, which meant this argument was made and then half applied:
+    /// the request was taken above the early returns and its *answer* was
+    /// withheld below them. See the comment at the head of [`Live::frame`].
+    fn run_requests(&mut self) {
+        let Some(mcp) = &self.mcp else {
+            return;
+        };
+        let asked: Vec<mcp::SaveRequest> = mcp.saves().collect();
+        for request in asked {
+            self.save_set(request.slot, request.id, Some(request.reply));
+        }
+    }
+
     /// A key press. Returns true if it was a request to quit.
     ///
     /// Every branch prints what it did. There is no on-screen UI, and a control
@@ -5005,7 +5186,10 @@ impl Live {
                 'o' => self.nudge_latency_offset(-audio::LATENCY_OFFSET_STEP_MS),
                 'p' => self.nudge_latency_offset(audio::LATENCY_OFFSET_STEP_MS),
                 'a' => self.snap_to_canvas(),
-                'k' => self.save_set(),
+                // The focused slot, a stamped name, and nobody waiting: a hand
+                // has one slot in front of it, cannot type a name, and is
+                // reading the terminal.
+                'k' => self.save_set(self.focus, None, None),
                 's' => self.print_status(),
                 'h' | '?' => eprint!("{BINDINGS}"),
                 _ => {}
@@ -5017,10 +5201,7 @@ impl Live {
 
     fn focus_slot(&mut self, slot: usize) {
         if !slot_in_range(slot, self.deck.slot_count()) {
-            eprintln!(
-                "no slot {slot}: this deck holds slots 0-{}",
-                self.deck.slot_count() - 1
-            );
+            eprintln!("{}", no_such_slot(slot, self.deck.slot_count()));
             return;
         }
         self.focus = slot;
@@ -5192,18 +5373,34 @@ impl Live {
         }
     }
 
-    /// **Write what this run is playing as a Set file**, from the focused slot.
+    /// **Write what this run is playing as a Set file.**
     ///
     /// The control `docs/roadmap.md` names as M4's open gap: `--save-set`
     /// writes what the *flags* say and exits, so the loop that lets an operator
     /// load a preset, edit it and watch it had no way to keep the result. This
     /// is the render-loop half of closing that. Every surface ends here — the
-    /// key below, and whatever M5 builds — for the same reason every mix
-    /// control ends in one method.
+    /// key below, the MCP tool, and whatever M5 builds — for the same reason
+    /// every mix control ends in one method. **This is the only save path**,
+    /// which is what makes a refusal and an outcome one sentence each rather
+    /// than one sentence per surface.
     ///
-    /// **The focused slot, not slot 0.** A Set file describes one Set and a
-    /// deck holds four; the one the operator means is the one their hands are
-    /// already on, which is what focus is.
+    /// **The slot is an argument and the key passes its focus in.** A Set file
+    /// describes one Set and a deck holds four; the one an *operator* means is
+    /// the one their hands are already on, which is what focus is — and a model
+    /// has no hands and no focus, so it names the slot as it names one to read
+    /// a procedure. This is `toggle_on_air`'s split, for its reason.
+    ///
+    /// **`id` is what the caller wanted it called, or a stamp.** A key press
+    /// cannot type a name, so it passes `None`; see `history::stamped_id`,
+    /// whose convention that is and whose reason it borrows — an operator looks
+    /// for the time they saved it. A caller that *can* type one is not made to
+    /// take a timestamp.
+    ///
+    /// **`reply` is whoever is waiting who is not at the terminal.** Every
+    /// sentence below goes to both, and each of them is written once: a refusal
+    /// that reached a model in different words than it reaches the terminal
+    /// would be two refusals to keep in step, and the wording of this one has
+    /// already had to be corrected once.
     ///
     /// **Read off the live Set, not off `Args`.** `saving_seeds` states the
     /// hazard from the other side: a writer with its own copy of the rule
@@ -5212,9 +5409,12 @@ impl Live {
     /// capacity or a salt through a rebuilt Set file — so the only reading that
     /// cannot be stale is the Set's own.
     ///
-    /// **A name is a stamp, because a key press cannot type one.** See
-    /// `history::stamped_id`, whose convention this is and whose reason it
-    /// borrows: an operator looks for the time they saved it.
+    /// **Refused, accepted, gathered, written — and only the third of those
+    /// needs a `Deck`.** The three sentences a save can produce before the disk
+    /// speaks are [`no_such_slot`], [`nothing_to_save`] and [`accepted_save`],
+    /// all free functions, so what a client is told is checkable without a
+    /// window. `playing_values` is the line that is not, and everything above it
+    /// here is above it deliberately.
     ///
     /// **Gathered here, written elsewhere.** Everything below this line is a
     /// read off values already in memory; the store I/O goes to a thread of its
@@ -5222,47 +5422,30 @@ impl Live {
     /// for a rate of a few an hour. The outcome comes back over `saves` and the
     /// record is written at the frame it arrives, not at this key press. See
     /// `Live::finished_saves`.
-    fn save_set(&mut self) {
-        let slot = self.focus;
+    fn save_set(&mut self, slot: usize, id: Option<String>, reply: Option<mcp::Reply>) {
+        // **Checked here rather than only where the request came from.** A key
+        // press cannot name a slot this deck does not hold and a tool call can,
+        // and below this line `playing_values` reads `deck.slot(slot)`, which
+        // panics on one. The surface that asked refuses it too, in its own
+        // words, so a model never reaches this — and this is the guard that
+        // does not depend on it having.
+        if !slot_in_range(slot, self.deck.slot_count()) {
+            return refused(reply, no_such_slot(slot, self.deck.slot_count()));
+        }
         let startup = self.startup.get(slot).map_or(&[][..], Vec::as_slice);
         let sources = live_sources(self.running.playing(slot), startup);
         if sources.is_empty() {
-            // **Named, and with the flag that changes the answer.** Every
-            // refusal around this one names the file or the range it is about;
-            // this one used to name neither the id the run came from nor
-            // anything the operator could do, which leaves them pressing a key
-            // that reports a fact about the world rather than a way out of it.
-            match &self.loaded_set {
-                // **Both flags, because `editable()` is both.** It is
-                // `editable()` that materialises a loaded Set into the scratch
-                // and puts it in `args.sets`, and that is `--watch ||
-                // --mcp` — so `--load-set X --mcp PORT` with no `--watch`
-                // already saves like any other slot. Naming only `--watch` sent
-                // an operator who had `--mcp` off to restart a set for a flag
-                // they did not need.
-                Some(id) if startup.is_empty() => eprintln!(
-                    "slot {slot}: nothing to save — it was filled from set `{id}` by hash, \
-                     with no files behind it and nothing able to rebuild it. Start the run \
-                     with `--watch` or `--mcp` and this slot saves like any other"
-                ),
-                _ => eprintln!(
-                    "slot {slot}: nothing to save — this slot's sources are not in the \
-                     store, which was said at startup, and no rebuild of it has landed since"
-                ),
-            }
-            return;
+            return refused(
+                reply,
+                nothing_to_save(slot, self.loaded_set.as_deref(), startup.is_empty()),
+            );
         }
-        let id = history::stamped_id();
+        // **Named and answered above the GPU line**, which is where the whole
+        // of [`accepted_save`]'s doc lives: `playing_values` below is the one
+        // read here that needs a `Deck`, and the accept has to be on the side
+        // of it a test can reach.
+        let id = accepted_save(slot, id, &sources, &self.store_root, reply.as_ref());
         let values = playing_values(self.deck.slot(slot).set(), &self.edges);
-        // Said before the thread starts, because the operator pressed a key and
-        // the answer to "did it take" is owed now rather than when the disk
-        // gets round to it. Where it went is said on arrival.
-        eprintln!(
-            "slot {slot}: saving {} node{} as set `{id}` in {}",
-            sources.len(),
-            if sources.len() == 1 { "" } else { "s" },
-            self.store_root.display()
-        );
         let save = Save {
             slot,
             id,
@@ -5278,15 +5461,32 @@ impl Live {
         std::thread::spawn(move || {
             let (slot, id) = (save.slot, save.id.clone());
             let outcome = save.run();
-            let _ = tx.send(Saved { slot, id, outcome });
+            // **Carried back rather than answered from here.** This thread
+            // knows the outcome and could send it, and that would be a second
+            // place a save is reported from: the record is written at the frame
+            // the outcome lands, and a model told anything else than what that
+            // frame decided would be reading a different story from the stream.
+            let _ = tx.send(Saved {
+                slot,
+                id,
+                outcome,
+                reply,
+            });
         });
     }
 
     /// **Every save that has landed since the last frame, said and recorded.**
     ///
-    /// Called from the frame loop beside the swap events, and drained rather
-    /// than waited on for the same reason: a frame owes the display a picture
-    /// and owes a disk nothing.
+    /// Drained and never waited on: a frame owes the display a picture and owes
+    /// a disk nothing.
+    ///
+    /// **Called at the top of the frame, beside [`Live::run_requests`] and
+    /// above every early return** — not beside the swap-event drain, which is
+    /// where it used to be. See the comment at the head of [`Live::frame`]: a
+    /// window that has faulted still has saves finishing behind it, and a run
+    /// that told nobody about them until it quit was withholding the one answer
+    /// a waiting client cannot get anywhere else. The swap drain stays below
+    /// because a swap *is* about what was drawn; a save is not.
     ///
     /// **The record is written here, at the frame the outcome arrived**, which
     /// is the pattern `record_procedure` already follows — a record that
@@ -5303,20 +5503,41 @@ impl Live {
         }
     }
 
-    /// One save's outcome, said and recorded.
+    /// One save's outcome, said, recorded, and answered.
+    ///
+    /// **One sentence for all three.** What the terminal is told, what the
+    /// stream records and what a waiting client is handed are the same fact, so
+    /// the words are formed once here and the client gets the ones the operator
+    /// got. The `Ok`/`Err` split is what a tool call's `isError` is built from —
+    /// see [`mcp::Reply::settled`].
     fn took_save(&mut self, saved: Saved) {
-        let Saved { slot, id, outcome } = saved;
+        let Saved {
+            slot,
+            id,
+            outcome,
+            reply,
+        } = saved;
         self.saves_in_flight = self.saves_in_flight.saturating_sub(1);
-        match outcome {
+        let said = match outcome {
             Ok(()) => {
-                eprintln!("slot {slot}: saved as set `{id}` — load it with `--load-set {id}`");
+                let said =
+                    format!("slot {slot}: saved as set `{id}` — load it with `--load-set {id}`");
+                eprintln!("{said}");
                 self.record_only(karakuri_store::record::Record::Save {
                     slot: slot as u8,
                     id,
                 });
+                Ok(said)
             }
             // **Printed, and nothing written.** See `Saved::outcome`.
-            Err(e) => eprintln!("slot {slot}: set `{id}` was not saved: {e}"),
+            Err(e) => {
+                let said = format!("slot {slot}: set `{id}` was not saved: {e}");
+                eprintln!("{said}");
+                Err(said)
+            }
+        };
+        if let Some(reply) = reply {
+            reply.settled(said);
         }
     }
 
@@ -5933,6 +6154,22 @@ impl Live {
     fn frame(&mut self) {
         self.run_demo();
         self.run_surface();
+        // **Both halves of the save path, and both above every early return
+        // below.** Taking the request here is [`Live::run_requests`]'s own
+        // reasoning: a client asking to keep what is playing should not be
+        // waiting on a swapchain, and nothing a request reaches needs the GPU.
+        // The drain used to sit under `frame::compose`, which implemented half
+        // of that and quietly withheld the other: a window latched to
+        // `Skip::Fault`, or returning `Outdated` every frame, returns before it
+        // — so the request was taken, the save thread wrote the file, and the
+        // client waited out `SAVE_REPLY` to be told the outcome was neither
+        // success nor failure about a save that had already landed. The
+        // terminal never said "saved as set X" either, and the `save` record
+        // was withheld from the stream until the run quit. A save's outcome has
+        // nothing to do with whether there is a surface to draw on, which is
+        // exactly what the two calls being here rather than there says.
+        self.run_requests();
+        self.finished_saves();
 
         // **The ordering that used to be a comment is now the shape of the
         // call.** A `tick` is a promise that the deck advanced by that many
@@ -6047,10 +6284,6 @@ impl Live {
         for (slot, landed) in procedures {
             self.took_up(slot, landed);
         }
-        // Beside the swap events and for the same reason: something asked for
-        // off this thread has finished, and the frame that notices is the frame
-        // that writes it down.
-        self.finished_saves();
         if set_changed {
             self.govern("build landed");
         }
@@ -8692,6 +8925,39 @@ mod live_save_tests {
         );
     }
 
+    /// **The two refusals a save can meet name the way out of them.**
+    ///
+    /// Both reach a model now as well as a terminal, which is what makes them
+    /// worth a test: `Live::save_set` needs a window and a GPU, so the sentences
+    /// live in free functions and this is where they are checked. The `--mcp`
+    /// half is a correction that has already been made once — this refusal named
+    /// `--watch` alone for as long as `--mcp` also made a slot savable, and sent
+    /// operators to restart a set for a flag they did not need.
+    #[test]
+    fn a_save_that_cannot_happen_says_why_and_what_would_change_it() {
+        let loaded = nothing_to_save(2, Some("night01"), true);
+        assert!(loaded.contains("`night01`"), "{loaded}");
+        assert!(loaded.contains("--watch"), "{loaded}");
+        assert!(
+            loaded.contains("--mcp"),
+            "a slot `--mcp` alone would have made savable was told to restart for \
+             `--watch`: {loaded}"
+        );
+
+        // A slot that has files behind it and nothing in the store is a
+        // different fact, and neither flag is the answer to it.
+        let unstored = nothing_to_save(2, Some("night01"), false);
+        assert!(
+            !unstored.contains("night01"),
+            "a slot with files of its own was told it came out of a set file: {unstored}"
+        );
+
+        // **The range, said without underflowing on a deck with no slots.** The
+        // arm that cannot happen is the one that stops saying so quietly.
+        assert_eq!(no_such_slot(9, 4), "no slot 9: this deck holds slots 0-3");
+        assert!(no_such_slot(0, 0).contains("holds none"));
+    }
+
     /// **A save still being written when the run ends is waited for**, so the
     /// `save` record README.md promises for every save that reached the disk is
     /// in the stream.
@@ -8709,6 +8975,8 @@ mod live_save_tests {
                 slot: 0,
                 id: "late".to_string(),
                 outcome: Ok(()),
+                // A hand pressed the key; nobody is waiting on a socket.
+                reply: None,
             })
         });
         let landed = drained_saves(&rx, 1, Instant::now() + SAVE_WAIT);
@@ -8729,5 +8997,61 @@ mod live_save_tests {
             started.elapsed() < Duration::from_secs(1),
             "a save that never reports back held the quit past its deadline"
         );
+    }
+
+    /// **Both halves of the save path sit above every early return in
+    /// [`Live::frame`]**, which is the whole of what makes an answer to a
+    /// waiting client independent of there being a swapchain.
+    ///
+    /// [`Live::run_requests`] argues this for itself: a frame that finds no
+    /// surface to draw on returns early, and a client asking to keep what is
+    /// playing should not be waiting on one. The *outcome* drain used to sit
+    /// below `frame::compose`, past three returns, so the argument was made and
+    /// then half applied. On a window latched to `frame::Skip::Fault`, or
+    /// returning `Outdated` every frame, the request was taken and the save
+    /// thread wrote the file successfully — and the client waited out
+    /// `mcp::SAVE_REPLY` to be told the outcome was neither success nor failure
+    /// about a save already on disk, the terminal never said "saved as set X",
+    /// and the `save` record `README.md` promises for every save that reached
+    /// the disk was withheld from the stream until the run quit.
+    ///
+    /// **Read off the source, and that is the honest description of what this
+    /// can reach.** `Live::frame` needs a window, a GPU and an event loop;
+    /// `README.md` says as much where it explains that the two replay defects
+    /// this project found both lived in this one function's statement order.
+    /// The defect here is a statement order too, and this asserts it where it
+    /// is, rather than asserting nothing and calling it untestable. Comment
+    /// lines are dropped first, so prose about returning cannot stand in for a
+    /// `return`.
+    #[test]
+    fn a_frame_attends_to_its_saves_before_it_can_return_early() {
+        let source = include_str!("main.rs");
+        let body = source
+            .split_once("\n    fn frame(&mut self) {")
+            .expect("`Live::frame` is no longer spelled that way")
+            .1;
+        let body = body
+            .split("\n    fn ")
+            .next()
+            .expect("the end of `Live::frame`");
+        let code: Vec<&str> = body
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect();
+        let code = code.join("\n");
+
+        let first_return = code
+            .find("return")
+            .expect("`Live::frame` no longer returns early, and this test is about when it does");
+        for call in ["self.run_requests();", "self.finished_saves();"] {
+            let at = code
+                .find(call)
+                .unwrap_or_else(|| panic!("`Live::frame` no longer calls `{call}`"));
+            assert!(
+                at < first_return,
+                "`{call}` is below an early return in `Live::frame`: a frame with nowhere \
+                 to draw takes saves and never answers for them"
+            );
+        }
     }
 }
