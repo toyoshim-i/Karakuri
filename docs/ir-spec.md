@@ -2937,7 +2937,7 @@ name drawn around some nodes.
 
 ### Metadata file format — M4
 
-**Four of the nine records below are written; nothing reads one back yet, and five have no
+**Four of the nine records below are written and one tool reads them back; five have no
 producer.** Both of the paths that store an artifact *from a compile* write a
 `<hash>.meta.ndjson` beside its `.kir`, carrying `meta`, `param_decl`, `capacity_decl` and
 `emit` — which is exactly what *"the `.kir` plus a compile pass"* can answer, because every
@@ -2958,8 +2958,11 @@ says what a procedure *declares*. The check is `Record::is_metadata` and not
 and telling an operator a `capacity_decl` was rejected for carrying time sends them looking
 in the wrong place.
 
-**`Store::read_meta` has no caller outside the tests**, which is the honest shape of this:
-the library that reads a card is M4's and the producing half arrived first.
+**One reader exists, and it is a narrow one.** MCP's `read_set` resolves a saved Set's
+nodes to their cards and renders what each procedure *declares*, so a model can weigh saved
+material without fetching and compiling every source. What is still M4's is the library
+around it: searching, grouping and walking genealogy over these files, none of which a
+per-Set lookup answers.
 
 **The other five wait on a producer, and an empty one would be worse than none.** `perf`
 is a measurement and wants the stage-7 probe — what a compile pass can answer is
@@ -2975,8 +2978,8 @@ has a hole at its root — which is a demand on whatever writes the first one, n
 write empty now.
 
 The store is content-addressed from M1, which is half of what M4 asks of it. This is the
-producing half of the other; the reading half — a library that searches, groups and walks
-genealogy over these files — is still M4's.
+producing half of the other, and one lookup over it; the *library* half — searching,
+grouping and walking genealogy over these files — is still M4's.
 
 Artifact metadata lives in a separate file, not in the `.kir` header. The `.kir` stays
 purely a source file that a human or an LLM can read and edit.

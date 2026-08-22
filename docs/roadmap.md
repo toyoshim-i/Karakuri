@@ -72,7 +72,10 @@ Orthogonal to the layers:
   unasked has no chat window to be asked in
 - **Library** — search, genealogy, embeddings, thumbnails (M4), on top of the content
   addressing that exists from M1. The separate metadata file it also wants is now written
-  for every stored artifact, and nothing reads one yet — see M4's demands
+  for every stored artifact **and read back**: the `read_set` MCP tool answers what a saved
+  Set holds off those cards, so a model choosing between kept material compiles nothing.
+  What is not built is the same reading at scale — search, grouping and genealogy across a
+  library rather than a lookup inside one Set. See M4's demands
 
 ### Three clocks
 
@@ -1931,13 +1934,18 @@ The two steps, if it does recur, in order of cost:
 
 - **The shipped examples as MCP resources.** They are files in the repository and they
   already work; exposing them is a `resources/list` entry each. Nothing infrastructural.
-- **Saved Sets and their artifacts as resources.** `--save-set` already writes one and the
-  store already content-addresses what it points at, so this is a lookup rather than a
-  feature.
+- ~~**Saved Sets and their artifacts as resources.**~~ **Built, and built as a tool** —
+  `read_set` takes the id of a saved Set and answers with what each of its nodes declares,
+  read off the metadata cards. The design point below is what decided the shape rather than
+  a preference: a user's Sets are not curated, not few, and not knowable when the server
+  starts, so they are asked for and not listed. It also fixed **which handle a model can
+  hold**: a card is filed under a content hash and nothing on this surface has ever handed a
+  model one, so a hash-addressed tool could not have been called a first time.
 
-Both now have a complication they did not have when they were scheduled: **`examples/` is
+The first now has a complication it did not have when it was scheduled: **`examples/` is
 app presets and a user's Sets are their own**, so a resource list has to say which is which.
-See the file layout in `docs/manual.md`.
+See the file layout in `docs/manual.md`. The second stopped needing that answer by not being
+a list.
 
 Embeddings, thumbnails and genealogy stay here in M4, because they answer *"which of two
 thousand"* and the above answers *"how is this written"*.
@@ -2068,9 +2076,17 @@ section of `docs/ir-spec.md`, where a reader meets the `camera` record.
   decodes them, can read the file back and refuses them from a Set file. `Store::put_artifact`
   writes no card of its own: it is content-addressed bytes and does not compile, so a card
   is the caller's to add, and `crates/karakuri-store/tests/store.rs` is full of puts that
-  add none — an artifact with no card is uncarded, not damaged. What is left of this demand is the *reading* half: `Store::read_meta`
-  has no caller outside the tests, and nothing searches, groups or walks these files, which
-  is the library this milestone is named for. See "Metadata file format" in
+  add none — an artifact with no card is uncarded, not damaged. **The reading half now has a
+  caller**, which it did not for as long as the writing half existed: the `read_set` MCP tool
+  takes the id of a saved Set, resolves its `slot` records to their cards and renders what
+  each node declares — every knob with its range and its default, the element count a
+  geometry may run at, the attributes it emits — so the question *"which of these kept things
+  should I use, and what can I turn on it"* is answered without fetching a source and
+  compiling it, which for a Set nobody has loaded nothing could answer at all. An artifact
+  with no card is described as uncarded there too, in words that do not read as a damaged
+  store, and one this store has never held is told apart from it. What is still owed is that
+  reading **at scale**: nothing searches, groups or walks these files across a library, which
+  is what this milestone is named for. See "Metadata file format" in
   `docs/ir-spec.md`
 - `parent` recorded from the first generated artifact, or the genealogy has a hole at the
   root. **Untouched, deliberately.** Nothing generates procedures, so `parent` has no
