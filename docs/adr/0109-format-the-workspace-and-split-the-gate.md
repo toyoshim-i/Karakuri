@@ -1,10 +1,10 @@
 ---
 id: 0109
 title: Format the workspace, and split the gate
-status: accepted
+status: superseded
 date: 2026-08-19
 supersedes: []
-superseded_by: []
+superseded_by: [0114]
 principles: [0054]
 tags: [process]
 ---
@@ -53,6 +53,14 @@ unformatted file. Both directions are now checked.
 - A slip worth recording: a temporary verification commit was cleaned up with `git reset --hard`,
   **taking the formatting result in the working tree with it**. `cargo fmt` is deterministic so
   nothing was lost, but `--soft` was what the situation needed.
+
+## Superseded
+
+The suite came off `pre-push` the next day in
+[ADR-0114](0114-tests-run-when-somebody-asks-not-when-git-does.md). The split survives and the
+formatting half is unchanged; what moved is that a branch push runs nothing and a **tag** push runs
+everything. This record's own rule — *a gate that takes minutes stops being a gate* — was right and
+pointed one step further than it went.
 
 ## Evidence
 

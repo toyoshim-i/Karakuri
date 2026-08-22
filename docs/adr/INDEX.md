@@ -10,9 +10,9 @@ index is maintained by hand — see ADR-0000 for when that stops being enough.
 `principles/` has no index. `ls docs/principles/` is the index, because each filename is the
 rule it states.
 
-**Reconstruction is in progress.** Records are being recovered in date order from the session
-history that runs from 2026-07-25. Everything through **2026-08-19** is written; the numbering
-is chronological, so later dates take later numbers.
+**The reconstruction is complete.** Every day of the session history from 2026-07-25 to 2026-08-22
+has been read and its decisions recovered. Numbering is chronological, so a later date takes a later
+number; new records continue from the end.
 
 ## Records
 
@@ -127,11 +127,19 @@ is chronological, so later dates take later numbers.
 | [ADR-0106](0106-an-error-scope-not-a-second-process.md) | An error scope, not a second process | 2026-08-18 | accepted |
 | [ADR-0107](0107-a-chain-is-materialised-per-source.md) | A chain is materialised per source | 2026-08-18 | accepted |
 | [ADR-0108](0108-cross-source-pairing-is-a-set-level-operation.md) | Cross-source pairing is a Set-level operation | 2026-08-18 | accepted |
-| [ADR-0109](0109-format-the-workspace-and-split-the-gate.md) | Format the workspace, and split the gate | 2026-08-19 | accepted |
+| [ADR-0109](0109-format-the-workspace-and-split-the-gate.md) | Format the workspace, and split the gate | 2026-08-19 | **superseded by ADR-0114** |
 | [ADR-0110](0110-this-machine-is-not-the-reference.md) | This machine is not the reference | 2026-08-19 | accepted |
 | [ADR-0111](0111-a-name-lives-in-the-set-file-and-may-be-written-on-the-command-line.md) | A name lives in the Set file and may be written on the command line | 2026-08-19 | accepted |
 | [ADR-0112](0112-what-complete-required-and-what-m3-cost.md) | What "complete" required, and what M3 cost | 2026-08-19 | accepted |
 | [ADR-0113](0113-the-slot-narrowing-beat-its-estimate.md) | The slot narrowing beat its estimate, and why is the finding | 2026-08-19 | accepted |
+| [ADR-0114](0114-tests-run-when-somebody-asks-not-when-git-does.md) | Tests run when somebody asks, not when git does | 2026-08-20 | accepted |
+| [ADR-0115](0115-split-work-by-file-not-by-phase.md) | Split work by file, not by phase | 2026-08-20 | accepted |
+| [ADR-0116](0116-stage-four-stops-claiming-the-byte-figure.md) | Stage 4 stops claiming the byte figure; the engine reports it | 2026-08-20 | accepted |
+| [ADR-0117](0117-before-v1-pay-the-cost-of-changing-toward-the-ideal.md) | Before v1, pay the cost of changing toward the ideal | 2026-08-21 | accepted |
+| [ADR-0118](0118-the-built-in-camera-is-a-node-unconditionally-and-last.md) | The built-in camera is a node, unconditionally and last | 2026-08-21 | accepted |
+| [ADR-0119](0119-source-binds-a-uniform-and-is-read-as-a-value.md) | `Source` binds a uniform and is read as a value | 2026-08-21 | accepted |
+| [ADR-0120](0120-a-record-may-reach-outside-the-stream.md) | A record may reach outside the stream, and a replay is a sandbox | 2026-08-22 | accepted |
+| [ADR-0121](0121-moving-code-leaves-its-reasoning-behind.md) | Moving code leaves its reasoning behind | 2026-08-20 | accepted |
 
 ## Retired numbers
 
@@ -249,20 +257,27 @@ never reused.
 | [ADR-0106](0106-an-error-scope-not-a-second-process.md) | An error scope, not a second process | 2026-08-18 | accepted |
 | [ADR-0107](0107-a-chain-is-materialised-per-source.md) | A chain is materialised per source | 2026-08-18 | accepted |
 | [ADR-0108](0108-cross-source-pairing-is-a-set-level-operation.md) | Cross-source pairing is a Set-level operation | 2026-08-18 | accepted |
-| [ADR-0109](0109-format-the-workspace-and-split-the-gate.md) | Format the workspace, and split the gate | 2026-08-19 | accepted |
+| [ADR-0109](0109-format-the-workspace-and-split-the-gate.md) | Format the workspace, and split the gate | 2026-08-19 | **superseded by ADR-0114** |
 | [ADR-0110](0110-this-machine-is-not-the-reference.md) | This machine is not the reference | 2026-08-19 | accepted |
 | [ADR-0111](0111-a-name-lives-in-the-set-file-and-may-be-written-on-the-command-line.md) | A name lives in the Set file and may be written on the command line | 2026-08-19 | accepted |
 | [ADR-0112](0112-what-complete-required-and-what-m3-cost.md) | What "complete" required, and what M3 cost | 2026-08-19 | accepted |
 | [ADR-0113](0113-the-slot-narrowing-beat-its-estimate.md) | The slot narrowing beat its estimate, and why is the finding | 2026-08-19 | accepted |
+| [ADR-0114](0114-tests-run-when-somebody-asks-not-when-git-does.md) | Tests run when somebody asks, not when git does | 2026-08-20 | accepted |
+| [ADR-0115](0115-split-work-by-file-not-by-phase.md) | Split work by file, not by phase | 2026-08-20 | accepted |
+| [ADR-0116](0116-stage-four-stops-claiming-the-byte-figure.md) | Stage 4 stops claiming the byte figure; the engine reports it | 2026-08-20 | accepted |
+| [ADR-0117](0117-before-v1-pay-the-cost-of-changing-toward-the-ideal.md) | Before v1, pay the cost of changing toward the ideal | 2026-08-21 | accepted |
+| [ADR-0118](0118-the-built-in-camera-is-a-node-unconditionally-and-last.md) | The built-in camera is a node, unconditionally and last | 2026-08-21 | accepted |
+| [ADR-0119](0119-source-binds-a-uniform-and-is-read-as-a-value.md) | `Source` binds a uniform and is read as a value | 2026-08-21 | accepted |
+| [ADR-0120](0120-a-record-may-reach-outside-the-stream.md) | A record may reach outside the stream, and a replay is a sandbox | 2026-08-22 | accepted |
+| [ADR-0121](0121-moving-code-leaves-its-reasoning-behind.md) | Moving code leaves its reasoning behind | 2026-08-20 | accepted |
 
 Re-pointing the records that cited a retired principle is permitted, and why, is
 [ADR-0059](0059-a-records-pointer-into-the-principles-registry-is-metadata.md).
 
 ## Standing rules with no record yet
 
-A principle with no ADR is one whose reasoning is still only in the code and the specification.
-These predate the reconstruction reaching their decision date.
+A principle with no ADR is one whose reasoning is still only in the code and the specification. These
+are the survivors of the first pass, written before the reconstruction reached their decision date.
 
-- [P-0002](../principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md) — Simulation time comes from a record, never from a clock *(ADR-0006 covers the tick record; the clock-for-cost exception is still unrecorded)*
 - [P-0005](../principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md) — A swap happens on a frame boundary, and an over-budget Set rolls back on its own
 - [P-0006](../principles/0006-the-workspace-stays-closed-to-rust.md) — The workspace stays closed to Rust
