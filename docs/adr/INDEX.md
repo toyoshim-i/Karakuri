@@ -11,7 +11,7 @@ index is maintained by hand — see ADR-0000 for when that stops being enough.
 rule it states.
 
 **Reconstruction is in progress.** Records are being recovered in date order from the session
-history that runs from 2026-07-25. Everything through **2026-08-01** is written; the numbering
+history that runs from 2026-07-25. Everything through **2026-08-03** is written; the numbering
 is chronological, so later dates take later numbers.
 
 ## Records
@@ -78,6 +78,15 @@ is chronological, so later dates take later numbers.
 | [ADR-0057](0057-the-transport-is-driven-by-position-not-by-tempo-and-phase.md) | The transport is driven by position, not by tempo and phase | 2026-08-01 | accepted |
 | [ADR-0058](0058-closed-form-is-worth-more-for-scrubbing-than-for-priming.md) | Closed form is worth more for scrubbing than for priming | 2026-08-01 | accepted |
 | [ADR-0059](0059-a-records-pointer-into-the-principles-registry-is-metadata.md) | A record's pointer into the principles registry is metadata | 2026-08-01 | accepted |
+| [ADR-0060](0060-the-tempo-octave-is-folded-not-judged.md) | The tempo octave is folded, not judged | 2026-08-02 | accepted |
+| [ADR-0061](0061-residency-is-requested-by-the-operator-and-effective-by-the-governor.md) | Residency is requested by the operator and effective by the governor | 2026-08-02 | accepted |
+| [ADR-0062](0062-warming-and-cooling-are-transitions-not-states.md) | Warming and Cooling are transitions, not states | 2026-08-02 | accepted |
+| [ADR-0063](0063-an-invariant-that-is-not-yet-true-says-so.md) | An invariant that is not yet true says so | 2026-08-02 | accepted |
+| [ADR-0064](0064-a-replaced-passage-is-read-to-its-end.md) | A replaced passage is read to its end | 2026-08-02 | accepted |
+| [ADR-0065](0065-transport-is-two-mechanisms-and-closed-form-is-the-seam.md) | Transport is two mechanisms, and closed form is the seam | 2026-08-03 | accepted |
+| [ADR-0066](0066-a-flag-becomes-a-record-writer.md) | A flag becomes a record writer, and a Set file matches it byte for byte | 2026-08-03 | accepted |
+| [ADR-0067](0067-the-session-writer-never-blocks-grows-or-silently-drops.md) | The session writer never blocks, never grows, and never silently drops | 2026-08-03 | accepted |
+| [ADR-0068](0068-a-timestamp-is-checked-against-a-second-measurement-not-a-constant.md) | A timestamp is checked against a second measurement, not against a constant | 2026-08-03 | accepted |
 
 ## Retired numbers
 
@@ -86,8 +95,75 @@ never reused.
 
 | Retired | Was | Replaced by | Why |
 | --- | --- | --- | --- |
-| P-0015 | One record tag is one record shape | [P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md) | The same rule holds for any name, not only a record tag — found when `"noise"` meant two things at two confidences |
-| P-0022 | Closed-form material needs no warming | [P-0032](../principles/0032-closed-form-means-scrubbable.md) | Not needing warming is the smaller half; the larger one is being scrubbable |
+| [ADR-0000](0000-record-decisions-here-and-standing-rules-in-principles.md) | Record decisions here and standing rules in principles/ | 2026-08-22 | accepted |
+| [ADR-0001](0001-identity-is-seed-an-ordinal-not-a-slot-index.md) | Identity is `seed`, an ordinal, and `id` is dropped | 2026-07-25 | accepted |
+| [ADR-0002](0002-compaction-preserves-order-and-determinism-is-bit-exact.md) | Compaction preserves order, and determinism means bit-exact | 2026-07-25 | accepted |
+| [ADR-0003](0003-hash-builtins-are-salted-from-the-seed-stream.md) | Hash builtins are salted from the layer's seed stream | 2026-07-25 | **superseded by ADR-0024** |
+| [ADR-0004](0004-var-is-added-so-a-loop-can-carry-a-value.md) | `var` is added so a loop can carry a value | 2026-07-25 | accepted |
+| [ADR-0005](0005-spawn-is-an-accumulator-and-the-engine-owns-the-birth-fraction.md) | Spawn is an accumulator, and the engine owns the birth fraction | 2026-07-25 | accepted |
+| [ADR-0006](0006-the-step-count-is-a-record-not-a-measurement.md) | The step count is a record, not a measurement | 2026-07-25 | accepted |
+| [ADR-0007](0007-a-set-file-is-a-projection-and-a-session-stream-is-the-timeline.md) | A Set file is a projection; a session stream is the timeline | 2026-07-25 | accepted |
+| [ADR-0008](0008-blend-is-declared-now-so-the-second-mode-is-an-addition.md) | `blend` is declared now, so the second mode is an addition | 2026-07-25 | accepted |
+| [ADR-0009](0009-capacity-is-a-dial-not-part-of-a-procedures-identity.md) | `capacity` is a dial, not part of a procedure's identity | 2026-07-25 | accepted |
+| [ADR-0010](0010-one-t-value-is-one-record-shape.md) | One `t` value is one record shape, across every file | 2026-07-25 | accepted |
+| [ADR-0011](0011-a-noise-binding-carries-a-kind-and-a-rate-in-beats.md) | A noise binding carries a kind and a rate in beats | 2026-07-25 | accepted |
+| [ADR-0012](0012-one-severity-and-a-rejection-carries-numbers.md) | One severity, and a rejection carries the numbers | 2026-07-25 | accepted |
+| [ADR-0013](0013-cost-has-three-axes-that-must-not-be-added.md) | Cost has three axes, and they must not be added | 2026-07-25 | accepted |
+| [ADR-0014](0014-generated-code-cannot-be-captured-by-a-name-a-procedure-can-spell.md) | Generated code cannot be captured by a name a procedure can spell | 2026-07-25 | accepted |
+| [ADR-0015](0015-a-measurement-carries-how-it-was-taken.md) | A measurement carries how it was taken | 2026-07-25 | accepted |
+| [ADR-0016](0016-agents-leave-work-in-the-tree-and-the-reviewer-commits.md) | Agents leave work in the tree; the reviewer commits | 2026-07-25 | accepted |
+| [ADR-0017](0017-an-invariant-that-can-be-tested-is-a-test.md) | An invariant that can be tested is a test, not a sentence | 2026-07-25 | accepted |
+| [ADR-0018](0018-three-documents-three-jobs.md) | Three documents, three jobs | 2026-07-26 | **superseded by ADR-0000** |
+| [ADR-0019](0019-exposure-is-three-things-and-none-stands-in-for-another.md) | Exposure is three things, and none of them stands in for another | 2026-07-26 | accepted |
+| [ADR-0020](0020-a-corpus-expresses-taste-and-never-a-missing-feature.md) | A corpus expresses taste, and never a missing feature | 2026-07-26 | accepted |
+| [ADR-0021](0021-a-palette-is-the-library-filtered-not-a-new-object.md) | A palette is the library filtered, not a new object | 2026-07-26 | accepted |
+| [ADR-0022](0022-revision-goes-param-then-range-then-regeneration.md) | Revision goes param, then range, then regeneration | 2026-07-26 | accepted |
+| [ADR-0023](0023-regeneration-is-destructive-in-a-slot-and-safe-in-the-library.md) | Regeneration is destructive in a slot and non-destructive in the library | 2026-07-26 | accepted |
+| [ADR-0024](0024-each-source-counts-from-zero-and-carries-a-source-attribute.md) | Each source counts from zero and carries a `source` attribute | 2026-07-26 | accepted |
+| [ADR-0025](0025-sources-are-distinguished-downstream-and-a-renderer-never-branches-on-one.md) | Sources are distinguished downstream, and a renderer never branches on one | 2026-07-26 | accepted |
+| [ADR-0026](0026-the-deck-is-l5s-surface-and-its-size-is-two-budgets.md) | The deck is L5's surface, and its size is two budgets | 2026-07-26 | accepted |
+| [ADR-0027](0027-a-set-value-is-immutable-and-its-compiled-instance-is-not.md) | A Set value is immutable; its compiled instance is not | 2026-07-26 | accepted |
+| [ADR-0028](0028-closed-form-and-accumulating-is-a-static-classification.md) | Closed-form and accumulating is a static classification | 2026-07-26 | accepted |
+| [ADR-0029](0029-amplification-is-a-second-kind-of-l2-not-a-new-layer.md) | Amplification is a second kind of L2, not a new layer | 2026-07-26 | accepted |
+| [ADR-0030](0030-simulation-time-comes-from-an-integer-step-count.md) | Simulation time comes from an integer step count, and advances per substep | 2026-07-27 | accepted |
+| [ADR-0031](0031-a-document-describing-replaced-behaviour-is-worse-than-none.md) | A document describing replaced behaviour is worse than none | 2026-07-27 | accepted |
+| [ADR-0032](0032-nothing-checks-clean-and-comes-up-short-at-runtime.md) | Nothing checks clean and comes up short at runtime | 2026-07-30 | accepted |
+| [ADR-0033](0033-freeing-on-the-render-thread-is-the-same-invariant-as-allocating.md) | Freeing on the render thread is the same invariant as allocating | 2026-07-27 | accepted |
+| [ADR-0034](0034-the-frame-guard-owns-the-encoder.md) | The frame guard owns the encoder | 2026-07-30 | accepted |
+| [ADR-0035](0035-claude-is-removed-from-history-while-there-is-no-remote.md) | `.claude/` is removed from history while there is no remote | 2026-07-30 | accepted |
+| [ADR-0036](0036-the-first-m2-slice-is-two-sets-mixed-through-a-tone-mapper.md) | The first M2 slice is two Sets, mixed, through a tone mapper | 2026-07-30 | accepted |
+| [ADR-0037](0037-tone-mapping-is-a-uniform-and-the-default-is-chosen-by-looking.md) | Tone mapping is a uniform, and the default is chosen by looking | 2026-07-30 | accepted |
+| [ADR-0038](0038-a-deck-of-one-is-bit-identical-to-a-bare-set.md) | A deck of one is bit-identical to a bare Set | 2026-07-30 | accepted |
+| [ADR-0039](0039-the-artifacts-exposure-returns-to-one-as-a-convention.md) | The artifact's exposure returns to 1.0, as a convention | 2026-07-31 | accepted |
+| [ADR-0040](0040-a-gain-of-zero-means-no-contribution-so-the-slot-is-skipped.md) | A gain of zero means no contribution, so the slot is skipped | 2026-07-31 | accepted |
+| [ADR-0041](0041-a-candidate-is-judged-only-on-frames-it-contributed-to.md) | A candidate is judged only on the frames it contributed to | 2026-07-31 | accepted |
+| [ADR-0042](0042-a-silently-wrong-image-loses-to-a-loud-failure.md) | A silently wrong image loses to a loud failure | 2026-07-31 | accepted |
+| [ADR-0043](0043-the-meter-never-waits-and-the-deck-owns-it.md) | The meter never waits, and the deck owns it | 2026-07-31 | accepted |
+| [ADR-0044](0044-a-test-that-survives-mutation-is-not-a-test.md) | A test that survives mutation is not a test | 2026-07-31 | accepted |
+| [ADR-0045](0045-the-cli-is-an-instrument-not-a-demo.md) | The CLI is an instrument, not a demo | 2026-07-31 | accepted |
+| [ADR-0046](0046-a-flag-writes-into-the-record-it-does-not-invent-one.md) | A flag writes into the record; it does not invent one | 2026-07-31 | accepted |
+| [ADR-0047](0047-a-binding-blends-on-confidence.md) | A binding blends on confidence | 2026-07-31 | accepted |
+| [ADR-0048](0048-four-curves-because-a-fifth-is-a-re-parameterisation.md) | Four curves, because a fifth is a re-parameterisation | 2026-07-31 | accepted |
+| [ADR-0049](0049-slot-means-two-things-and-the-clash-is-recorded.md) | `Slot` means two things, and the clash is recorded rather than resolved | 2026-07-31 | accepted |
+| [ADR-0050](0050-a-declared-generator-is-certain.md) | A declared generator is certain, and a sample is not always in [0,1] | 2026-08-01 | accepted |
+| [ADR-0051](0051-a-name-means-one-thing-so-the-buss-noise-entry-is-deleted.md) | A name means one thing, so the bus's `noise` entry is deleted | 2026-08-01 | accepted |
+| [ADR-0052](0052-a-parameter-is-keyed-by-its-layer-and-a-collision-is-refused.md) | A parameter is keyed by its layer, and a collision is refused meanwhile | 2026-08-01 | accepted |
+| [ADR-0053](0053-priming-runs-the-simulation-and-skips-rendering.md) | Priming runs the simulation and skips rendering entirely | 2026-08-01 | accepted |
+| [ADR-0054](0054-the-governor-budgets-from-the-probe-and-never-touches-a-live-slot.md) | The governor budgets from the probe, and never touches a Live slot | 2026-08-01 | accepted |
+| [ADR-0055](0055-a-measurement-enters-the-record-stream-raw-audio-does-not.md) | A measurement enters the record stream; raw audio does not | 2026-08-01 | accepted |
+| [ADR-0056](0056-beat-lock-is-feed-forward-and-the-unmeasurable-part-is-an-offset.md) | Beat lock is feed-forward, and the unmeasurable part is an offset | 2026-08-01 | accepted |
+| [ADR-0057](0057-the-transport-is-driven-by-position-not-by-tempo-and-phase.md) | The transport is driven by position, not by tempo and phase | 2026-08-01 | accepted |
+| [ADR-0058](0058-closed-form-is-worth-more-for-scrubbing-than-for-priming.md) | Closed form is worth more for scrubbing than for priming | 2026-08-01 | accepted |
+| [ADR-0059](0059-a-records-pointer-into-the-principles-registry-is-metadata.md) | A record's pointer into the principles registry is metadata | 2026-08-01 | accepted |
+| [ADR-0060](0060-the-tempo-octave-is-folded-not-judged.md) | The tempo octave is folded, not judged | 2026-08-02 | accepted |
+| [ADR-0061](0061-residency-is-requested-by-the-operator-and-effective-by-the-governor.md) | Residency is requested by the operator and effective by the governor | 2026-08-02 | accepted |
+| [ADR-0062](0062-warming-and-cooling-are-transitions-not-states.md) | Warming and Cooling are transitions, not states | 2026-08-02 | accepted |
+| [ADR-0063](0063-an-invariant-that-is-not-yet-true-says-so.md) | An invariant that is not yet true says so | 2026-08-02 | accepted |
+| [ADR-0064](0064-a-replaced-passage-is-read-to-its-end.md) | A replaced passage is read to its end | 2026-08-02 | accepted |
+| [ADR-0065](0065-transport-is-two-mechanisms-and-closed-form-is-the-seam.md) | Transport is two mechanisms, and closed form is the seam | 2026-08-03 | accepted |
+| [ADR-0066](0066-a-flag-becomes-a-record-writer.md) | A flag becomes a record writer, and a Set file matches it byte for byte | 2026-08-03 | accepted |
+| [ADR-0067](0067-the-session-writer-never-blocks-grows-or-silently-drops.md) | The session writer never blocks, never grows, and never silently drops | 2026-08-03 | accepted |
+| [ADR-0068](0068-a-timestamp-is-checked-against-a-second-measurement-not-a-constant.md) | A timestamp is checked against a second measurement, not against a constant | 2026-08-03 | accepted |
 
 Re-pointing the records that cited a retired principle is permitted, and why, is
 [ADR-0059](0059-a-records-pointer-into-the-principles-registry-is-metadata.md).
