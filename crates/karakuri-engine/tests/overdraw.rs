@@ -23,7 +23,7 @@
 // that enforces it, are in `tests/gpu_tests_are_under_mod_gpu.rs`.
 mod gpu {
     use karakuri_engine::binding::{Binding, Curve};
-    use karakuri_engine::{Gpu, Present, Set, SetError, Signals, VideoSource};
+    use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
     use karakuri_ir::typed::Checked;
     use karakuri_ir::Kind;
 
@@ -33,7 +33,7 @@ mod gpu {
     /// Two elements at fixed positions, no spawning, no motion — the picture is a
     /// pure function of `seed`, so every Set below gets literally identical
     /// geometry however many renderers read it.
-    const PAIR_L1: &str = r#"
+    pub(super) const PAIR_L1: &str = r#"
 proc pair {
   kind     L1
   topology points
@@ -112,7 +112,7 @@ proc {name} {{
         )
     }
 
-    fn compile(src: &str) -> Checked {
+    pub(super) fn compile(src: &str) -> Checked {
         let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
         let checked =
             karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
@@ -130,24 +130,6 @@ proc {name} {{
     /// A Set over [`PAIR_L1`] with `l4s` as its renderers, in draw order.
     fn build(gpu: &Gpu, l4s: &[&str]) -> Set {
         build_over(gpu, PAIR_L1, l4s)
-    }
-
-    fn try_build(gpu: &Gpu, l1: &str, l4s: &[&str]) -> Result<Set, SetError> {
-        let compiled: Vec<Checked> = l4s.iter().map(|s| compile(s)).collect();
-        let refs: Vec<&Checked> = compiled.iter().collect();
-        Set::build_many(
-            &gpu.device,
-            &gpu.queue,
-            &[(&compile(l1), 2)],
-            &[],
-            &[],
-            &[],
-            &refs,
-            karakuri_engine::set::Layering::Overdraw,
-            3,
-            &[],
-            karakuri_engine::set::Wiring::default(),
-        )
     }
 
     fn build_over(gpu: &Gpu, l1: &str, l4s: &[&str]) -> Set {
@@ -700,26 +682,6 @@ proc wash {
         );
     }
 
-    /// **A Set with nothing to draw is refused rather than built.** A `Set` is a
-    /// video source, and a video source with no frame to give has no useful
-    /// behaviour to fall back on — and `all(is_fullscreen)` over an empty list is
-    /// vacuously true, which would silently stop the simulation as well.
-    #[test]
-    fn a_set_with_no_renderer_is_refused() {
-        let gpu = Gpu::headless().expect("no GPU available");
-        let Err(err) = try_build(&gpu, PAIR_L1, &[]) else {
-            panic!("a Set with no renderer was built");
-        };
-        assert!(
-            matches!(err, SetError::NoRenderer { .. }),
-            "the wrong diagnostic for an empty stack: {err}"
-        );
-        assert!(
-            err.to_string().contains("pair"),
-            "the message does not name the L1: {err}"
-        );
-    }
-
     /// **The addressed write is what a bare name cannot do: set two renderers'
     /// `exposure` apart.**
     ///
@@ -844,6 +806,56 @@ proc wash {
             (resolved(0), resolved(1)),
             (1.0, 0.25),
             "the two bindings blended from one node's declaration rather than their own"
+        );
+    }
+}
+
+/// **The refusal, which reaches no device.**
+///
+/// A Set with no renderer is turned away before anything is compiled — the
+/// check is `Set::validate`'s, and `Set::build_many` reaches it by calling
+/// that rather than by keeping a copy.
+mod refused {
+    use super::gpu::{compile, PAIR_L1};
+    use karakuri_engine::set::{Layering, SetError, Wiring};
+    use karakuri_engine::Set;
+    use karakuri_ir::typed::Checked;
+
+    /// One L1 at capacity 2 and these renderers over it, which is the Set
+    /// every overdraw test in this file is built from — minus the device.
+    fn validate_over(l1: &str, l4s: &[&str]) -> Result<(), SetError> {
+        let compiled: Vec<Checked> = l4s.iter().map(|s| compile(s)).collect();
+        let refs: Vec<&Checked> = compiled.iter().collect();
+        Set::validate(
+            &[(&compile(l1), 2)],
+            &[],
+            &[],
+            &[],
+            &refs,
+            Layering::Overdraw,
+            3,
+            &[],
+            Wiring::default(),
+        )
+        .map(|_| ())
+    }
+
+    /// **A Set with nothing to draw is refused rather than built.** A `Set` is a
+    /// video source, and a video source with no frame to give has no useful
+    /// behaviour to fall back on — and `all(is_fullscreen)` over an empty list is
+    /// vacuously true, which would silently stop the simulation as well.
+    #[test]
+    fn a_set_with_no_renderer_is_refused() {
+        let Err(err) = validate_over(PAIR_L1, &[]) else {
+            panic!("a Set with no renderer was built");
+        };
+        assert!(
+            matches!(err, SetError::NoRenderer { .. }),
+            "the wrong diagnostic for an empty stack: {err}"
+        );
+        assert!(
+            err.to_string().contains("pair"),
+            "the message does not name the L1: {err}"
         );
     }
 }

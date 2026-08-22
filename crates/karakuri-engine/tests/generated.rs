@@ -21,12 +21,12 @@ mod gpu {
 
     const WIDTH: u32 = 256;
     const HEIGHT: u32 = 256;
-    const CAPACITY: u32 = 4096;
+    pub(super) const CAPACITY: u32 = 4096;
 
     /// A procedure with no `spawn` block: every element is live from frame zero and
     /// `seed` is its slot index, which is the simplest form the spec describes and
     /// the one that needs no compaction to run.
-    const L1: &str = r#"
+    pub(super) const L1: &str = r#"
 proc static_shell {
   kind     L1
   topology points
@@ -50,7 +50,7 @@ proc static_shell {
 }
 "#;
 
-    const L4: &str = r#"
+    pub(super) const L4: &str = r#"
 proc soft_points {
   kind  L4
   blend additive
@@ -78,7 +78,7 @@ proc soft_points {
 
     /// Everything stages 1 through 4 do, with the diagnostics rendered against the
     /// source if any stage refuses.
-    fn compile(src: &str) -> Checked {
+    pub(super) fn compile(src: &str) -> Checked {
         let proc = karakuri_ir::parse(src).unwrap_or_else(|errs| panic!("{}", render(&errs, src)));
         let checked = karakuri_ir::check::check(&proc)
             .unwrap_or_else(|errs| panic!("{}", render(&errs, src)));
@@ -224,24 +224,11 @@ proc soft_points {
         assert!(dense > sparse, "sparse {sparse}, dense {dense}");
     }
 
-    #[test]
-    fn a_capacity_outside_the_declared_range_is_refused() {
-        let gpu = Gpu::headless().expect("no GPU available");
-        let l1 = compile(L1);
-        let l4 = compile(L4);
-        let result = Set::build(&gpu.device, &gpu.queue, &l1, &l4, 999_999, 1);
-        let msg = match result {
-            Ok(_) => panic!("999999 is above the declared maximum and was accepted"),
-            Err(e) => e.to_string(),
-        };
-        assert!(msg.contains("999999") && msg.contains("262144"), "{msg}");
-    }
-
     /// An L1 emitting exactly `attrs` and writing nothing else. Narrowing `L1`'s
     /// own `emit` will not do: an attribute is writable only where it is emitted,
     /// so dropping one from the list makes the body itself illegal and the failure
     /// lands in the checker rather than at composition.
-    fn narrow_l1(attrs: &str) -> String {
+    pub(super) fn narrow_l1(attrs: &str) -> String {
         let writes: String = attrs
             .split(", ")
             .map(|a| match a {
@@ -266,7 +253,7 @@ proc soft_points {
     /// two as their "unsatisfiable" fixture and started passing for the wrong
     /// reason — a refusal test whose fixture became satisfiable asserts nothing and
     /// says nothing about it.
-    const L4_UNSATISFIABLE: &str = r#"
+    pub(super) const L4_UNSATISFIABLE: &str = r#"
 proc wants_shape {
   kind  L4
   blend additive
@@ -290,34 +277,8 @@ proc wants_shape {
     /// Without this check it surfaces as a WGSL parse failure from inside
     /// `create_shader_module`, which is an internal error where the contract calls
     /// for a diagnostic naming what to fix.
-    #[test]
-    fn an_l4_consuming_what_the_l1_never_emits_is_refused() {
-        let gpu = Gpu::headless().expect("no GPU available");
-        let l1 = compile(&narrow_l1("position, normal"));
-        let l4 = compile(L4_UNSATISFIABLE);
-        let result = Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, 1);
-        let msg = match result {
-            Ok(_) => panic!("`uv` is consumed, never emitted, and has no rule — and was accepted"),
-            Err(e) => e.to_string(),
-        };
-        assert!(msg.contains("uv"), "{msg}");
-        assert!(msg.contains("emit"), "no hint at what to do: {msg}");
-    }
-
     /// Every missing attribute at once, not just the first — a regeneration should
     /// be able to fix all of them in one pass. Same rule the IR checker follows.
-    #[test]
-    fn a_composition_error_names_every_missing_attribute() {
-        let gpu = Gpu::headless().expect("no GPU available");
-        let l1 = compile(&narrow_l1("position"));
-        let l4 = compile(L4_UNSATISFIABLE);
-        let msg = match Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, 1) {
-            Ok(_) => panic!("two attributes are missing and the pair was accepted"),
-            Err(e) => e.to_string(),
-        };
-        assert!(msg.contains("normal") && msg.contains("uv"), "{msg}");
-    }
-
     /// **And the pair that used to fail now composes**, which is the other half of
     /// the change and the half a refusal test cannot state. An L1 emitting only
     /// `position` paired with a renderer wanting `velocity` and `age` builds, and
@@ -482,5 +443,96 @@ proc accumulate {
             err.contains("this device refused") || err.contains("outside the range"),
             "a device refusal has to arrive as a message: {err}"
         );
+    }
+}
+
+/// **The refusals, which reach no device.**
+///
+/// Each of these used to acquire an adapter and hand `Set::build` two
+/// procedures, purely to be told the pair was illegal — a check that runs
+/// before a single pipeline is built, reachable only through a constructor
+/// that took a `&wgpu::Device`. `Set::validate` is that check pass on its own,
+/// and `Set::build_many` reaches it by calling it: there is one copy of each
+/// rule below, and this module and the build path both go through it.
+mod refused {
+    use super::gpu::{compile, narrow_l1, CAPACITY, L1, L4, L4_UNSATISFIABLE};
+    use karakuri_engine::set::{Layering, Wiring};
+    use karakuri_engine::Set;
+    use karakuri_ir::typed::Checked;
+
+    /// One geometry at `capacity`, one renderer over it and nothing else —
+    /// written out because it is the Set under test, and it is the same shape
+    /// `Set::build` hands to `Set::build_many`.
+    ///
+    /// Returns the refusal's sentence, and says `why` loudly when there was
+    /// none: a check that starts accepting is the failure this module exists
+    /// to catch, and it is the one a bare `expect_err` would report as "called
+    /// `Result::unwrap_err()` on an `Ok` value".
+    fn refused(l1: &Checked, l4: &Checked, capacity: u32, why: &str) -> String {
+        match Set::validate(
+            &[(l1, capacity)],
+            &[],
+            &[],
+            &[],
+            &[l4],
+            Layering::Overdraw,
+            1,
+            &[],
+            Wiring::default(),
+        ) {
+            Ok(_) => panic!("{why}"),
+            Err(e) => e.to_string(),
+        }
+    }
+
+    /// `capacity` is a Set-level dial and the range is the artifact's, so this
+    /// is the one comparison neither the checker nor the device can make.
+    #[test]
+    fn a_capacity_outside_the_declared_range_is_refused() {
+        let l1 = compile(L1);
+        let l4 = compile(L4);
+        let msg = refused(
+            &l1,
+            &l4,
+            999_999,
+            "999999 is above the declared maximum and was accepted",
+        );
+        assert!(msg.contains("999999") && msg.contains("262144"), "{msg}");
+    }
+
+    /// Stage 6, the one check that needs both procedures at once. An L4 reads
+    /// the element struct its paired L1 wrote, so consuming an attribute that
+    /// L1 never emitted — and that nothing knows how to synthesise — has no
+    /// field to read. Without this check it surfaces as a WGSL parse failure
+    /// from inside `create_shader_module`, which is an internal error where the
+    /// contract calls for a diagnostic naming what to fix.
+    #[test]
+    fn an_l4_consuming_what_the_l1_never_emits_is_refused() {
+        let l1 = compile(&narrow_l1("position, normal"));
+        let l4 = compile(L4_UNSATISFIABLE);
+        let msg = refused(
+            &l1,
+            &l4,
+            CAPACITY,
+            "`uv` is consumed, never emitted, and has no rule — and was accepted",
+        );
+        assert!(msg.contains("uv"), "{msg}");
+        assert!(msg.contains("emit"), "no hint at what to do: {msg}");
+    }
+
+    /// Every missing attribute at once, not just the first — a regeneration
+    /// should be able to fix all of them in one pass. Same rule the IR checker
+    /// follows.
+    #[test]
+    fn a_composition_error_names_every_missing_attribute() {
+        let l1 = compile(&narrow_l1("position"));
+        let l4 = compile(L4_UNSATISFIABLE);
+        let msg = refused(
+            &l1,
+            &l4,
+            CAPACITY,
+            "two attributes are missing and the pair was accepted",
+        );
+        assert!(msg.contains("normal") && msg.contains("uv"), "{msg}");
     }
 }

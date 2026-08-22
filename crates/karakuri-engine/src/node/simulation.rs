@@ -9,7 +9,7 @@ use karakuri_ir::typed::Checked;
 
 use super::{Geometry, Tick};
 use crate::compaction::Compaction;
-use crate::set::{ElementStorage, SetError, MAX_STEPS};
+use crate::set::{ElementStorage, MAX_STEPS};
 use crate::uniforms::UniformScratch;
 
 /// The param the engine quantises spawning from. Named once so the uniform
@@ -131,10 +131,14 @@ pub(crate) struct Simulation {
 impl Simulation {
     /// Generate, compile and allocate one L1 node at `capacity`.
     ///
-    /// `capacity` is a Set-level dial rather than part of the procedure's
-    /// identity, so it arrives here and is validated against the range the
-    /// artifact declares — the one check in this constructor, and it is here
-    /// because the range is this node's own.
+    /// **Infallible, and that is the point.** `capacity` is a Set-level dial
+    /// rather than part of the procedure's identity, and checking it against
+    /// the range the artifact declares used to be the one check in this
+    /// constructor — which made a device the only way to reach the refusal.
+    /// The check is `capacity_in_range` in `crate::set` now, called by
+    /// `Set::validate` before anything is built, and it is not repeated here:
+    /// the return type is what says so, because a second copy would need
+    /// somewhere to put its `Err`.
     pub(crate) fn build(
         device: &wgpu::Device,
         l1: &Checked,
@@ -144,19 +148,7 @@ impl Simulation {
         // slots those rules read are written by this node and by nothing else.
         derived: &[karakuri_ir::Attr],
         fields: karakuri_codegen::Bound<'_>,
-    ) -> Result<Simulation, SetError> {
-        let range = l1
-            .capacity
-            .ok_or_else(|| SetError::NoCapacity(l1.name.clone()))?;
-        if !range.contains(capacity) {
-            return Err(SetError::Capacity {
-                proc: l1.name.clone(),
-                requested: capacity,
-                min: range.min,
-                max: range.max,
-            });
-        }
-
+    ) -> Simulation {
         let shader = generate_l1(l1, derived, fields);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(&format!("{} (L1)", l1.name)),
@@ -401,7 +393,7 @@ impl Simulation {
         let element = compute("element", &compute_pl);
         let spawn = shader.has_spawn.then(|| compute("spawn", &compute_pl));
 
-        Ok(Simulation {
+        Simulation {
             capacity,
             seed_salt,
             has_spawn: shader.has_spawn,
@@ -425,7 +417,7 @@ impl Simulation {
             prev_bg,
             next_bg,
             param_names: l1.params.iter().map(|p| p.name.clone()).collect(),
-        })
+        }
     }
 
     /// The edge this node offers downstream, resolved against the buffers it

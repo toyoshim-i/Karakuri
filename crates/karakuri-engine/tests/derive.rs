@@ -56,7 +56,7 @@ proc {name} {{
     /// The attribute under test decides *where* rather than how bright, because a
     /// position is what this file can measure to a texel — see `deform.rs` for the
     /// same reasoning about the pinned camera below.
-    fn reader(name: &str, consumes: &str, y: &str) -> String {
+    pub(super) fn reader(name: &str, consumes: &str, y: &str) -> String {
         format!(
             r#"
 proc {name} {{
@@ -110,7 +110,7 @@ proc {name} {{
         )
     }
 
-    fn compile(src: &str) -> Checked {
+    pub(super) fn compile(src: &str) -> Checked {
         let proc = karakuri_ir::parse(src).unwrap_or_else(|e| panic!("{}", render(&e, src)));
         let checked =
             karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e, src)));
@@ -676,6 +676,43 @@ proc jumps {{
         "no element reached the true speed at all, so the assertion above was vacuous: {speeds:?}"
     );
     }
+}
+
+/// **The refusal, which reaches no device.**
+///
+/// A derivation rule whose source attribute the L1 does not emit is decided by
+/// `Set::validate` — the check pass `Set::build_many` reaches by calling it,
+/// rather than by holding a copy.
+mod refused {
+    use super::gpu::{compile, reader};
+    use karakuri_engine::set::{Layering, SetError, Wiring};
+    use karakuri_engine::Set;
+    use karakuri_ir::typed::Checked;
+
+    /// The Set `build_chain` above describes — one L1 at its declared default
+    /// capacity, this chain of L2s, one renderer — minus the device and
+    /// everything downstream of it.
+    fn validate_chain(l1: &str, l2s: &[&str], l4: &str) -> Result<(), SetError> {
+        let compiled: Vec<Checked> = l2s.iter().map(|s| compile(s)).collect();
+        let l2_refs: Vec<&Checked> = compiled.iter().collect();
+        let l1 = compile(l1);
+        let capacity = l1
+            .capacity
+            .expect("an L1 declares a capacity range")
+            .default;
+        Set::validate(
+            &[(&l1, capacity)],
+            &l2_refs,
+            &[],
+            &[],
+            &[&compile(l4)],
+            Layering::Overdraw,
+            7,
+            &[],
+            Wiring::default(),
+        )
+        .map(|_| ())
+    }
 
     /// **A rule that could not run says why**, rather than repeating advice that
     /// contradicts it.
@@ -688,7 +725,6 @@ proc jumps {{
     /// that would fix the file is the one thing the message does not name.
     #[test]
     fn a_blocked_rule_names_the_attribute_it_needed() {
-        let gpu = Gpu::headless().expect("a GPU");
         let no_position = r#"
 proc no_position {
   kind     L1
@@ -702,14 +738,12 @@ proc no_position {
   }
 }
 "#;
-        let err = build_chain(
-            &gpu,
+        let err = validate_chain(
             no_position,
             &[],
             &reader("wants_speed", "velocity", "velocity.y"),
         )
-        .err()
-        .expect("`velocity` derives from `position`, which this L1 does not emit");
+        .expect_err("`velocity` derives from `position`, which this L1 does not emit");
 
         let text = err.to_string();
         assert!(

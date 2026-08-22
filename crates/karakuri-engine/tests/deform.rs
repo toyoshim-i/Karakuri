@@ -424,7 +424,16 @@ proc tinted_dots {
         )
         .err()
         .expect("`tint` is not available without the deformation that emits it");
+        // **The variant, not just the word.** Asserting only that the message
+        // says `tint` passes for the wrong reason the day the composition check
+        // stops firing: the build then goes ahead, naga refuses the WGSL, and
+        // the `Invalid` that comes back happens to name `tint` too. Found by
+        // injecting exactly that.
         let message = err.to_string();
+        assert!(
+            matches!(err, karakuri_engine::set::SetError::Composition { .. }),
+            "the refusal came from somewhere other than the composition check: {message}"
+        );
         assert!(
             message.contains("tint"),
             "the diagnostic does not name what was missing: {message}"
