@@ -11,7 +11,7 @@ index is maintained by hand — see ADR-0000 for when that stops being enough.
 rule it states.
 
 **Reconstruction is in progress.** Records are being recovered in date order from the session
-history that runs from 2026-07-25. Everything through **2026-08-15** is written; the numbering
+history that runs from 2026-07-25. Everything through **2026-08-16** is written; the numbering
 is chronological, so later dates take later numbers.
 
 ## Records
@@ -112,6 +112,16 @@ is chronological, so later dates take later numbers.
 | [ADR-0091](0091-declaration-by-absence-and-an-empty-consumes-is-a-rule.md) | Declaration by absence, and an empty `consumes` is a rule | 2026-08-15 | accepted |
 | [ADR-0092](0092-a-resource-listing-is-a-curriculum-not-an-index.md) | A resource listing is a curriculum, not an index | 2026-08-15 | accepted |
 | [ADR-0093](0093-a-verification-that-measures-the-wrong-tree-verifies-nothing.md) | A verification that measures the wrong tree verifies nothing | 2026-08-15 | accepted |
+| [ADR-0094](0094-l2-is-stateless-as-a-rule-and-its-output-is-materialised.md) | L2 is stateless as a rule, and its output is materialised | 2026-08-16 | accepted |
+| [ADR-0095](0095-a-camera-edge-is-a-gpu-buffer-and-an-l3-may-hold-state.md) | A Camera edge is a GPU buffer, and an L3 may hold state | 2026-08-16 | accepted |
+| [ADR-0096](0096-camera-is-an-edge-into-l4-and-an-existing-field-is-not-a-fact.md) | Camera is an edge into L4, and an existing field is not a fact | 2026-08-16 | accepted |
+| [ADR-0097](0097-overdraw-and-composition-are-different-operations.md) | Overdraw and composition are different operations, and the graph says which | 2026-08-16 | accepted |
+| [ADR-0098](0098-l5-is-one-node-kind-with-two-roles.md) | L5 is one node kind with two roles | 2026-08-16 | accepted |
+| [ADR-0099](0099-element-zero-is-the-oldest-living-element.md) | Element 0 is the oldest living element | 2026-08-16 | accepted |
+| [ADR-0100](0100-a-published-interface-is-a-choice-of-attention.md) | A published interface is a choice of attention, not of authority | 2026-08-16 | accepted |
+| [ADR-0101](0101-a-sources-number-is-recorded-not-derived.md) | A source's number is recorded, not derived | 2026-08-16 | accepted |
+| [ADR-0102](0102-a-renderers-address-is-layer-and-index.md) | A renderer's address is `(layer, index)`, and `layer` alone means nothing | 2026-08-16 | accepted |
+| [ADR-0103](0103-a-trailer-missed-fifteen-times.md) | A trailer missed fifteen times, because I never read my own commits | 2026-08-16 | accepted |
 
 ## Retired numbers
 
@@ -214,6 +224,16 @@ never reused.
 | [ADR-0091](0091-declaration-by-absence-and-an-empty-consumes-is-a-rule.md) | Declaration by absence, and an empty `consumes` is a rule | 2026-08-15 | accepted |
 | [ADR-0092](0092-a-resource-listing-is-a-curriculum-not-an-index.md) | A resource listing is a curriculum, not an index | 2026-08-15 | accepted |
 | [ADR-0093](0093-a-verification-that-measures-the-wrong-tree-verifies-nothing.md) | A verification that measures the wrong tree verifies nothing | 2026-08-15 | accepted |
+| [ADR-0094](0094-l2-is-stateless-as-a-rule-and-its-output-is-materialised.md) | L2 is stateless as a rule, and its output is materialised | 2026-08-16 | accepted |
+| [ADR-0095](0095-a-camera-edge-is-a-gpu-buffer-and-an-l3-may-hold-state.md) | A Camera edge is a GPU buffer, and an L3 may hold state | 2026-08-16 | accepted |
+| [ADR-0096](0096-camera-is-an-edge-into-l4-and-an-existing-field-is-not-a-fact.md) | Camera is an edge into L4, and an existing field is not a fact | 2026-08-16 | accepted |
+| [ADR-0097](0097-overdraw-and-composition-are-different-operations.md) | Overdraw and composition are different operations, and the graph says which | 2026-08-16 | accepted |
+| [ADR-0098](0098-l5-is-one-node-kind-with-two-roles.md) | L5 is one node kind with two roles | 2026-08-16 | accepted |
+| [ADR-0099](0099-element-zero-is-the-oldest-living-element.md) | Element 0 is the oldest living element | 2026-08-16 | accepted |
+| [ADR-0100](0100-a-published-interface-is-a-choice-of-attention.md) | A published interface is a choice of attention, not of authority | 2026-08-16 | accepted |
+| [ADR-0101](0101-a-sources-number-is-recorded-not-derived.md) | A source's number is recorded, not derived | 2026-08-16 | accepted |
+| [ADR-0102](0102-a-renderers-address-is-layer-and-index.md) | A renderer's address is `(layer, index)`, and `layer` alone means nothing | 2026-08-16 | accepted |
+| [ADR-0103](0103-a-trailer-missed-fifteen-times.md) | A trailer missed fifteen times, because I never read my own commits | 2026-08-16 | accepted |
 
 Re-pointing the records that cited a retired principle is permitted, and why, is
 [ADR-0059](0059-a-records-pointer-into-the-principles-registry-is-metadata.md).

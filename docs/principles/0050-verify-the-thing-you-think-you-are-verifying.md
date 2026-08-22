@@ -15,9 +15,20 @@ intermediate state by removing known strings from the complete version, **assert
 **build before `git add`**, so what is verified is what is staged. Check out each finished commit and
 run its suite.
 
+**A view can be structurally blind.** The `Co-Authored-By` trailer went missing from fifteen commits
+in a row, and every one of them was "verified" with `git log --oneline -1` — a hash and a subject,
+which is a view a trailer cannot appear in. Fifteen checks, none of which could have caught it. Ask
+what the check is unable to see.
+
 **And beware a redirection that outlives its command.** `git cat-file … > file` creates the file before
 git can fail; recovery came from `git fsck --unreachable`, where a stash made with
 `--include-untracked` keeps the untracked tree as its **third parent**.
 
+**Two causes for one symptom.** "The test did not go red" can mean the mutant survived *or* that it
+never compiled — an injection loop that counts failing tests cannot tell a finding from a measurement
+error, so it checks.
+
 **Where it holds.** Decided in
-[ADR-0093](../adr/0093-a-verification-that-measures-the-wrong-tree-verifies-nothing.md).
+[ADR-0093](../adr/0093-a-verification-that-measures-the-wrong-tree-verifies-nothing.md),
+[ADR-0102](../adr/0102-a-renderers-address-is-layer-and-index.md) and
+[ADR-0103](../adr/0103-a-trailer-missed-fifteen-times.md).
