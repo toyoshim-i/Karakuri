@@ -8,7 +8,7 @@ that manual human control and autonomous AI control coexist on the same mechanis
 
 This file is the current state: how to run it, what the rules are, and what does and does
 not work today. Where it is going is [docs/roadmap.md](docs/roadmap.md); what the IR is is
-[docs/ir-spec.md](docs/ir-spec.md).
+[docs/ir-spec.md](docs/ir-spec.md); how the codebase is structured is [docs/architecture.md](docs/architecture.md).
 
 ---
 
@@ -538,6 +538,7 @@ crates/
                       pre-push:   fmt, clippy and every test
                       enable with `git config core.hooksPath .githooks`
 docs/
+  architecture.md     the codebase architecture, multi-crate map, and pipeline
   ir-spec.md          the IR. Settled; open questions are empty
   manual.md           how to play it: flags, keys, and what each does
   plugins.md          out-of-process helpers, and why they are out of process
@@ -552,8 +553,11 @@ examples/             app presets: seven L1, four L2, one L3, one Field,
 
 ## Documents
 
-| | |
+| Document | Description |
 |---|---|
 | This file | What exists, how to run it, and the rules that hold now |
+| [docs/architecture.md](docs/architecture.md) | Source code structure, multi-crate breakdown, compilation pipeline, threading model, and extension guide |
 | [docs/ir-spec.md](docs/ir-spec.md) | The IR: grammar, semantics, lowering, record formats. Its Resolved section records the decisions and why, including the ones implementation forced |
+| [docs/manual.md](docs/manual.md) | VJ operation manual: command-line flags, keyboard controls, session recording, and latency offset |
+| [docs/plugins.md](docs/plugins.md) | Plugin model for out-of-process helpers (e.g. Ableton Link tempo sources) |
 | [docs/roadmap.md](docs/roadmap.md) | Milestones after V1, and the **Demands on earlier work** each one places on code written now. That is the part worth reading before making a decision here |
