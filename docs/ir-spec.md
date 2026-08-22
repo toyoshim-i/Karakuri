@@ -3362,40 +3362,13 @@ elements than one workgroup covers sees neither mistake.
 - **Noise rate under tempo correction.** Stays cycles per beat, follows a tempo
   correction, ignores a phase one. The alternatives made two kinds of noise and left every
   existing `bind` record ambiguous. See [Binding noise](#binding-noise).
-- **Element identity.** `id` is gone. A slot index is not an identity once compaction
-  moves elements, so identity is `seed`, a monotone spawn ordinal carried per element. See
-  [Element identity](#element-identity).
-- **Compaction strategy.** Order-preserving prefix-sum stream compaction. Indirect
-  dispatch over the live count needs contiguity, so a free list would have required a scan
-  to build a live-slot list anyway; going straight to compaction also makes the blend order
-  stable and reproduction bit-exact. See [Dispatch](#dispatch).
-- **Loop accumulators.** `var` is in. `for` could not carry a value between iterations
-  with immutable `let` and previous-frame attribute reads as the only options, which left
-  it unusable for anything but repeated attribute writes. A `var` is a plain function-local
-  in the lowering, costs nothing statically, and does not weaken cost estimation. Scalar
-  constructors (`float(i)`) came with it, since without them the loop variable could not
-  enter float arithmetic. See [Statements and expressions](#statements-and-expressions).
-
-- **Spawn quantization.** Accumulator, no Poisson: irregularity belongs on a noise signal
-  bound to `spawn_rate`, where it stays adjustable, rather than baked into the engine as a
-  property nobody can turn. The problem that actually shows is spatial banding, which no
-  choice of distribution fixes, so the engine scales an element's first `dt` by its birth
-  fraction instead. See [Spawn timing](#spawn-timing).
-- **Substepping.** The step count is a `tick` record, not a measurement — emitted from real
-  time when live, read back verbatim on replay. Capped at 4. See
-  [On `dt` and simulation time](#on-dt-and-simulation-time).
-- **Sorting.** Not depth sorting — weighted blended OIT, which is order independent and so
-  cannot conflict with compaction. `blend additive` was declared in the L4 header from the
-  start, as the only legal value, so that the second mode would be an addition rather than a
-  change. `blend weighted` is that addition, and it was: one enum variant, one parse arm,
-  and nothing in the grammar moved. See [blend](#blend-l4-only).
-- **Runtime capacity.** This one was a design error, not a constraint to keep: `capacity`
-  is a performance dial, not part of a procedure's identity, and leaving it in the artifact
-  would have multiplied the library by every size anyone wanted. It moves to the Set, with
-  a range declared in the `.kir`, and the ambient becomes a uniform so that changing it
-  costs a fork but no compile. Cost estimation gets cleaner as a result — an artifact
-  records cost per element, which is the intrinsic figure. See
-  [capacity / topology](#capacity--topology-l1-only).
+Everything above concerns the measured signals, which are the newest part of the language.
+**The rest of what this specification settled — element identity, compaction, `var`, spawn
+quantization, substepping, sorting and runtime capacity — has moved to
+[docs/adr/](adr/), where the alternatives that lost are recorded with the reasons they
+lost.** The rules those decisions left in force are one file each in
+[docs/principles/](principles/). What each decision produced is normative text in the
+sections above and is unchanged.
 
 ## Open questions
 
