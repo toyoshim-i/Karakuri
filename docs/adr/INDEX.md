@@ -11,7 +11,7 @@ index is maintained by hand — see ADR-0000 for when that stops being enough.
 rule it states.
 
 **Reconstruction is in progress.** Records are being recovered in date order from the session
-history that runs from 2026-07-25. Everything through **2026-07-31** is written; the numbering
+history that runs from 2026-07-25. Everything through **2026-08-01** is written; the numbering
 is chronological, so later dates take later numbers.
 
 ## Records
@@ -68,11 +68,29 @@ is chronological, so later dates take later numbers.
 | [ADR-0047](0047-a-binding-blends-on-confidence.md) | A binding blends on confidence | 2026-07-31 | accepted |
 | [ADR-0048](0048-four-curves-because-a-fifth-is-a-re-parameterisation.md) | Four curves, because a fifth is a re-parameterisation | 2026-07-31 | accepted |
 | [ADR-0049](0049-slot-means-two-things-and-the-clash-is-recorded.md) | `Slot` means two things, and the clash is recorded rather than resolved | 2026-07-31 | accepted |
+| [ADR-0050](0050-a-declared-generator-is-certain.md) | A declared generator is certain, and a sample is not always in [0,1] | 2026-08-01 | accepted |
+| [ADR-0051](0051-a-name-means-one-thing-so-the-buss-noise-entry-is-deleted.md) | A name means one thing, so the bus's `noise` entry is deleted | 2026-08-01 | accepted |
+| [ADR-0052](0052-a-parameter-is-keyed-by-its-layer-and-a-collision-is-refused.md) | A parameter is keyed by its layer, and a collision is refused meanwhile | 2026-08-01 | accepted |
+| [ADR-0053](0053-priming-runs-the-simulation-and-skips-rendering.md) | Priming runs the simulation and skips rendering entirely | 2026-08-01 | accepted |
+| [ADR-0054](0054-the-governor-budgets-from-the-probe-and-never-touches-a-live-slot.md) | The governor budgets from the probe, and never touches a Live slot | 2026-08-01 | accepted |
+| [ADR-0055](0055-a-measurement-enters-the-record-stream-raw-audio-does-not.md) | A measurement enters the record stream; raw audio does not | 2026-08-01 | accepted |
+| [ADR-0056](0056-beat-lock-is-feed-forward-and-the-unmeasurable-part-is-an-offset.md) | Beat lock is feed-forward, and the unmeasurable part is an offset | 2026-08-01 | accepted |
+| [ADR-0057](0057-the-transport-is-driven-by-position-not-by-tempo-and-phase.md) | The transport is driven by position, not by tempo and phase | 2026-08-01 | accepted |
+| [ADR-0058](0058-closed-form-is-worth-more-for-scrubbing-than-for-priming.md) | Closed form is worth more for scrubbing than for priming | 2026-08-01 | accepted |
+| [ADR-0059](0059-a-records-pointer-into-the-principles-registry-is-metadata.md) | A record's pointer into the principles registry is metadata | 2026-08-01 | accepted |
 
 ## Retired numbers
 
-None yet. A superseded record keeps its row above; a **deleted principle** is recorded here as
-`P-nnnn — retired <date> → P-mmmm`.
+A superseded record keeps its row above. A **deleted principle** is recorded here, and its number is
+never reused.
+
+| Retired | Was | Replaced by | Why |
+| --- | --- | --- | --- |
+| P-0015 | One record tag is one record shape | [P-0031](../principles/0031-a-name-means-one-thing-across-the-system.md) | The same rule holds for any name, not only a record tag — found when `"noise"` meant two things at two confidences |
+| P-0022 | Closed-form material needs no warming | [P-0032](../principles/0032-closed-form-means-scrubbable.md) | Not needing warming is the smaller half; the larger one is being scrubbable |
+
+Re-pointing the records that cited a retired principle is permitted, and why, is
+[ADR-0059](0059-a-records-pointer-into-the-principles-registry-is-metadata.md).
 
 ## Standing rules with no record yet
 

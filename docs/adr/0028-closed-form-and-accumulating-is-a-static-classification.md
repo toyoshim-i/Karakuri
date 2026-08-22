@@ -5,7 +5,7 @@ status: accepted
 date: 2026-07-26
 supersedes: []
 superseded_by: []
-principles: [0022]
+principles: [0032]
 tags: [ir, engine]
 ---
 
@@ -61,4 +61,4 @@ Session 2026-07-26T07:35Z–07:39Z. A real bug was found in the same pass — `s
 the compute pass, so a pause did not pause and time drifted from state under load. The determinism
 tests passed because both sides of the comparison were **equally wrong**, which is the limit of a
 test that compares an engine against itself. Fixed in `555da34` with two regression tests. Standing
-rule: [P-0022](../principles/0022-closed-form-material-needs-no-warming.md).
+rule: [P-0032](../principles/0032-closed-form-means-scrubbable.md).
