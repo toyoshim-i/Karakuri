@@ -87,6 +87,24 @@ Most of `karakuri-engine`'s integration suites take a GPU device; every other cr
 cargo test --workspace
 ```
 
+### When the work is split across several hands
+
+Several agents or sessions working at once multiply whatever each of them runs: a suite that
+costs four minutes costs it *per worker*, mostly to re-answer a question somebody else already
+answered. The rule in §2 does not change, but who applies it does.
+
+- **The side directing the work runs the tests.** A worker says what it changed and which test
+  would catch a regression in it; proving that by running the workspace suite is the expensive
+  way to say the same thing.
+- **After a fix, run the test that failed — first, and on its own.** `cargo test -p <crate>
+  <name>` runs one. Broaden only once it passes; a green suite is a slower way to learn the
+  same fact, and a red one tells you less.
+- **Running a test against its injected defect
+  ([P-0025](principles/0025-a-test-meant-to-catch-something-is-run-against-the-defect.md)) is
+  one test's evidence.** Run that test with the defect in place, not the suite around it.
+- **`cargo check -p <crate>` answers "does this compile"** without building or running a test,
+  which is often the whole question.
+
 ### Running Workspace Linter (Clippy)
 ```sh
 cargo clippy --workspace --all-targets -- -D warnings
