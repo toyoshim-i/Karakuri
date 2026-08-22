@@ -52,18 +52,37 @@ git config core.hooksPath .githooks
   whether the work is good at a moment nobody was claiming it was.
 
 Neither hook runs tests on an ordinary commit or branch push, and that is a decision rather
-than an omission: this workspace has nearly nine hundred tests and most want a GPU, so any
+than an omission: this workspace has over nine hundred and fifty tests and most want a GPU, so any
 fixed subset spends minutes answering a question nobody asked. What replaces it is
 deliberate: whoever makes a change names the smallest suite that answers it and runs that
 (§3 lists them per crate), and the whole workspace runs at a boundary — before a tag, after
-a refactor, and before a change is called done (§4). The reasoning is written into the hooks
+a refactor, and before a change is called done (§5). The reasoning is written into the hooks
 themselves.
 
 ---
 
 ## 3. Build, Lint, and Test Commands
 
-### Running All Workspace Tests
+**Name the smallest suite that answers your question and run that** — see §2 for why, and
+[P-0057](principles/0057-run-what-the-question-needs-when-it-is-asked.md) for the rule. The whole
+workspace belongs at a boundary, not at every step.
+
+### Testing one crate
+```sh
+cargo test -p karakuri-ir          # IR: lexer, parser, checker, cost
+cargo test -p karakuri-codegen     # WGSL generation and naga validation
+cargo test -p karakuri-engine      # render graph, Set lifecycle, deck (needs a GPU)
+cargo test -p karakuri-engine --lib   # the part of it that does not
+cargo test -p karakuri-audio       # analysis, tempo tracking, beat lock
+cargo test -p karakuri-signal      # oscillator, synthesized bus, noise
+cargo test -p karakuri-store       # records, ndjson, content addressing
+cargo test -p karakuri-midi        # wire parsing and the map
+cargo test -p karakuri-cli         # flags, replay, MCP, live save
+```
+
+Most of `karakuri-engine`'s integration suites take a GPU device; every other crate is pure CPU.
+
+### At a boundary — before a tag, after a refactor, before calling a change done
 ```sh
 cargo test --workspace
 ```
@@ -77,13 +96,6 @@ cargo clippy --workspace --all-targets -- -D warnings
 ```sh
 cargo fmt --check
 ```
-
-### Testing Specific Component Packages
-- **IR Parser & Type Checker**: `cargo test -p karakuri-ir`
-- **WGSL Codegen & Naga Validation**: `cargo test -p karakuri-codegen`
-- **Render Engine & HotSwap**: `cargo test -p karakuri-engine`
-- **Audio Processing & Beat Lock**: `cargo test -p karakuri-audio`
-- **CLI & Replay Verification**: `cargo test -p karakuri-cli`
 
 ---
 
@@ -119,7 +131,6 @@ would have to change, that is a new record.
 Before marking a task or pull request as complete, ensure the following checklist is satisfied:
 
 - [ ] **A decision with a losing alternative has a record**: see §4. If nothing was decided, nothing is owed.
-
 - [ ] **All workspace tests pass**: `cargo test --workspace` returns 0 exit code.
 - [ ] **Naga validation passes**: Any modifications to `karakuri-codegen` MUST be verified against `naga_test.rs` to guarantee generated WGSL text parses and validates cleanly.
 - [ ] **Documentation integrity**: Existing comments, docstrings (`//!` and `///`), and Markdown documentation are updated accordingly.
