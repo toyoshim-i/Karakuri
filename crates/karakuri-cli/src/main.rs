@@ -4932,7 +4932,11 @@ impl ApplicationHandler for App {
                         })
                         .collect(),
                 );
-                match mcp::serve(port, slots, self.args.watch) {
+                // The store this run was given, not a second answer to where
+                // the library is: `read_set` reads a saved Set and its cards
+                // out of the same root `--save-set`, `--load-set` and the `k`
+                // key write into.
+                match mcp::serve(port, slots, self.args.store.clone(), self.args.watch) {
                     Ok(reporter) => {
                         // The port bound rather than the one asked for: `--mcp 0`
                         // takes an ephemeral one, and printing the 0 would name

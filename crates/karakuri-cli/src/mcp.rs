@@ -65,6 +65,10 @@ use std::io::{BufRead, Read, Write};
 use std::sync::mpsc;
 
 use karakuri_ir::Kind;
+use karakuri_store::hash::Hash;
+use karakuri_store::ndjson::Line;
+use karakuri_store::record::{Layer, Record};
+use karakuri_store::store::{Store, StoreError};
 use serde_json::{json, Value};
 
 /// What the render loop tells the server about, over a channel.
@@ -425,7 +429,19 @@ const SAVE_REPLY: std::time::Duration =
 /// Returns the [`Reporter`] the render loop keeps. The listener and everything
 /// behind it live on threads of their own; nothing here is ever called from a
 /// frame.
-pub fn serve(port: u16, slots: Slots, watching: bool) -> Result<Reporter, String> {
+///
+/// **`store` is a root and not an open [`Store`]**, which is the same decision
+/// [`Slots`] makes about a path and for a milder version of the same reason.
+/// Opening here would fail a whole run for a library nothing has asked for yet,
+/// and would hold one answer to "where is the store" against a directory the
+/// operator is free to move; opening per call is four `create_dir_all`s off a
+/// frame path, on a surface where the expensive thing is already a compile.
+pub fn serve(
+    port: u16,
+    slots: Slots,
+    store: std::path::PathBuf,
+    watching: bool,
+) -> Result<Reporter, String> {
     if slots.0.is_empty() {
         return Err("this run has no procedure files to serve — see `--load-set`".into());
     }
@@ -444,6 +460,7 @@ pub fn serve(port: u16, slots: Slots, watching: bool) -> Result<Reporter, String
 
     let state = std::sync::Arc::new(std::sync::Mutex::new(State {
         slots,
+        store,
         watching,
         events: rx,
         asked,
@@ -488,6 +505,10 @@ pub fn serve(port: u16, slots: Slots, watching: bool) -> Result<Reporter, String
 
 struct State {
     slots: Slots,
+    /// **Where the library lives** — `--store DIR`, the same root every other
+    /// half of this run reads and writes. A root rather than an open [`Store`];
+    /// see [`serve`].
+    store: std::path::PathBuf,
     /// Whether `--watch` is on. Without it a written procedure sits on disk and
     /// changes nothing, which a model has no way to discover and every reason
     /// to be told.
@@ -751,10 +772,12 @@ const PROTOCOL: &str = "2024-11-05";
 /// This type is the whole of the concurrency design, so it is worth stating
 /// plainly what it buys. `handle` locks the state around [`dispatch`], and there
 /// is a thread per connection: anything waited for under that lock is waited for
-/// by every other client too. Three of the four tools are a file read or a file
-/// write and finish under it; `save_set` waits for a render loop and then for a
-/// disk, which is unbounded in the only sense that matters — it depends on
-/// somebody else's frame rate.
+/// by every other client too. Four of the five tools are a file read or a file
+/// write and finish under it — `read_set` is the widest of them, a set file and
+/// a card for each node it names, and that is a bounded count of reads off the
+/// store rather than a wait on anybody else's thread; `save_set` waits for a
+/// render loop and then for a disk, which is unbounded in the only sense that
+/// matters — it depends on somebody else's frame rate.
 ///
 /// So the send happens under the lock, where the channel is, and the *wait*
 /// comes back out here. Returning a value that still has work in it is the
@@ -948,6 +971,40 @@ fn tools() -> Value {
                 "required": ["slot"],
             },
         },
+        {
+            "name": "read_set",
+            "description":
+                "What a saved Set holds, and what each procedure in it declares — read \
+                 out of the library without loading anything and without compiling \
+                 anything. A Set is a slot's material kept under a name: `save_set` \
+                 writes one, so does the operator's `k` key, and `--load-set ID` plays \
+                 one back. For every node this says which layer it is on — L1 is what \
+                 the elements are and how they move, L2 a deformation, L3 the camera, \
+                 L4 how they are drawn, Field a distance function the others evaluate — \
+                 what the procedure calls itself, and what it *declares*: each \
+                 parameter with the two numbers a value must lie between and the value \
+                 it takes when nothing turns it; the element count an L1 may run at, \
+                 lowest, highest and the count it runs at unless a Set says otherwise; \
+                 and the attributes it emits, which are what a renderer drawn over it \
+                 can consume. **Ranges are declarations, not settings**: a range says \
+                 what a value will be refused outside of, not where this Set has it. \
+                 Call it to choose between things you have kept, and to find out what \
+                 there is to turn on one, without fetching its source and compiling it.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description":
+                            "the id the set was filed under: letters, digits, `-` and \
+                             `_`. It is what `save_set` came back naming, what \
+                             `--save-set ID` was given, or the stamp a save that named \
+                             nothing was called after.",
+                    },
+                },
+                "required": ["id"],
+            },
+        },
     ])
 }
 
@@ -970,6 +1027,9 @@ fn call_tool(request: &Value, state: &mut State) -> Result<Called, String> {
         "read_procedure" => Called::Answered(read_procedure(&args, state)),
         "write_procedure" => Called::Answered(write_procedure(&args, state)),
         "swap_outcome" => Called::Answered(swap_outcome(state)),
+        // Answered here like a read and unlike `save_set`: a card is a file, the
+        // render loop does not hold one, and there is nothing to wait for.
+        "read_set" => Called::Answered(read_set(&args, state)),
         // **Refused here and waited for elsewhere.** Everything this module can
         // decide by itself — a slot that does not exist, an `id` that is not a
         // name — is decided under the lock like any other tool's arguments, and
@@ -1211,6 +1271,243 @@ fn save_set(args: &Value, state: &State) -> Result<mpsc::Receiver<News>, String>
             }
         })?;
     Ok(rx)
+}
+
+/// **What one saved Set holds, and what each of its procedures declares** —
+/// off the store, with nothing loaded, nothing compiled and no GPU.
+///
+/// **This is the reader `<hash>.meta.ndjson` did not have.** Every path that
+/// stores an artifact from a compile writes a card beside it — see
+/// [`crate::meta::card`] — and until this, `Store::read_meta` had no caller
+/// outside its own tests. A figure with a producer and no consumer is how the
+/// last wrong number in this program got published, so the card gets its reader
+/// in the same milestone that gave it a writer.
+///
+/// **A tool and not a resource.** `docs/roadmap.md`, M4: *"the resource list is
+/// a curriculum, not an index"* — a resource is a curated few a client reads in
+/// full, and a user's Sets are neither curated nor few nor knowable at startup.
+/// The two resources here are the spec and the vocabulary, which every client
+/// should read once; a library is searched, and searching is a call.
+///
+/// **The caller names a Set, because a Set id is the only handle a model can
+/// hold.** The three candidates were the address the other tools take
+/// (`slot`, `layer`, `index`), a Set id, and a content hash:
+///
+/// - **A hash is what the card is filed under and it is the one to reject**,
+///   easiest though it is. Nothing in this protocol has ever handed a model a
+///   hash, so the first call could not be made — a tool whose argument only
+///   this tool's own output can supply is a tool nobody can start using. It is
+///   also the *only* one of the three that needs no validation, being hex and
+///   64 characters, and choosing an argument for the convenience of its
+///   validation is choosing the wrong argument.
+/// - **`(slot, layer, index)` names what is on screen**, whose source a model
+///   can already fetch with `read_procedure` and read the declarations off
+///   directly. It would answer a question that is already answerable.
+/// - **A Set id names material this surface is otherwise blind to.** A saved
+///   Set that has not been loaded has no file behind it that `read_procedure`
+///   can reach — its sources are bytes in the store under hashes nothing shows
+///   — so *"which of these saved things should I use"* is unanswerable without
+///   this. `save_set` comes back naming the id it wrote, and `--load-set ID`
+///   is spelled with one, so a model that has kept anything has one in hand.
+///
+/// **What this does not say is what the Set has those knobs turned to.** The
+/// file read here carries `param` and `capacity` records beside the `slot`s and
+/// they are deliberately passed over: a `param_decl` says a knob exists and
+/// what it may be turned between, a `param` says where this Set left it, and
+/// the record vocabulary keeps them apart under two names for exactly that
+/// reason. Rendering both in one block would be the place they get confused,
+/// and *"what is it set to"* is a second question that deserves being asked as
+/// one. The lines are in hand the moment anybody wants it.
+fn read_set(args: &Value, state: &State) -> Result<String, String> {
+    let id = args
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or("`id` is required and is a string: which set to read")?;
+    // **The same check `save_set` puts a name through, and the reason is the
+    // same one.** This id becomes `<store>/sets/<id>.set.ndjson`, so
+    // `../../../somewhere/else` is a path, and paths never cross this protocol —
+    // see [`checked_id`] and [`Slots`]. A read is not the harmless half of that
+    // rule: it is the half that hands a file's contents back to the caller.
+    let id = checked_id(id)?;
+    let store = Store::open(&state.store)
+        .map_err(|e| format!("the store at `{}`: {e}", state.store.display()))?;
+    let lines = store.read_set(&id).map_err(|e| {
+        format!(
+            "reading set `{id}`: {e} — a set is filed under the id it was saved \
+             under, by `save_set`, by the operator's `k` key or by `--save-set ID`, \
+             and this store holds only the ones written into it"
+        )
+    })?;
+    // **The file's own order**, which is the order [`crate::setfile::save`]
+    // wrote the nodes in, and the order a hand-written file chose. Sorting by
+    // layer would impose a reading nobody wrote, for the reason
+    // [`crate::meta::card`] keeps a procedure's parameters in declaration order.
+    let nodes: Vec<(Layer, u32, Option<String>, Hash)> = lines
+        .iter()
+        .filter_map(|line| match line.record() {
+            Record::Slot {
+                layer,
+                index,
+                name,
+                proc_hash,
+            } => Some((*layer, *index, name.clone(), *proc_hash)),
+            _ => None,
+        })
+        .collect();
+    if nodes.is_empty() {
+        return Ok(format!(
+            "set `{id}` is in this store and names no material: it holds {} record{} \
+             and none of them is a `slot`, so there is nothing in it to describe.",
+            lines.len(),
+            if lines.len() == 1 { "" } else { "s" },
+        ));
+    }
+    let mut out = format!(
+        "set `{id}` holds {} node{}, and `--load-set {id}` plays it. Everything below \
+         is what a procedure *declares* — the range a value is refused outside of — \
+         and not what this set has anything turned to.\n",
+        nodes.len(),
+        if nodes.len() == 1 { "" } else { "s" },
+    );
+    for (layer, index, name, hash) in nodes {
+        out.push('\n');
+        out.push_str(&node_block(&store, layer, index, name.as_deref(), &hash));
+    }
+    Ok(out)
+}
+
+/// One node of a Set: its address in the Set, its artifact, and its card.
+fn node_block(store: &Store, layer: Layer, index: u32, name: Option<&str>, hash: &Hash) -> String {
+    // **Twelve hex characters and not sixty-four.** A hash is not an argument
+    // anything here takes — see [`read_set`] — so what this is for is telling
+    // two nodes apart and recognising the same artifact in two Sets, which
+    // twelve does at a length a reader can hold. `Hash::short` is the same
+    // shortening every log line in this program uses.
+    let stored = format!("stored as {}", hash.short(12));
+    let called = match name {
+        Some(name) => format!(", called `{name}` in this set"),
+        None => String::new(),
+    };
+    let address = format!("{}:{index}", layer_spelled(layer));
+    match store.read_meta(hash) {
+        Ok(card) => {
+            let (declared, body) = rendered_card(&card);
+            let declared = declared.map_or(String::new(), |name| format!(" `{name}`"));
+            format!("{address}{declared} — {stored}{called}\n{body}")
+        }
+        // **Not an error, and it must not read as one.** `Store::read_meta`
+        // answers `NotFound` for a card that was never written, which is an
+        // ordinary state of a working store rather than damage: a card is
+        // derived, `Store::put_artifact` writes none of its own — it takes bytes
+        // and does not compile — and an artifact stored before cards existed has
+        // none either. A model told "not found" would report a broken library;
+        // what it is owed is the sentence that says the source is there and the
+        // description is not.
+        //
+        // **Two absences, and the pair is worth the extra read.** A hash with no
+        // card and a hash this store has never seen are the same `NotFound` from
+        // here and completely different facts: the second means the Set was
+        // written against another store and will not load here at all, which is
+        // the more useful thing anyone could be told and is invisible if both
+        // say "no card". The artifact is only fetched on this branch, so the
+        // ordinary path pays nothing for it.
+        Err(StoreError::NotFound(_)) => {
+            let standing = if store.get_artifact(hash).is_err() {
+                "this store does not hold that artifact at all, so nothing here can \
+                 say what it declares and `--load-set` could not build this set \
+                 either — the set was saved somewhere else, or beside a store that \
+                 has since been moved"
+            } else {
+                "its source is here and it has no metadata card. That is an ordinary \
+                 state and not a damaged store: a card is derived rather than kept, so \
+                 an artifact stored as bytes, or stored by a build older than cards, \
+                 has none until something compiles it and stores it again. What it \
+                 declares is in its source, at the top of the procedure"
+            };
+            format!("{address} — {stored}{called}\n  {standing}.\n")
+        }
+        // A card that is there and will not read is the one case that *is* a
+        // damaged store, and it says so in different words for that reason.
+        Err(e) => format!("{address} — {stored}{called}\n  its card could not be read: {e}\n"),
+    }
+}
+
+/// A card's four records as prose: what the procedure calls itself, and the
+/// lines describing what it declares.
+///
+/// **Only the four a card can carry today.** `origin`, `parent`, `perf`, `tag`
+/// and `thumbnail` are specified and nothing writes one — see
+/// [`crate::meta::card`], which says why each is absent rather than empty — so
+/// they fall through the catch-all, which is also what makes this reader survive
+/// meeting a card written by a build that has more of them.
+fn rendered_card(card: &[Line]) -> (Option<String>, String) {
+    let mut declared = None;
+    let mut body = String::new();
+    let mut params = 0usize;
+    for line in card {
+        match line.record() {
+            Record::Meta { name, .. } => declared = Some(name.clone()),
+            Record::ParamDecl {
+                key,
+                ty,
+                min,
+                max,
+                default,
+            } => {
+                params += 1;
+                body.push_str(&format!(
+                    "  param {key} : {ty}, anywhere from {min} to {max}{}\n",
+                    match default {
+                        Some(default) => format!(", and {default} until something turns it"),
+                        // The record's own reading, in words: an absent
+                        // `default` says the default is not a number this build
+                        // can state, never that there is none — every declared
+                        // param has one, because the `.kir` grammar makes the
+                        // expression mandatory.
+                        None => ". Its default is an expression rather than a literal, so the \
+                             card cannot state it as a number"
+                            .to_string(),
+                    }
+                ));
+            }
+            Record::CapacityDecl { min, max, default } => body.push_str(&format!(
+                "  capacity: between {min} and {max} elements, and {default} of them \
+                 until a set says otherwise\n"
+            )),
+            Record::Emit { attrs } => body.push_str(&format!(
+                "  emits {} — what a renderer drawn over it can consume\n",
+                attrs.join(", ")
+            )),
+            _ => {}
+        }
+    }
+    // Said rather than left to silence: a block with no `param` line reads as a
+    // rendering that dropped them. Every other absence here is a whole record
+    // the card deliberately does not write — see [`crate::meta::card`] — and
+    // reads correctly as nothing, but "there is nothing to turn on this one" is
+    // an answer to the question that was asked.
+    if params == 0 {
+        body.push_str("  no parameters: there is nothing to turn on this one\n");
+    }
+    (declared, body)
+}
+
+/// A record [`Layer`] under the name this protocol already spells it with.
+///
+/// **Found through [`crate::setfile::layer_of`] rather than matched again.**
+/// The mapping between a record's `Layer` and the compiler's `Kind` exists once,
+/// is total, and is the one `--load-set` reads a Set through; a second match
+/// here would be a second answer to which layer a stored node is on, and the
+/// name a model is given for a node has to be the name it addresses one by. The
+/// fallback cannot be reached while that mapping stays total — and it renders as
+/// a word rather than panicking, because a layer added on one side only is a
+/// thing to see in an answer, not a thread to take down.
+fn layer_spelled(layer: Layer) -> &'static str {
+    LAYERS
+        .iter()
+        .copied()
+        .find(|kind| crate::setfile::layer_of(*kind) == layer)
+        .map_or("unknown", layer_name)
 }
 
 /// A Set id a client may name, or why not.
@@ -1523,6 +1820,23 @@ mod wire_tests {
         dir: tempfile::TempDir,
     }
 
+    /// **Under the fixture's own temporary directory and beside the procedure
+    /// files, which is where a real run's is not.** A run's store is
+    /// `--store DIR` and its procedures are wherever the operator keeps them;
+    /// what matters to these tests is that the server and the test reach one
+    /// root, and that a test that never writes a set leaves an empty store
+    /// rather than reading one somebody else's run left behind.
+    fn store_root(dir: &tempfile::TempDir) -> std::path::PathBuf {
+        dir.path().join("store")
+    }
+
+    impl Server {
+        /// The library this server was started on, open from the test's side.
+        fn store(&self) -> Store {
+            Store::open(store_root(&self.dir)).expect("store")
+        }
+    }
+
     /// **The pair these tests serve, written out rather than copied from
     /// `examples/`.**
     ///
@@ -1619,6 +1933,30 @@ proc probe_source_b {
 }
 "#;
 
+    /// **A geometry with something declared on it**, for the tests about
+    /// cards.
+    ///
+    /// The pair above declares no `param` and no range worth reading, so a
+    /// rendering that dropped every `param_decl`, or one that printed a `min`
+    /// where a `max` was, would pass against it. Every number here is a
+    /// different number, and none of them is a number anything else in this
+    /// module writes.
+    const PROBE_KNOBS: &str = r#"
+proc probe_knobs {
+  kind     L1
+  topology points
+  capacity [16, 4096] = 256
+
+  param radius : float [0.5, 3.5] = 1.75
+
+  emit position
+
+  element {
+    position = vec3(radius, 0.0, 0.0);
+  }
+}
+"#;
+
     /// A slot holding one of everything, in a file order that is deliberately
     /// not the order the layers compose in.
     ///
@@ -1640,7 +1978,7 @@ proc probe_source_b {
             write("blob.kir", PROBE_FIELD),
             write("l1_b.kir", PROBE_L1_B),
         ];
-        let reporter = serve(0, Slots(vec![(head, rest)]), true).expect("serve");
+        let reporter = serve(0, Slots(vec![(head, rest)]), store_root(&dir), true).expect("serve");
         let port = reporter.port();
         stand_in(reporter, no_loop);
         Server { port, dir }
@@ -1662,7 +2000,8 @@ proc probe_source_b {
         std::fs::write(&l4, PROBE_L4).expect("l4");
         // Port 0: the operating system picks, and `serve` reports what it got —
         // which is also the fix for `--mcp 0` naming a port that is not the port.
-        let reporter = serve(0, Slots(vec![(l1, vec![l4])]), watching).expect("serve");
+        let reporter =
+            serve(0, Slots(vec![(l1, vec![l4])]), store_root(&dir), watching).expect("serve");
         let port = reporter.port();
         (Server { port, dir }, reporter)
     }
@@ -2140,7 +2479,7 @@ proc probe_source_b {
         std::fs::write(&l1, PROBE_L1).expect("l1");
         std::fs::write(&l4, PROBE_L4).expect("l4");
         let shared = Slots(vec![(l1.clone(), vec![l4.clone()]), (l1, vec![l4])]);
-        let reporter = serve(0, shared, true).expect("serve");
+        let reporter = serve(0, shared, store_root(&dir), true).expect("serve");
         let port = reporter.port();
         std::mem::forget(reporter);
 
@@ -2188,7 +2527,7 @@ proc probe_source_b {
             (l1.clone(), vec![warp.clone(), l4.clone()]),
             (l1, vec![warp, l4]),
         ]);
-        let reporter = serve(0, shared, true).expect("serve");
+        let reporter = serve(0, shared, store_root(&dir), true).expect("serve");
         let port = reporter.port();
         std::mem::forget(reporter);
 
@@ -2274,7 +2613,8 @@ proc probe_source_b {
         std::fs::write(&l1, PROBE_L1).expect("l1");
         std::fs::write(&l4, PROBE_L4).expect("l4");
         let pair = (l1, vec![l4]);
-        let reporter = serve(0, Slots(vec![pair.clone(), pair]), true).expect("serve");
+        let reporter =
+            serve(0, Slots(vec![pair.clone(), pair]), store_root(&dir), true).expect("serve");
         let server = Server {
             port: reporter.port(),
             dir,
@@ -2504,6 +2844,203 @@ proc probe_source_b {
         assert!(!failed, "{said}");
         assert!(said.contains("--watch"), "{said}");
     }
+
+    /// **A stored artifact, its card, and one Set naming it** — the fixture the
+    /// card tests share.
+    ///
+    /// It puts the source and writes the card through [`crate::meta::card`]
+    /// rather than by hand, because what these tests are about is that the
+    /// numbers a model reads are the numbers the *source* declared: a card
+    /// assembled in the test would only prove this module can render a record
+    /// it was handed.
+    fn kept(server: &Server, id: &str, source: &str, card: bool) -> Hash {
+        let store = server.store();
+        let hash = store.put_artifact(source.as_bytes()).expect("put");
+        if card {
+            let checked = crate::compile::check(source).expect("the fixture compiles");
+            store
+                .write_meta(&hash, &crate::meta::card(&hash, &checked))
+                .expect("card");
+        }
+        set_naming(server, id, hash);
+        hash
+    }
+
+    /// A Set file naming one node, plus a record that is not a `slot`.
+    ///
+    /// The `param` is there so the reader has something to pass over: it is a
+    /// value this Set holds, which is a different question from what the
+    /// artifact declares, and a reader folding the two together would render it
+    /// as a knob.
+    fn set_naming(server: &Server, id: &str, hash: Hash) {
+        server
+            .store()
+            .write_set(
+                id,
+                &[
+                    Line::new(Record::Slot {
+                        layer: Layer::L1,
+                        index: 0,
+                        name: Some("shell".into()),
+                        proc_hash: hash,
+                    }),
+                    Line::new(Record::Param {
+                        layer: Layer::L1,
+                        index: Some(0),
+                        key: "radius".into(),
+                        value: karakuri_store::record::Value::Scalar(2.5),
+                    }),
+                ],
+            )
+            .expect("set");
+    }
+
+    /// **The tool is offered, and what comes back is what the source
+    /// declared.**
+    ///
+    /// The two halves are one test on purpose: a tool that is advertised and
+    /// answers nothing, and one that answers without being advertised, are both
+    /// invisible to a client, and this is the pass that says a model can find it
+    /// and use it in one go.
+    #[test]
+    fn the_set_tool_is_offered_and_a_card_says_what_the_source_declared() {
+        let server = start(true);
+        kept(&server, "keeper", PROBE_KNOBS, true);
+
+        let (_, listed) = post(
+            server.port,
+            &json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}).to_string(),
+        );
+        let listed: Value = serde_json::from_str(&listed).expect("json");
+        let names: Vec<String> = listed["result"]["tools"]
+            .as_array()
+            .expect("tools")
+            .iter()
+            .map(|t| t["name"].as_str().expect("name").to_string())
+            .collect();
+        assert!(
+            names.iter().any(|name| name == "read_set"),
+            "a client is never told the tool exists: {names:?}"
+        );
+
+        let (failed, said) = call(server.port, "read_set", json!({"id":"keeper"}));
+        assert!(!failed, "{said}");
+        // **The declaration, number for number.** Each of these is in the
+        // `.kir` above and in no other fixture, so a rendering that reached for
+        // the wrong end of a range, or that answered off a card it built itself,
+        // says a number that is not here.
+        for expected in [
+            "probe_knobs",
+            "L1:0",
+            "`shell`",
+            "param radius : float, anywhere from 0.5 to 3.5",
+            "and 1.75 until something turns it",
+            "between 16 and 4096 elements, and 256 of them",
+            "emits position",
+        ] {
+            assert!(
+                said.contains(expected),
+                "the card does not say `{expected}`: {said}"
+            );
+        }
+        // **What the Set turned it to is not what the artifact declares.** The
+        // fixture's `param` record holds 2.5 and the tool answers about
+        // declarations; a reader folding the two would print it as a range or as
+        // a default, and either is the `param_decl` / `param` confusion the
+        // record vocabulary keeps two names to prevent.
+        assert!(
+            !said.contains("2.5"),
+            "a value this set holds was rendered as something the artifact \
+             declares: {said}"
+        );
+    }
+
+    /// **An artifact with no card is described, not reported as a broken
+    /// store.**
+    ///
+    /// `Store::put_artifact` writes no card of its own — it takes bytes and does
+    /// not compile — so this is the ordinary state of anything stored before
+    /// cards existed or stored without one, and `Store::read_meta` answers it
+    /// with the same `NotFound` it answers a damaged library with. What a model
+    /// must not be handed is a failed call about a store that is fine.
+    #[test]
+    fn an_artifact_with_no_card_is_answered_and_not_called_a_broken_store() {
+        let server = start(true);
+        kept(&server, "uncarded", PROBE_KNOBS, false);
+        let (failed, said) = call(server.port, "read_set", json!({"id":"uncarded"}));
+        assert!(
+            !failed,
+            "an artifact stored without a card was reported to a model as a failed \
+             call: {said}"
+        );
+        assert!(
+            said.contains("L1:0") && said.contains("no metadata card"),
+            "the node was not described at all: {said}"
+        );
+        assert!(
+            said.contains("not a damaged store"),
+            "a card nobody has written yet reads as damage: {said}"
+        );
+
+        // **A hash this store has never seen is the other absence**, and it is a
+        // different fact: the Set cannot be loaded here at all. Both arrive as
+        // one `NotFound`, so a reader that did not ask the second question tells
+        // a model to go read a source that is not there.
+        set_naming(&server, "elsewhere", Hash::of(b"stored on another machine"));
+        let (failed, said) = call(server.port, "read_set", json!({"id":"elsewhere"}));
+        assert!(!failed, "{said}");
+        assert!(
+            said.contains("does not hold that artifact"),
+            "a set naming material this store has never had was answered as though \
+             the source were here: {said}"
+        );
+    }
+
+    /// **A set id from a client is one path component on the way to a card as
+    /// much as on the way to a save.**
+    ///
+    /// `save_set` puts a client's id through [`checked_id`] and this reads a
+    /// file under `<store>/sets/` by the same spelling — paths never cross this
+    /// protocol, and a *read* is the direction that hands the file back.
+    #[test]
+    fn a_set_id_on_the_way_to_a_card_cannot_name_a_path() {
+        let server = start(true);
+        for bad in [
+            "../../../etc/passwd",
+            "sets/../../elsewhere",
+            "a/b",
+            "~/mine",
+        ] {
+            let (failed, said) = call(server.port, "read_set", json!({"id": bad}));
+            assert!(failed, "`{bad}` was accepted as a set id: {said}");
+            // **Refused before anything was opened.** The refusal names the rule
+            // rather than an errno, which is also how it is told apart from the
+            // one a real read of a missing file produces.
+            assert!(
+                said.contains("path component") || said.contains("letters, digits"),
+                "`{bad}` was refused for something other than being a path: {said}"
+            );
+            assert!(
+                !said.contains("reading set"),
+                "`{bad}` reached the filesystem: {said}"
+            );
+        }
+    }
+
+    /// A set nobody saved is refused by the id that was asked for, and says
+    /// where sets come from — the answer a model can act on, against an errno
+    /// it cannot.
+    #[test]
+    fn a_set_this_store_never_saw_is_refused_by_its_id() {
+        let server = start(true);
+        let (failed, said) = call(server.port, "read_set", json!({"id":"never_saved"}));
+        assert!(
+            failed,
+            "a set that is not there answered as though it were: {said}"
+        );
+        assert!(said.contains("never_saved"), "{said}");
+        assert!(said.contains("save_set"), "{said}");
+    }
 }
 
 #[cfg(test)]
@@ -2519,6 +3056,10 @@ mod tests {
     fn state(events: mpsc::Receiver<Event>) -> State {
         State {
             slots: slots(),
+            // **A root, and nothing here opens it.** Only `read_set` does, on
+            // the call, which is what lets every test in this module build a
+            // state without a directory — see `serve`.
+            store: "a/store".into(),
             watching: true,
             events,
             asked: mpsc::sync_channel(ASKED).0,

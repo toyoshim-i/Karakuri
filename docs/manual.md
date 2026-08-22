@@ -117,7 +117,7 @@ Point a chat client at `http://127.0.0.1:8737/` and it can **read a slot's proce
 it, and be told what happened**. "The one that's showing now, a bit more vivid" is a small
 edit to a declarative file, and hot-swapping that file is what `--watch` already does.
 
-Four tools. `read_procedure` gives you the source; `write_procedure` checks it and, if it
+Five tools. `read_procedure` gives you the source; `write_procedure` checks it and, if it
 compiles, writes it — **and if it does not compile, what comes back is the checker's
 diagnostics, against the source**, which is what lets a model fix its own mistake;
 `swap_outcome` says whether the result landed, was rolled back for costing too much, or
@@ -135,6 +135,20 @@ same distinction the key makes and is worth re-reading below under [Keep it](#ke
 **It waits for the disk before it answers**, so what comes back names the id the set was
 written under; a model that has just made something worth keeping can ask for it to be kept
 and be told whether that worked, instead of asking a hand to press a key.
+
+`read_set` is the fifth and it is the way back in. Give it the id of a set you kept and it
+says **what that set holds and what each procedure in it declares**: every node with its
+layer and the name the set gave it, what the procedure calls itself, each knob with the two
+numbers a value has to lie between and the value it takes when nothing turns it, the element
+count a geometry may run at, and the attributes it emits for a renderer to consume. It reads
+those off the metadata card the store keeps beside every artifact a compile put there, so
+*"what is in `night01`, and what can I turn on it"* costs no load and no compile — which
+before this meant fetching each source and compiling it, and for a set you have not loaded
+meant nothing could answer at all. **Ranges are declarations and not settings**: a range says
+what a value will be refused outside of, not where this set has it. An artifact stored
+without a card — put as bytes, or put by a build older than cards — is described as exactly
+that, and not as a broken library: cards are derived, one appears the next time something
+compiles that artifact and stores it, and the source is in the store either way.
 
 Two resources come with it: the IR specification, and a vocabulary page — every built-in,
 every topology, and every stage output — **generated from the checker's own tables** rather
