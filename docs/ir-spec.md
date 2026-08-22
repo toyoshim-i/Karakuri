@@ -3405,28 +3405,14 @@ elements than one workgroup covers sees neither mistake.
 
 ## Resolved
 
-- **Measured signals in the record stream.** An `audio` record per frame and a `tempo`
-  record per correction, on `tick`'s terms: derived live, read back verbatim on replay,
-  and the analyser never runs twice on one session. Recording the *correction* rather than
-  the estimate is what lets the analyser improve without changing how an old session
-  replays. See
-  [Measurement in the stream](#measurement-in-the-stream--audio-and-tempo).
-- **A measured signal versus an invented one.** Same names, same `sample` call, different
-  confidence — nothing anywhere asks whether a device exists. A frame with no `audio`
-  record is not a frame of silence: it is a frame with no provider, and every name answers
-  what it answered before audio existed. See
-  [What a binding does](#what-a-binding-does).
-- **Noise rate under tempo correction.** Stays cycles per beat, follows a tempo
-  correction, ignores a phase one. The alternatives made two kinds of noise and left every
-  existing `bind` record ambiguous. See [Binding noise](#binding-noise).
+Every decision this specification settled is in [docs/adr/](adr/), one record each, with the
+alternatives that lost and the reasons they lost — element identity, compaction, `var`, spawn
+quantization, substepping, sorting, runtime capacity, and the measured signals. The rules those
+decisions left in force are one file each in [docs/principles/](principles/), where `ls` is the index.
 
-Everything above concerns the measured signals, which are the newest part of the language.
-**The rest of what this specification settled — element identity, compaction, `var`, spawn
-quantization, substepping, sorting and runtime capacity — has moved to
-[docs/adr/](adr/), where the alternatives that lost are recorded with the reasons they
-lost.** The rules those decisions left in force are one file each in
-[docs/principles/](principles/). What each decision produced is normative text in the
-sections above and is unchanged.
+What each decision produced is normative text in the sections above and is unchanged. This section
+kept summaries of it until the records existed; they exist now, and a summary that restates a decision
+is a second place for it to drift.
 
 ## Open questions
 
