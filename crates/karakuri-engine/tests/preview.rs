@@ -74,6 +74,7 @@ fn fit(gpu: &Gpu, target_w: u32, target_h: u32) -> Vec<u8> {
         depth_stencil_attachment: None,
         timestamp_writes: None,
         occlusion_query_set: None,
+        multiview_mask: None,
     }));
 
     present.draw(&mut encoder, &view, (target_w, target_h));
@@ -97,8 +98,10 @@ fn fit(gpu: &Gpu, target_w: u32, target_h: u32) -> Vec<u8> {
 
     let slice = readback.slice(..);
     slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
-    gpu.device.poll(wgpu::PollType::Wait).expect("poll");
-    let pixels = slice.get_mapped_range().to_vec();
+    gpu.device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("poll");
+    let pixels = slice.get_mapped_range().expect("map").to_vec();
     readback.unmap();
     pixels
 }

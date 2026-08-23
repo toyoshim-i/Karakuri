@@ -233,8 +233,10 @@ proc lens {
         gpu.queue.submit([encoder.finish()]);
         let slice = readback.slice(..);
         slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
-        gpu.device.poll(wgpu::PollType::Wait).expect("poll");
-        let data = slice.get_mapped_range();
+        gpu.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
+        let data = slice.get_mapped_range().expect("map");
         let out = data
             .chunks_exact(8)
             .filter(|t| f16(u16::from_le_bytes([t[0], t[1]])) > 0.01)

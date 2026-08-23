@@ -13,4 +13,4 @@ karakuri-ir.workspace = true
 # dependency tree via wgpu (karakuri-engine); pulling it in directly here lets
 # tests feed generated text through a real WGSL front end instead of trusting
 # that it merely looks right.
-naga = { version = "26", features = ["wgsl-in"] }
+naga = { version = "30", features = ["wgsl-in"] }

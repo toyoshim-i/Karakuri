@@ -32,7 +32,13 @@ impl Gpu {
     /// adapter that must be compatible with it, so a windowed caller needs the
     /// three steps apart.
     pub fn instance() -> wgpu::Instance {
-        wgpu::Instance::new(&wgpu::InstanceDescriptor::default())
+        // **Exactly what `Default` was**, which wgpu 30 removed: every field
+        // defaulted and no display handle. The handle is the one field that is
+        // new, and it is unused on Metal, Vulkan and DX12 — only GLES needs
+        // it, and on Wayland it is required to present at all. So a GL backend
+        // on Linux is where this constructor stops being the right one, and
+        // the handle to pass there is winit's `OwnedDisplayHandle`.
+        wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle())
     }
 
     pub async fn from_instance(
@@ -44,6 +50,11 @@ impl Gpu {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 force_fallback_adapter: false,
                 compatible_surface,
+                // Bucketed limits exist to blunt fingerprinting where wgpu is
+                // exposed to untrusted content. Nothing here is, and bucketing
+                // would round `adapter.limits()` down below what the device
+                // actually offers.
+                apply_limit_buckets: false,
             })
             .await?;
 
@@ -71,6 +82,9 @@ impl Gpu {
                 required_features,
                 required_limits: adapter.limits(),
                 memory_hints: wgpu::MemoryHints::Performance,
+                // Nothing above asks for an `EXPERIMENTAL_`-prefixed feature,
+                // and the token is the one thing that would let one through.
+                experimental_features: wgpu::ExperimentalFeatures::disabled(),
                 trace: wgpu::Trace::Off,
             })
             .await?;

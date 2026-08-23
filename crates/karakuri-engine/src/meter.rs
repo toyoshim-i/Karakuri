@@ -357,8 +357,8 @@ impl Meters {
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("meter"),
-            bind_group_layouts: &[&layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&layout)],
+            immediate_size: 0,
         });
         let pipeline = |entry_point: &str, label: &str| {
             device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -509,7 +509,10 @@ impl Meters {
                     continue;
                 }
                 let staging = &meter.ring[index].buffer;
-                let data = staging.slice(..).get_mapped_range();
+                let data = staging
+                    .slice(..)
+                    .get_mapped_range()
+                    .expect("the map callback reported success");
                 let mean = f32::from_le_bytes(data[0..4].try_into().expect("4-byte chunk"));
                 let peak = f32::from_le_bytes(data[4..8].try_into().expect("4-byte chunk"));
                 let bad = f32::from_le_bytes(data[8..12].try_into().expect("4-byte chunk"));

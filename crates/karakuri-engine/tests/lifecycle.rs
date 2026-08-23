@@ -116,7 +116,9 @@ proc emitter {{
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         set.render(&mut encoder, present.hdr_view(), steps);
         gpu.queue.submit([encoder.finish()]);
-        gpu.device.poll(wgpu::PollType::Wait).expect("poll");
+        gpu.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
     }
 
     /// One frame, returning the rendered `Rgba16Float` texels.
@@ -154,8 +156,10 @@ proc emitter {{
 
         let slice = readback.slice(..);
         slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
-        gpu.device.poll(wgpu::PollType::Wait).expect("poll");
-        let data = slice.get_mapped_range();
+        gpu.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
+        let data = slice.get_mapped_range().expect("map");
         let out = data
             .chunks_exact(2)
             .map(|b| u16::from_le_bytes([b[0], b[1]]))

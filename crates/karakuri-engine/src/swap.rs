@@ -21,7 +21,7 @@
 //! `Set`, handed over on a channel already finished.
 //!
 //! The render thread's side of that channel is `try_recv`, never `recv`, and
-//! there is no `device.poll(PollType::Wait)` anywhere on the frame path. A
+//! there is no `device.poll(PollType::wait_indefinitely())` anywhere on the frame path. A
 //! frame that finds nothing waiting does nothing about it and renders.
 //!
 //! ## Where a swap lands, and what actually guarantees it
@@ -1254,7 +1254,7 @@ fn run_worker(
             // thread must never do; a worker thread is exactly where it
             // belongs.
             queue.submit([]);
-            let _ = device.poll(wgpu::PollType::Wait);
+            let _ = device.poll(wgpu::PollType::wait_indefinitely());
 
             // And then measure it, on the same thread and for the same reason.
             // Caught for the same reason the build is: this reaches driver code
@@ -1289,7 +1289,7 @@ fn run_worker(
             // of the swap frame. The flush before the measurement does not
             // cover an upload the measurement itself creates.
             queue.submit([]);
-            let _ = device.poll(wgpu::PollType::Wait);
+            let _ = device.poll(wgpu::PollType::wait_indefinitely());
         }
 
         if out
@@ -1322,7 +1322,7 @@ fn panic_detail(payload: &Box<dyn std::any::Any + Send>) -> String {
 /// `Set` must stay `Send`, because the whole design above rests on building
 /// one on a worker thread and moving it to the render thread.
 ///
-/// It is today: every field is a wgpu handle (all `Send + Sync` in wgpu 26),
+/// It is today: every field is a wgpu handle (all `Send + Sync` in wgpu 30),
 /// a `Vec`, a `HashMap`, or a plain number. Nothing is a `Rc`, a `Cell`, or a
 /// raw pointer. This assertion is here so that a field which *is* one of those
 /// fails to compile at the line that explains why it matters, rather than

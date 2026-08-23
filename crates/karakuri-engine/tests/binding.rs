@@ -149,7 +149,9 @@ fn frame(gpu: &Gpu, deck: &mut Deck, present: &Present, steps: u8) {
     let mut f = deck.begin_frame(&gpu.device, &gpu.queue);
     f.render(present.hdr_view(), present.size(), steps);
     f.finish();
-    gpu.device.poll(wgpu::PollType::Wait).expect("poll");
+    gpu.device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("poll");
 }
 
 /// The mix, read back. `Rgba16Float` in and out with one slot at unity gain
@@ -186,8 +188,10 @@ fn readback(gpu: &Gpu, texture: &wgpu::Texture) -> Vec<u16> {
 
     let slice = buffer.slice(..);
     slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
-    gpu.device.poll(wgpu::PollType::Wait).expect("poll");
-    let data = slice.get_mapped_range();
+    gpu.device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("poll");
+    let data = slice.get_mapped_range().expect("map");
     let out = data
         .chunks_exact(2)
         .map(|b| u16::from_le_bytes([b[0], b[1]]))

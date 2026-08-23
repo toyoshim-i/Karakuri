@@ -12,7 +12,7 @@
 //!
 //! ## The harness waits for the GPU each frame, and the real one does not
 //!
-//! `Harness::frame` submits and then calls `device.poll(PollType::Wait)`. That
+//! `Harness::frame` submits and then calls `device.poll(PollType::wait_indefinitely())`. That
 //! is the submit-and-wait pattern the render thread must never use; it is here
 //! for two reasons. It bounds a headless loop that would otherwise queue
 //! thousands of command buffers ahead of the GPU, standing in for the vsync
@@ -304,7 +304,9 @@ proc wide_points {
             self.frame_capacities.push((at_top, at_bottom));
             // See the module doc: standing in for vsync, and what makes the
             // measured interval include the GPU rather than only the submission.
-            device.poll(wgpu::PollType::Wait).expect("poll");
+            device
+                .poll(wgpu::PollType::wait_indefinitely())
+                .expect("poll");
         }
 
         /// Render frames until `wanted` matches an event, and return how many
@@ -1025,7 +1027,9 @@ proc fountain {
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         set.render(&mut encoder, view, steps);
         gpu.queue.submit([encoder.finish()]);
-        gpu.device.poll(wgpu::PollType::Wait).expect("poll");
+        gpu.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
     }
 
     fn pixels(gpu: &Gpu, texture: &wgpu::Texture) -> Vec<u16> {
@@ -1058,8 +1062,10 @@ proc fountain {
         gpu.queue.submit([encoder.finish()]);
         let slice = buffer.slice(..);
         slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
-        gpu.device.poll(wgpu::PollType::Wait).expect("poll");
-        let data = slice.get_mapped_range();
+        gpu.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
+        let data = slice.get_mapped_range().expect("map");
         let out = data
             .chunks_exact(2)
             .map(|b| u16::from_le_bytes([b[0], b[1]]))

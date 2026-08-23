@@ -12,7 +12,7 @@ karakuri-ir = { version = "0.1.0", path = "../karakuri-ir" }
 karakuri-signal = { version = "0.1.0", path = "../karakuri-signal" }
 pollster = "1.0.1"
 thiserror.workspace = true
-wgpu = "26.0.1"
+wgpu = "30.0.1"
 winit = "0.30.13"
 
 [dev-dependencies]

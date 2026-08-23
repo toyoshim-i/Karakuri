@@ -233,9 +233,9 @@ impl Sink for PngSink {
         let slice = self.readback.slice(..);
         slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
         gpu.device
-            .poll(wgpu::PollType::Wait)
+            .poll(wgpu::PollType::wait_indefinitely())
             .map_err(|e| format!("{e}"))?;
-        let mapped = slice.get_mapped_range();
+        let mapped = slice.get_mapped_range().map_err(|e| format!("{e}"))?;
         let pixels = unpad_rows(&mapped, self.padded_row, self.unpadded_row);
         drop(mapped);
         self.readback.unmap();

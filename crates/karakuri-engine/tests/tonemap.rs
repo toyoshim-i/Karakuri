@@ -72,8 +72,10 @@ mod gpu {
 
         let slice = readback.slice(..);
         slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
-        gpu.device.poll(wgpu::PollType::Wait).expect("poll");
-        let pixels = slice.get_mapped_range().to_vec();
+        gpu.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
+        let pixels = slice.get_mapped_range().expect("map").to_vec();
         readback.unmap();
         pixels
     }

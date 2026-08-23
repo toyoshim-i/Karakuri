@@ -170,8 +170,8 @@ impl Camera {
         });
         let derive_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("camera derive"),
-            bind_group_layouts: &[&derive_bgl],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&derive_bgl)],
+            immediate_size: 0,
         });
         let derive = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("camera derive"),
@@ -407,8 +407,8 @@ impl Producer {
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("L3"),
-            bind_group_layouts: &[&uniform_bgl, &state_bgl],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&uniform_bgl), Some(&state_bgl)],
+            immediate_size: 0,
         });
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some(&l3.name),

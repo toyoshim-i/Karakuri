@@ -1352,15 +1352,17 @@ impl Set {
         salts: &[Option<u32>],
         wiring: Wiring<'_>,
     ) -> Result<Set, SetError> {
-        device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
         let built = Set::build_inner(
             device, queue, l1s, l2s, l3s, fields, l4s, layering, seed_salt, salts, wiring,
         );
         // **Popped on every path**, which is why the body is a second function
         // rather than this one: it returns early in a dozen places, and a scope
         // left on the stack would catch the *next* build's errors and report
-        // them against this one.
-        let captured = pollster::block_on(device.pop_error_scope());
+        // them against this one. Since wgpu 30 the guard's `Drop` pops it too,
+        // so the split no longer *prevents* that — what it still buys is the
+        // captured error as a value, which only an explicit `pop()` yields.
+        let captured = pollster::block_on(scope.pop());
 
         match (built, captured) {
             // **Our own refusal wins.** Where both fired, ours is the one with
@@ -4754,8 +4756,10 @@ proc dots {
                 gpu.queue.submit([encoder.finish()]);
                 let slice = readback.slice(..);
                 slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
-                gpu.device.poll(wgpu::PollType::Wait).expect("poll");
-                let data = slice.get_mapped_range();
+                gpu.device
+                    .poll(wgpu::PollType::wait_indefinitely())
+                    .expect("poll");
+                let data = slice.get_mapped_range().expect("map");
                 let mut out = [0u32; 12];
                 for (i, w) in data.chunks_exact(4).take(12).enumerate() {
                     out[i] = u32::from_le_bytes([w[0], w[1], w[2], w[3]]);

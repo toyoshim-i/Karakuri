@@ -5335,6 +5335,13 @@ impl ApplicationHandler for App {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
+            // The format above already carries the transfer function, and
+            // `Auto` is the one value that leaves the presentation engine
+            // interpreting the swapchain exactly as it always has: sRGB for an
+            // `*Srgb` format, and never a wide-gamut or HDR space picked
+            // behind the pipeline's back. See P-0064 — sRGB is encoded once,
+            // at final output, and that is here.
+            color_space: wgpu::SurfaceColorSpace::Auto,
             width: size.width.max(1),
             height: size.height.max(1),
             // **Chosen, not taken.** This was `caps.present_modes[0]`, which is
