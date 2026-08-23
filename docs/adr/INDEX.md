@@ -182,6 +182,7 @@ number; new records continue from the end.
 | [ADR-0154](0154-a-third-path-on-set-is-a-second-renderer-and-there-is-no-new-syntax.md) | A third path on `--set` is a second renderer, and there is no new syntax | 2026-08-16 | accepted |
 | [ADR-0155](0155-egui-draws-the-panel-and-the-price-is-wgpu-30.md) | egui draws the panel, and the price is wgpu 30 | 2026-08-23 | accepted |
 | [ADR-0156](0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md) | The console's arrangement is a tree this repository owns, not the toolkit's panels | 2026-08-23 | accepted |
+| [ADR-0157](0157-a-maximum-is-honoured-and-the-leftover-is-trailing-space.md) | A maximum is honoured, and the leftover is trailing space | 2026-08-23 | accepted |
 
 ## Retired numbers
 
