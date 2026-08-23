@@ -3658,9 +3658,10 @@ proc twice {
 }
 
 /// **A camera's members are resolved against its type**, so a name that is not
-/// one of the three is refused with the three named — and with the four values
-/// an L4 still cannot read, which is work not yet done rather than an
-/// oversight.
+/// one of the three is refused with the three named — and with the five values
+/// an L4 still cannot read, which is unbuilt by decision rather than by
+/// oversight:
+/// `docs/adr/0153-a-renderer-reads-three-camera-members-and-the-l3s-five-stay-unreadable.md`.
 #[test]
 fn a_member_a_camera_has_not_got_is_refused() {
     let errs = check_err(&THROUGH.replace("view.clip", "view.target"));

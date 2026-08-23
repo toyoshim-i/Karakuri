@@ -715,11 +715,14 @@ pub struct Set {
     /// against its first entry is what made accepting a second one a change
     /// where the sources are *made* and nowhere else.
     ///
-    /// **What a second source still has is no name**, which is why the
-    /// surfaces around the engine stop at one: a hot-swap rebuild, a Set file,
-    /// an MCP edit and the edit history all address a slot by layer and index,
-    /// and "the second geometry" is not something any of them can say: naming
-    /// what a Set holds is undecided.
+    /// **What a second source is called is settled.** Every node has a name —
+    /// the caller's where it wrote one, the procedure's own otherwise — and a
+    /// hot-swap rebuild, a Set file, an MCP edit and the edit history all
+    /// address a node by `(layer, index)` and carry that name beside it, so
+    /// "the second geometry" is something every one of them can say. A
+    /// procedure names the *slot* it takes rather than the node that fills it,
+    /// and an `edge` binds the two — see
+    /// `docs/adr/0152-a-kir-names-a-slot-and-the-set-names-the-nodes.md`.
     sources: Vec<Source>,
     /// **What each geometry is salted with**, in L1-procedure order — so a
     /// pairing Set has two entries and one [`Source`].
@@ -2997,8 +3000,10 @@ impl Set {
     /// be: a name is per *procedure* and an entry here is per *instance*, so a
     /// Set over two sources instantiates one chain of deforms twice and has
     /// more entries than there are names. Labelling these belongs to whatever
-    /// gives a node instance an address, which nothing does yet: naming what a
-    /// Set holds is undecided.
+    /// gives a node *instance* an address, which nothing does yet: naming
+    /// settled on the procedure and deliberately left the instance alone, and
+    /// nothing outside this method has wanted one since — see
+    /// `docs/adr/0152-a-kir-names-a-slot-and-the-set-names-the-nodes.md`.
     ///
     /// **A renderer, a camera and a merge are absent rather than zero.** An L4
     /// draws from the buffer the node above it allocated, so charging it would

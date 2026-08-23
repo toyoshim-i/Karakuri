@@ -212,8 +212,9 @@ pub const DEFAULT_BUDGET_MS: f32 = 20.0;
 /// comparable with one taken a drag-resize earlier. A governor adds
 /// measurements together and compares them, so **comparable matters more than
 /// absolute** — and an absolute number would be a lie the moment the window
-/// moved anyway. 1280x720 because it is the size every other figure in
-/// this repository was taken at.
+/// moved anyway. 1280x720 because it is the size every other figure in this
+/// repository was taken at — the reference workload is 262144 elements at
+/// 1280x720, and `docs/contributing.md` §1 says why everything is quoted there.
 pub const PROBE_RESOLUTION: (u32, u32) = (1280, 720);
 
 /// Simulation steps per measured frame. One, because that is what a `tick`

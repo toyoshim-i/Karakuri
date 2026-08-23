@@ -932,7 +932,9 @@ one derived from the procedure when you wrote none, which is `sphere_shell` here
 **An unbound slot is refused**, with a sentence naming the slot and listing what the Set
 holds. There is no "if there's exactly one, use it": that rule is what used to make the far
 geometry `--set` position 1, written down nowhere, so reordering the command line changed the
-picture in silence.
+picture in silence. Both halves of this — the slot name belonging to the procedure, and the
+refusal — are
+[ADR-0152](adr/0152-a-kir-names-a-slot-and-the-set-names-the-nodes.md).
 
 `k` is an ordinary `param`, so a fader, a signal binding, a transition and a published control
 all reach it. At 0 you see the geometry the chain runs over, at 1 the one the edge names, and

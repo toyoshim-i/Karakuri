@@ -6804,8 +6804,10 @@ impl Live {
     /// **Cycle what the output is showing**: the mix, then each slot in turn,
     /// then the mix again.
     ///
-    /// Auditioning is a prerequisite rather than a
-    /// convenience — choosing between candidates cannot be done blind. Every
+    /// Auditioning is a prerequisite rather than a convenience — choosing
+    /// between candidates cannot be done blind, and see
+    /// `docs/principles/0070-auditioning-is-a-prerequisite-not-a-convenience.md`
+    /// for what that rules out. Every
     /// slot is offered whatever its residency, because an off-air slot is
     /// exactly the one worth looking at: an Allocated one shows the still it
     /// stopped at and a Priming one shows what it is warming into.
@@ -8404,7 +8406,8 @@ mod tests {
     /// filename, so a stray comma got blamed on a missing file. Now a Set holds
     /// a list, and one comma-separated list read as one L1 and however many L4s
     /// is exactly what the command line should look like — *no new syntax at
-    /// all*.
+    /// all*. See
+    /// `docs/adr/0154-a-third-path-on-set-is-a-second-renderer-and-there-is-no-new-syntax.md`.
     #[test]
     fn set_with_three_paths_is_one_geometry_and_two_renderers() {
         let args = parse(&["--set", "a.kir,b.kir,c.kir"]).expect("should parse");

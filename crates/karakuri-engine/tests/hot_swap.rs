@@ -48,8 +48,9 @@ mod gpu {
     const SECOND: u32 = 8192;
 
     /// The workload the reported numbers are taken at — the CLI's own defaults,
-    /// so that they are comparable with the other host-clock figures in
-    /// this repository rather than being a measurement of a toy.
+    /// so that they are comparable with the other host-clock figures in this
+    /// repository rather than being a measurement of a toy. That one workload
+    /// is the rule and not a coincidence: `docs/contributing.md` §1.
     const REAL: (u32, (u32, u32)) = (262_144, (1280, 720));
 
     /// A budget no frame in this harness will come near, for the tests that want a

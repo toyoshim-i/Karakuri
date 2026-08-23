@@ -51,6 +51,17 @@ anything on the frame path; the colour rule in particular is
   rather than trusting the feature flag, and falls back to a host measurement that says so
   in the result. Treat every performance number produced here as host-side and biased high
   until this rule can be honoured on real hardware
+- **One reference workload: 262144 elements at 1280x720.** Every host-clock figure quoted in
+  this repository is taken there, which is the only reason two of them written a month apart can
+  be put beside each other. It is neither a target nor a limit — it is the `.kir` default
+  capacity and the default canvas, and it earns its place by being what everything else was
+  measured at. A number taken anywhere else says so beside itself, because the failure this
+  prevents is silent: a reader subtracts two figures that were never about the same thing and
+  gets a result that looks like a finding. It is also why
+  [`swap.rs`](../crates/karakuri-engine/src/swap.rs)'s `PROBE_RESOLUTION` is fixed rather than
+  the deck's — a governor adds per-Set measurements together, so **comparable matters more than
+  absolute**. What a number carries about *how* it was taken is separate and is
+  [P-0012](principles/0012-a-measurement-carries-how-it-was-taken.md)
 
 ### Working with git
 

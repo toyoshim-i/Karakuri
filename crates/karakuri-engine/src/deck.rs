@@ -1463,8 +1463,9 @@ impl Deck {
     /// **Audition one slot instead of the mix**, or `None` for the mix.
     ///
     /// A live preview of any slot's output, and a prerequisite rather than a
-    /// convenience: choosing between candidates is
-    /// the basic workflow and it cannot be done blind.
+    /// convenience: choosing between candidates is the basic workflow and it
+    /// cannot be done blind — see
+    /// `docs/principles/0070-auditioning-is-a-prerequisite-not-a-convenience.md`.
     ///
     /// **It adds a draw and never a step.** A previewed slot is rendered
     /// whatever its residency, so an Allocated one shows the still it holds and

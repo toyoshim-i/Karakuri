@@ -36,9 +36,13 @@ pub enum Kind {
     /// procedures evaluate it, which is why it needs no buffer, no pass and no
     /// position in the chain.
     ///
-    /// One per Set, on the same terms as the camera: several would need naming,
-    /// naming is fan-in, and fan-in arrives with multiple L1 sources and
-    /// brings its notation with it.
+    /// **One per Set no longer**, and on the same terms as the camera: a Set
+    /// holds as many fields as its files declare, each a node with a name an
+    /// edge can point at. The cap was the missing notation rather than the
+    /// language — a caller reaches one through a slot its own procedure
+    /// declares, `uses shape : Field` called `shape(p)` — which is the fan-in
+    /// multiple L1 sources arrived with. See
+    /// `docs/adr/0152-a-kir-names-a-slot-and-the-set-names-the-nodes.md`.
     Field,
 }
 
