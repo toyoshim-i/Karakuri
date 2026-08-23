@@ -305,7 +305,10 @@ The present tense lives in the other documents; `docs/principles/` is where a ru
 is kept current, by deletion and renumbering rather than by editing.
 
 **A source comment cites what is in force — a principle, an ADR, or a present-tense document. It never
-cites a plan.** `docs/roadmap.md` and anything under `docs/history/` are schedules: a reader who
+cites a plan**, and **a milestone named without a filename is the same citation** — *"M2's budget
+governor"* carries a schedule into the code exactly as a path would, and is harder to find because
+searching for the document does not catch it. `docs/roadmap.md` and anything under `docs/history/` are
+schedules: a reader who
 follows the pointer arrives at work that was *intended*, not at why the code is the way it is, and
 when the milestone closes the comment still reads plausibly while pointing at nothing. Where the
 comment already states its claim, write no pointer. Where the reason is genuinely elsewhere, an ADR is

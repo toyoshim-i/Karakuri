@@ -2,6 +2,12 @@ A source comment cites what is **in force** — a principle, an ADR, or a presen
 document like `docs/ir-spec.md`. **It never cites a plan**, which means `docs/roadmap.md`
 and anything under `docs/history/`.
 
+**A milestone named without a filename is the same citation.** *"M2's budget governor"*,
+*"deferred to M6"*, *"says M2 of the budget governor"* — these carry a schedule into the code
+exactly as a path would, and they are harder to find because a search for the document does
+not catch them. Where the thing exists, name the thing (`crate::governor`, not "M2's budget
+governor"). Where it does not, say that it is not built rather than when it was going to be.
+
 What this rules out is the citation that reads as authority and is a schedule:
 *"`docs/roadmap.md`, M4, \"Naming what a Set holds\""*. A milestone describes work that was
 intended, organised by when it was going to happen, and a reader who follows the pointer
