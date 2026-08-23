@@ -140,10 +140,10 @@ impl Renderer {
         // about the layout saying what the shader is, and about leaving the
         // *number* free for the camera below, which does need a group index with
         // nothing missing under it.
-        let mut groups: Vec<&wgpu::BindGroupLayout> = if fullscreen {
-            vec![&uniform_bgl]
+        let mut groups: Vec<Option<&wgpu::BindGroupLayout>> = if fullscreen {
+            vec![Some(&uniform_bgl)]
         } else {
-            vec![&uniform_bgl, &attr_bgl]
+            vec![Some(&uniform_bgl), Some(&attr_bgl)]
         };
         // **The generated source names the index and this asserts it**, rather
         // than a constant in two crates that agree by convention: which group
@@ -157,12 +157,12 @@ impl Renderer {
                 groups.len(),
                 "the camera's group index must follow the groups below it"
             );
-            groups.push(camera.layout());
+            groups.push(Some(camera.layout()));
         }
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("L4"),
             bind_group_layouts: &groups,
-            push_constant_ranges: &[],
+            immediate_size: 0,
         });
         // **What the fragment stage writes to, which the blend mode chooses.**
         // The generated shader returns one `vec4` or a two-field struct — see
@@ -243,7 +243,7 @@ impl Renderer {
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -347,6 +347,7 @@ impl Renderer {
                     depth_stencil_attachment: None,
                     timestamp_writes: None,
                     occlusion_query_set: None,
+                    multiview_mask: None,
                 });
                 self.record(&mut pass, parity, counts_buf);
             }
@@ -376,6 +377,7 @@ impl Renderer {
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
+            multiview_mask: None,
         });
         self.record(&mut pass, parity, counts_buf);
     }

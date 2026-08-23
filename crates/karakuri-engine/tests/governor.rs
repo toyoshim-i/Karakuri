@@ -484,7 +484,9 @@ fn frame(gpu: &Gpu, deck: &mut Deck, present: &Present, steps: u8) {
     let mut f = deck.begin_frame(&gpu.device, &gpu.queue);
     f.render(present.hdr_view(), present.size(), steps);
     f.finish();
-    gpu.device.poll(wgpu::PollType::Wait).expect("poll");
+    gpu.device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("poll");
 }
 
 fn steps_taken(set: &Set) -> u64 {

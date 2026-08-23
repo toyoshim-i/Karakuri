@@ -232,29 +232,42 @@ impl WindowSink {
 impl Sink for WindowSink {
     fn acquire(&mut self, gpu: &Gpu) -> Result<(), Skip> {
         let texture = match self.surface.get_current_texture() {
-            Ok(texture) => texture,
+            // `Suboptimal` is a texture like any other — it draws correctly and
+            // asks to be reconfigured for performance, which the next resize
+            // does anyway. Skipping the frame to reconfigure would drop a frame
+            // that was in hand.
+            wgpu::CurrentSurfaceTexture::Success(texture)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(texture) => texture,
             // The swapchain needs remaking, which is what these two mean.
             // Reconfigured here and retried next frame rather than in a loop:
             // a frame is cheap and a spin is not.
-            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+            wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Outdated => {
                 self.surface.configure(&gpu.device, &self.config);
                 return Err(Skip::Transient);
             }
-            // Genuinely transient and self-describing. Naming it would be
-            // naming ordinary jitter.
-            Err(wgpu::SurfaceError::Timeout) => return Err(Skip::Transient),
+            // Genuinely transient and self-describing. Naming them would be
+            // naming ordinary jitter — or, for `Occluded`, naming a minimised
+            // window. Neither is a fault: the frame is dropped and the next one
+            // is asked for.
+            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                return Err(Skip::Transient)
+            }
             // Not self-correcting the way `Timeout` is — one is fatal and the
             // other is a generic failure the caller cannot act on. Returning
             // silently left a frozen window with no reason for it anywhere;
             // saying it every frame would bury it under sixty copies a second
             // of itself, and formatting it every frame would allocate on the
             // frame path. So it is built exactly once.
-            Err(e) => {
+            wgpu::CurrentSurfaceTexture::Validation => {
                 if self.faulted {
                     return Err(Skip::Transient);
                 }
                 self.faulted = true;
-                return Err(Skip::Fault(format!("{e} — the window has stopped drawing")));
+                return Err(Skip::Fault(
+                    "acquiring a texture raised a validation error \
+                     — the window has stopped drawing"
+                        .into(),
+                ));
             }
         };
         // A frame arrived, so whatever went wrong is over and the next fault
@@ -277,9 +290,9 @@ impl Sink for WindowSink {
         (self.config.width, self.config.height)
     }
 
-    fn present(&mut self, _gpu: &Gpu) -> Result<(), String> {
+    fn present(&mut self, gpu: &Gpu) -> Result<(), String> {
         if let Some((texture, _view)) = self.current.take() {
-            texture.present();
+            gpu.queue.present(texture);
         }
         Ok(())
     }
@@ -391,12 +404,15 @@ mod tests {
             self.presented += 1;
             let slice = self.readback.slice(..);
             slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
-            gpu.device.poll(wgpu::PollType::Wait).expect("poll");
+            gpu.device
+                .poll(wgpu::PollType::wait_indefinitely())
+                .expect("poll");
             // **Colour only.** The present pass returns `vec4(rgb, 1.0)`, so
             // every texel's alpha is 255 and a scan over all four channels
             // answers "lit" for a frame that is entirely black.
             let lit = slice
                 .get_mapped_range()
+                .expect("map")
                 .chunks(4)
                 .any(|texel| texel[..3].iter().any(|&b| b > 0));
             self.readback.unmap();

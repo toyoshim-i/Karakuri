@@ -385,8 +385,13 @@ impl Simulation {
         // fourth, which stopped being true when `t` moved out of the uniform.
         let compute_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("L1"),
-            bind_group_layouts: &[&uniform_bgl, &prev_bgl, &next_bgl, &step_bgl],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[
+                Some(&uniform_bgl),
+                Some(&prev_bgl),
+                Some(&next_bgl),
+                Some(&step_bgl),
+            ],
+            immediate_size: 0,
         });
         let compute = |entry: &str, layout: &wgpu::PipelineLayout| {
             device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -813,8 +818,10 @@ pub(super) fn read_buffer(
 
     let slice = staging.slice(..);
     slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
-    device.poll(wgpu::PollType::Wait).expect("poll");
-    let data = slice.get_mapped_range();
+    device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("poll");
+    let data = slice.get_mapped_range().expect("map");
     let out = data.to_vec();
     drop(data);
     staging.unmap();

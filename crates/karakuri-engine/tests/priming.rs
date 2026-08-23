@@ -141,7 +141,9 @@ proc soft_points {
         let mut f = deck.begin_frame(&gpu.device, &gpu.queue);
         f.render(present.hdr_view(), present.size(), steps);
         f.finish();
-        gpu.device.poll(wgpu::PollType::Wait).expect("poll");
+        gpu.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
     }
 
     /// Raw `f16` bits, four per texel — raw so that an exact comparison compares
@@ -178,8 +180,10 @@ proc soft_points {
 
         let slice = buffer.slice(..);
         slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
-        gpu.device.poll(wgpu::PollType::Wait).expect("poll");
-        let data = slice.get_mapped_range();
+        gpu.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
+        let data = slice.get_mapped_range().expect("map");
         let out = data
             .chunks_exact(2)
             .map(|b| u16::from_le_bytes([b[0], b[1]]))

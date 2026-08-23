@@ -51,7 +51,7 @@ not about design, and it had no home until the manual had one.
 
 ## Stack
 
-- Rust + wgpu 26 (WGSL), winit
+- Rust + wgpu 30 (WGSL), winit
 - No UI for now. V1 is a CLI plus a window, and **the CLI is scaffolding rather than the
   destination** — the end state is a GUI application, so the command line is deliberately an
   auxiliary way to reach what the records already carry

@@ -94,8 +94,10 @@ fn frame(
 
     let slice = readback.slice(..);
     slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
-    gpu.device.poll(wgpu::PollType::Wait).expect("poll");
-    let data = slice.get_mapped_range();
+    gpu.device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("poll");
+    let data = slice.get_mapped_range().expect("map");
     let pixels = data.to_vec();
     drop(data);
     readback.unmap();

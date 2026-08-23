@@ -141,7 +141,8 @@ impl Deform {
         // plain L2 *below* one inherits the amplified capacity and is exactly as
         // able to exceed the limit.
         let bytes = element_storage.element_buffer();
-        let limit = u64::from(device.limits().max_storage_buffer_binding_size);
+        // `u64` since wgpu 30 — the limit itself, not a widened `u32`.
+        let limit = device.limits().max_storage_buffer_binding_size;
         if bytes > limit {
             return Err(SetError::TooManyElements {
                 l2: l2.name.clone(),
@@ -319,8 +320,8 @@ impl Deform {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("L2"),
-            bind_group_layouts: &[&uniform_bgl, &src_bgl, &dst_bgl],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&uniform_bgl), Some(&src_bgl), Some(&dst_bgl)],
+            immediate_size: 0,
         });
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some(&l2.name),
@@ -360,8 +361,8 @@ impl Deform {
             });
             let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("amplify counts"),
-                bind_group_layouts: &[&bgl],
-                push_constant_ranges: &[],
+                bind_group_layouts: &[Some(&bgl)],
+                immediate_size: 0,
             });
             let derive = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: Some("amplify counts"),

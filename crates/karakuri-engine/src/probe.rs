@@ -76,7 +76,7 @@
 //! "back-to-back" samples read as near-zero and the real cost of the run
 //! shows up as one enormous outlier wherever the driver happens to flush its
 //! backlog. `run_gpu` therefore submits one command buffer per sample and
-//! calls `device.poll(PollType::Wait)` before starting the next, forcing the
+//! calls `device.poll(PollType::wait_indefinitely())` before starting the next, forcing the
 //! GPU to actually finish each sample's work before the next is recorded.
 //! This is the "submit and wait" pattern the render thread must never do per
 //! frame — the render-thread invariants are about the *live* frame loop, and
@@ -122,7 +122,7 @@
 //! what that workload should cost on any real GPU and comfortably above
 //! single-tick noise, before ever calling the timestamps trustworthy. If
 //! calibration fails, `Probe` falls back to a host-clock measurement around
-//! `queue.submit` + `device.poll(PollType::Wait)` — a real number, and a
+//! `queue.submit` + `device.poll(PollType::wait_indefinitely())` — a real number, and a
 //! distinctly worse one (it includes submission and synchronization
 //! overhead, and cannot isolate the render pass from anything else in its
 //! command buffer) — and every [`Measurement`] this probe produces carries a
@@ -150,7 +150,7 @@ pub enum MeasurementMethod {
     /// that cannot genuinely complete in zero time resolved to a zero (or
     /// non-monotonic) delta anyway, so timestamp queries are not trusted on
     /// this device regardless of what it claims. The measurement instead
-    /// wraps `queue.submit` + `device.poll(PollType::Wait)` in a host clock:
+    /// wraps `queue.submit` + `device.poll(PollType::wait_indefinitely())` in a host clock:
     /// a real number, but one that includes submission and synchronization
     /// overhead and cannot isolate one pass from anything else recorded in
     /// its command buffer, so it reads coarser and biased high relative to a
@@ -483,9 +483,11 @@ impl Probe {
         // doc for why a pipelined batch cannot be trusted here.
         let slice = gpu.readback_buffer.slice(..);
         slice.map_async(wgpu::MapMode::Read, |r| r.expect("map probe readback"));
-        device.poll(wgpu::PollType::Wait).expect("poll");
+        device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
         let host_ns = started.elapsed().as_secs_f64() * 1_000_000_000.0;
-        let data = slice.get_mapped_range();
+        let data = slice.get_mapped_range().expect("map probe readback");
         let begin = u64::from_le_bytes(data[0..8].try_into().expect("8-byte chunk"));
         let end = u64::from_le_bytes(data[8..16].try_into().expect("8-byte chunk"));
         drop(data);
@@ -578,7 +580,7 @@ fn fs() -> @location(0) vec4<f32> {{
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("probe calibration"),
             bind_group_layouts: &[],
-            push_constant_ranges: &[],
+            immediate_size: 0,
         });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("probe calibration"),
@@ -598,7 +600,7 @@ fn fs() -> @location(0) vec4<f32> {{
             primitive: wgpu::PrimitiveState::default(),
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -634,6 +636,7 @@ fn fs() -> @location(0) vec4<f32> {{
                     depth_stencil_attachment: None,
                     timestamp_writes: None,
                     occlusion_query_set: None,
+                    multiview_mask: None,
                 });
                 pass.set_pipeline(&pipeline);
                 pass.draw(0..3, 0..1);
@@ -737,7 +740,9 @@ fn fs() -> @location(0) vec4<f32> {{
         source.render(&mut encoder, target_view, steps);
         let start = Instant::now();
         queue.submit([encoder.finish()]);
-        device.poll(wgpu::PollType::Wait).expect("poll");
+        device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
         start.elapsed().as_secs_f64() * 1_000.0
     }
 

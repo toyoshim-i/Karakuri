@@ -149,7 +149,9 @@ mod gpu {
         meters.record(0, &mut encoder);
         gpu.queue.submit([encoder.finish()]);
         meters.arm();
-        gpu.device.poll(wgpu::PollType::Wait).expect("poll");
+        gpu.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
         meters.collect(&gpu.device);
         meters
             .level(0)
@@ -602,7 +604,9 @@ proc nan_points {
     /// `tests/deck.rs` does. It is outside the frame, not in it.
     fn frame(gpu: &Gpu, deck: &mut Deck, present: &Present) {
         frame_without_waiting(gpu, deck, present);
-        gpu.device.poll(wgpu::PollType::Wait).expect("poll");
+        gpu.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
     }
 
     /// The same frame with nothing after it. Used by the test that has to be able
