@@ -773,10 +773,12 @@ const PROTOCOL: &str = "2024-11-05";
 /// This type is the whole of the concurrency design, so it is worth stating
 /// plainly what it buys. `handle` locks the state around [`dispatch`], and there
 /// is a thread per connection: anything waited for under that lock is waited for
-/// by every other client too. Four of the five tools are a file read or a file
-/// write and finish under it — `read_set` is the widest of them, a set file and
-/// a card for each node it names, and that is a bounded count of reads off the
-/// store rather than a wait on anybody else's thread; `save_set` waits for a
+/// by every other client too. Five of the six tools are a file read or a file
+/// write and finish under it — `list_sets` is the widest of them, a directory
+/// read plus a set file each and a card for each node those files left unnamed,
+/// which is a bounded count of reads off the store rather than a wait on
+/// anybody else's thread, and is why it is capped and why it compiles nothing;
+/// `read_set` is the same shape over one set. `save_set` waits for a
 /// render loop and then for a disk, which is unbounded in the only sense that
 /// matters — it depends on somebody else's frame rate.
 ///
@@ -1006,6 +1008,50 @@ fn tools() -> Value {
                 "required": ["id"],
             },
         },
+        {
+            "name": "list_sets",
+            "description":
+                "What this store holds: every Set saved into it, most recently written \
+                 first, with an address and a name per node. A Set is a slot's material \
+                 kept under a name — `save_set` writes one, so does the operator's `k` \
+                 key, and `--load-set ID` plays one back — and until this there was no \
+                 way to find out what had been kept: `read_set` answers about an id you \
+                 already have, and the ids of everything saved before this conversation \
+                 are not something a model can guess. **Call this first, then `read_set` \
+                 on the one you want.** What comes back is a line per set and not what \
+                 any of it declares: the parameters, the element counts and what a node \
+                 emits are `read_set`'s answer, because they need a card per artifact and \
+                 a listing that read them all would be reading a library to print an \
+                 index. **What a node is called here is what `read_set` calls it** — the \
+                 name the set gave it, the name its procedure gives itself where the set \
+                 gave none, and the short hash of its source where there is neither, \
+                 which is an ordinary state and not a damaged store. **The list is \
+                 capped**: what comes back says how many matched and how many are shown, \
+                 and if those differ you are looking at part of a library — narrow it \
+                 with the filters rather than assuming the rest is not there.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "holds": {
+                        "type": "string",
+                        "description":
+                            "list only sets holding a node whose name contains this, \
+                             matched without regard to case — `drift_shell` finds every \
+                             set built on that geometry. Omit to list everything.",
+                    },
+                    "layer": {
+                        "type": "string",
+                        "enum": layers,
+                        "description":
+                            "list only sets holding a node on this layer — `L2` for the \
+                             ones that deform something, `Field` for the ones with a \
+                             distance function. Given with `holds`, both must be true of \
+                             the set, though not of the same node. Omit to list \
+                             everything.",
+                    },
+                },
+            },
+        },
     ])
 }
 
@@ -1031,6 +1077,9 @@ fn call_tool(request: &Value, state: &mut State) -> Result<Called, String> {
         // Answered here like a read and unlike `save_set`: a card is a file, the
         // render loop does not hold one, and there is nothing to wait for.
         "read_set" => Called::Answered(read_set(&args, state)),
+        // A directory read and a file read per set, and nothing else — see
+        // [`list_sets`]. Answered here for the same reason `read_set` is.
+        "list_sets" => Called::Answered(list_sets(&args, state)),
         // **Refused here and waited for elsewhere.** Everything this module can
         // decide by itself — a slot that does not exist, an `id` that is not a
         // name — is decided under the lock like any other tool's arguments, and
@@ -1384,6 +1433,214 @@ fn read_set(args: &Value, state: &State) -> Result<String, String> {
     Ok(out)
 }
 
+/// **How many Sets one answer renders, however many matched.**
+///
+/// A library is not bounded by anything: a run that presses `k` between takes
+/// keeps a Set a minute, and a store two thousand deep is an ordinary end state
+/// rather than a broken one. A protocol answer is read into a context window,
+/// so the choice is between a fixed ceiling and an answer whose size is the
+/// user's own filing habits — and twenty is about what a reader can weigh in
+/// one go. What must never happen is the ceiling being reached silently, which
+/// is why [`list_sets`] says the total and the shown count in the same
+/// sentence.
+const LISTED: usize = 20;
+
+/// **What this store holds** — every Set saved into it, most recent first, with
+/// what each one is made of.
+///
+/// **The listing `read_set` needed and did not have.** `read_set` takes an id
+/// and its own description ends by telling a model to use it to choose between
+/// things it has kept — which was unreachable, because nothing said what was
+/// kept. A model could read a Set it had just saved, in the same conversation,
+/// and nothing else; an operator had `ls` on a directory of `.set.ndjson`. This
+/// is the other half, and it is the half the milestone is named for.
+///
+/// **Most recent first, and the tie-break is why this sorts at all.**
+/// `Store::list_sets` orders by id, which is total and repeatable and is the
+/// right order for the store to promise; *what did I just save* is the question
+/// this surface is mostly asked, so it sorts on the write time and breaks ties
+/// by id. The tie-break is not decoration: two Sets written within one tick of
+/// a coarse filesystem clock carry the same mtime, and a sort whose keys tie
+/// falls back to whatever order the entries arrived in — which is not an order,
+/// and would differ between two calls on an unchanged store. A model asking
+/// twice must not be told two different things about a library nobody touched.
+///
+/// **What it does not say is what any of it declares.** That needs a card per
+/// artifact and, for the element storage, a compile pass over the whole Set —
+/// which is what `read_set` is for, on one Set a caller has chosen. A listing
+/// that did it for a library would compile a thousand procedures to print a
+/// thousand lines. The per-node cards this *does* read are only the ones a
+/// name needs: a node the file named costs nothing to name here.
+///
+/// **The summary comes from [`crate::setfile::summarise`]**, which `--list-sets`
+/// renders too. One derivation, two renderings — an operator's line and this —
+/// so the two surfaces cannot come to disagree about what a store holds or
+/// about what a node in it is called.
+fn list_sets(args: &Value, state: &State) -> Result<String, String> {
+    // **Lowercased once here rather than per node.** Case-insensitive because a
+    // model that read `drift_shell` in one answer and types `Drift_Shell` into
+    // the next is not asking a different question.
+    let holds = match args.get("holds") {
+        // `null` is absent, for the reason [`save_set`]'s `id` says: a client
+        // building arguments from a record with an empty field sends one, and
+        // that is a caller saying nothing rather than a caller getting a type
+        // wrong.
+        None | Some(Value::Null) => None,
+        Some(value) => Some(
+            value
+                .as_str()
+                .ok_or("`holds` is a string: part of a node's name")?
+                .to_ascii_lowercase(),
+        ),
+    };
+    let layer = match args.get("layer") {
+        None | Some(Value::Null) => None,
+        Some(value) => {
+            let spelled = value
+                .as_str()
+                .ok_or("`layer` is a string: which layer a set must hold a node on")?;
+            // **The same spellings the other tools take**, from the same table:
+            // a model that addressed `Field` in `read_procedure` must not be
+            // told there is no such layer here.
+            let kind = layer_named(spelled)
+                .ok_or_else(|| format!("no layer `{spelled}` — {}", layer_list()))?;
+            Some(crate::setfile::layer_of(kind))
+        }
+    };
+    let opened = |e: StoreError| format!("the store at `{}`: {e}", state.store.display());
+    let store = Store::open(&state.store).map_err(opened)?;
+    let mut sets = crate::setfile::summarise(&store).map_err(opened)?;
+    let held = sets.len();
+    // **An empty store is an answer and not a failure**, and it is a different
+    // answer from a filter that matched nothing: one sends a reader to
+    // `save_set`, the other to a different filter. Answered before the filters
+    // are applied, because a filter over nothing has nothing to say.
+    if held == 0 {
+        return Ok(format!(
+            "this store holds no sets at all — nothing has been kept here yet. A set is \
+             written by `save_set`, by the operator's `k` key, or by `--save-set ID` on \
+             the command line, and this store is `{}`. Once one is saved, this lists it.",
+            state.store.display()
+        ));
+    }
+    sets.sort_by(|a, b| b.written.cmp(&a.written).then_with(|| a.id.cmp(&b.id)));
+    // **A set matches, not a node.** With both filters given the question is
+    // "which of the sets that use this also deform something", so each is
+    // answered against the whole set rather than against one node — a set whose
+    // `drift_shell` is a geometry and whose deformation is called something
+    // else is exactly what that question is looking for.
+    sets.retain(|set| {
+        holds.as_ref().is_none_or(|holds| {
+            set.nodes
+                .iter()
+                .any(|node| node.name.to_ascii_lowercase().contains(holds))
+        }) && layer.is_none_or(|layer| set.nodes.iter().any(|node| node.layer == layer))
+    });
+    let narrowed = describe_filters(holds.as_deref(), layer);
+    let matched = sets.len();
+    if matched == 0 {
+        return Ok(format!(
+            "none of the {held} set{} {narrowed}. The store is not empty — \
+             call this with no arguments to see everything in it. `holds` is matched \
+             against what each node is called, which is the name the set gave it or the \
+             name its procedure gives itself.",
+            plural(held),
+        ));
+    }
+    let shown = matched.min(LISTED);
+    let mut out = if matched > shown {
+        // **Never a truncated list that reads as a whole one.** A model told
+        // "here are your sets" over twenty of two hundred will tell its user
+        // they have twenty, and act on a library it has not seen.
+        format!(
+            "{matched} set{} {narrowed}, and the {shown} most recently written are below — \
+             **this is not all of them**: {} more matched and are not listed. Narrow it \
+             with `holds`, or with `layer`, or ask for a set by id with `read_set`.\n",
+            plural(matched),
+            matched - shown,
+        )
+    } else {
+        format!(
+            "{matched} set{} {narrowed}, most recently written first — all of them are \
+             below.\n",
+            plural(matched),
+        )
+    };
+    for set in sets.iter().take(shown) {
+        out.push_str(&set_line(set));
+    }
+    out.push_str(
+        "\nEach line is a set's id, when it was written, and what it holds: an address \
+         per node and what that node is called in this set. `read_set` with one of these \
+         ids says what each of its procedures declares — the parameters, the element \
+         counts and what it emits — and `--load-set ID` is what plays one.\n",
+    );
+    Ok(out)
+}
+
+/// One Set as a line of a listing.
+fn set_line(set: &crate::setfile::SetSummary) -> String {
+    let written = crate::setfile::written_at(set.written);
+    // **A file in `sets/` that will not read is listed and named.** Dropping it
+    // would answer "what have I kept" with something missing, and rendering it
+    // as a set of no nodes would say it holds nothing.
+    if let Some(why) = &set.unreadable {
+        return format!(
+            "`{}` — written {written}, and could not be read: {why}\n",
+            set.id
+        );
+    }
+    if set.nodes.is_empty() {
+        return format!(
+            "`{}` — written {written}, and names no material: it holds no `slot` record\n",
+            set.id
+        );
+    }
+    let nodes: Vec<String> = set
+        .nodes
+        .iter()
+        .map(|node| {
+            format!(
+                "{}:{} `{}`",
+                layer_spelled(node.layer),
+                node.index,
+                node.name
+            )
+        })
+        .collect();
+    format!(
+        "`{}` — written {written}, {} node{}: {}\n",
+        set.id,
+        set.nodes.len(),
+        plural(set.nodes.len()),
+        nodes.join(", "),
+    )
+}
+
+/// What the filters did to a listing, as the middle of a sentence — so that
+/// every count this tool prints is said to be a count *of* something, and a
+/// filtered answer can never be read as the whole store.
+fn describe_filters(holds: Option<&str>, layer: Option<Layer>) -> String {
+    match (holds, layer) {
+        (None, None) => "in this store".to_string(),
+        (Some(holds), None) => format!("in this store hold a node whose name contains `{holds}`"),
+        (None, Some(layer)) => format!("in this store hold a {} node", layer_spelled(layer)),
+        (Some(holds), Some(layer)) => format!(
+            "in this store hold both a node whose name contains `{holds}` and a {} node",
+            layer_spelled(layer)
+        ),
+    }
+}
+
+/// The `s` on a count, in the one place, because every sentence here has one.
+fn plural(n: usize) -> &'static str {
+    if n == 1 {
+        ""
+    } else {
+        "s"
+    }
+}
+
 /// **What this Set will allocate to hold its elements**, node by node and in
 /// total — computed from the Set file and a compile pass, with nothing built,
 /// no adapter opened and no GPU touched.
@@ -1541,23 +1798,47 @@ fn element_storage_block(store: &Store, id: &str) -> String {
 }
 
 /// One node of a Set: its address in the Set, its artifact, and its card.
+///
+/// **What it is called is [`crate::setfile::node_called`]'s answer**, and this
+/// is the function that used to decide it. `list_sets` names the same node in a
+/// listing and a model has to find, when it reads the Set, the node the listing
+/// told it about — so the three candidates are weighed in one place and read
+/// here rather than weighed a second time.
 fn node_block(store: &Store, layer: Layer, index: u32, name: Option<&str>, hash: &Hash) -> String {
     // **Twelve hex characters and not sixty-four.** A hash is not an argument
     // anything here takes — see [`read_set`] — so what this is for is telling
     // two nodes apart and recognising the same artifact in two Sets, which
     // twelve does at a length a reader can hold. `Hash::short` is the same
     // shortening every log line in this program uses.
-    let stored = format!("stored as {}", hash.short(12));
-    let called = match name {
-        Some(name) => format!(", called `{name}` in this set"),
-        None => String::new(),
-    };
+    let short = hash.short(12);
     let address = format!("{}:{index}", layer_spelled(layer));
+    // The head of one block: the address, what the node is called, and the
+    // address its source is stored under — except where the name *is* that
+    // address, which is what a node with no name of its own and no card to
+    // declare one gets, and saying it twice adds nothing to saying it once.
+    let head = |called: &str| {
+        if called == short {
+            format!("{address} `{short}`")
+        } else {
+            format!("{address} `{called}` — stored as {short}")
+        }
+    };
     match store.read_meta(hash) {
         Ok(card) => {
             let (declared, body) = rendered_card(&card);
-            let declared = declared.map_or(String::new(), |name| format!(" `{name}`"));
-            format!("{address}{declared} — {stored}{called}\n{body}")
+            let called = crate::setfile::node_called(name, declared.as_deref(), hash);
+            // **What did not win, where something had to lose.** A Set's own
+            // name for a node hides the name the procedure gives itself, and a
+            // model choosing between saved material wants both: the one this
+            // set addresses the node by, and the one that identifies the
+            // artifact wherever else it appears.
+            let also = match &declared {
+                Some(declared) if *declared != called => {
+                    format!(", and the artifact calls itself `{declared}`")
+                }
+                _ => String::new(),
+            };
+            format!("{}{also}\n{body}", head(&called))
         }
         // **Not an error, and it must not read as one.** `Store::read_meta`
         // answers `NotFound` for a card that was never written, which is an
@@ -1588,11 +1869,17 @@ fn node_block(store: &Store, layer: Layer, index: u32, name: Option<&str>, hash:
                  has none until something compiles it and stores it again. What it \
                  declares is in its source, at the top of the procedure"
             };
-            format!("{address} — {stored}{called}\n  {standing}.\n")
+            // No card, so there is no declared name to weigh: the set's own
+            // name if it has one, and the short hash otherwise.
+            let called = crate::setfile::node_called(name, None, hash);
+            format!("{}\n  {standing}.\n", head(&called))
         }
         // A card that is there and will not read is the one case that *is* a
         // damaged store, and it says so in different words for that reason.
-        Err(e) => format!("{address} — {stored}{called}\n  its card could not be read: {e}\n"),
+        Err(e) => {
+            let called = crate::setfile::node_called(name, None, hash);
+            format!("{}\n  its card could not be read: {e}\n", head(&called))
+        }
     }
 }
 
@@ -3009,6 +3296,384 @@ proc probe_knobs {
         assert!(said.contains("--watch"), "{said}");
     }
 
+    // -- the listing -----------------------------------------------------
+
+    /// An artifact in the store, with or without its card — [`kept`] without
+    /// the Set, for the tests that write Sets of their own.
+    fn stored(server: &Server, source: &str, card: bool) -> Hash {
+        let store = server.store();
+        let hash = store.put_artifact(source.as_bytes()).expect("put");
+        if card {
+            let checked = crate::compile::check(source).expect("the fixture compiles");
+            store
+                .write_meta(&hash, &crate::meta::card(&hash, &checked))
+                .expect("card");
+        }
+        hash
+    }
+
+    /// A Set file holding exactly the nodes it is given, and nothing else.
+    fn set_of(server: &Server, id: &str, nodes: &[(Layer, u32, Option<&str>, Hash)]) {
+        let lines: Vec<Line> = nodes
+            .iter()
+            .map(|(layer, index, name, hash)| {
+                Line::new(Record::Slot {
+                    layer: *layer,
+                    index: *index,
+                    name: name.map(str::to_string),
+                    proc_hash: *hash,
+                })
+            })
+            .collect();
+        server.store().write_set(id, &lines).expect("set");
+    }
+
+    /// **Say when a Set was written**, so a test of the order does not depend on
+    /// how fast a machine writes two files.
+    ///
+    /// A Set file carries no time — that is what `StoreError::TickInSet` exists
+    /// to enforce — so the mtime is the only record there is of when one was
+    /// saved, and setting it is how a fixture states the fact the listing sorts
+    /// on. Two Sets given the *same* second is the case worth building on
+    /// purpose: it is what a coarse filesystem clock produces, and it is the
+    /// case the tie-break exists for.
+    fn written_at(server: &Server, id: &str, secs: u64) {
+        let path = store_root(&server.dir)
+            .join("sets")
+            .join(format!("{id}.set.ndjson"));
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .expect("open the set file");
+        file.set_times(
+            std::fs::FileTimes::new()
+                .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs)),
+        )
+        .expect("set the mtime");
+    }
+
+    /// Where an id appears in an answer, so a test can talk about order.
+    fn at(said: &str, id: &str) -> usize {
+        said.find(&format!("`{id}`"))
+            .unwrap_or_else(|| panic!("`{id}` is not in the listing at all: {said}"))
+    }
+
+    /// **The tool is offered, and the library comes back most recent first.**
+    ///
+    /// The two halves are one test for the reason the `read_set` pair are: a
+    /// tool a client is never told about and a tool that answers nothing are
+    /// both invisible, and this is the pass that says a model can find it and
+    /// use it in one go.
+    ///
+    /// **`beta` and `gamma` are written in the same second on purpose.** The
+    /// store's own order is by id and is total; this surface sorts by recency,
+    /// and a sort on a coarse clock's seconds has ties — so the tie-break by id
+    /// is the whole reason two calls on an unchanged store say the same thing.
+    /// Without it these two would come back in whatever order `read_dir` felt
+    /// like, which is not an order at all.
+    #[test]
+    fn the_listing_is_offered_and_comes_back_most_recent_first() {
+        let server = start(true);
+        let hash = stored(&server, PROBE_L1, true);
+        for id in ["alpha", "beta", "gamma"] {
+            set_of(&server, id, &[(Layer::L1, 0, Some("shell"), hash)]);
+        }
+        written_at(&server, "alpha", 1_000);
+        written_at(&server, "beta", 2_000);
+        written_at(&server, "gamma", 2_000);
+
+        let (_, listed) = post(
+            server.port,
+            &json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}).to_string(),
+        );
+        let listed: Value = serde_json::from_str(&listed).expect("json");
+        let names: Vec<String> = listed["result"]["tools"]
+            .as_array()
+            .expect("tools")
+            .iter()
+            .map(|t| t["name"].as_str().expect("name").to_string())
+            .collect();
+        assert!(
+            names.iter().any(|name| name == "list_sets"),
+            "a client is never told the tool exists: {names:?}"
+        );
+
+        let (failed, said) = call(server.port, "list_sets", json!({}));
+        assert!(!failed, "{said}");
+        assert!(
+            at(&said, "beta") < at(&said, "alpha") && at(&said, "gamma") < at(&said, "alpha"),
+            "the oldest set is not last: what did I just save is the question this is \
+             mostly asked, and the answer is the wrong way round: {said}"
+        );
+        assert!(
+            at(&said, "beta") < at(&said, "gamma"),
+            "two sets written in one second came back in an order their ids do not \
+             decide, so two calls on an unchanged store can disagree: {said}"
+        );
+    }
+
+    /// **Both filters, apart and together.**
+    ///
+    /// `holds` is the "which of these use `drift_shell`" question and `layer` is
+    /// the "which of these deform something" one, and the pair is the reason
+    /// each is a filter rather than something a reader does by eye over twenty
+    /// lines. Case is folded because a model that read a name in one answer and
+    /// typed it back with a capital is asking the same question.
+    ///
+    /// **Together they are asked of the set and not of one node.** `holds` and
+    /// `layer` matching the same node would answer a question nobody has — the
+    /// useful one is *which of the sets built on this also deform something*,
+    /// and there the deformation is a different node with a different name.
+    #[test]
+    fn the_filters_narrow_the_listing_and_can_be_combined() {
+        let server = start(true);
+        let l1 = stored(&server, PROBE_L1, true);
+        let l2 = stored(&server, PROBE_L2, true);
+        // **Capitals in the fixture's own name and not only in the query.**
+        // Folding one side and not the other passes any fixture where the
+        // stored name is already lowercase, which is most of them — so the name
+        // the set carries is spelled the way an operator types a name and the
+        // query is spelled the way a model shouts one.
+        set_of(&server, "plain", &[(Layer::L1, 0, Some("Drift_Shell"), l1)]);
+        set_of(
+            &server,
+            "warped",
+            &[
+                (Layer::L1, 0, Some("Drift_Shell"), l1),
+                (Layer::L2, 0, Some("bend"), l2),
+            ],
+        );
+        set_of(
+            &server,
+            "other",
+            &[
+                (Layer::L1, 0, Some("lattice"), l1),
+                (Layer::L2, 0, Some("bend"), l2),
+            ],
+        );
+
+        // Case folded, and the name typed back the way a model would shout it.
+        let (failed, said) = call(server.port, "list_sets", json!({"holds":"DRIFT_shell"}));
+        assert!(!failed, "{said}");
+        assert!(
+            said.contains("`plain`") && said.contains("`warped`") && !said.contains("`other`"),
+            "`holds` did not select on what the nodes are called: {said}"
+        );
+
+        let (failed, said) = call(server.port, "list_sets", json!({"layer":"L2"}));
+        assert!(!failed, "{said}");
+        assert!(
+            said.contains("`warped`") && said.contains("`other`") && !said.contains("`plain`"),
+            "`layer` did not select on the layers a set holds: {said}"
+        );
+
+        let (failed, said) = call(
+            server.port,
+            "list_sets",
+            json!({"holds":"drift","layer":"L2"}),
+        );
+        assert!(!failed, "{said}");
+        assert!(
+            said.contains("`warped`") && !said.contains("`plain`") && !said.contains("`other`"),
+            "both filters given did not mean both must hold: {said}"
+        );
+
+        // A layer nothing spells is refused with the list, as every other tool
+        // refuses one — not answered as though it had matched nothing.
+        let (failed, said) = call(server.port, "list_sets", json!({"layer":"L9"}));
+        assert!(
+            failed,
+            "a layer this language does not have was accepted: {said}"
+        );
+        assert!(
+            said.contains("Field"),
+            "the refusal does not say what the layers are: {said}"
+        );
+    }
+
+    /// **A capped listing says what it dropped.**
+    ///
+    /// A library is not bounded by anything — a run that presses `k` between
+    /// takes keeps one a minute — so an answer that rendered whatever it found
+    /// would eventually be an answer nobody can read. The cap is not the
+    /// interesting half: a model told "here are your sets" over twenty of
+    /// twenty-five will tell its user they have twenty and then act on a
+    /// library it has not seen. So the count that matched, the count shown and
+    /// the fact that the filters narrow it are all in the text.
+    #[test]
+    fn a_capped_listing_can_never_be_read_as_the_whole_library() {
+        let server = start(true);
+        let hash = stored(&server, PROBE_L1, true);
+        let total = LISTED + 5;
+        for n in 0..total {
+            let id = format!("set{n:02}");
+            set_of(&server, &id, &[(Layer::L1, 0, Some("shell"), hash)]);
+            written_at(&server, &id, 1_000 + n as u64);
+        }
+
+        let (failed, said) = call(server.port, "list_sets", json!({}));
+        assert!(!failed, "{said}");
+        let listed = (0..total)
+            .filter(|n| said.contains(&format!("`set{n:02}`")))
+            .count();
+        assert_eq!(
+            listed, LISTED,
+            "the cap did not hold: {listed} of {total} sets were rendered\n{said}"
+        );
+        for expected in [
+            &format!("{total} sets"),
+            &format!("the {LISTED} most recently written"),
+            "5 more matched and are not listed",
+            "Narrow it with `holds`",
+        ] {
+            assert!(
+                said.contains(expected),
+                "a truncated listing does not say `{expected}`, so it reads as the whole \
+                 library: {said}"
+            );
+        }
+        // The most recent survive the cap, because the newest is what the
+        // question was about.
+        assert!(
+            said.contains(&format!("`set{:02}`", total - 1))
+                && !said.contains(&format!("`set{:02}`", 0)),
+            "the cap kept the wrong end of the library: {said}"
+        );
+    }
+
+    /// **An empty store and a filter that matches nothing are both answers, and
+    /// they are different answers.**
+    ///
+    /// Neither is an error: a store nobody has saved into is what every store
+    /// starts as, and a filter that selects none of twenty sets is the filter
+    /// doing its job. They read differently because they send a reader to
+    /// different places — one to `save_set`, the other to a different filter —
+    /// and being told "nothing matches" by an empty library is being told to go
+    /// looking for material that was never there.
+    #[test]
+    fn an_empty_store_and_a_filter_that_matches_nothing_read_differently() {
+        let server = start(true);
+        let (failed, said) = call(server.port, "list_sets", json!({}));
+        assert!(
+            !failed,
+            "an empty store was reported as a failed call: {said}"
+        );
+        assert!(
+            said.contains("no sets at all") && said.contains("save_set"),
+            "an empty store does not say what it is or where sets come from: {said}"
+        );
+
+        let hash = stored(&server, PROBE_L1, true);
+        set_of(&server, "keeper", &[(Layer::L1, 0, Some("shell"), hash)]);
+        let (failed, said) = call(
+            server.port,
+            "list_sets",
+            json!({"holds":"nothing_like_this"}),
+        );
+        assert!(
+            !failed,
+            "a filter that matched nothing was an error: {said}"
+        );
+        assert!(
+            !said.contains("no sets at all"),
+            "a filter that matched nothing was answered as an empty store, which sends a \
+             reader looking for material that is right there: {said}"
+        );
+        assert!(
+            said.contains("none of the 1 set") && said.contains("The store is not empty"),
+            "the no-match answer does not say the library is not empty: {said}"
+        );
+    }
+
+    /// **What a node is called is one answer, and every node has one.**
+    ///
+    /// The three cases are the three candidates, in order: the name this set
+    /// gave the node, the name its procedure gives itself, and the short hash
+    /// where there is neither. The last two are the ones worth building a
+    /// fixture for, because both are *ordinary* states of a working store —
+    /// `Store::put_artifact` writes no card, and a set saved on another machine
+    /// names artifacts this store has never had — and a listing that dropped
+    /// either would be a library with holes in it.
+    ///
+    /// **And it is checked against `read_set`'s own answer**, which is the
+    /// point of the derivation being one function: a model that picks a set out
+    /// of a listing and then reads it must find the node it was told about.
+    #[test]
+    fn a_node_is_called_here_what_read_set_calls_it() {
+        let server = start(true);
+        let carded = stored(&server, PROBE_KNOBS, true);
+        let uncarded = stored(&server, PROBE_L1, false);
+        let elsewhere = Hash::of(b"stored on another machine");
+        set_of(
+            &server,
+            "mixed",
+            &[
+                (Layer::L1, 0, Some("shell"), carded),
+                (Layer::L1, 1, None, carded),
+                (Layer::L2, 0, None, uncarded),
+                (Layer::L4, 0, None, elsewhere),
+            ],
+        );
+
+        let (failed, said) = call(server.port, "list_sets", json!({}));
+        assert!(!failed, "{said}");
+        for expected in [
+            // The set's own name, which beats the card's.
+            "L1:0 `shell`",
+            // No name in the file, so what the procedure calls itself.
+            "L1:1 `probe_knobs`",
+            // No card at all: the short hash, and the node is listed.
+            &format!("L2:0 `{}`", uncarded.short(12)),
+            // Not in this store at all: the same, and still listed.
+            &format!("L4:0 `{}`", elsewhere.short(12)),
+        ] {
+            assert!(
+                said.contains(expected),
+                "the listing does not name a node `{expected}`: {said}"
+            );
+        }
+
+        // **The same names, from the tool that reads one set.** Two derivations
+        // that agree today are two answers that stop agreeing the day one is
+        // edited, and this is the assertion that would notice.
+        let (failed, read) = call(server.port, "read_set", json!({"id":"mixed"}));
+        assert!(!failed, "{read}");
+        for expected in [
+            "L1:0 `shell`",
+            "L1:1 `probe_knobs`",
+            &format!("L2:0 `{}`", uncarded.short(12)),
+            &format!("L4:0 `{}`", elsewhere.short(12)),
+        ] {
+            assert!(
+                read.contains(expected),
+                "`read_set` calls a node something the listing does not: `{expected}` is \
+                 not in {read}"
+            );
+        }
+    }
+
+    /// A store that cannot be opened is an error with the path in it, the way
+    /// `read_set` reports one — not an empty library.
+    #[test]
+    fn a_store_that_cannot_be_opened_is_an_error_naming_the_path() {
+        let server = start(true);
+        // A file where the store's own root has to be: `Store::open` creates
+        // the layout under it and cannot, so the open itself is what fails —
+        // and the path is the only thing that tells an operator which store
+        // this run was pointed at.
+        let root = store_root(&server.dir);
+        std::fs::write(&root, b"not a directory").expect("write");
+        let (failed, said) = call(server.port, "list_sets", json!({}));
+        assert!(
+            failed,
+            "a store that cannot be read answered as though it held nothing: {said}"
+        );
+        assert!(
+            said.contains(&root.display().to_string()),
+            "the failure does not say which store: {said}"
+        );
+    }
+
     /// **A stored artifact, its card, and one Set naming it** — the fixture the
     /// card tests share.
     ///
@@ -3192,16 +3857,26 @@ proc probe_knobs {
         assert!(!failed, "{said}");
         for expected in [
             "element storage: 1664 bytes in total, across the 2 nodes",
-            "`shell` — 1152 bytes for 16 elements, 72 bytes each",
-            "`warp` — 512 bytes for 16 elements, 32 bytes each",
+            // **With the indentation, because the assertion below discriminates
+            // on it.** A storage row is indented and a node block's head is
+            // not; a bare substring here would keep passing on the day the
+            // indent went away, and the negative assertion would then be
+            // asserting nothing.
+            "  `shell` — 1152 bytes for 16 elements, 72 bytes each",
+            "  `warp` — 512 bytes for 16 elements, 32 bytes each",
         ] {
             assert!(
                 said.contains(expected),
                 "the set was not costed as `{expected}`: {said}"
             );
         }
+        // **The storage rows are indented and the node blocks are not**, which
+        // is what tells the two apart now that a node block names the node in
+        // its own head — `L4:0 \`dots\` — stored as …` is the renderer being
+        // described, and `  \`dots\` — 512 bytes` would be the renderer being
+        // charged for a buffer it does not own.
         assert!(
-            !said.contains("`dots` — "),
+            !said.contains("  `dots` — "),
             "the renderer was charged for the buffer it draws from, which is the \
              node above it: {said}"
         );

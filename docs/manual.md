@@ -117,7 +117,7 @@ Point a chat client at `http://127.0.0.1:8737/` and it can **read a slot's proce
 it, and be told what happened**. "The one that's showing now, a bit more vivid" is a small
 edit to a declarative file, and hot-swapping that file is what `--watch` already does.
 
-Five tools. `read_procedure` gives you the source; `write_procedure` checks it and, if it
+Six tools. `read_procedure` gives you the source; `write_procedure` checks it and, if it
 compiles, writes it — **and if it does not compile, what comes back is the checker's
 diagnostics, against the source**, which is what lets a model fix its own mistake;
 `swap_outcome` says whether the result landed, was rolled back for costing too much, or
@@ -156,6 +156,20 @@ what a value will be refused outside of, not where this set has it. An artifact 
 without a card — put as bytes, or put by a build older than cards — is described as exactly
 that, and not as a broken library: cards are derived, one appears the next time something
 compiles that artifact and stores it, and the source is in the store either way.
+
+`list_sets` is the sixth, and it is what makes the fifth reachable. `read_set` answers about
+an id you already have, and the ids of everything kept before this conversation are not
+something a model can guess — so this lists **what the store holds**: every set, most
+recently written first, with an address and a name per node. Two optional filters, because a
+library is asked questions rather than read end to end: `holds` selects the sets with a node
+whose name contains what you give it, matched without regard to case, so *"which of these use
+`drift_shell`"* is one call; `layer` selects the sets holding a node on one layer, so *"which
+of these deform something"* is `L2`. Given together, both must be true of the set. **The list
+is capped** and says so — what comes back states how many sets matched and how many are
+shown, so a partial answer can never be read as a whole library. What a node is called here
+is what `read_set` calls it, because one function decides it: the name the set gave the node,
+the name its procedure gives itself where the set gave none, and the short hash of its source
+where there is neither. `--list-sets` prints the same thing at a terminal, one line per set.
 
 Two resources come with it: the IR specification, and a vocabulary page — every built-in,
 every topology, and every stage output — **generated from the checker's own tables** rather
@@ -303,6 +317,7 @@ pressed it. See the keys below.
 | | |
 |---|---|
 | `--store DIR` | where Sets, sessions and artifacts live |
+| `--list-sets` | print what the store holds — a line per Set: its id, when it was saved, and how many nodes on each layer — and stop. Nothing is compiled and no window opens |
 | `--save-set ID` | write the material as a Set file and stop — the whole chain, at the capacity and the salt the run would have drawn with |
 | `--load-set ID` | build from one |
 | `--record-session ID` | write the timeline as it happens |
@@ -511,7 +526,7 @@ Three places, and only one of them is written to.
 | | where | who writes it |
 |---|---|---|
 | **App presets** | `examples/` | nobody. They ship with the program |
-| **Your presets** | `<store>/sets/<id>.set.ndjson` | `--save-set`, and the `k` key |
+| **Your presets** | `<store>/sets/<id>.set.ndjson` | `--save-set`, and the `k` key. `--list-sets` prints them |
 | **Scratch** | `<store>/scratch/` | `--watch`, `--mcp`, and your editor |
 
 **A run that can be edited copies its material into the scratch and runs from

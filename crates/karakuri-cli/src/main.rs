@@ -513,6 +513,9 @@ options:
   --tonemap OP          clamp | reinhard | aces | agx (default aces)
   --exposure V          output exposure, before the tone map (default 1.0)
   --store DIR           where artifacts and Set files live (default .karakuri)
+  --list-sets           print what the store holds — one line per Set: its id,
+                        when it was saved, and how many nodes on each layer —
+                        and stop. Nothing is compiled and no window opens
   --save-set ID         put every `.kir` of slot 0 in the store, write the
                         material as a Set file, and stop. It records what the
                         run was *drawing* rather than what the flags said: a
@@ -972,6 +975,19 @@ fn fail(message: &str) -> ! {
 enum ParseOutcome {
     Run(Box<Args>),
     Help,
+    /// `--list-sets`: print what the store at this path holds, and stop.
+    ///
+    /// **A third outcome rather than a field on [`Args`]**, and for `--help`'s
+    /// reason: this is not a run. Nothing downstream of here — the compile, the
+    /// scratch, the deck, the window — has anything to do with a listing, and a
+    /// flag carried into [`Args`] would have to be checked above every one of
+    /// them and would be wrong the day somebody added one more. The variant
+    /// makes reaching a GPU with this flag not a thing that can be forgotten:
+    /// there is no `Args` to run.
+    ///
+    /// It carries the store path because that is the whole of what a listing
+    /// needs, and `--store` may be given on either side of this flag.
+    ListSets(PathBuf),
 }
 
 /// The real entry point: reads the process's own arguments, then hands them
@@ -986,6 +1002,20 @@ fn parse_args() -> Args {
             print!("{USAGE}\n{BINDINGS}");
             std::process::exit(0);
         }
+        // **Nothing is built to answer this.** The store is opened, the `sets/`
+        // directory is read, each file in it is read, and the process ends —
+        // see [`listed_sets`]. On stdout, because it is the answer to the
+        // question that was asked rather than a note about a run.
+        Ok(ParseOutcome::ListSets(root)) => match listed_sets_at(&root) {
+            Ok(said) => {
+                print!("{said}");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("karakuri-cli: {e}");
+                std::process::exit(1);
+            }
+        },
         Err(message) => fail(&message),
     }
 }
@@ -1430,6 +1460,7 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
     // and the refusal below is about the giving. `--canvas` needs the same fact
     // for longer and carries it on `Args` instead.
     let mut size_given = false;
+    let mut list_sets = false;
     let mut positional = Vec::new();
     let mut it = args;
     while let Some(arg) = it.next() {
@@ -1573,6 +1604,11 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
                 })?);
             }
             "--store" => args_out.store = PathBuf::from(value_for("--store", &mut it)?),
+            // Read into a local rather than onto `Args`: a listing is not a
+            // run, and the answer is returned below once the whole command line
+            // has been seen — `--list-sets --store DIR` and `--store DIR
+            // --list-sets` are the same request.
+            "--list-sets" => list_sets = true,
             "--save-set" => args_out.save_set = Some(value_for("--save-set", &mut it)?),
             "--load-set" => args_out.load_set = Some(value_for("--load-set", &mut it)?),
             "--record-session" => {
@@ -1600,6 +1636,16 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
             other if other.starts_with('-') => return Err(format!("unknown option `{other}`")),
             _ => positional.push(PathBuf::from(arg)),
         }
+    }
+
+    // **Answered before a word is said about material**, and above every rule
+    // below: none of them is about a listing. A `.kir` pair this run will not
+    // read, a default pair nobody asked for, a refusal about two ways of naming
+    // material — all of it belongs to a run, and refusing `--list-sets
+    // --load-set x` for "two descriptions of the material" would be a refusal
+    // about a Set nothing here is going to build.
+    if list_sets {
+        return Ok(ParseOutcome::ListSets(args_out.store));
     }
 
     // The bare positional pair still means what it always meant, and now it is
@@ -2852,6 +2898,112 @@ fn open_store(args: &Args) -> karakuri_store::store::Store {
             std::process::exit(1);
         }
     }
+}
+
+/// **What the store holds, one line per Set** — the operator's half of what
+/// `list_sets` tells a model.
+///
+/// **It prints and stops.** No window, no adapter, no compile, no Set built:
+/// asking what is in a library is not a run, and a flag that opened a GPU to
+/// answer it would be unusable over ssh on the machine the library is on. That
+/// is why it is answered out of [`parse_args_from`] — see [`ParseOutcome`] —
+/// rather than somewhere down `main` where it would have to be kept above every
+/// early return by hand.
+///
+/// **The same summary the MCP tool renders**, from
+/// [`crate::setfile::summarise`]: one derivation, two renderings. What a node
+/// is called here is what `read_set` calls it, because the answer comes from
+/// one function — an operator reading a line here and a model reading a block
+/// there are looking at one library and must be told one thing about it.
+///
+/// A compact line and not a block: the question is *which of these do I want*,
+/// and what answers it is the id to type next to `--load-set`, when it was
+/// saved, and enough of what it holds to tell two of them apart. What each node
+/// declares is `read_set`'s answer, over MCP, on one Set at a time.
+fn listed_sets(
+    store: &karakuri_store::store::Store,
+    root: &std::path::Path,
+) -> Result<String, String> {
+    let mut sets =
+        setfile::summarise(store).map_err(|e| format!("store `{}`: {e}", root.display()))?;
+    if sets.is_empty() {
+        // Not an error and not silence: an empty store is what a store looks
+        // like before anything has been kept in it, and the answer says where
+        // sets come from rather than leaving a blank terminal to be read as a
+        // failure.
+        return Ok(format!(
+            "no sets in `{}` — nothing has been kept here yet. `--save-set ID` writes \
+             one, and so does the `k` key during a run.\n",
+            root.display()
+        ));
+    }
+    // **Most recent first, breaking ties by id.** `--save-set` twice in one
+    // second gives two files one mtime on a coarse filesystem clock, and a sort
+    // whose keys tie leaves the order to whatever `read_dir` said — so two runs
+    // of this flag over an untouched store would print two different lists. The
+    // id is unique by construction, which makes the order total.
+    sets.sort_by(|a, b| b.written.cmp(&a.written).then_with(|| a.id.cmp(&b.id)));
+    let width = sets.iter().map(|set| set.id.len()).max().unwrap_or(0);
+    let mut out = String::new();
+    for set in &sets {
+        let _ = write!(
+            out,
+            "{:<width$}  {}  ",
+            set.id,
+            setfile::written_at(set.written)
+        );
+        match &set.unreadable {
+            // Listed and named rather than dropped: a file in `sets/` that will
+            // not read is the one thing here an operator has to go and look at.
+            Some(why) => {
+                let _ = writeln!(out, "unreadable: {why}");
+            }
+            None if set.nodes.is_empty() => {
+                let _ = writeln!(out, "no material: it holds no `slot` record");
+            }
+            None => {
+                let _ = writeln!(out, "{}", holdings(&set.nodes));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// The listing for a store path — **opening nothing that is not there.**
+///
+/// `Store::open` establishes the layout under a root that does not exist yet,
+/// which is right for a run about to write into it and wrong here: a flag whose
+/// whole promise is that it only reads must not leave a directory behind to say
+/// that a library is empty. A path with no store at it is an answer, and it is
+/// a different one from a store with no sets in it — the first is very often a
+/// mistyped `--store`.
+fn listed_sets_at(root: &std::path::Path) -> Result<String, String> {
+    if !root.exists() {
+        return Ok(format!(
+            "no store at `{}` — nothing has ever been kept there, and nothing was \
+             created to find that out. Check `--store`, or keep something with \
+             `--save-set ID`.\n",
+            root.display()
+        ));
+    }
+    let store = karakuri_store::store::Store::open(root)
+        .map_err(|e| format!("store `{}`: {e}", root.display()))?;
+    listed_sets(&store, root)
+}
+
+/// What a Set holds, by layer and in the order the layers compose: `2 L1, 1 L2,
+/// 3 L4`. A layer nothing is on is left out rather than printed as a zero,
+/// because most Sets are on three of the five and a line of zeroes reads as
+/// something missing.
+fn holdings(nodes: &[setfile::NodeSummary]) -> String {
+    [Layer::L1, Layer::L2, Layer::L3, Layer::L4, Layer::Field]
+        .iter()
+        .filter_map(|layer| {
+            let n = nodes.iter().filter(|node| node.layer == *layer).count();
+            (n > 0).then(|| format!("{n} {}", setfile::layer_name(*layer)))
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Write the material as a Set file, and say where it went.
@@ -6882,8 +7034,168 @@ mod tests {
         match parse_args_from(args.iter().map(|s| s.to_string())) {
             Ok(ParseOutcome::Run(args)) => Ok(*args),
             Ok(ParseOutcome::Help) => panic!("expected Args, got --help"),
+            Ok(ParseOutcome::ListSets(_)) => panic!("expected Args, got --list-sets"),
             Err(e) => Err(e),
         }
+    }
+
+    // -- --list-sets -----------------------------------------------------
+
+    /// **`--list-sets` is not a run, and the type says so.**
+    ///
+    /// The flag prints what the store holds and stops: no window, no adapter,
+    /// no compile, no Set built. That is enforced by there being no [`Args`] at
+    /// all on this path — [`parse_args_from`] answers with
+    /// [`ParseOutcome::ListSets`], which carries a store path and nothing else,
+    /// so everything `main` does with an `Args` is unreachable rather than
+    /// merely skipped. A `bool` on `Args` would have needed a check above every
+    /// early return in `main` and would have been wrong the day somebody added
+    /// one more.
+    ///
+    /// **`--store` on either side of it**, because an operator types the flags
+    /// in whatever order they think of them, and a listing of the default store
+    /// when `--store` was given would be a listing of the wrong library.
+    #[test]
+    fn list_sets_prints_and_is_never_a_run() {
+        for spelling in [
+            vec!["--list-sets", "--store", "/tmp/library"],
+            vec!["--store", "/tmp/library", "--list-sets"],
+        ] {
+            match parse_args_from(spelling.iter().map(|s| s.to_string())) {
+                Ok(ParseOutcome::ListSets(root)) => {
+                    assert_eq!(
+                        root,
+                        PathBuf::from("/tmp/library"),
+                        "{spelling:?} listed a store nobody asked for"
+                    );
+                }
+                Ok(ParseOutcome::Run(_)) => panic!(
+                    "{spelling:?} came back as a run: a listing would then compile the \
+                     default material and open a window to print a directory"
+                ),
+                Ok(ParseOutcome::Help) => panic!("{spelling:?} came back as --help"),
+                Err(e) => panic!("{spelling:?} was refused: {e}"),
+            }
+        }
+    }
+
+    /// A store with two Sets in it, written at times this test decides.
+    ///
+    /// A Set file carries no time — the mtime is the only record of when one
+    /// was saved — so a fixture that means to test an order has to say what the
+    /// times are rather than hope two writes land in different seconds.
+    fn library(root: &std::path::Path) -> karakuri_store::store::Store {
+        let store = karakuri_store::store::Store::open(root).expect("store");
+        let hash = store.put_artifact(b"not compiled here").expect("put");
+        let slot = |layer: Layer, index: u32, name: &str| {
+            karakuri_store::ndjson::Line::new(Record::Slot {
+                layer,
+                index,
+                name: Some(name.to_string()),
+                proc_hash: hash,
+            })
+        };
+        store
+            .write_set(
+                "older",
+                &[slot(Layer::L1, 0, "shell"), slot(Layer::L4, 0, "dots")],
+            )
+            .expect("set");
+        store
+            .write_set(
+                "newer",
+                &[
+                    slot(Layer::L1, 0, "shell"),
+                    slot(Layer::L2, 0, "bend"),
+                    slot(Layer::L4, 0, "dots"),
+                    slot(Layer::L4, 1, "strokes"),
+                ],
+            )
+            .expect("set");
+        for (id, secs) in [("older", 1_000u64), ("newer", 2_000)] {
+            let file = std::fs::OpenOptions::new()
+                .write(true)
+                .open(root.join("sets").join(format!("{id}.set.ndjson")))
+                .expect("open the set file");
+            file.set_times(
+                std::fs::FileTimes::new()
+                    .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(secs)),
+            )
+            .expect("set the mtime");
+        }
+        store
+    }
+
+    /// **One line per Set: the id, when it was written, and what it holds.**
+    ///
+    /// The id is what goes next to `--load-set`, the time is what an operator
+    /// looks for a keeper by, and the layers are enough to tell two Sets apart
+    /// without opening either. Most recent first, for the reason the MCP
+    /// listing is: *what did I just save* is the question.
+    ///
+    /// A layer nothing is on is left out rather than printed as a zero — most
+    /// Sets are on three of the five, and a line of zeroes reads as something
+    /// missing.
+    #[test]
+    fn the_listing_is_a_line_per_set_most_recent_first() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().join("store");
+        let store = library(&root);
+        let said = listed_sets(&store, &root).expect("the listing");
+
+        let lines: Vec<&str> = said.lines().collect();
+        assert_eq!(lines.len(), 2, "one line per set, and no more: {said}");
+        assert!(
+            lines[0].starts_with("newer") && lines[1].starts_with("older"),
+            "the sets are not most recent first: {said}"
+        );
+        assert!(
+            lines[0].contains("1 L1, 1 L2, 2 L4") && !lines[0].contains("L3"),
+            "the line does not say what the set holds by layer, or counts a layer \
+             nothing is on: {said}"
+        );
+        assert!(
+            lines[1].contains("1 L1, 1 L4"),
+            "the line does not say what the set holds by layer: {said}"
+        );
+        // The times are the ones the fixture set, in the operator's own clock,
+        // and they are what tells two takes of one evening apart.
+        for (line, secs) in lines.iter().zip([2_000u64, 1_000]) {
+            let written = setfile::written_at(std::time::UNIX_EPOCH + Duration::from_secs(secs));
+            assert!(
+                line.contains(&written),
+                "the line does not say when the set was written: {line}"
+            );
+        }
+    }
+
+    /// An empty store is an ordinary answer and says where sets come from — not
+    /// a blank terminal, which reads as a flag that did nothing.
+    #[test]
+    fn an_empty_store_says_so_rather_than_printing_nothing() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().join("store");
+        let store = karakuri_store::store::Store::open(&root).expect("store");
+        let said = listed_sets(&store, &root).expect("the listing");
+        assert!(
+            said.contains("no sets in") && said.contains("--save-set"),
+            "an empty store printed something an operator cannot act on: {said:?}"
+        );
+
+        // **And a path with no store at it is a different answer, and creates
+        // nothing.** `Store::open` would establish the layout under it, so a
+        // listing of a mistyped `--store` would answer "empty" and leave a
+        // directory behind saying so — a read-only flag that writes.
+        let missing = dir.path().join("nowhere");
+        let said = listed_sets_at(&missing).expect("the listing");
+        assert!(
+            said.contains("no store at") && said.contains("--store"),
+            "a path with no store at it was not told apart from an empty one: {said:?}"
+        );
+        assert!(
+            !missing.exists(),
+            "a listing created the store it was asked to read"
+        );
     }
 
     // -- edges -----------------------------------------------------------

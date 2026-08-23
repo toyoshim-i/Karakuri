@@ -74,8 +74,10 @@ Orthogonal to the layers:
   addressing that exists from M1. The separate metadata file it also wants is now written
   for every stored artifact **and read back**: the `read_set` MCP tool answers what a saved
   Set holds off those cards, so a model choosing between kept material compiles nothing.
-  What is not built is the same reading at scale — search, grouping and genealogy across a
-  library rather than a lookup inside one Set. See M4's demands
+  The reading at scale is there too: `list_sets` and `--list-sets` enumerate what a store
+  holds, filtered by what a node is called or by which layer a Set uses. What is not built
+  is grouping and genealogy, and a search over more than a name — the card fields those
+  would need have no producer. See M4's demands
 
 ### Three clocks
 
@@ -2150,10 +2152,17 @@ section of `docs/ir-spec.md`, where a reader meets the `camera` record.
   should I use, and what can I turn on it"* is answered without fetching a source and
   compiling it, which for a Set nobody has loaded nothing could answer at all. An artifact
   with no card is described as uncarded there too, in words that do not read as a damaged
-  store, and one this store has never held is told apart from it. What is still owed is that
-  reading **at scale**: nothing searches, groups or walks these files across a library, which
-  is what this milestone is named for. See "Metadata file format" in
-  `docs/ir-spec.md`
+  store, and one this store has never held is told apart from it. **And the library around that lookup now exists**, which
+  is what this milestone is named for: `Store::list_sets` and `Store::list_artifacts`
+  enumerate at the cost of one directory read, the `list_sets` MCP tool renders every kept
+  Set most recently written first — filtered by what a node is called or by which layer a
+  Set has a node on, and **capped with the cap announced**, so a partial answer cannot be
+  read as a whole library — and `--list-sets` prints the same answer at a terminal without
+  compiling anything or opening a window. What a node is called there is what `read_set`
+  calls it, from one function, rather than a second derivation that agrees until somebody
+  edits one of them. What is still owed is what the *cards* would add: search is over node
+  names because `origin` and `tag` have no producer, nothing groups, and genealogy needs the
+  `parent` below. See "Metadata file format" in `docs/ir-spec.md`
 - `parent` recorded from the first generated artifact, or the genealogy has a hole at the
   root. **Untouched, deliberately.** Nothing generates procedures, so `parent` has no
   producer and the first generated artifact is still close — an empty one written now

@@ -71,7 +71,7 @@ use karakuri_signal::{NoiseConfig, NoiseKind};
 use karakuri_store::hash::Hash;
 use karakuri_store::ndjson::Line;
 use karakuri_store::record::{BindNoise, Layer, Record, Value};
-use karakuri_store::store::Store;
+use karakuri_store::store::{Store, StoreError};
 
 /// The Set file format version this build writes. One number for the whole
 /// file, on `Record::Set`.
@@ -403,7 +403,10 @@ pub fn record_from_binding(binding: &Binding) -> Record {
     }
 }
 
-fn layer_name(layer: Layer) -> &'static str {
+/// A record [`Layer`] spelled the way every surface spells it. `pub(crate)`
+/// because `--list-sets` names a node's layer in a line, and a second table in
+/// `main.rs` would be a second spelling of an address an operator then types.
+pub(crate) fn layer_name(layer: Layer) -> &'static str {
     match layer {
         Layer::L1 => "L1",
         Layer::L2 => "L2",
@@ -1160,6 +1163,181 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         salts,
         notes,
     })
+}
+
+/// **What one node of a Set is called** — the one answer, for every surface
+/// that has to name one.
+///
+/// Three candidates in a fixed order: the name this Set file's own `slot`
+/// record carries, then the name the artifact's metadata card declares, then
+/// the artifact's short hash.
+///
+/// **The Set's own name wins over the card's, because it is the more specific
+/// fact.** A card says what a procedure calls *itself* and says the same thing
+/// in every Set that references the artifact; a `slot` name is what *this* Set
+/// decided to call *this* node, is what an `edge` in the same file points at,
+/// and is what an operator typed in `--set near=lattice.kir`. A listing that
+/// preferred the card would give two nodes of one Set the same name wherever a
+/// chain instantiates one procedure twice.
+///
+/// **A node with neither still has a name.** An artifact with no card is an
+/// ordinary state of a working store rather than a damaged one — `mcp`'s
+/// `node_block` says so at length — and so is a Set naming an artifact this
+/// store never had. Neither is a reason to leave a node out of a listing or to
+/// print a blank where its name goes, so the short hash is the last resort: it
+/// tells two nodes apart, it recognises the same artifact in two Sets, and it
+/// is the same shortening every log line in this program uses.
+///
+/// **One function, called by both surfaces and by `read_set`.** Two derivations
+/// that agree today are two answers that stop agreeing the day one of them is
+/// edited, and the name a model reads in a listing has to be the name it then
+/// finds when it reads that Set.
+pub fn node_called(written: Option<&str>, declared: Option<&str>, hash: &Hash) -> String {
+    written
+        .or(declared)
+        .map_or_else(|| hash.short(12), str::to_string)
+}
+
+/// What an artifact's metadata card calls it, or `None` where this store has no
+/// card for it.
+///
+/// `None` covers both absences on purpose — no card written yet, and no
+/// artifact here at all — because the answer to *what is this node called* is
+/// the same for both: whatever the Set file says, and the short hash otherwise.
+/// The two are worth telling apart when a model is choosing material, and
+/// `read_set` is where that is done.
+pub fn card_name(store: &Store, hash: &Hash) -> Option<String> {
+    store
+        .read_meta(hash)
+        .ok()?
+        .iter()
+        .find_map(|line| match line.record() {
+            Record::Meta { name, .. } => Some(name.clone()),
+            _ => None,
+        })
+}
+
+/// One node of a Set, as a listing needs it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NodeSummary {
+    pub layer: Layer,
+    /// Which node of that layer, from 0 — the address `read_set` prints and
+    /// the one the other MCP tools take.
+    pub index: u32,
+    /// What it is called: [`node_called`]'s answer, never a second reading of
+    /// the same three candidates.
+    pub name: String,
+    /// The artifact behind it, whether or not this store holds one.
+    pub hash: Hash,
+}
+
+/// **What one saved Set holds**, read off the store: the id that names it, when
+/// its file was written, and a line per node.
+///
+/// **One value, rendered twice.** The MCP `list_sets` tool and `--list-sets`
+/// answer one question for two readers, and a library summarised once per
+/// reader is two answers that agree until somebody edits one of them. Both
+/// render this; neither opens a Set file of its own.
+///
+/// **What it deliberately does not carry**: what any of those nodes declares,
+/// what this Set has turned anything to, and whether it builds. Those need a
+/// card per artifact, the rest of the file, and a compile pass respectively —
+/// `read_set` does all three for *one* Set on purpose, and a listing that did
+/// them for a library would compile a thousand procedures to print a thousand
+/// lines.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SetSummary {
+    pub id: String,
+    /// When the file was last written, from the filesystem — a Set file carries
+    /// no time of its own. See `Store::list_sets`.
+    pub written: std::time::SystemTime,
+    pub nodes: Vec<NodeSummary>,
+    /// Why this Set's file could not be read, where it could not be.
+    ///
+    /// **Listed anyway, and said out loud.** A file in `sets/` that will not
+    /// parse is something an operator has to be told about; dropping it from
+    /// the listing would answer *what have I kept* with a Set missing, and
+    /// reporting it with an empty node list would say it holds nothing.
+    pub unreadable: Option<String>,
+}
+
+/// **Summarise every Set the store holds.**
+///
+/// One directory read, one read per Set file, and a card read per node the file
+/// left unnamed — nothing else. Nothing is compiled, no adapter is opened and
+/// `karakuri_engine::Set::validate` is never called: `load` and `read_set` do
+/// that for one named Set on purpose, and *what is in my library* is not the
+/// question that should pay for it.
+///
+/// **The card reads are memoised across the whole listing**, keyed by the
+/// artifact rather than by the node: a library where fifty Sets reference one
+/// unnamed geometry reads that card once. A named node reads no card at all,
+/// because [`node_called`] would not have used it.
+///
+/// The order is `Store::list_sets`'s — ascending by id, which is total and
+/// repeatable. A surface that wants recency sorts on [`SetSummary::written`]
+/// and says why.
+pub fn summarise(store: &Store) -> Result<Vec<SetSummary>, StoreError> {
+    let mut cards: BTreeMap<Hash, Option<String>> = BTreeMap::new();
+    let mut out = Vec::new();
+    for entry in store.list_sets()? {
+        let mut nodes = Vec::new();
+        let mut unreadable = None;
+        match store.read_set(&entry.id) {
+            Ok(lines) => {
+                for line in &lines {
+                    // **The file's own order**, which is the order [`save`]
+                    // wrote the nodes in and the order a hand-written file
+                    // chose — the same reading `read_set` gives, for the same
+                    // reason: sorting by layer here would impose an order
+                    // nobody wrote.
+                    let Record::Slot {
+                        layer,
+                        index,
+                        name,
+                        proc_hash,
+                    } = line.record()
+                    else {
+                        continue;
+                    };
+                    let declared = match name {
+                        Some(_) => None,
+                        None => cards
+                            .entry(*proc_hash)
+                            .or_insert_with(|| card_name(store, proc_hash))
+                            .clone(),
+                    };
+                    nodes.push(NodeSummary {
+                        layer: *layer,
+                        index: *index,
+                        name: node_called(name.as_deref(), declared.as_deref(), proc_hash),
+                        hash: *proc_hash,
+                    });
+                }
+            }
+            Err(e) => unreadable = Some(e.to_string()),
+        }
+        out.push(SetSummary {
+            id: entry.id,
+            written: entry.written,
+            nodes,
+            unreadable,
+        });
+    }
+    Ok(out)
+}
+
+/// When a Set was written, spelled the one way every listing spells it.
+///
+/// **Local, for the reason [`crate::history::stamped_id`] is local**: the
+/// answer has to be the one the person would say out loud, and a UTC clock is
+/// the wrong one for half the world and half the day. To the second, because
+/// that is as fine as a filesystem mtime is worth reading and finer than
+/// anybody scanning a column wants.
+pub fn written_at(at: std::time::SystemTime) -> String {
+    chrono::DateTime::<chrono::Local>::from(at)
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string()
 }
 
 #[cfg(test)]
