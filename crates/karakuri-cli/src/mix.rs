@@ -491,6 +491,23 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
         // instead was rejected for the reason above: the list would have to
         // grow for every record in the format, including the ones no build
         // here has heard of.
+        //
+        // **`merge` lands here and is owed nothing, which is checked rather
+        // than assumed.** It is `Vocabulary::Set` — see `Record::vocabulary` —
+        // so `session::split` puts every one it meets before the first tick
+        // into the head, and the head is decoded by `setfile::from_lines`,
+        // which builds the replay's Set at the layering it names and folds it
+        // to the renderer its `live` names. One arriving *after* a tick is a
+        // stream saying a Set changed how its renderers meet each other
+        // mid-performance, and there is no such move: a layering decides
+        // whether an L5 and a target per renderer exist at all, so changing it
+        // is a rebuild and a rebuild arrives as `procedure` records. Nothing
+        // in this program writes one there — `Live::record` writes mix records
+        // and `Live::record_procedure` writes `procedure` — and a deck has no
+        // method that could obey it at a frame. So it is passed over exactly
+        // as a `camera`, a `capacity` or a `seed` after the first tick is, and
+        // for the same reason: it is a Set's fact arriving where a
+        // performance's facts go.
         _ => Ok(None),
     }
 }

@@ -455,7 +455,11 @@ options:
                         so the first --publish is what narrows the console
   --merge N             composite slot N's renderers into one image before it
                         reaches the mix, instead of overdrawing them. The slot
-                        then takes per-renderer gain, opacity, blend and mask
+                        then takes per-renderer gain, opacity, blend and mask.
+                        A Set file records this, so a composited Set saved with
+                        --save-set or `k` loads back compositing without the
+                        flag — and this flag can only turn it on, so either
+                        saying so is enough and the two never disagree
   --bpm N               the tempo the local oscillator free-runs at
                         (default 120). With --audio-in this is where the grid
                         starts and what it falls back to; a tracked tempo
@@ -591,11 +595,13 @@ keys:
   z          cycle the wipe's shape: off, left to right, bottom to top, the
              two diagonals, an iris
   r          cycle which renderer of the focused slot is live, landing on the
-             current grid. Needs --merge on that slot: overdrawn renderers
-             share one target and there is nothing to silence. The ones not
-             selected still draw, into targets of their own — the choice is
-             free of a rebuild, not free of a frame. One way: there is no
-             position that folds them all back together
+             current grid. Needs the slot to composite — --merge, or a Set
+             file that records one: overdrawn renderers share one target and
+             there is nothing to silence. The ones not selected still draw,
+             into targets of their own — the choice is free of a rebuild, not
+             free of a frame. One way: there is no position that folds them
+             all back together. What you choose is kept: `k` writes it into
+             the Set file as the merge's `live`
   n          cycle where a fade starts: the next bar, the next beat, now
   j          cycle how long a fade lasts: 4, 2, 8 beats, or 0 for a cut
   v          cycle what the output shows: the mix, then each slot, then the
@@ -754,6 +760,18 @@ struct FromSet {
     /// Set's own seed — see [`salts_for`].
     salts: Vec<Option<u32>>,
     camera: Option<karakuri_engine::camera::Orbit>,
+    /// **Whether the file said its renderers composite**, which `--merge` is
+    /// the other way of saying — see [`layering_for`], where the two meet.
+    ///
+    /// **Kept here rather than pushed into `args.merge`.** Folding it into the
+    /// flag would make `--load-set` of a composited Set indistinguishable from
+    /// `--merge 0` in every message that prints what the operator asked for,
+    /// and the two are different sentences: one is what the file says, the
+    /// other is what the hand said.
+    layering: karakuri_engine::set::Layering,
+    /// **Which renderer the file left folded to**, and `None` where every one
+    /// of them is live — see `setfile::Loaded::live`, whose value this is.
+    live: Option<u32>,
     /// What each geometry runs at, by index, `None` where the file named none.
     ///
     /// **Kept here rather than folded into `--capacity`.** One flag holds one
@@ -909,6 +927,10 @@ struct Args {
     watch: bool,
     /// Which slots composite their renderers rather than overdrawing them —
     /// `--merge 0`, repeatable. See `karakuri_engine::set::Layering`.
+    ///
+    /// **Not the whole answer any more**: a Set file records its layering, so a
+    /// slot filled by `--load-set` may composite without appearing here. Ask
+    /// [`layering_for`], which is where the flag and the file meet.
     merge: Vec<usize>,
     /// The interface every slot's Set publishes — `--publish
     /// name=L4:0:exposure[0.2..0.8]`, repeatable. Empty means every Set
@@ -2505,6 +2527,10 @@ fn replay_session(args: &Args, id: &str) {
     // in different colours, which is exactly the failure the seed record was
     // added to stop.
     let salts = salts_for(seed_for(0), &loaded.salts, loaded.l1s.len());
+    // **Read once, and handed to both the Set and every rebuild the stream
+    // asks for**, which is `build_deck`'s rule and `recorded_camera`'s reason.
+    let layering = layering_for(args, 0, loaded.layering);
+    let live = loaded.live;
     let mut set = build(
         &gpu,
         &loaded.l1s,
@@ -2517,11 +2543,14 @@ fn replay_session(args: &Args, id: &str) {
         &loaded.l3s,
         &loaded.fields,
         &loaded.l4s,
-        // **A Set file does not record a layering**, on the same terms it
-        // records neither a chain nor a camera: it names an L1 and its
-        // renderers. Overdraw is what every Set was before an L5 could be
-        // nested, so it is what a file that cannot say reads as.
-        karakuri_engine::set::Layering::Overdraw,
+        // **The head's own layering**, which it records — so a session whose
+        // slot 0 was compositing replays compositing, and the `select` records
+        // in the stream land on a fold that is there to be selected in. A head
+        // that says nothing is a Set that overdrew, which is what saying
+        // nothing has always meant; `--merge 0` beside a replay still turns it
+        // on, on `layering_for`'s terms, which is what lets a session recorded
+        // before the record existed be replayed as it was played.
+        layering,
         // **The names and edges the file recorded.** A replay is the material
         // as it was played, and an edge is part of the material: a slot the
         // file bound and a replay did not would be a Set that will not build,
@@ -2536,8 +2565,8 @@ fn replay_session(args: &Args, id: &str) {
         &loaded.params,
         &loaded.bindings,
         // **A Set file does not record an interface yet**, on the same terms it
-        // records neither a chain nor a camera nor a layering: it names an L1,
-        // its renderers, their values and their bindings. Publishing nothing is
+        // records neither a chain nor a camera: it names an L1, its renderers,
+        // their values and their bindings. Publishing nothing is
         // publishing everything, so a replay shows the whole console — which is
         // the safe direction, since an interface is about attention.
         &[],
@@ -2547,6 +2576,11 @@ fn replay_session(args: &Args, id: &str) {
         salts.first().copied().unwrap_or_else(|| seed_for(0)),
         &salts,
         loaded.camera,
+        // **The fold the head was left with.** A `select` record later in the
+        // stream moves it, exactly as it did live; this is where the run
+        // started, and a replay that began with every renderer live would be a
+        // replay of a different first frame.
+        live,
     );
     set.resize(&gpu.device, w, h);
     // **A deck of one, from one Set file**, which is what a replay can build
@@ -2684,7 +2718,7 @@ fn replay_session(args: &Args, id: &str) {
                 apply_replayed(deck, &mut look, record);
             }
             for slot in changed {
-                match rebuild(&gpu, &store, &playing[slot], args, slot) {
+                match rebuild(&gpu, &store, &playing[slot], args, slot, layering, live) {
                     Ok(set) => deck.install(&gpu.device, slot, set),
                     Err(e) => eprintln!("  slot {slot}: {e} — it keeps what it had"),
                 }
@@ -2720,6 +2754,20 @@ fn rebuild(
     ),
     args: &Args,
     slot: usize,
+    // **The layering and the selection the head was built at**, restated here
+    // rather than re-derived — `watch::Watch::layering` states the rule and
+    // this is the replay's copy of the same hazard: a `procedure` record names
+    // a swapped-in procedure and says nothing about how the slot's renderers
+    // meet, so a rebuild that worked it out again would put a composited
+    // session onto overdraw at the first swap, with a `select` landing on a
+    // fold that is no longer there.
+    //
+    // **A later `select` in the stream moves the selection and this does not
+    // know it**, which is the same thing a live rebuild does to a slot the
+    // operator pressed `r` on. It is the head's fold, restated; a stream that
+    // selected again after the swap selects again on replay.
+    layering: karakuri_engine::set::Layering,
+    live: Option<u32>,
 ) -> Result<Set, String> {
     let (Some(l1_hash), l4_hashes) = playing else {
         return Err("its L1 has not been named".into());
@@ -2752,7 +2800,7 @@ fn rebuild(
         &[],
         &[],
         &l4s,
-        karakuri_engine::set::Layering::Overdraw,
+        layering,
         &Names::default(),
         // **No node here declares a slot**, because there is no L2 here at all:
         // a `procedure` record names an L1 and its renderers.
@@ -2770,6 +2818,7 @@ fn rebuild(
         // so the one source is salted from the slot's seed and its ordinal.
         &salts_for(seed_for(slot), &[], 1),
         None,
+        live,
     ))
 }
 
@@ -3087,6 +3136,21 @@ fn session_head(
             // loads.
             edges: &args.edges,
             camera: &camera,
+            // **The flags', on the terms every other value here is theirs.**
+            // This head is written before the first frame, from the material
+            // the run was started with — there is no Set to read a layering
+            // off yet — and a session whose slot 0 composites has to say so or
+            // the `select` records it goes on to write land on a replay with
+            // no fold to select in. The other branch above needs none of this:
+            // a run started from `--load-set` copies that file's lines
+            // verbatim, `merge` among them.
+            layering: layering_for(args, 0, recorded_layering(args, 0)),
+            // **Nothing yet, and it is not an omission.** A selection is made
+            // with `r` during a performance, so at the instant a head is
+            // written there is none — and one made later is a `select` record
+            // in the stream, which replays where it happened rather than
+            // before the first frame.
+            live: None,
             seeds: &saving_seeds(args, l1s),
         },
     ) {
@@ -3349,8 +3413,8 @@ fn stored_nodes(nodes: Vec<setfile::Node>) -> Nodes {
 /// Everything except the nodes, which are the one part a store has to be
 /// involved in — see [`Save`].
 ///
-/// **Five of the six are read from the Set and not from `Args`**, and the sixth
-/// is the exception that has to earn itself — which is the decision this
+/// **Seven of the eight are read from the Set and not from `Args`**, and the
+/// eighth is the exception that has to earn itself — which is the decision this
 /// function exists to hold. The reason is [`saving_capacities`]'s,
 /// stated once and true of all of them: a writer with its own copy of the rule
 /// records numbers the run was not using, and the file then describes a picture
@@ -3372,6 +3436,16 @@ fn stored_nodes(nodes: Vec<setfile::Node>) -> Nodes {
 ///   Set's, and why that is a copy of a value rather than of a rule.
 /// - **camera** is the built-in orbit's six numbers, which a `camera` record
 ///   and a Set file both set from outside.
+/// - **layering** is [`Set::layering`] and emphatically *not* `--merge`. This
+///   is the surface `k` and the MCP tool reach, and both exist to write **what
+///   is on screen**: the slot may have been filled by `--load-set` from a file
+///   that recorded a `merge` the flags never mentioned, and it may have been
+///   hot-swapped since. Asking the flag would write a file describing a Set
+///   nobody was watching, which is [`saving_capacities`]' failure exactly.
+/// - **live** is read off [`Set::inputs`] by [`selected_renderer`], for the
+///   same reason and a louder one: nothing but the run can know it. There is no
+///   flag that selects a renderer — `r` does, mid-performance — so the Set is
+///   not merely the better source here, it is the only one.
 /// - **seeds** are [`Set::source_salts`], one per geometry: what it *is* salted
 ///   with rather than what a position in `--set` would derive.
 fn playing_values(
@@ -3391,7 +3465,37 @@ fn playing_values(
         bindings: set.bindings().to_vec(),
         edges: edges.to_vec(),
         camera: set.camera,
+        layering: set.layering(),
+        live: selected_renderer(set.inputs()),
         seeds: set.source_salts().to_vec(),
+    }
+}
+
+/// **Which renderer a Set is folded to**, as a `merge` record spells it:
+/// `Some(i)` where exactly one input is live, and `None` where every one of
+/// them is.
+///
+/// **Every-live is checked first, and that decides the one-renderer case.** A
+/// composited Set holding a single renderer has one live input, which is both
+/// "all of them" and "exactly one" — and it is the first, because such a Set is
+/// one nobody has selected in. Writing `live 0` for it would record a choice
+/// that was never made, and `Record::Merge` is explicit that absent means every
+/// input live rather than node 0.
+///
+/// **Anything else is `None` too, and the anything else has no producer.**
+/// `mix::select` is the only thing that clears a `live` flag and it always
+/// leaves exactly one set, so a fold with two of five live cannot be reached
+/// from any surface this program has. If one ever is, `None` records the Set as
+/// unselected — which is a fold the reader can build — rather than naming one
+/// of them and calling that the choice.
+fn selected_renderer(inputs: &[karakuri_engine::mix::Input]) -> Option<u32> {
+    if inputs.iter().all(|input| input.live) {
+        return None;
+    }
+    let mut live = inputs.iter().enumerate().filter(|(_, input)| input.live);
+    match (live.next(), live.next()) {
+        (Some((at, _)), None) => Some(at as u32),
+        _ => None,
     }
 }
 
@@ -3488,6 +3592,23 @@ fn save_set(args: &Args, placed: &[Vec<Placed>], l1s: &[karakuri_ir::typed::Chec
             // loads.
             edges: &args.edges,
             camera: &camera,
+            // **The flag's, because this path has no Set to ask.**
+            // `--save-set` writes the material and exits before anything is
+            // built, so what the run *would* play is what the flags say — and
+            // for a one-shot they cannot be stale, since nothing has happened
+            // to make them so. `k` and the MCP tool are the paths where that
+            // stops being true, and `playing_values` reads the Set there.
+            //
+            // Through `layering_for`, so the flag and a `--load-set` file
+            // cannot mean different things by it here than they mean anywhere
+            // else — `--load-set` beside `--save-set` is refused, so the file
+            // half is only ever the default today, and one derivation is still
+            // one derivation.
+            layering: layering_for(args, 0, recorded_layering(args, 0)),
+            // **No selection, because nothing has selected.** `r` is a key
+            // pressed at a running frame and there is no flag for it, so a
+            // one-shot save has none to record — see `recorded_live`.
+            live: None,
             seeds: &saving_seeds(args, l1s),
         },
     ) {
@@ -3562,6 +3683,11 @@ fn load_set(args: &mut Args, id: &str) -> setfile::Loaded {
     args.from_set = Some(FromSet {
         salts: loaded.salts.clone(),
         camera: loaded.camera,
+        // **Carried rather than folded into `--merge`**, and read back through
+        // [`layering_for`] — which is where the flag and the file meet, once,
+        // for everything that builds this slot or writes it out again.
+        layering: loaded.layering,
+        live: loaded.live,
         capacities: loaded.capacities.clone(),
     });
     loaded
@@ -3826,6 +3952,69 @@ fn recorded_camera(args: &Args, slot: usize) -> Option<karakuri_engine::camera::
     }
 }
 
+/// **Whether a slot composites its renderers or overdraws them** — the one
+/// reading, from the flag and the file together.
+///
+/// **Either saying so is enough, and that is a decision rather than a
+/// coincidence.** `--merge N` can only turn compositing *on*: there is no
+/// spelling that turns it off, because the record's absence is what overdraw is
+/// and a flag that could say `false` would be a second spelling of not typing
+/// it. So `--load-set X --merge 0` on a file that already records a `merge` is
+/// two ways of asking for the same thing, and a file that records none plus
+/// `--merge 0` is the flag adding what the file did not say. The one case that
+/// could have been a contest — a composited file with `--merge` *left off* —
+/// is not one: leaving a flag off is not a statement, and treating it as one
+/// would make a loaded preset silently overdraw exactly as it did before this
+/// record existed.
+///
+/// **One reading, used everywhere**, on [`recorded_camera`]'s terms: the Set
+/// built at startup takes it, the watcher that restates it on every rebuild
+/// takes it, and the writer that saves the slot back out takes it. Working it
+/// out in two places is how a rebuild came to aim a camera where the startup
+/// did not.
+fn layering_for(
+    args: &Args,
+    slot: usize,
+    recorded: karakuri_engine::set::Layering,
+) -> karakuri_engine::set::Layering {
+    if recorded == karakuri_engine::set::Layering::Composite || args.merge.contains(&slot) {
+        karakuri_engine::set::Layering::Composite
+    } else {
+        karakuri_engine::set::Layering::Overdraw
+    }
+}
+
+/// **What a loaded Set file said about its layering**, for the slot it filled —
+/// [`recorded_camera`]'s shape and its rule: slot 0 and nothing else, since
+/// `--load-set` fills that slot and every other comes from `--set`.
+///
+/// Separate from [`layering_for`] because the replay path has a recorded
+/// layering in hand without ever touching `args.from_set` — its Set file is the
+/// head of a session stream — and both readings have to meet the flag through
+/// the same function. That is [`recorded_capacities`] and [`capacities_for`]'s
+/// split, for its reason.
+fn recorded_layering(args: &Args, slot: usize) -> karakuri_engine::set::Layering {
+    match (slot, args.from_set.as_ref()) {
+        (0, Some(from_set)) => from_set.layering,
+        _ => karakuri_engine::set::Layering::Overdraw,
+    }
+}
+
+/// Which renderer a loaded Set file left folded to, for the slot it filled.
+/// **Slot 0 and nothing else**, on the same terms as its camera and its
+/// capacities — and `None` for a file that recorded no selection, which is
+/// every input live and is the state a Set nobody selected in comes up in.
+///
+/// **No flag stands beside this one.** There is no `--select`: a selection is
+/// something an operator makes with `r` while watching, so the only thing that
+/// can put one in before the first frame is a file that recorded one.
+fn recorded_live(args: &Args, slot: usize) -> Option<u32> {
+    match (slot, args.from_set.as_ref()) {
+        (0, Some(from_set)) => from_set.live,
+        _ => None,
+    }
+}
+
 /// `meters` is false for the offscreen paths: a `--render` has nobody to show
 /// a level to, and a meter that nothing reads is a compute pass and a staging
 /// ring per frame for no reason. That is the whole point of it being opt-in.
@@ -3883,6 +4072,14 @@ fn build_deck(
             // **Read once for both the Set and its watcher** — see
             // [`recorded_camera`].
             let camera = recorded_camera(args, slot);
+            // **The flag and the file, resolved once** — see [`layering_for`].
+            // Read here rather than at each use for [`recorded_camera`]'s
+            // reason and with the same symptom: the watcher restates a layering
+            // on every rebuild, so a second derivation that disagreed would
+            // turn the first save of any `.kir` in the slot into a Set that
+            // stopped compositing, with nothing said.
+            let layering = layering_for(args, slot, recorded_layering(args, slot));
+            let live = recorded_live(args, slot);
             let set = build(
                 gpu,
                 l1,
@@ -3890,11 +4087,7 @@ fn build_deck(
                 l3s,
                 fields,
                 l4s,
-                if args.merge.contains(&slot) {
-                    karakuri_engine::set::Layering::Composite
-                } else {
-                    karakuri_engine::set::Layering::Overdraw
-                },
+                layering,
                 &material.names,
                 &args.edges,
                 &capacities_for(args, l1, recorded_capacities(args, slot)),
@@ -3915,17 +4108,13 @@ fn build_deck(
                     .unwrap_or_else(|| seed_for(slot)),
                 &salts[slot],
                 camera,
+                live,
             );
             if watch {
                 // One worker and one watcher per slot, over that slot's own
                 // two files. That is what makes "the slot whose files changed"
                 // the thing that rebuilds: no slot can see another's edit.
                 HotSwap::new(&gpu.device, &gpu.queue, set, args.budget_ms, {
-                    let layering = if args.merge.contains(&slot) {
-                        karakuri_engine::set::Layering::Composite
-                    } else {
-                        karakuri_engine::set::Layering::Overdraw
-                    };
                     let watcher = watch::Watch::new(
                         slot,
                         // **With the names, not only the paths.** A rebuild
@@ -3934,7 +4123,21 @@ fn build_deck(
                         // on the first save.
                         args.sets[slot].0.clone(),
                         args.sets[slot].1.clone(),
+                        // **The same reading the Set was built with**, and
+                        // the whole reason it is read once above: a rebuild
+                        // restates the layering rather than re-deriving it, so
+                        // a slot that loaded a composited Set file is still
+                        // compositing after the first save of a `.kir` in it.
+                        // A rebuild that let this be worked out again from
+                        // `--merge` alone would quietly discard what was
+                        // loaded — which is `Watch::camera`'s failure, in the
+                        // one place the picture does not even come back.
                         layering,
+                        // **And the selection with it**, for the same reason
+                        // and in the same breath: a fold restated to every
+                        // input live is a rebuild silently un-selecting what
+                        // the file selected. See `Watch::live`.
+                        live,
                         args.capacity_given.then_some(args.capacity),
                         salts[slot]
                             .first()
@@ -4071,6 +4274,10 @@ fn build(
     // One per entry in `l1s`, in the same order — see `salts_for`.
     salts: &[u32],
     camera: Option<karakuri_engine::camera::Orbit>,
+    // Which renderer the Set comes up folded to — see `recorded_live`. `None`
+    // leaves every input live, which is what `Set::build_many` builds and what
+    // a Set nobody has selected in is.
+    live: Option<u32>,
 ) -> Set {
     let deform: Vec<&karakuri_ir::typed::Checked> = l2s.iter().collect();
     let look: Vec<&karakuri_ir::typed::Checked> = l3s.iter().collect();
@@ -4132,6 +4339,28 @@ fn build(
             // the file list happens to contain.
             if let Some(camera) = camera {
                 set.camera = camera;
+            }
+            // **The `merge` record's selection, where the `camera` record's
+            // six numbers go** — before the params and for their reason: a
+            // value the file recorded is applied to the Set the file built,
+            // once, in the one place that knows both. A Set comes up with
+            // every input live, so leaving this out is a composited Set
+            // loading back unselected, which is the half of a variant pool
+            // that made saving one pointless.
+            //
+            // **Ineffective under `Overdraw`, and said rather than refused**,
+            // which is `Set::select_renderer`'s own rule: a file that records
+            // no `merge` records no selection either, so the only way to reach
+            // this with an overdrawing Set is `--merge` left off a file that
+            // has one — and `layering_for` decides that one line above.
+            if let Some(at) = live {
+                if !set.select_renderer(at as usize) {
+                    eprintln!(
+                        "  this set selects renderer {at} and has {} — every renderer is \
+                         live",
+                        l4s.len()
+                    );
+                }
             }
             for write in overrides {
                 if set.write_param(write) == 0 {
@@ -6311,11 +6540,16 @@ impl Live {
     ///
     /// **One way, and it is stated rather than discovered**: there is no
     /// position in the cycle that puts every renderer back. A Set comes up with
-    /// all of them folded and the first press leaves that state for good, which
-    /// is what "makes one live and the rest not" costs when the record names
-    /// one renderer. Restoring the fold is a different statement and wants its
-    /// own vocabulary — `Record::Preview` carries `null` for "the mix" and is
-    /// the shape it would take.
+    /// all of them folded — or folded to the one its Set file's `merge` record
+    /// named, which is the other way to start — and the first press leaves that
+    /// state for good, which is what "makes one live and the rest not" costs
+    /// when the record names one renderer. Restoring the fold is a different
+    /// statement and wants its own vocabulary — `Record::Preview` carries
+    /// `null` for "the mix" and is the shape it would take.
+    ///
+    /// **What it chooses is kept.** A live save reads the fold off the Set —
+    /// see `playing_values` — so `k` after a press writes `{"t":"merge",
+    /// "live":N}` and loading that file back comes up on renderer N.
     fn cycle_renderer(&mut self) {
         let slot = self.focus;
         let set = self.deck.slot(slot).set();
@@ -8307,6 +8541,95 @@ mod tests {
         assert_eq!(salts_for(seed, &[Some(11)], 2), vec![11, derived(1)]);
     }
 
+    /// **The flag and the file agree about compositing in either order**, and
+    /// leaving the flag off takes nothing away from a file that records a
+    /// merge.
+    ///
+    /// `--merge` can only turn compositing *on* — there is no spelling that
+    /// turns it off, because overdraw is what saying nothing means — so
+    /// `--load-set X --merge 0` on a composited file is two ways of asking for
+    /// one thing rather than a contest. The case that decides the rule is the
+    /// third: a composited file loaded with **no** flag. Reading the missing
+    /// flag as "overdraw" would make every saved variant pool come back
+    /// unfoldable, which is exactly the state the `merge` record was added to
+    /// end.
+    #[test]
+    fn the_flag_and_the_file_agree_about_compositing_in_either_order() {
+        use karakuri_engine::set::Layering::{Composite, Overdraw};
+        let composited = FromSet {
+            layering: Composite,
+            ..FromSet::default()
+        };
+        let flagged = parse(&["a.kir", "b.kir", "--merge", "0"]).expect("args");
+        let bare = parse(&["a.kir", "b.kir"]).expect("args");
+        // Parsed again rather than cloned: `Args` is not `Clone`, and it is the
+        // same two spellings either way.
+        let loaded_args = || parse(&["a.kir", "b.kir"]).expect("args");
+        let flagged_args = || parse(&["a.kir", "b.kir", "--merge", "0"]).expect("args");
+
+        // The flag alone, which is what every composited slot was before a Set
+        // file could say so.
+        assert_eq!(
+            layering_for(&flagged, 0, recorded_layering(&flagged, 0)),
+            Composite
+        );
+        // The file alone: `--load-set` of a Set that was saved compositing.
+        let mut loaded = loaded_args();
+        loaded.from_set = Some(composited.clone());
+        assert_eq!(
+            layering_for(&loaded, 0, recorded_layering(&loaded, 0)),
+            Composite,
+            "a composited Set file loaded back overdrawing because no --merge was typed"
+        );
+        // Both, in one run.
+        let mut both = flagged_args();
+        both.from_set = Some(composited);
+        assert_eq!(
+            layering_for(&both, 0, recorded_layering(&both, 0)),
+            Composite
+        );
+        // Neither.
+        assert_eq!(
+            layering_for(&bare, 0, recorded_layering(&bare, 0)),
+            Overdraw
+        );
+        // **And the file is slot 0's.** `--load-set` fills that slot and every
+        // other comes from `--set`, so a composited file says nothing about
+        // slot 1 — where only the flag can.
+        assert_eq!(
+            layering_for(&loaded, 1, recorded_layering(&loaded, 1)),
+            Overdraw
+        );
+    }
+
+    /// **What a live save writes as the merge's `live`, read off the Set.**
+    ///
+    /// `k` and the MCP tool write what is on screen, and the fold is one of the
+    /// things only the Set knows: there is no flag that selects a renderer.
+    /// Every-input-live is `None` and not renderer 0 — a Set nobody has
+    /// selected in has made no choice to record, and a one-renderer Set is that
+    /// case rather than a selection of its only renderer.
+    #[test]
+    fn a_saved_fold_is_the_selection_the_set_is_holding() {
+        let live = karakuri_engine::mix::Input::unity();
+        let dark = karakuri_engine::mix::Input {
+            live: false,
+            ..karakuri_engine::mix::Input::unity()
+        };
+        // Nobody has selected: every input live, so there is nothing to write.
+        assert_eq!(selected_renderer(&[live, live, live]), None);
+        // One renderer, never selected in — "all of them" and "one of them" at
+        // once, and it is the first.
+        assert_eq!(selected_renderer(&[live]), None);
+        // A selection, which is the one shape `mix::select` leaves.
+        assert_eq!(selected_renderer(&[dark, live, dark]), Some(1));
+        assert_eq!(selected_renderer(&[live, dark]), Some(0));
+        // Shapes nothing can produce: recorded as unselected rather than as a
+        // guess at which of them was meant.
+        assert_eq!(selected_renderer(&[dark, dark]), None);
+        assert_eq!(selected_renderer(&[live, live, dark]), None);
+    }
+
     #[test]
     fn every_slot_gets_a_distinct_seed() {
         let seeds: Vec<u32> = (0..MAX_SLOTS).map(seed_for).collect();
@@ -8804,6 +9127,9 @@ mod live_save_tests {
             salts[0],
             salts,
             camera,
+            // No selection: these Sets overdraw, and a fold nobody built has
+            // no renderer to be folded to. See `recorded_live`.
+            None,
         )
     }
 
@@ -9751,6 +10077,7 @@ mod live_save_tests {
                 Named::bare(paths[0].clone()),
                 vec![Named::bare(paths[1].clone())],
                 karakuri_engine::set::Layering::Overdraw,
+                None,
                 Some(capacity),
                 salts[0],
                 salts.to_vec(),

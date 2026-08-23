@@ -123,7 +123,34 @@ pub struct Watch {
     /// Whether this slot's renderers composite or overdraw. Restated on every
     /// rebuild rather than read off the outgoing Set, for the reason
     /// `Request::bindings` gives.
+    ///
+    /// **And rather than re-derived from `--merge`**, which is the sharper half
+    /// now that a Set file records a layering: a slot filled by `--load-set`
+    /// from a composited file is compositing without the flag ever having been
+    /// typed, so a rebuild that asked the flag would drop the slot to overdraw
+    /// on the first save of any `.kir` in it — the L5 gone, every renderer back
+    /// over one attachment, and any selection with it. That is `Watch::camera`'s
+    /// failure in a louder register: the camera came back wrong, this comes back
+    /// as a different picture entirely. `main::layering_for` is the one reading,
+    /// taken once and handed to both the Set and this.
     layering: karakuri_engine::set::Layering,
+    /// **Which renderer the slot is folded to**, restated on every rebuild
+    /// beside the layering that makes it mean anything, and `None` for every
+    /// input live.
+    ///
+    /// A Set is built with every input live — `mix::Input::default()` — so a
+    /// rebuild that left this out would silently un-select a slot loaded from a
+    /// file that recorded a selection, which is the same discard the layering
+    /// above describes and is invisible in exactly the same way: the picture
+    /// changes and nothing says why.
+    ///
+    /// **The run's own selection is not tracked here**, and that is a limit
+    /// rather than an oversight: `r` moves the fold at a frame this watcher
+    /// never sees, so a rebuild restates what the *slot was loaded with*. It is
+    /// what the params do with a value a record has moved since, and for the
+    /// same reason — a request has to be reproducible from a record stream, and
+    /// what a hand did later is in the stream as a `select`.
+    live: Option<u32>,
     /// `--capacity` when it was given, and otherwise `None` — each geometry
     /// then runs at the default its own `capacity` declaration names.
     ///
@@ -207,16 +234,18 @@ pub struct Watch {
 }
 
 impl Watch {
-    // Twelve, where clippy's line is seven. Every one of them is a piece of one
-    // slot's identity — its files, its layering, its capacity, its seed, its
-    // salts, its camera and the values it was started with — and a struct to
-    // carry them would be `Watch` itself, constructed one field short.
+    // Thirteen, where clippy's line is seven. Every one of them is a piece of
+    // one slot's identity — its files, its layering, its fold, its capacity,
+    // its seed, its salts, its camera and the values it was started with — and
+    // a struct to carry them would be `Watch` itself, constructed one field
+    // short.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         slot: usize,
         head: crate::Named,
         rest: Vec<crate::Named>,
         layering: karakuri_engine::set::Layering,
+        live: Option<u32>,
         capacity: Option<u32>,
         seed_salt: u32,
         salts: Vec<u32>,
@@ -234,6 +263,7 @@ impl Watch {
             head,
             rest,
             layering,
+            live,
             capacity,
             seed_salt,
             salts,
@@ -496,6 +526,10 @@ impl Source for Watch {
             },
             edges: self.edges.clone(),
             layering: self.layering,
+            // **The fold, restated with it.** A layering that survived a
+            // rebuild and a selection that did not would be a slot that comes
+            // back compositing every renderer at once — see `Watch::live`.
+            live: self.live,
             seed_salt: self.seed_salt,
             // **The run's own, restated.** A rebuild is a new Set of the same
             // material, and the material is what changed — not which geometry
@@ -525,6 +559,7 @@ mod tests {
             crate::Named::bare(dir.join("a.kir")),
             vec![crate::Named::bare(dir.join("b.kir"))],
             karakuri_engine::set::Layering::Overdraw,
+            None,
             Some(4096),
             1,
             vec![1],
@@ -576,6 +611,7 @@ mod tests {
             crate::Named::bare(paths[0].clone()),
             paths[1..].iter().cloned().map(crate::Named::bare).collect(),
             karakuri_engine::set::Layering::Overdraw,
+            None,
             Some(4096),
             1,
             vec![1],
@@ -625,6 +661,7 @@ mod tests {
             crate::Named::bare(paths[0].clone()),
             paths[1..].iter().cloned().map(crate::Named::bare).collect(),
             karakuri_engine::set::Layering::Overdraw,
+            None,
             Some(4096),
             salts[0],
             salts.clone(),
@@ -678,6 +715,7 @@ mod tests {
             crate::Named::bare(paths[0].clone()),
             paths[1..].iter().cloned().map(crate::Named::bare).collect(),
             karakuri_engine::set::Layering::Overdraw,
+            None,
             Some(4096),
             1,
             vec![1],
@@ -701,6 +739,65 @@ mod tests {
             six(&request.camera),
             six(&aimed),
             "a rebuild asked for a Set aimed somewhere other than where the slot is aimed"
+        );
+    }
+
+    /// **A rebuild restates the layering and the fold the slot was loaded
+    /// with**, rather than leaving either to be worked out again.
+    ///
+    /// A Set file records both — a `merge` record and its `live` — so a slot
+    /// filled by `--load-set` can be compositing, and folded to one renderer,
+    /// without `--merge` ever having been typed. A rebuild that re-derived the
+    /// layering from the flag would drop the slot to overdraw on the first save
+    /// of any `.kir` in it: the L5 gone, every renderer back over one
+    /// attachment, and the selection with it. That is `Watch::camera`'s failure
+    /// in a register where the picture does not come back — and a request that
+    /// carried the layering but not the fold would be half of it, a slot
+    /// compositing every alternative at once.
+    ///
+    /// Both are asserted from one rebuild, because both travel on one request
+    /// and either alone is not the Set that was loaded.
+    #[test]
+    fn a_rebuild_restates_the_layering_and_the_fold_the_slot_was_loaded_with() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let tmp = tempfile::tempdir().expect("temp dir");
+        // Two renderers over one geometry, which is what there has to be for a
+        // fold to be a choice at all.
+        let files = ["drift_shell.kir", "soft_points.kir", "soft_points.kir"];
+        let paths: Vec<PathBuf> = (0..files.len())
+            .map(|at| tmp.path().join(format!("{at}.kir")))
+            .collect();
+        let mut watch = Watch::new(
+            0,
+            crate::Named::bare(paths[0].clone()),
+            paths[1..].iter().cloned().map(crate::Named::bare).collect(),
+            // What a composited Set file loads as — no flag was typed here,
+            // which is the whole point.
+            karakuri_engine::set::Layering::Composite,
+            Some(1),
+            Some(4096),
+            1,
+            vec![1],
+            karakuri_engine::camera::Orbit::default(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        for (file, path) in files.iter().zip(&paths) {
+            std::fs::copy(root.join("examples").join(file), path).expect("copy an example");
+        }
+
+        let request = rebuild(&mut watch).expect("a build");
+        assert_eq!(
+            request.layering,
+            karakuri_engine::set::Layering::Composite,
+            "a rebuild asked for a Set that overdraws, and the slot was compositing"
+        );
+        assert_eq!(
+            request.live,
+            Some(1),
+            "a rebuild asked for a Set folding every renderer, and the slot was folded to one"
         );
     }
 
@@ -745,6 +842,7 @@ mod tests {
             named[0].clone(),
             named[1..].to_vec(),
             karakuri_engine::set::Layering::Overdraw,
+            None,
             Some(32768),
             1,
             vec![1, 2],
@@ -907,6 +1005,7 @@ mod tests {
                 crate::Named::bare(paths[0].clone()),
                 paths[1..].iter().cloned().map(crate::Named::bare).collect(),
                 karakuri_engine::set::Layering::Overdraw,
+                None,
                 Some(4096),
                 1,
                 vec![1],

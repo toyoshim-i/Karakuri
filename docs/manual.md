@@ -248,8 +248,11 @@ with a Set file. Each geometry's own capacity and its own hash salt are written 
 is every `--edge`, so a cube morphing into a sphere is a Set you can keep and reload with
 the colours and the pairing it had.
 
-What a Set file still leaves behind is the *layering*: `--merge` is not one of the records,
-so a saved Set loads as overdraw. That one stays on the command line.
+**The layering is written down too.** `merge` is one of the records, so a slot that
+composites its renderers is saved as one and loads back compositing — with whichever renderer
+you had selected still selected. `--merge` can only turn compositing *on*, so a file that
+records it and a flag that asks for it agree in either order and you never have to remember
+which of the two put it there.
 
 **And you do not have to decide before you start.** `--save-set` writes the material and
 stops, which is right for building a preset and no use once the set is running; the `k` key
@@ -271,7 +274,7 @@ pressed it. See the keys below.
 | `--set L1.kir,L4.kir,L4.kir` | the same, drawn twice — one simulation, two renderers over it, in the order given |
 | `--set L1.kir,L2.kir,L4.kir` | a deformation between the two. Every path after the first is sorted by the `kind` it declares, so there is nothing new to spell: L2s deform in the order given, L4s draw in the order given |
 | `--set L1.kir,L3.kir,L4.kir` | a camera. As many as you name; without one the built-in orbit, which is a node called `orbit` |
-| `--merge N` | slot `N` **composites** its renderers instead of overdrawing them — a render target each, folded through a gain, an opacity, a blend mode and a mask per renderer. Costs one frame-sized target per renderer and folds at most four. Without it they share one target and meet through their own blend states, which is what you want for one cloud drawn two ways |
+| `--merge N` | slot `N` **composites** its renderers instead of overdrawing them — a render target each, folded through a gain, an opacity, a blend mode and a mask per renderer. Costs one frame-sized target per renderer and folds at most four. Without it they share one target and meet through their own blend states, which is what you want for one cloud drawn two ways. A Set file records the layering, so a slot filled by `--load-set` may composite without this flag; the flag only ever turns it on |
 | `L1.kir L4.kir` | the same, positionally, for one slot |
 | `--capacity N` | elements per geometry. **Without it each procedure's own declared default is used**, which is what a `.kir`'s `capacity [min, max] = N` line is for; give this and it overrides every source in every slot |
 | `--param name=value` | a uniform write, applied to every Set — and within a Set, to every node that declares the name |
@@ -360,7 +363,7 @@ pressed it. See the keys below.
 | `x` | crossfade to the next slot |
 | `c` | wipe the next slot in over this one |
 | `z` | cycle the wipe's shape |
-| `r` | cycle which renderer of the focused slot is live. Needs `--merge` on that slot |
+| `r` | cycle which renderer of the focused slot is live. Needs that slot to composite — `--merge`, or a Set file that records one. `k` keeps the choice |
 | `n` | where a fade starts: next bar, next beat, now |
 | `j` | how long: 4, 2, 8 beats, or a cut |
 
@@ -442,15 +445,17 @@ Reload it exactly as you would any other preset:
 cargo run -p karakuri-cli -- --load-set 20260816-143052-271
 ```
 
-`--merge` is still not one of the records, so a saved Set loads as overdraw whichever way it
-was written.
+The layering comes back with it: a slot that was compositing loads compositing, folded to the
+renderer it was folded to. Adding `--merge 0` beside it changes nothing, and leaving it off
+takes nothing away — the file already said so.
 
 ### Selecting one renderer of a slot
 
 `r` makes **one** of a slot's renderers live and the others not, landing on the same grid a
 fade does — press it a beat before the bar and the picture changes on the bar. It needs
-`--merge N` on that slot: overdrawn renderers share one target and meet through their own
-blend states, so there is no edge to silence and nothing to choose between. Composited, each
+that slot to composite — `--merge N`, or a Set file that records it: overdrawn
+renderers share one target and meet through their own blend states, so there is no edge to
+silence and nothing to choose between. Composited, each
 renderer has a target of its own and its own edge into the fold, which is what makes the
 choice one uniform write.
 
@@ -468,12 +473,17 @@ warmed off air before it can be cut to, and neither the deck nor the priming pat
 two of those as alternatives yet. That is the rest of `docs/roadmap.md`'s variant pools and
 it is not built.
 
-**Two things it does not do.** There is no position in the cycle that folds every renderer
+**One thing it does not do.** There is no position in the cycle that folds every renderer
 back together — a Set comes up with all of them folded and the first press leaves that state
 for the rest of the run, so cycle on to another renderer rather than expecting the composite
-back. And it cannot be saved: `--merge` is not a Set file record, so a composited Set written
-out with `k` loads back as overdraw and has nothing for a selection to be about. The
-selection is a property of the run, like a gain.
+back.
+
+**It is kept, though.** `k` writes the layering and the choice into the Set file — the `merge`
+record and its `live` — so a composited Set saved while you are watching one renderer loads
+back compositing and watching that renderer. A Set nobody has selected in writes no `live` and
+comes back with every renderer folded, which is where it was. What is still a property of the
+run, like a gain, is the `select` *record*: it names a deck slot at an instant, and a session
+stream never says which slot held which Set.
 
 ### The status line
 

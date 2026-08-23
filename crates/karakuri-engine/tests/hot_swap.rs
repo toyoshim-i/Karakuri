@@ -186,6 +186,7 @@ proc wide_points {
             l3s: Vec::new(),
             fields: Vec::new(),
             layering: karakuri_engine::set::Layering::Overdraw,
+            live: None,
             published: Vec::new(),
             l4s: l4_srcs.iter().map(|s| compile(s)).collect(),
             seed_salt: 19274,

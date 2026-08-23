@@ -1718,11 +1718,14 @@ fn element_storage_block(store: &Store, id: &str) -> String {
         &l3s,
         &fields,
         &l4s,
-        // **What `--load-set` builds this file as.** A Set file records no
-        // layering, and the choice cannot change a number here either way:
+        // **What `--load-set` builds this file as**, which the file itself now
+        // records — a `merge` record, or its absence for a Set that overdraws.
+        // Read from the file rather than defaulted, so this refuses a
+        // composited Set with more renderers than a fold can hold exactly where
+        // loading it would. The choice changes no *number* here either way:
         // compositing costs a render target per renderer, and a render target
         // is not element storage.
-        karakuri_engine::set::Layering::Overdraw,
+        loaded.layering,
         // A salt decides what the elements *are* and never how many bytes they
         // take, so the set's own is enough here and a source deriving one from
         // it changes nothing this block prints.

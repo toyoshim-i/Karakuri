@@ -275,6 +275,71 @@ pub enum Record {
         radius: f32,
         speed: f32,
     },
+    /// **This Set composites its renderers rather than overdrawing them.**
+    ///
+    /// A Set built with `--merge N` gives every renderer a cleared target of
+    /// its own and folds them through an L5 `karakuri_engine::node::Merge`; a
+    /// Set without one runs them over a single attachment, the first clearing
+    /// and the rest loading. That is `karakuri_engine::set::Layering`, and it
+    /// was the one thing a Set knew about itself that a Set file could not
+    /// say — so a composited Set saved and loaded back overdrew, and
+    /// `Set::select_renderer` came back with nothing to select between: a
+    /// saved variant pool was an unselectable one.
+    ///
+    /// **A node with no procedure is described by a record of its own, and
+    /// that is `camera`'s rule rather than a new one.** What kept this out was
+    /// "a Set file records the nodes of a Set, not how they meet each other",
+    /// and that stopped holding when [`Record::Edge`] arrived — an edge
+    /// records exactly how two nodes meet. The reading that does hold is
+    /// already in the format: **the built-in camera has no [`Record::Slot`],
+    /// because it has no procedure to reference, and a [`Record::Camera`]
+    /// describes it instead.** An L5 has no `karakuri_ir::ast::Kind` for the
+    /// same reason — the compositing is fixed, `karakuri-engine/src/shaders/composite.wgsl`, so
+    /// there is nothing for a `kind L5` file to lower — and so it is described
+    /// here rather than referenced by a `slot`.
+    ///
+    /// **Its presence is the whole statement**, mirroring the engine's own
+    /// `Set::merge: Option<node::Merge>`. There is no boolean
+    /// field, because a record that could say `false` would be a second
+    /// spelling of its own absence — and two spellings of one fact leave a
+    /// reader asking which of them a writer meant by writing the other.
+    ///
+    /// **And no `index`.** [`Record::Camera`] carries one because a Set may
+    /// hold several cameras and a record has to say which of them it is about;
+    /// a Set holds exactly one L5 — it is the node its single `Texture` output
+    /// comes out of — so there is nothing here for an index to distinguish,
+    /// and a field that could only ever be 0 is an invitation to write a file
+    /// naming a node that cannot exist.
+    Merge {
+        /// **Which renderer is the only live one**, in draw order — the same
+        /// numbering [`Record::Select`]'s `renderer` and a [`Record::Slot`]'s
+        /// `index` use.
+        ///
+        /// **Absent means every input is live**, which is the state a merge
+        /// nobody has selected in is in: `mix::Input::default()` sets `live`
+        /// true, so a Set that was never selected in writes no `live` and
+        /// reads back identically. It is emphatically not node 0 on
+        /// [`Record::Slot`]'s rule — reading an absent field as 0 would
+        /// silence every renderer but the first in every composited Set that
+        /// was saved without a selection, which is a picture nobody asked for
+        /// and nothing said had changed.
+        ///
+        /// **`gain`, `opacity`, `blend` and `mask` are deliberately not fields
+        /// beside it.** `mix::Input` carries all four, and nothing outside
+        /// `crates/karakuri-engine/tests/merge.rs` can set one — there is no
+        /// flag, no key and no MCP tool, `Set::set_input` has exactly that one
+        /// caller — so a field for them would have no producer and a Set file
+        /// would record four defaults nobody chose. That is the argument
+        /// `docs/ir-spec.md` makes for keeping `parent` off a metadata card
+        /// rather than writing it empty: a record whose producer does not
+        /// exist waits for it, because an empty one is worse than none.
+        /// **The record grows a per-input row when something can set one** —
+        /// one line per edge, on the terms `slot` and `capacity` are one line
+        /// per node — and until then `live` is here because a selection is the
+        /// one input control an operator can actually reach.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        live: Option<u32>,
+    },
     /// Salts the hash builtins for one node, so re-seeding changes randomness
     /// without touching anything structural.
     Seed {
@@ -566,11 +631,18 @@ pub enum Record {
     /// refusing it would make a replay fail on a line that describes a
     /// performance that happened.
     ///
-    /// **It cannot be folded into a Set file, and not only because it is the
-    /// session's.** `Layering` is deliberately not in the Set file at all, so
-    /// the Set a selection is about loads back as overdraw — which makes a
-    /// selection a property of the *run*, like a gain. See
-    /// `docs/manual.md`, "Selecting one renderer of a slot".
+    /// **It is still not folded into a Set file, and the reason has moved.**
+    /// The layering *is* a Set file record now — [`Record::Merge`], whose
+    /// `live` field holds exactly the choice this one makes — so a composited
+    /// Set no longer loads back as overdraw with nothing for a selection to be
+    /// about. What no *session* record carries is the layering: nothing in a
+    /// stream says that the Set in slot 3 composites, and nothing says which
+    /// deck slot the Set at the head of a stream was played in, so a
+    /// projection folding a session down cannot tell whether a selection it
+    /// meets is about the Set it is writing. A selection stays a property of
+    /// the *run*, like a gain, until a session record says otherwise. See
+    /// `project::key_for`, and `docs/manual.md`, "Selecting one renderer of a
+    /// slot".
     Select {
         slot: u8,
         /// Which renderer of that slot, in draw order — the same numbering
@@ -925,11 +997,15 @@ impl Record {
     ///   about no Set. A Set file carrying one would claim, every time it was
     ///   loaded, that a save had just happened.
     ///
-    ///   [`Record::Select`] is the newest member, and it is in this group
-    ///   twice over. It says which renderer of a slot is live, which is a fact
-    ///   about a run; and the layering that makes the question mean anything
-    ///   is not in a Set file at all, so a Set loaded back has every renderer
-    ///   folded again and nothing for a stored selection to be about.
+    ///   [`Record::Select`] says which renderer of a slot is live, which is a
+    ///   fact about a run — and it used to be in this group twice over,
+    ///   because the layering that makes the question mean anything was not in
+    ///   a Set file at all. It is now: [`Record::Merge`] records it, and its
+    ///   `live` field is where a *Set* says which renderer is the live one.
+    ///   What remains is the first reason and it is enough — a selection is
+    ///   addressed to a deck slot and scheduled at an instant, and no session
+    ///   record says which slot's Set composites or which slot a folded Set
+    ///   was played in.
     ///
     /// - [`Record::Meta`], [`Record::ParamDecl`], [`Record::CapacityDecl`] and
     ///   [`Record::Emit`] are a **third file's** vocabulary: what an artifact
@@ -1006,6 +1082,7 @@ impl Record {
             | Record::Param { .. }
             | Record::Bind { .. }
             | Record::Camera { .. }
+            | Record::Merge { .. }
             | Record::Seed { .. }
             | Record::Edge { .. }
             | Record::Src { .. } => Vocabulary::Set,
@@ -1117,6 +1194,62 @@ mod tests {
         // the deck's, and it is an event rather than state. A Set file that
         // carried one would also be claiming a layering it cannot record.
         assert!(!rec.is_set_state());
+        assert!(!rec.is_metadata());
+    }
+
+    /// **A merge round-trips through the line the spec prints**, bytes and all,
+    /// with and without the one field it has.
+    ///
+    /// `round_trip_verbatim` rather than `round_trip`, because the shape of
+    /// this record is mostly what it does *not* carry. A `gain`, an `opacity`,
+    /// a `blend` or a `mask` added later with a serde default would compare
+    /// equal to itself and would rewrite every composited Set ever saved — and
+    /// the bare `{"t":"merge"}` is the line a Set nobody has selected in
+    /// writes, so it is the one that has to survive untouched.
+    #[test]
+    fn a_merge_round_trips_and_an_absent_live_stays_absent() {
+        // A composited Set nobody has selected in: every input live, which is
+        // `mix::Input::default()`, so there is nothing for `live` to say.
+        let rec = round_trip_verbatim(r#"{"t":"merge"}"#);
+        assert_eq!(
+            rec,
+            Record::Merge { live: None },
+            "the presence of the record is the whole statement"
+        );
+
+        // And a variant pool with a renderer chosen in it, which is the fact
+        // `Record::Select` could not leave behind before this record existed.
+        assert_eq!(
+            round_trip_verbatim(r#"{"t":"merge","live":1}"#),
+            Record::Merge { live: Some(1) }
+        );
+
+        // Renderer 0 is a choice somebody made and is written, where an absent
+        // `live` is nobody having chosen. The two are different pictures — one
+        // renderer against all of them — so the field must not be skipped at
+        // zero the way an `index` is.
+        assert_eq!(
+            round_trip_verbatim(r#"{"t":"merge","live":0}"#),
+            Record::Merge { live: Some(0) }
+        );
+    }
+
+    /// **A merge is what a Set *is*, and belongs in a Set file.**
+    ///
+    /// The assertion this record exists to make. A composited Set saved and
+    /// loaded back overdrew, because the layering was the one thing a Set knew
+    /// about itself that the file could not say — so `Set::select_renderer`
+    /// came back with nothing to select between and a saved variant pool was
+    /// an unselectable one.
+    #[test]
+    fn a_merge_is_set_state_and_not_an_artifacts_declaration() {
+        let rec = Record::Merge { live: Some(2) };
+        assert!(
+            rec.is_set_state(),
+            "the layering is what a Set is, so `Store::write_set` has to take it"
+        );
+        // And it is not a card's: nothing about it is something a compile pass
+        // reads off a `.kir`. An L5 has no procedure to compile.
         assert!(!rec.is_metadata());
     }
 

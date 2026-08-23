@@ -64,6 +64,7 @@ use std::collections::BTreeMap;
 
 use karakuri_engine::binding::{Curve, NOISE_SIGNAL};
 use karakuri_engine::camera::Orbit;
+use karakuri_engine::set::Layering;
 use karakuri_engine::{Binding, ParamWrite};
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
@@ -151,6 +152,25 @@ pub struct Loaded {
     /// **Which node fills each declared input slot**, as the file recorded it.
     pub edges: Vec<karakuri_engine::set::Edge>,
     pub camera: Option<Orbit>,
+    /// **Whether this Set composites its renderers or overdraws them**, as the
+    /// file said.
+    ///
+    /// [`Layering::Composite`] for a file carrying a `merge` record and
+    /// [`Layering::Overdraw`] for one that does not — which is every file
+    /// written before the record existed, and is what overdrawing has always
+    /// been recorded as: its absence. See [`Record::Merge`].
+    pub layering: Layering,
+    /// **Which renderer the file left selected**, in draw order, and `None`
+    /// where every input is live.
+    ///
+    /// `None` is not renderer 0 — see [`Record::Merge`]'s `live`, where the
+    /// whole of that argument lives: a Set nobody selected in writes no `live`
+    /// and comes back with every renderer folded, which is the state it was
+    /// saved in.
+    ///
+    /// **Always `None` under [`Layering::Overdraw`]**, because the only record
+    /// that can carry a selection is the one that says the Set composites.
+    pub live: Option<u32>,
     /// **What each geometry was salted with**, by `slot` index, one entry per
     /// `seed` record the file carried.
     ///
@@ -456,7 +476,7 @@ pub struct Node {
 }
 
 /// Everything a Set file records, gathered so [`save`] takes one argument for
-/// the Set rather than seven for its parts. The fields are the records, in the
+/// the Set rather than nine for its parts. The fields are the records, in the
 /// order they are written.
 pub struct Saving<'a> {
     /// Every node of the Set, in any order — [`save`] writes them by layer and
@@ -475,6 +495,23 @@ pub struct Saving<'a> {
     /// is most of them.
     pub edges: &'a [karakuri_engine::set::Edge],
     pub camera: &'a Orbit,
+    /// **Whether this Set composites its renderers or overdraws them.**
+    ///
+    /// [`Layering::Composite`] writes a `merge` record and
+    /// [`Layering::Overdraw`] writes nothing at all: the record's presence is
+    /// the whole statement, so a Set that overdraws is a file with no line to
+    /// say so — which is what keeps every file written before the record
+    /// existed byte for byte the file it was.
+    pub layering: Layering,
+    /// **Which renderer is the only live one**, in draw order, and `None` where
+    /// every one of them is — the state a Set nobody has selected in is in.
+    ///
+    /// **Read only under [`Layering::Composite`]**, because it rides the record
+    /// that says so. An overdrawing Set has edges like any other and nothing
+    /// reads them — `Set::select_renderer` is silently ineffective there — so a
+    /// selection made on one is a property of the run with nothing in the file
+    /// for it to be about, exactly as `Record::Select` has always been.
+    pub live: Option<u32>,
     /// **What each geometry is salted with**, one per L1 node in index order.
     ///
     /// **Per geometry, because the record is.** `seed` carries a stream and an
@@ -485,7 +522,7 @@ pub struct Saving<'a> {
     pub seeds: &'a [u32],
 }
 
-/// [`Saving`] with every part owned: the same seven facts, gathered where they
+/// [`Saving`] with every part owned: the same nine facts, gathered where they
 /// live and able to leave the thread that gathered them.
 ///
 /// **It exists because a live save is two threads.** The values are read off
@@ -506,6 +543,10 @@ pub struct Owned {
     pub bindings: Vec<Binding>,
     pub edges: Vec<karakuri_engine::set::Edge>,
     pub camera: Orbit,
+    /// See [`Saving::layering`].
+    pub layering: Layering,
+    /// See [`Saving::live`].
+    pub live: Option<u32>,
     pub seeds: Vec<u32>,
 }
 
@@ -519,6 +560,8 @@ impl Owned {
             bindings: &self.bindings,
             edges: &self.edges,
             camera: &self.camera,
+            layering: self.layering,
+            live: self.live,
             seeds: &self.seeds,
         }
     }
@@ -640,6 +683,8 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
         bindings,
         edges,
         camera,
+        layering,
+        live,
         seeds,
     } = set;
     refuse_unwritable(nodes, capacities, seeds)?;
@@ -725,6 +770,26 @@ pub fn save(store: &Store, id: &str, set: Saving<'_>) -> Result<(), String> {
             to: edge.to.clone(),
         }));
     }
+    // **Written only where the Set composites, because the record's presence
+    // is the whole statement.** A Set that overdraws writes no line here: there
+    // is no boolean field for one to say `false` with, and a file that could
+    // spell overdrawing two ways — absent, and present-and-false — would leave
+    // a reader asking what a writer meant by choosing the other. So an
+    // overdrawing Set is the file it always was, byte for byte.
+    //
+    // **After the edges and before the camera**, which is the order
+    // `docs/ir-spec.md` shows the format in. It is a node with no procedure
+    // described by a record of its own, exactly as the built-in camera below
+    // is, so it is written beside it.
+    //
+    // **`live` only here.** A selection is carried by the record that says the
+    // Set composites, so an overdrawing Set's edges — which exist and which
+    // nothing reads — leave nothing behind: that is `Record::Select`'s
+    // position, unchanged, and the reason `Set::select_renderer` is silently
+    // ineffective there rather than refused.
+    if layering == Layering::Composite {
+        lines.push(Line::new(Record::Merge { live }));
+    }
     // **The built-in camera is the last node of the L3 layer**, and the index
     // is written for the same reason a `seed`'s and a `capacity`'s are: the
     // record describes one producer, and a layer that holds several needs to
@@ -789,6 +854,12 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     let mut params = Vec::new();
     let mut bindings = Vec::new();
     let mut camera = None;
+    // **Whether the file said this Set composites, and which renderer it left
+    // selected.** `Overdraw` until a `merge` record says otherwise, because
+    // that is what the record's absence has always meant — every file written
+    // before it existed says overdraw by saying nothing.
+    let mut layering = Layering::Overdraw;
+    let mut live: Option<u32> = None;
     // Which camera node the `camera` record above was about, checked against
     // the file's L3 slots once every one of them has been met.
     let mut camera_index = 0;
@@ -953,6 +1024,20 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
                     ..Orbit::default()
                 });
             }
+            // **This Set composites its renderers**, which is the one thing a
+            // Set knew about itself that this file could not say. The record's
+            // presence is the whole statement — there is no field to read —
+            // and `live` beside it is which renderer the fold is left with.
+            //
+            // **Absent `live` is every input live and emphatically not node
+            // 0**: reading it as 0 would silence every renderer but the first
+            // in every composited Set that was saved without a selection, which
+            // is a picture nobody asked for. Checked against the renderers the
+            // file names after the loop, where the count is complete.
+            Record::Merge { live: at } => {
+                layering = Layering::Composite;
+                live = *at;
+            }
             // **One per geometry, and each reaches the source it names.** This
             // took index 0's and reported the rest, because the engine took one
             // salt per Set and derived each source's from it. It takes them per
@@ -997,9 +1082,12 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             | Record::Transport { .. }
             | Record::Preview { .. }
             | Record::Transition { .. }
-            // A `select` names a renderer of a slot; a Set file cannot even say
-            // whether its renderers are folded, so there is nothing here for
-            // one to be about — see `Record::Select`.
+            // A `select` names a renderer of a *deck slot* and schedules it at
+            // an instant, and nothing in a session says which slot's Set
+            // composites or which slot a folded Set was played in — so a
+            // stream folded down cannot tell whether a selection it meets is
+            // about the Set being written. Which renderer a *Set* is left
+            // folded to is `merge`'s `live`, above. See `Record::Select`.
             | Record::Select { .. }
             | Record::Mask { .. }
             // A `save` is here for a second reason as well as that one: it
@@ -1082,6 +1170,21 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         ));
         camera = None;
     }
+    // **A selection names a renderer this Set draws with**, checked here for
+    // the `camera` index's reason one block above: what the number means
+    // depends on how many renderers the file names, and that count is only
+    // complete once every `slot` record has been met. Reported and dropped
+    // rather than refused — the Set is whole, and a fold with every input live
+    // is the state it would have come up in anyway.
+    if live.is_some_and(|at| at as usize >= l4_srcs.len()) {
+        notes.push(format!(
+            "the merge selects renderer {} and this file names {} — every renderer \
+             is left live",
+            live.unwrap_or_default(),
+            l4_srcs.len()
+        ));
+        live = None;
+    }
     if l1_srcs.is_empty() {
         return Err(format!("set `{file_id}` has no L1 slot"));
     }
@@ -1160,6 +1263,8 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
         names,
         edges,
         camera,
+        layering,
+        live,
         salts,
         notes,
     })
@@ -1504,6 +1609,8 @@ proc blob {
             bindings,
             edges: &[],
             camera: &DEFAULT_CAMERA,
+            layering: Layering::Overdraw,
+            live: None,
             seeds: &[1],
         }
     }
@@ -1563,6 +1670,8 @@ proc blob {
                 bindings: &[],
                 edges: &edges,
                 camera: &DEFAULT_CAMERA,
+                layering: Layering::Overdraw,
+                live: None,
                 seeds: &[1, 2],
             },
         )
@@ -1668,6 +1777,8 @@ proc dissolve {
                 // **The salts are the identities the mask compares**, so a
                 // saved Set that gave them back differently would be a mask
                 // pointing at a different geometry after a reload.
+                layering: Layering::Overdraw,
+                live: None,
                 seeds: &[11, 22],
             },
         )
@@ -1720,6 +1831,8 @@ proc dissolve {
                 bindings: &[a_binding()],
                 edges: &[],
                 camera: &camera,
+                layering: Layering::Overdraw,
+                live: None,
                 seeds: &[4242],
             },
         )
@@ -2134,6 +2247,8 @@ proc dissolve {
                 bindings: &[],
                 edges: &[],
                 camera: &DEFAULT_CAMERA,
+                layering: Layering::Overdraw,
+                live: None,
                 seeds: &[1, 2],
             },
         )
@@ -2230,6 +2345,8 @@ proc dissolve {
                     to: "knife".to_string(),
                 }],
                 camera: &DEFAULT_CAMERA,
+                layering: Layering::Overdraw,
+                live: None,
                 seeds: &[1],
             },
         )
@@ -2302,6 +2419,8 @@ proc dissolve {
                 bindings: &[],
                 edges: &[],
                 camera: &DEFAULT_CAMERA,
+                layering: Layering::Overdraw,
+                live: None,
                 seeds: &[1, 2],
             },
         )
@@ -2356,6 +2475,8 @@ proc dissolve {
                 bindings: &[],
                 edges: &[],
                 camera: &DEFAULT_CAMERA,
+                layering: Layering::Overdraw,
+                live: None,
                 seeds: &[7, 9],
             },
         )
@@ -2451,6 +2572,171 @@ proc dissolve {
         );
     }
 
+    /// **A composited Set is saved as one and comes back as one**, folded to
+    /// the renderer it was folded to.
+    ///
+    /// This is the round trip the `merge` record exists for. A Set file could
+    /// not say that a slot composites, so a variant pool written out came back
+    /// overdrawing: no L5, no edges into one, and `Set::select_renderer` with
+    /// nothing to select between. Both halves are asserted here because either
+    /// one alone is useless — a layering that survived without its selection
+    /// comes up folding every alternative at once, which is a different picture
+    /// from the one that was saved.
+    #[test]
+    fn a_composited_set_comes_back_composited_and_still_folded_where_it_was() {
+        let (dir, store, l1, l4) = fixture();
+        let l4b = beside(
+            &dir,
+            "l4b.kir",
+            &L4.replace("proc points", "proc points_two"),
+        );
+        let nodes = ordinary(&store, &l1, &[l4, l4b]);
+        save(
+            &store,
+            "pool",
+            Saving {
+                layering: Layering::Composite,
+                live: Some(1),
+                ..plain(&nodes, &[])
+            },
+        )
+        .expect("save");
+
+        // The line itself, because the record's *presence* is the statement
+        // and a test that only read the decoder back could pass on a writer
+        // that wrote nothing and a reader that assumed everything.
+        assert!(
+            written(&store, "pool").contains(r#"{"t":"merge","live":1}"#),
+            "the file does not carry the merge the Set was saved with:\n{}",
+            written(&store, "pool")
+        );
+
+        let loaded = load(&store, "pool").expect("load");
+        assert_eq!(
+            loaded.layering,
+            Layering::Composite,
+            "a composited Set loaded back overdrawing"
+        );
+        assert_eq!(
+            loaded.live,
+            Some(1),
+            "the fold came back with a different renderer live"
+        );
+        assert!(
+            loaded.notes.is_empty(),
+            "unexpected notes: {:?}",
+            loaded.notes
+        );
+    }
+
+    /// **A Set that overdraws writes no `merge` line at all**, and loads back
+    /// overdrawing.
+    ///
+    /// The record's absence is how overdraw has always been spelled — there is
+    /// no boolean field, because a record that could say `false` would be a
+    /// second spelling of not writing one. So this asserts the *bytes*: a Set
+    /// that overdraws is byte for byte the file it was before the record
+    /// existed, and every file written by an older build reads as what it was.
+    #[test]
+    fn an_overdrawing_set_writes_no_merge_line_and_loads_back_overdrawing() {
+        let (dir, store, l1, l4) = fixture();
+        let l4b = beside(
+            &dir,
+            "l4b.kir",
+            &L4.replace("proc points", "proc points_two"),
+        );
+        let nodes = ordinary(&store, &l1, &[l4, l4b]);
+        save(&store, "stack", plain(&nodes, &[])).expect("save");
+
+        let text = written(&store, "stack");
+        assert!(
+            !text.contains("merge"),
+            "an overdrawing Set wrote a merge record:\n{text}"
+        );
+
+        let loaded = load(&store, "stack").expect("load");
+        assert_eq!(
+            loaded.layering,
+            Layering::Overdraw,
+            "a Set that recorded no merge loaded back compositing"
+        );
+        assert_eq!(loaded.live, None, "a Set with no merge recorded a fold");
+    }
+
+    /// **A composited Set nobody selected in writes no `live`**, and comes back
+    /// with every renderer live.
+    ///
+    /// Absent is *not* renderer 0. Read that way it would silence every
+    /// renderer but the first in every composited Set ever saved without a
+    /// selection — a picture nobody asked for, from a file that said nothing
+    /// had changed.
+    #[test]
+    fn a_composited_set_nobody_selected_in_writes_no_live() {
+        let (dir, store, l1, l4) = fixture();
+        let l4b = beside(
+            &dir,
+            "l4b.kir",
+            &L4.replace("proc points", "proc points_two"),
+        );
+        let nodes = ordinary(&store, &l1, &[l4, l4b]);
+        save(
+            &store,
+            "unselected",
+            Saving {
+                layering: Layering::Composite,
+                live: None,
+                ..plain(&nodes, &[])
+            },
+        )
+        .expect("save");
+
+        let text = written(&store, "unselected");
+        assert!(
+            text.contains(r#"{"t":"merge"}"#),
+            "the bare merge record is not in the file:\n{text}"
+        );
+
+        let loaded = load(&store, "unselected").expect("load");
+        assert_eq!(loaded.layering, Layering::Composite);
+        assert_eq!(
+            loaded.live, None,
+            "a merge with no `live` came back naming a renderer"
+        );
+    }
+
+    /// **A fold naming a renderer the file does not have is said and dropped.**
+    ///
+    /// A hand-written or hand-edited file can name one; the Set is whole either
+    /// way, so the honest answer is to load it with every renderer live — the
+    /// state it would have come up in — and say which line was not honoured.
+    /// Checked where the `camera` index is checked and for its reason: how many
+    /// renderers a file names is only known once every `slot` record has been
+    /// met.
+    #[test]
+    fn a_fold_naming_a_renderer_that_is_not_there_is_reported_and_dropped() {
+        let (_dir, store, l1, l4) = fixture();
+        let nodes = ordinary(&store, &l1, std::slice::from_ref(&l4));
+        save(
+            &store,
+            "wrong",
+            Saving {
+                layering: Layering::Composite,
+                live: Some(3),
+                ..plain(&nodes, &[])
+            },
+        )
+        .expect("save");
+
+        let loaded = load(&store, "wrong").expect("load");
+        assert_eq!(loaded.layering, Layering::Composite, "the Set still folds");
+        assert_eq!(loaded.live, None, "a fold nobody can honour was applied");
+        assert!(
+            loaded.notes.iter().any(|n| n.contains("renderer 3")),
+            "nothing said which renderer was not there: {:?}",
+            loaded.notes
+        );
+    }
+
     /// **Refused rather than written into a file that cannot be read back.**
     ///
     /// What [`save`] refuses is no longer a layer — it has a slot for every one
@@ -2518,6 +2804,8 @@ proc dissolve {
                     bindings: &[],
                     edges: &[],
                     camera: &DEFAULT_CAMERA,
+                    layering: Layering::Overdraw,
+                    live: None,
                     seeds: &[1],
                 },
             )
@@ -2657,6 +2945,8 @@ proc dissolve {
                 bindings: &[],
                 edges: &[],
                 camera: &DEFAULT_CAMERA,
+                layering: Layering::Overdraw,
+                live: None,
                 seeds: &[1],
             },
         )

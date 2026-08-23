@@ -283,6 +283,22 @@ pub struct Request {
     /// params below are: a request that depended on what happens to be live is
     /// not reproducible from a record stream.
     pub layering: crate::set::Layering,
+    /// **Which renderer the new Set is folded to**, applied as soon as it is
+    /// built — where [`Request::camera`] is applied, and for its reason.
+    /// `None` leaves every input live, which is what [`Set::build_many`] builds
+    /// and what a Set nobody has selected in is.
+    ///
+    /// **Restated rather than carried over from the outgoing Set**, on the
+    /// terms every other field here is. The symptom of leaving it out is the
+    /// one [`Request::camera`] describes: a slot whose Set file recorded a
+    /// selection comes back with every renderer folded in at once on the first
+    /// rebuild, and nothing says so — a composited picture is not a broken one,
+    /// it is a different one.
+    ///
+    /// **Ineffective under [`crate::set::Layering::Overdraw`]**, on
+    /// [`Set::select_renderer`]'s terms and for its reason: the edges exist
+    /// either way and nothing reads them without an L5.
+    pub live: Option<u32>,
     pub seed_salt: u32,
     /// **One hash salt per geometry, and only what was assigned** — see
     /// [`Set::build_many`]. Empty, or an entry that is `None`, is a source
@@ -1163,6 +1179,18 @@ fn run_worker(
                 // but the two paths agreeing about where this lands is what
                 // keeps a rebuilt Set the same Set as a started one.
                 set.camera = request.camera;
+                // **The fold the request states, beside the camera it states**
+                // and for the same reason — see [`Request::live`]. A renderer
+                // this build no longer has is said and passed over: the files
+                // were just recompiled and may name fewer renderers than the
+                // Set that was loaded, which is a rebuild rather than an error.
+                if let Some(at) = request.live {
+                    if !set.select_renderer(at as usize) {
+                        eprintln!(
+                            "  this build has no renderer {at} to fold to — every renderer                              is live"
+                        );
+                    }
+                }
                 for write in &request.params {
                     // Addressed or not — `Set::write_param` is the one place
                     // that decides, so this path and the command line's cannot

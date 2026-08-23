@@ -3485,10 +3485,15 @@ impl Set {
     ///   carries state of its own, and selecting between those means a second
     ///   Set, priming it off air, and sharing the geometry across the two —
     ///   none of which exists. See `docs/roadmap.md`, "Variant pools".
-    /// - **It cannot be saved.** [`Layering`] is deliberately not a Set file
-    ///   record, so a composited Set written out and loaded back overdraws and
-    ///   has no L5 for a selection to be about. The selection is a property of
-    ///   the run, like a gain.
+    /// - **It is saved with the Set and not with the performance.**
+    ///   [`Layering`] *is* a Set file record — `merge` — and the choice this
+    ///   makes rides on it as that record's `live`, so a composited Set written
+    ///   out and loaded back composites and comes up folded to the renderer it
+    ///   was folded to. What is still not a Set file's is a `select` record: it
+    ///   names a deck slot at an instant, and no session record says which
+    ///   slot's Set composites, so a stream folded down cannot tell whether a
+    ///   selection it meets is about the Set being written. See
+    ///   `karakuri_store::record::Record::Merge`.
     ///
     /// **Silently ineffective under [`Layering::Overdraw`]**, on
     /// [`Set::set_input`]'s terms and for its reason: the edges exist either
