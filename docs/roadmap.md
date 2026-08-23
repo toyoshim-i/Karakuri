@@ -485,8 +485,11 @@ already made.
 Pages. It was written **ahead of the implementation on purpose**: the panel does not exist, so
 the manual is the only place its behaviour can be pinned, and it is a better place than a
 specification because a sentence you cannot write about a control is a control designed
-wrong. Read it before touching this milestone — [the seven rules](manual/index.html) and
-[the console](manual/console.html), region by region, with a working mock of the panel in it.
+wrong. Read it before touching this milestone. Four pages, published at
+<https://toyoshim-i.github.io/Karakuri/manual/>: [the seven rules](manual/index.html) the
+surface obeys, [what the words mean](manual/concepts.html), [the console](manual/console.html)
+region by region with a working mock of the panel in it, and
+[every operation](manual/operations.html) with each way in.
 
 **Its seven rules are capped and `docs/principles/` is not**, which is the difference between
 the two documents rather than an inconsistency between them. Principles accumulate, because a
@@ -523,8 +526,9 @@ fade, and starting or stopping a session recording.
 
 **So M5 opens with naming rather than drawing**, which is the shape M4 opened with — nothing
 could be edited there until nodes had names, and nothing can be routed here until operations
-do. The manual's operations pages are where that enumeration is written down, and a surface
-missing from an operation's row is a line of this milestone's work.
+do. [Every operation](manual/operations.html) is where that enumeration is written down, and a
+surface missing from an operation's row is a line of this milestone's work. **It is written**:
+41 operations, and 50 of the 179 ways in exist.
 
 #### What was settled about the panel, and where each thing is argued
 
@@ -587,8 +591,10 @@ path, and **it must be testable without a GPU or a window** — the model and th
 answer headless and the view stays thin, which is what keeps this milestone's tests off the
 `mod gpu` side of `docs/contributing.md`'s split.
 
-**How this milestone is actually sequenced is not settled here**, and is to be taken up once
-the manual's operations pages are written, since those are what the vocabulary is read off.
+**How this milestone is actually sequenced is not settled here.** It was left until the
+manual's operations page existed, since that is what the vocabulary is read off — and **that
+page is written now**, so the condition has been met and the sequencing is the next thing this
+milestone owes a decision on. Nothing below it is blocked on anything else.
 
 **Adds**
 
