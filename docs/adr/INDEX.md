@@ -166,6 +166,7 @@ number; new records continue from the end.
 | [ADR-0144](0144-the-test-suites-largest-cost-was-a-directory-listing.md) | The test suite's largest cost was a directory listing | 2026-08-23 | accepted |
 | [ADR-0145](0145-the-storage-figure-is-computed-on-demand-not-recorded.md) | The storage figure is computed on demand, not recorded | 2026-08-23 | accepted |
 | [ADR-0146](0146-a-selection-is-its-own-record-and-lands-once.md) | A selection is its own record, and lands once | 2026-08-23 | accepted |
+| [ADR-0147](0147-geometry-is-not-shared-across-sets.md) | Geometry is not shared across Sets | 2026-08-23 | accepted |
 
 ## Retired numbers
 

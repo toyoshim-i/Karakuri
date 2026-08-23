@@ -2089,11 +2089,18 @@ section of `docs/ir-spec.md`, where a reader meets the `camera` record.
 
   **What is not built is everything the paragraph says about deck slots.** Alternatives that
   differ at L1 or L2 carry state of their own, so they are separate Sets — and holding
-  several of them as one pool needs the deck to know they are alternatives, needs the
-  unselected ones primed off air so a cut does not arrive cold, and needs the geometry
-  shared across them so that three variants of one shell are not three simulations of it.
-  None of that exists. The pre-forked-Sets-as-deck-members mechanism is the design and
-  nothing implements it.
+  several of them as one pool needs the deck to know they are alternatives, and needs the
+  unselected ones primed off air so a cut does not arrive cold. Neither exists. The
+  pre-forked-Sets-as-deck-members mechanism is the design and nothing implements it.
+
+  **The third thing it would have needed is not coming.** Sharing geometry across those Sets
+  — so that three variants of one shell are not three simulations of it — is **rejected**,
+  not pending: the drawing pipeline is closed within a Set, and a slot that wants the same
+  geometry holds its own copy. See [ADR-0147](adr/0147-geometry-is-not-shared-across-sets.md)
+  for why the saving loses to keeping the Set a boundary. So a deck-slot pool costs one
+  simulation per alternative, permanently, even when they differ only at L4 — which is worth
+  having for alternatives that differ at L1 or L2, where separate simulations are the point
+  rather than an inefficiency.
 
   **That is also where the two cost claims come apart, and the passage above reads as though
   they were one claim.** "Cheap for closed-form and dear for accumulating" is a statement
