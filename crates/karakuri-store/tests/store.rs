@@ -2,6 +2,7 @@
 //! temporary directory — never the user's `library/`.
 
 use std::fs;
+use std::time::{Duration, SystemTime};
 
 use karakuri_store::{project, Hash, Layer, Line, Record, Store, StoreError, Value};
 use tempfile::tempdir;
@@ -476,5 +477,350 @@ fn a_metadata_file_survives_an_unknown_t_and_an_unknown_key() {
     assert!(
         contents.contains(r#"{"t":"origin","prompt":"organic drifting shell","seed":19274}"#),
         "the unknown line did not survive the write: {contents}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Enumeration: `list_sets` and `list_artifacts`.
+// ---------------------------------------------------------------------------
+
+/// The smallest thing that is a legal Set file, for tests that care about the
+/// file's name and not about what is in it.
+fn a_set() -> Vec<Line> {
+    vec![Line::new(Record::Set {
+        id: "drift_01".into(),
+        v: 1,
+    })]
+}
+
+/// **The order is by id, and it is the same order twice.**
+///
+/// `read_dir` hands entries back in whatever order the filesystem stored them,
+/// which on APFS is creation order and elsewhere is a hash bucket walk — so a
+/// listing that forwards it looks stable on the machine it was written on and
+/// reorders itself on someone else's. The ids here are written in an order that
+/// is neither sorted nor reverse-sorted, so an implementation that forgot to
+/// sort would have to be lucky twice to pass.
+#[test]
+fn list_sets_orders_by_id_and_repeats_that_order() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    for id in ["mike", "zulu", "drift_01", "01_drift", "alpha"] {
+        store.write_set(id, &a_set()).unwrap();
+    }
+
+    let ids: Vec<String> = store
+        .list_sets()
+        .unwrap()
+        .into_iter()
+        .map(|e| e.id)
+        .collect();
+    assert_eq!(ids, ["01_drift", "alpha", "drift_01", "mike", "zulu"]);
+
+    // Unchanged store, same sequence — including the entries' write times.
+    assert_eq!(store.list_sets().unwrap(), store.list_sets().unwrap());
+}
+
+/// **The time reported is the file's, and it is the axis "the one I saved
+/// last" is asked along.**
+///
+/// The two mtimes are stamped rather than observed, because a test that writes
+/// two files and asserts the second is newer asserts nothing on a filesystem
+/// whose clock ticks once a second. Stamping also puts the recency order at
+/// odds with the id order, which is the point: the listing comes back by id,
+/// and one `sort_by_key` on the field turns it into the answer an operator
+/// wanted.
+#[test]
+fn list_sets_carries_the_time_the_file_was_written() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    // `alpha` sorts first and was saved last.
+    let older = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000_000);
+    let newer = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+    for (id, stamp) in [("alpha", newer), ("zulu", older)] {
+        store.write_set(id, &a_set()).unwrap();
+        let path = dir.path().join("sets").join(format!("{id}.set.ndjson"));
+        fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(stamp))
+            .unwrap();
+    }
+
+    let listed = store.list_sets().unwrap();
+    assert_eq!(
+        listed.iter().map(|e| e.written).collect::<Vec<_>>(),
+        [newer, older],
+        "the reported time is not the file's modification time"
+    );
+
+    let mut by_recency = listed;
+    by_recency.sort_by_key(|e| e.written);
+    assert_eq!(
+        by_recency.last().unwrap().id,
+        "alpha",
+        "sorting the listing by its own time did not recover the save order"
+    );
+}
+
+/// **Only `<id>.set.ndjson` is a Set.** Everything else that can end up in that
+/// directory — a `.tmp` from a write that died, an editor's backup, a
+/// subdirectory — is somebody else's file, and reporting one as a Set means
+/// handing back an id [`Store::read_set`] cannot open. The `.tmp` case is not
+/// hypothetical: `write_atomic` puts one there under exactly that name for the
+/// length of every write.
+#[test]
+fn list_sets_skips_what_the_layout_does_not_claim() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+    let sets = dir.path().join("sets");
+
+    store.write_set("drift_01", &a_set()).unwrap();
+    fs::write(sets.join("drift_01.set.ndjson.tmp"), b"half a write").unwrap();
+    fs::write(sets.join("notes.txt"), b"reminder").unwrap();
+    fs::write(sets.join("drift_02.ndjson"), b"wrong suffix").unwrap();
+    fs::write(sets.join("drift_03.set"), b"wrong suffix").unwrap();
+    fs::create_dir(sets.join("archive.set.ndjson")).unwrap();
+
+    let ids: Vec<String> = store
+        .list_sets()
+        .unwrap()
+        .into_iter()
+        .map(|e| e.id)
+        .collect();
+    assert_eq!(ids, ["drift_01"]);
+}
+
+/// The same claim for artifacts, plus the ordering that makes a listing
+/// reproducible. Expected order is built from the hex spellings rather than
+/// from `Hash`'s own `Ord`, so the test says "ascending hex" rather than
+/// agreeing with whatever the implementation sorted by.
+#[test]
+fn list_artifacts_orders_by_hash_and_repeats_that_order() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    let mut expected: Vec<String> = ["proc a {}", "proc b {}", "proc c {}", "proc d {}"]
+        .iter()
+        .map(|s| store.put_artifact(s.as_bytes()).unwrap().short(64))
+        .collect();
+    expected.sort();
+
+    let listed: Vec<String> = store
+        .list_artifacts()
+        .unwrap()
+        .into_iter()
+        .map(|e| e.hash.short(64))
+        .collect();
+    assert_eq!(listed, expected);
+    assert_eq!(
+        store.list_artifacts().unwrap(),
+        store.list_artifacts().unwrap()
+    );
+}
+
+/// **An artifact without a card is an ordinary artifact.**
+///
+/// `read_meta` already says so, and this is the same statement made in bulk:
+/// the uncarded one is listed, not skipped and not an error, and the flag is
+/// the difference. A caller that had to discover this by calling `read_meta`
+/// per artifact would be reading an ordinary answer out of an error variant,
+/// once per artifact, opening a file each time to do it.
+#[test]
+fn list_artifacts_flags_the_carded_and_the_uncarded() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    let carded = store.put_artifact(b"proc carded { kind L1 }").unwrap();
+    let bare = store.put_artifact(b"proc bare { kind L1 }").unwrap();
+    store
+        .write_meta(
+            &carded,
+            &[Line::new(Record::Meta {
+                hash: carded,
+                name: "carded".into(),
+                kind: Layer::L1,
+                v: 1,
+            })],
+        )
+        .unwrap();
+
+    let listed = store.list_artifacts().unwrap();
+    assert_eq!(listed.len(), 2, "the uncarded artifact was dropped");
+    let flag = |h| {
+        listed
+            .iter()
+            .find(|e| e.hash == h)
+            .unwrap_or_else(|| panic!("{h} missing from the listing"))
+            .has_meta
+    };
+    assert!(flag(carded), "an artifact with a card was reported bare");
+    assert!(!flag(bare), "an artifact with no card was reported carded");
+}
+
+/// **A card is not an artifact, and neither is a directory.**
+///
+/// Both live under the same root as the `.kir` files, so both are in front of
+/// any implementation that lists that directory. The stray card is the case
+/// `write_meta` documents — it writes one without checking the artifact exists
+/// — and counting it would put a hash in the library that `get_artifact` cannot
+/// serve. The directory is named `<hash>.kir` on purpose: the suffix and the
+/// hash both check out, and it is still not an artifact.
+#[test]
+fn list_artifacts_reports_neither_a_stray_card_nor_a_directory() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    let real = store.put_artifact(b"proc real { kind L1 }").unwrap();
+    let never_put = Hash::of(b"proc never_put { kind L1 }");
+    store.write_meta(&never_put, &[]).unwrap();
+    fs::create_dir(
+        dir.path()
+            .join(format!("{}.kir", Hash::of(b"a directory").short(64))),
+    )
+    .unwrap();
+
+    let listed = store.list_artifacts().unwrap();
+    assert_eq!(
+        listed.iter().map(|e| e.hash).collect::<Vec<_>>(),
+        [real],
+        "something that is not an artifact was listed as one"
+    );
+}
+
+/// **A name this store would not have written is not an artifact**, and none
+/// of these may panic on the way to being ignored.
+///
+/// The uppercase case is the subtle one: it parses to a valid address, whose
+/// `.kir` path is then the lowercase spelling — so listing it would report a
+/// hash `get_artifact` immediately fails to find. The non-UTF-8 name is the one
+/// that punishes an `unwrap` on `to_str`, and nothing stops a user from
+/// creating it.
+#[test]
+fn list_artifacts_skips_names_this_store_would_not_have_written() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    let real = store.put_artifact(b"proc real { kind L1 }").unwrap();
+    // Uppercase hex, under an address nothing was ever put at — writing the
+    // real artifact's address in uppercase would land on the real artifact's
+    // own file on a case-insensitive volume, which is most of macOS.
+    let shouty = Hash::of(b"proc shouty { kind L1 }")
+        .short(64)
+        .to_uppercase();
+    fs::write(dir.path().join(format!("{shouty}.kir")), b"upper case hex").unwrap();
+    fs::write(dir.path().join("proc_drift_shell.kir"), b"not hex at all").unwrap();
+    fs::write(
+        dir.path().join(format!("{}.kir", "z".repeat(64))),
+        b"64 non-hex",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join(format!("{}.kir", real.short(32))),
+        b"too short",
+    )
+    .unwrap();
+    fs::write(dir.path().join(".kir"), b"no stem").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        // Best-effort: APFS validates filenames and refuses this outright
+        // (EILSEQ), so on macOS the case cannot be staged at all and the
+        // listing is left to prove the rest. On a filesystem that does allow
+        // it — ext4, and every volume this store might be kept on over a
+        // network share — the file lands and an `unwrap` on `to_str` dies here.
+        let name = std::ffi::OsStr::from_bytes(b"\xff\xfe.kir");
+        let _ = fs::write(dir.path().join(name), b"not utf-8");
+    }
+
+    let listed = store.list_artifacts().unwrap();
+    assert_eq!(listed.iter().map(|e| e.hash).collect::<Vec<_>>(), [real]);
+    // And what was listed is what the store can actually serve.
+    assert_eq!(
+        store.get_artifact(&listed[0].hash).unwrap(),
+        b"proc real { kind L1 }"
+    );
+}
+
+/// A store with nothing in it lists nothing — including the three
+/// subdirectories `Store::open` just made, which sit in the artifact root and
+/// are not artifacts.
+#[test]
+fn listing_an_empty_store_is_empty_and_not_an_error() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    assert_eq!(store.list_sets().unwrap(), []);
+    assert_eq!(store.list_artifacts().unwrap(), []);
+}
+
+/// **A store whose directory went away is an error, not an empty library.**
+///
+/// The two answers look alike and mean opposite things: one says nothing is
+/// kept, the other says we could not find out. An operator who is told the
+/// first will generate the thing they already had.
+#[test]
+fn listing_a_removed_directory_is_an_error() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+    store.write_set("drift_01", &a_set()).unwrap();
+    store.put_artifact(b"proc p { kind L1 }").unwrap();
+
+    fs::remove_dir_all(dir.path().join("sets")).unwrap();
+    match store.list_sets() {
+        Err(StoreError::Io(e)) => assert_eq!(e.kind(), std::io::ErrorKind::NotFound),
+        other => panic!("expected an io error for a missing sets/, got {other:?}"),
+    }
+
+    fs::remove_dir_all(dir.path()).unwrap();
+    match store.list_artifacts() {
+        Err(StoreError::Io(e)) => assert_eq!(e.kind(), std::io::ErrorKind::NotFound),
+        other => panic!("expected an io error for a missing root, got {other:?}"),
+    }
+}
+
+/// **Listing reads names, never contents.**
+///
+/// A library of two thousand Sets should cost one directory read, and the way
+/// that claim is checked without timing anything is to make the contents
+/// unreadable: every file here fails to parse, and the listing has to come back
+/// whole anyway. The `read_set` at the end is what keeps the test honest — it
+/// proves the bytes really are unparsable, so the listing's success means it
+/// never looked.
+#[test]
+fn listing_reads_names_and_not_contents() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    fs::write(
+        dir.path().join("sets").join("garbage.set.ndjson"),
+        b"this is not ndjson\n",
+    )
+    .unwrap();
+    let hash = store.put_artifact(b"proc p { kind L1 }").unwrap();
+    fs::write(
+        dir.path().join(format!("{}.meta.ndjson", hash.short(64))),
+        b"neither is this\n",
+    )
+    .unwrap();
+
+    let sets = store.list_sets().unwrap();
+    assert_eq!(
+        sets.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(),
+        ["garbage"]
+    );
+    let artifacts = store.list_artifacts().unwrap();
+    assert_eq!(artifacts.len(), 1);
+    assert!(
+        artifacts[0].has_meta,
+        "an unparsable card is still a card — listing does not read it"
+    );
+
+    assert!(
+        matches!(store.read_set("garbage"), Err(StoreError::Record { .. })),
+        "the file parsed after all, so listing it proved nothing"
     );
 }

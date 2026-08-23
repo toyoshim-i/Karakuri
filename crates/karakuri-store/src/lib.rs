@@ -14,4 +14,4 @@ pub use hash::{Hash, HashParseError};
 pub use ndjson::Line;
 pub use project::project;
 pub use record::{BindNoise, Layer, Record, Value, MAX_STEPS};
-pub use store::{Store, StoreError};
+pub use store::{ArtifactEntry, SetEntry, Store, StoreError};
