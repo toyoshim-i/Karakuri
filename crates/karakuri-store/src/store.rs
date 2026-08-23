@@ -14,8 +14,10 @@
 //! hex (no `sha256:` prefix and no colon) so it is safe as a path component
 //! on every platform the store might run on.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
+use std::time::SystemTime;
 
 use crate::hash::Hash;
 use crate::ndjson::{self, Line};
@@ -214,4 +216,157 @@ impl Store {
     pub fn save_session_as_set(&self, set_id: &str, session: &[Line]) -> Result<(), StoreError> {
         self.write_set(set_id, &project::project(session))
     }
+
+    /// **List the Sets the store holds**, in ascending id order, each with the
+    /// time its file was last written.
+    ///
+    /// **The time comes from the filesystem because the file has none.** A Set
+    /// file is a state projection and carries no time at all — that is what
+    /// [`StoreError::TickInSet`] exists to enforce — so there is nothing inside
+    /// one to sort by, and the mtime is not a second-best here but the only
+    /// record that exists of when a Set was saved. [`Store::write_set`] renames
+    /// a complete file into place, so what that mtime marks is the moment the
+    /// Set became readable rather than the moment some writer opened a file.
+    ///
+    /// **Ordered by id and not by recency**, though "the one I saved last" is
+    /// the question this method is mostly asked. Two Sets written within one
+    /// tick of a coarse filesystem clock carry the same mtime, and a sort whose
+    /// keys tie falls back to whatever `read_dir` handed us — which is not an
+    /// order, and would differ between two calls on an unchanged store. Ids are
+    /// unique by construction, so ordering on them is total and repeatable;
+    /// recency is a `sort_by_key(|e| e.written)` away, and the field to do it
+    /// with is on every entry.
+    ///
+    /// **A name the layout does not claim is skipped, not repaired.** The
+    /// directory holds `<id>.set.ndjson`; an editor's backup, a `.tmp` left by
+    /// a write that died, a subdirectory someone made — those belong to whoever
+    /// put them there, and reporting one as a Set under a truncated id would
+    /// invent a library entry [`Store::read_set`] cannot open.
+    ///
+    /// An empty store lists nothing, and that is not an error. A `sets/`
+    /// directory removed under the store *is* one: the caller asked what is
+    /// there and we have no answer, and an empty `Vec` would say "nothing is
+    /// kept" to a question we could not read.
+    pub fn list_sets(&self) -> Result<Vec<SetEntry>, StoreError> {
+        let mut out = Vec::new();
+        for entry in fs::read_dir(self.root.join("sets"))? {
+            let entry = entry?;
+            let name = entry.file_name();
+            // Non-UTF-8 fails `to_str` and falls out of the listing with
+            // everything else the layout does not claim — no lossy repair, and
+            // no unwrap for a hostile name to trip.
+            let Some(id) = name.to_str().and_then(|n| n.strip_suffix(".set.ndjson")) else {
+                continue;
+            };
+            if entry.file_type()?.is_dir() {
+                continue;
+            }
+            out.push(SetEntry {
+                id: id.to_string(),
+                written: entry.metadata()?.modified()?,
+            });
+        }
+        out.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(out)
+    }
+
+    /// **List the artifacts the store holds, and say which of them have a
+    /// metadata card**, in ascending hash order.
+    ///
+    /// **One listing and not two.** The layout puts `<hash>.kir` and
+    /// `<hash>.meta.ndjson` in the same directory, so the pass that finds the
+    /// artifacts has already seen the cards; a separate `list_carded` would
+    /// read the directory a second time to recover what this one would have
+    /// thrown away. Carded and uncarded are then the same list read two ways —
+    /// filter one way to ask which artifacts a search index can already
+    /// describe, the other to ask what a regeneration pass has left to do.
+    ///
+    /// **A card is not an artifact.** A `<hash>.meta.ndjson` with no `.kir`
+    /// beside it is exactly the stray file [`Store::write_meta`] declines to
+    /// prevent, and it does not appear here: the `.kir` files are the
+    /// population and the cards only decorate them. A directory is not an
+    /// artifact either, whatever it happens to be named.
+    ///
+    /// **And a name has to be one this store would have written**, not merely
+    /// one that parses. `<UPPERCASE HEX>.kir` decodes to a perfectly good
+    /// address — whose `.kir` path is then the *lowercase* name, so listing it
+    /// would hand back a hash [`Store::get_artifact`] cannot find. Rendering the
+    /// parsed address out again and requiring it to equal the stem costs one
+    /// string compare and makes every hash listed a hash the rest of this API
+    /// works on.
+    ///
+    /// Ordering is by the address itself, which for hex is the order a reader
+    /// scanning the column expects. As with [`Store::list_sets`], an empty
+    /// store lists nothing and a missing root is an error.
+    pub fn list_artifacts(&self) -> Result<Vec<ArtifactEntry>, StoreError> {
+        let mut sources = BTreeSet::new();
+        let mut cards = BTreeSet::new();
+        for entry in fs::read_dir(&self.root)? {
+            let entry = entry?;
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else { continue };
+            let stem = if let Some(stem) = name.strip_suffix(".kir") {
+                Some((stem, &mut sources))
+            } else {
+                name.strip_suffix(".meta.ndjson").map(|s| (s, &mut cards))
+            };
+            let Some((stem, set)) = stem else { continue };
+            let Some(hash) = parse_hash_stem(stem) else {
+                continue;
+            };
+            if entry.file_type()?.is_dir() {
+                continue;
+            }
+            set.insert(hash);
+        }
+        // `BTreeSet` has already put the addresses in order, and having each
+        // one at most once is the same property that makes the card lookup a
+        // membership test rather than a scan.
+        Ok(sources
+            .into_iter()
+            .map(|hash| ArtifactEntry {
+                has_meta: cards.contains(&hash),
+                hash,
+            })
+            .collect())
+    }
+}
+
+/// Read a `<hash>` path component back as the address it names, or `None` if
+/// the name is not one this store would have written.
+///
+/// The round trip through [`Hash::short`] is the whole check: parsing alone
+/// accepts spellings — uppercase hex, most obviously — that never name a file
+/// the store put there, and a listing that reported one would be reporting an
+/// artifact nothing can read back.
+fn parse_hash_stem(stem: &str) -> Option<Hash> {
+    let hash: Hash = format!("sha256:{stem}").parse().ok()?;
+    (hash.short(64) == stem).then_some(hash)
+}
+
+/// A Set the store holds, as [`Store::list_sets`] found it: what to hand
+/// [`Store::read_set`], and when that file was last written.
+///
+/// The time is a field rather than something a caller is left to read out of
+/// the id. Ids auto-named after a timestamp do sort by time, which is exactly
+/// what makes the assumption tempting and wrong — the moment an operator names
+/// one `drift_01` it sorts beside the others and nowhere near when it was made.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SetEntry {
+    pub id: String,
+    pub written: SystemTime,
+}
+
+/// An artifact the store holds, as [`Store::list_artifacts`] found it.
+///
+/// `has_meta` false is an ordinary artifact and not a damaged one: metadata is
+/// derived, so anything put by a build older than the card format has none
+/// until something regenerates it — the same state [`Store::read_meta`] returns
+/// `NotFound` for. Carrying it as a flag is what lets a caller ask the question
+/// in bulk instead of calling `read_meta` per artifact and reading the answer
+/// out of an error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ArtifactEntry {
+    pub hash: Hash,
+    pub has_meta: bool,
 }
