@@ -1,0 +1,17 @@
+[package]
+name = "karakuri-console"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The arrangement is built from the same pieces any other arrangement is, and
+# nothing else is needed to state it: no toolkit, no device, no window. See
+# ADR-0156 — the panel is a client of this tree, not its owner.
+karakuri-layout = { version = "0.1.0", path = "../karakuri-layout" }
+
+[dev-dependencies]
+# Only the round-trip test needs a concrete format; the arrangement itself is
+# format-agnostic, exactly as `karakuri-layout` is.
+serde_json.workspace = true
