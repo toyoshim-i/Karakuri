@@ -18,7 +18,7 @@ use crate::oscillator::Oscillator;
 use crate::{Sample, SignalBus};
 
 /// Oscillator-derived values (`bpm`, `beat`, `bar`) are the local oscillator's
-/// own ground truth — the single source of truth per the project invariants —
+/// own ground truth — the single source of truth for phase and tempo —
 /// so they carry full confidence.
 const CONFIDENCE_OSCILLATOR: f32 = 1.0;
 
