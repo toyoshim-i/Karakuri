@@ -24,7 +24,7 @@ pub type Mat4 = [[f32; 4]; 4];
 /// The six numbers a camera is, in world space.
 ///
 /// **Not a matrix, and deliberately.** Blending two trajectories — an orbit and
-/// a handheld rig mixed at 0.3, which is what `docs/roadmap.md` means by
+/// a handheld rig mixed at 0.3, which is what `docs/ir-spec.md` means by
 /// L3-multiple — is meaningful on these and meaningless on the matrices derived
 /// from them.
 ///

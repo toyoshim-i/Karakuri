@@ -3189,7 +3189,7 @@ impl<'a> Checker<'a> {
                          projection to multiply a position by; `{slot}.eye`, where it is; \
                          and `{slot}.ray`, the direction through this fragment. Its `target`, \
                          `up`, `fov_y`, `near` and `far` are the L3's to write and no \
-                         renderer can read them yet — see `docs/roadmap.md`"
+                         renderer can read them yet"
                     ),
                 );
                 return None;

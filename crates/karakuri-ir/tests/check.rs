@@ -646,8 +646,9 @@ proc probe {
 /// while `spawn` was wired to nothing: with the lifecycle live, a `spawn`
 /// block without a rate compiles clean, builds a Set, and then creates zero
 /// elements every step forever, which reads as a procedure that draws
-/// nothing rather than as a mistake. That is exactly the shape the roadmap
-/// says this pass exists to refuse.
+/// nothing rather than as a mistake. That is exactly the shape this pass
+/// exists to refuse — see
+/// `docs/principles/0024-nothing-checks-clean-and-comes-up-short-at-runtime.md`.
 #[test]
 fn a_spawn_block_without_a_spawn_rate_param_is_rejected() {
     let src = r#"
@@ -3658,7 +3659,8 @@ proc twice {
 
 /// **A camera's members are resolved against its type**, so a name that is not
 /// one of the three is refused with the three named — and with the four values
-/// an L4 still cannot read, which is a roadmap entry rather than an oversight.
+/// an L4 still cannot read, which is work not yet done rather than an
+/// oversight.
 #[test]
 fn a_member_a_camera_has_not_got_is_refused() {
     let errs = check_err(&THROUGH.replace("view.clip", "view.target"));

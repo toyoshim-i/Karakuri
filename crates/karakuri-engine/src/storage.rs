@@ -13,7 +13,8 @@
 //! index its text never mentions, and an amplifier pays at the count it makes
 //! rather than at the Set's. The stage-4 `bytes/element` figure was exactly
 //! that second derivation — 96 bytes published against 312 allocated — and it
-//! was withdrawn rather than corrected; `docs/roadmap.md`, M4.
+//! was withdrawn rather than corrected — see
+//! `docs/adr/0116-stage-four-stops-claiming-the-byte-figure.md`.
 //!
 //! **What is counted is [`crate::set::ElementStorage`]'s question and not
 //! this module's.** One entry per element is the rule there; the counts block,

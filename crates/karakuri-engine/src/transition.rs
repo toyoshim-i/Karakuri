@@ -1,7 +1,7 @@
 //! Transitions: a mix control moving over musical time.
 //!
-//! `docs/roadmap.md` asks for M2's "transitions as first-class objects, not
-//! just crossfade", and the object it turned out to want is smaller than a
+//! What was asked for was "transitions as first-class objects, not just
+//! crossfade", and the object it turned out to want is smaller than a
 //! crossfade rather than larger: **one control, one destination, one musical
 //! duration, one curve.** A crossfade is two of them issued together, a fade-in
 //! is one, and a cut on the bar is one with a duration of zero — so the thing
@@ -11,8 +11,9 @@
 //!
 //! ## On the beat clock, and what that costs
 //!
-//! The roadmap's three clocks say the middle one — beat and bar, half a second
-//! to four — is for "variant switching, parameter morphs, transitions". The
+//! Of the three clocks this system runs on, the middle one — beat and bar, half
+//! a second to four — is for variant switching, parameter morphs and
+//! transitions. The
 //! transport got there first: `Sync::Beat` already derives a slot's `t` from
 //! the grid, which is engine machinery running on that clock rather than a
 //! procedure reading a signal. What is new here is *scheduling*: the transport

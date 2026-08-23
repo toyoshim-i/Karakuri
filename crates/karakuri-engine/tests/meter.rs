@@ -908,9 +908,9 @@ proc nan_points {
     /// busy and skip. With a wait anywhere in the frame path, neither can happen:
     /// the ring is drained every frame, so the lag is pinned at one and the skip
     /// count at zero. So the run must show *one* of a reading older than one frame
-    /// or a skipped measurement, and this is the same shape as the roadmap's "three
+    /// or a skipped measurement, and this is the same shape as "three
     /// to five frames were rendered between the request going out and the swap
-    /// landing, which is what does not block means operationally".
+    /// landing", which is what *does not block* means operationally.
     ///
     /// What this loop is *not* is a measurement of the lag: running dozens of
     /// frames ahead of the GPU is what an unpaced headless loop does, not what a

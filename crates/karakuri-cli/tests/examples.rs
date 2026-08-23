@@ -1,6 +1,6 @@
 //! Every `.kir` in `examples/`, through the whole front end.
 //!
-//! **These are the files the manual and the roadmap tell people to run**, and
+//! **These are the files the manual tells people to run**, and
 //! before this nothing in the suite opened one. A stale example is not a cosmetic
 //! problem: it is the first thing anyone types, and the first thing a model is
 //! pointed at when it asks what the language looks like.
@@ -97,8 +97,8 @@ mod gpu {
             ("drift_shell.kir", "glass_shell.kir"),
             ("drift_shell.kir", "field_march.kir"),
             ("strand_shell.kir", "strand_strokes.kir"),
-            // The three a model wrote in one session; the roadmap names them as a
-            // group, so both of its L4s are paired with its L1.
+            // The three a model wrote in one session, and they are a group, so
+            // both of its L4s are paired with its L1.
             ("beat_strands.kir", "beat_strokes.kir"),
             ("beat_strands.kir", "beat_bloom.kir"),
             // Named for what they are rather than for a partner — `beat_shell`

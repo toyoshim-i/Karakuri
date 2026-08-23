@@ -119,7 +119,7 @@ impl NoiseConfig {
         // keeps it continuous, but a **phase** correction does not re-hash it.
         // Realigning the beat grid with a room is no reason for a flicker with
         // no musical intent to jump. See `Oscillator`'s module doc, which is
-        // also where `docs/roadmap.md`'s open question about this is answered.
+        // also where this is settled.
         let lattice = oscillator.elapsed_beats() * self.rate as f64;
         sample_kind(self.kind, seed, self.stream, lattice)
     }
@@ -410,8 +410,9 @@ mod tests {
         assert_ne!(a, b);
     }
 
-    /// **Which clock noise runs off**, which is `docs/roadmap.md`'s open
-    /// question about a tempo-relative rate under correction, answered in a
+    /// **Which clock noise runs off** — a tempo-relative rate under correction
+    /// (`docs/adr/0126-a-noise-rate-follows-a-tempo-correction-and-not-a-phase-one.md`),
+    /// answered in a
     /// test rather than only in prose: a *tempo* correction reaches a noise
     /// stream, and a *phase* correction does not.
     ///

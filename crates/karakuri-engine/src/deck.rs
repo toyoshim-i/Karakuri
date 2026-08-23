@@ -1,8 +1,10 @@
 //! The deck: several Sets resident at once, one to four of them composited.
 //!
-//! `docs/roadmap.md` names this once, in M2, so that Priming Sets, M5's
-//! staging lane, M6's agent pool and M7's scheduled material are all the same
-//! waiting area seen from different angles. This is its first slice and it is
+//! There is one waiting area and not several: Priming Sets, a staging lane, an
+//! agent pool and scheduled material are all the same thing seen from different
+//! angles — see
+//! `docs/adr/0026-the-deck-is-l5s-surface-and-its-size-is-two-budgets.md`.
+//! This is its first slice and it is
 //! deliberately narrow: N slots, each owning a [`HotSwap`], each Live slot
 //! rendering into its own HDR target, and one composite pass folding those
 //! targets together with a per-slot gain, opacity and [`Blend`] mode.
@@ -32,11 +34,11 @@
 //!
 //! ## The frame guard
 //!
-//! `docs/roadmap.md` records this under M2's **Demands on earlier work**:
-//!
-//! > **One `begin_frame` per encoder has to become structural before there are
-//! > several Sets.** [...] with a deck compositing up to four and priming the
-//! > rest it is a frame built from two different simulations.
+//! **One `begin_frame` per encoder has to become structural before there are
+//! several Sets**: with a deck compositing up to four and priming the rest, a
+//! frame is built from two different simulations. That was recorded as owed
+//! work at the moment the hole was found — see
+//! `docs/adr/0034-the-frame-guard-owns-the-encoder.md`.
 //!
 //! Here is where it comes due, so [`Deck::begin_frame`] owns the encoder. It
 //! returns a [`Frame`] holding `&mut Deck` *and* the `CommandEncoder`, and the
@@ -85,7 +87,7 @@
 //!
 //! ## Residency: requested and effective
 //!
-//! All three of the roadmap's levels are here now. [`Residency::Live`] is
+//! All three levels are here now. [`Residency::Live`] is
 //! stepped and composited; [`Residency::Priming`] is stepped and **not drawn**;
 //! [`Residency::Allocated`] is compiled, buffers held, not stepping.
 //!
@@ -131,14 +133,15 @@
 //!
 //! ## Priming steps; it does not draw
 //!
-//! `docs/roadmap.md` describes Priming as "rendering hidden at reduced rate and
+//! Priming was first specified as "rendering hidden at reduced rate and
 //! resolution". **That wording is superseded and this is the implementation, so
-//! the reasoning belongs here.**
+//! the reasoning belongs here** — see
+//! `docs/adr/0053-priming-runs-the-simulation-and-skips-rendering.md`.
 //!
 //! What needs warming is per-element state, and **L1 owns all of it**. An L1
 //! procedure's attributes live in the element buffers and are the only thing a
-//! simulation accumulates; L4 is stateless by construction — the roadmap's own
-//! layer table says so, `Set`'s L4 pipeline holds no per-element storage it
+//! simulation accumulates; L4 is stateless by construction — `Set`'s L4
+//! pipeline holds no per-element storage it
 //! writes, and every frame it reads whatever L1 last wrote and throws the
 //! result at a target. So a Set is warm exactly when its element buffers are
 //! warm, and reaching that state needs [`Set::prepare`] and the L1 passes and
@@ -148,7 +151,7 @@
 //! render entirely**. Not a smaller target: no target. There is no resolution
 //! to reduce, no draw to pay for, and no composite term — the mix skips
 //! anything that is not Live, which it already did for Allocated. That is
-//! strictly cheaper than the roadmap's version and it warms exactly the same
+//! strictly cheaper than a hidden render and it warms exactly the same
 //! state, because the state was never in the pixels.
 //!
 //! The one thing that draws a Priming slot is an operator looking at it, and
@@ -156,7 +159,7 @@
 //! "Preview" below. It changes what is on screen and changes nothing about what
 //! is warming.
 //!
-//! It also removes a trap the roadmap's version carries: a Set primed at a
+//! It also removes a trap the reduced-resolution version carries: a Set primed at a
 //! reduced resolution is a Set whose L4 ran at a different `point_size`-to-pixel
 //! ratio, and if any of that ever fed back into state the primed result would
 //! not be the result of having been Live. Skipping the draw makes "primed for
@@ -345,8 +348,10 @@ use crate::transition::{Control, Selection, Transition};
 use crate::transport::{Advance, Sync, Transport};
 use crate::video_source::VideoSource;
 
-/// How many slots a deck can hold. The roadmap's number: "one to four members
-/// are Live and composited; the rest are resident". Four is also what the
+/// How many slots a deck can hold: one to four members are Live and
+/// composited, and the rest are resident — see
+/// `docs/adr/0026-the-deck-is-l5s-surface-and-its-size-is-two-budgets.md`, which
+/// is where the number comes from. Four is also what the
 /// composite shader binds, so raising it is an edit there as well as here.
 ///
 /// This is a layout constant only because the governor that should be
@@ -391,7 +396,7 @@ fn clamp_opacity(opacity: f32) -> f32 {
 /// **A wipe is this and the transition system and nothing else.** An incoming
 /// layer under `over`, with a linear mask whose `position` a scheduled move is
 /// carrying from 0 to 1, hides the outgoing one exactly where the front has
-/// passed. `docs/roadmap.md` said a wipe "wants a mask"; it turned out to want
+/// passed. A wipe was said to "want a mask"; it turned out to want
 /// only that, because the parts that animate it were already here.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Mask {
@@ -623,8 +628,8 @@ impl Blend {
     /// The skip is the operator's way out of broken material: a slot whose L4
     /// divided by zero holds a NaN, and `0.0 * NaN` is NaN, so a fader that
     /// multiplied rather than skipped would put one slot's NaN into every
-    /// channel of the mix. `docs/roadmap.md` records that as the first thing
-    /// this milestone taught.
+    /// channel of the mix — see
+    /// `docs/adr/0040-a-gain-of-zero-means-no-contribution-so-the-slot-is-skipped.md`.
     ///
     /// `opacity` at zero is silence under every mode, and it is the escape
     /// that always works — **except while the slot is being auditioned**, where
@@ -643,7 +648,7 @@ impl Blend {
 
 /// Where a slot sits between compiled and composited.
 ///
-/// All three of the roadmap's levels. The ordering of the variants is the
+/// All three levels. The ordering of the variants is the
 /// ordering of how much a slot costs, which is the order
 /// [`crate::governor`] moves slots down.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -678,7 +683,7 @@ struct Slot {
     /// [`Deck::govern`], and the only one the frame loop reads.
     effective: Residency,
     /// Linear gain, applied to this slot's own colour before the blend. This is
-    /// the roadmap's "per-Set linear gain" at L5 — how this material balances
+    /// the per-Set linear gain at L5 — how this material balances
     /// against the others — and it is not the `param exposure` inside a
     /// procedure and not tone mapping. All three get called exposure and only
     /// the first belongs to the artifact.
@@ -1457,8 +1462,8 @@ impl Deck {
 
     /// **Audition one slot instead of the mix**, or `None` for the mix.
     ///
-    /// M2's "live preview of any slot's output", and the roadmap calls it a
-    /// prerequisite rather than a convenience: choosing between candidates is
+    /// A live preview of any slot's output, and a prerequisite rather than a
+    /// convenience: choosing between candidates is
     /// the basic workflow and it cannot be done blind.
     ///
     /// **It adds a draw and never a step.** A previewed slot is rendered
@@ -1867,7 +1872,7 @@ impl Frame<'_> {
                 // **no render pass at all** — no target, no draw, nothing
                 // reaching the composite. See "Priming steps; it does not
                 // draw" in the module doc for why that warms everything the
-                // roadmap's hidden render would have.
+                // a hidden render would have.
                 //
                 // On a frame it does not step, nothing happens: `prepare` is
                 // what advances `t`, so the slot's clock simply runs slower

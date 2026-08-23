@@ -30,8 +30,8 @@
 //!
 //! ## Where the flag went
 //!
-//! `--bind`'s fields are `Record::Bind`'s fields, and `docs/roadmap.md` records
-//! the debt that came with that: **two diagnostics guarding the flag — a `bpm`
+//! `--bind`'s fields are `Record::Bind`'s fields, and a debt came with that:
+//! **two diagnostics guarding the flag — a `bpm`
 //! binding, and `noise.octaves` on a kind that has no octaves — lived only in
 //! the flag, and the decoder owed them too.** Paying that by writing them a
 //! second time would be two copies of a rule that must not differ.
@@ -235,7 +235,7 @@ impl Loaded {
 /// **The one place a binding's semantics live.** `--bind` reaches here too, so
 /// the flag and a Set file cannot mean different things by the same fields.
 ///
-/// The two diagnostics `docs/roadmap.md` says the decoder owes are here and
+/// The two diagnostics the decoder owes are here and
 /// nowhere else:
 ///
 /// - **`signal=bpm` is refused.** A tempo is not a `[0, 1]` signal, so the
@@ -2342,7 +2342,7 @@ proc dissolve {
         assert!(notes.contains("skipped"), "{notes}");
     }
 
-    /// The two diagnostics `docs/roadmap.md` says the decoder owes, asserted
+    /// The two diagnostics the decoder owes, asserted
     /// against the decoder rather than against the flag that used to hold them.
     #[test]
     fn the_decoder_carries_the_diagnostics_the_flag_used_to_hold_alone() {

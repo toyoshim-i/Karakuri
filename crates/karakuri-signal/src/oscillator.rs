@@ -23,9 +23,9 @@
 //! is what keeps an uncorrected session identical to one from before this
 //! existed.
 //!
-//! There are two of them, and the difference is the answer to a question
-//! `docs/roadmap.md` leaves open — what a noise `bind`'s cycles-per-beat rate
-//! does once tempo is corrected:
+//! There are two of them, and the difference is the answer to what a noise
+//! `bind`'s cycles-per-beat rate does once tempo is corrected — see
+//! `docs/adr/0126-a-noise-rate-follows-a-tempo-correction-and-not-a-phase-one.md`:
 //!
 //! - [`Oscillator::beats`] is musical position. It takes phase shifts, because
 //!   a phase shift is the beat grid being realigned with the room.
@@ -403,7 +403,7 @@ mod correction_tests {
         }
     }
 
-    /// The roadmap's open question, answered in the type: noise follows a
+    /// Answered in the type: noise follows a
     /// tempo correction and ignores a phase one.
     #[test]
     fn noise_time_follows_a_tempo_correction_and_ignores_a_phase_one() {

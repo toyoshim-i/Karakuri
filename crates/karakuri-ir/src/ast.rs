@@ -29,16 +29,16 @@ pub enum Kind {
     /// **A spatial function: `vec3 -> float`.** Code rather than data, and the
     /// only kind that lowers to no pass of its own.
     ///
-    /// `docs/roadmap.md`'s L5 note says a `kind` is what a procedure *lowers
-    /// to*, and that an L5 has no `kind` because it has no code to lower. This
+    /// A `kind` is what a procedure *lowers to*, and an L5 has no `kind`
+    /// because it has no code to lower — `docs/ir-spec.md`, "kind". This
     /// is the mirror: a field has *only* code to lower, so it has a file and no
     /// node. What it lowers to is a WGSL function spliced into whichever
     /// procedures evaluate it, which is why it needs no buffer, no pass and no
     /// position in the chain.
     ///
     /// One per Set, on the same terms as the camera: several would need naming,
-    /// naming is fan-in, and `docs/roadmap.md` says fan-in arrives with
-    /// multiple L1 sources and brings its notation with it.
+    /// naming is fan-in, and fan-in arrives with multiple L1 sources and
+    /// brings its notation with it.
     Field,
 }
 

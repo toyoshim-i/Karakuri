@@ -1,10 +1,11 @@
 //! Transport: what a deck slot's clock does with the session's.
 //!
-//! `docs/roadmap.md` asks for "the mapping from session time to a slot's `t`, so
-//! that material can be run at a rate, held, or scrubbed — tape-style
-//! fast-forward and rewind, locked to the beat grid." This is that mapping, and
-//! it is **driven by a position rather than by a tempo and a phase**: a position
-//! can reverse and jump and a tempo cannot. Audio analysis supplies one that
+//! This is the mapping from session time to a slot's `t`, so that material can
+//! be run at a rate, held, or scrubbed — tape-style fast-forward and rewind,
+//! locked to the beat grid. It is **driven by a position rather than by a tempo
+//! and a phase** — see
+//! `docs/adr/0057-the-transport-is-driven-by-position-not-by-tempo-and-phase.md`:
+//! a position can reverse and jump and a tempo cannot. Audio analysis supplies one that
 //! only ever moves forward; a deck link supplies one that does not, and arrives
 //! at the same entry point.
 //!
