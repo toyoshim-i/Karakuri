@@ -598,8 +598,6 @@ milestone owes a decision on. Nothing below it is blocked on anything else.
 
 **Adds**
 
-**Adds**
-
 - Node editor. Waits on the authoring notation at the head of M4 — M3 introduced node
   *ownership* and deliberately not a graph model, so there is nothing to edit until nodes
   have names
