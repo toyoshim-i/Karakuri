@@ -508,7 +508,7 @@ proc wash {
             lit(&expected) > 100,
             "the bare Set drew nothing, so this test would pass on two black frames"
         );
-        // And it has to be a *bright* frame, not merely a non-empty one. `README`'s
+        // And it has to be a *bright* frame, not merely a non-empty one. `docs/status.md`'s
         // Color invariant is that values above 1.0 are expected and are what feeds
         // bloom, so a mix that only agreed on [0, 1] would be agreeing on the
         // uninteresting half. Asserted rather than assumed, because the material
@@ -2701,7 +2701,7 @@ proc wash {
 
     /// What a slot costs, and what the composite costs. **Printed, not asserted.**
     ///
-    /// `README.md`'s Working style asks for a GPU-timestamp measurement on any
+    /// `docs/contributing.md`'s working style asks for a GPU-timestamp measurement on any
     /// change touching the frame path, and says in the same breath that timestamps
     /// do not work on the machine this was developed on — `probe.rs` documents an
     /// enormous workload resolving to zero. So this is a host clock around
@@ -2710,7 +2710,7 @@ proc wash {
     /// `cargo test -p karakuri-engine --test deck -- --nocapture --ignored`.
     ///
     /// Three configurations at the CLI's own defaults, so the numbers are
-    /// comparable with the ones in `README.md` rather than being a measurement of
+    /// comparable with the ones in `docs/status.md` rather than being a measurement of
     /// a toy: a bare Set, a deck of one, and a deck of four. Bare against deck-of-
     /// one isolates the composite pass, since the simulation either side of it is
     /// identical. Deck-of-one against deck-of-four is what a slot costs, which is

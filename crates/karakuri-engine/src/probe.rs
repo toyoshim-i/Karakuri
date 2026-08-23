@@ -102,7 +102,7 @@
 //! resolve to a plausible nonzero delta on some attempts and a zero or
 //! non-monotonic one on others, run to run and even attempt to attempt
 //! within the same process, with the encoder-level `write_timestamp` path
-//! and the pass-boundary `timestamp_writes` path both affected. README's
+//! and the pass-boundary `timestamp_writes` path both affected. `docs/contributing.md`'s
 //! invariant that "any change touching performance comes with a
 //! GPU-timestamp measurement" is currently unenforceable on this machine —
 //! not because the code here is wrong, but because the adapter's advertised

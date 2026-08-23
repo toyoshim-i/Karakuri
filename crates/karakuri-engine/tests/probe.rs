@@ -76,7 +76,7 @@ mod gpu {
     /// about the host clock and contention; the numbers said the host clock was
     /// not involved. On the runs that failed, the adapter advertised
     /// `TIMESTAMP_QUERY`, calibration passed, and the timestamps were meaningless
-    /// — the abstract warning `README.md` carries, arriving.
+    /// — the abstract warning `docs/contributing.md` carries, arriving.
     ///
     /// **The defect was the calibration's guard.** It was a constant floor of
     /// 0.1 ms against a workload costing tens of milliseconds, so a reading of

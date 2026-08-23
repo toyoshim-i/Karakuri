@@ -1,6 +1,6 @@
 //! The beat lock: what the estimate is allowed to do to the local oscillator.
 //!
-//! The invariant this is written under is `README.md`'s — *rendering reads only
+//! The invariant this is written under is `docs/invariants.md`'s — *rendering reads only
 //! the local oscillator, never an external clock*. Nothing here becomes the
 //! clock. It produces a [`Correction`]: a tempo and a phase shift, handed to
 //! `Oscillator::correct`, recorded as a `tempo` record, and read back verbatim

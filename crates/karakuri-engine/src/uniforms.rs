@@ -14,7 +14,7 @@
 //! ## Why the storage is owned by the caller
 //!
 //! Packing happens in `Set::prepare`, which runs once per frame on the render
-//! thread, where the first invariant in `README.md` is "never allocate". An
+//! thread, where the first invariant in `docs/invariants.md` is "never allocate". An
 //! earlier version of this built a fresh `Vec<u8>` and a fresh
 //! `HashSet<String>` per call and pushed a freshly allocated `String` into
 //! that set for every field it wrote — three kinds of allocation per uniform

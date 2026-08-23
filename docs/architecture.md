@@ -60,6 +60,59 @@ graph TD
 | [karakuri-store](../crates/karakuri-store) | `crates/karakuri-store` | Content-addressed artifact storage (keyed by `.kir` hash), `.set` files, `.ndjson` session logs |
 | [karakuri-cli](../crates/karakuri-cli) | `crates/karakuri-cli` | Application entry point, `winit` event loop, hot-reloading watcher, MCP server integration |
 
+### Repository Layout
+
+Where everything lives, including the parts that are not crates:
+
+```
+crates/
+  karakuri-ir/        IR parser, type checker, cost estimation
+  karakuri-codegen/   IR → WGSL
+  karakuri-engine/    render graph, Set lifecycle, pipeline management
+  karakuri-signal/    local oscillator, synthesized signals, signal bus
+  karakuri-audio/     input device, analysis, tempo tracking, the beat lock
+  karakuri-midi/      wire messages, and the operator's map of them
+  karakuri-store/     content-addressed artifact store, ndjson I/O
+  karakuri-cli/       V1 entry point
+.githooks/            pre-commit: `cargo fmt --check` on what is staged
+                      pre-push:   fmt, clippy and every test
+                      enable with `git config core.hooksPath .githooks`
+docs/
+  architecture.md     the codebase architecture, multi-crate map, and pipeline
+  contributing.md     engineering principles, build/test commands, and verification rules
+  invariants.md       the rules in force, and the tests that hold them
+  ir-spec.md          the IR. Settled; open questions are empty
+  manual.md           how to play it: flags, keys, and what each does
+  plugins.md          out-of-process helpers, and why they are out of process
+  roadmap.md          where this goes after V1
+  status.md           V1 scope, and what exists part by part
+examples/             app presets: seven L1, four L2, one L3, one Field,
+                      nine L4, and a control-surface map to copy
+.karakuri/            the store: artifacts, sets, sessions, scratch and the
+                      edit history (gitignored, and `--store` moves it)
+```
+
+### Vocabulary
+
+The words the rest of these documents use for the runtime objects above. They are defined
+once here so that a term means the same thing in the roadmap, the manual and the code:
+
+| Term | Meaning |
+|---|---|
+| Procedure | Code that runs every frame on the GPU, written in the IR |
+| Artifact | A saved procedure. Content-addressed and immutable |
+| Slot | Two things, and it is worth knowing which. A **layer slot** is a position within a Set (L1/L2/L3/L4). A **deck slot** is a position within the deck, holding a whole Set. [roadmap.md](roadmap.md) says *member* for the second; the code says `Deck::slot`, and that disagreement is recorded rather than resolved — renaming either is churn until something depends on telling them apart |
+| Deck | Where prepared-but-not-showing material lives, at Set granularity. Up to four slots; one to four of them Live and composited, the rest resident |
+| Residency | How ready a deck slot is, over three levels: **Live** (composited), **Priming** (stepped, and drawn only if it is being auditioned), **Allocated** (compiled, buffers held, not stepping, keeping its state; drawn only if it is being auditioned). It is **two facts, not one** — what the operator *requested*, which only they change, and what the engine is *effectively* doing, which the governor recomputes each pass |
+| Parked | Requested Priming, effective Allocated: waiting for budget, **not cancelled**. It resumes by itself when there is room, because the request is never overwritten — every pass recomputes the effective level from it |
+| Set | Filled slots forming one video source. The unit of compilation and of lifecycle |
+| VideoSource | The interface L5 consumes. Set is one implementation of it |
+| Signal bus | Input distributed to every layer. Always complete; values carry a confidence |
+| Local oscillator | The single source of truth for phase and tempo. External input is only correction |
+| Record stream | The path engine state is mutated through, so that a session replays. ndjson. **Everything an operator moves goes through it, and so does the material** — see [invariants.md](invariants.md) |
+| Set file | A Set's state projection. No time in it |
+| Session stream | The timeline. A Set file followed by `tick` records and the edits between them |
+
 ---
 
 ## 3. Compilation & Execution Pipeline
@@ -205,7 +258,9 @@ graph LR
 
 ## 7. Related Documents
 
-- [README.md](../README.md): Quickstart and CLI flag reference
+- [README.md](../README.md): The front door — what this is, a quickstart, and the document map
+- [invariants.md](invariants.md): The rules in force, and the tests that hold them
+- [status.md](status.md): V1 scope, and what exists part by part
 - [ir-spec.md](ir-spec.md): `.kir` DSL language specification
 - [roadmap.md](roadmap.md): Architectural vision and implementation roadmap
 - [manual.md](manual.md): VJ operator manual

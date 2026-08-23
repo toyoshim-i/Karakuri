@@ -11,7 +11,7 @@
 //! and stops. `karakuri-cli` turns that into the same `gain` record a keypress
 //! writes, and the engine is driven through that.
 //!
-//! **That is the invariant, not an arrangement.** `README.md`'s record stream
+//! **That is the invariant, not an arrangement.** `docs/invariants.md`'s record stream
 //! is the sole mutation path, and the reason M6's agents will be safe to run is
 //! that they can do nothing a human could not do through the same interface. A
 //! surface is the first thing to test that claim against, because a surface is

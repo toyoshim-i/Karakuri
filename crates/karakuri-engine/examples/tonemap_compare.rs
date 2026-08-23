@@ -4,7 +4,7 @@
 //! Not a test: there is no correct image to assert against, only material
 //! this project actually renders. `examples/spark_fountain.kir` (dense,
 //! saturated, additive, with a bright core) is paired with
-//! `examples/soft_points.kir` — the pairing `README.md` gives as the
+//! `examples/soft_points.kir` — the pairing `docs/manual.md` gives as the
 //! non-default one — and `examples/drift_shell.kir` (sparser, the default L1)
 //! is included alongside it so the grid also shows the case that motivates
 //! AgX the least.
@@ -29,7 +29,7 @@ const SEED: u32 = 19_274;
 
 /// Simulation steps to run before capturing, at `dt = 1/60`. `spark_fountain`
 /// needs to reach the steady population its lifetime and spawn rate settle at
-/// — `README.md` puts that around 74000 of 262144 slots, reached well inside
+/// — `docs/status.md` puts that around 74000 of 262144 slots, reached well inside
 /// five seconds — and `drift_shell` is run the same distance so both scenes
 /// are compared at the same simulation instant rather than at frame zero.
 const WARMUP_STEPS: u32 = 300;

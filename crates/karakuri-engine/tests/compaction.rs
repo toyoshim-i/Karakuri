@@ -392,7 +392,7 @@ mod gpu {
     // --- cost, measured on the GPU ---
     //
     // "Any change touching performance comes with a GPU-timestamp measurement"
-    // (README, Working style). `karakuri-engine::Probe` is another agent's
+    // (`docs/contributing.md`, working style). `karakuri-engine::Probe` is another agent's
     // work in progress and not this module's to depend on, so this brackets
     // `Compaction::record` with the same two-no-op-compute-pass timestamp
     // technique `probe.rs` uses, independently, to get a real number for the

@@ -1,6 +1,7 @@
 # Karakuri — Vision and Roadmap
 
-Companion to `README.md` (invariants and V1 scope) and `docs/ir-spec.md` (the IR).
+Companion to `docs/invariants.md` (the rules in force), `docs/status.md` (V1 scope and
+what exists) and `docs/ir-spec.md` (the IR).
 
 This document exists so that decisions made during V1 do not foreclose later milestones.
 Where a later milestone imposes a constraint on earlier code, that constraint is stated
@@ -189,7 +190,7 @@ Each layer composes differently, and each needs its own semantics.
 Sizes are rough and relative — a sense of which milestone is larger than which, not an
 estimate of anyone's calendar.
 
-### M1 — Closing the loop *(= V1, scoped in `README.md`)*
+### M1 — Closing the loop *(= V1, scoped in `docs/status.md`)*
 
 **Proves:** an LLM can generate constrained IR, we can validate it, compile it to WGSL,
 and hot-swap it without dropping a frame.
@@ -198,7 +199,7 @@ One Set, hardcoded slots, no UI, synthesized signals only, L1 and L4 only. If th
 does not close, the whole concept needs rethinking. Everything after this is engineering.
 
 **Closed.** All three clauses hold; what remains unbuilt inside V1's scope is tracked in
-`README.md`, not here.
+`docs/status.md`, not here.
 
 What it cost, since it is the only evidence about how the later estimates should be read:
 the loop closed, and then four separate things that had checked clean were found to come
@@ -746,7 +747,7 @@ fine alone and is unreadable next to lights.
   out of process behind `--tempo-source`. See `docs/plugins.md`
 - ~~MIDI control surface on a dedicated controller, not the DJ controller.~~ **Done for
   input**, and it turned out to be the first real test of an invariant rather than a feature
-  of its own. `README.md` says the record stream is the sole mutation path, and the reason
+  of its own. `docs/invariants.md` says the record stream is the sole mutation path, and the reason
   M6's agents will be safe to run is that they can do nothing a human could not do through
   the same interface — a surface is the first thing to put that claim under load, because it
   is the first thing that is not the keyboard. Every arm of the connection ends in the
@@ -2635,21 +2636,23 @@ rejected, the field does not.
 
 | | |
 |---|---|
-| `README.md` | What exists, how to run it, and the invariants in force |
+| `README.md` | The front door: what this is, a quickstart, and where every other document is |
+| `docs/invariants.md` | The rules in force, and the tests that hold them |
+| `docs/status.md` | V1 scope, and what exists part by part |
 | `docs/ir-spec.md` | The IR: grammar, semantics, lowering, record formats |
 | `docs/manual.md` | How to play it: every flag, every key, and what each does |
 | `docs/plugins.md` | The out-of-process boundary, and why those two things are outside it |
 | This file | Milestones, their demands on earlier work, and the settled decisions above |
 
 None of the others should restate this one, and this one should not restate them. The two
-that overlap most are the README and the manual, and the line between them is audience: the
-README says what exists, the manual says how to use it.
+that overlap most are `docs/status.md` and the manual, and the line between them is
+audience: the status document says what exists, the manual says how to use it.
 
 ---
 
 ## Reading order for implementation
 
-1. `README.md` — invariants, then V1 scope
+1. `docs/invariants.md`, then `docs/status.md` — the rules, then V1 scope
 2. `docs/ir-spec.md` — the whole thing before writing any parser code
 3. This document — the **Demands on earlier work** sections only, during M1
 4. `docs/manual.md` — when there is something to run

@@ -28,6 +28,32 @@ Start with these, and read the rest before changing anything they touch:
 stops being true is deleted and re-recorded under a new number rather than edited — see
 [ADR-0000](adr/0000-record-decisions-here-and-standing-rules-in-principles.md).
 
+The engine-level rules those principles are drawn from — the render thread, state mutation,
+signals, determinism, the IR and colour — are stated in full in
+[invariants.md](invariants.md). Read it before changing anything on the frame path.
+
+### Working style
+
+- **Vertical slices, not layers.** Not "build the whole signal bus" but "get a triangle on
+  screen, then never break it"
+- Keep it running. Do not commit a state that does not build
+- **The gates are hooks in the repository, not habits.** `git config core.hooksPath
+  .githooks` once per clone, and then a commit is refused if its Rust is not what
+  `cargo fmt` writes, and a push is refused unless the whole workspace formats, lints under
+  `-D warnings`, and passes every test. Formatting is on the commit because it costs a
+  second; the rest is on the push because it costs minutes, and a gate that costs minutes
+  gets skipped until it is not a gate
+- Before adding an abstraction, confirm it has at least two call sites
+- Any change touching performance comes with a GPU-timestamp measurement — **which does not
+  currently work on the development machine.** On Apple M4 Pro via Metal, wgpu advertises
+  and enables both `TIMESTAMP_QUERY` and `TIMESTAMP_QUERY_INSIDE_ENCODERS`, and a
+  deliberately enormous workload still resolves to zero, to a negative delta, or
+  occasionally to something plausible. Flaky is worse than broken: a probe returning 0.0 ms
+  reads as a very fast shader. `Probe` therefore calibrates against a known-heavy workload
+  rather than trusting the feature flag, and falls back to a host measurement that says so
+  in the result. Treat every performance number produced here as host-side and biased high
+  until this rule can be honoured on real hardware
+
 ---
 
 ## 2. Environment Setup & Development Tools
@@ -235,10 +261,12 @@ Before marking a task or pull request as complete, ensure the following checklis
 ## 6. Related Architecture & Specification Reference
 
 - [architecture.md](architecture.md): Source code structure, multi-crate map, pipeline, and threading model
+- [invariants.md](invariants.md): The rules in force, and the tests that hold them
 - [ir-spec.md](ir-spec.md): `.kir` DSL specification and language invariants
 - [manual.md](manual.md): CLI arguments and VJ keyboard controls reference
 - [plugins.md](plugins.md): Out-of-process helper plugin specification
 - [roadmap.md](roadmap.md): Architectural roadmap and future milestones
+- [status.md](status.md): V1 scope, and what exists part by part
 - [adr/](adr/): Every decision, with the alternatives that lost — append-only
 - [principles/](principles/): The rules in force, one per file — current only
 
