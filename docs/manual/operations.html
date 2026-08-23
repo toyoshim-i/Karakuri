@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Every Operation</title>
+<meta name="description" content="Every operation Karakuri can perform, and which of the four surfaces reaches it.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;500;700&family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <a class="mark" href="index.html">Karakuri</a>
+    <nav class="topnav">
+      <a href="index.html">How it thinks</a>
+      <a href="console.html">The console</a>
+      <a href="operations.html" aria-current="page">Every operation</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Karakuri &middot; the manual</p>
+    <h1>Every operation, and every way in</h1>
+    <p class="lede">
+      The first rule says every operation is reachable from the panel, from the
+      keyboard alone, from a mapped MIDI control, and from a model over MCP.
+      This page is that rule written out one operation at a time &mdash; which
+      makes it two things at once: what the instrument can do, and where it does
+      not yet hold.
+    </p>
+  </header>
+
+  <section class="cap">
+    <h2>How to read a row</h2>
+    <div class="legend">
+      <span><i class="has"></i> built &mdash; this surface reaches it today</span>
+      <span><i class="plan"></i> designed &mdash; it has a home on the console, and the console is not built</span>
+      <span><i class="gap"></i> nothing &mdash; this surface cannot reach it at all</span>
+    </div>
+    <p>
+      <strong>41 operations, and 50 of the 179 ways in exist.</strong> Every
+      <em>panel</em> route is marked designed rather than built, because the
+      panel itself is not built &mdash; where it says a region, that is where
+      the control lives in <a href="console.html">the console</a>. The counts
+      here are read off the code rather than estimated, and they are what the
+      Interface milestone is for.
+    </p>
+    <p>
+      A <strong>launch</strong> badge means the only way in is a flag, before
+      the run, and nothing can change it afterwards. <strong>On the grid</strong>
+      means the change is scheduled and lands on a musical instant rather than
+      when you asked for it.
+    </p>
+  </section>
+
+  <section>
+    <h2>Transport and tempo</h2>
+    <p class="lede">The beat grid everything else is scheduled against.</p>
+    <div class="opgroup">
+      <div class="op">
+        <div class="op-head"><h3>Tap the beat</h3><span class="op-when ">immediate</span></div>
+        <p>Three taps or more set the tempo; any tap sets the phase. Refused without an audio input attached.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>tap</b></span>
+          <span class="rt has">key <b>b</b></span>
+          <span class="rt has">MIDI <b>note &rarr; tap</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Halve or double the grid</h3><span class="op-when ">immediate</span></div>
+        <p>Moves the tracker's octave window with it, and is refused if it would leave the trackable range.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>&frac12; &times;2</b></span>
+          <span class="rt has">key <b>, .</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Nudge the latency offset</h3><span class="op-when ">immediate</span></div>
+        <p>Five milliseconds a press, for the delay between what a room hears and what it sees.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>offset</b></span>
+          <span class="rt has">key <b>o p</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Set a deck's sync mode</h3><span class="op-when ">immediate</span></div>
+        <p>Free, tempo-synced, or beat-synced &mdash; and a mode a deck's material cannot honour is skipped with a reason.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>deck head</b></span>
+          <span class="rt has">key <b>y</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Scrub a deck a quarter beat</h3><span class="op-when ">immediate</span></div>
+        <p>Only where the deck is beat-synced: closed-form material can be moved to a position, accumulating material cannot.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>deck head</b></span>
+          <span class="rt has">key <b>u i</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Set the free-run tempo</h3><span class="op-when launch">launch</span></div>
+        <p>What the grid runs at with nothing driving it.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>transport</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+          <span class="rt has">CLI <b>--bpm N</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Attach a beat source</h3><span class="op-when launch">launch</span></div>
+        <p>An audio input to track, or an external process to follow. Four keys are refused without one.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>transport</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+          <span class="rt has">CLI <b>--audio-in, --tempo-source</b></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Decks</h2>
+    <p class="lede">What is resident, what is on air, and what material is in each.</p>
+    <div class="opgroup">
+      <div class="op">
+        <div class="op-head"><h3>Select a deck</h3><span class="op-when ">immediate</span></div>
+        <p>Which deck the keys are addressed to. A console pointer &mdash; it writes no record, and it is not the same as keyboard focus.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>click a strip</b></span>
+          <span class="rt has">key <b>0&ndash;3</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Put a deck on air, or take it off</h3><span class="op-when ">immediate</span></div>
+        <p>MIDI names the deck, so it needs no selection; a key acts on the selected one.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>tally chip</b></span>
+          <span class="rt has">key <b>space</b></span>
+          <span class="rt has">MIDI <b>note &rarr; on-air N</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Ask a deck to warm off air</h3><span class="op-when ">request</span></div>
+        <p>A request, not a command: the governor grants it on a later pass and reconsiders it every pass.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>tally chip</b></span>
+          <span class="rt has">key <b>w</b></span>
+          <span class="rt has">MIDI <b>note &rarr; prime N</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Load material into a deck</h3><span class="op-when launch">launch</span></div>
+        <p>The single largest gap in this table. Nothing loads a Set into a running deck &mdash; the library can be read and not played from.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>library &rarr; deck</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+          <span class="rt has">CLI <b>--set, --load-set</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Composite a deck's renderers</h3><span class="op-when launch">launch</span></div>
+        <p>Rather than overdrawing them. The flag can only turn it on; a saved Set brings its own answer.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>deck head</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+          <span class="rt has">CLI <b>--merge N</b></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Mixing</h2>
+    <p class="lede">How much of each deck reaches the screen, and how the change lands.</p>
+    <div class="opgroup">
+      <div class="op">
+        <div class="op-head"><h3>Gain</h3><span class="op-when ">immediate</span></div>
+        <p>The trim: the level material arrives at, colour only. A key steps it; a MIDI control sets it outright.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>strip trim</b></span>
+          <span class="rt has">key <b>[ ] \\</b></span>
+          <span class="rt has">MIDI <b>cc &rarr; gain N</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Opacity</h3><span class="op-when ">immediate</span></div>
+        <p>The fader across the blend, and the only one of the two that touches what a layer covers.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>strip fader</b></span>
+          <span class="rt has">key <b>; '</b></span>
+          <span class="rt has">MIDI <b>cc &rarr; opacity N</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Blend mode</h3><span class="op-when ">immediate</span></div>
+        <p>How a deck meets the ones under it in the fold.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>strip button</b></span>
+          <span class="rt has">key <b>m</b></span>
+          <span class="rt has">MIDI <b>note &rarr; blend N</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Fade a deck out or in</h3><span class="op-when grid">on the grid</span></div>
+        <p>Starts at the current quantum and lasts the current length. Opacity only &mdash; a gain fade exists in the record vocabulary and has no control.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>strip</b></span>
+          <span class="rt has">key <b>f g</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Crossfade to the next deck</h3><span class="op-when grid">on the grid</span></div>
+        <p>One gesture, four records: the incoming deck is silenced and put on air at once, and the two fades land on the grid.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>crossfader</b></span>
+          <span class="rt has">key <b>x</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Wipe the next deck in</h3><span class="op-when grid">on the grid</span></div>
+        <p>Mask, opacity, blend and residency land immediately; the mask's travel is scheduled. Refused with no shape chosen.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>transition row</b></span>
+          <span class="rt has">key <b>c</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Choose the wipe shape, the quantum, the length</h3><span class="op-when ">console setting</span></div>
+        <p>These change nothing you can see and write nothing to the stream. They decide what the <em>next</em> fade, crossfade or wipe means.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>transition row</b></span>
+          <span class="rt has">key <b>z n j</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Choose which renderer of a deck is live</h3><span class="op-when grid">on the grid</span></div>
+        <p>Only where the deck composites and holds two or more. One-way: no position in the cycle folds them all back in.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>renderer chips</b></span>
+          <span class="rt has">key <b>r</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Choose what the output shows</h3><span class="op-when ">immediate</span></div>
+        <p>The mix, or one deck auditioned. MIDI can name a deck or the mix directly.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>preview</b></span>
+          <span class="rt has">key <b>v</b></span>
+          <span class="rt has">MIDI <b>note &rarr; preview N|mix</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Tone map and exposure</h3><span class="op-when ">immediate</span></div>
+        <p>The transfer from unbounded linear HDR to something displayable, and the level going into it.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>transport</b></span>
+          <span class="rt has">key <b>t - = `</b></span>
+          <span class="rt has">MIDI <b>cc &rarr; exposure</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+          <span class="rt has">CLI <b>--tonemap, --exposure</b></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Inside a Set</h2>
+    <p class="lede">Everything about what a deck <em>is</em>. Almost none of it is reachable while running.</p>
+    <div class="opgroup">
+      <div class="op">
+        <div class="op-head"><h3>Write a parameter</h3><span class="op-when launch">launch</span></div>
+        <p>The sharpest gap here: a model can rewrite a whole procedure and cannot turn one knob. Moving a value today means editing the source and letting a hot swap rebuild it, which is a cold start rather than a uniform write.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>inspector</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt plan">MIDI <b>learned control</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+          <span class="rt has">CLI <b>--param</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Attach a signal to a parameter</h3><span class="op-when launch">launch</span></div>
+        <p>A source, a curve and a range &mdash; which is the whole of what &ldquo;how hard it reacts&rdquo; means.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>sensitivity row</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+          <span class="rt has">CLI <b>--bind</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Take a parameter back</h3><span class="op-when ">immediate</span></div>
+        <p>Stop a signal driving a knob without losing the binding. Nothing does this today; it is the second rule's other half.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>take back</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Wire a procedure's input to a node</h3><span class="op-when launch">launch</span></div>
+        <p>An unbound declared input is refused where the Set is built rather than guessed at.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>&mdash;</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+          <span class="rt has">CLI <b>--edge</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Narrow the published interface</h3><span class="op-when launch">launch</span></div>
+        <p>What the console shows, and &mdash; since a knob binds to a position in it &mdash; what a MIDI control counts.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>&mdash;</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+          <span class="rt has">CLI <b>--publish</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Element capacity, seeds, the camera</h3><span class="op-when launch">launch</span></div>
+        <p>Each comes from a Set file or a declared default. There is no flag for a seed and none for a camera.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>inspector</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+          <span class="rt has">CLI <b>--capacity</b></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The library</h2>
+    <p class="lede">What is kept, and how it is found.</p>
+    <div class="opgroup">
+      <div class="op">
+        <div class="op-head"><h3>Keep what a deck is playing</h3><span class="op-when ">asynchronous</span></div>
+        <p>Writes the material <em>on screen</em> &mdash; the versions running, with their parameters, capacities, salts, layering and fold &mdash; not what any file on disk says. The tool waits for the disk and reports; the key does not.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>keep</b></span>
+          <span class="rt has">key <b>k</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt has">MCP <b>save_set</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>List what the store holds</h3><span class="op-when ">immediate</span></div>
+        <p>Most recent first, narrowed by what a node is called or by which layer a Set uses, and it says how many it did not show.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>library</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt has">MCP <b>list_sets</b></span>
+          <span class="rt has">CLI <b>--list-sets</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Read what one Set holds and declares</h3><span class="op-when ">immediate</span></div>
+        <p>Every knob with its range and default, the element count, the attributes emitted &mdash; without fetching a source or compiling it.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>library</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt has">MCP <b>read_set</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Send a Set to somebody, and take one in</h3><span class="op-when ">not a run</span></div>
+        <p>Every inlined source must hash to the address its slot names before anything is stored, and an id already taken is refused rather than overwritten.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>library</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+          <span class="rt has">CLI <b>--bundle, --unbundle</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Walk the edit history</h3><span class="op-when ">&mdash;</span></div>
+        <p>Every compile writes into the store's history and <strong>nothing reads it</strong>. Undo is a surface over these files, and the surface is a later milestone.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>&mdash;</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Procedures</h2>
+    <p class="lede">Reading, writing and swapping the material itself.</p>
+    <div class="opgroup">
+      <div class="op">
+        <div class="op-head"><h3>Read one node's source</h3><span class="op-when ">immediate</span></div>
+        <p>Addressed by deck, layer and index. Read before writing: the edit is usually small, and what is there is the best guide to the language.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>inspector</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt has">MCP <b>read_procedure</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Check and write one node's source</h3><span class="op-when ">on a worker</span></div>
+        <p>Checked as you write it; built on a worker and swapped at a frame boundary. If it does not compile, what comes back is the checker's diagnostics against the source.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>inspector</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt has">MCP <b>write_procedure</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Edit the file instead</h3><span class="op-when ">on a worker</span></div>
+        <p>The same swap, reached from any editor. Polled, debounced, and compared by content rather than by timestamp.</p>
+        <div class="rts">
+          <span class="rt gap">panel <b>&mdash;</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+          <span class="rt has">CLI <b>--watch</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Find out what a write did</h3><span class="op-when ">after the fact</span></div>
+        <p>Landed, rolled back for costing too much, or failed to build. A write returning cleanly means it compiled, not that it is on screen.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>health readout</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt has">MCP <b>swap_outcome</b></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Output and recording</h2>
+    <p class="lede">Where the frame goes, and what is kept of the performance.</p>
+    <div class="opgroup">
+      <div class="op">
+        <div class="op-head"><h3>Size the window</h3><span class="op-when ">immediate</span></div>
+        <p>The window is a preview and has no say in what is drawn: the canvas is fixed for the run, and the window fits it with the leftover black.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>drag</b></span>
+          <span class="rt has">key <b>a</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+          <span class="rt has">CLI <b>--size, --canvas</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Choose where the frame goes</h3><span class="op-when ">immediate</span></div>
+        <p>The window, a projector window, and the plugin sinks. A composited frame already goes to as many sinks as are listening.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>outputs</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Record the session</h3><span class="op-when launch">launch</span></div>
+        <p>The timeline as it happens, replayable frame for frame. There is no way to start or stop one while running.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>rec</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+          <span class="rt has">CLI <b>--record-session</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Quit</h3><span class="op-when ">immediate</span></div>
+        <p>Waits up to five seconds for a save still being written, then says how many it left behind rather than letting a hung disk hold the quit.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>close</b></span>
+          <span class="rt has">key <b>esc</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cap">
+    <h2>What the gaps say</h2>
+    <p>
+      <strong>MIDI is the narrowest by a wide margin.</strong> Its whole
+      vocabulary is eight actions, and it cannot express a node address, a
+      parameter name or an id. It also has no idea of a selected deck &mdash; it
+      names the deck in the message &mdash; where the keys have nothing but the
+      selected deck. The same operation is addressed two different ways on two
+      surfaces.
+    </p>
+    <p>
+      <strong>A model can rewrite a whole procedure and cannot turn one knob.</strong>
+      MCP edits material, reports swaps and reads the library, and touches
+      nothing in the mix, the clock or what is on air. It can make a deck
+      unrecognisable and cannot put it on air.
+    </p>
+    <p>
+      <strong>The command line is the only way into most of what a Set is</strong>
+      &mdash; parameters, bindings, edges, the published interface, capacity
+      &mdash; and it is only open before the run starts. Reachable from nothing
+      at all while running: parameter writes, binding changes, edge rewiring, the
+      camera, seeds, capacity, canvas size, un-compositing a deck, folding every
+      renderer back in, a gain fade, and starting or stopping a recording.
+    </p>
+  </section>
+
+  <footer>
+    Counted from the source, not from this manual. Where a row here and the
+    program disagree, the program is right and this page is a bug &mdash;
+    <a href="index.html">the seven rules</a> are what both are meant to obey.
+  </footer>
+
+</div>
+
+</body>
+</html>
