@@ -790,9 +790,13 @@ fine alone and is unreadable next to lights.
   swapchain had no texture, so an abandoned frame told the stream it had simulated steps the
   deck never took. `Outdated` arrives on every resize.
 
-  What is *not* built is fullscreen and display selection, and that is deliberate rather
-  than deferred: the window is a preview, an OBS capture of it covers the ordinary case, and
-  anything past that is the plugin seam's job rather than a bigger window's
+  What is *not* built is fullscreen and display selection. That was deliberate rather than
+  deferred — the window is a preview, an OBS capture of it covers the ordinary case, and
+  anything past that is the plugin seam's job rather than a bigger window's — and **M5
+  supersedes half of it**. A projector window is a second `Sink` and belongs in this
+  repository; fullscreen is what an application on an operating system does rather than an
+  output mode of its own. What stays outside is Syphon, Spout and NDI, which are the plugin
+  sinks `docs/plugins.md` draws the line at
 - ~~Panic key to a known-good Set.~~ **Decided against, and the reasoning is worth more
   than the key would have been.**
 
@@ -2258,11 +2262,136 @@ answer to what a node is called), and that a plausible explanation is not a meas
 
 ### M5 — Interface
 
-**Goal:** a surface where a human can see what the system is about to do and disagree with it.
+**Goal: the application.** Karakuri is a GUI application for playing a VJ set in real time —
+you pick a Set per deck and mix them live — and this milestone is where that application
+exists. **MCP is a mouth, not the control stick**: it is there to help a person, and the four
+properties at the head of this document are all about what a *person* can do in front of an
+audience.
 
-This comes before agents deliberately. An autonomous system that cannot be observed and
-overridden is not usable on stage, and building the observation surface afterwards means
-retrofitting it into decisions already made.
+**That is a correction, and the sentence it replaced is worth keeping visible**, because it
+is the one a reader arrives at first and it sent this milestone in the wrong direction: *"a
+surface where a human can see what the system is about to do and disagree with it."* That is
+true and it is M6 read backwards — it describes the agent-oversight half of a panel whose
+main job is being an instrument. Disagreeing with an agent is one thing the console does,
+not what it is for. The restatement is the author's, in this session's own words.
+
+The ordering below it still holds, and for its original reason. **This comes before agents
+deliberately.** An autonomous system that cannot be observed and overridden is not usable on
+stage, and building the observation surface afterwards means retrofitting it into decisions
+already made.
+
+#### The manual is the reference, and it is written before the panel
+
+`docs/manual/` is the console's manual, published from this repository's `docs/` with GitHub
+Pages. It was written **ahead of the implementation on purpose**: the panel does not exist, so
+the manual is the only place its behaviour can be pinned, and it is a better place than a
+specification because a sentence you cannot write about a control is a control designed
+wrong. Read it before touching this milestone — [the seven rules](manual/index.html) and
+[the console](manual/console.html), region by region, with a working mock of the panel in it.
+
+**Its seven rules are capped and `docs/principles/` is not**, which is the difference between
+the two documents rather than an inconsistency between them. Principles accumulate, because a
+codebase learns. The manual's rules must not, because they are the mental model somebody holds
+before the panel makes sense, and a set of rules that keeps growing is a set nobody holds:
+adding one there means removing or merging one.
+
+#### One vocabulary, and this milestone opens with naming
+
+Every operation must be reachable from the panel, from the keyboard alone, from a mapped MIDI
+control, and from MCP. That is structural before it is visual: **each operation is named once,
+and every surface routes into that name.** An operation only the mouse can reach breaks it; so
+does one the map cannot address. A step sequencer is a fifth route and works for the same
+reason.
+
+**It is checkable rather than intended.** With the vocabulary exhaustive, a test asserts that
+every command carries a key binding, is addressable by a map, and is what the panel emits —
+the shape `crates/karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs` already uses, and the
+shape `Record::vocabulary` already uses for records.
+
+**The four surfaces barely overlap today, and here is the count**, read off the code rather
+than estimated: **35 live operations reachable from keys** — and only from the *focused* slot,
+since nothing but `0`–`3` addresses another; **8 from MIDI**, which is the whole of `Target`
+in `karakuri-midi`'s map (`gain`, `opacity`, `exposure`, `on-air`, `prime`, `blend`,
+`preview`, `tap`) and cannot express a node address, a parameter name or an id; **6 MCP
+tools**, which touch nothing in the mix, the clock or the deck's residency; and **38 command
+line flags**, many of which are the *only* route to what they set.
+
+The sharpest consequence: **a model can rewrite a whole procedure and cannot write a single
+parameter.** `--param` exists and is reachable from one surface at one moment. Reachable from
+nothing at all while running: parameter writes, binding changes, edge rewiring, the camera,
+seeds, capacity, canvas size, un-merging a slot, restoring every renderer to the fold, a gain
+fade, and starting or stopping a session recording.
+
+**So M5 opens with naming rather than drawing**, which is the shape M4 opened with — nothing
+could be edited there until nodes had names, and nothing can be routed here until operations
+do. The manual's operations pages are where that enumeration is written down, and a surface
+missing from an operation's row is a line of this milestone's work.
+
+#### What was settled about the panel, and where each thing is argued
+
+Recorded here because they are decisions, and the manual states behaviour rather than reasons.
+
+- **The mixer is an L5, and so is a master effect.** `karakuri-engine/src/node/merge.rs`
+  already writes the signature: `[Texture] -> Texture`. A master effect is that with one input
+  and the mixer is the same with several, so admitting frame effects is **giving L5 a writable
+  form** — adding it to `Kind::ALL`, whose one stated reason for excluding it (no code to
+  lower) lapses the moment an L5 is authored — and not extending the algebra. Fan-in is
+  already solved by `uses` plus `edge`; a per-deck effect and a master effect become one node
+  at different points; and **the deck count stops being a system constant**, since how many
+  inputs an L5 folds becomes a property of the procedure rather than of one built-in shader.
+  **Feedback is the exception** and wants a decision of its own: reading the previous frame is
+  a cycle.
+- **A step sequencer is a signal source, not an effect.** It produces no pixels. What it does
+  is write controls on the beat, and both halves exist: `karakuri-signal`'s bus is a
+  name-to-value lookup already answering `bpm`, `beat`, `bar`, `energy`, `band`, `band3`, and a
+  `bind` record names a signal as a string with its curve and range. A sequencer is **one more
+  name on that bus**, stepping on the oscillator that already drives `beat`. A lane is a
+  binding, so a lane drives a Set parameter as readily as a deck fader.
+- **A MIDI control is bound to a deck and a position in its published interface**, never to a
+  Set's parameter by name. Name-binding makes the mapping a cost paid again on every swap,
+  where a learn flow exists to make it a cost paid once; and the deck being in the address
+  settles the crossing when one Set is loaded into two decks. The order is what a Set
+  *published*, and where it published nothing, the order its parameters were declared —
+  `Published` is already an ordered list, and its own doc's rule holds here: publishing decides
+  what is *shown*, never what is *reachable*, so this must not become the only way in.
+- **Learning happens from the tooltip.** Every compact control already explains itself on
+  hover, so the assignment lives there — which makes the first rule structural rather than
+  remembered: a new operation gets a tooltip, and a tooltip is a thing a map can reach.
+- **A map is a file, saved and recalled per controller**, which is the shape the MIDI section
+  above already gives it and for that section's reason. What is missing is reaching it while
+  running.
+- **There are two focuses and they must not look alike.** The deck selection persists and is
+  what a key press is addressed to; keyboard focus is transient. Drawing them the same erases
+  which of the two a reader is looking at.
+- **A projector window is a second `Sink` and lives in this repository.** A composited frame
+  already goes to *n* sinks — `docs/plugins.md` — and Syphon, Spout and NDI are the plugin
+  ones. **Fullscreen is what an application on an operating system does**, not an output mode
+  of its own, which supersedes the "not built, deliberately" note in M2's output routing
+  bullet.
+- **`gain` is a trim and `opacity` is the fader**, which `karakuri-engine/src/mix.rs` says
+  outright and which the two behave as: opacity at zero silences under every blend mode, gain
+  at zero does not silence `over`. Drawing them as two identical sliders throws that away.
+
+#### What draws the panel, and it is not decided
+
+Nothing in this tree draws a UI: the dependencies are `winit` and `wgpu`, with no text
+rendering and no toolkit, and everything an operator sees is either the rendered output or a
+line printed to a terminal. **`egui` is the standing recommendation** — immediate mode, it
+takes the `wgpu` and `winit` versions already here, and this panel's controls are faders,
+meters, step grids and lanes, none of which a widget library supplies, so cheap custom
+painting is what matters. The alternative costed was a page served over the loopback MCP
+port, which buys layout freedom and a tablet but costs a second language and a state round
+trip. **Not chosen here.**
+
+Two rules the panel is built to whatever draws it. It must not allocate on the render frame
+path, and **it must be testable without a GPU or a window** — the model and the command layer
+answer headless and the view stays thin, which is what keeps this milestone's tests off the
+`mod gpu` side of `docs/contributing.md`'s split.
+
+**How this milestone is actually sequenced is not settled here**, and is to be taken up once
+the manual's operations pages are written, since those are what the vocabulary is read off.
+
+**Adds**
 
 **Adds**
 
@@ -2272,7 +2401,9 @@ retrofitting it into decisions already made.
 - Parameter surfaces with MIDI learn and signal binding UI. **What they show is decided in
   M3** — a Set declares which of its controls it publishes, so this surface renders an
   interface rather than inventing one. Without that it would be twenty-five knobs per slot
-  and a filter nobody can save
+  and a filter nobody can save. **How learning works is settled above**: a control is bound to
+  a deck and a position in that published interface, the assignment lives in the control's own
+  tooltip, and the map is a file saved per controller
 - Set browser with live previews of priming Sets. **It carries M4's thumbnail decision with
   it**: a stored still is not the live preview beside it, and what a thumbnail is *of* is
   undecided because a metadata card is per artifact and one procedure cannot be rendered
