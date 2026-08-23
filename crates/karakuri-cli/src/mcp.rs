@@ -64,6 +64,7 @@
 use std::io::{BufRead, Read, Write};
 use std::sync::mpsc;
 
+use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
 use karakuri_store::hash::Hash;
 use karakuri_store::ndjson::Line;
@@ -1318,6 +1319,11 @@ fn save_set(args: &Value, state: &State) -> Result<mpsc::Receiver<News>, String>
 /// reason. Rendering both in one block would be the place they get confused,
 /// and *"what is it set to"* is a second question that deserves being asked as
 /// one. The lines are in hand the moment anybody wants it.
+///
+/// **One number here is not a declaration**, and it is the last block: what the
+/// Set will allocate to hold elements. See [`element_storage_block`] for why
+/// that is computed rather than measured, and why it is the one figure in this
+/// answer that is about the Set as a whole rather than about a procedure.
 fn read_set(args: &Value, state: &State) -> Result<String, String> {
     let id = args
         .get("id")
@@ -1373,7 +1379,165 @@ fn read_set(args: &Value, state: &State) -> Result<String, String> {
         out.push('\n');
         out.push_str(&node_block(&store, layer, index, name.as_deref(), &hash));
     }
+    out.push('\n');
+    out.push_str(&element_storage_block(&store, &id));
     Ok(out)
+}
+
+/// **What this Set will allocate to hold its elements**, node by node and in
+/// total — computed from the Set file and a compile pass, with nothing built,
+/// no adapter opened and no GPU touched.
+///
+/// **A figure with a producer and no reader is how the last wrong number in
+/// this program got published.** `Set::element_storage` has reported this per
+/// node since the buffers existed and no binary in this tree printed it; the
+/// figure that *was* printed, at stage 4, was a second arithmetic over one
+/// procedure's `emit` list — it claimed 96 bytes per element where 312 were
+/// allocated, and it was withdrawn rather than corrected. `docs/roadmap.md`,
+/// M4. So this one is not a second arithmetic: `Plan::element_storage` calls
+/// the same sizing the allocation calls, over the same walk a build makes, and
+/// a test in `karakuri-engine` asserts the two answers about one Set are equal.
+///
+/// **Every number needs the whole Set and not one card**, which is why this is
+/// a block of its own rather than a line inside [`node_block`]. What a node
+/// allocates depends on what *reaches* it: an L2 writes everything upstream
+/// emitted as well as its own `emit`, an `amplify` above a node multiplies the
+/// element count for everything below it, and an L1 that can `kill()` pays for
+/// a buffer its text never mentions. A per-node figure read off a card would be
+/// wrong in exactly the three ways the withdrawn one was.
+///
+/// **Not computed at all, rather than computed from a guess**, wherever the
+/// Set does not check out: a Set naming an artifact this store has not got, or
+/// one whose nodes do not compose, has no figure — and being told which is more
+/// use than a number that assumed its way past the problem.
+fn element_storage_block(store: &Store, id: &str) -> String {
+    // **The same shape as the "no card" branch of [`node_block`]**: a Set this
+    // cannot cost is an ordinary thing to meet in a working store rather than a
+    // failed call, and what a model is owed is the sentence saying which half
+    // is missing.
+    let unavailable = |why: &str| {
+        format!(
+            "element storage: not computed — {why}. This is the one figure here that \
+             needs the set to hold together as a whole, because what a node allocates \
+             depends on what reaches it; everything above is read off each artifact's \
+             own card and stands on its own.\n"
+        )
+    };
+    let loaded = match crate::setfile::load(store, id) {
+        Ok(loaded) => loaded,
+        Err(why) => return unavailable(&why),
+    };
+    // **What each geometry runs at: the file's number, or the procedure's own
+    // default where the file names none** — `capacity [min, max] = default`,
+    // and the default is what the spec says applies. The other branch of
+    // `capacity_for` is `--capacity`, an operator's flag overriding both, and
+    // there are no flags in an MCP call: this answer is about a file.
+    let mut sources: Vec<(&Checked, u32)> = Vec::with_capacity(loaded.l1s.len());
+    for (at, l1) in loaded.l1s.iter().enumerate() {
+        match loaded
+            .capacities
+            .get(at)
+            .copied()
+            .flatten()
+            .or_else(|| l1.capacity.map(|declared| declared.default))
+        {
+            Some(capacity) => sources.push((l1, capacity)),
+            None => {
+                return unavailable(&format!(
+                    "`{}` declares no `capacity` and this set records none for it, so \
+                     there is no element count to size anything against",
+                    l1.name
+                ))
+            }
+        }
+    }
+    let l2s: Vec<&Checked> = loaded.l2s.iter().collect();
+    let l3s: Vec<&Checked> = loaded.l3s.iter().collect();
+    let fields: Vec<&Checked> = loaded.fields.iter().collect();
+    let l4s: Vec<&Checked> = loaded.l4s.iter().collect();
+    let plan = match karakuri_engine::Set::validate(
+        &sources,
+        &l2s,
+        &l3s,
+        &fields,
+        &l4s,
+        // **What `--load-set` builds this file as.** A Set file records no
+        // layering, and the choice cannot change a number here either way:
+        // compositing costs a render target per renderer, and a render target
+        // is not element storage.
+        karakuri_engine::set::Layering::Overdraw,
+        // A salt decides what the elements *are* and never how many bytes they
+        // take, so the set's own is enough here and a source deriving one from
+        // it changes nothing this block prints.
+        loaded.salts.first().copied().flatten().unwrap_or_default(),
+        &loaded.salts,
+        karakuri_engine::set::Wiring {
+            l1s: &loaded.names.l1s,
+            l2s: &loaded.names.l2s,
+            l3s: &loaded.names.l3s,
+            l4s: &loaded.names.l4s,
+            fields: &loaded.names.fields,
+            edges: &loaded.edges,
+        },
+    ) {
+        Ok(plan) => plan,
+        Err(e) => return unavailable(&format!("this set does not build: {e}")),
+    };
+
+    let planned = plan.element_storage();
+    let names = plan.node_names();
+    let total: u64 = planned.iter().map(|p| p.storage.bytes).sum();
+    let mut out = format!(
+        "element storage: {total} bytes in total, across the {} node{} of this set that \
+         hold elements, at the capacities the file records. Nothing was built to find \
+         that out: it is the arithmetic the allocation itself is sized by, run over the \
+         file.\n",
+        planned.len(),
+        if planned.len() == 1 { "" } else { "s" },
+    );
+    for entry in &planned {
+        out.push_str(&format!(
+            "  `{}` — {} bytes for {} element{}, {} bytes each\n",
+            names[entry.node],
+            entry.storage.bytes,
+            entry.storage.capacity,
+            if entry.storage.capacity == 1 { "" } else { "s" },
+            entry.storage.per_element(),
+        ));
+    }
+    // **A repeated name is not a mistake and has to say so.** A set over two
+    // geometries instantiates its whole chain of deformations once per
+    // geometry, so one deform procedure is two nodes with buffers of their own
+    // — and they are different sizes whenever the geometries are.
+    if planned
+        .iter()
+        .enumerate()
+        .any(|(at, entry)| planned[..at].iter().any(|seen| seen.node == entry.node))
+    {
+        out.push_str(
+            "A name appears twice above because this set has more than one geometry: the \
+             chain is instantiated once per geometry, and each instance holds buffers of \
+             its own.\n",
+        );
+    }
+    // **What the number means, for a reader who has never seen this system.**
+    // The withdrawn figure was as wrong in what it was taken to mean as in its
+    // arithmetic, and a number relayed as "what this costs a GPU" would be that
+    // mistake in a new costume. A renderer having no row at all is part of the
+    // same sentence: it draws from the buffer the node above it allocated, so a
+    // row for it would be that memory counted twice.
+    out.push_str(
+        "What that covers: one element struct per element, the four-byte liveness flag \
+         beside it, the second copy a geometry keeps so it can read what it wrote last \
+         step, and the destination index a geometry that spawns or kills pays for. A \
+         renderer and a camera hold no elements and so have no row. It is NOT what this \
+         set costs a GPU: render targets, uniform blocks and every other buffer not \
+         indexed by an element are outside it, so it is a floor on device memory and \
+         never the figure to allocate against. What it is exactly is the cost of one \
+         more element — the per-element numbers above are exact divisions rather than \
+         averages.\n",
+    );
+    out
 }
 
 /// One node of a Set: its address in the Set, its artifact, and its card.
@@ -2952,6 +3116,103 @@ proc probe_knobs {
             !said.contains("2.5"),
             "a value this set holds was rendered as something the artifact \
              declares: {said}"
+        );
+    }
+
+    /// **What a saved set will allocate to hold elements, without building
+    /// it.**
+    ///
+    /// `Set::element_storage` has reported this per node since the buffers
+    /// existed and nothing in this tree printed it; the figure that *was*
+    /// printed, at stage 4, was a second arithmetic over one procedure's `emit`
+    /// list and was 85% low. So the test is not that a number appears — it is
+    /// that the number is the one the allocation is sized by, over material
+    /// where a per-procedure reading would say something else:
+    ///
+    /// - **`warp` is charged for `position` and it never mentions it.** An L2
+    ///   writes everything that reached it, so it is sized at the chain's
+    ///   stride; a figure read off its own `deform` block would be another
+    ///   number entirely.
+    /// - **`dots` has no row at all.** A renderer draws from the buffer the
+    ///   node above it allocated, so a row for it would be the same memory
+    ///   counted twice — and a zero would be a number the reader has to work
+    ///   out the meaning of.
+    /// - **Sixteen elements and not the eight the procedure defaults to.** The
+    ///   `capacity` record is what this set was saved at, and a figure computed
+    ///   from the declaration instead would be exactly half of every number
+    ///   below while looking just as plausible.
+    ///
+    /// The bytes are hand-walked from WGSL's placement rules, the same way
+    /// `karakuri-engine`'s own storage tests are, so nothing here is the engine
+    /// compared against itself: `emit position` lays out `seed` at 0, then
+    /// `birth_frac` at 4, then `position` at 16 — 28 bytes rounded up to the
+    /// struct's 16-byte alignment, so a stride of 32. A geometry keeps two
+    /// directions of the element buffer and two of the four-byte liveness flag
+    /// and, having neither `spawn` nor `kill()`, nothing else: `2 * 16 * (32 +
+    /// 4)` is 1152. The deform keeps one buffer at that stride and no flags of
+    /// its own: `16 * 32` is 512.
+    #[test]
+    fn a_saved_set_says_what_it_will_allocate_to_hold_elements() {
+        let server = start(true);
+        let store = server.store();
+        let put = |source: &str| store.put_artifact(source.as_bytes()).expect("put");
+        let (l1, l2, l4) = (put(PROBE_L1), put(PROBE_L2), put(PROBE_L4));
+        store
+            .write_set(
+                "costed",
+                &[
+                    Line::new(Record::Slot {
+                        layer: Layer::L1,
+                        index: 0,
+                        name: Some("shell".into()),
+                        proc_hash: l1,
+                    }),
+                    Line::new(Record::Slot {
+                        layer: Layer::L2,
+                        index: 0,
+                        name: Some("warp".into()),
+                        proc_hash: l2,
+                    }),
+                    Line::new(Record::Slot {
+                        layer: Layer::L4,
+                        index: 0,
+                        name: Some("dots".into()),
+                        proc_hash: l4,
+                    }),
+                    Line::new(Record::Capacity {
+                        layer: Layer::L1,
+                        index: 0,
+                        value: 16,
+                    }),
+                ],
+            )
+            .expect("set");
+
+        let (failed, said) = call(server.port, "read_set", json!({"id":"costed"}));
+        assert!(!failed, "{said}");
+        for expected in [
+            "element storage: 1664 bytes in total, across the 2 nodes",
+            "`shell` — 1152 bytes for 16 elements, 72 bytes each",
+            "`warp` — 512 bytes for 16 elements, 32 bytes each",
+        ] {
+            assert!(
+                said.contains(expected),
+                "the set was not costed as `{expected}`: {said}"
+            );
+        }
+        assert!(
+            !said.contains("`dots` — "),
+            "the renderer was charged for the buffer it draws from, which is the \
+             node above it: {said}"
+        );
+        // **The sentence that keeps this from being read as device memory.**
+        // The withdrawn figure's mistake was as much in what it was taken to
+        // mean as in its arithmetic, and a number a model relays as "what this
+        // costs a GPU" is that mistake in a new costume.
+        assert!(
+            said.contains("NOT what this set costs a GPU"),
+            "an element-storage figure is offered as though it were device \
+             memory: {said}"
         );
     }
 

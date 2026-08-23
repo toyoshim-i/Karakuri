@@ -46,6 +46,10 @@ pub mod points;
 pub mod present;
 pub mod probe;
 pub mod set;
+/// Private: how large a node's per-element buffers are, which is a question
+/// between a node and [`set::Plan`] and never a caller's. What the figure
+/// *means* is public, as [`set::ElementStorage`].
+mod storage;
 pub mod swap;
 pub mod transition;
 pub mod transport;

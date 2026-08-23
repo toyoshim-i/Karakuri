@@ -1869,7 +1869,10 @@ would have read a slot that exists as a slot that does not.
 
 #### Surfacing what a Set holds in memory
 
-**The figure has an owner and no reader.** `Set::element_storage` reports what every node of
+**~~The figure has an owner and no reader.~~ Closed.** MCP's `read_set` reports it per node
+and as a total, for a saved Set at the capacities its file records — computed from the file
+plus a compile pass rather than written into a record, which is not the shape this section
+expected and is argued in ADR-0145. `Set::element_storage` reports what every node of
 a Set allocated, per node, off `wgpu::Buffer::size()` of the buffers that node created, and
 `Set::element_storage_bytes` totals a slot's worth of it — see "Narrowing the element slot"
 above for why it lives there rather than in stage 4. Grepping for it finds the two node
