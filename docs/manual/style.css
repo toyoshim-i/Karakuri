@@ -524,3 +524,47 @@
   .card strong { font-size: 1rem; }
   .card span { font-size: 0.9rem; color: var(--dim); line-height: 1.6; }
   .card:focus-visible { outline: 2px solid var(--lav); outline-offset: 3px; }
+
+  /* ── the operations reference ─────────────────────────────────────── */
+
+  .opgroup { display: flex; flex-direction: column; gap: 0; }
+  .op {
+    display: flex; flex-direction: column; gap: 0.55rem;
+    padding: 1.1rem 0; border-top: 1px solid var(--line);
+  }
+  .opgroup .op:last-child { border-bottom: 1px solid var(--line); }
+  .op-head { display: flex; align-items: baseline; gap: 0.8rem; flex-wrap: wrap; }
+  .op-head h3 {
+    font-family: var(--f-round); font-size: 1.02rem; font-weight: 700;
+    text-transform: none; letter-spacing: -0.005em; color: var(--ink); margin: 0;
+  }
+  .op-when {
+    font-family: var(--f-code); font-size: 0.7rem; text-transform: uppercase;
+    letter-spacing: 0.12em; padding: 0.1rem 0.6rem; border-radius: 999px;
+    color: var(--dim); background: var(--ground);
+  }
+  .op-when.grid { color: var(--lav); background: color-mix(in srgb, var(--lav) 14%, transparent); }
+  .op-when.launch { color: var(--sun); background: color-mix(in srgb, var(--sun) 18%, transparent); }
+  .op p { font-size: 0.94rem; color: var(--dim); }
+
+  .rts { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .rt {
+    font-family: var(--f-code); font-size: 0.75rem; line-height: 1.5;
+    border-radius: 999px; padding: 0.16rem 0.7rem;
+    background: var(--surface); color: var(--dim);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .rt b { font-weight: 700; color: var(--ink); }
+  .rt.has { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mint) 55%, transparent); }
+  .rt.has b { color: var(--mint); }
+  .rt.plan { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lav) 45%, transparent); }
+  .rt.plan b { color: var(--lav); }
+  .rt.gap { background: transparent; color: var(--faint); box-shadow: inset 0 0 0 1px var(--line); }
+  .rt.gap b { color: var(--faint); font-weight: 400; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1.4rem; font-size: 0.86rem; color: var(--dim); }
+  .legend span { display: flex; align-items: center; gap: 0.45rem; }
+  .legend i { width: 12px; height: 12px; border-radius: 999px; display: block; }
+  .legend i.has { background: var(--mint); }
+  .legend i.plan { background: var(--lav); }
+  .legend i.gap { background: transparent; box-shadow: inset 0 0 0 1px var(--faint); }
