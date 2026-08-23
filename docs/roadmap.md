@@ -2073,12 +2073,19 @@ section of `docs/ir-spec.md`, where a reader meets the `camera` record.
   search by look, not by words
 - Genealogy. Derivation graph via `parent`, enabling "make ten variations of this"
   evolutionary workflows
-- Variant pools. A slot holds several compiled alternatives, selectable at beat resolution.
+- ~~Variant pools. A slot holds several compiled alternatives, selectable at beat resolution.
   Mechanically these are pre-forked Sets sharing every other slot, so they are deck members
-  rather than a separate structure — and they cost what their differing slot costs. Three
-  alternatives that differ only in L4 share one simulation; three that differ in L1 are
-  three simulations. Selection is close to free for closed-form material and expensive for
-  accumulating material, which is the same distinction priming turns on.
+  rather than a separate structure~~ — **a pool is a Set, and the deck-members mechanism is
+  not the design** ([ADR-0148](adr/0148-a-variant-pool-is-a-set-and-the-deck-stays-a-mixer.md)).
+  The alternatives are nodes of one Set and `r` selects among them on the grid; the deck
+  stays a mixer, where selecting is a cut and fading between two things is what an operator
+  does at the final stage with faders that already exist.
+
+  What survives of the paragraph is the cost arithmetic, once it is read of one Set rather
+  than of several: three alternatives that differ only in L4 share one simulation, and three
+  that differ in L1 are three simulations. The other claim does not survive — "close to free
+  for closed-form and expensive for accumulating" is about *priming*, which is a deck
+  concept, and inside one Set there is nothing to warm.
 
   **The smaller half is built, and it is the half that lives inside one Set.** A composited
   slot — `--merge N` — already gives every renderer a target of its own and an edge into an
