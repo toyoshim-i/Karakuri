@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Karakuri Manual</title>
+<meta name="description" content="The seven rules the Karakuri console obeys, and what the instrument is.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;500;700&family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <a class="mark" href="index.html">Karakuri</a>
+    <nav class="topnav">
+      <a href="index.html" aria-current="page">How it thinks</a>
+      <a href="console.html">The console</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Karakuri &middot; the manual</p>
+    <h1>An instrument that writes its own material</h1>
+    <p class="lede">
+      Karakuri is a visual instrument. You keep Sets in a library, load one into
+      each deck, and mix them live &mdash; and the material inside a Set is
+      procedures that run on the GPU every frame, which you or a model can
+      rewrite while it is on screen. This page is the seven rules the whole
+      surface obeys. Everything else follows from them.
+    </p>
+  </header>
+
+  <section>
+    <h2>Seven rules, and they do not grow</h2>
+    <div class="seven">
+
+      <div class="rule">
+        <span class="n">01</span>
+        <div>
+          <h3>One vocabulary, four ways in</h3>
+          <p>
+            Every operation is reachable from the panel, from the keyboard
+            alone, from a mapped MIDI control, and from a model over MCP. There
+            is no operation only the mouse can reach, and none the map cannot
+            address. What you learn on one surface you already know on the
+            others, because they are the same named operations underneath.
+          </p>
+        </div>
+      </div>
+
+      <div class="rule">
+        <span class="n">02</span>
+        <div>
+          <h3>You can always see who is holding a control, and always take it back</h3>
+          <p>
+            A parameter driven by something else shows its source instead of a
+            number &mdash; a signal, a MIDI knob, a sequencer lane, an agent
+            &mdash; and <em>take back</em> sits next to it. A control you cannot
+            see being moved is one you cannot take, so nothing moves invisibly.
+          </p>
+        </div>
+      </div>
+
+      <div class="rule">
+        <span class="n">03</span>
+        <div>
+          <h3>Density is bought with hover</h3>
+          <p>
+            The panel is dense because a performance is dense. Anything compact
+            enough to be a symbol says three things when you point at it: what
+            it is, what state it is in, and what a click will do. The third is
+            what makes a symbol learnable rather than decorative.
+          </p>
+        </div>
+      </div>
+
+      <div class="rule">
+        <span class="n">04</span>
+        <div>
+          <h3>Nothing is hidden quietly</h3>
+          <p>
+            A list that showed you part of itself says so and says how much. A
+            control you cannot use says why it cannot be used rather than going
+            grey without a reason. A procedure dropped for costing too much says
+            that it was dropped. Silence is never the answer to something having
+            gone differently than you asked.
+          </p>
+        </div>
+      </div>
+
+      <div class="rule">
+        <span class="n">05</span>
+        <div>
+          <h3>Mixing is between decks; shaping is inside one</h3>
+          <p>
+            The mixer holds only what decides how much of each deck reaches the
+            screen, and every channel stays visible so nothing scrolls out of
+            reach mid transition. Everything about what a deck <em>is</em> lives
+            in the inspector, where you can open more than one at a time and
+            work on the deck that is not on air.
+          </p>
+        </div>
+      </div>
+
+      <div class="rule">
+        <span class="n">06</span>
+        <div>
+          <h3>Authority is per node, never a global mode</h3>
+          <p>
+            Each node of a Set is manual, suggesting, or automatic, and you set
+            that node by node. There is no switch that hands the whole
+            instrument to an agent, because the useful arrangement is almost
+            always partial: this geometry is yours and that renderer is not.
+          </p>
+        </div>
+      </div>
+
+      <div class="rule">
+        <span class="n">07</span>
+        <div>
+          <h3>Sizes are the machine's answer, and the room is yours</h3>
+          <p>
+            Every divider drags, the program view can take the whole panel, and
+            how many deck previews run is a control rather than a constant
+            &mdash; because what a machine can afford is not something a layout
+            should decide for it. Day and night are a choice you make, not one
+            your operating system makes for you.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="cap">
+    <h2>Why there are seven and not seventy</h2>
+    <p>
+      These are what you have to hold in your head before the panel makes sense,
+      and <strong>a set of rules that keeps growing is a set nobody holds</strong>.
+      So the list is capped: adding one means removing or merging one. That is a
+      rule about this page rather than about the software, and it is the reason
+      the page can be read once and trusted afterwards.
+    </p>
+    <p>
+      It is deliberately not the same kind of document as the principles the
+      code is written to. Those accumulate, because a codebase learns. This one
+      must not, because a mental model that grows is a mental model that breaks.
+    </p>
+  </section>
+
+  <section>
+    <h2>Where to go next</h2>
+    <div class="cards">
+      <a class="card" href="console.html">
+        <strong>The console &rarr;</strong>
+        <span>
+          The panel itself, region by region: the mixer, the inspector, the
+          library, the master chain, the sequencer and the outputs &mdash; with
+          what each one is standing on.
+        </span>
+      </a>
+    </div>
+  </section>
+
+  <footer>
+    Karakuri is under construction. The mechanisms behind the mixer, the
+    inspector, the library and the outputs are built; the master chain, the
+    sequencer, the staging lane, authority and the panel itself are not. This
+    manual is written ahead of them on purpose, as the reference the
+    implementation is checked against.
+  </footer>
+
+</div>
+
+</body>
+</html>
