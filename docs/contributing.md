@@ -50,9 +50,17 @@ signals, determinism, the IR and colour — are stated in full in
 
 ### Working with git
 
-**More than one worker shares this tree.** Sessions and agents run against the same working
-copy at the same time, so a command that acts on everything acts on somebody else's
-half-finished work too. Nearly every rule below is that one fact applied.
+**Act on what you have looked at, and never on everything.** That is the whole of it: a
+command whose scope is "the tree" acts on whatever happens to be in the tree, which is not
+the same as what you meant. Working alone, that is a build artifact or a half-finished edit of
+your own landing in a commit about something else — untidy, and recoverable. But **a checkout
+may be shared**: nothing stops two sessions or a handful of agents working against one
+working copy, and it is a normal way to use this project. Then the same command takes
+somebody else's work instead, and untidy becomes destructive.
+
+That possibility is enough. None of the rules below asks you to know which situation you are
+in, because the practice that is safe when a checkout is shared costs nothing when it is
+not.
 
 - **Set the hooks up once per clone**: `git config core.hooksPath .githooks`. The gates are
   in the repository rather than in anyone's habits — a commit is refused if its Rust is not
@@ -61,16 +69,20 @@ half-finished work too. Nearly every rule below is that one fact applied.
   second; the rest is on the push, because a gate that costs minutes gets skipped until it is
   not a gate
 - **Stage by explicit path. Never `git add -A`, never `git commit -a`.** A wildcard stage
-  sweeps another worker's in-progress files into a commit about something else, and it has
-  happened here. Read `git status --short` before staging and `git log --oneline -1` before
-  committing: `HEAD` moves under you while you work
-- **Nothing that discards.** No `git checkout -- <path>`, `restore`, `reset`, `stash` or
-  `clean` while there is work in the tree that is not yours — those are the commands that
-  destroy rather than confuse, and the tree is rarely only yours. If you need a file back,
-  copy it out of `git show HEAD:<path>` instead of resetting the path
-- **Uncommitted work you did not write is somebody else's, and it stays.** Leave it, stage
-  around it, and say what you saw. Do not tidy it, and do not include it to make the tree
-  clean
+  commits what you did not read, and on a shared checkout what you did not write — which is
+  not hypothetical; it has happened in this repository. Read `git status --short` before
+  staging and
+  `git log --oneline -1` before committing. `HEAD` and the remote can both move while you
+  work, so a count of unpushed commits you have been carrying in your head is a guess —
+  `git rev-list --count origin/main..HEAD` is the answer
+- **Nothing that discards, unless you can name what it discards.** `git checkout -- <path>`,
+  `restore`, `reset`, `stash` and `clean` destroy rather than confuse, and what they take is
+  uncommitted, which means it is the only copy. `git show HEAD:<path>` gets a file's committed
+  state back without touching the working one, and answers the question most of the time
+- **If the tree holds changes you did not make, they stay.** Leave them, stage around them,
+  and say what you saw. Do not tidy them, and do not sweep them in to make the tree clean —
+  on a shared checkout they are someone's work in progress, and even alone they are a
+  question worth answering before a commit rather than after one
 - **One commit per concern, with its documentation in the same commit.** The record, the
   manual page and the roadmap line a change makes true land with the change, because a
   follow-up commit to fix the prose is one nobody writes. It is what makes §4's *hook it from
