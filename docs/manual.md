@@ -272,7 +272,7 @@ replay must not have one.
 
 A run driven by a Set file renders **the same frame** as the run whose flags wrote it.
 Anything the file could not be carried across in full is printed rather than dropped — see
-the Status table in [status.md](status.md).
+the status table in [roadmap.md](roadmap.md).
 
 **A Set file carries the whole chain.** A slot holding L2s, an L3, one or several
 `kind Field` files or several geometries is saved as the chain it is — one `slot` record per node, on the layer

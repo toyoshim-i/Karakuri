@@ -8,7 +8,7 @@
 //! nothing at all, and that a rollback restores the previous Set rather than
 //! merely stopping the new one. What is *measured* is printed rather than
 //! asserted — see `frame_times_across_a_swap_are_measured_and_reported` at the
-//! bottom, and the numbers it produced in `docs/status.md`.
+//! bottom, and the numbers it produced in the roadmap.
 //!
 //! ## The harness waits for the GPU each frame, and the real one does not
 //!
@@ -49,7 +49,7 @@ mod gpu {
 
     /// The workload the reported numbers are taken at — the CLI's own defaults,
     /// so that they are comparable with the other host-clock figures in
-    /// `docs/status.md` rather than being a measurement of a toy.
+    /// the roadmap rather than being a measurement of a toy.
     const REAL: (u32, (u32, u32)) = (262_144, (1280, 720));
 
     /// A budget no frame in this harness will come near, for the tests that want a
@@ -895,7 +895,7 @@ proc wide_points {
     /// Wall-clock frame intervals across a swap: worst case and median, before,
     /// during, and after. **Printed, not asserted** — see the module doc. Run with
     /// `cargo test -p karakuri-engine --test hot_swap -- --nocapture` to see them;
-    /// the numbers this produced on the development machine are in `docs/status.md`,
+    /// the numbers this produced on the development machine are in the roadmap,
     /// labelled as the host-clock figures they are.
     #[test]
     fn frame_times_across_a_swap_are_measured_and_reported() {

@@ -646,7 +646,7 @@ proc probe {
 /// while `spawn` was wired to nothing: with the lifecycle live, a `spawn`
 /// block without a rate compiles clean, builds a Set, and then creates zero
 /// elements every step forever, which reads as a procedure that draws
-/// nothing rather than as a mistake. That is exactly the shape `docs/status.md`
+/// nothing rather than as a mistake. That is exactly the shape the roadmap
 /// says this pass exists to refuse.
 #[test]
 fn a_spawn_block_without_a_spawn_rate_param_is_rejected() {
