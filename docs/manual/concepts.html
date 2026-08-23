@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What the Words Mean</title>
+<meta name="description" content="The six ideas the rest of the Karakuri manual assumes: a procedure, a Set, a deck, the mix, the beat grid, and a record.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;500;700&family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <a class="mark" href="index.html">Karakuri</a>
+    <nav class="topnav">
+      <a href="index.html">How it thinks</a>
+      <a href="concepts.html" aria-current="page">What the words mean</a>
+      <a href="console.html">The console</a>
+      <a href="operations.html">Every operation</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Karakuri &middot; the manual</p>
+    <h1>What the words mean</h1>
+    <p class="lede">
+      Six ideas, and the rest of the manual assumes them. None is complicated
+      on its own; what is worth reading is how they fit &mdash; because the
+      shape they make is not the shape most visual software has, and reading
+      the console with the wrong shape in mind is the one way to find it
+      confusing.
+    </p>
+  </header>
+
+  <section>
+    <h2>A procedure</h2>
+    <p>
+      The smallest thing Karakuri keeps. <strong>A procedure is code, not
+      pixels and not a recording</strong> &mdash; a short program that runs on
+      the graphics card every frame, written in this project's own language and
+      saved as a <code>.kir</code> file. It declares what can be turned on it,
+      and that declaration is what the console reads to know which knobs to
+      draw.
+    </p>
+    <p>
+      A procedure has a <strong>kind</strong>, and the kind says what it is made
+      of rather than what it looks like. <strong>L1</strong> is the material:
+      what the elements are and how they move. <strong>L2</strong> deforms
+      them. <strong>L3</strong> is a camera. <strong>L4</strong> draws.
+      <strong>Field</strong> is a distance function the others can ask questions
+      of, which is the one kind that draws nothing at all. And
+      <strong>L5</strong> folds several drawn results into one, which is what
+      the mixer itself is.
+    </p>
+    <p>
+      A procedure is stored by the hash of its own text, so <em>the bytes are
+      its name</em>. Two identical procedures are one stored thing, and a
+      procedure can never be quietly altered under a name that already meant
+      something else.
+    </p>
+  </section>
+
+  <section>
+    <h2>A Set</h2>
+    <p>
+      One picture's worth of material: a few procedures wired together, with
+      the values their knobs are turned to, the element counts they run at, and
+      the random seeds that decide what they look like. <strong>A Set is what
+      you keep and what you load</strong> &mdash; the unit the library is made
+      of.
+    </p>
+    <p>
+      Sets hold more than one of most kinds. Two geometries with a morph between
+      them is one Set; one geometry drawn three ways is one Set with three
+      renderers. Which node feeds which is written down rather than inferred
+      from the order you typed them, so reordering a command line cannot
+      silently change the picture.
+    </p>
+    <p>
+      <strong>A Set says what it publishes.</strong> A procedure may declare
+      twenty-five parameters and a Set decides which few are worth a knob on the
+      console &mdash; and that published list, in order, is also what a MIDI
+      control counts when it is learned. Publishing chooses what is
+      <em>shown</em>, never what is <em>reachable</em>: nothing about it locks
+      an operator out of a control the Set did not think to offer.
+    </p>
+  </section>
+
+  <section>
+    <h2>A deck</h2>
+    <p>
+      A place a Set is loaded and played from. There are four, and they are
+      mixed together into what you see. <strong>A deck is not a layer in an
+      image editor</strong> &mdash; it is running material, with its own time,
+      that keeps running whether or not it is on screen.
+    </p>
+    <p>
+      That is why a deck has a <strong>residency</strong> rather than a
+      visibility. <strong>Live</strong> is stepping and reaching the screen.
+      <strong>Priming</strong> is stepping and not drawn, warming up so that
+      cutting to it does not arrive cold &mdash; material that accumulates over
+      time looks wrong for its first seconds, and priming is what buys those
+      seconds back. <strong>Allocated</strong> is holding its buffers and not
+      stepping, keeping the time it had reached.
+    </p>
+  </section>
+
+  <section>
+    <h2>The mix</h2>
+    <p>
+      How much of each deck reaches the screen. Each deck has a
+      <strong>gain</strong>, which is a trim on the level its colour arrives at,
+      and an <strong>opacity</strong>, which is the fader across the blend. They
+      are not two names for one thing: <em>opacity at zero silences a deck under
+      every blend mode, and gain at zero does not</em> &mdash; a black card
+      still covers what is under it. The fader is the one your hand lives on;
+      the trim is set once and left.
+    </p>
+    <p>
+      A deck also has a <strong>blend mode</strong>, which is how it meets what
+      is beneath it, and a <strong>mask</strong>, which is what shape of the
+      frame it reaches at all.
+    </p>
+  </section>
+
+  <section>
+    <h2>The beat grid</h2>
+    <p>
+      A clock the whole instrument shares, driven by an audio input, an external
+      source, or its own oscillator. It matters because
+      <strong>changes can be scheduled onto it</strong>: a crossfade asked for
+      halfway through a bar starts on the bar, so what you play lands where the
+      music is rather than where your hand was.
+    </p>
+    <p>
+      Two different requests hide under the word <em>sync</em>.
+      <strong>Tempo-sync</strong> changes the <em>rate</em> a deck advances at,
+      and anything can follow it, because it only ever means taking more or
+      fewer steps. <strong>Beat-sync</strong> locks the <em>position</em>, which
+      needs the ability to jump &mdash; so it is offered where material can be
+      evaluated at a moment, and refused where material has to be arrived at by
+      running it, since re-running a deck's whole history to correct it is not a
+      feature.
+    </p>
+  </section>
+
+  <section>
+    <h2>A record, and why everything is one</h2>
+    <p>
+      Every change to what is playing is written as a line in a stream: a fader
+      moved, a deck put on air, a procedure swapped in. <strong>Nothing changes
+      the running state except by a record</strong> &mdash; which is what makes
+      a performance replayable frame for frame rather than approximately, and
+      what makes a saved Set a projection of the same vocabulary rather than a
+      second format that has to agree with the first.
+    </p>
+    <p>
+      It also decides what a save <em>is</em>. Keeping a deck writes the
+      material <strong>on screen</strong> &mdash; the versions running, at the
+      values they are at &mdash; not what any file on disk happens to say. A
+      procedure you wrote and that was rolled back for costing too much is on
+      disk and not on screen, and a save saves the screen.
+    </p>
+  </section>
+
+  <section class="cap">
+    <h2>The shape, in one paragraph</h2>
+    <p>
+      <strong>Procedures</strong> are code that draws. A few of them wired
+      together with their settings is a <strong>Set</strong>, which is what the
+      <strong>library</strong> holds. A Set loaded into a <strong>deck</strong>
+      is running material with its own time and its own residency. Four decks
+      are folded together by the <strong>mix</strong>, and everything that
+      changes is scheduled against the <strong>beat grid</strong> and written
+      down as a <strong>record</strong>. The console is a surface over exactly
+      that and nothing else &mdash; which is why
+      <a href="operations.html">every operation</a> can be listed and counted.
+    </p>
+  </section>
+
+  <footer>
+    Next: <a href="console.html">the console</a>, region by region, or
+    <a href="operations.html">every operation</a> with each way in.
+    <a href="index.html">The seven rules</a> are what all of it obeys.
+  </footer>
+
+</div>
+
+</body>
+</html>
