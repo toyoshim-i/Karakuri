@@ -294,17 +294,12 @@ into something else, and never reuse the retired number. Record the retirement i
 re-point the ADRs that cited it
 ([ADR-0059](adr/0059-a-records-pointer-into-the-principles-registry-is-metadata.md)).
 
-**An ADR's reasoning is not edited after it lands.** If the argument would have to change, that is a
-new record. What that buys is permission to stop maintaining it: **an ADR is allowed to go out of
-date**, and one describing what a document said in August is right as history — rewriting it to match
-the present destroys the only account of how things got here. Nobody is obliged to keep a hundred and
-fifty records current, which is the whole point.
-
-**Allowed to go out of date is not the same as left wrong.** The front matter exists to be written
-after the fact — `status`, `superseded_by`, `principles` — and a record whose *pointer* has gone bad,
-or that states a fact that was never true, is corrected. Retiring a principle explicitly requires it:
-re-point the ADRs that cited it. The line is between the argument, which is what happened and stays,
-and the wiring around it, which is meant to be maintained.
+**An ADR is a description of history**, and that decides what may be edited: the past is not revised,
+a description that was wrong is corrected, and annotating a record with what it later became is
+welcome. An argument that would have to change is a new record, which is what buys the permission to
+stop maintaining a hundred and fifty of them. See
+[P-0066](principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md), which
+carries the test for the cases that are not obvious.
 
 The present tense lives in the other documents; `docs/principles/` is where a rule that still stands
 is kept current, by deletion and renumbering rather than by editing.
