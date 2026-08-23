@@ -636,6 +636,40 @@ the whole count. What makes this more than bookkeeping is the first rule: **ever
 reachable from the keyboard alone**, and a divider that is only draggable is not. Naming these is
 what decides how a pane is resized without a mouse, and it is owed before the panel is drawn.
 
+#### What building the console's arrangement found
+
+`karakuri-console` holds the arrangement as one `Spec`, with every number read off
+`docs/manual/style.css` and every derivation written beside it. Building it against the manual
+turned up four things, and the first is architectural.
+
+**A region cannot be added or removed while the panel is running.** The mock's `2 up` control says
+a wide window fits three or four inspector panes and that the operator chooses how many *live*; a
+`Spec` builds a `Layout` once and the arena has no insert and no remove. Rebuilding to change the
+count throws away every drag, every fold and the solo state in the whole panel — add a third
+inspector pane and the library's width, the program's height and the sequencer's fold all snap
+back. What is missing is a pair of arena operations that keep the rest of the tree and its ids,
+with `solo`'s saved flags resized alongside; it is not a change to the solver. **The same control
+appears four more times** — `+ lane` in the sequencer, `+ add` in the master chain, `+ add output`,
+and `+` on the scope list — so it is one gap, drawn five times.
+
+**A node has one `[min, max]` pair, along its parent's axis.** The mixer wants a width floor (four
+strips side by side) *and* a height floor (a strip is never cut off), and both could be stated only
+because they happen to sit at different levels of the tree. Two constraints on one node cannot be.
+
+**A split's minimum is not derived from its children's.** The pane row declares 530, which is the
+right pane's three bays and its dividers added up by hand three levels away. A test recomputes it
+so the two cannot drift, and that test helper wants to be a method on `Layout` rather than a copy
+in every consumer.
+
+**And three places where the manual does not agree with itself**, all found by trying to build from
+it rather than to read it. `.body-grid`'s centre track says `minmax(340px, 1fr)`, at which each
+inspector pane is 165 wide — but `.param`'s fixed tracks come to 207 before the fader has any width
+at all, and `.console`'s `min-width: 1010px` is what actually holds the panel, at which they are
+237. The panel has two minimum widths and the smaller one is unreachable. The lede says *every
+divider drags* and the mock draws a grip on four bays of eight. And *"height given back is rows:
+roughly 48 in the library, and near 40 per inspector pane"* does not divide: a `.lib-row` and a
+`.param` are the same box, so the same height is the same number of rows.
+
 Two rules the panel is built to whatever draws it. It must not allocate on the render frame
 path, and **it must be testable without a GPU or a window** — the model and the command layer
 answer headless and the view stays thin, which is what keeps this milestone's tests off the
