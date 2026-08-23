@@ -280,3 +280,36 @@ fn a_layout_of_one_view_is_the_viewport() {
     assert!(l.children(l.root()).is_empty());
     assert_eq!(l.axis(l.root()), None);
 }
+
+#[test]
+fn a_split_with_no_children_is_an_empty_region_rather_than_a_special_case() {
+    // `Spec::row(_, vec![])` is expressible, so the question is what it means
+    // rather than whether to refuse it — and the solve already answers: a
+    // childless split claims its extent like any other node, hands none of it
+    // on, and hits as nothing. There is no divider to draw, which is why every
+    // count of gaps here is `visible - 1` saturated at zero rather than a
+    // subtraction that would go negative on exactly this arrangement.
+    let mut l = Layout::new(karakuri_layout::Spec::row(
+        4.0,
+        vec![
+            karakuri_layout::Spec::view("side").fixed(100.0),
+            karakuri_layout::Spec::row(4.0, vec![]).flex(1.0),
+        ],
+    ));
+    at(&mut l, 640.0, 480.0);
+    assert_invariants(&l);
+
+    let empty = l.children(l.root())[1];
+    assert!(l.children(empty).is_empty());
+    assert_eq!(l.rect(empty), Rect::new(104.0, 0.0, 536.0, 480.0));
+    assert_eq!(
+        l.hit(karakuri_layout::Point::new(300.0, 100.0), 3.0),
+        karakuri_layout::Hit::Nothing
+    );
+
+    // And on its own it is the whole viewport, still with nothing in it.
+    let mut lone = Layout::new(karakuri_layout::Spec::column(4.0, vec![]));
+    at(&mut lone, 640.0, 480.0);
+    assert_invariants(&lone);
+    assert_eq!(lone.rect(lone.root()), Rect::new(0.0, 0.0, 640.0, 480.0));
+}

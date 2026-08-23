@@ -183,6 +183,7 @@ number; new records continue from the end.
 | [ADR-0155](0155-egui-draws-the-panel-and-the-price-is-wgpu-30.md) | egui draws the panel, and the price is wgpu 30 | 2026-08-23 | accepted |
 | [ADR-0156](0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md) | The console's arrangement is a tree this repository owns, not the toolkit's panels | 2026-08-23 | accepted |
 | [ADR-0157](0157-a-maximum-is-honoured-and-the-leftover-is-trailing-space.md) | A maximum is honoured, and the leftover is trailing space | 2026-08-23 | accepted |
+| [ADR-0158](0158-a-saved-arrangement-that-disagrees-with-itself-is-refused-not-repaired.md) | A saved arrangement that disagrees with itself is refused, not repaired | 2026-08-23 | accepted |
 
 ## Retired numbers
 

@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 serde.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 # Only the tests need a concrete format. The crate itself is format-agnostic:
