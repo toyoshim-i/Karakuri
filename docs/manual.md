@@ -136,6 +136,13 @@ same distinction the key makes and is worth re-reading below under [Keep it](#ke
 written under; a model that has just made something worth keeping can ask for it to be kept
 and be told whether that worked, instead of asking a hand to press a key.
 
+**Why these behave as they do**, if you are about to change one: an id you choose
+overwrites rather than being renamed ([ADR-0128](adr/0128-a-set-saved-under-a-name-the-caller-chose-overwrites.md)),
+`read_set` takes a set id rather than a hash because nothing here has ever handed a model a
+hash ([ADR-0138](adr/0138-a-model-names-a-set-not-a-hash.md)), and it states what a
+procedure *declares* rather than what the set turned it to
+([ADR-0139](adr/0139-a-card-states-what-a-procedure-declares-and-not-what-a-set-turned-it-to.md)).
+
 `read_set` is the fifth and it is the way back in. Give it the id of a set you kept and it
 says **what that set holds and what each procedure in it declares**: every node with its
 layer and the name the set gave it, what the procedure calls itself, each knob with the two
