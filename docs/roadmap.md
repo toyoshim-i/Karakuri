@@ -575,26 +575,69 @@ Recorded here because they are decisions, and the manual states behaviour rather
   outright and which the two behave as: opacity at zero silences under every blend mode, gain
   at zero does not silence `over`. Drawing them as two identical sliders throws that away.
 
-#### What draws the panel, and it is not decided
+#### What draws the panel — `egui`, and it cost a `wgpu` bump
 
-Nothing in this tree draws a UI: the dependencies are `winit` and `wgpu`, with no text
-rendering and no toolkit, and everything an operator sees is either the rendered output or a
-line printed to a terminal. **`egui` is the standing recommendation** — immediate mode, it
-takes the `wgpu` and `winit` versions already here, and this panel's controls are faders,
-meters, step grids and lanes, none of which a widget library supplies, so cheap custom
-painting is what matters. The alternative costed was a page served over the loopback MCP
-port, which buys layout freedom and a tablet but costs a second language and a state round
-trip. **Not chosen here.**
+**`egui` draws it** ([ADR-0155](adr/0155-egui-draws-the-panel-and-the-price-is-wgpu-30.md)),
+and the recommendation this replaces carried one claim that measurement falsified. It said `egui`
+"takes the `wgpu` and `winit` versions already here". `winit` yes; **`wgpu` no** — there is no
+`egui` release bound to `wgpu` 26. `egui-wgpu` 0.32 wants 25, 0.33 wants 27, 0.34 and 0.35 want
+29, and 0.36 wants 30, and **26 was skipped entirely**. A toolkit that renders through `wgpu`
+shares the engine's `Device`, so adopting one *was* a `wgpu` migration and the only question was
+how far.
+
+That question was measured rather than argued, by copying the workspace and changing the version
+strings: **`wgpu` 27 costs 6 errors in 2 kinds, `wgpu` 30 costs 54 in 12.** All of the 54 are
+descriptor fields added or removed except one — `Device::pop_error_scope` is gone, and
+`push_error_scope` now returns a guard whose `pop()` yields the error. The workspace went to
+**`wgpu` 30 and `naga` 30**, taking the larger migration once rather than the smaller one twice;
+the argument and the rejected 27 are in the record.
+
+**What `egui` buys is text and input, not widgets.** This panel's controls are faders, meters,
+step grids and lanes, and no widget library supplies any of them — they are custom painting either
+way. What would otherwise be written here is font loading, shaping, a glyph atlas, and the input
+and hit-testing plumbing under it. That, and not a widget set, is the job being bought.
+
+#### The arrangement is not the toolkit's
+
+Every divider in the console drags, every pane has a width it will not pass in either direction,
+and any pane folds away to give its space to the rest. `egui`'s own panels can express that —
+`Panel` anchors to an edge with a `CentralPanel` taking the rest, panels nest through
+`show_inside`, and `resizable`, `size_range` and `show_collapsible` cover the behaviour. **The
+arrangement is still this repository's**
+([ADR-0156](adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)), in
+`karakuri-layout`, a crate with no toolkit in it that hands out rectangles.
+
+The reason is the vocabulary above rather than anything about `egui`: **widening the library and
+folding the sequencer away are operations**, and an operation is named once with every surface
+routing into that name. State the panel owns is state a key press, a MIDI control and MCP can all
+reach; state in `egui::Memory` under an `Id` is state only a pointer reaches comfortably. The
+second reason is testing — the arrangement answers as arithmetic on a machine with no adapter,
+rather than by running a `Context` and reading rectangles back out of the toolkit's memory.
+
+**Solving never mutates the arrangement**
+([P-0071](principles/0071-solving-a-layout-never-mutates-it.md)): a viewport too small for the
+minima produces small rectangles and changes nothing stored, so a window dragged narrow and back
+comes back to exactly what it left.
+
+**And it leaves the operations page short.** Arranging the panel is operations, and
+[every operation](manual/operations.html) carries no row for folding a pane, for moving a divider,
+or for `solo` — which the console page already draws as a control with a tooltip. So the 41 is not
+the whole count. What makes this more than bookkeeping is the first rule: **every operation is
+reachable from the keyboard alone**, and a divider that is only draggable is not. Naming these is
+what decides how a pane is resized without a mouse, and it is owed before the panel is drawn.
 
 Two rules the panel is built to whatever draws it. It must not allocate on the render frame
 path, and **it must be testable without a GPU or a window** — the model and the command layer
 answer headless and the view stays thin, which is what keeps this milestone's tests off the
 `mod gpu` side of `docs/contributing.md`'s split.
 
-**How this milestone is actually sequenced is not settled here.** It was left until the
-manual's operations page existed, since that is what the vocabulary is read off — and **that
-page is written now**, so the condition has been met and the sequencing is the next thing this
-milestone owes a decision on. Nothing below it is blocked on anything else.
+**The sequencing starts from the bottom, and the first piece is the layout.** It had been left
+until the manual's operations page existed, since that is what the vocabulary is read off; the
+page is written, and what it says is that the panel is a set of regions an operator arranges. So
+`karakuri-layout` is built and tested before anything is drawn into it — it needs no toolkit, no
+device and no window, which means the `wgpu` 30 migration and the layout model were done at the
+same time without waiting on each other. Beyond that first piece the order is open, and nothing
+below is blocked on anything else.
 
 **Adds**
 

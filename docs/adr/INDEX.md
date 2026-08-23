@@ -180,6 +180,8 @@ number; new records continue from the end.
 | [ADR-0152](0152-a-kir-names-a-slot-and-the-set-names-the-nodes.md) | A `.kir` names a slot, and the Set names the nodes | 2026-08-21 | accepted |
 | [ADR-0153](0153-a-renderer-reads-three-camera-members-and-the-l3s-five-stay-unreadable.md) | A renderer reads three camera members, and the L3's five stay unreadable | 2026-08-21 | accepted |
 | [ADR-0154](0154-a-third-path-on-set-is-a-second-renderer-and-there-is-no-new-syntax.md) | A third path on `--set` is a second renderer, and there is no new syntax | 2026-08-16 | accepted |
+| [ADR-0155](0155-egui-draws-the-panel-and-the-price-is-wgpu-30.md) | egui draws the panel, and the price is wgpu 30 | 2026-08-23 | accepted |
+| [ADR-0156](0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md) | The console's arrangement is a tree this repository owns, not the toolkit's panels | 2026-08-23 | accepted |
 
 ## Retired numbers
 
