@@ -311,8 +311,10 @@ mod tests {
     ///
     /// **This is the third implementation, and the reason the other two were
     /// worth putting behind a trait.** `Live::frame` had never been reached by
-    /// a test in this program: it needs a window, and `SurfaceError::Outdated`
-    /// — the case that produced a real defect — cannot be synthesised at all.
+    /// a test in this program: it needs a window, and `Outdated` — the case
+    /// that produced a real defect — cannot be synthesised at all. (It was
+    /// `SurfaceError::Outdated` until wgpu 30 replaced the `Result` with
+    /// `CurrentSurfaceTexture`; the point survives the rename.)
     /// Two of the three record-ordering bugs found in this codebase lived in
     /// that function. A sink that refuses on demand is what makes the case
     /// reachable.
