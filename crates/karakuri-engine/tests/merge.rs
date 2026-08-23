@@ -2,7 +2,7 @@
 //!
 //! **Placing the node is what decides which**, and the two are different
 //! operations rather than one with a dial — `docs/ir-spec.md`, "Overdraw and
-//! compositing are different operations, and the graph says which". Four
+//! compositing are different operations, and the graph says which". Five
 //! claims:
 //!
 //! - **A merge of one is exact.** `0.0 + 1.0 * src` is `src`, so a Set that
@@ -15,6 +15,10 @@
 //!   renderer, which is the whole reason to pay for the targets.
 //! - **The targets follow a resize**, since they are frame-sized and a Set is
 //!   built before it is sized.
+//! - **A selection is the fold and not the draw.** Making one renderer live
+//!   takes the others out of the picture and leaves them costing exactly what
+//!   they cost before — which is the claim the control is sold on, and the
+//!   reason it is a uniform write rather than a rebuild.
 
 // Every test here takes a device, so the whole file is one `mod gpu` — the
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
@@ -287,6 +291,91 @@ proc {name} {{
             (half - cool * 0.5).abs() < cool * 0.05,
             "half opacity gave {half} where half of {cool} was due"
         );
+    }
+
+    /// **Selecting one renderer leaves only that one in the frame**, and
+    /// leaves it exactly as it was.
+    ///
+    /// Both halves are the claim. The first is what a selection is for; the
+    /// second is what makes it a *choice* rather than a fade — the surviving
+    /// renderer must arrive at the level it was already at, because nothing
+    /// about its own edge was touched.
+    ///
+    /// This goes through the flag rather than through an opacity, which is a
+    /// different path in the shader: `Input::contributes` folds `live` into the
+    /// uniform and the fold skips the input entirely, where an opacity of zero
+    /// is still a texel fetch and a multiply. The fader test above cannot see
+    /// this one.
+    #[test]
+    fn selecting_one_renderer_leaves_only_that_renderer_in_the_frame() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let two = [dots("warm", (0.5, 0.0, 0.0)), dots("cool", (0.0, 0.0, 0.5))];
+        let mut set = build(&gpu, &two, Layering::Composite);
+        let full = frame(&gpu, &mut set);
+        let (warm, cool) = (total(&full, 0), total(&full, 2));
+        assert!(
+            warm > 1.0 && cool > 1.0,
+            "both renderers must reach the frame first"
+        );
+
+        assert!(set.select_renderer(1), "this Set draws with two renderers");
+        let only_cool = frame(&gpu, &mut set);
+        assert!(
+            total(&only_cool, 0) < warm * 0.01,
+            "the renderer that was not selected still reached the fold"
+        );
+        assert!(
+            (total(&only_cool, 2) - cool).abs() < cool * 0.01,
+            "the selected renderer did not arrive at the level it was already at"
+        );
+
+        // And the other way, which is what makes it a selection rather than a
+        // one-shot silencing: choosing renderer 0 brings it back and takes 1
+        // out.
+        assert!(set.select_renderer(0));
+        let only_warm = frame(&gpu, &mut set);
+        assert!(total(&only_warm, 2) < cool * 0.01);
+        assert!((total(&only_warm, 0) - warm).abs() < warm * 0.01);
+
+        // A renderer this Set does not have changes nothing at all — the
+        // picture is still the one the last selection asked for, rather than a
+        // mix silenced on the way to finding out.
+        assert!(!set.select_renderer(2));
+        let after = frame(&gpu, &mut set);
+        assert!(
+            (total(&after, 0) - warm).abs() < warm * 0.01 && total(&after, 2) < cool * 0.01,
+            "a refused selection moved the picture"
+        );
+    }
+
+    /// **A selection on an overdrawing Set is carried and does nothing**,
+    /// which is `Set::set_input`'s rule and is stated rather than refused: the
+    /// edges are there under both layerings and nothing reads them without an
+    /// L5.
+    ///
+    /// It matters because it is what a replayed `select` record meets when a
+    /// session recorded against `--merge` is replayed without it — and because
+    /// `Layering` is not a Set file record, that is the ordinary case rather
+    /// than an exotic one.
+    #[test]
+    fn selecting_a_renderer_of_an_overdrawing_set_changes_nothing() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let two = [dots("warm", (0.5, 0.0, 0.0)), dots("cool", (0.0, 0.0, 0.5))];
+        let mut set = build(&gpu, &two, Layering::Overdraw);
+        let before = frame(&gpu, &mut set);
+        assert!(
+            set.select_renderer(1),
+            "the edges exist under both layerings"
+        );
+        let after = frame(&gpu, &mut set);
+        for channel in [0, 2] {
+            let (a, b) = (total(&before, channel), total(&after, channel));
+            assert!(a > 1.0, "channel {channel} is empty before the selection");
+            assert!(
+                (a - b).abs() < a * 0.01,
+                "channel {channel} moved from {a} to {b} on a Set with no L5 to fold"
+            );
+        }
     }
 
     /// **The targets are frame-sized and a Set is built before it is sized**, so a

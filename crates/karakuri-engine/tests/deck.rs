@@ -38,7 +38,7 @@ mod gpu {
     use karakuri_engine::binding::Curve;
     use karakuri_engine::deck::{Blend, Deck, Mask, MaskKind, Residency};
     use karakuri_engine::swap::{Event, HotSwap, Request};
-    use karakuri_engine::transition::{Control, Transition};
+    use karakuri_engine::transition::{quantise, Control, Selection, Transition};
     use karakuri_engine::{Gpu, Present, Set, Signals, VideoSource};
     use karakuri_ir::typed::Checked;
 
@@ -98,6 +98,30 @@ proc soft_points {
   fragment {
     let d = length(point_coord * 2.0 - 1.0);
     color = vec4(vec3(1.0, 1.0, 1.0) * exposure, max(0.0, 1.0 - d));
+  }
+}
+"#;
+
+    /// A second renderer over the same geometry, differing only in its name.
+    ///
+    /// Which is the whole point: two ways of drawing one simulation is what a
+    /// Set holds several L4s *for*, and what selecting between them is about.
+    /// A name of its own because a name addresses a node and two nodes cannot
+    /// share one.
+    const L4_B: &str = r#"
+proc harder_points {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 2.0;
+  }
+
+  fragment {
+    color = vec4(1.0, 0.5, 0.25, 1.0);
   }
 }
 "#;
@@ -834,6 +858,101 @@ proc wash {
         // alone, which is why `set_mask` does not cancel a transition.
         assert_eq!(deck.mask(1).kind(), MaskKind::Linear);
         assert_eq!(deck.transitions_on(1).count(), 0);
+    }
+
+    /// A Set drawn by two renderers over one simulation, composited.
+    ///
+    /// The shape a selection is about: one L1, two L4s, and an L5 folding
+    /// them — which is what gives each renderer an edge with a `live` flag on
+    /// it.
+    fn set_of_two_renderers(gpu: &Gpu) -> Set {
+        let (l1, a, b) = (compile(L1), compile(L4), compile(L4_B));
+        let mut set = Set::build_many(
+            &gpu.device,
+            &gpu.queue,
+            &[(&l1, CAPACITY)],
+            &[],
+            &[],
+            &[],
+            &[&a, &b],
+            karakuri_engine::set::Layering::Composite,
+            SEED_A,
+            &[],
+            karakuri_engine::set::Wiring::default(),
+        )
+        .expect("one geometry and two renderers over it");
+        set.resize(&gpu.device, WIDTH, HEIGHT);
+        set
+    }
+
+    /// **A scheduled selection lands on the beat it was given and not before.**
+    ///
+    /// The claim that makes a selection a *musical* control rather than a key
+    /// press: it is quantised once, where the operator asked, and every frame
+    /// until that beat leaves the Set exactly as it was. A selection applied
+    /// where it was scheduled would pass every arithmetic test there is and
+    /// still be the wrong instrument — the picture would change on the hand
+    /// rather than on the bar.
+    ///
+    /// The queue is asserted as well as the edges, because the two failures
+    /// look alike from outside: a selection that never lands and one that
+    /// lands and is applied again every frame afterwards both leave the right
+    /// renderer live.
+    #[test]
+    fn a_scheduled_selection_lands_on_the_beat_it_was_given_and_not_before() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let present = Present::new(&gpu.device, Present::HDR_FORMAT, WIDTH, HEIGHT);
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![HotSwap::fixed(set_of_two_renderers(&gpu))],
+            WIDTH,
+            HEIGHT,
+        );
+        // 120 bpm and dt of 1/60 is two beats a second, so a frame is 1/30 of a
+        // beat and the bar below is 120 frames away rather than an unknown
+        // number of them.
+        deck.set_signals(Signals::new(120.0, 1));
+        // Off the boundary first, so that quantising has somewhere to go: on
+        // beat 0 the next bar *is* now, which is correct and is not this test.
+        frame(&gpu, &mut deck, &present, 1);
+
+        let now = deck.signals().oscillator().beats();
+        let start = quantise(now, 4.0);
+        assert!(start > now, "the fixture is already on the bar");
+        deck.schedule_selection(Selection::new(0, 1, start));
+
+        let live = |deck: &Deck| -> Vec<usize> {
+            deck.slot(0)
+                .set()
+                .inputs()
+                .iter()
+                .enumerate()
+                .filter(|(_, input)| input.live)
+                .map(|(at, _)| at)
+                .collect()
+        };
+        assert_eq!(live(&deck), vec![0, 1], "a Set comes up folding both");
+
+        while deck.signals().oscillator().beats() < start {
+            assert_eq!(
+                live(&deck),
+                vec![0, 1],
+                "the selection landed at {} beats, before the {start} it was given",
+                deck.signals().oscillator().beats()
+            );
+            assert_eq!(deck.selections_on(0).count(), 1, "the selection is armed");
+            frame(&gpu, &mut deck, &present, 1);
+        }
+
+        // The frame that crossed the instant applied it: exactly one live, and
+        // it is the one that was asked for.
+        assert_eq!(live(&deck), vec![1]);
+        assert_eq!(
+            deck.selections_on(0).count(),
+            0,
+            "a selection that has landed is still queued, and would be applied \
+             over whatever moves the edges next"
+        );
     }
 
     /// **A scheduled fade moves the fader on the beat grid and nowhere else.**

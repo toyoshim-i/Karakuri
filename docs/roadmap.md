@@ -2066,7 +2066,33 @@ section of `docs/ir-spec.md`, where a reader meets the `camera` record.
   rather than a separate structure — and they cost what their differing slot costs. Three
   alternatives that differ only in L4 share one simulation; three that differ in L1 are
   three simulations. Selection is close to free for closed-form material and expensive for
-  accumulating material, which is the same distinction priming turns on
+  accumulating material, which is the same distinction priming turns on.
+
+  **The smaller half is built, and it is the half that lives inside one Set.** A composited
+  slot — `--merge N` — already gives every renderer a target of its own and an edge into an
+  L5, so `r` makes one of them live and the rest not, on the beat grid, through a `select`
+  record that replays like any other. That is "three alternatives that differ only in L4
+  share one simulation", and it is the sentence above that is true *today*: they share one
+  because they are renderers of one Set rather than three Sets that happen to agree.
+
+  **What is not built is everything the paragraph says about deck slots.** Alternatives that
+  differ at L1 or L2 carry state of their own, so they are separate Sets — and holding
+  several of them as one pool needs the deck to know they are alternatives, needs the
+  unselected ones primed off air so a cut does not arrive cold, and needs the geometry
+  shared across them so that three variants of one shell are not three simulations of it.
+  None of that exists. The pre-forked-Sets-as-deck-members mechanism is the design and
+  nothing implements it.
+
+  **That is also where the two cost claims come apart, and the passage above reads as though
+  they were one claim.** "Cheap for closed-form and dear for accumulating" is a statement
+  about *priming*: it is dear exactly when the alternative has a history to re-run before it
+  can be cut to, which is a property of a Set being warmed in a deck slot. Inside one Set
+  there is nothing to warm — the alternatives are renderers over a simulation that is
+  already running — so selection costs one uniform write whether the material is closed-form
+  or accumulating, and the distinction does not apply. What it costs instead is memory and
+  passes: every alternative goes on drawing into its own frame-sized target, 7.03 MB at
+  1280x720, selected or not. Cheap, not free, and cheap in a different currency than the one
+  this bullet was written in
 - Bundle and unbundle for sharing single self-contained patch files
 
 **Demands on earlier work**

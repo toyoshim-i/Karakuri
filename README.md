@@ -211,8 +211,8 @@ during implementation, these win.
   not there yet.
 
   What goes through a record: `audio` and `tempo` every frame, `canvas` once at the head,
-  and `gain`, `opacity`, `blend`, `mask`, `transition`, `preview`, `residency`, `look` and
-  `transport` on every key that moves them. Each is built, read back, and only then applied,
+  and `gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `preview`, `residency`,
+  `look` and `transport` on every key that moves them. Each is built, read back, and only then applied,
   so what drives the engine is what a replay would decode rather than a second path that
   happens to agree with it.
 

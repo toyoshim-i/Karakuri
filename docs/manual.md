@@ -338,6 +338,7 @@ pressed it. See the keys below.
 | `x` | crossfade to the next slot |
 | `c` | wipe the next slot in over this one |
 | `z` | cycle the wipe's shape |
+| `r` | cycle which renderer of the focused slot is live. Needs `--merge` on that slot |
 | `n` | where a fade starts: next bar, next beat, now |
 | `j` | how long: 4, 2, 8 beats, or a cut |
 
@@ -422,6 +423,36 @@ cargo run -p karakuri-cli -- --load-set 20260816-143052-271
 `--merge` is still not one of the records, so a saved Set loads as overdraw whichever way it
 was written.
 
+### Selecting one renderer of a slot
+
+`r` makes **one** of a slot's renderers live and the others not, landing on the same grid a
+fade does — press it a beat before the bar and the picture changes on the bar. It needs
+`--merge N` on that slot: overdrawn renderers share one target and meet through their own
+blend states, so there is no edge to silence and nothing to choose between. Composited, each
+renderer has a target of its own and its own edge into the fold, which is what makes the
+choice one uniform write.
+
+**The ones you are not watching still draw.** Selecting takes a renderer out of the *fold*,
+not out of the frame: it still runs its pass and still fills its own target, which at
+1280x720 is 7.03 MB apiece. That is what the control costs, and it is why it can land on a
+beat at all — the alternatives are already resident and already drawing, so choosing between
+them is not a build. Cheap, not free.
+
+**It is one geometry drawn several ways, and nothing more.** These are L4s over one
+simulation, so what you can choose between is how the material is *drawn* — sprites against
+strokes, one exposure against another, a shader against its rewrite. An alternative that is
+a different *simulation* is a different Set: it carries state of its own, it has to be
+warmed off air before it can be cut to, and neither the deck nor the priming path can hold
+two of those as alternatives yet. That is the rest of `docs/roadmap.md`'s variant pools and
+it is not built.
+
+**Two things it does not do.** There is no position in the cycle that folds every renderer
+back together — a Set comes up with all of them folded and the first press leaves that state
+for the rest of the run, so cycle on to another renderer rather than expecting the composite
+back. And it cannot be saved: `--merge` is not a Set file record, so a composited Set written
+out with `k` loads back as overdraw and has nothing for a selection to be about. The
+selection is a property of the run, like a gain.
+
 ### The status line
 
 Printed twice a second, and on `s`. One group per slot, then the session:
@@ -440,6 +471,7 @@ is up and an absent blend means `add`.
 | `>` | the focused slot |
 | `LIVE` `prim` `park` `off` | effective residency — what the engine is doing, not what was asked. `park` is a prime request the governor is holding for want of budget, reconsidered every pass |
 | `g` | gain. `g>0.25` means a scheduled move is running to that value; `o>` and `w>` are the same for the fader and a wipe |
+| `r>1` | a renderer selection is armed and lands on the grid, on the same terms as `g>` |
 | `t` | that slot's simulation time, which is its own and not the session's |
 | `o` | opacity, when it is not 1.0 |
 | `over` `max` | blend mode, when it is not `add` |

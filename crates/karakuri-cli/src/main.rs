@@ -587,6 +587,12 @@ keys:
              what a beat is; a wipe is the two of them. Needs a shape from `z`
   z          cycle the wipe's shape: off, left to right, bottom to top, the
              two diagonals, an iris
+  r          cycle which renderer of the focused slot is live, landing on the
+             current grid. Needs --merge on that slot: overdrawn renderers
+             share one target and there is nothing to silence. The ones not
+             selected still draw, into targets of their own — the choice is
+             free of a rebuild, not free of a frame. One way: there is no
+             position that folds them all back together
   n          cycle where a fade starts: the next bar, the next beat, now
   j          cycle how long a fade lasts: 4, 2, 8 beats, or 0 for a cut
   v          cycle what the output shows: the mix, then each slot, then the
@@ -2761,6 +2767,22 @@ fn apply_replayed(deck: &mut Deck, look: &mut Look, record: &karakuri_store::rec
             beats,
             curve,
         })) => deck.schedule(schedule_from(deck, slot, control, to, start, beats, curve)),
+        Ok(Some(mix::Change::Select {
+            slot,
+            renderer,
+            start,
+        })) => {
+            // The same check the live path makes, against the same fact, and
+            // this is the path it is actually likely on: a session replayed
+            // against material that has since lost a renderer.
+            let count = deck.slot(slot).set().inputs().len();
+            match renderer_in_range(slot, renderer, count) {
+                Ok(()) => deck.schedule_selection(karakuri_engine::transition::Selection::new(
+                    slot, renderer, start,
+                )),
+                Err(refusal) => eprintln!("  {refusal} — skipped"),
+            }
+        }
         // **Governed, exactly as the live path governs.** `set_residency`
         // writes the request *and* grants it, and only a governor pass
         // re-derives what the deck is actually doing against the budget of the
@@ -4512,6 +4534,44 @@ fn no_such_slot(slot: usize, slot_count: usize) -> String {
     }
 }
 
+/// **A renderer the slot does not draw with**, in the words every surface says
+/// it in.
+///
+/// [`no_such_slot`]'s shape, one address down: the thing named, then what there
+/// was to name. A selection is the first control that addresses *inside* a
+/// slot, so it is the first refusal that needed this — and it is a free
+/// function beside that one rather than a sentence in `Live`, because the key
+/// press and a replayed record both meet it and telling one operator two
+/// stories about one mistake is what `no_such_slot` exists to have stopped.
+///
+/// **The count comes from the Set on screen, not from the flags the run
+/// started with**, which is what makes it true after a hot swap: a rebuilt
+/// slot draws with however many renderers its new sources declare.
+fn no_such_renderer(slot: usize, at: usize, count: usize) -> String {
+    match count {
+        // Cannot happen — a Set with no renderer does not build — and written
+        // anyway, because `count - 1` on it underflows and panics, which is
+        // what the arm that "cannot happen" costs when the shape around it
+        // changes. The same reasoning as [`no_such_slot`]'s empty deck.
+        0 => format!("no renderer {at}: slot {slot} draws with none"),
+        n => format!(
+            "no renderer {at}: slot {slot} draws with renderers 0-{}",
+            n - 1
+        ),
+    }
+}
+
+/// Whether `at` names a renderer of a slot that draws with `count` of them, and
+/// the sentence if it does not. [`slot_in_range`]'s companion, returning the
+/// refusal rather than a bool because both callers print it.
+fn renderer_in_range(slot: usize, at: usize, count: usize) -> Result<(), String> {
+    if at < count {
+        Ok(())
+    } else {
+        Err(no_such_renderer(slot, at, count))
+    }
+}
+
 /// **Why a slot has nothing to save**, in the words the operator is given.
 ///
 /// **Named, and with the flag that changes the answer.** Every refusal around
@@ -5321,6 +5381,7 @@ impl Live {
                 'x' => self.crossfade(),
                 'c' => self.wipe(),
                 'z' => self.cycle_mask(),
+                'r' => self.cycle_renderer(),
                 'n' => self.cycle_quantum(),
                 'j' => self.cycle_fade_beats(),
                 't' => self.cycle_tonemap(),
@@ -6073,6 +6134,97 @@ impl Live {
         eprintln!("wipes are {name}");
     }
 
+    /// **Choose which renderer of the focused slot is the live one**, on the
+    /// grid.
+    ///
+    /// The first half of a variant pool, and the half that is true today:
+    /// several renderers over *one* simulation, in one Set, one of them folded
+    /// into the picture at a time. `docs/roadmap.md`'s pool is deck slots
+    /// differing at a layer slot, and the rest of it — an alternative that
+    /// differs at L1, priming it off air, sharing the geometry between them —
+    /// is not built. See the manual, "Selecting one renderer of a slot".
+    ///
+    /// **What it does not save.** The renderers that are not selected go on
+    /// drawing, each into a target of its own: at 1280x720 that is 7.03 MB and
+    /// a render pass apiece, every frame, whether or not anybody is looking at
+    /// them. That is what makes the selection a uniform write and a cut on the
+    /// beat rather than a build — cheap, and not free. The line printed says
+    /// how many are still drawing for exactly that reason.
+    ///
+    /// **Cycling from the selection that is armed, not from the one on
+    /// screen.** A press lands up to a bar later, so two presses inside a bar
+    /// read the same live edge and would both choose the same renderer — the
+    /// second press would do nothing and say it had. `Deck::selections_on` is
+    /// what makes the second press mean "the one after that".
+    ///
+    /// **One way, and it is stated rather than discovered**: there is no
+    /// position in the cycle that puts every renderer back. A Set comes up with
+    /// all of them folded and the first press leaves that state for good, which
+    /// is what "makes one live and the rest not" costs when the record names
+    /// one renderer. Restoring the fold is a different statement and wants its
+    /// own vocabulary — `Record::Preview` carries `null` for "the mix" and is
+    /// the shape it would take.
+    fn cycle_renderer(&mut self) {
+        let slot = self.focus;
+        let set = self.deck.slot(slot).set();
+        let count = set.inputs().len();
+        let composited = set.layering() == karakuri_engine::set::Layering::Composite;
+        // The live edges, read before anything is scheduled: with nothing
+        // selected yet every one of them is live, which is the state a Set
+        // builds in.
+        let live: Vec<usize> = set
+            .inputs()
+            .iter()
+            .enumerate()
+            .filter(|(_, input)| input.live)
+            .map(|(at, _)| at)
+            .collect();
+        if count < 2 {
+            eprintln!(
+                "slot {slot} draws with one renderer — there is nothing to choose between. \
+                 A second `.kir` on the `--set` for this slot is what makes a choice"
+            );
+            return;
+        }
+        if !composited {
+            eprintln!(
+                "slot {slot} overdraws its {count} renderers — they share one target and \
+                 meet through their own blend states, so there is no edge to silence. \
+                 `--merge {slot}` gives each a target of its own"
+            );
+            return;
+        }
+        let armed = self.deck.selections_on(slot).next().map(|s| s.renderer());
+        let next = match (armed, live.as_slice()) {
+            // The one waiting to land, so a second press inside the same bar
+            // moves past it rather than choosing it again.
+            (Some(at), _) => (at + 1) % count,
+            // Exactly one live is a selection that has landed.
+            (None, [at]) => (at + 1) % count,
+            // Every renderer live, which is what a Set comes up as, or none of
+            // them, which nothing here produces: start at the first.
+            (None, _) => 0,
+        };
+        let now = self.deck.signals().oscillator().beats();
+        let start = karakuri_engine::transition::quantise(now, self.quantum);
+        self.record(mix::select_record(slot, next, start));
+        eprintln!(
+            "slot {slot} renderer {next} of {count} from {} — {}",
+            self.quantum_name(),
+            // The cost, said on every press rather than in the manual alone: a
+            // selection that reads as free is one an operator will reach for
+            // where a rebuild was wanted.
+            if count == 2 {
+                "the other one still draws into a target of its own".to_string()
+            } else {
+                format!(
+                    "the other {} still draw into targets of their own",
+                    count - 1
+                )
+            }
+        );
+    }
+
     /// One scheduled move on a slot's fader, through the record.
     ///
     /// The start is resolved **here**, once, against the grid as it stands: the
@@ -6265,6 +6417,26 @@ impl Live {
             } => {
                 let t = schedule_from(&self.deck, slot, control, to, start, beats, curve);
                 self.deck.schedule(t);
+            }
+            // **Checked against the Set on screen**, which is the only place
+            // the answer is: the decoder knows the deck's size and not what is
+            // in it. A record from a session recorded against a Set with three
+            // renderers and replayed against one with two lands here.
+            mix::Change::Select {
+                slot,
+                renderer,
+                start,
+            } => {
+                let count = self.deck.slot(slot).set().inputs().len();
+                match renderer_in_range(slot, renderer, count) {
+                    Ok(()) => {
+                        self.deck
+                            .schedule_selection(karakuri_engine::transition::Selection::new(
+                                slot, renderer, start,
+                            ))
+                    }
+                    Err(refusal) => eprintln!("{refusal}"),
+                }
             }
             mix::Change::Residency { slot, level } => {
                 self.deck.set_residency(slot, level);
@@ -6496,6 +6668,13 @@ impl Live {
                     },
                     t.to()
                 );
+            }
+            // **And what is waiting to be chosen**, on the same terms and for
+            // the same reason: a selection armed for the next bar is invisible
+            // between the key and the music, and `r>1` is the only thing on
+            // screen that says a renderer is about to change.
+            for selection in self.deck.selections_on(slot) {
+                let _ = write!(self.status, "r>{} ", selection.renderer());
             }
             // The fader and the mode, **only when they are doing something**,
             // on the same terms as the transport below: a deck nobody has
@@ -8902,6 +9081,68 @@ mod live_save_tests {
         // arm that cannot happen is the one that stops saying so quietly.
         assert_eq!(no_such_slot(9, 4), "no slot 9: this deck holds slots 0-3");
         assert!(no_such_slot(0, 0).contains("holds none"));
+    }
+
+    /// **A renderer the slot does not draw with, refused in the shared words**,
+    /// and refused at the boundary rather than one past it.
+    ///
+    /// The sentence is pinned with an `assert_eq!` against
+    /// [`no_such_renderer`] rather than a `contains`, which is the lesson
+    /// [`no_such_slot`] paid for: four spellings of one refusal lived side by
+    /// side because every test asked only whether the range appeared in it.
+    /// Both surfaces that can meet this — the key press and a replayed `select`
+    /// record — go through [`renderer_in_range`], so pinning it here pins both.
+    #[test]
+    fn a_renderer_a_slot_does_not_draw_with_is_refused_with_the_range_it_missed() {
+        assert_eq!(
+            renderer_in_range(1, 3, 3).expect_err("renderer 3 of three"),
+            "no renderer 3: slot 1 draws with renderers 0-2"
+        );
+        // The boundary either side of it, which is where the off-by-one would
+        // live: the last renderer is `count - 1` and it is legal.
+        assert!(renderer_in_range(1, 2, 3).is_ok());
+        assert!(renderer_in_range(0, 0, 1).is_ok());
+        assert!(renderer_in_range(0, 1, 1).is_err());
+        // And the arm that cannot happen, said without underflowing.
+        assert_eq!(
+            no_such_renderer(0, 0, 0),
+            "no renderer 0: slot 0 draws with none"
+        );
+    }
+
+    /// **Every key `Live::key` acts on is in [`BINDINGS`]**, which is the only
+    /// thing standing between a control and being undiscoverable: there is no
+    /// on-screen UI, and this text is both what `--help` prints and what `h`
+    /// does.
+    ///
+    /// The characters rather than the lines, because a binding's description is
+    /// prose and its key is not.
+    #[test]
+    fn every_key_the_live_path_acts_on_is_documented() {
+        // The ones whose branch is a name rather than a character, listed here
+        // because the match arms they come from cannot be read as text.
+        for key in ["0-3", "space", "esc"] {
+            assert!(BINDINGS.contains(key), "`{key}` is not in the bindings");
+        }
+        // The key column of every line that has one: two spaces, the keys, then
+        // the gap before the description. Keys are documented in pairs where
+        // they come in pairs — `[ ]`, `u i` — so it is the column that is
+        // searched and not the first character of a line.
+        let documented: Vec<&str> = BINDINGS
+            .lines()
+            .filter_map(|line| line.strip_prefix("  "))
+            .filter(|line| !line.starts_with(' '))
+            .flat_map(|line| line.split("  ").next().unwrap_or_default().split(' '))
+            .collect();
+        for key in [
+            "[", "]", "\\", ";", "'", "m", "v", "f", "g", "x", "c", "z", "r", "n", "j", "t", "-",
+            "=", "`", "w", "y", "u", "i", "b", ",", ".", "o", "p", "a", "k", "s", "h",
+        ] {
+            assert!(
+                documented.contains(&key),
+                "`{key}` has no entry in the bindings"
+            );
+        }
     }
 
     /// **A save still being written when the run ends is waited for**, so the

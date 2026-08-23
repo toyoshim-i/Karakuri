@@ -994,6 +994,10 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             | Record::Transport { .. }
             | Record::Preview { .. }
             | Record::Transition { .. }
+            // A `select` names a renderer of a slot; a Set file cannot even say
+            // whether its renderers are folded, so there is nothing here for
+            // one to be about — see `Record::Select`.
+            | Record::Select { .. }
             | Record::Mask { .. }
             // A `save` is here for a second reason as well as that one: it
             // names a Set file, and this *is* the Set file reader. Obeying it

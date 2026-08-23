@@ -336,16 +336,16 @@ pub enum Record {
     },
     // -- The mix: durable state that belongs to the *session* -------------
     //
-    // Everything above describes one Set and goes into a Set file. These twelve
-    // describe the deck the Sets are playing on, and a Set file must not
-    // contain them — a Set does not know what fader it is under or whether it
-    // is on air, and one that carried its gain would restore that gain
+    // Everything above describes one Set and goes into a Set file. These
+    // thirteen describe the deck the Sets are playing on, and a Set file must
+    // not contain them — a Set does not know what fader it is under or whether
+    // it is on air, and one that carried its gain would restore that gain
     // wherever it was next loaded. They are state all the same, which is what
     // separates them from the three below: `is_set_state` says no to all
-    // fifteen of them and means two different things by it. (It says no to the
+    // sixteen of them and means two different things by it. (It says no to the
     // four metadata records further down as well, for a third reason that is
     // not about state at all — see the group comment above `Record::Meta`; the
-    // count here is these fifteen and not that nineteen. It read "seven" and
+    // count here is these sixteen and not that twenty. It read "seven" and
     // "twelve" from the commit that gave the mix a vocabulary until this one:
     // every record added since went in without the count moving, because a
     // prose count is not checked by anything. Both are counted off the
@@ -540,6 +540,50 @@ pub enum Record {
         beats: f64,
         /// `lin`, `pow2`, `sqrt` or `smooth`.
         curve: String,
+    },
+    /// **Which renderer of a composited deck slot is the live one**, from a
+    /// musical instant on.
+    ///
+    /// A record of its own rather than a `control` on [`Record::Transition`],
+    /// and the engine's `transition::Control` already carries the reason: the
+    /// things a transition moves are **positions**, and this is a **choice**.
+    /// "Half way to renderer 2" does not name a picture, which is why there is
+    /// no `beats` and no `curve` here — a selection is a cut, and a cut is a
+    /// fade of zero beats with nothing left for a curve to shape. The other
+    /// half of the argument is the address: every `transition` is about one
+    /// `(slot, control)` pair and a selection is about one renderer *inside*
+    /// the Set a slot is playing, which is a second index no control carries.
+    ///
+    /// **`start` alone, on `transition`'s terms**: an absolute position on the
+    /// session's beat count, because "on the next bar" is a different instant
+    /// depending on when it is read. Quantising happens once, where the
+    /// operator asked.
+    ///
+    /// **What it selects is an edge into the Set's L5**, so it says something
+    /// only where the slot was built to composite — `--merge N`. A slot that
+    /// overdraws has no L5 for an edge to go into, and this record is then
+    /// carried, replayed and without effect, exactly as `Set::set_input` is:
+    /// refusing it would make a replay fail on a line that describes a
+    /// performance that happened.
+    ///
+    /// **It cannot be folded into a Set file, and not only because it is the
+    /// session's.** `Layering` is deliberately not in the Set file at all, so
+    /// the Set a selection is about loads back as overdraw — which makes a
+    /// selection a property of the *run*, like a gain. See
+    /// `docs/manual.md`, "Selecting one renderer of a slot".
+    Select {
+        slot: u8,
+        /// Which renderer of that slot, in draw order — the same numbering
+        /// `--param L4:1:name=value` and a `slot` record's `index` use.
+        ///
+        /// **No wildcard and no `Option`.** Absent is not "every renderer": a
+        /// record that named none of them would be the un-selection this build
+        /// does not have — see the manual for why it is one-way — and a reader
+        /// meeting an absent field would have to guess which of the two it
+        /// meant.
+        renderer: u32,
+        /// The musical instant it lands on, in beats.
+        start: f64,
     },
     /// **Which slot is being auditioned**, or none of them for the mix.
     ///
@@ -846,7 +890,7 @@ enum Vocabulary {
 }
 
 impl Record {
-    /// Whether this record belongs in a Set file. **Nineteen say no, for three
+    /// Whether this record belongs in a Set file. **Twenty say no, for three
     /// different reasons, and keeping them apart is the point of the name** —
     /// it is `is_set_state` rather than `is_state` because most of what it
     /// refuses is state.
@@ -859,12 +903,14 @@ impl Record {
     ///   [`Record::Residency`], [`Record::Look`], [`Record::Canvas`],
     ///   [`Record::Procedure`],
     ///   [`Record::Transport`],
-    ///   [`Record::Preview`], [`Record::Mask`] and [`Record::Transition`] are
+    ///   [`Record::Preview`], [`Record::Mask`], [`Record::Transition`] and
+    ///   [`Record::Select`] are
     ///   the **session's**
-    ///   rather than any Set's. The last is the one that is not durable state
-    ///   at all but an *event* — a move scheduled at an instant — and it is
-    ///   here rather than beside `tick` because what it moves is the deck.
-    ///   Folding a session down to a Set file drops it for both reasons at
+    ///   rather than any Set's. The last two are the ones that are not durable
+    ///   state at all but *events* — a move and a choice, each scheduled at an
+    ///   instant — and they are
+    ///   here rather than beside `tick` because what they move is the deck.
+    ///   Folding a session down to a Set file drops them for both reasons at
     ///   once. A Set does
     ///   not know what fader it is under; one that carried its gain would
     ///   restore that gain wherever it was next loaded, which is a Set file
@@ -874,10 +920,16 @@ impl Record {
     ///   a Set renders at whatever size it is given, and one that carried a
     ///   canvas would make loading it resize every *other* Set in the deck.
     ///
-    ///   [`Record::Save`] joins that second group and is the newest member of
-    ///   it: it says a deck slot's material was written out, which is a fact
-    ///   about a performance and about no Set. A Set file carrying one would
-    ///   claim, every time it was loaded, that a save had just happened.
+    ///   [`Record::Save`] joins that second group: it says a deck slot's
+    ///   material was written out, which is a fact about a performance and
+    ///   about no Set. A Set file carrying one would claim, every time it was
+    ///   loaded, that a save had just happened.
+    ///
+    ///   [`Record::Select`] is the newest member, and it is in this group
+    ///   twice over. It says which renderer of a slot is live, which is a fact
+    ///   about a run; and the layering that makes the question mean anything
+    ///   is not in a Set file at all, so a Set loaded back has every renderer
+    ///   folded again and nothing for a stored selection to be about.
     ///
     /// - [`Record::Meta`], [`Record::ParamDecl`], [`Record::CapacityDecl`] and
     ///   [`Record::Emit`] are a **third file's** vocabulary: what an artifact
@@ -894,7 +946,7 @@ impl Record {
     /// jobs. It lives in `docs/ir-spec.md` under "Records with an effect
     /// outside the stream", where a replay reads it.
     ///
-    /// A session stream carries the fifteen of the first two groups and none of
+    /// A session stream carries the sixteen of the first two groups and none of
     /// the third. That is the difference between the two files, stated from
     /// this side, and it is what [`Record::is_metadata`] is a separate function
     /// for: `Store::write_set` refuses a `param_decl` through *that* question so
@@ -968,6 +1020,7 @@ impl Record {
             | Record::Transport { .. }
             | Record::Preview { .. }
             | Record::Transition { .. }
+            | Record::Select { .. }
             | Record::Mask { .. }
             | Record::Save { .. } => Vocabulary::Session,
             // The arm `is_set_state` was missing when it was a `matches!` over
@@ -1038,6 +1091,33 @@ mod tests {
         // And it is the session's rather than a Set's, for both reasons at
         // once: it is the deck's, and it is an event rather than state.
         assert!(!rec.is_set_state());
+    }
+
+    /// **A selection round-trips through the line the spec prints**, bytes and
+    /// all.
+    ///
+    /// `round_trip_verbatim` rather than `round_trip`, because the whole shape
+    /// of this record is what it does *not* carry: a `beats` or a `curve`
+    /// added later with a serde default would still compare equal to itself
+    /// and would change every session ever recorded. A selection is a cut and
+    /// has neither — see [`Record::Select`].
+    #[test]
+    fn a_selection_round_trips_through_the_line_the_spec_prints() {
+        let line = r#"{"t":"select","slot":1,"renderer":2,"start":64.0}"#;
+        let rec = round_trip_verbatim(line);
+        assert_eq!(
+            rec,
+            Record::Select {
+                slot: 1,
+                renderer: 2,
+                start: 64.0,
+            }
+        );
+        // The session's, on both of the counts `is_set_state` separates: it is
+        // the deck's, and it is an event rather than state. A Set file that
+        // carried one would also be claiming a layering it cannot record.
+        assert!(!rec.is_set_state());
+        assert!(!rec.is_metadata());
     }
 
     /// The wire line the spec prints, parsed and written back.

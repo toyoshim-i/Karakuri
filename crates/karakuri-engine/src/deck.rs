@@ -341,7 +341,7 @@ use crate::present::Present;
 use crate::probe::Probe;
 use crate::set::{DT, MAX_STEPS};
 use crate::swap::{Event, HotSwap, PROBE_RESOLUTION};
-use crate::transition::{Control, Transition};
+use crate::transition::{Control, Selection, Transition};
 use crate::transport::{Advance, Sync, Transport};
 use crate::video_source::VideoSource;
 
@@ -764,6 +764,13 @@ pub struct Deck {
     /// keeps them inside the determinism invariant the same way slot order
     /// does.
     transitions: Vec<Transition>,
+    /// Scheduled selections, at most one per slot — see
+    /// [`Deck::schedule_selection`]. Separate from `transitions` rather than a
+    /// third `Control`, for [`Selection`]'s reason: a choice is not a position.
+    /// One per slot and not one per `(slot, renderer)`, because a slot has one
+    /// live renderer and a second selection on it is an operator changing their
+    /// mind — the same rule `transitions` holds per control.
+    selections: Vec<Selection>,
     width: u32,
     height: u32,
 }
@@ -825,6 +832,8 @@ impl Deck {
             // on the replay path, where a scheduled move arrives inside the
             // per-frame callback rather than from a key press.
             transitions: Vec::with_capacity(MAX_SLOTS * Control::ALL.len()),
+            // At its bound too, and the bound is one per slot.
+            selections: Vec::with_capacity(MAX_SLOTS),
             width,
             height,
         }
@@ -1599,6 +1608,71 @@ impl Deck {
         self.transitions.iter().filter(move |t| t.slot() == slot)
     }
 
+    /// **Schedule which renderer of a slot's Set is the live one**, replacing
+    /// whatever selection was already waiting on that slot.
+    ///
+    /// The later one wins, on [`Deck::schedule`]'s terms: two selections armed
+    /// on one slot is an operator changing their mind, and honouring both would
+    /// show a renderer nobody is still asking for for as long as the two
+    /// instants are apart.
+    ///
+    /// **The renderer is not range-checked here**, and that is not an
+    /// oversight. What a slot's Set holds can change between the schedule and
+    /// the instant — a hot swap lands with however many renderers the new
+    /// sources declare — so the answer at the press is not the answer at the
+    /// beat. It is checked where it is applied, and a selection that no longer
+    /// names a renderer is dropped there. The *slot* is checked here, because
+    /// a deck does not change size.
+    pub fn schedule_selection(&mut self, selection: Selection) {
+        assert!(
+            selection.slot() < self.slots.len(),
+            "no slot {}: this deck holds slots 0-{}",
+            selection.slot(),
+            self.slots.len() - 1
+        );
+        self.selections.retain(|s| s.slot() != selection.slot());
+        self.selections.push(selection);
+    }
+
+    /// What is waiting to be selected on this slot, for a status line. On
+    /// [`Deck::transitions_on`]'s terms and for its reason: an armed choice is
+    /// invisible for up to a bar otherwise.
+    pub fn selections_on(&self, slot: usize) -> impl Iterator<Item = &Selection> {
+        self.selections.iter().filter(move |s| s.slot() == slot)
+    }
+
+    /// Every selection whose instant has arrived, applied, and dropped.
+    ///
+    /// **Applied once and dropped**, where a transition writes its control on
+    /// every frame of its length: there is nothing to interpolate, so a
+    /// selection that stayed would be a second writer of the edges for the rest
+    /// of the run — and the operator would find a per-input fader snapping back
+    /// every frame.
+    ///
+    /// A selection naming a renderer the Set no longer has is dropped without
+    /// writing anything, which is [`crate::mix::select`]'s answer rather than a
+    /// decision taken twice: the Set in a slot can change under a hot swap
+    /// between the schedule and the beat.
+    fn advance_selections(&mut self, beats: f64) {
+        for i in 0..self.selections.len() {
+            let s = self.selections[i];
+            if !s.due(beats) {
+                continue;
+            }
+            // `live_mut` rather than a queue write of its own: the edges are the
+            // Set's state, and the merge uniform is written from them wherever
+            // the Set next writes its uniforms — `prepare` on air, and
+            // `refresh_view` for an audition. A selection therefore reaches an
+            // off-air slot's picture the moment somebody looks at it, which is
+            // the only moment it could be seen.
+            self.slots[s.slot()]
+                .swap
+                .live_mut()
+                .select_renderer(s.renderer());
+        }
+        self.selections.retain(|s| !s.due(beats));
+    }
+
     /// Every scheduled move applied at this musical position, and the finished
     /// ones dropped.
     ///
@@ -1733,6 +1807,11 @@ impl Frame<'_> {
         // faders it moves. See `crate::transition`.
         let beats = self.deck.signals.oscillator().beats();
         self.deck.advance_transitions(beats);
+        // **Beside the transitions, and for the same reason**: a selection is
+        // scheduled on the same grid and has to land before anything draws the
+        // renderers it chooses between. It writes a Set's edges rather than a
+        // slot's fader, so the two cannot collide.
+        self.deck.advance_selections(beats);
 
         let signals = &self.deck.signals;
         let preview = self.deck.preview;

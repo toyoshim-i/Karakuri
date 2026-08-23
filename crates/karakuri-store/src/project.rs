@@ -144,6 +144,13 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         | Record::Transport { .. }
         | Record::Preview { .. }
         | Record::Transition { .. }
+        // **An event, like the `transition` above it, and dropped for a second
+        // reason of its own.** A selection says which renderer of a slot is
+        // live; whether that question means anything is decided by the
+        // layering, which is not a Set file record at all — so a folded
+        // selection would describe a Set that loads back with every renderer
+        // folded again.
+        | Record::Select { .. }
         | Record::Mask { .. }
         // **Nothing to fold, and nothing that could be.** A `save` names a Set
         // file that already exists; folding a session down to a Set file is

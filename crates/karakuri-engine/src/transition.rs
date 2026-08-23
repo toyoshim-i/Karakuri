@@ -233,6 +233,73 @@ impl Transition {
     }
 }
 
+/// **One scheduled choice**: which renderer of a slot's Set is the live one,
+/// from a musical instant on.
+///
+/// A type of its own beside [`Transition`], and the argument is
+/// [`Control`]'s own. The controls a transition moves are *positions* — a
+/// number an operator slides — and this is a **choice**: "half way to renderer
+/// 2" does not name a picture, so there is nothing for a duration or a curve
+/// to do. A selection is a cut, and a cut is a fade of zero beats with the
+/// interpolation taken out; giving it `beats` and `curve` fields that only
+/// ever hold 0 and `lin` would be a fade that is documented never to fade.
+///
+/// The other half is the address. A transition is one per `(slot, control)`
+/// and is cancelled by that pair; a selection names a slot *and* an index
+/// inside the Set that slot is playing, which is a second address no `Control`
+/// carries and no `to: f32` could hold without spelling an index as a float.
+///
+/// **What it does not schedule is anything about cost.** The renderers that
+/// are not selected go on drawing — see
+/// [`crate::set::Set::select_renderer`], which is what this lands on.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Selection {
+    slot: usize,
+    renderer: usize,
+    start: f64,
+}
+
+impl Selection {
+    /// A selection landing at `start` beats. `start` is absolute, on
+    /// [`Transition::new`]'s terms and for its reason.
+    pub fn new(slot: usize, renderer: usize, start: f64) -> Selection {
+        Selection {
+            slot,
+            renderer,
+            // A start nothing can reach is a selection that never lands and
+            // never leaves the queue. The record path refuses these before they
+            // get here, as it does for a transition; this is the backstop.
+            start: if start.is_finite() { start } else { 0.0 },
+        }
+    }
+
+    pub fn slot(&self) -> usize {
+        self.slot
+    }
+
+    pub fn renderer(&self) -> usize {
+        self.renderer
+    }
+
+    pub fn start(&self) -> f64 {
+        self.start
+    }
+
+    /// Whether this musical position is at or past the instant it lands on.
+    ///
+    /// **At, and the boundary is `>=`**, which is [`Transition::value_at`]'s
+    /// rule: the instant itself belongs to the move. A selection scheduled on
+    /// beat 10 has to have happened *at* beat 10.
+    ///
+    /// There is no "before it starts, leave it alone" case to answer here,
+    /// which is the whole difference from a transition: a fade has a value at
+    /// every instant of its length and has to decline to write one before it
+    /// begins, where a selection writes once and is done.
+    pub fn due(&self, beats: f64) -> bool {
+        beats >= self.start
+    }
+}
+
 /// The next musical instant on a grid of `quantum` beats, at or after `beats`.
 ///
 /// `quantum` of 0 is "now" and returns `beats` — an operator who wants a cut
@@ -380,6 +447,39 @@ mod tests {
         // And a grid that has gone backwards past zero still lands on a
         // boundary rather than off the grid.
         assert_eq!(quantise(-1.5, 1.0), -1.0);
+    }
+
+    /// **A selection waits for the grid.** Scheduled a beat and a quarter into
+    /// a bar, on a bar quantum, it is not due at the press, not due at the
+    /// next beat, and due exactly on the bar — which is the whole reason it is
+    /// scheduled rather than applied where the key was pressed.
+    #[test]
+    fn a_selection_lands_on_the_grid_rather_than_when_it_was_asked_for() {
+        let now = 9.25;
+        let s = Selection::new(1, 2, quantise(now, 4.0));
+        assert_eq!(s.start(), 12.0);
+        assert!(!s.due(now));
+        assert!(!s.due(10.0));
+        assert!(!s.due(11.999));
+        // The instant itself belongs to the move, exactly as a cut's does.
+        assert!(s.due(12.0));
+        assert!(s.due(99.0));
+        // And a quantum of zero is "now", which is what an operator who wants
+        // it immediately reaches for.
+        assert!(Selection::new(1, 2, quantise(now, 0.0)).due(now));
+    }
+
+    /// **A start nothing can reach is a selection that never lands**, and
+    /// unlike a transition nothing else would ever clear it: there is no
+    /// `finished` past the end, only a queue entry waiting for a beat that
+    /// cannot arrive.
+    #[test]
+    fn a_selection_start_that_is_not_a_number_becomes_one() {
+        for start in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let s = Selection::new(0, 0, start);
+            assert!(s.start().is_finite(), "{start}");
+            assert!(s.due(s.start()), "{start}: never lands");
+        }
     }
 
     /// Every control round-trips its own name, so one added to the enum and not

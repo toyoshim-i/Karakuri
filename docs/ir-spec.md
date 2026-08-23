@@ -845,6 +845,12 @@ The same distinction decides whether beat-resolution variant selection is afford
 switching between closed-form alternatives costs nothing, while keeping three accumulating
 alternatives selectable means three simulations resident.
 
+**That is the distinction across *deck slots*, and it is not the one the built control turns
+on.** Selecting between renderers of one Set — the `select` record below — is neither case:
+they draw over a simulation that is already running and hold no state of their own, so the
+choice is a uniform write whether the material is closed-form or accumulating. What it costs
+is a frame-sized target and a pass for every alternative, selected or not.
+
 ### Blocks
 
 ```
@@ -1983,8 +1989,8 @@ without either appearing in the file.
   both records now carry the way `procedure` does — `--param L4:1:exposure=2.0`,
   `--bind index=1`.
 - Unknown `t` values are ignored, for forward compatibility.
-- **`gain`, `opacity`, `blend`, `mask`, `transition`, `preview`, `residency`, `look`,
-  `canvas`, `procedure` and `transport` are not in this list and must never be.** They are the session's
+- **`gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `preview`, `residency`,
+  `look`, `canvas`, `procedure` and `transport` are not in this list and must never be.** They are the session's
   rather than any Set's — see the session stream format. `canvas` is the sharpest case: a
   Set renders at whatever size it is handed, so a Set file that carried one would resize
   every *other* Set in the deck by being loaded.
@@ -2248,11 +2254,11 @@ session tempo, which **v0.2 had no record for**.
 Neither is state, so neither appears in a Set file: both are what a frame *saw* or
 *decided*, and the tempo belongs to the session rather than to any one Set.
 
-### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `preview`, `residency`, `look`, `canvas`, `procedure` and `transport`
+### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `preview`, `residency`, `look`, `canvas`, `procedure` and `transport`
 
 A session that carried the material and not the performance would replay the same Sets, on
 the same beat, all at whatever gain they happened to start at, with nothing ever going on
-or off air. Eleven records carry what an operator moves — ten states and one event:
+or off air. Twelve records carry what an operator moves — ten states and two events:
 
 ```ndjson
 {"t":"gain","slot":0,"value":0.75}
@@ -2261,6 +2267,7 @@ or off air. Eleven records carry what an operator moves — ten states and one e
 {"t":"preview","slot":2}
 {"t":"mask","slot":1,"kind":"linear","angle":0.0,"position":0.0,"softness":0.02}
 {"t":"transition","slot":1,"control":"mask","to":1.0,"start":64.0,"beats":8.0,"curve":"smooth"}
+{"t":"select","slot":0,"renderer":1,"start":64.0}
 {"t":"residency","slot":1,"level":"priming"}
 {"t":"look","op":"aces","exposure":1.2,"white_point":4.0}
 {"t":"canvas","width":1920,"height":1080}
@@ -2320,6 +2327,30 @@ replaces it.
 is no `crossfade` record and there should not be: a crossfade is two of these sharing a
 start and a length, a fade-in is one, and a cut is one with a duration of zero. The
 first-class thing is the move.
+
+**`select` is which renderer of a slot's Set is the live one**, from a musical instant on.
+The other scheduled event, and a record of its own rather than a `control` on `transition`,
+for the reason that vocabulary already states: the things a transition moves are
+**positions**, and this is a **choice**. "Half way to renderer 2" does not name a picture, so
+there is no `beats` and no `curve` — a selection is a cut, and a cut is a fade of zero beats
+with nothing left to interpolate. `start` is absolute, on `transition`'s terms and for its
+reason.
+
+`renderer` is an index in draw order, the numbering `--param L4:1:key=value` and a `slot`
+record's `index` use. It says something only where the slot was built to composite: an
+overdrawing slot's renderers share one attachment and have no edges into an L5, so a `select`
+on one is carried, replayed and without effect — which is the ordinary case rather than an
+exotic one, because a Set file cannot record its layering and one loaded back overdraws. A
+`renderer` the slot does not draw with is refused where the record is applied rather than
+where it is decoded, since how many renderers a slot has is a property of the Set in it and
+can change under a hot swap between the schedule and the beat.
+
+**What it selects between is one geometry drawn several ways.** The renderers are L4s over
+one simulation, so this is the half of a variant pool that a Set can hold — see
+`docs/roadmap.md`, "Variant pools", for the other half and for why the two halves' costs are
+different costs. And it is the *fold* that skips an unselected renderer, never the draw: every
+one of them still fills a frame-sized target of its own, which is what makes the choice a
+uniform write and what it costs to have it be one.
 
 **`mask` is what shape of the frame a layer reaches.** It multiplies that layer's
 opacity per texel, which is what makes it a mask rather than a second fader: everything
@@ -2440,8 +2471,11 @@ at; a reader meeting these records builds afresh, so `t` restarts there. A swap 
 defined to start cold and therefore replays exactly — only a rollback differs, and a
 rollback means the candidate was over budget, which is an exceptional frame already.
 
-**These eleven stay out of a Set file**, ten because they are state that is the
-session's rather than any Set's and `transition` because it is not state at all. That is a second
+**These twelve stay out of a Set file**, ten because they are state that is the
+session's rather than any Set's and `transition` and `select` because they are not state at
+all.  `select` is out for a second reason of its own: a Set file cannot say whether a slot
+composites its renderers — `--merge` is not one of its records — so there is nothing in one
+for a selection to be about. That is a second
 reason for a record to be absent from a Set file and it is not the `audio` one: there is
 something to fold here, and this is not the projection it folds into. A Set file that
 restored a gain would apply it to whatever slot it was next loaded into, and one whose
