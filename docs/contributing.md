@@ -98,7 +98,9 @@ cargo test -p karakuri-cli --bins -- --skip gpu::   # `karakuri-cli` has no libr
 ```
 
 The GPU tests are 284 of 997 and most of the time the whole workspace costs, so this is
-nearly all of the suite for a fraction of the wall clock — about 4 s against 78 s.
+nearly all of the suite for a fraction of the wall clock — about 4 s against 60 s.
+(The first run after a clean rebuild is slower, around 78 s, while the freshly written
+binaries page in; it settles after that.)
 `--skip` is a substring match on the full test path, which is why the module is named
 `gpu` and nothing else is.
 
