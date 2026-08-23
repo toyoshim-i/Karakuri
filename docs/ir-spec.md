@@ -49,7 +49,25 @@ kind Field     // a signed distance at a point
 All five are built. `L5` is **not** among them and should not be: a `kind` says what a
 procedure *lowers to*, and an L5 has no code to lower since the compositing is fixed — so
 there is no `kind L5` file, and `crate::node::Merge` is the node. See
-[L5](#l5--built) and `docs/roadmap.md`.
+[L5](#l5--built).
+
+**As signatures, the five kinds are the layer algebra**, which is this specification's own
+and not a summary of anything outside it:
+
+```
+L1    : ()                 -> Geometry
+L2    : Geometry           -> Geometry
+L3    : ()                 -> Camera
+L4    : (Geometry, Camera) -> Texture
+Field : vec3               -> float
+```
+
+Two declarations break L2's endomorphism and neither moves it out of its slot position:
+`amplify` breaks it on the *count* axis, one element in and several out, and `uses <name> :
+Geometry` breaks it on the *arity* axis — see [a geometry slot](#a-geometry-slot-l2-only)
+and [amplify](#amplify-l2-only). And `L3 : () -> Camera` says what an L3 *produces* rather
+than what it may read — [L3 — the camera](#l3--the-camera) is where that line is drawn and
+where the signature is qualified.
 
 **`Field` is the mirror of that argument**, which is why it is a kind and has no node: it
 has *only* code to lower. What it lowers to is a WGSL function spliced into whichever
@@ -988,9 +1006,9 @@ stating because the shader says otherwise. `source == only` compares two
 uniforms: the same value in every lane, the cheapest branch a GPU has — and
 also a constant for the whole instance, which makes this an on/off for the
 instance rather than a mask across the material. The honest optimisation is not
-to instantiate the node in the chains it excludes at all. That is recorded in
-`docs/roadmap.md` with the trigger for doing it; it is an optimisation and not a
-change of meaning.
+to instantiate the node in the chains it excludes at all. Whether an implementation does
+that is not something this language says: it is an optimisation and not a change of
+meaning, and an author writes the same `.kir` either way.
 
 ### The `camera` block (L3)
 
@@ -1034,8 +1052,9 @@ author had to remember. `near` and `far` are not decorative — see the note und
 **It reads the clock, `dt`, and its params, and nothing else.** No `seed`, because that is a
 per-element value and an L3 runs once a frame over no element. No attributes, and `consumes`
 is refused rather than ignored: an L3 *will* read geometry, and what it will read is a
-reduction or element zero — see [What an L3 can point at](#what-an-l3-can-point-at-a-reduction-or-element-zero) —
-which is addressing this language does not have yet. `dt` is there although nothing can use it
+reduction or element zero — see
+[What an L3 can point at](#what-an-l3-can-point-at-a-reduction-or-element-zero--not-built)
+— which is addressing this language does not have yet. `dt` is there although nothing can use it
 yet, because an L3 is allowed to hold state and smoothing is written against a step.
 
 `eye` is also readable, as an ambient, in a marching L4's `fragment` block. One concept,
@@ -1100,11 +1119,11 @@ viewpoint drawn two ways — and what is refused is two edges into one *slot*, w
 renderer with two answers about where it is looking from. A renderer may declare at most one
 Camera slot: a frame drawn from two viewpoints is two renderers.
 
-**What an L4 still cannot read is the other four values a camera writes** — `target`, `up`,
+**What an L4 still cannot read is the other five values a camera writes** — `target`, `up`,
 `fov_y`, `near` and `far`. Those are a new capability rather than a new spelling for an old
-one, and they are deferred for the reason [L3 — the camera](#l3--the-camera) gives: an L3
-produces state, not a matrix, and handing a renderer the state is a decision about what a
-camera *is* to a renderer. See `docs/roadmap.md`.
+one, and they are not in the language today, for the reason
+[L3 — the camera](#l3--the-camera) gives: an L3 produces state, not a matrix, and handing a
+renderer the state is a decision about what a camera *is* to a renderer.
 
 ### The `field` block
 
@@ -1153,8 +1172,8 @@ of the caller. Charging it per element would be a rate against a quantity a fiel
 have, and would give it a ceiling that says nothing about what evaluating it costs anybody.
 The number that has to fit under a ceiling is the caller's with this multiplied into it.
 
-**Why `Field` is a `kind` and has no node.** `docs/roadmap.md` settled that a `kind` says
-what a procedure *lowers to*, and that an L5 has no `kind` because it has no code to lower.
+**Why `Field` is a `kind` and has no node.** A `kind` says what a procedure *lowers to*, and
+an L5 has no `kind` because it has no code to lower.
 A field is the mirror: it has only code to lower. So it has a file and no node, needs no
 buffer and no pass, and takes no position in the chain — which is also why it introduces no
 new syntactic category. There is no user-defined function here; there is one more kind, one
@@ -2412,8 +2431,9 @@ property of the run, like a gain, until a session record says otherwise.
 
 **What it selects between is one geometry drawn several ways.** The renderers are L4s over
 one simulation, so this is the half of a variant pool that a Set can hold — see
-`docs/roadmap.md`, "Variant pools", for the other half and for why the two halves' costs are
-different costs. And it is the *fold* that skips an unselected renderer, never the draw: every
+[ADR-0148](adr/0148-a-variant-pool-is-a-set-and-the-deck-stays-a-mixer.md) for the other
+half, alternatives that differ at L1, and for why the two halves' costs are different
+costs. And it is the *fold* that skips an unselected renderer, never the draw: every
 one of them still fills a frame-sized target of its own, which is what makes the choice a
 uniform write and what it costs to have it be one.
 
@@ -2434,7 +2454,7 @@ a corner half-lit would be a wipe that stopped short.
 
 What is deliberately not here is a mask read from a **texture** — an arbitrary shape, or
 another layer's luminance. That needs somewhere for the shape to come from, and the answer
-is M3's `Field` rather than a third `kind`.
+is a [`Field`](#the-field-block) rather than a third `kind`.
 
 **`preview` is which slot the output is showing**, or `null` for the mix. It is not a mix
 control — it changes nothing about how the Sets are combined — and it is in the stream for
@@ -2623,11 +2643,12 @@ them means writing into a store, which is the effect the rule above exists to ke
 
 Everything above this line is implemented and tested. **Everything below carries its own
 state in its heading**, because this section has outlived the sentence that used to open it:
-a heading ending in *"— built"* is implemented and tested like the rest of the document, and
-one carrying a milestone is design that has been settled but not built — no parser accepts
-it, no checker enforces it, no generator emits it.
+a heading ending in *"— built"* is implemented and tested like the rest of the document, one
+ending in *"— not built"* is design that has been settled and that nothing implements — no
+parser accepts it, no checker enforces it, no generator emits it — and one ending in
+*"— partly built"* says in its opening line which half is which.
 
-The unbuilt half is written down because later milestones depend on these shapes and because
+The unbuilt half is written down because later work depends on these shapes and because
 deciding them now keeps V1 from foreclosing them. The built half stays here rather than
 moving up because the reasoning is what makes each of them worth reading, and cutting a
 section into its rules and its argument would put the two in different places.
@@ -2638,18 +2659,18 @@ so the four sections naming them are built.
 
 ### L2 and L3 — built
 
-The layer algebra has been in `docs/roadmap.md` since before there was a compiler, and
-everything about L1 and L4 was decided by building them. L2 and L3 have been "later" for
-long enough that the vagueness became load-bearing: the engine is being split so that `Ln`
-is a node, and the shape of an L2 node and an L3 node constrains that split now rather than
-when they are written. What follows is what is decided, why, and what is not.
+The [layer algebra](#kind) was settled before there was a compiler, and everything about L1
+and L4 was decided by building them. L2 and L3 have been "later" for long enough that the
+vagueness became load-bearing: the engine is being split so that `Ln` is a node, and the
+shape of an L2 node and an L3 node constrains that split now rather than when they are
+written. What follows is what is decided, why, and what is not.
 
 #### L3 — the camera
 
 **What crosses the edge is camera state, not a matrix**, and the reason is multiplicity.
-`docs/roadmap.md` says L3-multiple is a weighted blend of trajectories — an orbit and a
-handheld rig mixed at 0.3 — and a lerp of two view-projection matrices is not a projection
-of anything. So an L3 node produces the six numbers a camera *is*:
+Mixing two L3s is a weighted blend of trajectories — an orbit and a handheld rig at 0.3 —
+and a lerp of two view-projection matrices is not a projection of anything. So an L3 node
+produces the six numbers a camera *is*:
 
 ```
 eye, target, up, fov_y, near, far
@@ -2735,9 +2756,9 @@ nothing between frames. Four things follow, and the fourth is why it is stated a
 - **Priming stays an L1 question.** Warming a Set means warming what accumulates, and
   nothing else does.
 - **It makes fusion legal later.** A stateless stage can be composed into its consumer at
-  codegen time, which is what `docs/roadmap.md`'s graph compiler means by fusing `Field`
-  chains. Left unstated, fusion would rest on a reading of the language rather than on a
-  rule — the same distinction `fullscreen`'s empty `consumes` draws.
+  codegen time, the way a `Field` is spliced into whichever procedures evaluate it. Left
+  unstated, fusion would rest on a reading of the language rather than on a rule — the same
+  distinction `fullscreen`'s empty `consumes` draws.
 
 **An L2 cannot `kill()`.** It follows from statelessness but is worth stating separately,
 because what it buys is specific: liveness is decided upstream, so compaction runs once
@@ -2750,9 +2771,8 @@ rebuilt every frame, single-buffered and never compacted — which is what
 both. The alternative is to fuse each L2 into whatever reads it, which costs no memory and
 **pays the L2's cost once per reader** — so a heavy noise deformation read by three
 renderers costs three times. Materialising pays once regardless of how many nodes read it,
-which is the shape that survives the thing this milestone is for. Fusion is then an
-optimisation the graph compiler may apply, in the place the roadmap already puts it, rather
-than the only implementation there is.
+which is the shape that survives a Set that is a graph. Fusion is then an optimisation a
+graph compiler may apply, rather than the only implementation there is.
 
 **`emit` and `consumes` are both L2 declarations.** An L2's `emit` widens what is available
 *downstream of it* rather than what its L1 wrote — the derived buffer is the L2's, not the L1's — so an L2
@@ -2806,7 +2826,7 @@ camera fills it, and two L4s bound to one camera are one viewpoint drawn two way
 needed no rule — `SlotBoundTwice` forbids two edges into one *slot*, which is as right for a
 camera as for a geometry. See [Several cameras](#several-cameras).
 
-#### What an L3 can point at: a reduction, or element zero — M4
+#### What an L3 can point at: a reduction, or element zero — not built
 
 Two things, and the second is cheaper *and* more meaningful than this document claimed a day
 ago.
@@ -2858,9 +2878,9 @@ Two consequences worth stating rather than discovering:
 A Set publishes every `param` every procedure in it declares, addressed by the node that
 declares it. With one L1 and one renderer that is about nine controls and the addressing is
 invisible — a bare name still reaches them, because it reaches every node that declares it.
-With the graph M3 introduces — several pipelines, L2s, an L3, a nested L5 — it is twenty-five, most of which
-are **authoring decisions the Set's author already made** rather than anything an operator
-wants under their hands at two in the morning.
+With a graph — several pipelines, L2s, an L3, a nested L5 — it is twenty-five, most of
+which are **authoring decisions the Set's author already made** rather than anything an
+operator wants under their hands at two in the morning.
 
 So a Set declares an interface: **which of its internal controls appear on the console, under
 what names, and over what part of their declared range.** This is the node-group analogy the
@@ -2924,9 +2944,9 @@ choice about attention, not about authority.**
 `SetError::ParamCollision` used to refuse a pair of procedures that both declare a param of
 one name, because `Set::params` was one flat map keyed by name across the whole Set. Two
 renderers over one geometry declare `exposure` almost every time — every L4 in `examples/`
-does — so the check as written forbade exactly what M3 is for. **The engine now keys values
-by the node that declares them and the error is deleted**, which is the internal half of the
-address the graph needs anyway.
+does — so the check as written forbade exactly what a Set of several nodes is for. **The
+engine now keys values by the node that declares them and the error is deleted**, which is
+the internal half of the address the graph needs anyway.
 
 What that leaves for an interface is the external half, and it is the interesting one.
 Internally a control is node-and-name. Externally it has the name the Set gave it — so two
@@ -2968,8 +2988,8 @@ where the author left them.
 
 ### L5 — built
 
-L5 has been the deck's mix since M2 and has never been a `kind`. Under the node model it
-becomes one, and **it has two roles rather than two implementations**:
+L5 is the deck's mix and has never been a `kind`. Under the node model it becomes one, and
+**it has two roles rather than two implementations**:
 
 - **The console.** The top-level L5 is what an operator sees and mixes on — gain, opacity,
   blend mode and mask per input, with a surface attached to every one of them. This is what
@@ -3034,10 +3054,10 @@ renderers in draw order and `crates/karakuri-engine/tests/overdraw.rs` asserts t
 composition in pixels. Two scenes cross-fading is the second, and it costs 7.03 MB an input
 at 1280x720 — which is what compositing costs, asked for explicitly by placing a node.
 
-An earlier draft of `docs/roadmap.md` recommended the first shape for *every* case and said
-so knowingly — *"it is also the answer that becomes wrong first: a real graph has nodes that
-consume textures, and then the combine is a node"*. It was not wrong; it was the rule for one
-of the two shapes, stated as if it were the rule for both.
+The first shape was once the recommendation for *every* case, with the objection to it
+already attached: it is the answer that becomes wrong first, because a real graph has nodes
+that consume textures, and then the combine is a node. That was not wrong; it was the rule
+for one of the two shapes, stated as if it were the rule for both.
 
 #### What a Set is, exactly
 
@@ -3047,7 +3067,7 @@ L4s) and may merge (several L4s into an L5, several geometries into one node); a
 takes one texture, so a Set has one output; and "grouping" is not a hierarchy level but a
 name drawn around some nodes.
 
-### Metadata file format — M4
+### Metadata file format — partly built
 
 **Four of the nine records below are written and one tool reads them back; five have no
 producer.** Both of the paths that store an artifact *from a compile* write a
@@ -3080,8 +3100,8 @@ on — and `--list-sets` prints the same answer at a terminal. **What a node is 
 function's answer**, `setfile::node_called`, so a name read in a listing is the name found on
 opening that Set.
 
-What is still M4's is what the *cards* would let a library do and cannot yet. Search is over
-node names because that is what a card can be searched on today: `origin` and `tag` have no
+What is still missing is what the *cards* would let a library do and cannot yet. Search is
+over node names because that is what a card can be searched on today: `origin` and `tag` have no
 producer, so nothing finds a Set by the prompt that made it or by a word somebody filed it
 under. Nothing groups, and nothing walks genealogy, which needs a `parent` that nothing
 writes.
@@ -3099,9 +3119,9 @@ particular has to start being recorded with the first generated artifact or the 
 has a hole at its root — which is a demand on whatever writes the first one, not a line to
 write empty now.
 
-The store is content-addressed from M1, which is half of what M4 asks of it. This is the
+The store is content-addressed, which is half of what a library needs of it. This is the
 producing half of the other, with a lookup over one Set and a listing over all of them;
-what is still M4's is grouping and genealogy, and a search over more than a node's name.
+what is still missing is grouping and genealogy, and a search over more than a node's name.
 
 Artifact metadata lives in a separate file, not in the `.kir` header. The `.kir` stays
 purely a source file that a human or an LLM can read and edit.
@@ -3178,10 +3198,11 @@ for the two vocabularies to be disjoint in practice; they have to be disjoint by
 carries `{"t":"preview","slot":2}` — two shapes under one `t`, which is what the rule
 immediately above forbids, and a *silent* collision rather than a loud one: the deck
 record's `slot` is optional, so a decoder holding one vocabulary reads the metadata line as
-the deck's and drops the `path` without a word. `thumbnail` is what `docs/roadmap.md`
-already calls this under M4's Adds — *"distinct from the live slot preview built in M2 —
-that one renders a running instance, this one is a stored asset"* — so they were two words
-for two things everywhere but here. **The metadata name is the one that moved**, because
+the deck's and drops the `path` without a word. `thumbnail` is the name the stored asset
+carries everywhere else — the store keeps one under `thumbnails/` — and it draws the
+distinction the collision was hiding: the deck's `preview` renders a running instance, a
+thumbnail is a stored asset. They were two words for two things everywhere but here.
+**The metadata name is the one that moved**, because
 nothing writes or reads it and no file anywhere holds that line, where the deck's `preview`
 is written into session streams that exist on disk and renaming *that* would break reading
 them. A suffix — `preview_path` — was the other candidate and was rejected: a suffix says
@@ -3639,9 +3660,9 @@ false of the specification. So the sections above now state what is *decided* as
 is not, and a reader who finds no gaps here should read them rather than conclude there is
 nothing to look at.
 
-The last one standing was **how two merged geometries keep their identities apart**, carried
-in `docs/roadmap.md` since before there was a compiler. It is answered above under "Multiple
-L1 sources, and `source`": per-source zero-based `seed`, a per-source `source` value — a
+The last one standing was **how two merged geometries keep their identities apart**, open
+since before there was a compiler. It is answered above under "Multiple L1 sources, and
+`source`": per-source zero-based `seed`, a per-source `source` value — a
 uniform rather than the implicit attribute that section first called it — whose value is
 **assigned and recorded rather than derived**, a per-source hash salt that is the same value,
 and a name written where a source is used for anything that wants to mask on it.
