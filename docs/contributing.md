@@ -97,10 +97,18 @@ cargo test -p karakuri-engine --lib -- --skip gpu::
 cargo test -p karakuri-cli --bins -- --skip gpu::   # `karakuri-cli` has no library target
 ```
 
-The GPU tests are 301 of 997 and about 99% of the roughly 306 seconds the whole workspace
-costs, so this is nearly all of the suite for nearly none of the time. `--skip` is a
-substring match on the full test path, which is why the module is named `gpu` and nothing
-else is.
+The GPU tests are 284 of 997 and most of the time the whole workspace costs, so this is
+nearly all of the suite for a fraction of the wall clock — about 4 s against 78 s.
+`--skip` is a substring match on the full test path, which is why the module is named
+`gpu` and nothing else is.
+
+**Do not turn incremental compilation back on** without reading
+[ADR-0144](adr/0144-the-test-suites-largest-cost-was-a-directory-listing.md). It leaves
+~865 object files per rebuild in `target/debug/deps/`, and macOS makes every test binary
+run from that directory pay a full listing of it before it can reach a GPU. That one fact
+was worth more than every other change to this suite put together: 373 s to 90 s for
+`karakuri-engine` alone. If the suite ever starts creeping up again, count the files there
+first — `ls target/debug/deps | wc -l` — before looking at any test.
 
 `cargo test -p <crate>` keeps its exact meaning — everything runs, and the pre-push hook is
 untouched. The filter only ever subtracts. `#[ignore]` would have inverted that default, so
@@ -128,7 +136,7 @@ cargo test --workspace
 ### When the work is split across several hands
 
 Several agents or sessions working at once multiply whatever each of them runs: a suite that
-costs four minutes costs it *per worker*, mostly to re-answer a question somebody else already
+costs a minute costs it *per worker*, mostly to re-answer a question somebody else already
 answered. The rule in §2 does not change, but who applies it does.
 
 - **The side directing the work runs the tests.** A worker says what it changed and which test

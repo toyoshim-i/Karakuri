@@ -24,5 +24,25 @@ serde_json = "1"
 # crates debuggable.
 opt-level = 1
 
+# **Off, because the artifacts it leaves behind cost more than it saves.**
+# An incremental rebuild writes ~865 `*.rcgu.o` files into `target/debug/deps/`
+# under fresh hashes and removes none of the old ones, so that directory grows
+# without bound: a month of ordinary work left 622,832 object files in it.
+#
+# That matters here for a reason that has nothing to do with compiling.
+# `cargo test` runs every test binary out of `target/debug/deps/`, and
+# `MTLCreateSystemDefaultDevice` — reached by the first `Gpu::headless()` in a
+# process — asks CoreFoundation for the main bundle, which iterates the
+# executable's whole directory looking for `Contents`/`Resources`/`Support
+# Files`. The cost is O(entries): 0.036s beside 1 file, 1.2s beside 100k,
+# and 10.6s beside 626,948. With 30 GPU-touching test binaries each paying it
+# once, that was the single largest cost in the test suite — larger than every
+# test in it put together.
+#
+# Turning this off costs about 8% on a rebuild (18.8s to 20.2s for
+# `karakuri-engine --tests`) and holds the directory at a steady size.
+# See ADR-0144.
+incremental = false
+
 [profile.dev.package."*"]
 opt-level = 3
