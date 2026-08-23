@@ -391,7 +391,7 @@ pressed it. See the keys below.
 | `a` | size the window to the canvas, 1:1 |
 | `k` | **keep the focused slot** — write what it is playing right now as a Set file |
 | `s` | print the status line |
-| `h` | print the keys |
+| `h` `?` | print the keys |
 | `esc` | quit |
 
 **`k` is the one that saves your work mid-set.** It writes the focused slot's material as a

@@ -673,7 +673,7 @@ keys:
              line saying where it went arrives when it lands. `--save-set` is
              the same file written before a run instead of during one
   s          print the status line now
-  h          print these bindings
+  h ?        print these bindings
   esc        quit
 ";
 
@@ -9952,39 +9952,373 @@ mod live_save_tests {
         );
     }
 
+    /// This file's own source, at compile time. The scanner below reads
+    /// [`Live::key`] out of it rather than being told what the keys are — the
+    /// shape `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs` set: read
+    /// the checked-in source, and carry a floor so the scan cannot silently
+    /// match nothing.
+    const SOURCE: &str = include_str!("main.rs");
+
+    /// How [`BINDINGS`] spells the arms whose pattern is a name rather than a
+    /// character. Nothing in `Key::Named(NamedKey::Escape)` says `esc`, so this
+    /// one mapping cannot be derived and is stated — but it is stated as a
+    /// *table*, and a `NamedKey` arm missing from it fails
+    /// [`every_key_the_live_path_acts_on_is_documented`] by name rather than
+    /// being passed over. That is the whole difference from the list of
+    /// characters that used to be here: a named key added tomorrow is a test
+    /// failure that says which key, not a silence.
+    const NAMED_KEY_SPELLINGS: &[(&str, &str)] = &[("Escape", "esc"), ("Space", "space")];
+
+    /// The end of the character literal starting at `at`, or `None` if what is
+    /// there is not one.
+    ///
+    /// A lifetime has to be told from a literal — `'a` is one, `'a'` and `'\n'`
+    /// are the other — because getting it wrong lets a `'"'` open a string that
+    /// swallows the rest of the file. `'\''` is why an escape cannot simply
+    /// look for the next quote: the escaped quote *is* the next quote.
+    fn char_literal_end(src: &str, at: usize) -> Option<usize> {
+        let b = src.as_bytes();
+        if b.get(at) != Some(&b'\'') {
+            return None;
+        }
+        if b.get(at + 1) == Some(&b'\\') {
+            // A two-byte escape — `\\`, `\'`, `\n`, `\0` — closes at `at + 3`.
+            if b.get(at + 3) == Some(&b'\'') {
+                return Some(at + 4);
+            }
+            // `\x41`, `\u{2026}`: the first quote after the escape. Bounds
+            // first, so a file ending mid-literal is `None` and not a panic.
+            if at + 3 > src.len() {
+                return None;
+            }
+            return src[at + 3..].find('\'').map(|n| at + 3 + n + 1);
+        }
+        let c = src[at + 1..].chars().next()?;
+        let close = at + 1 + c.len_utf8();
+        (b.get(close) == Some(&b'\'')).then_some(close + 1)
+    }
+
+    /// The character a literal's inside spells, the way rustc reads it.
+    ///
+    /// Panics rather than returning nothing on a spelling it does not know: a
+    /// key quietly dropped here is a key quietly undocumented, which is the
+    /// exact failure this file is closing.
+    fn unescape(lit: &str) -> char {
+        let mut cs = lit.chars();
+        let first = cs.next().expect("a character literal is not empty");
+        if first != '\\' {
+            return first;
+        }
+        match cs.next().expect("an escape has a second character") {
+            'n' => '\n',
+            'r' => '\r',
+            't' => '\t',
+            '0' => '\0',
+            c @ ('\\' | '\'' | '"') => c,
+            _ => panic!("`'{lit}'` is a key spelling this scanner cannot read"),
+        }
+    }
+
+    /// Comments and string literals blanked to spaces, keeping length and line
+    /// structure. Character literals are left exactly as written — they are the
+    /// payload.
+    ///
+    /// Load-bearing in both directions. Comments are prose and prose is full of
+    /// apostrophes; string literals hold `"{BINDINGS}"` and every message the
+    /// arms print. Cut down from the same function in
+    /// `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs`; this file has no
+    /// block comments and no raw strings, and if one arrives the floors below
+    /// are what refuses the mis-scan.
+    fn blank_comments_and_strings(src: &str) -> String {
+        let b = src.as_bytes();
+        let mut out = b.to_vec();
+        let mut i = 0;
+        while i < b.len() {
+            if b[i..].starts_with(b"//") {
+                let end = src[i..].find('\n').map_or(b.len(), |n| i + n);
+                for c in out[i..end].iter_mut() {
+                    *c = b' ';
+                }
+                i = end;
+                continue;
+            }
+            if b[i] == b'"' {
+                let start = i;
+                i += 1;
+                while i < b.len() {
+                    match b[i] {
+                        b'\\' => i += 2,
+                        b'"' => {
+                            i += 1;
+                            break;
+                        }
+                        _ => i += 1,
+                    }
+                }
+                let end = i.min(b.len());
+                for c in out[start..end].iter_mut() {
+                    if *c != b'\n' {
+                        *c = b' ';
+                    }
+                }
+                continue;
+            }
+            if let Some(end) = char_literal_end(src, i) {
+                i = end;
+                continue;
+            }
+            i += 1;
+        }
+        String::from_utf8(out).expect("blanking only ever writes spaces")
+    }
+
+    /// [`Live::key`]'s body, blanked, found by its signature.
+    ///
+    /// The signature and not a line number, and not the name alone — `key` is a
+    /// common word. It is spelled with `concat!` so the joined needle exists
+    /// nowhere in this file except the function it names: a source scanner that
+    /// finds itself is the classic way one of these comes back green. That it
+    /// occurs exactly once is asserted, so a renamed or reformatted signature
+    /// fails here instead of leaving the scan with nothing to read.
+    fn live_key_body() -> String {
+        let blanked = blank_comments_and_strings(SOURCE);
+        let needle = concat!("fn ", "key(&mut self, key: &Key) -> bool {");
+        assert_eq!(
+            blanked.matches(needle).count(),
+            1,
+            "`{needle}` is not in this file exactly once — the scanner is \
+             reading nothing, or reading the wrong function"
+        );
+        let open = blanked.find(needle).expect("just counted one") + needle.len();
+        let b = blanked.as_bytes();
+        let (mut i, mut depth) = (open, 1usize);
+        let end = loop {
+            if i >= b.len() {
+                panic!("`{needle}` never closes");
+            }
+            // A braced character literal is a key like any other: stepped over
+            // whole, so binding `{` could not open a block here.
+            if let Some(skip) = char_literal_end(&blanked, i) {
+                i = skip;
+                continue;
+            }
+            match b[i] {
+                b'{' => depth += 1,
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break i;
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        };
+        blanked[open..end].to_string()
+    }
+
+    /// One arm of [`Live::key`]'s match, as its pattern reads.
+    enum Arm {
+        /// A character it acts on: `'x' => …`.
+        Char(char),
+        /// A span of them: `'0'..='3' => …`.
+        Range(char, char),
+        /// A `NamedKey`, whose pattern is a name and not a character at all.
+        Named(String),
+    }
+
+    /// Every arm of [`Live::key`], read off the pattern side of each `=>` in
+    /// its body.
+    ///
+    /// The pattern side and not the line, because everything after the first
+    /// `=>` is the arm's *body* — where `unwrap_or('\0')` lives, and `\0` is not
+    /// a binding. Line by line, because a pattern and its `=>` share a line; an
+    /// arm body that grew an `=>` of its own would be read as a pattern, which
+    /// can only ever demand documentation for a key nobody binds, and that
+    /// fails loudly rather than passing quietly.
+    fn live_key_arms(body: &str) -> Vec<Arm> {
+        let mut arms = Vec::new();
+        for line in body.lines() {
+            let Some(cut) = line.find("=>") else {
+                continue;
+            };
+            let pattern = &line[..cut];
+            for (at, marker) in pattern.match_indices("NamedKey::") {
+                let name: String = pattern[at + marker.len()..]
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect();
+                if !name.is_empty() {
+                    arms.push(Arm::Named(name));
+                }
+            }
+            let mut chars = Vec::new();
+            let mut i = 0;
+            while i < pattern.len() {
+                match char_literal_end(pattern, i) {
+                    Some(end) => {
+                        chars.push(unescape(&pattern[i + 1..end - 1]));
+                        i = end;
+                    }
+                    None => i += 1,
+                }
+            }
+            // `'0'..='3'` is one binding spanning four keys, not two bindings.
+            if pattern.contains("..=") {
+                assert_eq!(
+                    chars.len(),
+                    2,
+                    "`{pattern}` is a range with {} endpoints",
+                    chars.len()
+                );
+                arms.push(Arm::Range(chars[0], chars[1]));
+            } else {
+                arms.extend(chars.into_iter().map(Arm::Char));
+            }
+        }
+        arms
+    }
+
+    /// The key column of [`BINDINGS`]: two spaces, the keys, then the gap
+    /// before the description. Keys are documented in pairs where they come in
+    /// pairs — `[ ]`, `u i`, `h ?` — so it is the column that is read and not
+    /// the first character of a line.
+    ///
+    /// A column and never a substring of the whole constant, which is the trap
+    /// this text is laid out to defuse: `?` occurs in the prose of the `, .`
+    /// line, so `BINDINGS.contains("?")` is true whether or not `?` is bound to
+    /// anything. See [`a_key_named_only_in_prose_is_not_documented`].
+    fn documented_keys(bindings: &str) -> Vec<&str> {
+        bindings
+            .lines()
+            .filter_map(|line| line.strip_prefix("  "))
+            .filter(|line| !line.starts_with(' '))
+            .flat_map(|line| line.split("  ").next().unwrap_or_default().split(' '))
+            .filter(|key| !key.is_empty())
+            .collect()
+    }
+
     /// **Every key `Live::key` acts on is in [`BINDINGS`]**, which is the only
     /// thing standing between a control and being undiscoverable: there is no
     /// on-screen UI, and this text is both what `--help` prints and what `h`
     /// does.
     ///
-    /// The characters rather than the lines, because a binding's description is
-    /// prose and its key is not.
+    /// The keys are *read out of the match arms* — see [`live_key_body`] — and
+    /// not restated here. The version of this test that restated them iterated
+    /// a hard-coded array of 32 characters, so what it enforced was "these 32
+    /// keys are documented"; `'h' | '?'` had been a live arm with no entry in
+    /// the column the whole time and this test passed on every run. **A check
+    /// weaker than its own name is worse than no check**, because the name is
+    /// what stops anyone looking again — nobody re-reads a green
+    /// `every_key_the_live_path_acts_on_is_documented`.
+    ///
+    /// Which is also why the counts are asserted. A scanner whose pattern
+    /// stops matching finds nothing and then passes everything, and that is the
+    /// same failure a second time.
     #[test]
     fn every_key_the_live_path_acts_on_is_documented() {
-        // The ones whose branch is a name rather than a character, listed here
-        // because the match arms they come from cannot be read as text.
-        for key in ["0-3", "space", "esc"] {
-            assert!(BINDINGS.contains(key), "`{key}` is not in the bindings");
+        let documented = documented_keys(BINDINGS);
+        let (mut chars, mut ranges, mut named) = (0, 0, 0);
+
+        for arm in live_key_arms(&live_key_body()) {
+            match arm {
+                Arm::Char(c) => {
+                    chars += 1;
+                    let key = c.to_string();
+                    assert!(
+                        documented.contains(&key.as_str()),
+                        "`{c}` is a key `Live::key` acts on and has no entry in the \
+                         bindings — an operator has no way to find it"
+                    );
+                }
+                // Documented as the span it is, `0-3`, and the span is built
+                // from the arm's own endpoints rather than being spelled here.
+                Arm::Range(from, to) => {
+                    ranges += 1;
+                    let key = format!("{from}-{to}");
+                    assert!(
+                        documented.contains(&key.as_str()),
+                        "`{key}` is a range `Live::key` acts on and has no entry in \
+                         the bindings"
+                    );
+                }
+                // A named arm carries no character to look for, so its spelling
+                // comes from the one table there is — and an unknown name stops
+                // the run rather than being skipped.
+                Arm::Named(name) => {
+                    named += 1;
+                    let (_, spelling) = NAMED_KEY_SPELLINGS
+                        .iter()
+                        .find(|(known, _)| *known == name)
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "`NamedKey::{name}` is a key `Live::key` acts on and \
+                                 NAMED_KEY_SPELLINGS does not say how the bindings \
+                                 spell it"
+                            )
+                        });
+                    assert!(
+                        documented.contains(spelling),
+                        "`{spelling}` (`NamedKey::{name}`) has no entry in the bindings"
+                    );
+                }
+            }
         }
-        // The key column of every line that has one: two spaces, the keys, then
-        // the gap before the description. Keys are documented in pairs where
-        // they come in pairs — `[ ]`, `u i` — so it is the column that is
-        // searched and not the first character of a line.
-        let documented: Vec<&str> = BINDINGS
-            .lines()
-            .filter_map(|line| line.strip_prefix("  "))
-            .filter(|line| !line.starts_with(' '))
-            .flat_map(|line| line.split("  ").next().unwrap_or_default().split(' '))
-            .collect();
-        for key in [
-            "[", "]", "\\", ";", "'", "m", "v", "f", "g", "x", "c", "z", "r", "n", "j", "t", "-",
-            "=", "`", "w", "y", "u", "i", "b", ",", ".", "o", "p", "a", "k", "s", "h",
-        ] {
-            assert!(
-                documented.contains(&key),
-                "`{key}` has no entry in the bindings"
-            );
-        }
+
+        // Floors, not counts. They are what `Live::key` actually holds today —
+        // 33 characters, one range, two named keys — rather than a round number
+        // under them, because a control surface is small enough that losing one
+        // key is news and the scan going quiet is the thing being guarded
+        // against. Three of them because they fail apart: a signature change
+        // gives no arms at all, a broken literal reader gives named arms and no
+        // characters, and a `NamedKey` renamed away gives characters and no
+        // named ones. Raise them when a key is added; lowering one is a claim
+        // that a control was deliberately removed.
+        assert!(
+            chars >= 33,
+            "only {chars} character keys read out of `Live::key` — the scan is not \
+             seeing the match arms"
+        );
+        assert!(
+            ranges >= 1,
+            "no `'a'..='b'` arm read out of `Live::key` — slot focus is one"
+        );
+        assert!(
+            named >= 2,
+            "only {named} `NamedKey` arms read out of `Live::key` — escape and space \
+             are two"
+        );
+    }
+
+    /// **A character that occurs only in a binding's prose is not documented.**
+    ///
+    /// The reason [`documented_keys`] parses a column instead of asking
+    /// `BINDINGS.contains(key)`, and it is not hypothetical: `?` appears inside
+    /// the `, .` entry's description, so the substring form of this check would
+    /// have called `?` documented while it was bound to nothing. That version
+    /// would have looked stronger than the hard-coded array it replaced and
+    /// enforced less.
+    #[test]
+    fn a_key_named_only_in_prose_is_not_documented() {
+        // `?` twice in prose and never in the column: once in the description
+        // beside a key, once on the continuation line under it. Both are places
+        // the real text puts it, and each one is a different way the parse
+        // could go wrong.
+        let prose = concat!(
+            "keys:\n",
+            "  s          print the status line — the tracker writes ? there when\n",
+            "             it is unsure, and ? again if it stays unsure\n",
+        );
+        // What a substring check sees, and it is a lie.
+        assert!(prose.contains('?'));
+        assert!(
+            !documented_keys(prose).contains(&"?"),
+            "a character in a description was counted as a documented key"
+        );
+        // The column, where a real binding lives, still reads.
+        assert!(documented_keys(prose).contains(&"s"));
+        // And in the real text `?` is now in the column, not only the prose.
+        assert!(documented_keys(BINDINGS).contains(&"?"));
     }
 
     /// **A save still being written when the run ends is waited for**, so the
