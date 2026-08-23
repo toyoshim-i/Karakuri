@@ -437,8 +437,20 @@ fine alone and is unreadable next to lights.
 - **The deck** — the one place prepared-but-not-showing material lives, at Set granularity.
   Priming Sets, the staging lane M5 draws, the pool an agent fills in M6, and whatever M7
   schedules ahead of a phrase are all this, seen from different angles. Naming it once here
-  stops each of those milestones inventing its own waiting area. One to four members are
-  Live and composited; the rest are resident
+  stops each of those milestones inventing its own waiting area. Between one and four members
+  are Live and composited, and the rest are resident — **except that "the rest" is currently
+  empty**: `Deck::new` asserts a deck holds at most `MAX_SLOTS` members in total, and
+  `MAX_SLOTS` is the same four the compositing shader declares inputs for. So a deck holds
+  four Sets, not four *shown* out of more, and the waiting area named here is the residency
+  levels of those four rather than a fifth member.
+
+  **That is the first thing a variant pool runs into**: three alternatives would take three
+  of the instrument's four slots. Decoupling the two numbers is a small edit — the shader's
+  four bindings are the cap on *Live*, not on membership — and it lands on the one budget
+  the governor says it cannot keep. See `governor.rs`: it bounds compute and not VRAM,
+  "because bounding VRAM means being able to refuse an allocation and to free one on demand,
+  which needs an allocator's cooperation that does not exist in this engine". A pool is the
+  first feature that makes that gap bite.
 - Residency has three levels: **Live**, **Priming** (stepping hidden, at reduced rate), and
   **Allocated** (compiled, buffers held, not stepping). **The governor does not move slots
   between them** — it computes an *effective* level each pass from the operator's *requested*
