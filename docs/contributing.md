@@ -37,24 +37,6 @@ signals, determinism, the IR and colour — are stated in full in
 - **Vertical slices, not layers.** Not "build the whole signal bus" but "get a triangle on
   screen, then never break it"
 - Keep it running. Do not commit a state that does not build
-- **Stage by explicit path. Never `git add -A`, never `git commit -a`.** More than one
-  session works in this tree at once, and a wildcard stage sweeps somebody else's
-  in-progress files into a commit about something else — which has happened here. Check
-  `git status --short` before staging and `git log --oneline -1` before committing: `HEAD`
-  moves under you
-- **One commit per concern, with its documentation in the same commit.** The record, the
-  manual page and the roadmap line that a change makes true land with the change, because a
-  follow-up commit to fix the prose is one nobody writes. This is what makes §4's *hook it
-  from where the work is* possible at all
-- **The commit message carries the argument, not the diff.** What was wrong, what was chosen,
-  and what the alternative was — `git log` is the only place some of that ever gets written
-  down. End a message written with an AI agent with a `Co-Authored-By:` trailer naming it
-- **The gates are hooks in the repository, not habits.** `git config core.hooksPath
-  .githooks` once per clone, and then a commit is refused if its Rust is not what
-  `cargo fmt` writes, and a push is refused unless the whole workspace formats, lints under
-  `-D warnings`, and passes every test. Formatting is on the commit because it costs a
-  second; the rest is on the push because it costs minutes, and a gate that costs minutes
-  gets skipped until it is not a gate
 - Before adding an abstraction, confirm it has at least two call sites
 - Any change touching performance comes with a GPU-timestamp measurement — **which does not
   currently work on the development machine.** On Apple M4 Pro via Metal, wgpu advertises
@@ -65,6 +47,42 @@ signals, determinism, the IR and colour — are stated in full in
   rather than trusting the feature flag, and falls back to a host measurement that says so
   in the result. Treat every performance number produced here as host-side and biased high
   until this rule can be honoured on real hardware
+
+### Working with git
+
+**More than one worker shares this tree.** Sessions and agents run against the same working
+copy at the same time, so a command that acts on everything acts on somebody else's
+half-finished work too. Nearly every rule below is that one fact applied.
+
+- **Set the hooks up once per clone**: `git config core.hooksPath .githooks`. The gates are
+  in the repository rather than in anyone's habits — a commit is refused if its Rust is not
+  what `cargo fmt` writes, and a push is refused unless the whole workspace formats, lints
+  under `-D warnings`, and passes every test. Formatting is on the commit because it costs a
+  second; the rest is on the push, because a gate that costs minutes gets skipped until it is
+  not a gate
+- **Stage by explicit path. Never `git add -A`, never `git commit -a`.** A wildcard stage
+  sweeps another worker's in-progress files into a commit about something else, and it has
+  happened here. Read `git status --short` before staging and `git log --oneline -1` before
+  committing: `HEAD` moves under you while you work
+- **Nothing that discards.** No `git checkout -- <path>`, `restore`, `reset`, `stash` or
+  `clean` while there is work in the tree that is not yours — those are the commands that
+  destroy rather than confuse, and the tree is rarely only yours. If you need a file back,
+  copy it out of `git show HEAD:<path>` instead of resetting the path
+- **Uncommitted work you did not write is somebody else's, and it stays.** Leave it, stage
+  around it, and say what you saw. Do not tidy it, and do not include it to make the tree
+  clean
+- **One commit per concern, with its documentation in the same commit.** The record, the
+  manual page and the roadmap line a change makes true land with the change, because a
+  follow-up commit to fix the prose is one nobody writes. It is what makes §4's *hook it from
+  where the work is* possible at all
+- **Commit a concern when it is finished, not at the end of the day.** Work left uncommitted
+  while other commits land on top of it gets harder to describe by the hour, and the message
+  it deserved is the first thing lost
+- **The commit message carries the argument, not the diff.** What was wrong, what was chosen,
+  and what the alternative was — `git log` is the only place some of that is ever written
+  down. End a message written with an AI agent with a `Co-Authored-By:` trailer naming it
+- **Commit; do not push.** Publishing is the maintainer's, and an agent working here has no
+  credentials for it by design. Say how many commits are waiting rather than pushing them
 
 ---
 
