@@ -37,6 +37,18 @@ signals, determinism, the IR and colour — are stated in full in
 - **Vertical slices, not layers.** Not "build the whole signal bus" but "get a triangle on
   screen, then never break it"
 - Keep it running. Do not commit a state that does not build
+- **Stage by explicit path. Never `git add -A`, never `git commit -a`.** More than one
+  session works in this tree at once, and a wildcard stage sweeps somebody else's
+  in-progress files into a commit about something else — which has happened here. Check
+  `git status --short` before staging and `git log --oneline -1` before committing: `HEAD`
+  moves under you
+- **One commit per concern, with its documentation in the same commit.** The record, the
+  manual page and the roadmap line that a change makes true land with the change, because a
+  follow-up commit to fix the prose is one nobody writes. This is what makes §4's *hook it
+  from where the work is* possible at all
+- **The commit message carries the argument, not the diff.** What was wrong, what was chosen,
+  and what the alternative was — `git log` is the only place some of that ever gets written
+  down. End a message written with an AI agent with a `Co-Authored-By:` trailer naming it
 - **The gates are hooks in the repository, not habits.** `git config core.hooksPath
   .githooks` once per clone, and then a commit is refused if its Rust is not what
   `cargo fmt` writes, and a push is refused unless the whole workspace formats, lints under
@@ -90,9 +102,29 @@ themselves.
 
 ## 3. Build, Lint, and Test Commands
 
-**Name the smallest suite that answers your question and run that** — see §2 for why, and
-[P-0057](principles/0057-run-what-the-question-needs-when-it-is-asked.md) for the rule. The whole
-workspace belongs at a boundary, not at every step.
+**Run the whole workspace. It is cheap now.** `cargo test --workspace` takes about a minute
+as of 2026-08-23, against roughly thirty before — the difference is a macOS pathology found
+and measured on 2026-08-23, where creating a Metal device stats every entry of the
+directory the binary sits in, so a `target/deps` full of old test binaries cost more than
+the tests did ([ADR-0144](adr/0144-the-test-suites-largest-cost-was-a-directory-listing.md)).
+Everything below is still true and worth knowing; almost none of it is worth *rationing* at
+this price.
+
+**What that changes, and what it does not.** The rules here divide into ones that existed
+because running tests was expensive and ones that exist because of what a result *tells*
+you. The first kind is now a convenience: reach for `--skip gpu::` mid-edit if you like, and
+let the directing side carry the suite when several agents are working, but neither is owed.
+The second kind holds at any price — **after a fix, run the failed test first and alone**,
+because a green suite is a slower way to learn the same fact and a red one tells you less;
+and **run a test against its injected defect on its own**, because that is one test's
+evidence and the suite around it is not. See
+[P-0057](principles/0057-run-what-the-question-needs-when-it-is-asked.md), which is about
+answering the question in front of you rather than about saving seconds.
+
+**Revisit this if the suite becomes a bottleneck again.** The strict operation it replaces —
+name the smallest suite, keep the workspace for boundaries, put the cost on whoever is
+directing — is recoverable from this paragraph and from §2, and the number above is dated so
+it can be checked rather than assumed.
 
 ### Testing one crate
 ```sh
@@ -267,7 +299,8 @@ there, and the plan did not know any of it had happened.
 Before marking a task or pull request as complete, ensure the following checklist is satisfied:
 
 - [ ] **A decision with a losing alternative has a record**: see §4. If nothing was decided, nothing is owed.
-- [ ] **All workspace tests pass**: `cargo test --workspace` returns 0 exit code.
+- [ ] **All workspace tests pass**: `cargo test --workspace` returns 0 — it costs about a minute, see §3.
+- [ ] **Formatting and lints pass**: `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings`. The push hook enforces both, so a checklist without them is one you can satisfy and still be refused.
 - [ ] **Naga validation passes**: Any modifications to `karakuri-codegen` MUST be verified against `naga_test.rs` to guarantee generated WGSL text parses and validates cleanly.
 - [ ] **Documentation integrity**: Existing comments, docstrings (`//!` and `///`), and Markdown documentation are updated accordingly.
 - [ ] **No unhandled errors or silent fallbacks**: Core logic should produce explicit error types (`IrError`, `SetError`, `GpuError`, etc.) rather than swallowing exceptions.
@@ -281,6 +314,12 @@ Before marking a task or pull request as complete, ensure the following checklis
 - [invariants.md](invariants.md): The rules in force, and the tests that hold them
 - [ir-spec.md](ir-spec.md): `.kir` DSL specification and language invariants
 - [manual.md](manual.md): CLI arguments and VJ keyboard controls reference
+- [manual/](manual/): **the console's manual, published** at
+  <https://toyoshim-i.github.io/Karakuri/manual/> — the seven rules its surface obeys, what
+  the words mean, the console region by region, and every operation with each way in. Written
+  ahead of the interface on purpose, and the reference that implementation is checked against.
+  HTML rather than Markdown, which is the same distinction said in the file extension: a
+  designed document with readers who never open this repository
 - [plugins.md](plugins.md): Out-of-process helper plugin specification
 - [roadmap.md](roadmap.md): Architectural roadmap and future milestones
 - [status.md](status.md): V1 scope, and what exists part by part
