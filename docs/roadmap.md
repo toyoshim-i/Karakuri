@@ -2139,7 +2139,28 @@ section of `docs/ir-spec.md`, where a reader meets the `camera` record.
   passes: every alternative goes on drawing into its own frame-sized target, 7.03 MB at
   1280x720, selected or not. Cheap, not free, and cheap in a different currency than the one
   this bullet was written in
-- Bundle and unbundle for sharing single self-contained patch files
+- Bundle and unbundle for sharing single self-contained patch files. **Built**, as two
+  flags that print and stop: `--bundle ID` writes the Set filed under `ID` to standard
+  output with every source it names inlined as `src` records — one run per artifact
+  however many nodes reference it, since the reader keys them by hash — and refuses the
+  whole bundle naming the node where the store cannot supply one. `--unbundle FILE`
+  takes one in: every inlined source is checked against the address its `slot` names
+  before anything is written, each becomes an artifact with a metadata card, and the Set
+  is filed under the id the file itself carries — refused rather than overwritten where
+  that id is taken, which is deliberately not `--save-set`'s rule. A source this build
+  cannot compile is stored and keeps its slot, reported with what the checker said, so
+  the failure lands on `--load-set` with a span rather than on the whole file with none.
+  **What it deliberately leaves out**: a bundle is one *Set* and not a session — a
+  session stream carries its own material at its head and nothing folds a stream into a
+  bundle. It carries no metadata cards, deliberately: a card is derived from a compile
+  pass, so the receiving build regenerates it from the source and an artifact that does
+  not compile there arrives without one rather than with a card from a build that is not
+  theirs. It says nothing about **provenance** — `origin`, `parent` and `tag` still have
+  no producer, so a bundle cannot say who made the material or what it was derived from,
+  which is the gap that would have to close before anything like a shared library — and
+  it is neither signed nor compressed. And there is no way to rename on the way in: an
+  id collision is fixed by editing the file's `set` record, because a flag that
+  overrode it would be the overwrite this refuses, spelled differently
 
 **Demands on earlier work**
 

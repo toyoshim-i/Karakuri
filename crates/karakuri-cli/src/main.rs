@@ -529,6 +529,19 @@ options:
                         and flags — the whole chain, names and edges included.
                         A flag given beside it wins. Anything the file could not
                         carry is printed rather than dropped in silence
+  --bundle ID           write the Set filed under ID to standard output with
+                        every source it names inlined as `src` records, and
+                        stop. That file loads on a machine whose store has
+                        never held the material, so it is what you send
+                        somebody: `--bundle night01 > night01.ndjson`. An
+                        artifact this store does not hold refuses the whole
+                        bundle naming it, rather than producing a file that
+                        looks self-contained and is not
+  --unbundle FILE       read a bundled Set file, put its inlined sources in the
+                        store, write its Set file, and stop. Every source must
+                        hash to the address its `slot` names or the file is
+                        refused whole. The id comes from the file, and one
+                        already taken is refused rather than overwritten
   --record-session ID   write the timeline to sessions/ID.ndjson as it
                         happens: the Set's records, then a `tick` a frame and
                         every edit between them. The material goes at the head
@@ -1010,6 +1023,30 @@ enum ParseOutcome {
     /// It carries the store path because that is the whole of what a listing
     /// needs, and `--store` may be given on either side of this flag.
     ListSets(PathBuf),
+    /// `--bundle ID`: write the Set filed under `ID` to standard output with
+    /// every source it names inlined, and stop.
+    ///
+    /// [`ParseOutcome::ListSets`]'s variant for [`ParseOutcome::ListSets`]'s
+    /// reason, and the reason is the whole of why it is here: bundling reads a
+    /// file and hashes some bytes, and there is no Set to build, no adapter to
+    /// request and no window to open. An `Args` field would have to be checked
+    /// above every early return in `main` and would be wrong the day somebody
+    /// added one more; a variant with no `Args` in it makes reaching a device
+    /// not a thing that can be forgotten.
+    Bundle {
+        store: PathBuf,
+        id: String,
+    },
+    /// `--unbundle FILE`: take a bundled Set file into the store, and stop.
+    ///
+    /// Here for the same reason, and it compiles: each inlined source goes
+    /// through the checker so that a metadata card can be written for it. That
+    /// is the check pass, which takes no device — `Set::validate` runs without
+    /// one and a single procedure certainly does.
+    Unbundle {
+        store: PathBuf,
+        file: PathBuf,
+    },
 }
 
 /// The real entry point: reads the process's own arguments, then hands them
@@ -1029,6 +1066,36 @@ fn parse_args() -> Args {
         // see [`listed_sets`]. On stdout, because it is the answer to the
         // question that was asked rather than a note about a run.
         Ok(ParseOutcome::ListSets(root)) => match listed_sets_at(&root) {
+            Ok(said) => {
+                print!("{said}");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("karakuri-cli: {e}");
+                std::process::exit(1);
+            }
+        },
+        // **To standard output, so a shell can redirect it.** A bundle is a
+        // thing you *send somebody* — a single self-contained file that works
+        // in their store — rather than something the library keeps, so it goes
+        // where `> patch.ndjson` puts it and needs no naming rule of its own in
+        // `sets/`. The store already holds this Set under an id; a second copy
+        // of it there under some derived name would be a second answer to which
+        // file is the Set.
+        Ok(ParseOutcome::Bundle { store, id }) => match bundled_set(&store, &id) {
+            Ok(said) => {
+                print!("{said}");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("karakuri-cli: {e}");
+                std::process::exit(1);
+            }
+        },
+        // On stdout for the reason a listing is: it is the answer to the
+        // question that was asked. Nothing is compiled to *run* — the checker
+        // is reached only to write each artifact's metadata card.
+        Ok(ParseOutcome::Unbundle { store, file }) => match unbundled_file(&store, &file) {
             Ok(said) => {
                 print!("{said}");
                 std::process::exit(0);
@@ -1483,6 +1550,8 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
     // for longer and carries it on `Args` instead.
     let mut size_given = false;
     let mut list_sets = false;
+    let mut bundle: Option<String> = None;
+    let mut unbundle: Option<PathBuf> = None;
     let mut positional = Vec::new();
     let mut it = args;
     while let Some(arg) = it.next() {
@@ -1631,6 +1700,11 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
             // has been seen — `--list-sets --store DIR` and `--store DIR
             // --list-sets` are the same request.
             "--list-sets" => list_sets = true,
+            // Locals rather than `Args` fields, for `--list-sets`'s reason:
+            // neither is a run, and both are answered below once the whole
+            // command line has been seen, so `--store` may be on either side.
+            "--bundle" => bundle = Some(value_for("--bundle", &mut it)?),
+            "--unbundle" => unbundle = Some(PathBuf::from(value_for("--unbundle", &mut it)?)),
             "--save-set" => args_out.save_set = Some(value_for("--save-set", &mut it)?),
             "--load-set" => args_out.load_set = Some(value_for("--load-set", &mut it)?),
             "--record-session" => {
@@ -1668,6 +1742,22 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
     // about a Set nothing here is going to build.
     if list_sets {
         return Ok(ParseOutcome::ListSets(args_out.store));
+    }
+    // The same, and above the material rules for the same reason. Answered in
+    // a fixed order rather than refused as a pair: each of the three prints and
+    // stops, so the only thing a second one could change is which answer is
+    // printed, and none of them is a run whatever the other says.
+    if let Some(id) = bundle {
+        return Ok(ParseOutcome::Bundle {
+            store: args_out.store,
+            id,
+        });
+    }
+    if let Some(file) = unbundle {
+        return Ok(ParseOutcome::Unbundle {
+            store: args_out.store,
+            file,
+        });
     }
 
     // The bare positional pair still means what it always meant, and now it is
@@ -3038,6 +3128,49 @@ fn listed_sets_at(root: &std::path::Path) -> Result<String, String> {
     let store = karakuri_store::store::Store::open(root)
         .map_err(|e| format!("store `{}`: {e}", root.display()))?;
     listed_sets(&store, root)
+}
+
+/// **One Set, with every source it names inlined, as the text to print.**
+///
+/// **A bundle goes to standard output**, which is what this returning a
+/// `String` is: it is a file you *send somebody* — one self-contained patch
+/// that loads in a store which has never held the material — so it belongs
+/// where `karakuri-cli --bundle night01 > night01.bundle.ndjson` puts it. A
+/// store directory would need a naming rule of its own for it, and a second
+/// copy of a Set sitting beside the Set is a second answer to which of them is
+/// the file.
+///
+/// **Opening nothing that is not there**, on [`listed_sets_at`]'s terms: a flag
+/// that only reads must not leave a store behind to report that a Set is
+/// missing from it. Here it is an error rather than an answer, because a bundle
+/// of a Set that does not exist is not a bundle.
+fn bundled_set(root: &std::path::Path, id: &str) -> Result<String, String> {
+    if !root.exists() {
+        return Err(format!(
+            "no store at `{}`, so there is no set `{id}` to bundle — check `--store`",
+            root.display()
+        ));
+    }
+    let store = karakuri_store::store::Store::open(root)
+        .map_err(|e| format!("store `{}`: {e}", root.display()))?;
+    Ok(setfile::bundle(&store, id)?
+        .iter()
+        .map(|line| format!("{}\n", line.as_str()))
+        .collect())
+}
+
+/// **A bundle somebody sent you, into this store**, and the report of what
+/// happened.
+///
+/// The store *is* opened where it is not there, unlike [`bundled_set`]: this is
+/// a write, and establishing the layout under a root an operator named is what
+/// every other writing path here does.
+fn unbundled_file(root: &std::path::Path, file: &std::path::Path) -> Result<String, String> {
+    let lines = karakuri_store::ndjson::read(file)
+        .map_err(|e| format!("reading `{}`: {e}", file.display()))?;
+    let store = karakuri_store::store::Store::open(root)
+        .map_err(|e| format!("store `{}`: {e}", root.display()))?;
+    setfile::unbundle(&store, &lines)
 }
 
 /// What a Set holds, by layer and in the order the layers compose: `2 L1, 1 L2,
@@ -7269,6 +7402,8 @@ mod tests {
             Ok(ParseOutcome::Run(args)) => Ok(*args),
             Ok(ParseOutcome::Help) => panic!("expected Args, got --help"),
             Ok(ParseOutcome::ListSets(_)) => panic!("expected Args, got --list-sets"),
+            Ok(ParseOutcome::Bundle { .. }) => panic!("expected Args, got --bundle"),
+            Ok(ParseOutcome::Unbundle { .. }) => panic!("expected Args, got --unbundle"),
             Err(e) => Err(e),
         }
     }
@@ -7308,8 +7443,77 @@ mod tests {
                      default material and open a window to print a directory"
                 ),
                 Ok(ParseOutcome::Help) => panic!("{spelling:?} came back as --help"),
+                Ok(ParseOutcome::Bundle { .. }) | Ok(ParseOutcome::Unbundle { .. }) => {
+                    panic!("{spelling:?} came back as a bundle")
+                }
                 Err(e) => panic!("{spelling:?} was refused: {e}"),
             }
+        }
+    }
+
+    /// **Neither `--bundle` nor `--unbundle` is a run**, and the type says so
+    /// for [`ParseOutcome::ListSets`]'s reason: there is no [`Args`] on either
+    /// path, so the compile, the deck, the window and the adapter request are
+    /// unreachable rather than merely skipped. `--unbundle` does reach the
+    /// checker — that is how a metadata card gets written — and the check pass
+    /// needs no device.
+    ///
+    /// **`--store` on either side of each**, because an operator types the
+    /// flags in whatever order they think of them, and a bundle read out of the
+    /// default store when `--store` was given would be a bundle of the wrong
+    /// library.
+    #[test]
+    fn bundle_and_unbundle_print_and_are_never_a_run() {
+        for spelling in [
+            vec!["--bundle", "night01", "--store", "/tmp/library"],
+            vec!["--store", "/tmp/library", "--bundle", "night01"],
+        ] {
+            match parse_args_from(spelling.iter().map(|s| s.to_string())) {
+                Ok(ParseOutcome::Bundle { store, id }) => {
+                    assert_eq!(store, PathBuf::from("/tmp/library"), "{spelling:?}");
+                    assert_eq!(id, "night01", "{spelling:?}");
+                }
+                Ok(ParseOutcome::Run(_)) => panic!(
+                    "{spelling:?} came back as a run: writing a bundle to stdout would then \
+                     compile material and open a window to do it"
+                ),
+                other => panic!(
+                    "{spelling:?} came back as something else: {}",
+                    named(&other)
+                ),
+            }
+        }
+        for spelling in [
+            vec!["--unbundle", "sent.ndjson", "--store", "/tmp/library"],
+            vec!["--store", "/tmp/library", "--unbundle", "sent.ndjson"],
+        ] {
+            match parse_args_from(spelling.iter().map(|s| s.to_string())) {
+                Ok(ParseOutcome::Unbundle { store, file }) => {
+                    assert_eq!(store, PathBuf::from("/tmp/library"), "{spelling:?}");
+                    assert_eq!(file, PathBuf::from("sent.ndjson"), "{spelling:?}");
+                }
+                Ok(ParseOutcome::Run(_)) => panic!(
+                    "{spelling:?} came back as a run: taking a file into the store would \
+                     then build a Set and open a window"
+                ),
+                other => panic!(
+                    "{spelling:?} came back as something else: {}",
+                    named(&other)
+                ),
+            }
+        }
+    }
+
+    /// Which outcome, for a panic message. `ParseOutcome` holds GPU-adjacent
+    /// config and is deliberately not `Debug`; see `value_tests::parse`.
+    fn named(outcome: &Result<ParseOutcome, String>) -> String {
+        match outcome {
+            Ok(ParseOutcome::Run(_)) => "a run".to_string(),
+            Ok(ParseOutcome::Help) => "--help".to_string(),
+            Ok(ParseOutcome::ListSets(_)) => "--list-sets".to_string(),
+            Ok(ParseOutcome::Bundle { .. }) => "--bundle".to_string(),
+            Ok(ParseOutcome::Unbundle { .. }) => "--unbundle".to_string(),
+            Err(e) => format!("a refusal: {e}"),
         }
     }
 

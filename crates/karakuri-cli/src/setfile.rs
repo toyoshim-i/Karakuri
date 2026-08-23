@@ -1270,6 +1270,299 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
     })
 }
 
+// -- Bundling: a Set file that carries its own material ------------------
+
+/// **Bundle the Set filed under `id`: the file it already is, with every
+/// source it names inlined after it.**
+///
+/// The bundled form is `docs/ir-spec.md`'s and it is the one [`from_lines`]
+/// already reads — a run of `src` records per artifact, keyed by hash, which
+/// wins over the store when both could answer. So a bundle loads on a machine
+/// whose store has never held the material, which is the whole of what it is
+/// for.
+///
+/// **Lines back rather than a file written.** Where a bundle goes is the
+/// caller's, and the caller writes it to standard output; see
+/// [`crate::bundled_set`].
+pub fn bundle(store: &Store, id: &str) -> Result<Vec<Line>, String> {
+    let lines = store
+        .read_set(id)
+        .map_err(|e| format!("reading set `{id}`: {e}"))?;
+    with_inlined_source(store, id, lines)
+}
+
+/// The inlining itself, over lines already in hand.
+fn with_inlined_source(store: &Store, id: &str, lines: Vec<Line>) -> Result<Vec<Line>, String> {
+    let mut out = lines;
+    // **After the records that were already there, and the file's own order is
+    // otherwise untouched.** [`from_lines`] folds `src` into a map keyed by
+    // hash and line number before it resolves anything, so it requires no
+    // position at all — and a bundle that is the saved file plus an appendix
+    // diffs against the file it was made from.
+    let mut runs = Vec::new();
+    // First-reference order, and **one run per artifact however many nodes
+    // reference it**: the reader keys `src` by hash, so a second copy of a
+    // shared procedure would be bytes nobody reads. `Vec` rather than a set
+    // because a Set has a handful of nodes and this keeps the runs in the order
+    // the file names them.
+    let mut inlined: Vec<Hash> = Vec::new();
+    for line in &out {
+        let Record::Slot {
+            layer,
+            index,
+            name,
+            proc_hash,
+        } = line.record()
+        else {
+            continue;
+        };
+        if inlined.contains(proc_hash) {
+            continue;
+        }
+        inlined.push(*proc_hash);
+        // **One missing artifact refuses the whole bundle**, naming the node.
+        // A bundle short of one procedure is a file that looks self-contained
+        // and is not, and the machine it is carried to is the worst place to
+        // find that out — a partial bundle would be discovered by whoever you
+        // sent it to rather than by you.
+        let bytes = store.get_artifact(proc_hash).map_err(|e| {
+            format!(
+                "set `{id}`: {} is not in this store ({e}), so it cannot be inlined — \
+                 a bundle carries every source or it is not one",
+                node_at(*layer, *index, name.as_deref(), proc_hash)
+            )
+        })?;
+        let src = String::from_utf8(bytes).map_err(|e| {
+            format!(
+                "set `{id}`: the source of {} is not UTF-8: {e}",
+                node_at(*layer, *index, name.as_deref(), proc_hash)
+            )
+        })?;
+        // **`split` and not `lines`**, because this has to be exactly
+        // invertible: `s.split('\n').collect::<Vec<_>>().join("\n") == s` for
+        // every string, where `lines()` drops a trailing newline and would hand
+        // [`unbundle`] bytes that hash to something other than the address the
+        // `slot` record names. Every `.kir` ends with one.
+        for (n, text) in src.split('\n').enumerate() {
+            runs.push(Line::new(Record::Src {
+                hash: *proc_hash,
+                line: n as u32,
+                s: text.to_string(),
+            }));
+        }
+    }
+    out.append(&mut runs);
+    Ok(out)
+}
+
+/// How a refusal names one node: its address, and what it is called.
+fn node_at(layer: Layer, index: u32, name: Option<&str>, hash: &Hash) -> String {
+    format!(
+        "{}:{index} `{}`",
+        layer_name(layer),
+        node_called(name, None, hash)
+    )
+}
+
+/// What one `slot` record of a bundle says, kept for the sentences
+/// [`unbundle`] owes about it.
+struct Slot {
+    layer: Layer,
+    index: u32,
+    name: Option<String>,
+    hash: Hash,
+}
+
+impl Slot {
+    fn called(&self) -> String {
+        node_at(self.layer, self.index, self.name.as_deref(), &self.hash)
+    }
+}
+
+/// **Take a bundle somebody sent you into this store**: its inlined sources as
+/// artifacts, a metadata card per artifact that compiles, and its Set file
+/// under the id the file itself carries.
+///
+/// **Nothing is written until every source has been checked.** A store's whole
+/// guarantee is that a hash names those bytes and no others, so a `src` run
+/// whose text hashes to something else is refused — naming the node — before
+/// anything reaches the disk. A half-applied bundle would leave the store
+/// holding material nobody can name.
+///
+/// **The id comes from the file's own `set` record, and a taken one is refused
+/// rather than overwritten.** This is deliberately not [`save`]'s rule, which
+/// `--save-set ID` and the `k` key share: **an id you type is an instruction,
+/// and an id that arrived inside somebody else's file is not.** Overwriting on
+/// a name you chose is you replacing your own preset; overwriting on a name a
+/// stranger's file chose is a preset an operator built disappearing because
+/// somebody they have never met picked the same word. Being annoying about it
+/// costs one rename; the other failure costs work that is gone.
+///
+/// The report says what happened, including the sources this build's checker
+/// will not compile: those are **stored and filed all the same**, because the
+/// Set will then fail on load with the checker's own diagnostics against the
+/// source — which tells an operator which line is wrong, where refusing the
+/// whole file would tell them only that it was.
+pub fn unbundle(store: &Store, lines: &[Line]) -> Result<String, String> {
+    let mut file_id = None;
+    let mut slots: Vec<Slot> = Vec::new();
+    // Keyed and folded exactly as [`from_lines`] does it, so what is hashed
+    // below is the text the reader will reconstruct rather than a second
+    // reading of the same records.
+    let mut inlined: BTreeMap<Hash, BTreeMap<u32, String>> = BTreeMap::new();
+    for line in lines {
+        match line.record() {
+            Record::Set { id, .. } => file_id = Some(id.clone()),
+            Record::Slot {
+                layer,
+                index,
+                name,
+                proc_hash,
+            } => slots.push(Slot {
+                layer: *layer,
+                index: *index,
+                name: name.clone(),
+                hash: *proc_hash,
+            }),
+            Record::Src { hash, line, s } => {
+                inlined.entry(*hash).or_default().insert(*line, s.clone());
+            }
+            _ => {}
+        }
+    }
+    let Some(file_id) = file_id else {
+        return Err(
+            "this file carries no `set` record, so it names no id to file itself \
+                    under — an unbundle takes the id from the file rather than from the \
+                    command line"
+                .to_string(),
+        );
+    };
+    // Asked before a byte is written, for the reason in this function's own
+    // doc: the id in the file is somebody else's choice of word.
+    let held = store
+        .list_sets()
+        .map_err(|e| format!("reading what this store already holds: {e}"))?;
+    if held.iter().any(|entry| entry.id == file_id) {
+        return Err(format!(
+            "set `{file_id}` is already in this store, and unbundling does not overwrite \
+             one: the id came from the file rather than from you. Nothing was stored. \
+             Edit the `set` record's id, or move the set you have"
+        ));
+    }
+    // **Every inlined source hashes to the hash its `slot` record names**, or
+    // the file is refused whole. This is the check that makes a bundle
+    // trustworthy at all: without it a `src` run is a way to file arbitrary
+    // text under an address an operator recognises.
+    let mut sources = Vec::new();
+    for (hash, run) in &inlined {
+        let text = run.values().cloned().collect::<Vec<_>>().join("\n");
+        let actual = Hash::of(text.as_bytes());
+        let called = slots
+            .iter()
+            .find(|slot| slot.hash == *hash)
+            .map(Slot::called)
+            .unwrap_or_else(|| format!("`{}`", hash.short(12)));
+        if actual != *hash {
+            return Err(format!(
+                "{called}: the inlined source hashes to {} and the file files it under {} — \
+                 a content-addressed store's whole guarantee is that a hash names those \
+                 bytes, so this bundle is refused and nothing was stored",
+                actual.short(12),
+                hash.short(12)
+            ));
+        }
+        sources.push((*hash, text, called));
+    }
+    // **A `slot` naming an artifact that is neither inlined nor already here**
+    // is a file that is not self-contained, and it is refused naming it. One
+    // that is already in the store and not inlined is fine — that is an
+    // ordinary partial bundle, and the store answers for it.
+    for slot in &slots {
+        if inlined.contains_key(&slot.hash) || store.get_artifact(&slot.hash).is_ok() {
+            continue;
+        }
+        return Err(format!(
+            "{}: neither inlined in this file nor in this store, so the file is not \
+             self-contained and nothing was stored — it wants bundling again where its \
+             material is",
+            slot.called()
+        ));
+    }
+
+    let mut notes = Vec::new();
+    let mut cards = 0;
+    for (hash, text, called) in &sources {
+        store
+            .put_artifact(text.as_bytes())
+            .map_err(|e| format!("{called}: storing the source: {e}"))?;
+        if !slots.iter().any(|slot| slot.hash == *hash) {
+            notes.push(format!(
+                "{called} is inlined and no `slot` record references it; it is stored anyway"
+            ));
+        }
+        // **The card is what a compile produces**, so it is written here and by
+        // `put_meta` — the one both compile paths already go through — rather
+        // than by a second writer of the same file.
+        match crate::compile::check(text) {
+            Ok(checked) => {
+                if crate::put_meta(store, hash, &crate::meta::card(hash, &checked)).is_none() {
+                    cards += 1;
+                }
+            }
+            // **Stored, filed, and reported** — see this function's doc. The
+            // note carries the checker's own words, because "one source did not
+            // compile" is not something an operator can act on and a diagnostic
+            // with a span is.
+            Err(report) => notes.push(format!(
+                "{called} does not compile on this build, so it has no metadata card. It is \
+                 stored and it keeps its slot; `--load-set {file_id}` will refuse it and say:\n{}",
+                report
+                    .lines()
+                    .map(|l| format!("      {l}"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )),
+        }
+    }
+    // **The `src` runs are dropped from what is filed.** They are the carrying
+    // form — a way to move an artifact between stores — and this store now
+    // holds the artifacts, so what is kept is the ordinary Set file that
+    // references them by hash. Keeping the runs would file a second copy of
+    // every source inside the preset directory, where `--bundle` can produce
+    // one again from the artifacts at any time.
+    let kept: Vec<Line> = lines
+        .iter()
+        .filter(|line| !matches!(line.record(), Record::Src { .. }))
+        .cloned()
+        .collect();
+    store
+        .write_set(&file_id, &kept)
+        .map_err(|e| format!("writing set `{file_id}`: {e}"))?;
+
+    let mut said = format!(
+        "unbundled `{file_id}`: {} node{}, {} source{} stored, {cards} metadata card{} written\n",
+        slots.len(),
+        plural(slots.len()),
+        sources.len(),
+        plural(sources.len()),
+        plural(cards),
+    );
+    for note in &notes {
+        said.push_str(&format!("  {note}\n"));
+    }
+    Ok(said)
+}
+
+/// The `s` on a count, so a report reads as a sentence rather than as a form.
+fn plural(n: usize) -> &'static str {
+    if n == 1 {
+        ""
+    } else {
+        "s"
+    }
+}
+
 /// **What one node of a Set is called** — the one answer, for every surface
 /// that has to name one.
 ///
@@ -2999,5 +3292,291 @@ proc dissolve {
             assert_eq!(back.noise.map(|n| n.kind), Some(kind), "{kind:?}");
             assert_eq!(back.noise.map(|n| (n.rate, n.stream)), Some((2.5, 3)));
         }
+    }
+    // -- Bundling --------------------------------------------------------
+
+    /// The text a bundle is written out as, back through the reader — so a
+    /// test round-trips through the *file*, which is what `--bundle >` writes
+    /// and what `--unbundle` reads, rather than through records held in memory
+    /// that could not have survived a serialisation.
+    fn as_a_file(lines: &[Line]) -> Vec<Line> {
+        parsed(
+            &lines
+                .iter()
+                .map(|line| format!("{}\n", line.as_str()))
+                .collect::<String>(),
+        )
+    }
+
+    /// **The round trip both flags exist for**: a bundle written out of one
+    /// store loads in a store that has never held its artifacts.
+    ///
+    /// `inlined_source_loads_without_a_store_that_knows_the_artifact` above
+    /// proves the *reader* does that, from `src` records a test hand-built.
+    /// This is the writing half beside it: nothing here spells a record out —
+    /// [`bundle`] produces the file and [`unbundle`] takes it in, and the
+    /// material arrives on the far side as procedures with their own names.
+    ///
+    /// **And the cards come with it.** An artifact whose card is missing is an
+    /// ordinary store rather than a damaged one, so this is not the difference
+    /// between a bundle that works and one that does not — but a bundle that
+    /// dropped them would leave every unbundled library thinner than the one it
+    /// came from, silently.
+    #[test]
+    fn a_bundle_loads_in_a_store_that_has_never_seen_the_artifacts() {
+        let (_dir, store, l1, l4) = fixture();
+        save(
+            &store,
+            "s1",
+            plain(&ordinary(&store, &l1, std::slice::from_ref(&l4)), &[]),
+        )
+        .expect("save");
+        let sent = as_a_file(&bundle(&store, "s1").expect("bundle"));
+
+        let elsewhere = tempfile::tempdir().expect("tempdir");
+        let bare = Store::open(elsewhere.path()).expect("store");
+        let said = unbundle(&bare, &sent).expect("the file carries its own source");
+        assert!(said.contains("`s1`"), "{said}");
+
+        let loaded = load(&bare, "s1").expect("the set is filed and its artifacts are here");
+        assert_eq!(loaded.l1s[0].name, "ring");
+        assert_eq!(loaded.l4s[0].name, "points");
+        for hash in [
+            Hash::of(&std::fs::read(&l1).expect("read")),
+            Hash::of(&std::fs::read(&l4).expect("read")),
+        ] {
+            bare.read_meta(&hash)
+                .unwrap_or_else(|e| panic!("{}: {e}", hash.short(12)));
+        }
+    }
+
+    /// **A bundle missing one procedure is refused whole, naming it.**
+    ///
+    /// The alternative is a file that looks self-contained and is not, whose
+    /// failure surfaces on somebody else's machine — where the artifact it
+    /// wants is not, and never was.
+    #[test]
+    fn a_bundle_is_refused_when_the_store_lacks_a_source() {
+        let (_dir, store, l1, _l4) = fixture();
+        let here = stored(&store, &l1);
+        let missing = Hash::of(b"a renderer that was never put in this store");
+        let text = format!(
+            r#"{{"t":"set","id":"gone","v":1}}
+{{"t":"slot","layer":"L1","proc":"{here}"}}
+{{"t":"slot","layer":"L4","name":"veil","proc":"{missing}"}}
+"#
+        );
+        store.write_set("gone", &parsed(&text)).expect("write");
+
+        let e = bundle(&store, "gone").expect_err("a bundle cannot carry what is not there");
+        assert!(e.contains("veil"), "the node is not named: {e}");
+        assert!(e.contains(&missing.short(12)), "{e}");
+    }
+
+    /// **Two nodes over one artifact inline it once.** The reader keys `src` by
+    /// hash, so a second run would be a second copy of the same bytes that
+    /// nothing ever reads — and this Set is one geometry drawn twice by the
+    /// same renderer, which is the ordinary way that happens.
+    #[test]
+    fn one_artifact_referenced_twice_is_inlined_once() {
+        let (_dir, store, l1, l4) = fixture();
+        let twice = vec![l4.clone(), l4.clone()];
+        save(&store, "s1", plain(&ordinary(&store, &l1, &twice), &[])).expect("save");
+        let bundled = bundle(&store, "s1").expect("bundle");
+
+        let renderer = Hash::of(&std::fs::read(&l4).expect("read"));
+        let slots = bundled
+            .iter()
+            .filter(|line| matches!(line.record(), Record::Slot { proc_hash, .. } if *proc_hash == renderer))
+            .count();
+        assert_eq!(slots, 2, "the fixture is meant to name the renderer twice");
+        // One run, so line 0 appears once.
+        let heads = bundled
+            .iter()
+            .filter(
+                |line| matches!(line.record(), Record::Src { hash, line: 0, .. } if *hash == renderer),
+            )
+            .count();
+        assert_eq!(heads, 1, "the renderer's source was inlined {heads} times");
+        // And the run is whole: as many `src` records as the source has lines.
+        let run = bundled
+            .iter()
+            .filter(|line| matches!(line.record(), Record::Src { hash, .. } if *hash == renderer))
+            .count();
+        assert_eq!(run, L4.split('\n').count());
+    }
+
+    /// **A source that does not hash to the address its `slot` names is
+    /// refused, and nothing is stored.**
+    ///
+    /// This is the check that makes a bundle worth trusting at all: without it
+    /// a `src` run is a way to file arbitrary text under an address the
+    /// operator on the far side recognises, and every guarantee content
+    /// addressing makes is gone. Refusing *after* storing some of it would be
+    /// nearly as bad — the store would hold half a stranger's file.
+    #[test]
+    fn an_unbundle_refuses_a_source_that_does_not_hash_to_its_address() {
+        let (_dir, store, l1, l4) = fixture();
+        save(
+            &store,
+            "s1",
+            plain(&ordinary(&store, &l1, std::slice::from_ref(&l4)), &[]),
+        )
+        .expect("save");
+        let renderer = Hash::of(&std::fs::read(&l4).expect("read"));
+        // One line of the renderer's inlined source rewritten, everything else
+        // — the `slot` record's hash included — left exactly as written.
+        let tampered: Vec<Line> = bundle(&store, "s1")
+            .expect("bundle")
+            .into_iter()
+            .map(|line| match line.record() {
+                Record::Src { hash, line: at, .. } if *hash == renderer && *at == 1 => {
+                    Line::new(Record::Src {
+                        hash: renderer,
+                        line: 1,
+                        s: "proc points_but_not_really {".to_string(),
+                    })
+                }
+                _ => line,
+            })
+            .collect();
+
+        let elsewhere = tempfile::tempdir().expect("tempdir");
+        let bare = Store::open(elsewhere.path()).expect("store");
+        let e = unbundle(&bare, &as_a_file(&tampered))
+            .expect_err("text that is not the bytes its address names");
+        // The node, by the address the file gives it and by what it is called
+        // — which in a store with no card for it is its short hash.
+        assert!(e.contains("L4:0"), "the node is not named: {e}");
+        assert!(e.contains(&renderer.short(12)), "{e}");
+        assert!(
+            bare.list_artifacts().expect("list").is_empty(),
+            "a refused bundle left an artifact behind"
+        );
+        assert!(
+            bare.list_sets().expect("list").is_empty(),
+            "a refused bundle left a Set file behind"
+        );
+    }
+
+    /// **An id already taken is refused, and the Set that was there is left
+    /// exactly as it was.**
+    ///
+    /// Deliberately not `--save-set`'s rule, which overwrites: an id you type
+    /// is an instruction, and an id that arrived inside somebody else's file is
+    /// not. The bytes are compared before and after, because "it refused" and
+    /// "it refused without having written" are two different claims.
+    #[test]
+    fn an_unbundle_refuses_an_id_already_taken_and_leaves_the_set_alone() {
+        let (dir, store, l1, l4) = fixture();
+        save(
+            &store,
+            "s1",
+            plain(&ordinary(&store, &l1, std::slice::from_ref(&l4)), &[]),
+        )
+        .expect("save");
+        let sent = as_a_file(&bundle(&store, "s1").expect("bundle"));
+
+        // Somebody else's store, with a Set of their own under that word: one
+        // geometry drawn by two renderers, where the bundle names one.
+        let elsewhere = tempfile::tempdir().expect("tempdir");
+        let theirs = Store::open(elsewhere.path()).expect("store");
+        let l2 = beside(&dir, "theirs.kir", L2);
+        let mine = vec![
+            Node {
+                hash: stored(&theirs, &l1),
+                layer: Kind::L1,
+                index: 0,
+                name: None,
+            },
+            Node {
+                hash: stored(&theirs, &l2),
+                layer: Kind::L2,
+                index: 0,
+                name: Some("preset".to_string()),
+            },
+            Node {
+                hash: stored(&theirs, &l4),
+                layer: Kind::L4,
+                index: 0,
+                name: None,
+            },
+        ];
+        save(&theirs, "s1", plain(&mine, &[])).expect("save");
+        let before = written(&theirs, "s1");
+
+        let e = unbundle(&theirs, &sent).expect_err("an id that arrived in a file is not typed");
+        assert!(e.contains("`s1`"), "the id is not named: {e}");
+        assert_eq!(before, written(&theirs, "s1"), "the preset was overwritten");
+    }
+
+    /// **A source this build cannot compile is stored, keeps its slot, and is
+    /// reported.**
+    ///
+    /// Refusing the whole file would tell an operator that *something* is
+    /// wrong. Storing it means `--load-set` fails against the source itself,
+    /// with the checker's span and hint on the line that is wrong — which is a
+    /// thing they can fix. So the note says which node and what the checker
+    /// said, and the artifact is on disk to be read and edited.
+    #[test]
+    fn an_unbundle_stores_a_source_that_does_not_compile_and_says_so() {
+        let broken = "proc veil {\n  kind L4\n  this is not a renderer\n}\n";
+        let renderer = Hash::of(broken.as_bytes());
+        let geometry = Hash::of(L1.as_bytes());
+        let mut lines = vec![
+            Line::new(Record::Set {
+                id: "sent".to_string(),
+                v: VERSION,
+            }),
+            Line::new(Record::Slot {
+                layer: Layer::L1,
+                index: 0,
+                name: None,
+                proc_hash: geometry,
+            }),
+            Line::new(Record::Slot {
+                layer: Layer::L4,
+                index: 0,
+                name: Some("veil".to_string()),
+                proc_hash: renderer,
+            }),
+        ];
+        for (hash, src) in [(geometry, L1), (renderer, broken)] {
+            for (n, text) in src.split('\n').enumerate() {
+                lines.push(Line::new(Record::Src {
+                    hash,
+                    line: n as u32,
+                    s: text.to_string(),
+                }));
+            }
+        }
+
+        let elsewhere = tempfile::tempdir().expect("tempdir");
+        let bare = Store::open(elsewhere.path()).expect("store");
+        let said = unbundle(&bare, &as_a_file(&lines)).expect("one bad source is not a refusal");
+
+        let report = crate::compile::check(broken).expect_err("the fixture must not compile");
+        let first = report.lines().next().expect("a diagnostic").trim();
+        assert!(said.contains("veil"), "the node is not named: {said}");
+        assert!(
+            said.contains(first),
+            "the checker's own words are not in the note: {said}"
+        );
+        bare.get_artifact(&renderer)
+            .expect("a source that will not compile is still stored");
+        assert!(
+            bare.read_meta(&renderer).is_err(),
+            "a card was written for a source that never compiled"
+        );
+        bare.read_meta(&geometry).expect("the good one is carded");
+        let filed = bare.read_set("sent").expect("the set is filed");
+        assert_eq!(
+            filed
+                .iter()
+                .filter(|line| matches!(line.record(), Record::Slot { .. }))
+                .count(),
+            2,
+            "the node that will not compile lost its slot"
+        );
     }
 }
