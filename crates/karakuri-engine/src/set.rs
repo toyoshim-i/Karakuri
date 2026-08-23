@@ -3463,6 +3463,40 @@ impl Set {
         }
     }
 
+    /// **Make one renderer live and the rest not** — selecting among the
+    /// alternatives a composited Set folds. `false` if there is no such
+    /// renderer, and nothing is written in that case.
+    ///
+    /// Three things this is not, each stated here because a reader meets the
+    /// control before they meet what it costs:
+    ///
+    /// - **It saves the fold, not the frame.** Every renderer still draws,
+    ///   into a cleared target of its own, exactly as it did before one of
+    ///   them was selected — [`Set::draw`] gives each its target whatever its
+    ///   edge says, and only the fold skips the ones that are not live. So an
+    ///   alternative nobody is watching costs a render pass and a frame-sized
+    ///   target: 7.03 MB at 1280x720. That is *cheap* rather than free, and it
+    ///   is the reason this half of a variant pool is buildable at all — the
+    ///   alternatives are already resident and already drawing, so choosing
+    ///   between them is a uniform write.
+    /// - **It covers L4 and only L4.** These are renderers over one
+    ///   simulation, so alternatives that differ in how the material is *drawn*
+    ///   are what a Set can hold. An alternative that differs at L1 or L2
+    ///   carries state of its own, and selecting between those means a second
+    ///   Set, priming it off air, and sharing the geometry across the two —
+    ///   none of which exists. See `docs/roadmap.md`, "Variant pools".
+    /// - **It cannot be saved.** [`Layering`] is deliberately not a Set file
+    ///   record, so a composited Set written out and loaded back overdraws and
+    ///   has no L5 for a selection to be about. The selection is a property of
+    ///   the run, like a gain.
+    ///
+    /// **Silently ineffective under [`Layering::Overdraw`]**, on
+    /// [`Set::set_input`]'s terms and for its reason: the edges exist either
+    /// way and nothing reads them without an L5.
+    pub fn select_renderer(&mut self, at: usize) -> bool {
+        crate::mix::select(&mut self.edges, at)
+    }
+
     /// Whether this Set composites its renderers or overdraws them.
     pub fn layering(&self) -> Layering {
         if self.merge.is_some() {

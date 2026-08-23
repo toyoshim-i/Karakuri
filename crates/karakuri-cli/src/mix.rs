@@ -91,6 +91,21 @@ pub enum Change {
         beats: f64,
         curve: Curve,
     },
+    /// **Which renderer of a slot's Set becomes the live one**, at a musical
+    /// instant. Carried as its parts rather than as a
+    /// `karakuri_engine::transition::Selection` for [`Change::Transition`]'s
+    /// reason — the applier is the one holding the deck.
+    ///
+    /// **The renderer is not checked here.** This decoder knows how many slots
+    /// the deck has and nothing about what is in them; how many renderers a
+    /// slot draws with is a property of the Set it is playing, which the
+    /// applier has in hand and this does not. It is checked there, in
+    /// [`crate::no_such_renderer`]'s words.
+    Select {
+        slot: usize,
+        renderer: usize,
+        start: f64,
+    },
     Residency {
         slot: usize,
         level: Residency,
@@ -158,6 +173,20 @@ pub fn transition_record(
         start,
         beats,
         curve: curve.name().to_string(),
+    }
+}
+
+/// A scheduled selection — which renderer of a slot goes live, and when — as
+/// the record that carries it.
+///
+/// No length and no curve, and that is the record rather than an omission: a
+/// selection is a choice and a choice is a cut. See
+/// `karakuri_engine::transition::Selection`.
+pub fn select_record(slot: usize, renderer: usize, start: f64) -> Record {
+    Record::Select {
+        slot: slot as u8,
+        renderer: renderer as u32,
+        start,
     }
 }
 
@@ -381,6 +410,26 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
                 curve,
             }))
         }
+        Record::Select {
+            slot,
+            renderer,
+            start,
+        } => {
+            let slot = in_range(*slot)?;
+            // **The number, on the transition's terms.** A start that is not a
+            // position is a selection that never lands and never leaves the
+            // queue — there is no `finished` to clear it — so it is refused
+            // here, where an operator can be told, and clamped in the engine as
+            // a backstop.
+            if !start.is_finite() {
+                return Err(format!("selection start `{start}` is not a position"));
+            }
+            Ok(Some(Change::Select {
+                slot,
+                renderer: *renderer as usize,
+                start: *start,
+            }))
+        }
         Record::Preview { slot } => Ok(Some(Change::Preview {
             slot: slot.map(in_range).transpose()?,
         })),
@@ -486,6 +535,14 @@ mod tests {
                     start: 64.0,
                     beats: 8.0,
                     curve: Curve::Smooth,
+                },
+            ),
+            (
+                select_record(2, 1, 64.0),
+                Change::Select {
+                    slot: 2,
+                    renderer: 1,
+                    start: 64.0,
                 },
             ),
             (preview_record(Some(2)), Change::Preview { slot: Some(2) }),
@@ -697,6 +754,18 @@ mod tests {
             };
             let message = change(&record, 4).expect_err("a number no move can use");
             assert!(message.contains(wanted), "{start}/{beats}/{to}: {message}");
+        }
+
+        // A selection that never lands, for the reason a transition's does not:
+        // nothing clears a queued move whose instant cannot arrive.
+        for start in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let record = Record::Select {
+                slot: 0,
+                renderer: 0,
+                start,
+            };
+            let message = change(&record, 4).expect_err("a beat no selection can land on");
+            assert!(message.contains("not a position"), "{start}: {message}");
         }
 
         let unknown_shape = Record::Mask {

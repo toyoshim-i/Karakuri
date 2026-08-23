@@ -84,6 +84,36 @@ impl Input {
     }
 }
 
+/// **Make one edge live and the rest not**, in place.
+///
+/// Selecting among alternatives, which is what a set of edges into one L5 is
+/// for once several of them draw the same thing differently. `false` if `at`
+/// names no edge, and **nothing is written when it does not**: a selection
+/// nobody can honour must not leave a mix half-silenced on the way to finding
+/// that out.
+///
+/// **A slice rather than a method on whatever owns the edges**, because the
+/// rule is about the list and not about the owner: exactly one live, whoever
+/// is holding them. [`crate::set::Set::select_renderer`] is the one caller,
+/// and this is the half that can be read without a device.
+///
+/// **`live` and not `opacity`**, which is the difference between selecting and
+/// fading. The flag is what `Input::contributes` folds and what the shader
+/// skips on, so an unselected input is not read at all — where an opacity of
+/// zero is still a texel fetch and a multiply. Neither of them saves the
+/// *draw*: the renderer behind an unselected edge fills its own target this
+/// frame like every other. See [`crate::set::Set::select_renderer`] for what
+/// that costs.
+pub fn select(edges: &mut [Input], at: usize) -> bool {
+    if at >= edges.len() {
+        return false;
+    }
+    for (i, edge) in edges.iter_mut().enumerate() {
+        edge.live = i == at;
+    }
+    true
+}
+
 /// The mix pass: one fullscreen triangle folding up to [`MAX_SLOTS`] textures.
 pub(crate) struct Composite {
     pipeline: wgpu::RenderPipeline,
@@ -277,5 +307,68 @@ impl Composite {
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.bind_group, &[]);
         pass.draw(0..3, 0..1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **Exactly one live, and it is the one asked for.** The whole claim of a
+    /// selection: not "the chosen one is live", which a fold that turned
+    /// nothing off would also satisfy, but that everything else stopped.
+    #[test]
+    fn selecting_one_edge_leaves_exactly_one_live() {
+        let mut edges = vec![Input::unity(); 3];
+        for at in 0..edges.len() {
+            assert!(select(&mut edges, at));
+            let live: Vec<usize> = edges
+                .iter()
+                .enumerate()
+                .filter(|(_, e)| e.live)
+                .map(|(i, _)| i)
+                .collect();
+            assert_eq!(live, vec![at], "selecting {at} left {live:?} live");
+        }
+    }
+
+    /// **Everything else about an edge survives being unselected**, which is
+    /// what makes a selection reversible in principle and what keeps it from
+    /// being a fader in disguise: a renderer selected away and back is at the
+    /// gain, opacity, blend and mask it was set to.
+    #[test]
+    fn a_selection_moves_the_flag_and_nothing_else() {
+        let quiet = Input {
+            gain: 0.25,
+            opacity: 0.5,
+            ..Input::unity()
+        };
+        let mut edges = vec![quiet, Input::unity()];
+        assert!(select(&mut edges, 1));
+        assert!(!edges[0].live);
+        assert_eq!((edges[0].gain, edges[0].opacity), (0.25, 0.5));
+        assert!(select(&mut edges, 0));
+        assert!(edges[0].live);
+        assert_eq!((edges[0].gain, edges[0].opacity), (0.25, 0.5));
+    }
+
+    /// **An edge that is not there writes nothing.** The refusal has to come
+    /// before the loop rather than out of it: silencing two renderers on the
+    /// way to discovering there is no third would take the picture away and
+    /// report the mistake at the same time.
+    #[test]
+    fn selecting_an_edge_that_is_not_there_leaves_every_edge_alone() {
+        let mut edges = vec![Input::unity(); 2];
+        assert!(!select(&mut edges, 2));
+        assert!(
+            edges.iter().all(|e| e.live),
+            "an unhonourable selection silenced the mix"
+        );
+        // And the boundary either side of it.
+        assert!(select(&mut edges, 1));
+        assert!(!select(&mut edges, usize::MAX));
+        assert!(edges[1].live);
+        // An empty list has nothing to select and says so rather than panicking.
+        assert!(!select(&mut [], 0));
     }
 }
