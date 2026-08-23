@@ -209,7 +209,7 @@ an IR `kind` with a node behind it**, so a Set is a chain rather than a pair —
 geometries, deformations that stack and mask and amplify and pair, a camera written as a
 procedure, several renderers, and a signed distance field any of them can call.
 
-Work has moved to M4, which is the library at scale, and it opened with the one thing M3
+M4 then closed too — the library at scale — and it opened with the one thing M3
 left: **the nodes in a Set had no names.** They have them now, and the first *edge* between
 them is spelled — `uses far : Geometry` in a procedure and `--edge morph.far=sphere_shell`
 in the Set, so `--set` order no longer decides which geometry a morph reads. A Set file, a
@@ -224,9 +224,19 @@ rather than its elements — a `u32` in a uniform against a bind-group entry —
 can finally say which of a Set's geometries it applies to, with `source == only`, and a
 node may declare several where it may declare one `far`.
 
-The table below is what exists, part by part. What is still absent, and why, stays in
-[roadmap.md](roadmap.md) rather than being listed here: agents, the library,
-the node editor.
+**Work is in M5, the interface, and two pieces of it exist.** The workspace is on `wgpu` 30
+and `naga` 30, which is what `egui` needs and which nothing else here wanted
+([ADR-0155](adr/0155-egui-draws-the-panel-and-the-price-is-wgpu-30.md)). And
+[`karakuri-layout`](../crates/karakuri-layout/) holds the console's regions: an arrangement of
+views and splits with a size, a minimum and a maximum each, solved to rectangles, with dividers
+that drag, panes that fold away and a `solo` that leaves one region holding the window. It has
+no toolkit, no device and no window in it, so its 35 tests run in a fifth of a second on a
+machine with no adapter — which is the property
+[ADR-0156](adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md) chose to own the
+arrangement for. **Nothing draws any of it yet.**
+
+The table below is what exists, part by part. What is still absent, and why, is in the
+milestones further down rather than listed here: agents, the library, the node editor.
 
 #### Status
 
