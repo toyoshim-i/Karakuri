@@ -14,7 +14,7 @@
 //! `Sample`'s own documentation asks for step 4: confidence "is never a flag:
 //! a consumer blends on it rather than testing it". The consequence is worth
 //! following rather than softening. `beat`, `bar` and `bpm` come off the local
-//! oscillator, which the project invariants call the single source of truth,
+//! oscillator, which is the single source of truth for phase and tempo,
 //! so they carry confidence 1.0 and a binding to them takes full effect today.
 //! `energy` and the bands are invented when nothing is measuring, so they carry
 //! 0.1 and move a parameter by a tenth of what the same number from a real

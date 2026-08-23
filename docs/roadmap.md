@@ -1,7 +1,8 @@
 # Karakuri — Vision and Roadmap
 
-Companion to `docs/invariants.md` (the rules in force) and
-what exists) and `docs/ir-spec.md` (the IR).
+Companion to [docs/principles/](principles/) (the rules in force, one file each) and
+`docs/ir-spec.md` (the IR). What has already been built is *What exists today* below; the
+milestones that closed are kept whole in [history/](history/).
 
 This document exists so that decisions made during V1 do not foreclose later milestones.
 Where a later milestone imposes a constraint on earlier code, that constraint is stated
@@ -834,7 +835,8 @@ rejected, the field does not.
 | | |
 |---|---|
 | `README.md` | The front door: what this is, a quickstart, and where every other document is |
-| `docs/invariants.md` | The rules in force, and the tests that hold them |
+| [`docs/principles/`](principles/) | The rules in force, one file each — `ls` is the index |
+| [`docs/history/`](history/) | Milestones that closed, kept whole. History, never the present tense |
 | `docs/ir-spec.md` | The IR: grammar, semantics, lowering, record formats |
 | `docs/manual.md` | How to play it: every flag, every key, and what each does |
 | `docs/plugins.md` | The out-of-process boundary, and why those two things are outside it |
@@ -848,7 +850,7 @@ audience: the status document says what exists, the manual says how to use it.
 
 ## Reading order for implementation
 
-1. `docs/invariants.md`, then this document's *What exists today* — the rules, then what is built
+1. `docs/principles/`, then this document's *What exists today* — the rules, then what is built
 2. `docs/ir-spec.md` — the whole thing before writing any parser code
 3. This document — the **Demands on earlier work** sections only, during M1
 4. `docs/manual.md` — when there is something to run

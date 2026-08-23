@@ -267,8 +267,8 @@
 //!
 //! ## Signals
 //!
-//! **One local oscillator per session, and this is where it lives.** The
-//! invariants call it the single source of truth for phase and tempo, so there
+//! **One local oscillator per session, and this is where it lives.** It is the
+//! single source of truth for phase and tempo, so there
 //! cannot be one per Set: four Sets would be four truths, and a beat would
 //! land at four instants. The deck is the smallest thing that is one per
 //! session and already has the frame, so [`Deck`] owns a [`Signals`] and

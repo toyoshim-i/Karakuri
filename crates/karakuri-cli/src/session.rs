@@ -6,7 +6,8 @@
 //! known ticks.
 //!
 //! With this, `tick` finally has a writer and the record stream is the whole
-//! path — `docs/invariants.md`'s invariant stops being a target. What a session
+//! path — *every control ends in the same record*
+//! (`docs/principles/0028-every-control-ends-in-the-same-record.md`) stops being a target. What a session
 //! reproduces is the *performance*: the same material, the same frames, the
 //! same fader moves at the same instants, and the same audio, without a
 //! microphone.
@@ -14,9 +15,9 @@
 //! ## The render thread writes nothing
 //!
 //! `Line::new` serialises eagerly and a `String` is an allocation, so a frame
-//! that produced a line would be allocating on the render thread — the first
-//! invariant in `docs/invariants.md`, and one this crate has already had to repair once
-//! for a record it built per frame.
+//! that produced a line would be allocating on the render thread, which nothing
+//! does — and a rule this crate has already had to repair once for a record it
+//! built per frame.
 //!
 //! So the frame path only ever **moves a `Record` into a `Vec` that already has
 //! room**, and a writer thread does the serialising and the I/O. An `audio`

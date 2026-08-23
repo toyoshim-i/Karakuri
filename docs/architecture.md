@@ -78,12 +78,13 @@ crates/
                       pre-push:   fmt, clippy and every test
                       enable with `git config core.hooksPath .githooks`
 docs/
+  adr/                every decision, with the alternatives that lost — append-only
   architecture.md     the codebase architecture, multi-crate map, and pipeline
   contributing.md     engineering principles, build/test commands, and verification rules
-  invariants.md       the rules in force, and the tests that hold them
   ir-spec.md          the IR. Settled; open questions are empty
   manual.md           how to play it: flags, keys, and what each does
   plugins.md          out-of-process helpers, and why they are out of process
+  principles/         the rules in force, one per file — current only
   roadmap.md          where this goes after V1
 examples/             app presets: seven L1, four L2, one L3, one Field,
                       nine L4, and a control-surface map to copy
@@ -108,7 +109,7 @@ once here so that a term means the same thing in the roadmap, the manual and the
 | VideoSource | The interface L5 consumes. Set is one implementation of it |
 | Signal bus | Input distributed to every layer. Always complete; values carry a confidence |
 | Local oscillator | The single source of truth for phase and tempo. External input is only correction |
-| Record stream | The path engine state is mutated through, so that a session replays. ndjson. **Everything an operator moves goes through it, and so does the material** — see [invariants.md](invariants.md) |
+| Record stream | The path engine state is mutated through, so that a session replays. ndjson. **Everything an operator moves goes through it, and so does the material** — see [P-0028](principles/0028-every-control-ends-in-the-same-record.md) |
 | Set file | A Set's state projection. No time in it |
 | Session stream | The timeline. A Set file followed by `tick` records and the edits between them |
 
@@ -258,7 +259,8 @@ graph LR
 ## 7. Related Documents
 
 - [README.md](../README.md): The front door — what this is, a quickstart, and the document map
-- [invariants.md](invariants.md): The rules in force, and the tests that hold them
+- [principles/](principles/): The rules in force, one per file — current only
+- [adr/](adr/): Every decision, with the alternatives that lost — append-only
 - [ir-spec.md](ir-spec.md): `.kir` DSL language specification
 - [roadmap.md](roadmap.md): Architectural vision and implementation roadmap
 - [manual.md](manual.md): VJ operator manual

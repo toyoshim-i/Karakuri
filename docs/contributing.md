@@ -28,9 +28,13 @@ Start with these, and read the rest before changing anything they touch:
 stops being true is deleted and re-recorded under a new number rather than edited — see
 [ADR-0000](adr/0000-record-decisions-here-and-standing-rules-in-principles.md).
 
-The engine-level rules those principles are drawn from — the render thread, state mutation,
-signals, determinism, the IR and colour — are stated in full in
-[invariants.md](invariants.md). Read it before changing anything on the frame path.
+The engine-level rules — the render thread, state mutation, signals, determinism, the IR and
+colour — are principles like any other, and there is deliberately **no second document
+restating them**. `invariants.md` was exactly that document, and a sixth copy of a rule stated
+in five places is the drift [ADR-0000](adr/0000-record-decisions-here-and-standing-rules-in-principles.md)
+was written to end rather than to preserve. Read the ones your change touches before changing
+anything on the frame path; the colour rule in particular is
+[P-0064](principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md).
 
 ### Working style
 
@@ -341,7 +345,6 @@ Before marking a task or pull request as complete, ensure the following checklis
 ## 6. Related Architecture & Specification Reference
 
 - [architecture.md](architecture.md): Source code structure, multi-crate map, pipeline, and threading model
-- [invariants.md](invariants.md): The rules in force, and the tests that hold them
 - [ir-spec.md](ir-spec.md): `.kir` DSL specification and language invariants
 - [manual.md](manual.md): CLI arguments and VJ keyboard controls reference
 - [manual/](manual/): **the console's manual, published** at

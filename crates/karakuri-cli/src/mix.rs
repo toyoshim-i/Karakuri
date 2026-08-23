@@ -2,7 +2,8 @@
 //!
 //! The faders, the blend modes, residency and the output look are the state an
 //! operator moves during a performance and the only state the engine had no
-//! record vocabulary for at all — `docs/invariants.md` named the gap. A
+//! record vocabulary for at all, and the gap was written down rather than
+//! papered over. A
 //! session that replayed everything else would replay the material and not the
 //! *performance*: the same Sets, on the same beat, all at whatever gain they
 //! happened to start at, with nothing ever going on or off air.

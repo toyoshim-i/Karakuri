@@ -53,7 +53,9 @@
 //! The analyser says what it measured, at confidence 1.0 — including a
 //! measured silence. [`staleness`] is what turns "how long ago" into "how much
 //! to believe", and it lives here because it is the one part of the audio path
-//! that reads a clock. That is the same division `docs/invariants.md` draws for `tick`:
+//! that reads a clock. That is the same division
+//! `docs/principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md`
+//! draws for `tick`:
 //! measurement happens where the clock is, and what comes out joins the record
 //! stream.
 

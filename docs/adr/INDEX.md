@@ -169,6 +169,7 @@ number; new records continue from the end.
 | [ADR-0147](0147-geometry-is-not-shared-across-sets.md) | Geometry is not shared across Sets | 2026-08-23 | accepted |
 | [ADR-0148](0148-a-variant-pool-is-a-set-and-the-deck-stays-a-mixer.md) | A variant pool is a Set, and the deck stays a mixer | 2026-08-23 | accepted |
 | [ADR-0149](0149-source-cites-what-is-in-force-not-a-plan.md) | Source cites what is in force, not a plan | 2026-08-23 | accepted |
+| [ADR-0150](0150-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once.md) | The pipeline is linear HDR, and sRGB is encoded once at final output | 2026-08-23 | accepted |
 
 ## Retired numbers
 

@@ -3654,9 +3654,9 @@ fn saving_nodes(
 /// and the run that saved it drew 32768, and loading the file back gave a
 /// visibly different picture: a larger, smeared lattice.
 ///
-/// **That falsified the one promise the format makes** — `docs/invariants.md` states that
-/// a run driven by the file renders the same frame as the run whose flags wrote
-/// it. It was invisible while a Set was a pair, because the number was wrong in
+/// **That falsified the one promise the format makes** — a run driven by the
+/// file renders the same frame as the run whose flags wrote it
+/// (`docs/adr/0066-a-flag-becomes-a-record-writer.md`). It was invisible while a Set was a pair, because the number was wrong in
 /// the file and wrong again on the way back in; `--load-set` learning to honour
 /// a recorded capacity is what made the two disagree out loud.
 ///
@@ -6272,8 +6272,10 @@ impl Live {
     /// A frame owes the disk nothing, which is why [`finished_saves`] drains and
     /// never blocks. The end of the run is the one moment where that is the
     /// wrong trade: a save pressed in the last second reached the disk under an
-    /// id nothing in the stream ever named, so `docs/invariants.md`'s claim that a `save`
-    /// record exists for every live save that reached the disk was false in
+    /// id nothing in the stream ever named, so the claim that a `save`
+    /// record exists for every live save that reached the disk
+    /// (`docs/adr/0120-a-record-may-reach-outside-the-stream.md`)
+    /// was false in
     /// exactly the window an operator is most likely to be in — press `k`, see
     /// it took, quit.
     ///
@@ -6908,7 +6910,7 @@ impl Live {
         if let Some(recorder) = &mut self.recorder {
             // Cloned, which allocates — and this is a key press rather than a
             // frame, so it is the one place in the record path where that is
-            // allowed. `docs/invariants.md`'s invariant is about what a frame does.
+            // allowed. The render-thread rule is about what a frame does.
             recorder.push(record.clone());
         }
         match mix::change(&record, self.deck.slot_count()) {
@@ -10322,8 +10324,9 @@ mod live_save_tests {
     }
 
     /// **A save still being written when the run ends is waited for**, so the
-    /// `save` record `docs/invariants.md` promises for every save that reached the disk is
-    /// in the stream.
+    /// `save` record promised for every save that reached the disk
+    /// (`docs/adr/0120-a-record-may-reach-outside-the-stream.md`)
+    /// is in the stream.
     ///
     /// The window is small and it is exactly the one an operator is in: press
     /// `k`, read that it took, quit. The wait is bounded — see [`SAVE_WAIT`] —
@@ -10375,13 +10378,14 @@ mod live_save_tests {
     /// thread wrote the file successfully — and the client waited out
     /// `mcp::SAVE_REPLY` to be told the outcome was neither success nor failure
     /// about a save already on disk, the terminal never said "saved as set X",
-    /// and the `save` record `docs/invariants.md` promises for every save that reached
+    /// and the `save` record promised for every save that reached
     /// the disk was withheld from the stream until the run quit.
     ///
     /// **Read off the source, and that is the honest description of what this
-    /// can reach.** `Live::frame` needs a window, a GPU and an event loop;
-    /// `docs/invariants.md` says as much where it explains that the two replay defects
-    /// this project found both lived in this one function's statement order.
+    /// can reach.** `Live::frame` needs a window, a GPU and an event loop, and
+    /// the two replay defects this project found both lived in this one
+    /// function's statement order
+    /// (`docs/adr/0078-a-frame-that-is-discarded-must-not-already-have-been-recorded.md`).
     /// The defect here is a statement order too, and this asserts it where it
     /// is, rather than asserting nothing and calling it untestable. Comment
     /// lines are dropped first, so prose about returning cannot stand in for a

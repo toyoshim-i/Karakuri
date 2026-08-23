@@ -20,7 +20,7 @@ Four properties define it, and each has a document behind it:
 - **Real-time.** A changed procedure is compiled on a worker thread, installed at a frame
   boundary, watched for a window, and rolled back automatically if it costs too much.
   Nothing allocates or compiles a shader on the render thread — that and the rest of the
-  rules in force are [docs/invariants.md](docs/invariants.md)
+  rules in force are [docs/principles/](docs/principles/), one file each
 - **For VJ work.** Up to four Sets on a deck, each with its own gain, opacity and blend
   mode, on a beat grid the room's tempo can drive. How to play it is
   [docs/manual.md](docs/manual.md)

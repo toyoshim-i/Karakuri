@@ -142,8 +142,9 @@ impl ElementStorage {
     }
 }
 
-/// The fixed simulation step. **Not** the real frame delta — see the
-/// determinism invariant in `docs/invariants.md`. Public because the session clock a
+/// The fixed simulation step. **Not** the real frame delta — see
+/// `docs/principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md`.
+/// Public because the session clock a
 /// binding reads has to advance by exactly this: an oscillator on a different
 /// step would drift away from the `t` the Sets are running at, and the drift
 /// would be invisible until a beat landed in the wrong place.
@@ -3381,9 +3382,9 @@ impl Set {
     /// other miss in this file does.
     fn control_position(&self, name: &str) -> Option<f32> {
         // **Without allocating**, which `published()` cannot promise: this is
-        // called from `resolve_bindings`, which `Set::prepare` calls, and the
-        // first invariant in `docs/invariants.md` is the one about not allocating on the
-        // render thread. So the interface is searched in place and the default
+        // called from `resolve_bindings`, which `Set::prepare` calls, and
+        // nothing on the render thread allocates. So the interface is searched
+        // in place and the default
         // one — where a control's name *is* a param's key — is answered without
         // building the list it would appear in.
         // **The key, not the name.** A control is published under a name the Set
@@ -3580,7 +3581,7 @@ impl Set {
     /// **Nothing in here allocates.** Both uniform writes go through storage
     /// sized at build time (`crate::uniforms::UniformScratch`) and the step
     /// arguments through a stack array, because this is the render thread and
-    /// the first invariant in `docs/invariants.md` is the one about allocating on it.
+    /// nothing on it allocates.
     /// Binding resolution is the same: a fixed `Vec` written in place, a
     /// stack-sized bus over a borrowed oscillator, and a linear scan to read
     /// values back out.

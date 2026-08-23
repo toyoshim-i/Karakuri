@@ -11,8 +11,9 @@
 // ones before it, which is the same guarantee `shaders/scan.wgsl` chains its
 // scan levels on.
 //
-// **Rec.709 linear, and stated rather than assumed.** `docs/invariants.md`'s Color
-// invariant is that the pipeline is linear and HDR end to end; the primaries
+// **Rec.709 linear, and stated rather than assumed.** The colour rule
+// (`docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md`)
+// is that the pipeline is linear and HDR end to end; the primaries
 // that goes with are Rec.709, so luminance is 0.2126 R + 0.7152 G + 0.0722 B
 // and not the average of the three. The difference is not cosmetic — green
 // carries ten times the luminance blue does at equal magnitude, so a meter that

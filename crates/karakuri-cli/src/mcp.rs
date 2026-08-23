@@ -9,7 +9,9 @@
 //!
 //! ## It is the third surface, and it obeys the same rule as the other two
 //!
-//! Keys, then MIDI, now this. `docs/invariants.md`'s invariant is that everything an
+//! Keys, then MIDI, now this. The invariant
+//! (`docs/principles/0028-every-control-ends-in-the-same-record.md`)
+//! is that everything an
 //! operator moves goes through a record, is read back, and only then applied —
 //! and `docs/roadmap.md` already demanded exactly this of M6's agents, in those
 //! words, before anyone had thought about MCP:
