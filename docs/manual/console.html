@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Karakuri Console</title>
+<meta name="description" content="The Karakuri console, region by region: mixer, inspector, library, master chain, sequencer and outputs.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;500;700&family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <a class="mark" href="index.html">Karakuri</a>
+    <nav class="topnav">
+      <a href="index.html">How it thinks</a>
+      <a href="console.html" aria-current="page">The console</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Karakuri &middot; the manual</p>
+    <h1>The console is the instrument</h1>
+    <p class="lede">
+      Pick a Set per deck, mix them live, and see who is holding every control.
+      Mixing lives <em>between</em> decks; shaping lives <em>inside</em> one.
+      Every divider drags, because a preview's size is a machine's answer rather
+      than a layout's &mdash; and the whole panel follows the room, pastel on
+      white by day and lit on black in a dark hall.
+    </p>
+  </header>
+
+  <section>
+    <div class="roomswitch">
+      <span>the room:</span>
+      <button type="button" id="room-day"  aria-pressed="false">day</button>
+      <button type="button" id="room-night" aria-pressed="false">night</button>
+      <button type="button" id="room-auto" aria-pressed="true">follow you</button>
+    </div>
+    <div class="console-frame">
+      <div class="console" id="console">
+
+        <!-- transport -->
+        <div class="bay">
+          <div class="transport">
+            <span class="bpm">128.0</span>
+            <span style="color:var(--c-faint)">BPM</span>
+            <span class="pill armed">audio&#8209;in</span>
+            <span class="beat-grid"><i class="on"></i><i></i><i></i><i></i></span>
+            <span style="color:var(--c-dim)">bar 37</span>
+            <span class="pill">tap</span>
+            <span class="pill lav" data-tip="MIDI learn. Off. Click, then move a control here and a knob on your surface, and the two are mapped.">learn</span>
+            <span class="sep"></span>
+            <span data-tip="Frame time against the budget. 12.4 ms of 16.6 &mdash; there is headroom. A candidate that cannot hold this is rolled back on its own.">
+              <span class="val">58</span><span style="color:var(--c-faint)"> fps &middot; </span><span class="val">12.4</span><span style="color:var(--c-faint)">/16.6 ms</span>
+            </span>
+            <span class="pill armed" data-tip="The last procedure written landed at a frame boundary and is on screen. The other answers are rolled back for cost, and failed to build.">landed</span>
+            <span class="pill on" data-tip="Recording this session to the store as it happens. Click to stop.">&#9679; rec</span>
+          </div>
+        </div>
+
+        <div class="body-grid">
+
+          <!-- LEFT: library over staging -->
+          <div class="col">
+            <div class="bay" style="flex:1; display:flex; flex-direction:column;">
+              <div class="bay-head"><span>Library</span><span class="grip">&#8942;&#8942;</span></div>
+              <div class="scopes">
+                <span class="scope sel">favourites</span>
+                <span class="scope">my sets</span>
+                <span class="scope">presets</span>
+                <span class="scope">folder</span>
+                <span class="scope" data-tip="Add a scope. A library is asked questions rather than read end to end, so what you browse gets both wider and narrower with use.">+</span>
+              </div>
+              <div class="path">~/sets/tour&#8209;2026/night&#8209;b &nbsp;&#8250;&nbsp; opening</div>
+              <div class="lib-filters"><span class="field">holds&hellip;</span><span class="field">layer&hellip;</span></div>
+              <div class="lib-list">
+                <div class="lib-row cursor"><span class="star">&#9733;</span><span>drift_night</span><span class="dim">16:09</span></div>
+                <div class="lib-row"><span class="star">&#9733;</span><span>lattice_veil</span><span class="dim">15:52</span></div>
+                <div class="lib-row"><span style="color:var(--c-faint)">&#9734;</span><span>glass_shell</span><span class="dim">15:31</span></div>
+                <div class="lib-row"><span style="color:var(--c-faint)">&#9734;</span><span>night01</span><span class="dim">14:58</span></div>
+                <div class="lib-row"><span style="color:var(--c-faint)">&#9734;</span><span>strand_bloom</span><span class="dim">14:12</span></div>
+              </div>
+              <div class="lib-foot"><span>5 of 27</span><span class="sep"></span><span class="pill lav">load &rarr; C</span></div>
+            </div>
+
+            <div class="bay">
+              <div class="bay-head"><span>Staging</span><span>2 waiting</span></div>
+              <div class="stage-list">
+                <div class="cand"><span class="dot" style="background:var(--c-lav)"></span><span>veil_02</span><span class="sep"></span><span class="who">you, 14:41</span></div>
+                <div class="cand"><span class="dot" style="background:var(--c-sun)"></span><span>drift_night&nbsp;b</span><span class="sep"></span><span class="who">agent</span></div>
+                <div class="cand" style="justify-content:center;color:var(--c-faint)">a rejected candidate costs nothing</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CENTRE: program over inspector -->
+          <div class="col">
+            <div class="bay">
+              <div class="bay-head">
+                <span>Program</span>
+                <span style="display:flex;gap:5px;align-items:center">
+                  <span class="pill">1920&times;1080</span>
+                  <span class="pill" data-tip="Solo the program view: the panel folds away and only the picture is left, which is also how you capture this window.">solo</span>
+                  <span class="pill armed" data-tip="Two of four deck previews are running. A priming deck draws only while something auditions it, so each preview is an audition and costs a pass. Click to choose how many.">previews 2 of 4</span>
+                  <span class="grip">&#8942;&#8942;</span>
+                </span>
+              </div>
+              <div class="program-body">
+                <div class="program-view"><span>PROGRAM</span></div>
+                <div class="previews">
+                  <div class="preview a">A</div>
+                  <div class="preview b">B</div>
+                  <div class="preview">C &middot; off</div>
+                  <div class="preview">D</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="bay">
+              <div class="bay-head">
+                <span>Inspector</span>
+                <span style="display:flex;gap:5px;align-items:center">
+                  <span class="pill armed" data-tip="Two panes open. A wide window fits three or four, and each one added is another deck's worth of rows on screen for the same height.">2 up &#9662;</span>
+                  <span class="grip">&#8942;&#8942;</span>
+                </span>
+              </div>
+
+              <div class="insp-split">
+
+                <div class="insp-half">
+                  <div class="half-head"><span>showing</span><span class="what">deck A &middot; drift_night</span><span>&#9662;</span>
+                    <span class="sep"></span>
+                    <span class="pill on" data-tip="Keep deck A as a Set, exactly as it is on screen &mdash; the versions running, with their parameters, capacities, salts, layering and fold. It goes into the library under a name.">keep</span>
+                  </div>
+
+                  <div class="node-group">
+                    <div class="node-head"><span class="addr">L1:0</span><b>drift_shell</b><span class="sep"></span>
+                      <span class="auth" data-tip="Authority on this node. Manual: only you move it. Suggest: an agent proposes and you accept. Auto: it acts. Set per node, never globally.">
+                        <span class="sel">man</span><span>sug</span><span>auto</span>
+                      </span>
+                    </div>
+                    <div class="param">
+                      <span class="pname">radius</span>
+                      <span class="fader"><b style="width:32%"></b><s style="left:29%"></s></span>
+                      <span class="pval">2.40</span>
+                    </div>
+                    <div class="param bound">
+                      <span class="pname">turbulence</span>
+                      <span class="fader"><b style="width:58%"></b><s style="left:55%"></s></span>
+                      <span class="pval src">energy</span>
+                    </div>
+                    <div class="sens">
+                      <span>sensitivity</span>
+                      <span class="chips">
+                        <span class="pill armed">energy</span><span class="pill">pow2</span>
+                        <span class="pill">0.10 &ndash; 2.40</span>
+                        <span class="pill" data-tip="Take the knob back from the signal holding it. The binding is kept and stops driving, so you can hand it back.">take back</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="node-group">
+                    <div class="node-head"><span class="addr">L2:0</span><b>swirl_warp</b><span class="sep"></span>
+                      <span class="auth"><span class="sel">man</span><span>sug</span><span>auto</span></span>
+                    </div>
+                    <div class="param">
+                      <span class="pname">amount</span>
+                      <span class="fader"><b style="width:71%"></b><s style="left:68%"></s></span>
+                      <span class="pval">0.71</span>
+                    </div>
+                    <div class="param bound">
+                      <span class="pname">twist</span>
+                      <span class="fader"><b style="width:40%"></b><s style="left:37%"></s></span>
+                      <span class="pval src">midi 21</span>
+                    </div>
+                  </div>
+
+                  <div class="node-group">
+                    <div class="node-head"><span class="addr">L4</span><b>renderers</b><span class="sep"></span>
+                      <span class="auth"><span>man</span><span class="sel">sug</span><span>auto</span></span>
+                    </div>
+                    <div class="rend-row" data-tip="This Set composites, so one renderer is live and the rest are not. Selecting lands on the beat grid, and a kept Set comes back folded the way you left it.">
+                      <span class="rend sel">soft_points</span>
+                      <span class="rend">strand_strokes</span>
+                      <span class="rend">spark_fountain</span>
+                    </div>
+                    <div class="param">
+                      <span class="pname">hue</span>
+                      <span class="fader"><b style="width:58%"></b><s style="left:55%"></s></span>
+                      <span class="pval">0.58</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="divider-v">&#8942;</div>
+
+                <div class="insp-half">
+                  <div class="half-head"><span>showing</span><span class="what">deck B &middot; lattice_veil</span><span>&#9662;</span>
+                    <span class="sep"></span><span class="pill">keep</span>
+                  </div>
+
+                  <div class="node-group">
+                    <div class="node-head"><span class="addr">L1:0</span><b>lattice_shell</b><span class="sep"></span>
+                      <span class="auth"><span class="sel">man</span><span>sug</span><span>auto</span></span>
+                    </div>
+                    <div class="param">
+                      <span class="pname">spacing</span>
+                      <span class="fader"><b style="width:44%"></b><s style="left:41%"></s></span>
+                      <span class="pval">0.86</span>
+                    </div>
+                    <div class="param bound">
+                      <span class="pname">drift</span>
+                      <span class="fader"><b style="width:26%"></b><s style="left:23%"></s></span>
+                      <span class="pval src">seq 1</span>
+                    </div>
+                    <div class="sens">
+                      <span>sensitivity</span>
+                      <span class="chips">
+                        <span class="pill armed">seq 1</span><span class="pill">step</span>
+                        <span class="pill">0.00 &ndash; 1.00</span><span class="pill">take back</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="node-group">
+                    <div class="node-head"><span class="addr">L4</span><b>renderers</b><span class="sep"></span>
+                      <span class="auth"><span class="sel">man</span><span>sug</span><span>auto</span></span>
+                    </div>
+                    <div class="rend-row"><span class="rend sel">dots</span></div>
+                    <div class="param">
+                      <span class="pname">size</span>
+                      <span class="fader"><b style="width:37%"></b><s style="left:34%"></s></span>
+                      <span class="pval">1.20</span>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT: mixer, master, sequencer -->
+          <div class="col">
+            <div class="bay">
+              <div class="bay-head"><span>Mixer</span><span>4 of 4 &middot; page 1</span></div>
+              <div class="mixer-strips">
+                <div class="strip live focus">
+                  <span class="strip-name">drift_night</span>
+                  <span class="tally live" data-tip="Deck A is live: stepping and composited into the program. Click to cycle residency &mdash; live, priming, allocated.">live</span>
+                  <span class="trim"><span class="lbl">g</span><span class="fader"><b style="width:72%"></b><s style="left:66%"></s></span></span>
+                  <div class="fader-col">
+                    <span class="vfader"><b style="height:97%"></b><s style="bottom:94%"></s></span>
+                    <span class="vmeter"><b style="height:74%"></b><u style="bottom:82%"></u></span>
+                  </div>
+                  <span class="strip-num">1.00</span>
+                  <span class="strip-mode">
+                    <span class="mini sel" data-tip="Blend: add. How this deck meets the ones under it in the fold. Click to cycle &mdash; add, over, screen, multiply.">add</span>
+                    <span class="mini" data-tip="Mask: none. What shape of the frame this deck reaches. Click to choose one.">&#9711;</span>
+                  </span>
+                </div>
+
+                <div class="strip priming">
+                  <span class="strip-name">lattice_veil</span>
+                  <span class="tally priming" data-tip="Deck B is priming: stepping and warming its buffers, drawn only while something auditions it. Click to cycle residency.">prim</span>
+                  <span class="trim"><span class="lbl">g</span><span class="fader"><b style="width:44%"></b><s style="left:38%"></s></span></span>
+                  <div class="fader-col">
+                    <span class="vfader"><b style="height:30%"></b><s style="bottom:27%"></s></span>
+                    <span class="vmeter"><b style="height:12%"></b></span>
+                  </div>
+                  <span class="strip-num">0.30</span>
+                  <span class="strip-mode"><span class="mini sel">over</span><span class="mini">&#9681;</span></span>
+                </div>
+
+                <div class="strip">
+                  <span class="strip-name">glass_shell</span>
+                  <span class="tally alloc" data-tip="Deck C is allocated: compiled and holding its buffers, not stepping, keeping its t. Click to cycle residency.">alloc</span>
+                  <span class="trim"><span class="lbl">g</span><span class="fader"><b style="width:0%"></b><s style="left:0%"></s></span></span>
+                  <div class="fader-col">
+                    <span class="vfader"><b style="height:0%"></b><s style="bottom:0%"></s></span>
+                    <span class="vmeter"></span>
+                  </div>
+                  <span class="strip-num">0.00</span>
+                  <span class="strip-mode"><span class="mini sel">add</span><span class="mini">&#9711;</span></span>
+                </div>
+
+                <div class="strip empty">
+                  <span class="strip-name">&mdash;</span>
+                  <span class="tally off">empty</span>
+                  <span class="trim"><span class="lbl">g</span><span class="fader"></span></span>
+                  <div class="fader-col"><span class="vfader"></span><span class="vmeter"></span></div>
+                  <span class="strip-num" style="color:var(--c-faint)">&mdash;</span>
+                  <span class="strip-mode"><span class="mini">&mdash;</span></span>
+                </div>
+              </div>
+
+              <div class="xfade">
+                <div class="xrow">
+                  <span style="color:var(--c-faint)">A</span>
+                  <span class="xtrack"><s style="left:22%"></s></span>
+                  <span style="color:var(--c-faint)">B</span>
+                </div>
+                <div class="xrow">
+                  <span class="pill armed">wipe</span><span class="pill">iris</span>
+                  <span class="pill">next bar</span><span class="pill">8 beats</span>
+                  <span class="sep"></span><span class="pill on">go</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="bay">
+              <div class="bay-head"><span>Master</span><span class="grip">&#8942;&#8942;</span></div>
+              <div class="master-body">
+                <div class="master-row">
+                  <span style="color:var(--c-faint)">out</span>
+                  <span class="fader" style="flex:1"><b style="width:100%"></b><s style="left:94%"></s></span>
+                  <span class="val">1.00</span>
+                </div>
+                <div class="chain">
+                  <div class="fx"><i class="dot"></i>feedback<span class="amt">0.34</span></div>
+                  <div class="fx sel"><i class="dot"></i>bloom<span class="amt">0.60</span></div>
+                  <div class="fx off"><i class="dot"></i>rgb shift<span class="amt">&mdash;</span></div>
+                  <div class="fx off" style="justify-content:center">+ add</div>
+                </div>
+                <div style="color:var(--c-faint);font-size:10px">runs in linear HDR, before the one tonemap</div>
+              </div>
+            </div>
+
+            <div class="bay">
+              <div class="bay-head">
+                <span>Sequencer</span>
+                <span style="display:flex;gap:4px;align-items:center">
+                  <span class="pill armed">seq 1</span><span class="pill">seq 2</span><span class="pill">+</span>
+                </span>
+              </div>
+              <div class="seq">
+                <div class="seq-head">
+                  <span class="pill armed">16</span><span class="pill">1/8</span><span class="pill">2 bars</span>
+                  <span class="sep"></span>
+                  <span style="color:var(--c-dim)">step <span class="val">6</span></span>
+                </div>
+                <div class="seq-ruler">
+                  <span>1</span><span></span><span></span><span></span>
+                  <span>2</span><span></span><span></span><span></span>
+                  <span>3</span><span></span><span></span><span></span>
+                  <span>4</span><span></span><span></span><span></span>
+                </div>
+                <div class="seq-body">
+                  <div class="seq-play"><span></span><span class="lane"><i></i><i></i><i></i><i></i><i></i><i class="at"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+
+                  <div class="seq-row">
+                    <span class="seq-label" data-tip="Lane A &#9646; &mdash; deck A opacity, the channel fader. Active: the pattern is driving it. Click to mute the lane and keep the pattern.">A<span class="g">&#9646;</span></span>
+                    <span class="seq-lane"><i class="on hot down"></i><i class="on hot"></i><i class="on hot"></i><i class="on hot"></i><i class="on hot down"></i><i class="on hot"></i><i></i><i></i><i class="down"></i><i></i><i class="on hot"></i><i class="on hot"></i><i class="on hot down"></i><i class="on hot"></i><i class="on hot"></i><i class="on hot"></i></span>
+                  </div>
+                  <div class="seq-row">
+                    <span class="seq-label" data-tip="Lane B &#9646; &mdash; deck B opacity, the channel fader. Active. Click to mute the lane.">B<span class="g">&#9646;</span></span>
+                    <span class="seq-lane"><i class="down"></i><i></i><i></i><i></i><i class="down"></i><i></i><i class="on"></i><i class="on"></i><i class="on down"></i><i class="on"></i><i></i><i></i><i class="down"></i><i></i><i></i><i></i></span>
+                  </div>
+                  <div class="seq-row mute">
+                    <span class="seq-label" data-tip="Lane C &#9646; &mdash; deck C opacity, the channel fader. Muted: the pattern is kept and drives nothing. Click to unmute.">C<span class="g">&#9646;</span></span>
+                    <span class="seq-lane"><i class="down"></i><i></i><i></i><i class="on"></i><i class="down"></i><i></i><i></i><i class="on"></i><i class="down"></i><i></i><i></i><i class="on"></i><i class="down"></i><i></i><i></i><i class="on"></i></span>
+                  </div>
+                  <div class="seq-row">
+                    <span class="seq-label" data-tip="Lane B &#8767; &mdash; a Set parameter, L2:0 twist on deck B. Active. Click to mute the lane.">B<span class="g">&#8767;</span></span>
+                    <span class="seq-lane"><i class="on down"></i><i></i><i class="on"></i><i></i><i class="on down"></i><i></i><i class="on"></i><i></i><i class="on down"></i><i></i><i class="on"></i><i></i><i class="on down"></i><i></i><i class="on"></i><i></i></span>
+                  </div>
+                </div>
+                <div class="seq-foot">
+                  <span>a lane is a binding &middot; label mutes</span>
+                  <span class="sep"></span><span class="pill">+ lane</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- outputs -->
+        <div class="bay">
+          <div class="outputs">
+            <span style="color:var(--c-faint);font-family:var(--f-round);font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase">Outputs</span>
+            <span class="sink on" data-tip="This window, the default sink. Enabled, and it cannot be turned off &mdash; it is where you are watching."><i class="dot"></i>this window</span>
+            <span class="sink on" data-tip="A second window on the DELL, fullscreen. It is an ordinary window that an ordinary operating system made fullscreen, not an output mode of its own. Click to disable."><i class="dot"></i>projector &middot; DELL U2720Q</span>
+            <span class="sink" data-tip="Syphon, publishing as `karakuri`. Off. Click to enable &mdash; a slow sink has its frame dropped and never delays the window."><i class="dot"></i>Syphon</span>
+            <span class="sink absent tip-right" data-tip="NDI. No plugin is loaded, so there is nothing to enable. Install the plugin and it appears here as a sink."><i class="dot"></i>NDI &middot; no plugin</span>
+            <span class="sep"></span>
+            <span class="pill lav">+ add output</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <section class="callout mint">
+    <h2>The engine already said which one is the fader</h2>
+    <p>
+      An earlier draft drew <code>gain</code> and <code>opacity</code> as two
+      identical sliders, which threw away a distinction the code states outright:
+    </p>
+    <blockquote>
+      /// The level the material arrives at. Colour only.<br>
+      pub gain: f32,<br>
+      /// The fader across the blend, [0, 1]. The only one of the two that<br>
+      /// touches what a layer covers.<br>
+      pub opacity: f32,
+    </blockquote>
+    <p>
+      They behave differently too: <strong>opacity at zero silences under every
+      blend mode, and gain at zero does not silence <code>over</code></strong>
+      &mdash; a black card still covers. So this is a channel fader and a trim,
+      as a mixer has always had them. Opacity is the tall control your hand lives
+      on; gain is the small trim above it, set once and left.
+    </p>
+  </section>
+
+  <section class="callout">
+    <h2>The mixer is an L5, and so is a master effect</h2>
+    <p>A master effect looked like a new kind of node. The engine already writes the signature down:</p>
+    <blockquote>// The L5 node, nested: `[Texture] -&gt; Texture`.</blockquote>
+    <p>
+      <strong>A master effect is that signature with one input; the mixer is the
+      same with several.</strong> One kind, not two &mdash; what made the mixer
+      look special is that its instance is <em>built in</em>, the third time this
+      shape has come up: L3 has a built-in orbit camera <em>and</em> writable
+      camera procedures, and the <code>merge</code> record describes the built-in
+      L5 exactly as <code>camera</code> describes the built-in L3.
+    </p>
+    <p>
+      So admitting frame effects is <strong>giving L5 a writable form</strong>,
+      not extending the algebra. Fan-in is already solved by <code>uses</code>
+      plus <code>edge</code>; a per-deck effect and a master effect become the
+      same node at different points; and <strong>the deck count stops being a
+      system constant</strong>, since how many inputs an L5 folds becomes a
+      property of the procedure rather than of one built-in shader.
+      <strong>Feedback is the exception</strong>: reading the previous frame is a
+      cycle, and wants a decision of its own.
+    </p>
+  </section>
+
+  <section>
+    <h2>What each region is standing on</h2>
+    <div class="notes">
+
+      <div class="note">
+        <h3>Mixer</h3>
+        <p>
+          Four channel strips, all visible, nothing that scrolls out of reach mid
+          transition. Four today because the compositing shader declares four
+          inputs &mdash; the strip is a <strong>paged list whose length is a
+          number</strong>, and the header says which page you are on.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>Inspector</h3>
+        <p>
+          <em>n</em> panes, each showing whatever you point it at. Parameters
+          group <strong>by node</strong>, the way a Set is addressed everywhere
+          else (<code>L2:0:amount</code>), so an effect layer's controls need no
+          second idea of where things live. Only what a Set
+          <em>publishes</em> &mdash; the reason this is four rows rather than
+          twenty-five.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>Who is holding a control</h3>
+        <p>
+          A bound parameter shows its source instead of a number: a signal, a
+          MIDI control, a sequencer lane, an agent. <strong>That readout is where
+          disagreeing with the system begins</strong> &mdash; a control you
+          cannot see being moved is one you cannot take back &mdash; and
+          <em>take back</em> sits right beside it.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>Authority is per node</h3>
+        <p>
+          <code>man / sug / auto</code> on each node head, never a global mode.
+          Manual is yours alone, suggest proposes into the staging lane, auto
+          acts. One of the four properties the whole system is defined by, so it
+          belongs on the face of the panel rather than in a preferences window.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>Health, in the transport</h3>
+        <p>
+          Frame time against the budget, and what the last write did &mdash;
+          <strong>landed, rolled back for cost, or failed to build</strong>. The
+          rollback already happens on its own; what was missing was any way to
+          see that it had. Unbreakable on stage is only reassuring if it is
+          visible.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>Sequencer</h3>
+        <p>
+          One row per lane. The row keeps its width and the cells divide it, so
+          eight steps are landscape cells and sixteen are portrait ones. Each
+          lane sits under the mixer strip it drives. <strong>A lane is a
+          binding</strong> &mdash; a source, a target, a curve and a range, a
+          record that already exists &mdash; so a lane drives a Set parameter as
+          readily as a deck fader.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>Library, and staging under it</h3>
+        <p>
+          A scope and a walk, not one flat list: favourites, my sets, app
+          presets, a folder &mdash; and the scope list is itself extensible.
+          Staging is where candidates wait, whether they came from you or from an
+          agent; <strong>a rejected one costs nothing</strong>, because the
+          previous artifact is still in the library.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>Program, sized by height</h3>
+        <p>
+          A 16:9 view filling a wide centre column would be 763 pixels tall and
+          eat the inspector whole. So you drag its <em>height</em> and it
+          letterboxes into the width it has &mdash; which is what the engine
+          already does. Height given back is rows: roughly 48 in the library, and
+          near 40 per inspector pane.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>Outputs</h3>
+        <p>
+          A composited frame already goes to <em>n</em> sinks; this is that list,
+          made switchable. A projector window is a second sink and lives in the
+          repository; Syphon, Spout and NDI are plugin sinks and appear only when
+          a plugin is loaded. <strong>Fullscreen is just what an application
+          does.</strong>
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>Every icon explains itself</h3>
+        <p>
+          Density is only earned if it is legible on demand, so hover says three
+          things: <strong>what the control is, what state it is in, and what a
+          click will do</strong>. The third is the one usually left out, and
+          leaving it out is what makes a compact panel unlearnable &mdash; the
+          reader sees the state and never learns it is a control.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="callout mint">
+    <h2>One vocabulary, four ways in</h2>
+    <p>
+      Every operation is reachable from the GUI, from the keyboard alone, from a
+      mapped MIDI control, and from MCP. That is structural before it is visual:
+      <strong>each operation is named once, and every surface routes into that
+      name</strong>. An operation only the mouse can reach breaks it; so does one
+      the map cannot address. The sequencer is a fifth route, and it only works
+      for the same reason.
+    </p>
+    <div class="routes">
+      <span class="route">GUI <b>&rarr;</b> command</span>
+      <span class="route">keys <b>&rarr;</b> command</span>
+      <span class="route">MIDI map <b>&rarr;</b> command</span>
+      <span class="route">MCP <b>&rarr;</b> command</span>
+      <span class="route">sequencer <b>&rarr;</b> command</span>
+    </div>
+    <p>
+      It is checkable rather than merely intended: with the vocabulary
+      exhaustive, a test asserts that every command carries a key binding, is
+      addressable by the map, and is what the GUI emits. And it is half-built
+      &mdash; <code>L4:1:exposure</code> is already one spelling shared by
+      <code>--param</code>, <code>--publish</code>, the MIDI map and the MCP
+      tools. <strong>So this milestone opens with naming, not drawing.</strong>
+    </p>
+  </section>
+
+  <section class="open">
+    <h2>Still open</h2>
+    <div class="open-item">
+      <h4>What draws the panel</h4>
+      <p>
+        Nothing in the tree draws a UI today: the dependencies are winit and
+        wgpu, with no text rendering and no toolkit. Everything an operator sees
+        is the rendered output or a line printed to a terminal.
+      </p>
+    </div>
+    <div class="open-item">
+      <h4>Whether a folder scope reads Sets or artifacts</h4>
+      <p>
+        A directory of <code>.kir</code> files is a different thing from a
+        directory of Set files, and a bundle is a third. The scope list is where
+        that difference becomes visible, so it wants deciding before the first
+        scope beyond the store is added.
+      </p>
+    </div>
+    <div class="open-item">
+      <h4>How a Set gets from the library to a deck</h4>
+      <p>
+        Dragging a row onto a strip is one answer. A focused deck and a load key
+        is the one that also satisfies keyboard-only operation &mdash; and the
+        constraint should decide it, with dragging added afterwards as a second
+        route to the same command.
+      </p>
+    </div>
+  </section>
+
+  <script>
+    (function () {
+      var panel = document.getElementById("console");
+      var modes = { "room-day": "day", "room-night": "night", "room-auto": null };
+      var buttons = Object.keys(modes).map(function (id) { return document.getElementById(id); });
+      buttons.forEach(function (button) {
+        button.addEventListener("click", function () {
+          var want = modes[button.id];
+          panel.classList.remove("day", "night");
+          if (want) { panel.classList.add(want); }
+          buttons.forEach(function (other) {
+            other.setAttribute("aria-pressed", String(other === button));
+          });
+        });
+      });
+    })();
+  </script>
+  <footer>
+    A layout, not a specification &mdash; it is what the implementation is
+    checked against. The mechanisms behind the mixer, the inspector, the library
+    and the outputs are built; the master chain, the sequencer, the staging lane,
+    authority and the panel itself are not.
+    <a href="index.html">The seven rules</a> are what all of this obeys.
+  </footer>
+
+</div>
+
+</body>
+</html>
