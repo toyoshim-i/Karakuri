@@ -137,6 +137,14 @@ struct Solved {
 /// arrangement: the stored sizes, the collapsed flags and the viewport are all
 /// here, and the solved rectangles are not — they are derived, and a derived
 /// value on disk is a second answer waiting to disagree with the first.
+///
+/// **A file that deserialises without error is one that can be solved, hit
+/// tested and operated.** Loading it is where that is established, and it is
+/// the only place it has to be: a truncated, hand-edited or older file whose
+/// arena is not a tree — an index addressing no node, a node in two places, a
+/// parent pointer that disagrees with the list holding it — is refused with a
+/// sentence saying which node and what is wrong with it, rather than loading
+/// and panicking, aborting or hanging later. See `check_structure`.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "Wire")]
 pub struct Layout {
@@ -149,8 +157,9 @@ pub struct Layout {
 /// The wire form. It exists so that a deserialised `Layout` arrives with its
 /// rectangle and scratch buffers already sized: leaving them out of the derive
 /// alone would leave them empty, and the first solve after a load would
-/// allocate. It is also where a saved arrangement is checked for the name rule
-/// [`Layout::new`] states — on this side it is a rejected file rather than a
+/// allocate. It is also where a saved arrangement is checked — for the name
+/// rule [`Layout::new`] states, and for being an arena that is a tree at all
+/// ([`check_structure`]). On this side both are a rejected file rather than a
 /// panic, because a file is data and a [`Spec`] is code.
 #[derive(Deserialize)]
 struct Wire {
@@ -189,11 +198,17 @@ impl Serialize for Layout {
 }
 
 impl TryFrom<Wire> for Layout {
-    type Error = String;
+    type Error = LoadError;
 
-    fn try_from(w: Wire) -> Result<Layout, String> {
+    fn try_from(w: Wire) -> Result<Layout, LoadError> {
+        // Structure before names: everything below assumes an arena that is a
+        // tree, including the solve this ends with, and a file that is not one
+        // makes the name rule the least of what is wrong with it.
+        check_structure(&w.nodes, w.root)?;
         if let Some(name) = duplicate_name(&w.nodes) {
-            return Err(duplicate_message(name));
+            return Err(LoadError::DuplicateName {
+                name: name.to_owned(),
+            });
         }
         let mut saved = w.saved;
         saved.resize(w.nodes.len(), false);
@@ -219,11 +234,184 @@ fn duplicate_name(nodes: &[Node]) -> Option<&str> {
     })
 }
 
-fn duplicate_message(name: &str) -> String {
-    format!(
+/// Why a saved arrangement was refused: one variant per rule the file broke.
+///
+/// **Every number in a message is an index into the file's own `nodes` array**,
+/// because that is what a person looking at a saved session has in front of
+/// them — a `NodeId` is written on the wire as the bare number it is, so
+/// "node 7" is the eighth entry of `nodes` and nothing has to be counted twice.
+///
+/// It is deliberately not public, and could not usefully be: `serde` turns it
+/// into the deserialiser's own error by way of `Display` before any caller of
+/// `from_str` sees it, so the sentence *is* the whole of what reaches anyone.
+/// It is a type rather than a `format!` at each site so that the eight
+/// sentences sit together where they can be read as one voice, and so that
+/// adding a rule to [`check_structure`] is adding a variant here rather than
+/// another string somewhere else.
+#[derive(Debug, thiserror::Error)]
+enum LoadError {
+    /// A file truncated to nothing still parses as a `Layout` with an empty
+    /// arena, and every index into it is out of range — starting with the root.
+    #[error(
+        "the arrangement has no nodes: a saved arrangement is a root and whatever hangs from \
+         it, so there is nothing here to lay out"
+    )]
+    NoNodes,
+    #[error(
+        "the root is node {root}, and the arrangement has {len} nodes: every index in a saved \
+         arrangement addresses a node of the same file"
+    )]
+    RootOutOfRange { root: usize, len: usize },
+    #[error(
+        "the root, node {root}, records node {parent} as its parent: the root is where the \
+         arrangement starts, so nothing stands above it and walking up from any node has to \
+         stop there"
+    )]
+    RootHasParent { root: usize, parent: usize },
+    #[error(
+        "node {split} lists node {child} as its child {index}, and the arrangement has {len} \
+         nodes: every index in a saved arrangement addresses a node of the same file"
+    )]
+    ChildOutOfRange {
+        split: usize,
+        index: usize,
+        child: usize,
+        len: usize,
+    },
+    #[error(
+        "node {split} lists node {child} as a child, and node {child} has already been reached \
+         from the root: an arrangement is a tree, so a second route to a node is either one \
+         node in two places or a loop, and the solve follows a loop until it runs out of stack"
+    )]
+    ReachedTwice { split: usize, child: usize },
+    #[error(
+        "node {child} is a child of node {split} but {}: a parent pointer and a children list \
+         are one fact written twice, and where they disagree, walking up from a node reaches \
+         somewhere it does not hang from — or never stops",
+        records(*parent)
+    )]
+    ParentDisagrees {
+        child: usize,
+        split: usize,
+        parent: Option<usize>,
+    },
+    #[error(
+        "nothing reaches node {node} from the root: an arrangement is one tree, and a node no \
+         children list mentions is a region that is never solved, never drawn and never moved \
+         by anything folded above it"
+    )]
+    Unreachable { node: usize },
+    #[error(
         "two nodes are named {name:?}: a name addresses one region, and every surface \
          that is not a pointer reaches a region by its name"
-    )
+    )]
+    DuplicateName { name: String },
+}
+
+/// What a node's `parent` field says, as the middle of a sentence. A missing
+/// one is a distinct fault from a wrong one and reads as one.
+fn records(parent: Option<usize>) -> String {
+    match parent {
+        Some(p) => format!("records node {p} as its parent"),
+        None => "records no parent at all".to_owned(),
+    }
+}
+
+/// Everything a saved arrangement has to be before any of it can be solved,
+/// hit-tested or operated, checked in one pass on the load path.
+///
+/// **The arena's invariants, and what each of them costs when it is missing:**
+///
+/// 1. There is at least one node, and `root` addresses one. Otherwise the first
+///    line of [`Layout::solve`] indexes past the rectangle buffer.
+/// 2. The root has no parent, and every other node's `parent` is exactly the
+///    split whose children list holds it. This is the one that matters most:
+///    [`Layout::visible`] and [`Arrangement::is_ancestor`] walk *up*, and a
+///    parent chain that closes into a loop makes them **hang**, which is the
+///    worst of these failures because there is no panic to read afterwards.
+///    Deriving the parents from the walk instead would hide the disagreement
+///    rather than report it, and the file would still be a file that disagrees
+///    with itself.
+/// 3. Every child index addresses a node. Otherwise the first solve indexes
+///    past the arena.
+/// 4. No node is reached twice. A children list that points at a node already
+///    in the tree is either one node in two places or a cycle, and
+///    [`solve_subtree`] recurses on children — so a cycle is a stack overflow
+///    at load, which aborts the process rather than returning an error.
+/// 5. Every node is reached. This one is a decision rather than a crash: an
+///    orphan solves to nothing, draws nothing, and cannot be reached by a fold
+///    or a solo above it, so it is a region that exists in the file and nowhere
+///    else. A loader that accepted it would be accepting a file it has already
+///    read as a tree plus some debris.
+///
+/// **[`Layout::new`] needs none of this**, and does not pay for it: [`build`]
+/// pushes each node once, hands it the parent it was built under, and fills a
+/// split's children with the ids it just created, so 1 to 5 hold of anything a
+/// [`Spec`] can express. Only a file can be wrong in these ways, so only the
+/// file is checked.
+///
+/// Not every disagreement is refused. A `min` above a `max`, a negative or NaN
+/// size, a split with no children — a [`Spec`] can express all of those and
+/// [`Layout::new`] accepts them, so refusing them here would make a file and
+/// the code that writes it disagree about what an arrangement is. The solve is
+/// total over them: it clamps at zero, iterates a bounded number of passes and
+/// leaves the discrepancy as trailing space.
+fn check_structure(nodes: &[Node], root: NodeId) -> Result<(), LoadError> {
+    let len = nodes.len();
+    if len == 0 {
+        return Err(LoadError::NoNodes);
+    }
+    if root.0 >= len {
+        return Err(LoadError::RootOutOfRange { root: root.0, len });
+    }
+    if let Some(NodeId(parent)) = nodes[root.0].parent {
+        return Err(LoadError::RootHasParent {
+            root: root.0,
+            parent,
+        });
+    }
+
+    // An explicit stack rather than recursion: the depth here is the file's
+    // rather than the arrangement's, and meeting a deep one by overflowing the
+    // stack is one of the failures this exists to refuse.
+    let mut reached = vec![false; len];
+    reached[root.0] = true;
+    let mut pending = vec![root.0];
+    while let Some(split) = pending.pop() {
+        let Kind::Split { children, .. } = &nodes[split].kind else {
+            continue;
+        };
+        for (index, &NodeId(child)) in children.iter().enumerate() {
+            if child >= len {
+                return Err(LoadError::ChildOutOfRange {
+                    split,
+                    index,
+                    child,
+                    len,
+                });
+            }
+            // Before the parent check, because a node the walk has already
+            // placed is a loop or a duplicate whichever way its parent points,
+            // and that is the fault worth naming.
+            if reached[child] {
+                return Err(LoadError::ReachedTwice { split, child });
+            }
+            if nodes[child].parent != Some(NodeId(split)) {
+                return Err(LoadError::ParentDisagrees {
+                    child,
+                    split,
+                    parent: nodes[child].parent.map(|NodeId(p)| p),
+                });
+            }
+            reached[child] = true;
+            pending.push(child);
+        }
+    }
+
+    match reached.iter().position(|r| !r) {
+        Some(node) => Err(LoadError::Unreachable { node }),
+        None => Ok(()),
+    }
 }
 
 /// A viewport with a negative — or NaN — size is a caller's arithmetic, not a
@@ -257,7 +445,12 @@ impl Layout {
         let mut nodes = Vec::new();
         let root = build(&mut nodes, spec, None);
         if let Some(name) = duplicate_name(&nodes) {
-            panic!("{}", duplicate_message(name));
+            panic!(
+                "{}",
+                LoadError::DuplicateName {
+                    name: name.to_owned()
+                }
+            );
         }
         let saved = vec![false; nodes.len()];
         let mut layout = Layout::assemble(nodes, root, saved);
