@@ -16,9 +16,9 @@
 //!
 //! A chain of snapshots per slot and layer is what a surface walks to offer
 //! undo, and what an operator saves from once they find the one they liked.
-//! Neither of those exists yet — the surface is M5 and saving to a user preset
-//! is `--save-set`'s neighbourhood — but the snapshots have to be taken while
-//! the editing is happening or there is nothing to walk later.
+//! Neither of those exists yet — nothing walks the chain, and saving to a user
+//! preset is `--save-set`'s neighbourhood — but the snapshots have to be taken
+//! while the editing is happening or there is nothing to walk later.
 //!
 //! # Why a date directory, and why local time
 //!

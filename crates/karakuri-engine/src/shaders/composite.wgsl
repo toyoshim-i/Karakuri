@@ -52,8 +52,8 @@
 // the colour is being added. So the one formula above holds for colour;
 // **alpha is the exception and is always `over`.** Nothing downstream reads it
 // today — the present pass tone maps `.rgb` — and it exists because `over`
-// needs it and because M2's output routing hands a frame to something that
-// will want to key on it.
+// needs it, and because coverage is what anything handed this frame outside
+// the present pass would key on.
 //
 // A layer this shader *skips* contributes no coverage either, which is the one
 // place a level reaches alpha: `gain` scales colour and nothing else, but a

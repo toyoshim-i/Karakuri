@@ -29,8 +29,8 @@
 //!
 //! ## Unmapped messages are printed, and that is the learn mode
 //!
-//! There is no UI to assign a knob in, and M5 is where one arrives. Until then
-//! the way to find out what a controller sends is to turn it and read: an
+//! There is no UI to assign a knob in, and none is built. Until there is, the
+//! way to find out what a controller sends is to turn it and read: an
 //! unmapped message prints the line that would map it, so discovering a surface
 //! is turning every knob once and pasting the output into a file.
 //!

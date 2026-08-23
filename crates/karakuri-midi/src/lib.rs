@@ -13,8 +13,8 @@
 //!
 //! **That is the invariant, not an arrangement.** The record stream
 //! (`docs/principles/0028-every-control-ends-in-the-same-record.md`)
-//! is the sole mutation path, and the reason M6's agents will be safe to run is
-//! that they can do nothing a human could not do through the same interface. A
+//! is the sole mutation path, and the reason an automatic writer is safe to run
+//! is that it can do nothing a human could not do through the same interface. A
 //! surface is the first thing to test that claim against, because a surface is
 //! the first thing that is not the keyboard. Every consequence follows from it:
 //! a session recorded from a controller **replays with no controller

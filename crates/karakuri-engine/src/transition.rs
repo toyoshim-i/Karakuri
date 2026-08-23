@@ -61,9 +61,8 @@
 //! Moving a control by hand cancels whatever transition was moving it. A fader
 //! that fought back would be the worst control on the deck: the one place an
 //! operator reaches when something is wrong is the same place an automatic
-//! thing is writing. This is the same rule M6 states for agents — "manual
-//! intervention instantly demoting that layer's agent to `Suggest`" — arriving
-//! early because the first automatic writer arrived early.
+//! thing is writing. A transition is the first automatic writer on this deck,
+//! and the rule is meant to hold for every one that follows it.
 
 use crate::binding::Curve;
 
