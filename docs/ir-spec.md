@@ -3068,6 +3068,19 @@ it. Anything else fed to the generator belongs here too, for the same reason: tw
 from the same prompt that differ because different reference material was supplied are
 otherwise unexplainable.
 
+**Why this vocabulary is shaped as it is.** One Rust enum carries all three vocabularies
+rather than one per file, because a separate enum makes a metadata record decode as
+`Unknown` and the format promises to *pass those over* — so a Set file could not refuse one
+([ADR-0135](adr/0135-one-record-enum-and-one-classifier-behind-both-predicates.md)). The
+store keeps bytes and whoever compiled them writes the card, because `karakuri-store` has no
+compiler and should not grow one
+([ADR-0136](adr/0136-the-store-keeps-bytes-and-whoever-compiled-them-writes-the-card.md)). A
+default that does not fold writes the key absent rather than the record absent, because a
+missing record says *no such parameter*
+([ADR-0137](adr/0137-an-unfoldable-default-writes-the-key-absent-not-the-record-absent.md)).
+And `thumbnail` is not called `preview` because that name was already a deck record with a
+different shape ([ADR-0134](adr/0134-the-metadata-preview-becomes-thumbnail.md)).
+
 **One `t` means one shape, across every file.** A metadata file describes what an artifact
 *declares*; a Set file records what a value *is*. Those are different records, so they get
 different names — `param_decl` and `capacity_decl` here, `param` and `capacity` there. The

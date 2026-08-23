@@ -2087,6 +2087,17 @@ section of `docs/ir-spec.md`, where a reader meets the `camera` record.
   for closed-form and expensive for accumulating" is about *priming*, which is a deck
   concept, and inside one Set there is nothing to warm.
 
+  **What this leaves owed, in order.** A composited Set does not round-trip, so a pool cannot
+  be kept: `Layering` is held out of the Set file by the rule that a file records the nodes of
+  a Set and not how they meet each other, and admitting it means either bending that rule or
+  finding a reading of it that fits — undecided, and the next decision this line owes. Then
+  the selection is one-way: nothing folds every renderer back in, and restoring the fold wants
+  its own spelling, of the shape `Record::Preview`'s null-for-the-mix has. And an L1
+  alternative is stepped whether it is selected or not, because `Set::step` walks every
+  source; parking one while another runs does not exist, so an L1 pool is not the cheap thing
+  an L4 pool is. The mechanism and the record are argued in
+  [ADR-0146](adr/0146-a-selection-is-its-own-record-and-lands-once.md).
+
   **The smaller half is built, and it is the half that lives inside one Set.** A composited
   slot — `--merge N` — already gives every renderer a target of its own and an edge into an
   L5, so `r` makes one of them live and the rest not, on the beat grid, through a `select`

@@ -117,6 +117,12 @@ from over 370 s to about 60 s (2026-08-23). If the suite ever starts creeping up
 the files there
 first — `ls target/debug/deps | wc -l` — before looking at any test.
 
+The convention and its enforcement are argued in
+[ADR-0140](adr/0140-a-gpu-test-lives-under-mod-gpu-and-the-rule-is-enforced-both-ways.md),
+and the no-skip rule below in
+[ADR-0141](adr/0141-a-gpu-test-with-no-adapter-fails-rather-than-skipping.md), which also
+records what would reverse it.
+
 `cargo test -p <crate>` keeps its exact meaning — everything runs, and the pre-push hook is
 untouched. The filter only ever subtracts. `#[ignore]` would have inverted that default, so
 `cargo test` would have quietly stopped meaning "everything"; that is why this is a module
@@ -128,6 +134,10 @@ which reads the workspace's own source and fails both ways round: a GPU test out
 gpu` would be run by the filtered command, and a CPU test inside one would silently stop
 running whenever anyone filtered. It counts spawning a binary that reaches `Gpu::headless`
 as reaching one, which is the only way `tests/replay.rs` can be seen at all.
+
+A test that needs a device is only *untestable* to the extent that the line needing it is —
+where one line needs the device and the rest is a decision, the decision comes out
+([ADR-0130](adr/0130-a-wrapper-that-needs-a-gpu-does-not-excuse-the-decision-inside-it.md)).
 
 **There is no in-test skip, in either direction.** A test that needs a device and cannot get
 one panics; every one of them does. Eight used to print a message and return instead, and one
@@ -194,6 +204,18 @@ re-point the ADRs that cited it
 
 **An ADR is not edited after it lands**, except to set `status` and `superseded_by`. If the reasoning
 would have to change, that is a new record.
+
+**Hook it from where the work is, or nobody will find it.** `INDEX.md` makes a record
+*findable*; it does not make anyone *look*. A record that changes what is planned or what is
+still owed gets a pointer from [roadmap.md](roadmap.md), beside the item it changes — including
+the sentence naming what the decision leaves undone, because a consequence recorded only in
+the ADR is a consequence the next person meets rather than reads. A record that changes how
+the thing is used gets one from [manual.md](manual.md) or [ir-spec.md](ir-spec.md); a record
+that settles a standing rule gets a principle, which is the working set people actually read.
+
+This is not decoration. Nineteen records were written on 2026-08-22 and 2026-08-23 and
+fourteen of them were reachable from nothing outside `docs/adr/` — the reasoning was all
+there, and the plan did not know any of it had happened.
 
 ---
 
