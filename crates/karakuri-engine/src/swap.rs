@@ -59,9 +59,9 @@
 //! It transfers no state. A new procedure means new buffers, so the incoming
 //! Set starts cold: `t` at zero, element buffers at their initial contents,
 //! nothing primed. That is correct for V1. Warming a Set out of sight before
-//! showing it is `docs/roadmap.md`'s M2 (Priming) and needs the deck and the
+//! showing it is Priming — see [`crate::deck`] — and needs the deck and the
 //! residency model to exist first; half of it built here would be a second,
-//! worse answer that M2 would then have to remove.
+//! worse answer that the deck would then have to remove.
 //!
 //! The outgoing Set, by contrast, is not stepped while it waits to see whether
 //! it is needed again — `t` is simulation time and does not advance for a Set
@@ -125,7 +125,8 @@
 //!   and unreliable on this machine, calibrates against a known-heavy workload
 //!   rather than trusting the feature flag, and labels every number with how it
 //!   was obtained. A governor steering on an unlabelled number is the failure
-//!   mode `docs/roadmap.md` asks to decide about before building this.
+//!   mode a measurement that does not say how it was taken invites — see
+//!   `docs/principles/0012-a-measurement-carries-how-it-was-taken.md`.
 //! - A Set is the unit the governor budgets in, and it is the unit that gets
 //!   built. Measuring it where it is built means the measurement travels with
 //!   it and cannot get attached to the wrong one.
@@ -196,11 +197,11 @@ const JUDGE_FRAMES: usize = 30;
 /// in half reads as 16.7 ms — under this budget, so the watchdog would keep a
 /// candidate that halved the frame rate. `karakuri-cli`'s `--budget-ms` is the
 /// operator's answer to that. The real answer is a budget derived from the
-/// display rather than from a constant, which belongs with `docs/roadmap.md`'s
-/// M2 budget governor: that is where per-Set measurement and the decision
+/// display rather than from a constant, which belongs with the budget governor
+/// — [`crate::governor`]: that is where per-Set measurement and the decision
 /// about whether GPU timestamps can be trusted on the performing machine both
-/// live, and picking a second, worse answer here would be something M2 has to
-/// remove.
+/// live, and picking a second, worse answer here would be one to remove
+/// later.
 pub const DEFAULT_BUDGET_MS: f32 = 20.0;
 
 /// The offscreen size every per-Set measurement is taken at.
@@ -212,7 +213,7 @@ pub const DEFAULT_BUDGET_MS: f32 = 20.0;
 /// measurements together and compares them, so **comparable matters more than
 /// absolute** — and an absolute number would be a lie the moment the window
 /// moved anyway. 1280x720 because it is the size every other figure in
-/// the roadmap was taken at.
+/// this repository was taken at.
 pub const PROBE_RESOLUTION: (u32, u32) = (1280, 720);
 
 /// Simulation steps per measured frame. One, because that is what a `tick`

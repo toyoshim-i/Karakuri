@@ -1342,9 +1342,9 @@ fn parse_bind(value: &str) -> Result<Binding, String> {
     // documentation always claimed: a way to write a `bind` record. Every
     // semantic rule — the `bpm` refusal, `octaves` needing `fbm`, a generator
     // needing `signal=noise` — lives in `setfile::binding_from_record` and
-    // cannot differ between a command line and a Set file. `docs/roadmap.md`
-    // recorded that debt against the decoder; this is it paid by having one
-    // rule rather than two copies of it.
+    // cannot differ between a command line and a Set file. That debt against
+    // the decoder is paid by having one rule rather than two copies of it —
+    // see `docs/adr/0066-a-flag-becomes-a-record-writer.md`.
     //
     // The one check that stays here is the one the record cannot express.
     // `BindNoise::octaves` has a serde default, deliberately — "a generator
@@ -5021,9 +5021,10 @@ fn refused(reply: Option<mcp::Reply>, said: String) {
 /// calling `save_set {"slot":9}` and an operator pressing `9` got different
 /// sentences for the same mistake on the same control. That was tolerable while
 /// each surface reached different controls; it stopped being tolerable when
-/// `save_set` made one control reachable from two of them, and
-/// `docs/roadmap.md` now offers "the refusals are the same sentences whoever
-/// meets them" as the thing M5's surface inherits. `mcp.rs`, `midi.rs` and
+/// `save_set` made one control reachable from two of them: the refusals are
+/// the same sentences whoever meets them — see
+/// `docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md`.
+/// `mcp.rs`, `midi.rs` and
 /// `mix.rs` all call this now. Each of them pins it with an `assert_eq!`
 /// against this function rather than trusting this comment — see
 /// `mcp::tests::a_slot_a_layer_and_a_renderer_resolve_and_anything_else_is_refused`,
@@ -6101,10 +6102,11 @@ impl Live {
 
     /// **Write what this run is playing as a Set file.**
     ///
-    /// The control `docs/roadmap.md` names as M4's open gap: `--save-set`
+    /// The control that closes an open gap: `--save-set`
     /// writes what the *flags* say and exits, so the loop that lets an operator
     /// load a preset, edit it and watch it had no way to keep the result. This
-    /// is the render-loop half of closing that. Every surface ends here — the
+    /// is the render-loop half of closing that — see
+    /// `docs/adr/0122-a-save-writes-the-bytes-that-are-on-screen.md`. Every surface ends here — the
     /// key below, the MCP tool, and whatever M5 builds — for the same reason
     /// every mix control ends in one method. **This is the only save path**,
     /// which is what makes a refusal and an outcome one sentence each rather
@@ -6655,8 +6657,10 @@ impl Live {
     ///
     /// The first half of a variant pool, and the half that is true today:
     /// several renderers over *one* simulation, in one Set, one of them folded
-    /// into the picture at a time. `docs/roadmap.md`'s pool is deck slots
-    /// differing at a layer slot, and the rest of it — an alternative that
+    /// into the picture at a time. A pool spanning deck slots that differ at a
+    /// layer slot was the alternative and is rejected — see
+    /// `docs/adr/0148-a-variant-pool-is-a-set-and-the-deck-stays-a-mixer.md` —
+    /// and the rest of it — an alternative that
     /// differs at L1, priming it off air, sharing the geometry between them —
     /// is not built. See the manual, "Selecting one renderer of a slot".
     ///
@@ -6800,7 +6804,7 @@ impl Live {
     /// **Cycle what the output is showing**: the mix, then each slot in turn,
     /// then the mix again.
     ///
-    /// Auditioning, which `docs/roadmap.md` calls a prerequisite rather than a
+    /// Auditioning is a prerequisite rather than a
     /// convenience — choosing between candidates cannot be done blind. Every
     /// slot is offered whatever its residency, because an off-air slot is
     /// exactly the one worth looking at: an Allocated one shows the still it
@@ -8399,8 +8403,8 @@ mod tests {
     /// pair: `b.kir,c.kir` had been silently accepted as one literal L4
     /// filename, so a stray comma got blamed on a missing file. Now a Set holds
     /// a list, and one comma-separated list read as one L1 and however many L4s
-    /// is exactly what `docs/roadmap.md` said the command line should look like
-    /// — *"no new syntax at all"*.
+    /// is exactly what the command line should look like — *no new syntax at
+    /// all*.
     #[test]
     fn set_with_three_paths_is_one_geometry_and_two_renderers() {
         let args = parse(&["--set", "a.kir,b.kir,c.kir"]).expect("should parse");

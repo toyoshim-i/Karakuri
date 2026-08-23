@@ -9,8 +9,8 @@
 //!
 //! **In the audio callback.** The alternative — copying raw samples into a ring
 //! and transforming them on the render thread — was rejected on two counts: it
-//! puts an FFT and an autocorrelation inside the frame budget that the roadmap's
-//! governor is supposed to be policing, and it makes the amount of work per
+//! puts an FFT and an autocorrelation inside the frame budget the engine's
+//! governor is policing, and it makes the amount of work per
 //! frame depend on how much audio happened to arrive, which is the shape of a
 //! frame-time spike.
 //!

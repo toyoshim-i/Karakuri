@@ -1,9 +1,7 @@
 //! Per-slot level metering: how much light a Set is actually putting out.
 //!
-//! `docs/roadmap.md`, on M2's L5 mixer:
-//!
-//! > Semi-automatic gain needs a measured level per Set, which is the same
-//! > per-Set measurement hook the budget governor needs.
+//! Semi-automatic gain needs a measured level per Set, which is the same
+//! per-Set measurement hook the budget governor needs.
 //!
 //! The reason it is needed at all is that a fader means nothing if each Set
 //! arrives at a different nominal level. There is a tone mapper now and the
@@ -56,8 +54,9 @@
 //! precisely what makes a NaN count a bad proxy for "this material is wrong" —
 //! a warning that fires on normal material teaches an operator to ignore
 //! warnings, which is worse than not having one. That is the same argument the
-//! rest of this module makes about gain, and the same one `docs/roadmap.md`
-//! records against a tempo octave chosen by heuristic. The count is shown; what
+//! rest of this module makes about gain, and the same one recorded against a
+//! tempo octave chosen by heuristic
+//! (`docs/adr/0060-the-tempo-octave-is-folded-not-judged.md`). The count is shown; what
 //! to make of it is the operator's.
 //!
 //! Excluded texels divide into the mean as zero rather than being taken out of

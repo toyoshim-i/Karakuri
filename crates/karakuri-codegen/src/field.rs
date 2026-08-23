@@ -8,8 +8,8 @@
 //! struct, because its params live in the uniform of whoever calls it; no
 //! entry point, because it is not dispatched.
 //!
-//! `docs/roadmap.md` settled that a `kind` says what a procedure *lowers to*,
-//! and that an L5 has no `kind` because it has no code to lower. This is the
+//! A `kind` says what a procedure *lowers to*, and an L5 has no `kind` because
+//! it has no code to lower — `docs/ir-spec.md`, "kind". This is the
 //! mirror — only code, so a file and no node.
 //!
 //! # One splice per slot, named by the slot

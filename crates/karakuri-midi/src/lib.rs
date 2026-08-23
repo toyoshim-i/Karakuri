@@ -1,7 +1,7 @@
 //! MIDI in: a control surface driving the deck through the record stream.
 //!
-//! `docs/roadmap.md`, M2: "MIDI control surface on a dedicated controller, not
-//! the DJ controller." The reason it is a separate surface is that the DJ
+//! A MIDI control surface goes on a dedicated controller, not the DJ
+//! controller. The reason it is a separate surface is that the DJ
 //! controller belongs to whoever is playing the music, and the visuals cannot
 //! be on a device somebody else's hands are on.
 //!

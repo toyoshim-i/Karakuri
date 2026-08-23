@@ -23,7 +23,7 @@
 //!   own doc, which says to ask `cost::estimate` instead.
 //! - `origin`, `parent` and `tag` describe where an artifact *came from*, and
 //!   nothing generates procedures yet, so there is nothing to say. `parent` is
-//!   the one `docs/roadmap.md` calls the demand most likely to be missed by
+//!   the demand most likely to be missed by
 //!   arriving late: leaving room for it is the point, and writing a `parent`
 //!   with nothing in it would fill the hole with a lie rather than leave it
 //!   visible.

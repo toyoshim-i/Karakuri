@@ -62,8 +62,8 @@ pub struct Checked {
     ///
     /// One field for both because the two are the same question asked of the
     /// two halves of a Set. Before `lines` existed this was an L1 field with
-    /// no L4 counterpart, which is what made `docs/roadmap.md`'s "give an L4 a
-    /// way to say what it renders" an open question.
+    /// no L4 counterpart, which is what left "give an L4 a way to say what it
+    /// renders" an open question.
     ///
     /// **The two halves are allowed to disagree**, and nothing compares them:
     /// only the L4's value reaches lowering, and a line renderer needs nothing

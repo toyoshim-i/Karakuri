@@ -1,7 +1,7 @@
 //! The deck: several Sets resident, one to four composited.
 //!
-//! What is asserted here is what `docs/roadmap.md`'s M2 promises and what the
-//! rest of the system will be built on top of, in the order the module doc on
+//! What is asserted here is what the deck promises and what the
+//! rest of the system is built on top of, in the order the module doc on
 //! `deck.rs` argues them:
 //!
 //! - a deck of one is a bare Set, **bit for bit**, so every single-Set
@@ -508,9 +508,11 @@ proc wash {
             lit(&expected) > 100,
             "the bare Set drew nothing, so this test would pass on two black frames"
         );
-        // And it has to be a *bright* frame, not merely a non-empty one. the roadmap's
-        // Color invariant is that values above 1.0 are expected and are what feeds
-        // bloom, so a mix that only agreed on [0, 1] would be agreeing on the
+        // And it has to be a *bright* frame, not merely a non-empty one. The colour
+        // invariant is that values above 1.0 are expected and are what feeds
+        // bloom — see
+        // `docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md`
+        // — so a mix that only agreed on [0, 1] would be agreeing on the
         // uninteresting half. Asserted rather than assumed, because the material
         // this test renders is free to get dimmer later and take the property with
         // it silently.
@@ -535,8 +537,9 @@ proc wash {
     /// target is allowed to hold a NaN — `sqrt` of a negative is a procedure that
     /// passes every stage of this pipeline — and one blended at a zero fader would
     /// otherwise put a NaN in every channel of the composite, wiping out every
-    /// other slot. This is the property `docs/roadmap.md` records as the first
-    /// thing M2 taught, and it is **the** reason the operator has a fader at all.
+    /// other slot — see
+    /// `docs/adr/0040-a-gain-of-zero-means-no-contribution-so-the-slot-is-skipped.md`.
+    /// It is **the** reason the operator has a fader at all.
     ///
     /// The comparison is against the same deck with that slot `Allocated`, which is
     /// the path that was already exact, so this asserts the two ways of silencing a
@@ -1222,7 +1225,7 @@ proc wash {
     ///
     /// The mix is checked rather than the fields: halfway through, the outgoing
     /// slot is dimmer than it was and the incoming one is brighter, and the frame
-    /// carries both. That is the thing the roadmap asked for, and it needed no type
+    /// carries both. That is the whole of what a crossfade is, and it needed no type
     /// of its own.
     #[test]
     fn a_crossfade_is_two_moves_sharing_a_start_and_a_length() {
@@ -2362,7 +2365,7 @@ proc wash {
     /// the same property `swap.rs` already leans on to park an outgoing Set across
     /// a watchdog window, which is why it costs nothing to have here.
     ///
-    /// This is two of the roadmap's three residency levels. `Priming` — stepping
+    /// This is two of the three residency levels. `Priming` — stepping
     /// hidden at a reduced rate — is the next slice and needs the budget governor
     /// to be worth having.
     #[test]
@@ -2710,7 +2713,8 @@ proc wash {
     /// `cargo test -p karakuri-engine --test deck -- --nocapture --ignored`.
     ///
     /// Three configurations at the CLI's own defaults, so the numbers are
-    /// comparable with the ones in the roadmap rather than being a measurement of
+    /// comparable with the other host-clock figures in this repository rather
+    /// than being a measurement of
     /// a toy: a bare Set, a deck of one, and a deck of four. Bare against deck-of-
     /// one isolates the composite pass, since the simulation either side of it is
     /// identical. Deck-of-one against deck-of-four is what a slot costs, which is

@@ -1,10 +1,10 @@
 //! The budget governor: what may prime, and how fast.
 //!
-//! `docs/roadmap.md` puts this in M2 and leaves the load-bearing question open
-//! under **Decide before building** — "whether GPU timestamps work on the
-//! performing machine", because "a governor steering on a host clock reacts to
-//! submission overhead as much as to shader cost". The decision this module is
-//! built on:
+//! The load-bearing question left open before this was built was whether GPU
+//! timestamps work on the performing machine, because a governor steering on a
+//! host clock reacts to submission overhead as much as to shader cost. The
+//! decision this module is built on
+//! (`docs/adr/0054-the-governor-budgets-from-the-probe-and-never-touches-a-live-slot.md`):
 //!
 //! > **The governor budgets against a per-Set cost measured by
 //! > [`crate::probe`] when the Set is built** — not against live GPU timestamps
@@ -88,9 +88,11 @@
 //! Restoring a slot it parked earlier is not that: the request was there the
 //! whole time.
 //!
-//! And it does not budget **VRAM**. `docs/roadmap.md` wants two budgets — VRAM
+//! And it does not budget **VRAM**. The deck's size is two budgets — VRAM
 //! bounding how many Sets can be Allocated at all, compute bounding how many
-//! can step — and only the second is buildable today. Bounding VRAM means
+//! can step
+//! (`docs/adr/0026-the-deck-is-l5s-surface-and-its-size-is-two-budgets.md`) —
+//! and only the second is buildable today. Bounding VRAM means
 //! being able to refuse an allocation and to free one on demand, which needs an
 //! allocator's cooperation that does not exist in this engine: a Set's buffers
 //! are created by `Set::build` and released by dropping it, with nothing in

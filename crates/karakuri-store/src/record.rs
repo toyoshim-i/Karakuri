@@ -34,7 +34,8 @@
 //! `Preview { slot: None }` with its `path` dropped and nothing said — the one
 //! record for which "an unknown `t` is ignored" protected nothing, because the
 //! `t` was not unknown. The library asset is spelled `thumbnail` now, which is
-//! the word `docs/roadmap.md` already used for it. The deck record could not be
+//! the word the library already used for it — see
+//! `docs/adr/0134-the-metadata-preview-becomes-thumbnail.md`. The deck record could not be
 //! the one to move: it is written into session streams that exist on disk,
 //! where nothing has ever written the metadata one.
 
@@ -199,8 +200,7 @@ pub enum Record {
         /// each running at the default its own procedure declares, so a layer
         /// alone cannot say which of them is being resized: two geometries at
         /// two capacities were inexpressible in this format however they were
-        /// spelled on the way in — see `docs/roadmap.md`, "Naming what a Set
-        /// holds".
+        /// spelled on the way in, and naming what a Set holds is undecided.
         ///
         /// **Absent is node 0, not a wildcard**, which is [`Record::Slot`]'s
         /// rule rather than [`Record::Param`]'s: this record names one node,
@@ -465,8 +465,8 @@ pub enum Record {
     ///
     /// A `String` rather than an enum, on the same terms as `curve` and
     /// `noise.kind`: an unrecognised level is the engine's to diagnose against
-    /// what it actually supports. This one has earned it — `docs/roadmap.md`
-    /// planned five residency levels and three were built.
+    /// what it actually supports. This one has earned it — five residency
+    /// levels were planned and three were built.
     Residency {
         slot: u8,
         level: String,
@@ -778,7 +778,7 @@ pub enum Record {
     /// frame. The same terms as [`Record::Tick`] and [`Record::Audio`]: derived
     /// live, read back verbatim on replay.
     ///
-    /// **v0.2 had no tempo record at all**, which `docs/roadmap.md` notes: the
+    /// **v0.2 had no tempo record at all**: the
     /// session tempo arrived by CLI flag and nothing in the stream could say
     /// what it was. This closes that, and it closes it with the *correction*
     /// rather than with the estimate, for a reason worth stating: an analyser

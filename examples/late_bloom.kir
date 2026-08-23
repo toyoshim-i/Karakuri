@@ -2,7 +2,7 @@
 // for.
 //
 // **The same modulator is a different thing under a different mask**, and that
-// is the claim `docs/roadmap.md` makes for this layer being the largest single
+// is what makes this layer the largest single
 // source of expressive range in the system. The body here is three lines and
 // does one thing — push elements away from the axis. Masked on `age` it is a
 // bloom that only old material takes part in; masked on `seed` it would be a

@@ -2,8 +2,7 @@
 //! compilation and lifecycle.
 //!
 //! **A Set does not own everything, and no longer pretends to.** `Ln` is a node
-//! — `docs/roadmap.md`, "a Set stops owning everything" — and the unit that owns
-//! GPU state is the node rather than the grouping. Both of the nodes there are
+//! and the unit that owns GPU state is the node rather than the grouping. Both of the nodes there are
 //! today live in [`crate::node`]: the **L1 node** owns the element and alive
 //! buffers, the counts, the compaction scan, the spawn accumulator, its
 //! pipelines and its bind groups; the **L4 node** owns its pipeline, its
@@ -719,8 +718,8 @@ pub struct Set {
     /// **What a second source still has is no name**, which is why the
     /// surfaces around the engine stop at one: a hot-swap rebuild, a Set file,
     /// an MCP edit and the edit history all address a slot by layer and index,
-    /// and "the second geometry" is not something any of them can say. See
-    /// `docs/roadmap.md`, "Naming what a Set holds".
+    /// and "the second geometry" is not something any of them can say: naming
+    /// what a Set holds is undecided.
     sources: Vec<Source>,
     /// **What each geometry is salted with**, in L1-procedure order — so a
     /// pairing Set has two entries and one [`Source`].
@@ -758,8 +757,10 @@ pub struct Set {
     /// value and was refused at build time by a `ParamCollision` error rather
     /// than resolved. Every L4 in `examples/` declares `exposure`, so that
     /// refusal is exactly what forbade several renderers over one geometry;
-    /// keying by the node that declares the name is what the roadmap named as
-    /// the fix, and the error is gone with it.
+    /// keying by the node that declares the name was named as the fix when the
+    /// refusal landed
+    /// (`docs/adr/0052-a-parameter-is-keyed-by-its-layer-and-a-collision-is-refused.md`),
+    /// and the error is gone with it.
     params: Vec<HashMap<String, f32>>,
     /// The declared `[min, max]` of every param, in the same node order as
     /// [`Set::params`]. **Kept because an interface needs it**: a published
@@ -1108,8 +1109,8 @@ impl<'a> Plan<'a> {
     /// which chains exist, what stride each node writes at (the chain's, not the
     /// procedure's own `emit` list), what an amplifier did to the count below
     /// it, and whether an L1 pays for a compaction scan. A figure taken from one
-    /// `.kir` was missing three of those, was 85% low, and was withdrawn:
-    /// `docs/roadmap.md`, M4.
+    /// `.kir` was missing three of those, was 85% low, and was withdrawn —
+    /// `docs/adr/0116-stage-four-stops-claiming-the-byte-figure.md`.
     ///
     /// **It generates the shaders to ask them.** An element layout is decided
     /// by the generator and by nothing else, so the alternative is a second
@@ -2996,8 +2997,8 @@ impl Set {
     /// be: a name is per *procedure* and an entry here is per *instance*, so a
     /// Set over two sources instantiates one chain of deforms twice and has
     /// more entries than there are names. Labelling these belongs to whatever
-    /// gives a node instance an address, which nothing does yet — see
-    /// `docs/roadmap.md`, "Naming what a Set holds".
+    /// gives a node instance an address, which nothing does yet: naming what a
+    /// Set holds is undecided.
     ///
     /// **A renderer, a camera and a merge are absent rather than zero.** An L4
     /// draws from the buffer the node above it allocated, so charging it would
@@ -3485,7 +3486,8 @@ impl Set {
     ///   are what a Set can hold. An alternative that differs at L1 or L2
     ///   carries state of its own, and selecting between those means a second
     ///   Set, priming it off air, and sharing the geometry across the two —
-    ///   none of which exists. See `docs/roadmap.md`, "Variant pools".
+    ///   none of which exists. See
+    ///   `docs/adr/0148-a-variant-pool-is-a-set-and-the-deck-stays-a-mixer.md`.
     /// - **It is saved with the Set and not with the performance.**
     ///   [`Layering`] *is* a Set file record — `merge` — and the choice this
     ///   makes rides on it as that record's `live`, so a composited Set written
@@ -4095,8 +4097,9 @@ impl Set {
     /// This is the whole of what a Priming slot runs. All of a Set's
     /// per-element state is the L1 node's: L4 is stateless and reads whatever
     /// L1 last wrote, so warming a Set means running this and skipping the draw.
-    /// See "Priming" in [`crate::deck`] for why that is the right shape and why
-    /// `docs/roadmap.md`'s "reduced resolution" is superseded by it.
+    /// See "Priming" in [`crate::deck`] for why that is the right shape, and
+    /// `docs/adr/0053-priming-runs-the-simulation-and-skips-rendering.md` for
+    /// the "reduced resolution" it supersedes.
     ///
     /// [`VideoSource::render`] is this followed by the draw, so the two cannot
     /// disagree about what a step is: there is one copy of the pass sequence

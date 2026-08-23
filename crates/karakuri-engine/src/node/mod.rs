@@ -1,7 +1,7 @@
 //! Nodes, and the edges between them.
 //!
-//! **`Ln` is a node and a Set is a grouping around some** — `docs/roadmap.md`,
-//! "a Set stops owning everything". The unit that owns GPU state is the node,
+//! **`Ln` is a node and a Set is a grouping around some**, so a Set stops
+//! owning everything. The unit that owns GPU state is the node,
 //! not the Set, which is what lets two L4 nodes read one L1 node's geometry for
 //! one simulation, and what leaves a place for an L2 node to be inserted rather
 //! than for a fixed pipeline to grow a third position.

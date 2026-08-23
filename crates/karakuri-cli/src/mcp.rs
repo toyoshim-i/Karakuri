@@ -13,12 +13,8 @@
 //! (`docs/principles/0028-every-control-ends-in-the-same-record.md`)
 //! is that everything an
 //! operator moves goes through a record, is read back, and only then applied —
-//! and `docs/roadmap.md` already demanded exactly this of M6's agents, in those
-//! words, before anyone had thought about MCP:
-//!
-//! > The record stream must be the sole mutation path, so that an agent is
-//! > structurally incapable of doing anything a human could not do through the
-//! > same interface
+//! so that an agent is structurally incapable of doing anything a human could
+//! not do through the same interface.
 //!
 //! An agent from outside the process is still an agent — and this surface is
 //! the reason the invariant is now true of *material* as well as of the mix.
@@ -1335,8 +1331,9 @@ fn save_set(args: &Value, state: &State) -> Result<mpsc::Receiver<News>, String>
 /// last wrong number in this program got published, so the card gets its reader
 /// in the same milestone that gave it a writer.
 ///
-/// **A tool and not a resource.** `docs/roadmap.md`, M4: *"the resource list is
-/// a curriculum, not an index"* — a resource is a curated few a client reads in
+/// **A tool and not a resource.** The resource list is a curriculum, not an
+/// index — see `docs/adr/0092-a-resource-listing-is-a-curriculum-not-an-index.md`.
+/// A resource is a curated few a client reads in
 /// full, and a user's Sets are neither curated nor few nor knowable at startup.
 /// The two resources here are the spec and the vocabulary, which every client
 /// should read once; a library is searched, and searching is a call.
@@ -1652,8 +1649,9 @@ fn plural(n: usize) -> &'static str {
 /// node since the buffers existed and no binary in this tree printed it; the
 /// figure that *was* printed, at stage 4, was a second arithmetic over one
 /// procedure's `emit` list — it claimed 96 bytes per element where 312 were
-/// allocated, and it was withdrawn rather than corrected. `docs/roadmap.md`,
-/// M4. So this one is not a second arithmetic: `Plan::element_storage` calls
+/// allocated, and it was withdrawn rather than corrected — see
+/// `docs/adr/0116-stage-four-stops-claiming-the-byte-figure.md`.
+/// So this one is not a second arithmetic: `Plan::element_storage` calls
 /// the same sizing the allocation calls, over the same walk a build makes, and
 /// a test in `karakuri-engine` asserts the two answers about one Set are equal.
 ///
@@ -1992,8 +1990,8 @@ fn layer_spelled(layer: Layer) -> &'static str {
 /// A *stamp* is a name nobody chose and renaming one loses nothing; a name a
 /// caller typed is an instruction, and `--save-set ID` has always obeyed it by
 /// overwriting. So `save_set` does what `--save-set` does, and says so — in the
-/// tool description a model reads, in `docs/manual.md` and in
-/// `docs/roadmap.md`. Undocumented was the thing that was not allowed.
+/// tool description a model reads and in `docs/manual.md`. Undocumented was
+/// the thing that was not allowed.
 ///
 /// **No `con`, `nul`, `aux`, `com1` check.** They are reserved device names on
 /// Windows and would be a file that is not a file. There is no Windows target
