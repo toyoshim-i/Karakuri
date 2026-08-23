@@ -6107,8 +6107,8 @@ impl Live {
     /// load a preset, edit it and watch it had no way to keep the result. This
     /// is the render-loop half of closing that — see
     /// `docs/adr/0122-a-save-writes-the-bytes-that-are-on-screen.md`. Every surface ends here — the
-    /// key below, the MCP tool, and whatever M5 builds — for the same reason
-    /// every mix control ends in one method. **This is the only save path**,
+    /// key below, the MCP tool, and whatever surface arrives next — for the
+    /// same reason every mix control ends in one method. **This is the only save path**,
     /// which is what makes a refusal and an outcome one sentence each rather
     /// than one sentence per surface.
     ///
@@ -6639,8 +6639,8 @@ impl Live {
     ///
     /// One key for both, because the shapes and the angles an operator actually
     /// reaches for are a short list rather than two dials: across, up, the two
-    /// diagonals, and an iris. A dial for the angle is M5's, where there is
-    /// somewhere to see it.
+    /// diagonals, and an iris. A continuous dial for the angle is not built:
+    /// there is nowhere on this surface to see one.
     fn cycle_mask(&mut self) {
         let at = MASK_SHAPES
             .iter()
@@ -9415,9 +9415,8 @@ mod live_save_tests {
     /// `.kir` declares** — every param with its range, the capacity range and
     /// its default, and the emitted attributes.
     ///
-    /// `docs/ir-spec.md`'s metadata section opened with "nothing writes or reads
-    /// one" for the whole of M1 to M3, so every claim it makes was unenforced
-    /// prose. This is the half a compile pass can produce, pinned against a
+    /// `docs/ir-spec.md`'s metadata section long described records that nothing
+    /// wrote and nothing read, so every claim it made was unenforced prose. This is the half a compile pass can produce, pinned against a
     /// source a reader can check it against by eye.
     ///
     /// **Including a negative default**, which is the one declaration a second

@@ -21,7 +21,7 @@
 // for a sprite and for a stroke, applied to a bigger primitive.
 //
 // **This is what the SDF builtins were for.** `sd_sphere`, `sd_box`, `sd_torus`
-// and the CSG operators have passed the checker since M1 with nothing able to
+// and the CSG operators passed the checker long before anything could
 // draw them: a distance field is a shape you march, and nothing marched. This
 // marches.
 //

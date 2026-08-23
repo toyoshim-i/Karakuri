@@ -66,8 +66,8 @@
 //! The outgoing Set, by contrast, is not stepped while it waits to see whether
 //! it is needed again — `t` is simulation time and does not advance for a Set
 //! nothing is calling `prepare` on. A rollback therefore resumes it exactly
-//! where it was parked, which is the same property M2 names *Allocated*
-//! residency.
+//! where it was parked, which is the same property
+//! [`Allocated`](crate::deck::Residency::Allocated) residency has.
 //!
 //! ## The watchdog measures a host clock, and says so
 //!
@@ -375,8 +375,8 @@ pub struct Request {
 /// Where the worker gets its work.
 ///
 /// Implemented by the caller rather than here, because "what changed" is not
-/// the engine's business: a file watcher, a record stream, and M6's generation
-/// queue are the same shape from this side. A source that decides there is
+/// the engine's business: a file watcher, a record stream, and a queue of
+/// generated material are the same shape from this side. A source that decides there is
 /// nothing to build — including because a `.kir` file failed to compile and it
 /// printed diagnostics instead — simply returns `None`, and nothing happens.
 /// That is how "a failed compile changes nothing" is enforced: a failure never
@@ -704,8 +704,9 @@ impl HotSwap {
     /// is separate one Live slot's cost from its neighbours': every Live slot
     /// in a deck is judged against the whole deck's frame interval, so a
     /// budget that fits one Set rolls back every candidate in a deck of four.
-    /// Fixing *that* needs a per-Set measurement, which is M2's budget
-    /// governor.
+    /// Fixing *that* needs a per-Set measurement, which [`crate::probe`] takes
+    /// at build time and [`crate::governor`] budgets from — this watchdog does
+    /// not read it.
     pub(crate) fn begin_frame_parked(&mut self, device: &wgpu::Device) {
         self.frame_boundary(device, false);
     }

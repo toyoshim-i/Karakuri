@@ -410,7 +410,7 @@ proc wide_points {
         assert_eq!(
             steps_taken(h.swap.set()),
             1,
-            "the swapped-in Set inherited a `t`; V1 swaps cold and M2 is what warms them"
+            "the swapped-in Set inherited a `t`; a swap lands cold and Priming is the warming"
         );
 
         for (i, (top, bottom)) in h.frame_capacities.iter().enumerate() {

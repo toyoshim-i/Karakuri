@@ -33,7 +33,7 @@
 //! is not portable to another — its bind groups name those buffers and its
 //! generated `Element` struct is compiled against that layout. That is not a
 //! limitation to lift later; it is the slot interface contract, which
-//! `Set::build`'s `consumes ⊆ emit` check has been enforcing informally since M1.
+//! `Set::build`'s `consumes ⊆ emit` check has been enforcing informally all along.
 //!
 //! **One value still crosses outside it: the parity.** The counts buffer used
 //! to as well, and moved in when [`Deform`] arrived and needed it at build time

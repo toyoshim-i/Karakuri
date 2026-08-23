@@ -8,10 +8,10 @@
 //!
 //! **With several Sets this renders the mix**, for that reason and no other: it
 //! is what the window shows. A flag that rendered each slot to its own file
-//! would be a different feature — auditioning one candidate on its own is M2's
-//! per-slot preview, it wants a default renderer per topology to be worth
-//! having, and the deck already keeps every slot's target separate so that it
-//! can be added without changing anything here. What the mix must not become is
+//! would be a different feature — auditioning one candidate on its own is what
+//! `Deck::set_preview` already does on screen, and the deck keeps every slot's
+//! target separate, so a per-slot file can be added without changing anything
+//! here. What the mix must not become is
 //! a fourth definition of "the output"; there is one, and this is it.
 
 use std::path::Path;

@@ -15,7 +15,7 @@
 //! to show the number first and decide later whether anything should act on it.
 //! What a design for automatic gain would need — a time constant, a target
 //! level, a hold, a way to be overridden mid-set — is not decided, so guessing
-//! at its shape here would be a second, worse answer M2 then has to remove.
+//! at its shape here would be a second, worse answer to remove later.
 //!
 //! ## Two numbers
 //!
