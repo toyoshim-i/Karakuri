@@ -77,7 +77,10 @@ Orthogonal to the layers:
   The reading at scale is there too: `list_sets` and `--list-sets` enumerate what a store
   holds, filtered by what a node is called or by which layer a Set uses. What is not built
   is grouping and genealogy, and a search over more than a name — the card fields those
-  would need have no producer. See M4's demands
+  would need have no producer. Thumbnails are not built either, and what is missing there is
+  a decision rather than machinery: a card is per artifact and one procedure cannot be
+  rendered alone, so *what a thumbnail is of* has to be settled, which M5's Set browser is
+  the right place to settle it beside. See M4's demands, and M4's thumbnails bullet
 
 ### Three clocks
 
@@ -1695,6 +1698,24 @@ than against one being taught to.
 **Goal:** finding the right thing among two thousand artifacts is faster than generating a
 new one.
 
+**Closed, and the goal sentence is not the evidence for it.** There are no two thousand
+artifacts and nothing generates one, so the sentence above cannot be checked and will not be
+until M6. What can be said is what a library can be asked, and every one of these was
+impossible when the milestone opened: a Set can be **named** so an edge points at a node
+rather than at a position; **saved** from a running session as the material that is on screen
+rather than what the flags said; **listed**, so the ids of everything kept before this
+conversation are findable rather than guessable; **read** — every knob, its range, its
+default, the element count, the attributes — without fetching a source or compiling it;
+**round-tripped** whole, layering and fold included, so a kept variant pool is still
+selectable; and **sent to somebody else** as one self-contained file whose every inlined
+source is checked against the address it claims. The machinery is there and it is tested at
+the scale that exists.
+
+**What is not built is named below with what would revive it**, and in two of the three cases
+the trigger is a producer that does not exist rather than a cost nobody wanted to pay. One of
+them was mis-filed as waiting for scale and is not — see the thumbnails bullet, where the
+missing piece turned out to be a design question the Adds list hides.
+
 **And a second goal this milestone turned out to have, which the first one hides.** Read
 through the Adds list, M4 adds no new pixels — no primitive, no blend, no material. That
 reading is wrong about what a milestone is for. **What changes is what can be done in front
@@ -1703,11 +1724,12 @@ and not kept, three layers of the language a model could not reach. The scene wa
 constructible; being able to *reach* it during a set is the thing, and it is worth stating
 because a feature table cannot show it.
 
-That is also the order to work in. The items below split into debts that are costing
-something today and capacity for a scale that has not arrived — twenty-one procedures and no
-generation loop is not two thousand artifacts. The first three, and variant pools, are the
-first kind. Thumbnails, embeddings and genealogy are the second, and they should be revived
-on evidence the way "Procedures a model can read" already was.
+That was also the order it was worked in, and the split it was worked by holds up. The items
+below divide into debts that were costing something and capacity for a scale that has not
+arrived — twenty-one procedures and no generation loop is not two thousand artifacts. The
+first three, variant pools and bundling were the first kind, and all of them are built.
+Thumbnails, embeddings and genealogy were the second; they stay unbuilt and are revived on
+evidence, the way "Procedures a model can read" already was.
 
 **On the estimate below.** It was written when naming sat in M3. Naming is now the first work
 of this milestone, so read it as the *rest* of M4 rather than the whole of it.
@@ -1890,8 +1912,9 @@ expected and is argued in ADR-0145. `Set::element_storage` reports what every no
 a Set allocated, per node, off `wgpu::Buffer::size()` of the buffers that node created, and
 `Set::element_storage_bytes` totals a slot's worth of it — see "Narrowing the element slot"
 above for why it lives there rather than in stage 4. Grepping for it finds the two node
-impls that produce it and the tests that assert it, and nothing else. **No binary in this
-tree reports element storage at all.**
+impls that produce it and the tests that assert it. **What no binary prints during a run is
+element storage**, which is a narrower gap than the one this section opened with: the figure
+is answered on demand, for a saved Set, and never volunteered by the run that allocated it.
 
 **That is a regression, accepted rather than overlooked, and it is recorded here because a
 hole nobody wrote down gets rediscovered as a bug.** `karakuri-cli` printed a `bytes/element`
@@ -2069,12 +2092,33 @@ section of `docs/ir-spec.md`, where a reader meets the `camera` record.
 - Library thumbnails. Every artifact gets a short loop and a still at promotion time, for
   browsing. Distinct from the live slot preview built in M2 — that one renders a running
   instance, this one is a stored asset, and it is `thumbnail` in the metadata vocabulary
-  for exactly that reason — see "Metadata file format" in `docs/ir-spec.md`
+  for exactly that reason — see "Metadata file format" in `docs/ir-spec.md`.
+
+  **Not built, and it was mis-filed as waiting for scale.** The machinery is one command:
+  `--load-set ID --render out.png` writes a still from a stored Set offscreen, in under a
+  second, and `<store>/thumbnails/` already exists for the file to land in. What is actually
+  missing is a decision the sentence above hides. **A card is per artifact, an artifact is
+  one procedure, and one procedure cannot be rendered** — an L1 is elements nothing draws and
+  an L4 is a way of drawing nothing. So "every artifact gets a still" has to say *in what
+  Set*, and the honest answers differ: a canonical minimal Set per kind describes the
+  procedure and not the material, while the Set it was saved in describes the material and
+  gives two artifacts of one Set the same picture. Deciding that is the work, not the
+  rendering, and it is worth deciding beside M5's browser rather than before it — a thumbnail
+  nothing displays is a file whose framing nobody can judge
 - Dual embeddings. Text embedding of prompt and tags, plus a visual embedding of the
   thumbnail. Visual search matters more than it sounds — under stage conditions people
-  search by look, not by words
+  search by look, not by words. **Not built, and blocked on both halves.** The text half
+  needs `origin` and `tag`, which have no producer — `list_sets` searches on what a node is
+  *called* for exactly that reason, which is the shallowest of the three things a card could
+  be searched on. The visual half needs the thumbnail above. It also wants a model and a
+  place to keep vectors, neither of which this tree has, and the network rule in the
+  invariants applies: whatever this becomes has to degrade to the name search that exists
 - Genealogy. Derivation graph via `parent`, enabling "make ten variations of this"
-  evolutionary workflows
+  evolutionary workflows. **Not built, and it is the one item that must not be built early.**
+  `parent` has no producer because nothing generates procedures, and a graph is only worth
+  walking once there are derivations in it. The demand this leaves on M6 is below and it is
+  the sharpest one in this document: recorded from the *first* generated artifact, or the
+  genealogy has a hole at its root that no later pass can fill
 - ~~Variant pools. A slot holds several compiled alternatives, selectable at beat resolution.
   Mechanically these are pre-forked Sets sharing every other slot, so they are deck members
   rather than a separate structure~~ — **a pool is a Set, and the deck-members mechanism is
@@ -2203,7 +2247,12 @@ section of `docs/ir-spec.md`, where a reader meets the `camera` record.
   field is `ns_per_element`, which is a measurement — see "Metadata file format" in
   `docs/ir-spec.md`, which withdrew a published number for exactly this once already
 
-~4–6 weeks.
+~4–6 weeks. **What it actually cost**, since M1's note says the estimates are only readable
+against evidence: the naming work and the four `####` items above, the variant-pool
+round-trip and bundling, against three of the five Adds left standing. The expensive half was
+not the implementation again — it was finding that a fact derived in two places had already
+drifted (a live save could write a version never on screen; a listing would have had a second
+answer to what a node is called), and that a plausible explanation is not a measurement.
 
 ---
 
@@ -2224,7 +2273,10 @@ retrofitting it into decisions already made.
   M3** — a Set declares which of its controls it publishes, so this surface renders an
   interface rather than inventing one. Without that it would be twenty-five knobs per slot
   and a filter nobody can save
-- Set browser with live previews of priming Sets
+- Set browser with live previews of priming Sets. **It carries M4's thumbnail decision with
+  it**: a stored still is not the live preview beside it, and what a thumbnail is *of* is
+  undecided because a metadata card is per artifact and one procedure cannot be rendered
+  alone — see M4's thumbnails bullet, which has the machinery costed and the question stated
 - Staging lane — where candidates appear before they go live. Its first producer is the
   operator's own regeneration of a slot, which needs no agents and makes the lane useful
   and testable as soon as it exists; M6's agents write to the same place rather than
