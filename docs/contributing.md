@@ -229,7 +229,24 @@ re-point the ADRs that cited it
 ([ADR-0059](adr/0059-a-records-pointer-into-the-principles-registry-is-metadata.md)).
 
 **An ADR is not edited after it lands**, except to set `status` and `superseded_by`. If the reasoning
-would have to change, that is a new record.
+would have to change, that is a new record. It follows that **an ADR is allowed to go out of date and
+must not be "corrected" when the present moves** — one describing what a document said in August is
+right as history, and rewriting it destroys the only account of how things got here. The present tense
+lives in the other documents; `docs/principles/` is where a rule that still stands is kept current, by
+deletion and renumbering rather than by editing.
+
+**A source comment cites what is in force — a principle, an ADR, or a present-tense document. It never
+cites a plan.** `docs/roadmap.md` and anything under `docs/history/` are schedules: a reader who
+follows the pointer arrives at work that was *intended*, not at why the code is the way it is, and
+when the milestone closes the comment still reads plausibly while pointing at nothing. Where the
+comment already states its claim, write no pointer. Where the reason is genuinely elsewhere, an ADR is
+the durable ticket to point at — addressable for as long as the code exists.
+
+Counted on 2026-08-23: **71 references to the roadmap across 26 source files, against one reference to
+an ADR or a principle in all of `crates/`.** That is the number worth watching, and it is not really
+about comment style — it says the catalogue is not yet where anyone reaches while writing code. See
+[P-0063](principles/0063-source-cites-what-is-in-force-not-a-plan.md) and
+[ADR-0149](adr/0149-source-cites-what-is-in-force-not-a-plan.md).
 
 **Hook it from where the work is, or nobody will find it.** `INDEX.md` makes a record
 *findable*; it does not make anyone *look*. A record that changes what is planned or what is
