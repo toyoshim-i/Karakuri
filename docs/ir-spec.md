@@ -105,9 +105,12 @@ both `soft_points.kir` and `drift_streaks.kir` for exactly that reason. Requirin
 declarations to agree would have invented a dependency the lowering does not have, and would
 have made "the same cloud, drawn two ways" cost two L1 *files*.
 
-It does still cost two *simulations*: a Set owns its element buffers, so the same L1 in two
-slots is stepped twice. Sharing one simulation between several renderers is "multiple L4
-renderers over shared geometry" in `docs/roadmap.md`, and it is not built.
+Several renderers over one simulation **is** built: a Set holds a list of L4 nodes and
+`Set::step` walks its sources while `Set::draw` walks its renderers, so "the same cloud,
+drawn two ways" costs one simulation and one draw pass each. What still costs two
+simulations is the same L1 in two *deck slots*, because a Set owns its element buffers and
+nothing shares a `Source` across Sets — a different want, and the one a variant pool across
+deck slots would need.
 
 What it *is* for: it is the geometry's own statement of intent, which is what a reader
 picking a pairing goes on, and what a default renderer per topology will select on when one
