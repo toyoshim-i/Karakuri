@@ -252,7 +252,14 @@ impl Compaction {
 
         let dest = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("compaction dest"),
-            size: u64::from(capacity) * 4,
+            // **Not `capacity * 4` written out here.** The same buffer has to
+            // be sized by whatever *reports* what a node allocated, with no
+            // device and no `Compaction` in hand — `crate::storage` is where
+            // that is decided, and this is the allocating half of the one
+            // expression. The module doc's paragraph on this size not being
+            // free to change here is the reason it has a home rather than a
+            // spelling.
+            size: crate::storage::dest_bytes(capacity),
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });

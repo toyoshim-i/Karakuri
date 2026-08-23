@@ -48,7 +48,8 @@
 
 use std::collections::HashMap;
 
-use karakuri_ir::layout::ElementLayout;
+use karakuri_codegen::{generate_l1, generate_l2};
+use karakuri_ir::layout::{ElementLayout, Synthetic};
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
 
@@ -56,6 +57,7 @@ use crate::binding::{Binding, ParamWrite, Signals, CONTROL_PREFIX};
 use crate::camera::Orbit;
 use crate::mix::Input;
 use crate::node::{Deform, Renderer, Simulation};
+use crate::storage::{DeformStorage, SimulationStorage};
 use crate::video_source::VideoSource;
 
 /// Past this the simulation falls behind rather than catching up — the
@@ -1052,6 +1054,170 @@ pub struct Plan<'a> {
     source_salts: Vec<u32>,
     /// The attributes synthesised for each head's chain, in `heads` order.
     derived: Vec<Vec<karakuri_ir::Attr>>,
+    /// **The material this plan is about**, kept so that a question about it
+    /// can be answered from the plan alone — [`Plan::element_storage`] is the
+    /// one that asks. Handing those slices in a second time instead would let a
+    /// caller cost one Set against another Set's plan, and the answer would look
+    /// exactly as plausible as a right one. Only the layers that hold elements
+    /// are kept: a camera, a renderer and a merge allocate none.
+    l1s: Vec<(&'a Checked, u32)>,
+    l2s: Vec<&'a Checked>,
+    /// The `kind Field` procedures `field_bound` indexes into. Kept because a
+    /// bound field is spliced into a node's shader, and a shader is where an
+    /// element layout comes from.
+    fields: Vec<&'a Checked>,
+}
+
+/// **One node instance's element storage, and which node of the Set it is an
+/// instance of.**
+///
+/// A *node* is a procedure in the Set; an *instance* is that procedure running
+/// over one geometry. A Set over two sources instantiates its chain of
+/// deformations twice, so two entries here can name the same node — and they
+/// are not the same figure, since each is sized against the source it runs
+/// over. See [`Plan::element_storage`], which returns these, and
+/// [`Set::element_storage`], which is the same list read off a built Set with
+/// the node dropped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlannedStorage {
+    /// Index into [`Plan::node_names`] — the node this instance is an instance
+    /// of. **Not an address a caller can build a name from arithmetic**: node
+    /// order is [`Set::validate`]'s own and the name is what a reader should
+    /// print, which is why this is an index into a list rather than a layer and
+    /// an ordinal.
+    pub node: usize,
+    /// What that instance will allocate.
+    pub storage: ElementStorage,
+}
+
+impl<'a> Plan<'a> {
+    /// **What every node of the Set will allocate to hold elements** — before
+    /// anything is compiled, with no adapter and no device.
+    ///
+    /// **In the order [`Set::element_storage`] reports the same Set**: per
+    /// source, the simulation, the far simulation it pairs with where there is
+    /// one, then the chain of deformations — the order the elements themselves
+    /// travel in. The two lists agree entry for entry, which is what a `mod gpu`
+    /// test in `tests/storage.rs` asserts and what makes this figure worth
+    /// publishing at all.
+    ///
+    /// **Nothing here re-derives a size.** The per-node arithmetic is
+    /// `crate::storage`, called by this and by the constructors that allocate;
+    /// what this walk contributes is the four inputs no single procedure has —
+    /// which chains exist, what stride each node writes at (the chain's, not the
+    /// procedure's own `emit` list), what an amplifier did to the count below
+    /// it, and whether an L1 pays for a compaction scan. A figure taken from one
+    /// `.kir` was missing three of those, was 85% low, and was withdrawn:
+    /// `docs/roadmap.md`, M4.
+    ///
+    /// **It generates the shaders to ask them.** An element layout is decided
+    /// by the generator and by nothing else, so the alternative is a second
+    /// implementation of the layout rules — the defect this is written to avoid.
+    /// Generation is string building and touches no hardware; the cost that
+    /// makes a build slow is the pipeline compilation this does not do.
+    ///
+    /// **Element storage and not device memory**, on the terms
+    /// [`ElementStorage`] sets out: render targets, uniform blocks, the counts
+    /// block and the scan's block-sum pyramid are all outside it. Anything
+    /// reporting this to a person owes them that sentence too.
+    pub fn element_storage(&self) -> Vec<PlannedStorage> {
+        // **The same lookup `build_inner` makes**, and for the same reason: a
+        // bound field is spliced into the node's shader, so a node built with
+        // one and a node costed without it are two different shaders and can be
+        // two different strides.
+        let bound_at = |at: usize| -> Vec<(&str, &Checked)> {
+            self.field_bound
+                .iter()
+                .filter(|(node, _, _)| *node == at)
+                .map(|(_, slot, ordinal)| (slot.as_str(), self.fields[*ordinal]))
+                .collect()
+        };
+        let simulation = |at: usize, derived: &[karakuri_ir::Attr]| {
+            let (l1, capacity) = self.l1s[at];
+            let shader = generate_l1(l1, derived, &bound_at(at));
+            PlannedStorage {
+                node: at,
+                storage: SimulationStorage::of(
+                    capacity,
+                    shader.element_layout.stride,
+                    shader.compacted,
+                )
+                .total(),
+            }
+        };
+
+        let mut out = Vec::new();
+        for (head, &at) in self.heads.iter().enumerate() {
+            let (l1, capacity) = self.l1s[at];
+            // **This chain's synthesised attributes**, which widen every
+            // element under this source. Per head, because two sources emitting
+            // different things need different slots derived.
+            let derived = &self.derived[head];
+            out.push(simulation(at, derived));
+            // **Charged once per head and not once per Set**, because that is
+            // what `build_inner` builds: a chain instantiated over a second
+            // geometry reads a far side generated against *its* derived list,
+            // so there are two simulations rather than one shared.
+            //
+            // Every pairing Set today has exactly one head — `SetError::
+            // PairingArity` refuses one that is not two geometries, and one of
+            // the two is the far side — so this is a distinction nothing can
+            // currently see. It is written the way the build walks anyway,
+            // because the arity rule is somewhere else and a figure that agreed
+            // with the build only by borrowing that rule is the shape this
+            // whole file keeps paying for.
+            if let Some(far_at) = self.far_at {
+                out.push(simulation(far_at, derived));
+            }
+
+            // The chain, walked exactly as `build_inner` walks it: what reaches
+            // a node decides the struct it writes, and an amplifier changes the
+            // count for everything below.
+            let mut upstream: Vec<karakuri_ir::Attr> = l1.emit.clone();
+            let mut synthetic = Synthetic::NONE;
+            let mut chain_capacity = capacity;
+            for (k, l2) in self.l2s.iter().enumerate() {
+                let far = self
+                    .far_at
+                    .filter(|_| l2.geometry_slot().is_some())
+                    .map(|far_at| self.l1s[far_at].0.emit.as_slice());
+                let shader = generate_l2(
+                    l2,
+                    &upstream,
+                    synthetic,
+                    derived,
+                    far,
+                    &bound_at(self.l1s.len() + k),
+                );
+                // Saturating for the reason `Deform::build` saturates: a chain
+                // of amplifiers is a product a `u32` can be walked off the end
+                // of, and a wrapped count here would report a Set as cheaper
+                // than the one the device refuses to build.
+                chain_capacity = chain_capacity.saturating_mul(shader.amplify.unwrap_or(1));
+                out.push(PlannedStorage {
+                    node: self.l1s.len() + k,
+                    storage: DeformStorage::of(
+                        chain_capacity,
+                        shader.element_layout.stride,
+                        shader.amplify.is_some(),
+                    )
+                    .total(),
+                });
+                upstream = shader.emits;
+                synthetic = shader.synthetic;
+            }
+        }
+        out
+    }
+
+    /// **What each node is called**, in node order: the geometries, the
+    /// deformations, the cameras, the renderers, the fields.
+    ///
+    /// The names a built Set answers [`Set::node_names`] with — derived here,
+    /// which is why a caller can print them before there is a Set to ask.
+    pub fn node_names(&self) -> &[String] {
+        &self.names
+    }
 }
 
 /// **`capacity` against the range the L1 artifact declares.**
@@ -2152,6 +2318,9 @@ impl Set {
             heads,
             source_salts,
             derived: derived_per_head,
+            l1s: l1s.to_vec(),
+            l2s: l2s.to_vec(),
+            fields: fields.to_vec(),
         })
     }
 
@@ -2184,6 +2353,12 @@ impl Set {
             heads,
             source_salts,
             derived: derived_per_head,
+            // The material, which this function was handed itself and uses its
+            // own copy of. The plan keeps it for the callers that have a plan
+            // and nothing else — see [`Plan::element_storage`].
+            l1s: _,
+            l2s: _,
+            fields: _,
         } = Set::validate(
             l1s, l2s, l3s, fields, l4s, layering, seed_salt, salts, wiring,
         )?;

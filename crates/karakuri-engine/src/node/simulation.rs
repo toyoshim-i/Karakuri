@@ -10,6 +10,7 @@ use karakuri_ir::typed::Checked;
 use super::{Geometry, Tick};
 use crate::compaction::Compaction;
 use crate::set::{ElementStorage, MAX_STEPS};
+use crate::storage::SimulationStorage;
 use crate::uniforms::UniformScratch;
 
 /// The param the engine quantises spawning from. Named once so the uniform
@@ -157,8 +158,12 @@ impl Simulation {
 
         // -- buffers ------------------------------------------------------
         let element_layout = shader.element_layout.clone();
-        let element_buffer_size = u64::from(capacity) * u64::from(element_layout.stride);
-        let alive_buffer_size = u64::from(capacity) * u64::from(ALIVE_BYTES);
+        // **Sized where the figure is decided, not here** — see
+        // `crate::storage`. What this constructor knows is that it wants a pair
+        // of each; how large one is, and whether the scan's destination index
+        // is paid for at all, is the same answer `Plan::element_storage` gives
+        // a caller with no device.
+        let storage = SimulationStorage::of(capacity, element_layout.stride, shader.compacted);
         let make_pair = |label: &str, size: u64| {
             let make = |suffix: &str| {
                 device.create_buffer(&wgpu::BufferDescriptor {
@@ -179,8 +184,8 @@ impl Simulation {
                 b: make("b"),
             }
         };
-        let element_buf = make_pair("element", element_buffer_size);
-        let alive_buf = make_pair("alive", alive_buffer_size);
+        let element_buf = make_pair("element", storage.element_buffer());
+        let alive_buf = make_pair("alive", storage.alive_buffer());
 
         let counts_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("counts"),
@@ -283,7 +288,10 @@ impl Simulation {
         // Built before the bind groups because `element`'s uniform group
         // binds the scan's `dest` buffer, and skipped entirely for a static
         // procedure — the one whose scan would be the identity permutation.
-        let compaction = shader.compacted.then(|| {
+        // **Asked of the storage rather than of the shader a second time.**
+        // `Some` here is `shader.compacted`, carried through the one place that
+        // charges for it, so the node cannot own a scan its figure left out.
+        let compaction = storage.dest_buffer().map(|_dest_bytes| {
             Compaction::new(
                 device,
                 capacity,

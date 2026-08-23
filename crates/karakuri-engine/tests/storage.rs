@@ -27,7 +27,7 @@
 // prefix `cargo test -- --skip gpu::` filters on. The convention, and the test
 // that enforces it, are in `tests/gpu_tests_are_under_mod_gpu.rs`.
 mod gpu {
-    use karakuri_engine::set::{Edge, Layering};
+    use karakuri_engine::set::{Edge, Layering, PlannedStorage};
     use karakuri_engine::{Gpu, Set};
     use karakuri_ir::typed::Checked;
 
@@ -205,6 +205,19 @@ proc dots {
     /// capacity is exactly what makes the entries below a list rather than one
     /// figure times a count.
     fn build_sources(gpu: &Gpu, l1s: &[&str], l2s: &[&str], edges: &[Edge]) -> Set {
+        both(gpu, l1s, l2s, edges).1
+    }
+
+    /// **The same material through both answers**: what the plan says the Set
+    /// will allocate, and the Set built from it.
+    ///
+    /// **One assembly of the arguments and not two**, because the claim
+    /// [`the_plan_reports_what_the_built_set_allocates`] makes is that two
+    /// answers about *one* Set agree. A helper that assembled the arguments
+    /// twice could be handed the plan of one Set and the build of another, and
+    /// the equality would then be measuring the helper rather than the engine —
+    /// which is the shape of mistake this whole file exists to refuse.
+    fn both(gpu: &Gpu, l1s: &[&str], l2s: &[&str], edges: &[Edge]) -> (Vec<PlannedStorage>, Set) {
         let l1: Vec<Checked> = l1s.iter().map(|s| compile(s)).collect();
         let sources: Vec<(&Checked, u32)> = l1
             .iter()
@@ -218,7 +231,24 @@ proc dots {
         let l2: Vec<Checked> = l2s.iter().map(|s| compile(s)).collect();
         let l2_refs: Vec<&Checked> = l2.iter().collect();
         let l4 = compile(DOTS);
-        Set::build_many(
+        let wiring = || karakuri_engine::set::Wiring {
+            edges,
+            ..Default::default()
+        };
+        let planned = Set::validate(
+            &sources,
+            &l2_refs,
+            &[],
+            &[],
+            &[&l4],
+            Layering::Overdraw,
+            7,
+            &[],
+            wiring(),
+        )
+        .expect("the same arguments the build below is given")
+        .element_storage();
+        let set = Set::build_many(
             &gpu.device,
             &gpu.queue,
             &sources,
@@ -229,12 +259,10 @@ proc dots {
             Layering::Overdraw,
             7,
             &[],
-            karakuri_engine::set::Wiring {
-                edges,
-                ..Default::default()
-            },
+            wiring(),
         )
-        .expect("a chain of some L1s, some L2s and one L4")
+        .expect("a chain of some L1s, some L2s and one L4");
+        (planned, set)
     }
 
     /// The stride of `emit position, tint`, walked by hand from WGSL's placement
@@ -494,5 +522,106 @@ proc dots {
             2 * sim + PAIR_CAPACITY * STRIDE
         );
         assert_eq!(set.element_storage_bytes(), 16384, "6656 + 6656 + 3072");
+    }
+
+    /// **The figure a Set that has not been built can be asked for is the
+    /// figure it allocates.**
+    ///
+    /// This is the test that keeps the one-place property honest, and it is
+    /// worth being exact about which half of it. `crate::storage` decides both
+    /// how large each buffer a node allocates is *and* what they come to
+    /// together. The first half is asserted by every hand-walked number above,
+    /// which reads the buffers a build actually created; the second — the
+    /// doubling that is an L1's two directions, the flag array only an
+    /// amplifier owns — is reachable only through a plan and is asserted here
+    /// and nowhere else.
+    ///
+    /// **And the walk, which cannot be shared at all**: a device-free reporter
+    /// has to work out for itself which chains exist, what stride each node
+    /// writes at, what an amplifier did to the count below it and whether an L1
+    /// pays for a compaction scan. Each of those is a term the withdrawn
+    /// stage-4 figure got wrong, and each case below is one of them.
+    ///
+    /// A Set is compared against itself rather than against a constant, so
+    /// nothing here needs re-stating when a stride changes — the numbers are
+    /// the business of the tests above.
+    #[test]
+    fn the_plan_reports_what_the_built_set_allocates() {
+        let gpu = Gpu::headless().expect("a GPU");
+        let same = |l1s: &[&str],
+                    l2s: &[&str],
+                    edges: &[Edge],
+                    term: &str|
+         -> (Vec<PlannedStorage>, Set) {
+            let (planned, set) = both(&gpu, l1s, l2s, edges);
+            assert_eq!(
+                planned.iter().map(|p| p.storage).collect::<Vec<_>>(),
+                set.element_storage(),
+                "the plan and the buffers disagree about {term}"
+            );
+            // The total as well as the entries: a walk that dropped a node
+            // would fail the first assertion, and one that counted a node twice
+            // at zero bytes would pass it.
+            assert_eq!(
+                planned.iter().map(|p| p.storage.bytes).sum::<u64>(),
+                set.element_storage_bytes(),
+                "the plan and the buffers disagree about the total for {term}"
+            );
+            (planned, set)
+        };
+
+        same(&[STILL], &[], &[], "an L1's two directions");
+        same(
+            &[CULLING],
+            &[],
+            &[],
+            "the compaction scan's destination index",
+        );
+        same(
+            &[STILL],
+            &[WIDEN],
+            &[],
+            "an L2 sized for what reached it rather than for its own emit list",
+        );
+        same(
+            &[STILL],
+            &[FAN, WIDEN],
+            &[],
+            "an amplifier's factor reaching the node below it",
+        );
+
+        let left = source("left");
+        let right = source("right");
+        same(
+            &[&left, &right],
+            &[WIDEN],
+            &[],
+            "a chain instantiated once per geometry",
+        );
+
+        // **The pairing Set, and the node each entry names.** Three instances
+        // under one source, and the `node` field is what a reader prints a name
+        // from — so this is where it is asserted rather than in a sixth case
+        // that would only repeat the equality.
+        let near = source("near");
+        let far = source("far");
+        let (planned, set) = same(
+            &[&near, &far],
+            &[MORPH],
+            &[Edge {
+                node: "morph".to_string(),
+                slot: "far".to_string(),
+                to: "far".to_string(),
+            }],
+            "the far geometry a pairing Set holds",
+        );
+        assert_eq!(
+            planned
+                .iter()
+                .map(|p| set.node_names()[p.node].as_str())
+                .collect::<Vec<_>>(),
+            vec!["near", "far", "morph"],
+            "an entry names a node other than the one it is an instance of"
+        );
     }
 }

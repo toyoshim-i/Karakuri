@@ -2,12 +2,13 @@
 
 use karakuri_codegen::generate_l2;
 use karakuri_codegen::layout::{binding, counts, group, UniformLayout, WORKGROUP_SIZE};
-use karakuri_ir::layout::{ElementLayout, Synthetic, ALIVE_BYTES};
+use karakuri_ir::layout::{ElementLayout, Synthetic};
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Attr;
 
 use super::{Geometry, View};
 use crate::set::{ElementStorage, SetError};
+use crate::storage::DeformStorage;
 use crate::uniforms::UniformScratch;
 
 /// An L2 node: geometry in, geometry out.
@@ -118,6 +119,15 @@ impl Deform {
         // end of. A wrapped capacity allocates a buffer that is too small and is
         // read past; a saturated one is caught by the check below.
         let out_capacity = capacity.saturating_mul(shader.amplify.unwrap_or(1));
+        // **Sized where the figure is decided** — see `crate::storage`. Every
+        // buffer this node is charged for comes off this, including the number
+        // the limit below refuses, so what a device rejects and what a caller
+        // with no device is told are one expression.
+        let element_storage = DeformStorage::of(
+            out_capacity,
+            shader.element_layout.stride,
+            shader.amplify.is_some(),
+        );
         // **Asked of the device, here, rather than left to the allocation.**
         // wgpu does not return an error for a binding above the limit — its
         // uncaptured error handler panics the thread, which at startup takes the
@@ -130,7 +140,7 @@ impl Deform {
         // Checked for every node rather than only for amplifiers, because a
         // plain L2 *below* one inherits the amplified capacity and is exactly as
         // able to exceed the limit.
-        let bytes = u64::from(out_capacity) * u64::from(shader.element_layout.stride);
+        let bytes = element_storage.element_buffer();
         let limit = u64::from(device.limits().max_storage_buffer_binding_size);
         if bytes > limit {
             return Err(SetError::TooManyElements {
@@ -147,7 +157,7 @@ impl Deform {
 
         let elements = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("{} elements", l2.name)),
-            size: u64::from(out_capacity) * u64::from(shader.element_layout.stride),
+            size: element_storage.element_buffer(),
             // No COPY_SRC: nothing reads this back. `Set::read_elements` is
             // about what the simulation holds, which is the L1's buffer and not
             // a derived one.
@@ -222,7 +232,13 @@ impl Deform {
         let amplified_buffers = shader.amplify.map(|factor| {
             let alive = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(&format!("{} alive", l2.name)),
-                size: u64::from(out_capacity) * u64::from(ALIVE_BYTES),
+                // `expect` rather than a second `if`: this closure runs exactly
+                // when `shader.amplify` is `Some`, which is the predicate the
+                // storage was built with, so a `None` here would mean the two
+                // had come apart — which is the thing worth stopping on.
+                size: element_storage
+                    .alive_buffer()
+                    .expect("an amplifying node is charged for its own alive array"),
                 usage: wgpu::BufferUsages::STORAGE,
                 mapped_at_creation: false,
             });
