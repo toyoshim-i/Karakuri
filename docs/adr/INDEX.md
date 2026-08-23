@@ -3,16 +3,11 @@
 How this directory and [../principles/](../principles/) are run is
 [ADR-0000](0000-record-decisions-here-and-standing-rules-in-principles.md). Read that first.
 
-**An ADR's reasoning is not edited after it lands.** If the argument would have to change,
-that is a new record — which is what buys the permission to stop maintaining these: a record
-is *allowed* to go out of date, and one describing what a document said in August is right as
-history. Nobody keeps a hundred and fifty records current.
-
-**Allowed to go out of date is not the same as left wrong.** The front matter is written after
-the fact by design — `status`, `superseded_by`, `principles` — and a pointer that has gone bad
-or a fact that was never true is corrected. Retiring a principle requires it: re-point the
-ADRs that cited it. The argument is what happened and stays; the wiring around it is
-maintained.
+**An ADR is a description of history**, which decides what may be edited: the past is not
+revised, a description that was wrong is corrected, and annotating a record with what it later
+became is welcome. The test is whether an edit changes what the record says happened or what a
+reader can find out about it —
+[P-0066](../principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md).
 
 A retired number is never reused; when one is superseded it stays in the table with a pointer
 to what replaced it. This index is maintained by hand — see ADR-0000 for when that stops being
@@ -181,6 +176,7 @@ number; new records continue from the end.
 | [ADR-0148](0148-a-variant-pool-is-a-set-and-the-deck-stays-a-mixer.md) | A variant pool is a Set, and the deck stays a mixer | 2026-08-23 | accepted |
 | [ADR-0149](0149-source-cites-what-is-in-force-not-a-plan.md) | Source cites what is in force, not a plan | 2026-08-23 | accepted |
 | [ADR-0150](0150-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once.md) | The pipeline is linear HDR, and sRGB is encoded once at final output | 2026-08-23 | accepted |
+| [ADR-0151](0151-an-adr-is-a-description-of-history.md) | An ADR is a description of history | 2026-08-23 | accepted |
 
 ## Retired numbers
 
