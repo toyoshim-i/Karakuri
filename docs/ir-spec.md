@@ -1898,6 +1898,7 @@ known. The total-cost decision lives there, not in the artifact.
 {"t":"param","layer":"L4","index":1,"key":"hue","value":0.58}
 {"t":"bind","layer":"L1","key":"turbulence","signal":"energy","curve":"pow2","range":[0.1,2.4]}
 {"t":"edge","node":"morph","slot":"far","to":"sphere_shell"}
+{"t":"merge","live":1}
 {"t":"camera","kind":"orbit","radius":8.0,"speed":0.15}
 {"t":"seed","stream":"L1","value":19274}
 {"t":"seed","stream":"L1","index":1,"value":48113}
@@ -1906,7 +1907,9 @@ known. The total-cost decision lives there, not in the artifact.
 **One `slot` record per node, in node order** — the geometries, the deformers, the cameras,
 the renderers, then the fields. **The built-in camera has no `slot` record**, because it has
 no procedure to reference: it is the last node of the L3 layer in every Set, and the `camera`
-record below is what describes it. The chain above is two geometries, a morph between them and
+record below is what describes it. **The L5 has none for the same reason**, and the `merge`
+record describes it — a node with no procedure is described by a record of its own, which is
+one rule and not two. The chain above is two geometries, a morph between them and
 two renderers over the result; a Set of one geometry and one renderer is the two `slot` lines
 it always was. Only `near` was written down: the other four names are derived from their
 procedures where the Set is built, which is why the `edge` can name `morph` and `sphere_shell`
@@ -1980,6 +1983,47 @@ without either appearing in the file.
   a record can be about, since a camera that is a procedure writes its own six numbers every
   frame. An index naming one of those is reported and skipped rather than applied to a node
   that would overwrite it.
+- **`merge` says the Set composites its renderers** rather than overdrawing them, and it is
+  the `camera` precedent rather than a new rule. A Set built with `--merge N` gives every
+  renderer a cleared target of its own and folds them through an L5; a Set without one draws
+  them over a single attachment, the first clearing and the rest loading. That was the one
+  thing a Set knew about itself that this file could not say — so a composited Set saved and
+  loaded back overdrew, and `select` had nothing left to be about, which is what made a saved
+  variant pool an *unselectable* one.
+
+  The rule that kept it out was "a Set file records the **nodes** of a Set, not how they meet
+  each other", and `edge` ended that rule by recording exactly how two nodes meet. What holds
+  instead is already above: **the built-in camera has no `slot` record, because it has no
+  procedure to reference, and the `camera` record describes it instead.** An L5 has no `kind`
+  for the same reason — the compositing is fixed, so a `kind L5` file would have nothing to
+  contain — so a node with no procedure is described by a record of its own. What was chosen
+  here is the second sentence over the first; what lost is the claim that a Set file says only
+  what a Set holds.
+
+  **Its presence is the whole statement, and there is no boolean field.** A record that could
+  say `false` would be a second spelling of its own absence, and two spellings of one fact
+  leave a reader asking what a writer meant by choosing the other. **And no `index`**:
+  `camera` carries one because a Set may hold several cameras, where a Set holds exactly one
+  L5 — it is the node the Set's single `Texture` output comes out of — so there is nothing
+  here for an index to distinguish, and a field that could only ever be 0 invites a file to
+  name a node that cannot exist.
+
+  **`live` is which renderer is the only live one**, in draw order, the numbering `select`'s
+  `renderer` and a `slot`'s `index` use. **Absent means every input is live**, which is the
+  state a merge nobody has selected in is in — an L5 input is live by default — so a Set that
+  was never selected in writes the bare `{"t":"merge"}` and reads back identically. Absent is
+  emphatically *not* node 0 on the `slot` rule: read that way it would silence every renderer
+  but the first in every composited Set ever saved without a selection.
+
+  **`gain`, `opacity`, `blend` and `mask` are not fields here, and that is deliberate.** An L5
+  input carries all four, and nothing outside `crates/karakuri-engine/tests/merge.rs` can set
+  one — there is no flag, no key and no MCP tool — so a field for them would have no producer,
+  and every composited Set would record four defaults nobody chose. That is the argument this
+  document makes for keeping `parent` off a metadata card rather than writing it empty: a
+  record whose producer does not exist waits for it. **The record grows a per-input row when
+  something can set one** — one line per edge, on the terms `slot` and `capacity` are one line
+  per node — and `live` is here in the meantime because a selection is the one input control
+  an operator can actually reach.
 - `param` and `bind` are keyed by `layer` in the record, and the engine holds one value per
   **node**. A name two procedures both declare is two values, each reaching the node that
   declared it — which it had to become, since every L4 in `examples/` declares `exposure`
@@ -2339,11 +2383,20 @@ reason.
 `renderer` is an index in draw order, the numbering `--param L4:1:key=value` and a `slot`
 record's `index` use. It says something only where the slot was built to composite: an
 overdrawing slot's renderers share one attachment and have no edges into an L5, so a `select`
-on one is carried, replayed and without effect — which is the ordinary case rather than an
-exotic one, because a Set file cannot record its layering and one loaded back overdraws. A
-`renderer` the slot does not draw with is refused where the record is applied rather than
-where it is decoded, since how many renderers a slot has is a property of the Set in it and
-can change under a hot swap between the schedule and the beat.
+on one is carried, replayed and without effect — which used to be the ordinary case, because a
+Set file could not record its layering and one loaded back overdrew. It records it now, in the
+`merge` record, so a composited Set saved and loaded back still composites. A `renderer` the
+slot does not draw with is refused where the record is applied rather than where it is
+decoded, since how many renderers a slot has is a property of the Set in it and can change
+under a hot swap between the schedule and the beat.
+
+**What a `select` still cannot be folded into is that record**, and the reason is now on the
+session's side rather than the Set's. A selection is addressed to a **deck slot**, and no
+session record says which slots composite, nor which deck slot the Set at the head of a stream
+was played in — a session head is one slot's material and the stream never says whose. So a
+projection folding a session down cannot tell whether a selection it meets is about the Set it
+is writing, and folding it into a `merge` would be guessing that it is. A selection stays a
+property of the run, like a gain, until a session record says otherwise.
 
 **What it selects between is one geometry drawn several ways.** The renderers are L4s over
 one simulation, so this is the half of a variant pool that a Set can hold — see
@@ -2473,9 +2526,13 @@ rollback means the candidate was over budget, which is an exceptional frame alre
 
 **These twelve stay out of a Set file**, ten because they are state that is the
 session's rather than any Set's and `transition` and `select` because they are not state at
-all.  `select` is out for a second reason of its own: a Set file cannot say whether a slot
-composites its renderers — `--merge` is not one of its records — so there is nothing in one
-for a selection to be about. That is a second
+all.  `select` is out for a second reason of its own, and it is no longer that a Set file
+cannot say whether a slot composites its renderers — the `merge` record says exactly that,
+and a composited Set now loads back composited. It is that no **session** record says it: a
+selection names a deck slot, and nothing in a stream says which slots composite, nor which
+deck slot the Set at the head of the stream was played in — "What no record says is what the
+deck held", above. So a projection cannot tell whether a selection it meets is about the Set
+it is folding, and folding it into a `merge` would be guessing that it is. That is a second
 reason for a record to be absent from a Set file and it is not the `audio` one: there is
 something to fold here, and this is not the projection it folds into. A Set file that
 restored a gain would apply it to whatever slot it was next loaded into, and one whose
@@ -2810,8 +2867,9 @@ which is a shape `publish` itself refuses. A wildcard control's range is the **i
 of what its nodes declare — one knob moving both must not offer a position only one of them
 said it still looks like itself at.
 
-It is not in a Set file yet, on the same terms a chain, a camera and a layering are not — but
-it **is** in a `Request`, so it survives a hot swap. Leaving it out was worse than a lost
+It is not in a Set file yet, and it is now the only one of those four left out: a chain saves
+as a `slot` per node, a camera as the `camera` record, and a layering as the `merge` record.
+But it **is** in a `Request`, so it survives a hot swap. Leaving it out was worse than a lost
 surface: the bindings are restated, so a `control:` binding outlived the control it named, and
 a binding whose source is gone holds its param where it found it for the rest of the run.
 
@@ -2921,10 +2979,15 @@ and the per-input controls, `Deck` mixes on it with a surface wired to every inp
 folds its renderers with it and no surface at all.
 
 A Set says which it wants with `karakuri_engine::set::Layering`, reached from the command
-line as `--merge <slot>`. It is not in a Set file: the format records the *nodes* of a Set —
-a `slot` per node, chain and camera included — and how the renderers meet each other is not
-one of them. A saved Set therefore loads as overdraw, which is what every Set was before an
-L5 could be nested.
+line as `--merge <slot>`, **and a Set file records it** — the `merge` record, see [Set file
+format](#set-file-format). It was kept out on the rule that the format records the *nodes* of
+a Set — a `slot` per node, chain and camera included — and not how the renderers meet each
+other. `edge` ended that rule by recording exactly how two nodes meet, and what stands in its
+place is the reading `camera` already established: a node with no procedure gets no `slot`
+record and is described by a record of its own, an L5 having no `kind` for the same reason it
+has no code to lower. Until then a saved Set loaded as overdraw whatever it was built as —
+which is what every Set was before an L5 could be nested, and which left a saved variant pool
+unselectable, since a `select` needs an L5 to be about.
 
 **Which separates the mix from the deck**, and the separation is worth having because today
 they are one type. `gain`, `opacity`, `blend` and `mask` are properties of an *edge into an

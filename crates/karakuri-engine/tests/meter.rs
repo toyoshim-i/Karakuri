@@ -841,6 +841,7 @@ proc nan_points {
                 l3s: Vec::new(),
                 fields: Vec::new(),
                 layering: karakuri_engine::set::Layering::Overdraw,
+                live: None,
                 published: Vec::new(),
                 l4s: vec![compile(&L4.replace("{{EXPOSURE}}", "0.000"))],
                 seed_salt: SEED,

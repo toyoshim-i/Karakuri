@@ -211,6 +211,163 @@ fn unknown_records_survive_a_read_write_round_trip() {
     assert_eq!(contents, original);
 }
 
+/// **A Set file may say that it composites, and `Store::write_set` takes it.**
+///
+/// The record this test is about is the layering — the one thing a Set knew
+/// about itself that its file could not say, so a composited Set saved and
+/// loaded back overdrew and `Set::select_renderer` came back with nothing to
+/// select between.
+///
+/// **Written back byte for byte**, which is the claim the optional field
+/// makes: a Set nobody has selected in writes the bare `{"t":"merge"}`, and a
+/// `"live":null` on every one of them would be a changed file for a fact
+/// nobody stated.
+#[test]
+fn write_set_accepts_a_merge_record() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    let proc_hash = Hash::of(b"proc p { kind L4 }");
+    let lines = vec![
+        Line::new(Record::Set {
+            id: "morph_01".into(),
+            v: 1,
+        }),
+        Line::new(Record::Slot {
+            layer: Layer::L4,
+            index: 0,
+            name: None,
+            proc_hash,
+        }),
+        Line::new(Record::Slot {
+            layer: Layer::L4,
+            index: 1,
+            name: None,
+            proc_hash,
+        }),
+        Line::new(Record::Merge { live: Some(1) }),
+    ];
+    store.write_set("morph_01", &lines).unwrap();
+
+    let read_back = store.read_set("morph_01").unwrap();
+    assert_eq!(
+        read_back.last().unwrap().record(),
+        &Record::Merge { live: Some(1) }
+    );
+
+    let contents = fs::read_to_string(dir.path().join("sets").join("morph_01.set.ndjson")).unwrap();
+    assert!(
+        contents.contains(r#"{"t":"merge","live":1}"#),
+        "the merge did not go to disk as the line the spec prints: {contents}"
+    );
+
+    // And the same Set with nobody selected in it: the presence of the record
+    // is the whole statement, so the line carries nothing else.
+    let unselected = vec![
+        Line::new(Record::Set {
+            id: "morph_02".into(),
+            v: 1,
+        }),
+        Line::new(Record::Merge { live: None }),
+    ];
+    store.write_set("morph_02", &unselected).unwrap();
+    let contents = fs::read_to_string(dir.path().join("sets").join("morph_02.set.ndjson")).unwrap();
+    assert!(
+        contents.contains("{\"t\":\"merge\"}\n"),
+        "an unselected merge wrote something beyond its own presence: {contents}"
+    );
+}
+
+/// **A `merge` line carrying a key this build does not know reads back as
+/// itself and writes back with the key still on it.**
+///
+/// Both halves of the format's forward-compatibility rule, on the newest
+/// record: an unknown `t` is ignored, and so is an unknown key inside a record
+/// whose `t` *is* known. This record is the one that will meet the second
+/// half first — `gain`, `opacity`, `blend` and `mask` are named in its doc as
+/// the fields it does not have yet, so the build that grows them is the build
+/// whose files this one has to read.
+#[test]
+fn a_merge_line_keeps_a_key_this_build_does_not_know() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    let path = dir.path().join("sets").join("from_later.set.ndjson");
+    let original = concat!(
+        r#"{"t":"set","id":"morph_01","v":1}"#,
+        "\n",
+        // What a build that had grown the per-input row would write.
+        r#"{"t":"merge","live":1,"gain":0.5}"#,
+        "\n",
+    );
+    fs::write(&path, original).unwrap();
+
+    let lines = store.read_set("from_later").unwrap();
+    assert_eq!(lines.len(), 2, "a line was dropped rather than passed over");
+    assert_eq!(
+        lines[1].record(),
+        &Record::Merge { live: Some(1) },
+        "a known `t` carrying an unknown key did not read back as itself"
+    );
+
+    // And the key survives the write, because a `Line` writes the text it came
+    // from — the same thing that keeps an unknown `t` verbatim.
+    store.write_set("from_later", &lines).unwrap();
+    assert_eq!(fs::read_to_string(&path).unwrap(), original);
+}
+
+/// **A projection keeps the layering and still drops the selection.**
+///
+/// The end-to-end half of `project`'s own test. A `merge` is what the Set
+/// *is*, so it folds and is written; a `select` is addressed to a **deck
+/// slot**, and nothing in a session says which slots composite nor which deck
+/// slot the Set at the head of the stream was played in — so a projection
+/// cannot tell whether a selection it meets is about the Set it is writing,
+/// and folding one in would be guessing.
+///
+/// It matters here rather than only in the unit test because a `select` that
+/// reached this far would not merely be wrong, it would fail the save:
+/// `write_set` refuses a record that is not Set state.
+#[test]
+fn save_session_as_set_keeps_a_merge_and_drops_a_selection() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    let session = vec![
+        Line::new(Record::Set {
+            id: "morph_01".into(),
+            v: 1,
+        }),
+        // The head's, because a session stream begins with a Set file's
+        // records — so this is a stream saying as much about layering as a
+        // stream can say.
+        Line::new(Record::Merge { live: None }),
+        Line::new(Record::Tick { steps: 1 }),
+        Line::new(Record::Select {
+            slot: 0,
+            renderer: 1,
+            start: 8.0,
+        }),
+        Line::new(Record::Tick { steps: 1 }),
+    ];
+
+    store.save_session_as_set("morph_01", &session).unwrap();
+    let set = store.read_set("morph_01").unwrap();
+
+    let records: Vec<_> = set.iter().map(|l| l.record().clone()).collect();
+    assert_eq!(
+        records,
+        vec![
+            Record::Set {
+                id: "morph_01".into(),
+                v: 1
+            },
+            Record::Merge { live: None },
+        ],
+        "the projection did not keep the layering and drop the selection"
+    );
+}
+
 #[test]
 fn write_set_rejects_a_tick() {
     let dir = tempdir().unwrap();

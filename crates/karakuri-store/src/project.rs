@@ -39,6 +39,12 @@ enum Key {
     Param(Layer, Option<u32>, String),
     Bind(Layer, Option<u32>, String),
     Camera(u32),
+    /// **No index beside it, because a Set holds exactly one L5.** Every other
+    /// key here carries whatever says *which* node a record is about; a
+    /// `merge` record addresses the only node it could address, so the key is
+    /// the record type and a second `merge` in a session is one L5 with a
+    /// later answer.
+    Merge,
     Seed(Layer, u32),
     /// A node and the slot of it being bound — the two halves of what an edge
     /// is *about*, where the node it is bound *to* is what the edge says.
@@ -120,6 +126,11 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         // the fold as the two producers they are — the same correction
         // `capacity` and `seed` needed when a layer stopped holding one node.
         Record::Camera { index, .. } => Some(Key::Camera(*index)),
+        // **One L5, so one key.** A Set composites or it does not, and the
+        // last line to say so is what the Set ends up being — which is the
+        // same last-write-wins every other address here gets, over an address
+        // with nothing in it.
+        Record::Merge { .. } => Some(Key::Merge),
         // The same, and it is what a per-source salt *is*: two sources folded
         // onto one seed is two geometries salted alike, which is the one thing
         // salting exists to prevent.
@@ -144,12 +155,19 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         | Record::Transport { .. }
         | Record::Preview { .. }
         | Record::Transition { .. }
-        // **An event, like the `transition` above it, and dropped for a second
-        // reason of its own.** A selection says which renderer of a slot is
-        // live; whether that question means anything is decided by the
-        // layering, which is not a Set file record at all — so a folded
-        // selection would describe a Set that loads back with every renderer
-        // folded again.
+        // **An event, like the `transition` above it, and still dropped — but
+        // no longer for the reason it used to be.** The layering *is* a Set
+        // file record now: `Record::Merge` says a Set composites, and its
+        // `live` field is where a Set records which renderer is the live one.
+        // What no *session* record carries is the layering. A `select` is
+        // addressed to a deck slot, and nothing in a stream says which slots
+        // composite, nor which deck slot the Set at the head of the stream was
+        // played in — `session_head` in `karakuri-cli` says as much when it
+        // writes one, that "a session stream cannot say what a deck held". So
+        // a projection meeting a selection cannot tell whether it is about the
+        // Set it is folding, and folding it in would be guessing that the head
+        // is the slot the record names. When a session record says which slot
+        // composites, this arm becomes a fold into that slot's `merge`.
         | Record::Select { .. }
         | Record::Mask { .. }
         // **Nothing to fold, and nothing that could be.** A `save` names a Set
@@ -572,6 +590,82 @@ mod tests {
                 name: Some("near".into()),
                 proc_hash
             }
+        );
+    }
+
+    /// **One L5, so one `merge` record**, and a session that composited and
+    /// then said so again folds to the later line.
+    ///
+    /// The key carries no index because there is nothing for one to
+    /// distinguish — a Set has exactly one L5, the node its single `Texture`
+    /// output comes out of — so this is `capacity`'s fold over an address with
+    /// nothing in it.
+    #[test]
+    fn a_later_merge_folds_onto_the_earlier_one() {
+        let session = vec![
+            line(Record::Set {
+                id: "s".into(),
+                v: 1,
+            }),
+            line(Record::Merge { live: None }),
+            line(Record::Tick { steps: 1 }),
+            line(Record::Merge { live: Some(1) }),
+        ];
+        let set = project(&session);
+        assert_eq!(
+            set.len(),
+            2,
+            "a Set holds one L5: {:?}",
+            set.iter().map(|l| l.record()).collect::<Vec<_>>()
+        );
+        assert_eq!(set[1].record(), &Record::Merge { live: Some(1) });
+    }
+
+    /// **A selection is dropped even where the stream says the Set
+    /// composites**, which is the drop this projection has to keep making and
+    /// the one whose reason moved.
+    ///
+    /// The layering is a Set file record now, so the old reason — "a folded
+    /// selection would describe a Set that loads back with every renderer
+    /// folded again" — is gone. What replaces it is that **no session record
+    /// carries the layering**: a `select` is addressed to a *deck slot*, and
+    /// nothing in a stream says which slots composite nor which deck slot the
+    /// Set at the head of the stream was played in. The `merge` line below is
+    /// the head's, so this session says as much as any session can, and it
+    /// still does not say that slot 1 is the slot this Set is in. Folding the
+    /// selection would be guessing that.
+    ///
+    /// So the `merge` passes through as it was written — `live` still absent,
+    /// every input live — and the selection does not reach the file.
+    #[test]
+    fn a_selection_is_dropped_even_where_the_stream_says_the_set_composites() {
+        let session = vec![
+            line(Record::Set {
+                id: "s".into(),
+                v: 1,
+            }),
+            line(Record::Merge { live: None }),
+            line(Record::Tick { steps: 1 }),
+            line(Record::Select {
+                slot: 1,
+                renderer: 2,
+                start: 64.0,
+            }),
+            line(Record::Tick { steps: 1 }),
+        ];
+        let set = project(&session);
+        assert_eq!(
+            set.len(),
+            2,
+            "a selection reached a Set file: {:?}",
+            set.iter().map(|l| l.record()).collect::<Vec<_>>()
+        );
+        assert!(set.iter().all(|l| l.record().is_set_state()));
+        assert_eq!(
+            set[1].record(),
+            &Record::Merge { live: None },
+            "the selection was folded into the merge, which no session record \
+             says is the merge it is about"
         );
     }
 
