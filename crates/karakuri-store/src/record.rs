@@ -200,7 +200,9 @@ pub enum Record {
         /// each running at the default its own procedure declares, so a layer
         /// alone cannot say which of them is being resized: two geometries at
         /// two capacities were inexpressible in this format however they were
-        /// spelled on the way in, and naming what a Set holds is undecided.
+        /// spelled on the way in, which is what made this field part of the
+        /// naming work rather than a follow-on to it — see
+        /// `docs/adr/0111-a-name-lives-in-the-set-file-and-may-be-written-on-the-command-line.md`.
         ///
         /// **Absent is node 0, not a wildcard**, which is [`Record::Slot`]'s
         /// rule rather than [`Record::Param`]'s: this record names one node,
@@ -466,7 +468,9 @@ pub enum Record {
     /// A `String` rather than an enum, on the same terms as `curve` and
     /// `noise.kind`: an unrecognised level is the engine's to diagnose against
     /// what it actually supports. This one has earned it — five residency
-    /// levels were planned and three were built.
+    /// levels were named and three were built, because two of the five turned
+    /// out to be transitions rather than states:
+    /// `docs/adr/0062-warming-and-cooling-are-transitions-not-states.md`.
     Residency {
         slot: u8,
         level: String,

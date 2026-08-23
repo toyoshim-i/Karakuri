@@ -11,9 +11,10 @@
 //!
 //! ## On the beat clock, and what that costs
 //!
-//! Of the three clocks this system runs on, the middle one — beat and bar, half
-//! a second to four — is for variant switching, parameter morphs and
-//! transitions. The
+//! Of the three clocks this system runs on — see
+//! `docs/principles/0069-the-three-clocks-never-collapse-into-each-other.md` —
+//! the middle one, beat and bar, half a second to four, is for variant
+//! switching, parameter morphs and transitions. The
 //! transport got there first: `Sync::Beat` already derives a slot's `t` from
 //! the grid, which is engine machinery running on that clock rather than a
 //! procedure reading a signal. What is new here is *scheduling*: the transport

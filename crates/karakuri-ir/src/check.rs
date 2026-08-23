@@ -3162,7 +3162,10 @@ impl<'a> Checker<'a> {
     /// table, because a geometry's parts *are* attributes; a camera's are not
     /// parts of anything else, so this asks the slot's *type* what it has.
     /// Three members, and each is a value an L4 could already read — which is
-    /// what makes this a new spelling rather than a new capability: the
+    /// what makes this a new spelling rather than a new capability, and why the
+    /// L3's other five stay unreadable
+    /// (`docs/adr/0153-a-renderer-reads-three-camera-members-and-the-l3s-five-stay-unreadable.md`):
+    /// the
     /// unnamed forms are [`Ambient::Camera`], [`Ambient::Eye`] and
     /// [`Ambient::Ray`], and they mean the Set's camera where no slot was
     /// declared.

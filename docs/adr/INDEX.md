@@ -177,6 +177,9 @@ number; new records continue from the end.
 | [ADR-0149](0149-source-cites-what-is-in-force-not-a-plan.md) | Source cites what is in force, not a plan | 2026-08-23 | accepted |
 | [ADR-0150](0150-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once.md) | The pipeline is linear HDR, and sRGB is encoded once at final output | 2026-08-23 | accepted |
 | [ADR-0151](0151-an-adr-is-a-description-of-history.md) | An ADR is a description of history | 2026-08-23 | accepted |
+| [ADR-0152](0152-a-kir-names-a-slot-and-the-set-names-the-nodes.md) | A `.kir` names a slot, and the Set names the nodes | 2026-08-21 | accepted |
+| [ADR-0153](0153-a-renderer-reads-three-camera-members-and-the-l3s-five-stay-unreadable.md) | A renderer reads three camera members, and the L3's five stay unreadable | 2026-08-21 | accepted |
+| [ADR-0154](0154-a-third-path-on-set-is-a-second-renderer-and-there-is-no-new-syntax.md) | A third path on `--set` is a second renderer, and there is no new syntax | 2026-08-16 | accepted |
 
 ## Retired numbers
 
@@ -199,3 +202,5 @@ A principle with no ADR is one whose reasoning is still only in the code and the
 - [P-0005](../principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md) — A swap happens on a frame boundary, and an over-budget Set rolls back on its own
 - [P-0067](../principles/0067-the-language-is-bounded-so-a-procedure-can-be-priced-before-it-runs.md) — The language is bounded, so a procedure can be priced before it runs. It predates the recovered history; the reasoning is in `ir-spec.md` and the check pass
 - [P-0065](../principles/0065-the-signal-bus-is-not-readable-from-ir.md) — The signal bus is not readable from IR. It predates the recovered history and has no decision to record. **Renumbered from 0061 on 2026-08-23**, which two writers had reached for within three hours of each other; the earlier file keeps the number, and 0061 is [a refusal a person can reach from two surfaces is one sentence](../principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md)
+- [P-0069](../principles/0069-the-three-clocks-never-collapse-into-each-other.md) — The three clocks never collapse into each other. Part of the design skeleton rather than a decision taken against an alternative: it was written down before there was an engine to test it against, and the frame path, the transport, the transitions and the build worker were all arranged around it
+- [P-0070](../principles/0070-auditioning-is-a-prerequisite-not-a-convenience.md) — Auditioning is a prerequisite, not a convenience. The requirement was stated when the instrument was first described and the control was built to it; nothing was decided against an alternative. [ADR-0072](0072-auditioning-adds-a-draw-and-never-a-step.md) records how an audition behaves, not whether the control exists
