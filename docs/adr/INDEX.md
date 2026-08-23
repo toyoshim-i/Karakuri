@@ -3,9 +3,20 @@
 How this directory and [../principles/](../principles/) are run is
 [ADR-0000](0000-record-decisions-here-and-standing-rules-in-principles.md). Read that first.
 
-An ADR is not edited after it lands, except to set its status. A retired number is never
-reused; when one is superseded it stays in the table with a pointer to what replaced it. This
-index is maintained by hand — see ADR-0000 for when that stops being enough.
+**An ADR's reasoning is not edited after it lands.** If the argument would have to change,
+that is a new record — which is what buys the permission to stop maintaining these: a record
+is *allowed* to go out of date, and one describing what a document said in August is right as
+history. Nobody keeps a hundred and fifty records current.
+
+**Allowed to go out of date is not the same as left wrong.** The front matter is written after
+the fact by design — `status`, `superseded_by`, `principles` — and a pointer that has gone bad
+or a fact that was never true is corrected. Retiring a principle requires it: re-point the
+ADRs that cited it. The argument is what happened and stays; the wiring around it is
+maintained.
+
+A retired number is never reused; when one is superseded it stays in the table with a pointer
+to what replaced it. This index is maintained by hand — see ADR-0000 for when that stops being
+enough.
 
 `principles/` has no index. `ls docs/principles/` is the index, because each filename is the
 rule it states.
