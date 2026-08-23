@@ -1,6 +1,6 @@
 //! Every `.kir` in `examples/`, through the whole front end.
 //!
-//! **These are the files the README and the manual tell people to run**, and
+//! **These are the files the manual and `docs/status.md` tell people to run**, and
 //! before this nothing in the suite opened one. A stale example is not a cosmetic
 //! problem: it is the first thing anyone types, and the first thing a model is
 //! pointed at when it asks what the language looks like.
@@ -8,7 +8,7 @@
 //! Two claims. Every file on its own terms, which is where rot shows first — a
 //! renamed builtin, a tightened range, a `blend` value that stopped existing —
 //! and then the *pairs* the documentation offers, since a command line in the
-//! README is a claim about a pair and `Set::build` is where a pair is judged.
+//! manual is a claim about a pair and `Set::build` is where a pair is judged.
 //!
 //! Which L1 goes with which L4 is written in prose and in the files' own
 //! comments, never in the files, so the pair list below is by hand. Deriving one
@@ -81,7 +81,7 @@ mod gpu {
 
     /// **The pairs the documentation names actually compose.** `Set::build` is where
     /// `consumes ⊆ emit` is decided, and it is also where the rules a single file
-    /// cannot express live — `blend weighted` on a fullscreen L4, for one. A README
+    /// cannot express live — `blend weighted` on a fullscreen L4, for one. A document
     /// that offers a command line is making a claim about the pair, not about two
     /// files.
     ///
@@ -97,7 +97,7 @@ mod gpu {
             ("drift_shell.kir", "glass_shell.kir"),
             ("drift_shell.kir", "field_march.kir"),
             ("strand_shell.kir", "strand_strokes.kir"),
-            // The three a model wrote in one session; the README names them as a
+            // The three a model wrote in one session; `docs/status.md` names them as a
             // group, so both of its L4s are paired with its L1.
             ("beat_strands.kir", "beat_strokes.kir"),
             ("beat_strands.kir", "beat_bloom.kir"),

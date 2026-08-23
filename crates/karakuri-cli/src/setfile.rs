@@ -2,7 +2,7 @@
 //!
 //! Everything else an operator moves — audio, tempo, the mix, the transport —
 //! reaches the engine as a record. The *material* did not: two `.kir` paths and
-//! a handful of flags went straight into `Set::build`, so `README.md`'s
+//! a handful of flags went straight into `Set::build`, so `docs/invariants.md`'s
 //! invariant had to say "the performance is on the record path and the material
 //! is not". This is the other half.
 //!

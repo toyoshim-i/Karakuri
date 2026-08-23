@@ -1,7 +1,7 @@
 // A bloom pass, built out of a second renderer instead of a post stage.
 //
 // **There is no post-processing in this engine.** The only thing after the mix
-// is the tone mapper, and `README.md` says of bloom: "Does not exist. Values
+// is the tone mapper, and `docs/status.md` says of bloom: "Does not exist. Values
 // above 1.0 are what would feed it." So this is not a blur of the frame — a
 // shader here cannot read the frame — it is the *same geometry drawn again*,
 // wide and soft and dim, composited additively with the crisp version in slot 0.

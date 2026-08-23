@@ -143,7 +143,7 @@ impl ElementStorage {
 }
 
 /// The fixed simulation step. **Not** the real frame delta — see the
-/// determinism invariant in `README.md`. Public because the session clock a
+/// determinism invariant in `docs/invariants.md`. Public because the session clock a
 /// binding reads has to advance by exactly this: an oscillator on a different
 /// step would drift away from the `t` the Sets are running at, and the drift
 /// would be invisible until a beat landed in the wrong place.
@@ -3382,7 +3382,7 @@ impl Set {
     fn control_position(&self, name: &str) -> Option<f32> {
         // **Without allocating**, which `published()` cannot promise: this is
         // called from `resolve_bindings`, which `Set::prepare` calls, and the
-        // first invariant in `README.md` is the one about not allocating on the
+        // first invariant in `docs/invariants.md` is the one about not allocating on the
         // render thread. So the interface is searched in place and the default
         // one — where a control's name *is* a param's key — is answered without
         // building the list it would appear in.
@@ -3580,7 +3580,7 @@ impl Set {
     /// **Nothing in here allocates.** Both uniform writes go through storage
     /// sized at build time (`crate::uniforms::UniformScratch`) and the step
     /// arguments through a stack array, because this is the render thread and
-    /// the first invariant in `README.md` is the one about allocating on it.
+    /// the first invariant in `docs/invariants.md` is the one about allocating on it.
     /// Binding resolution is the same: a fixed `Vec` written in place, a
     /// stack-sized bus over a borrowed oscillator, and a linear scan to read
     /// values back out.

@@ -79,7 +79,7 @@ pub struct Audio {
     /// band count, so a stream with more bands than a reader knows about still
     /// decodes, and `record.rs` argues that at length. Building a fresh one per
     /// frame would put a heap allocation on the render thread, which
-    /// `README.md` forbids without a size qualifier and deliberately: "one
+    /// `docs/invariants.md` forbids without a size qualifier and deliberately: "one
     /// small allocation" is the argument that ends with a hitch nobody can
     /// account for. `Vec::clear` keeps the buffer, so the only allocation is
     /// the one here, before the first frame.
@@ -450,7 +450,7 @@ mod tests {
     }
 
     /// **Rewriting the record does not touch the heap.** `Audio::frame` emits
-    /// one of these per frame on the render thread, where `README.md` allows no
+    /// one of these per frame on the render thread, where `docs/invariants.md` allows no
     /// allocation at all, so the band buffer has to be the one from before.
     ///
     /// A counting allocator would be the direct assertion, but a

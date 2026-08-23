@@ -33,6 +33,15 @@ The canvas is fitted into the window, so you will normally see black bars. Press
 the window to the canvas exactly — that is what you want if something downstream is
 capturing the window.
 
+Defaults are `drift_shell` + `soft_points` at 262144 elements. [examples/](../examples/) also
+holds `spark_fountain`, an L1 that spawns and kills, and `beat_shell`, which reads the
+`beats` ambient so the figure turns with the bar and swells on the beat rather than at
+wall time. Pair either with the same L4:
+
+```sh
+cargo run -p karakuri-cli -- examples/spark_fountain.kir examples/soft_points.kir
+```
+
 ### Change the material while it runs
 
 ```sh
@@ -46,6 +55,19 @@ compiled on a worker thread and swapped in between two frames. Then it is **judg
 the median frame interval over those thirty is over the budget the candidate is dropped and
 the outgoing Set is live again at exactly the `t` it was parked at. A file that does not
 compile prints its diagnostics and never becomes a candidate at all.
+
+A procedure that fails
+any stage prints every diagnostic it has, against the source, and stops — there is one
+severity, because the response to a rejection is to regenerate rather than to proceed with
+a caveat.
+
+```
+$ cargo run -p karakuri-cli -- broken.kir examples/soft_points.kir
+12:61: contract: `energy` does not resolve to a local, a param, an attribute, or an ambient value
+12 |     position = sphere_point(u, hash1(seed + 1u)) * radius * energy;
+                                                                 ^^^^^^
+hint: the signal bus is not readable from IR — declare `param energy` and attach a `bind` record to it in the Set file
+```
 
 An unknown parameter name in a `--bind` is reported and ignored rather than refused, so a
 typo costs you the binding and says so:
@@ -73,6 +95,11 @@ sync — acts on that one, and the status line marks it with `>`.
 `space` puts the focused slot on and off air. Off air it keeps its `t`, so it resumes rather
 than restarting. `w` asks for it to be *warmed* off air so that it is already running when
 it comes up; that is a request, and the governor grants it only if the frame budget has room.
+
+A request it is still holding shows as `park` on the status line, apart from `off` — the
+same residency, opposite situations, and a surface that showed them alike would be telling
+an operator their request was discarded when it is reconsidered every pass and takes effect
+by itself when a slot comes off air.
 
 ### Move between them
 
@@ -240,6 +267,12 @@ cargo run -p karakuri-cli -- --replay take1 --seq frames/
 
 A replay reads a `tick` where a live run reads a clock, and the recorded audio where a live
 run reads a microphone — so what comes back is the performance and not just the material.
+It renders offscreen, deliberately: a window would put a clock back at the one place a
+replay must not have one.
+
+A run driven by a Set file renders **the same frame** as the run whose flags wrote it.
+Anything the file could not be carried across in full is printed rather than dropped — see
+the Status table in [status.md](status.md).
 
 **A Set file carries the whole chain.** A slot holding L2s, an L3, one or several
 `kind Field` files or several geometries is saved as the chain it is — one `slot` record per node, on the layer
@@ -487,6 +520,37 @@ comes back with every renderer folded, which is where it was. What is still a pr
 run, like a gain, is the `select` *record*: it names a deck slot at an instant, and a session
 stream never says which slot held which Set.
 
+### The two faders and the blend mode
+
+`[`/`]` move a slot's **gain** — the level the material arrives at — and `;`/`'` move its
+**opacity**, the fader across the blend. `m` cycles the blend mode: `add`, `over`, `max`.
+Under `add` the two faders are the same dial twice; under `over` one dims a layer and the
+other stops it hiding what is beneath, and an `over` layer at zero *gain* is a black card
+that still covers. Opacity is the one that silences under every mode, so it is the one to
+pull when material has gone bad — **except while that slot is being auditioned**, where both
+faders are ignored on purpose and the way out is to end the audition.
+
+`t` cycles the tone map operator live, which is the only way to compare two of them on
+moving material.
+
+### Auditioning a slot
+
+`v` cycles what the output shows — the mix, then each slot in turn. Auditioning an off-air
+slot draws it without stepping it, so looking at material never moves it; a slot that has
+never run has nothing to draw, and priming is what gives it something. The status line says
+`PVW<n>` while the output is one slot rather than the mix.
+
+### Syncing a slot to the room
+
+`y` cycles a slot's **transport**: `free` runs at wall time, `tempo` scales the rate by the
+room's tempo, and `beat` locks the slot's clock to the room's musical position — tape-style,
+so `u`/`i` scrub it back and forward a quarter beat a press. Modes the material cannot take
+are skipped with the reason: **beat sync needs closed-form material**, because a position
+lock has to be able to place the clock and an accumulating procedure can only be run
+forward; and **tempo sync is refused on material that reads `beats`**, which already follows
+the room and would otherwise follow it twice. Engaging a mode anchors the material at the
+current tempo, so nothing jumps at the moment it is switched on.
+
 ### The status line
 
 Printed twice a second, and on `s`. One group per slot, then the session:
@@ -522,6 +586,11 @@ is up and an absent blend means `add`.
 | `ableton-link 2p` | the tempo source and its peer count, with ` ?` not yet heard from, ` stop` stopped, ` GONE` died, `xN` anchors rejected. The grid's tempo follows it here when there is no `--audio-in` to print it |
 
 The audio group is absent entirely without `--audio-in`.
+
+Each slot's **level** is its mean and peak luminance, measured on the GPU and lagging a few
+frames because reading it back synchronously would be a stall. Mean is what two Sets are
+matched on; peak warns which one will dominate the mix wherever it lands regardless of its
+fader.
 
 **`x` is a count and not a fault.** Dividing by something that reaches zero is one of the
 most ordinary things a shader does, and it usually shows as a blown-out pixel. Those texels

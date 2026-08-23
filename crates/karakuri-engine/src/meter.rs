@@ -76,7 +76,7 @@
 //! and the buffer is mapped with `map_async`. **Nothing anywhere in here waits
 //! for the GPU.** [`Meters::collect`] polls with `wgpu::PollType::Poll`, which
 //! processes whatever has already finished and returns, and reads whichever
-//! results have arrived. `README.md`'s render-thread invariant is absolute and
+//! results have arrived. `docs/invariants.md`'s render-thread invariant is absolute and
 //! the rest of this engine is built around it — `swap.rs` moved both building
 //! *and dropping* a Set onto a worker rather than pay a stall, and
 //! `Set::live_count` is an explicitly-documented stall that nothing on the

@@ -212,7 +212,7 @@ pub const DEFAULT_BUDGET_MS: f32 = 20.0;
 /// measurements together and compares them, so **comparable matters more than
 /// absolute** — and an absolute number would be a lie the moment the window
 /// moved anyway. 1280x720 because it is the size every other figure in
-/// `README.md` was taken at.
+/// `docs/status.md` was taken at.
 pub const PROBE_RESOLUTION: (u32, u32) = (1280, 720);
 
 /// Simulation steps per measured frame. One, because that is what a `tick`
@@ -474,7 +474,7 @@ impl std::fmt::Display for Event {
                 f,
                 "rolled back `{label}`: {median_ms:.2} ms median frame interval over \
                  {JUDGE_FRAMES} frames exceeds the {budget_ms:.2} ms budget \
-                 (host clock — see README's Working style)"
+                 (host clock — see docs/contributing.md, working style)"
             ),
             Event::WorkerLost => write!(
                 f,
