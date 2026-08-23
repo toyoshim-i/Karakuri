@@ -16,7 +16,7 @@ Four properties define it, and each has a document behind it:
 - **AI-native.** An LLM can write this language from the specification alone, and `--mcp`
   serves the Model Context Protocol on loopback so a chat client can read a slot's
   procedure, rewrite it, and be told what the compiler and the frame budget made of it.
-  What has actually been demonstrated is in [docs/status.md](docs/status.md)
+  What has actually been demonstrated is in [docs/roadmap.md](docs/roadmap.md)
 - **Real-time.** A changed procedure is compiled on a worker thread, installed at a frame
   boundary, watched for a window, and rolled back automatically if it costs too much.
   Nothing allocates or compiles a shader on the render thread — that and the rest of the

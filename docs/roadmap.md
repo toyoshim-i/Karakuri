@@ -1,6 +1,6 @@
 # Karakuri — Vision and Roadmap
 
-Companion to `docs/invariants.md` (the rules in force), `docs/status.md` (V1 scope and
+Companion to `docs/invariants.md` (the rules in force) and
 what exists) and `docs/ir-spec.md` (the IR).
 
 This document exists so that decisions made during V1 do not foreclose later milestones.
@@ -81,7 +81,7 @@ Orthogonal to the layers:
   would need have no producer. Thumbnails are not built either, and what is missing there is
   a decision rather than machinery: a card is per artifact and one procedure cannot be
   rendered alone, so *what a thumbnail is of* has to be settled, which M5's Set browser is
-  the right place to settle it beside. See M4's demands, and M4's thumbnails bullet
+  the right place to settle it beside. See what M4 still owes, below
 
 ### Three clocks
 
@@ -185,2082 +185,279 @@ Each layer composes differently, and each needs its own semantics.
 
 ---
 
+## What exists today
+
+**What is built, part by part, and how much of it is proved** — the answer to *does it
+actually do that yet*, as against the milestones below, which say where it is going. Kept
+here rather than in a document of its own because a status page nobody opens is a status
+page nobody updates, and this is the file that gets opened.
+
+
+There is exactly one assumption to prove:
+
+> Can an LLM generate constrained IR, can we validate it and compile it to WGSL, and can
+> we hot-swap it without dropping a frame?
+
+One Set, slots hardcoded, no UI. Local oscillator and synthesized signals only. L1 for
+geometry and L4 for rendering, nothing else.
+
+**That assumption is proved and V1 is closed**, and two milestones have closed on top of it.
+M2 made it playable — a deck, an L5 mix, tone mapping, audio and a beat grid, MIDI,
+transitions, Set files and session replay. M3 made it deep: **every layer in the model is now
+an IR `kind` with a node behind it**, so a Set is a chain rather than a pair — several
+geometries, deformations that stack and mask and amplify and pair, a camera written as a
+procedure, several renderers, and a signed distance field any of them can call.
+
+Work has moved to M4, which is the library at scale, and it opened with the one thing M3
+left: **the nodes in a Set had no names.** They have them now, and the first *edge* between
+them is spelled — `uses far : Geometry` in a procedure and `--edge morph.far=sphere_shell`
+in the Set, so `--set` order no longer decides which geometry a morph reads. A Set file, a
+hot-swap rebuild and the MCP surface all reach past a slot's first geometry. The same
+notation now carries a **field** — `uses shape : Field` and `shape(p)` replaced the reserved
+word `field(p)` — and a **camera**: `uses view : Camera` and `view.clip`, so a Set holds as
+many viewpoints as its files declare and each renderer says which one it draws from. All
+three inputs that were capped at one are named, bound and refused the same way.
+
+A fourth slot type takes none of those. `uses only : Source` binds a geometry's *identity*
+rather than its elements — a `u32` in a uniform against a bind-group entry — so a `mask`
+can finally say which of a Set's geometries it applies to, with `source == only`, and a
+node may declare several where it may declare one `far`.
+
+The table below is what exists, part by part. What is still absent, and why, stays in
+[roadmap.md](roadmap.md) rather than being listed here: agents, the library,
+the node editor.
+
+#### Status
+
+**All three clauses hold.** `.kir` text goes through every stage and 262144 elements come
+out on a GPU with no hand-written shader in the path.
+
+An LLM can write this language from the specification alone. Three models were each given
+`ir-spec.md`, a one-line aesthetic prompt, and nothing else — no example files, no
+source, no tests. **Two of the three compiled on the first attempt with no diagnostics at
+all**; the third failed on one type error and passed on the second attempt after reading
+it. That is a result rather than an assumption, at n=3.
+
+What none of them got was the *look* they were asked for. All three rendered a saturated
+blob, and the same procedures rendered correctly once exposure and scale were turned down —
+the code was right and the viewing conditions were guesses. The specification did not say
+where the camera is, what world scale to work in, or that usable exposure falls as element
+count rises. It does now, but the underlying problem is that a generator has no way to know
+a value that depends on a Set-level dial. That is the tone mapper's job, not the prompt's.
+
+The third clause closed last. A `.kir` file that changes is reparsed, rechecked,
+regenerated, and rebuilt into a whole new `Set` — shader modules, pipelines, buffers, bind
+groups — on a worker thread, and the render loop collects it with a `try_recv` at the top
+of a frame. There is no `recv` and no `device.poll(Wait)` anywhere on the frame path.
+`--watch` is both the demo and the development loop. What a swap does and does not do is
+worth stating exactly:
+
+- **It lands between two frames, never inside one — by convention, not by construction.**
+  The live Set is only ever replaced at the top of `begin_frame`, which returns it as a
+  `&mut` borrow the caller holds for the whole frame body, so no single reference changes
+  identity underneath a frame. That is weaker than it sounds and the difference is worth
+  stating: the command encoder is the caller's and borrows nothing, so a caller that calls
+  `begin_frame` twice inside one encoder gets two Sets in one frame, and it compiles. Both
+  callers in this repository call it once per frame; nothing in the types says they have
+  to. Making it structural means handing the encoder out from `begin_frame` too, behind a
+  guard that submits on drop, and `crates/karakuri-engine/src/deck.rs` now does exactly
+  that: `Deck::begin_frame` returns a guard owning both the `&mut Deck` and the encoder, so
+  a second frame while one is open does not compile and two generations of Sets cannot
+  reach one encoder. That is the shape a caller with more than one Set has to use. A
+  `HotSwap` driven on its own — which is still what the CLI does — keeps the weaker
+  property above.
+- **It transfers no state.** A new procedure means new buffers, so the incoming Set starts
+  cold: `t` at zero, nothing primed. Warming a Set out of sight before it is shown is
+  priming, which the deck does and this does not.
+- **It is reversible for a window.** The outgoing Set is kept alive — and unstepped, so its
+  `t` stands still — through eight warmup frames and thirty measured ones. If the median
+  frame interval over those thirty exceeds the budget, the candidate is dropped and the
+  outgoing Set is live again at exactly the `t` it was parked at. Only after it passes is
+  the old one released, and it is released on the worker thread: dropping a Set frees GPU
+  resources, and a free on the render thread is the same invariant as an allocation on it.
+- **Saves that land during a window are collapsed to the newest.** A judging window is
+  about forty frames, which is long enough for two more saves to compile behind it. The
+  channel is first-in-first-out, so the verdict frame drains it to the last finished build
+  rather than taking the front of the queue; a superseded Set is never shown, and a
+  superseded build that *failed* still prints its diagnostics.
+- **A build that fails changes nothing.** A `.kir` that will not compile prints its
+  diagnostics on the worker thread and never becomes a request at all; a pair `Set::build`
+  refuses is reported and put down. Either way the running Set keeps its `t`, its element
+  buffers, and its live count.
+
+Measured across a swap at capacity 262144, 1280×720, **on a host clock** — the same caveat
+as every other number in this file. Two more that are specific to these: it is a frame
+*interval* rather than a GPU cost, and it was taken in the **headless** test harness, which
+has no surface and therefore no vsync and no compositor. Its `device.poll(Wait)` per frame
+stands in for the pacing a real window would get, so these are the cost of producing a
+frame, not the cost of showing one:
+
+| | median | worst |
+|---|---|---|
+| steady, before the request | 5.0 ms | 13.0 ms |
+| the frame the swap landed on | 4.6 ms | — |
+| steady, after the swap | 5.0 ms | 10.3 ms |
+
+Three to five frames were rendered between the request going out and the swap landing,
+which is what "does not block" means operationally — a blocking receive would make that
+number zero. The swap frame has not, across runs, cost more than the worst ordinary frame
+in the same run; but it is one sample of a noisy quantity, so the honest claim is
+"indistinguishable from jitter", not "free".
+
+The watchdog measures a median rather than a worst case, for the reason `Probe` does: on a
+host clock a single sample carries whatever the OS scheduler was doing, and one hitch is
+not a reason to throw away generated material. It also discards the first eight frames after
+a swap, because a cold Set's first frames pay for pipeline first-use and for its own
+whole-capacity buffer upload — a budget check that fired on frame one would roll back every
+candidate that ever existed.
+
+The budget defaults to 20 ms: one 60 Hz frame plus slack, 60 Hz being the rate `dt` sets.
+**That default does not generalise to a faster display, and this one is faster.** On the
+120 Hz panel it was developed on, steady state is 8.3 ms and a frame rate cut in half reads
+as 16.7 ms, which the default does not catch. `--budget-ms` is the operator's answer; a
+budget derived from the display rather than from a constant belongs with the budget
+governor and is not built, alongside the decision about whether GPU timestamps can be trusted at all. That decision is a **ratio against a second measurement of the same submission**, not a constant: a fixed floor was what let an adapter's meaningless 0.095 ms reading through, and it is checked on every measurement rather than once, because the adapter that produced it passed calibration and lied afterwards.
+
+| | |
+|---|---|
+| IR: parse, type and contract check, cost estimation | Works. Diagnostics carry a span, a hint, and every error at once. A `consumes` not covered by `emit` is rejected outright, except `age` and `velocity` which the engine synthesises — so a streak renderer pairs with any geometry emitting `position`, and everything else is still a refusal by name at build rather than a shader that comes up short at runtime |
+| WGSL generation | Works, validated through naga. Generated names cannot be captured by anything a `.kir` can spell |
+| Set, buffers, pipelines, compute and render | Works. Double buffering, Set-level `capacity`, parameters as uniform writes. Nothing on the frame path allocates: both per-frame uniform writes go through storage sized once at build time |
+| Linear HDR end to end, sRGB once at output | Works |
+| Store | Works, and the engine obeys it. `--save-set` writes a Set file and puts every node's `.kir` source in the store as a content-addressed artifact; `--load-set` reads it back and builds from it, resolving each procedure by hash or from inlined `src` when the file is bundled. `--bundle ID` **writes** that bundled form — the Set file plus one `src` run per artifact it names, to standard output, because a bundle is a thing you send somebody rather than something the library keeps — and refuses whole, naming the node, where the store cannot supply one of the sources. `--unbundle FILE` takes one back in: every inlined source must hash to the address its `slot` names before anything is stored, each becomes an artifact with a metadata card, and a Set id this store already holds is refused rather than overwritten, because an id you type is an instruction and an id that arrived inside somebody else's file is not. The `k` key — and the `save_set` MCP tool, which is the same control and the same code — writes the same file from a *running* session, for the focused slot or for one a call names, reading the capacities, params, bindings, camera, layering, selected renderer, seeds and sources off the Set on screen rather than off the flags — bar the two the Set does not hold, which come from the run: the edges, which nothing can rewire mid-run, and each node's spelled name. **Every record type has a writer.** `audio` and `tempo` go through a record every frame, `gain`, `residency`, `look` and `transport` on every key that moves them, `set`/`slot`/`capacity`/`param`/`bind`/`edge`/`camera`/`merge`/`seed` on every save and load, `src` on every `--bundle` and read back by `--unbundle` and by any `--load-set` of a bundled file, `save` on every live save that reached the disk — a save still being written when the window closes is waited for, up to five seconds, so quitting straight after pressing `k` still records it, and past that bound the run says how many it left behind rather than letting a hung disk hold the quit — and `tick` once a frame into a session stream. `--record-session` writes the timeline as it happens and `--replay` renders it back, so a performance is replayed rather than only rebuilt |
+| What a Set file cannot carry | Named rather than dropped, and printed on load. A `param` may be a vector and the engine's map holds `f32`; and a `camera` record carries two of `Orbit`'s six fields, so the other four come back as defaults. Each is a real disagreement between the format and the engine rather than an omission in the loader, and a Set file that half-applied in silence is the failure this repository keeps refusing. Two have left this list. `seed`, `capacity` and `param` keyed by layer against an engine holding one of each per Set: params are per node now, the salt is per source, and each source runs at its own capacity. And a `slot`'s **name**, which used to be recorded and reported because no surface pointed at a node by one — an `edge` does, so a name is carried back to the node it belongs to |
+| One frame loop | Works. There were two — the window's and the offscreen PNG's — and the seam between them was meant to be a single line (a live run measures its step count from a clock, a replay reads it from a `tick`). It had become five, and **every replay defect this project has found was one of the four extras**: the look applied once instead of per frame, the governor running on one path only, the present pass skipped on unkept frames. Now `frame::compose` is the loop and a `Sink` is where it goes — a window, a PNG writer, and a test double. The **ordering is structural**: `compose` takes the committing work as a closure and calls it only after the sink has a target, so a frame with nowhere to draw cannot record a `tick` claiming steps the deck never took. That was two statements in the right order before, and getting it wrong was invisible. The test sink is what finally reaches `Live::frame`'s claims, which no test in this program had ever done |
+| Replay fidelity | Works, and it is now checked end to end rather than argued: `crates/karakuri-cli/tests/replay.rs` runs the binary, replays two sessions differing in one record, and reads the pixels. Every assertion there is paired with a **control** — the same session replayed twice, byte for byte — because this material moves on `t`, so "the frames differ" is true whatever the code does. Building it closed a real hole: a `look` record moved nothing on replay. The offscreen renderer took a look and applied it once before the loop while the replay driver wrote every decoded one into a variable nothing read again, so a session replayed under the look it *started* with however many times the operator changed it — and with no automatic gain by design, the exposure is a control an operator is expected to ride. It also closed a second one of the same family: a `tick` is a **terminator, not a header** — `split` files each record into the frame of the next tick — and a frame used to push its `tick` before the `audio` and `tempo` it had just measured, so a replay showed frame N what frame N−1 heard, in the two signals every binding is driven by. Both bugs were in the record ordering of the one function that has no test reaching it, `Live::frame`, which needs a window; the splitter half is tested and the writer half is checked by reading, and that is said where the test is rather than left to assume |
+| Session recording | Works, and it carries its own material: `--record-session` writes the Set at the head of the stream — from `--load-set` when given and saved under `ID-material` when not — so `--replay` needs nothing else and neither does this flag. It is now **refused** with `--render`, `--seq` and `--replay` rather than silently dropped: the recorder is only built on the path that opens a window, so those runs exited 0 having written no session and said nothing, which is the failure the recorder's own construction site carries a comment warning against. It used to write the `--load-set` file *or nothing*, and "or nothing" was a timeline of ticks with no material under it — a session that refused to replay long after the set was over, with nothing said at the time. What is still short: a session stream has no way to say what a **deck** held, so only slot 0's material is at the head and a multi-slot session replays the rest of the performance against a deck of one |
+| Set file and session stream | The two projections are kept apart by `Record::is_set_state` and `project`. A Set file drops the mix as well as the ticks, and for a different reason: a gain is state, but the *session's*, and a Set file that restored one would pull down whatever fader it was next loaded under. A session folds *down* to a Set file — `Store::save_session_as_set`, ticks dropped and state folded — which is the projection the format specifies. What does not exist is the other one: folding a session to the deck state it ends at, so a run could resume where the last one stopped. Nothing needs it yet |
+| Transport | Works, per slot. `free`, `tempo` (rate, scaled by the room's tempo against a per-slot anchor) and `beat` (position lock, jumps and reverses). **Two mechanisms, because there are two kinds of material**: closed-form state at `t` is a pure function of `t`, so a seek costs one element pass; accumulating material integrates, and reversing a sum is impossible rather than slow, so all it can be given is a rate. The anchor is a per-slot dial because **material has no intrinsic tempo** — a `.kir` declares parameters and a capacity, not a bar length — and it defaults to the tempo at the moment sync is engaged so that engaging it moves nothing. What is not built: a position source that can itself reverse. Audio only ever moves forward; a deck link (M7) does not, and arrives at the same entry point |
+| `beats` | Works. The session's tempo grid, readable from IR as an ambient beside `t` — per substep, continuous across a tempo correction, and the same instant `t` names. **Without it the picture ran at wall time whatever the music did**: a tempo change moved the grid every binding was sampled on and moved nothing that was drawn, and a `bind` cannot close that, because what follows a tempo is not a parameter value but the passage of time. `beat` and `bar` stay bus names and stay different — phases in `[0, 1]` for driving a parameter, where `beats` is unbounded and monotone for driving a position |
+| Signal binding | Works. A binding samples the bus, curves it, maps it onto a range, and blends into the parameter **by confidence** — so a binding to `beat` or `bar` takes full effect today, and one to `energy` moves fully when a microphone is open and a tenth as far when none is. The binding did not change when audio arrived; the same name started answering with a different confidence |
+| Oscillator, synthesized bus, noise | On the frame path now. One oscillator per session, owned by the deck, advanced by the same `steps` the slots are |
+| Element lifecycle | Works. `spawn` and `kill()` run, order-preserving compaction is wired into the L1 dispatch, and `element` and the draw are both indirect off one counts buffer. A procedure that can neither spawn nor kill skips the scan entirely and dispatches in place |
+| Tone mapping | Works. Four operators — clamp, Reinhard, ACES, AgX — chosen by a uniform, so switching one mid-set is a buffer write. ACES by default, picked by rendering all four across five exposures and looking; `cargo run -p karakuri-engine --example tonemap_compare` regenerates that. Applied once, immediately before the single sRGB encode |
+| The deck and the mix | Works. Up to four slots, each with its own `HotSwap` and its own HDR target, folded together in slot order with a per-slot **gain, opacity and blend mode**. Allocated holds its state, so a slot brought back resumes rather than restarts |
+| Diagnostics | Works, and it turned out to have a second audience. Seventy-three diagnostics carry a `hint`, written to be kind to whoever typed the mistake. The first real MCP session showed they are also **the specification an LLM reads**: denied an example to copy, a model probed the checker instead — safely, because `write_procedure` checks before it writes, so a failed compile changes nothing. `hint: v0.2 defines 'points' only` closed off line primitives in one try — a hint that has since had to be rewritten, because the language grew the primitive it was refusing. And the hint that carried a *reason* — `loop bounds cannot reference a param… cost estimation needs them fixed at parse time` — changed the model's whole approach rather than its syntax: it concluded that integrating a streamline per element was incompatible with the cost model and switched to an analytic curve. **A hint that only corrects syntax produces a procedure that compiles and cannot be afforded.** Every hint should say why |
+| Examples | Twenty-two procedures. **`drift_shell + swirl_warp + soft_points` is the first chain**: an L2 twisting the geometry between the simulation and the draw, which no `.kir` could reach before because a Set was a pair. `drift_shell + soft_points` is the default and is particles; **`drift_shell + drift_streaks` is the same L1 drawn as segments**; **`drift_shell + glass_shell` is the same L1 again, drawn as a solid** — the same cloud that is a lamp under `additive` is an opaque ball under `weighted`; **`drift_shell + field_march` draws no elements at all** and marches a distance field instead; **`drift_shell + melt_blob + field_lens` splits that in two** — `melt_blob` is a shape and nothing else, `field_lens` is a marcher containing no shape, `--edge field_lens.shape=melt_blob` says which shape it marches, and either can be swapped without touching the other. `drift_shell + kaleidoscope + soft_points` turns one point cloud into six; **`drift_shell + beat_jump + soft_points` is the camera written as a procedure** — `beat_jump` cuts to a new angle on the beat and keeps facing the centre, and does it by hashing the beat number, so it holds no state and stays seekable under a scrub; **adding `second_eye` draws the same cloud from a second viewpoint in the same frame** — it declares `uses view : Camera` and `--edge second_eye.view=orbit` points it at the built-in orbit while `soft_points` keeps `beat_jump`; **`drift_shell + swirl_warp + late_bloom + soft_points` stacks two deformations** and `late_bloom` is where a `mask` block earns the layer its claim — three lines of `deform` that are a different effect masked on `age`, on `seed` or on distance, with a `weight` beside it as the fader; **`lattice_shell + sphere_shell + morph + soft_points` is a cube becoming a sphere on one fader** — two geometries in one Set, paired element by element, with `--edge morph.far=sphere_shell` saying which of them the morph reaches for. `beat_strands + beat_strokes + beat_bloom` are three a model wrote over MCP in one session, and what they do with `lines` is not what I would have written — `velocity` redefined as the offset to the next sample, so consecutive segments share an endpoint. **`strand_shell + strand_strokes` is line art made *without* a line primitive**, kept as written now that `lines` exists because it is the measurement of what one topology cost: roughly twice the elements. `beat_shell` reads `beats`, `spark_fountain` spawns and kills |
+| **Rendering primitives** | **Three topologies and two blends.** **`lines` cost the engine nothing** — the same quad, six vertices per instance and a `TriangleList` pipeline, laid along the segment from `clip` to `clip_b` instead of around a point. Both ends of a segment belong to **one element**: no element links to another, deliberately, since an index into the element buffer is what compaction invalidates. **`fullscreen` cost rather more, and it is what the SDF builtins were for** — `sd_sphere`, `sd_box`, `sd_torus`, `sd_plane` and the four CSG operators passed the checker from M1 with nothing able to draw them. An L4 declares it by having **no `vertex` block**, gets `eye` and `ray`, and **consumes nothing** — which is a checked rule rather than a consequence, and is what makes skipping the paired L1's whole simulation provable instead of merely plausible. Its fragment budget is eight times a sprite renderer's, because a fullscreen pass covers the canvas exactly once where sprites overdraw an unknown number of times. **`blend weighted` is the second way fragments combine, and the first way material in this project has ever occluded anything** — weighted blended OIT: an accumulation target, an `R16Float` revealage whose blend state multiplies rather than adds, and a resolve pass. Order independent, so it does not fight compaction the way a depth sort would. It reads `color`'s alpha as *opacity* where `additive` reads it as emission strength, and clamps it, which is the one thing an author has to know. What leaves the resolve is exactly what the additive path leaves — premultiplied colour, coverage in alpha — so **L5 was not touched**: the mix reads a weighted slot without knowing the mode exists |
+| Blend modes | Works: `add`, `over`, `max`. The set is what survives an **unbounded linear HDR** mix rather than what a VJ mixer usually lists — `screen` and `multiply` assume `[0, 1]` and nothing has tone mapped this far up the pipeline, so `screen` of two 2.0s is 0.0. `over` is the only mode in which one layer hides another, and what it hides with is coverage the L4 pass accumulates into alpha; thin material barely covers, which is correct rather than a defect. This is also what finally separates **gain from opacity** — gain is the level the material arrives at, opacity is the fader across the blend and the only control that silences a slot under every mode. What is not built: a layer stack that is anything other than slot order |
+| Priming and the governor | Works. Priming steps a slot and does not draw it — L1 owns every piece of per-element state and L4 is stateless, so warming is the compute passes and nothing else. The governor computes each slot's effective residency from the operator's request and a budget of per-Set costs measured by the probe at build time. It **never demotes a Live slot**: an over-budget deck reports and suspends priming. An unmeasured Live slot means the committed cost is unknown, and unknown is not headroom, so priming is suspended until every slot has been measured |
+| Audio | Works. Analysis runs in the driver's callback, not on the frame path, and the frame reads one small value through a `try_lock` on both sides so neither can block. Level is RMS mapped −60 to −6 dBFS: a mastered track's loud windows sit near the top of that, where a top at 0 dBFS would leave real music between 0.80 and 0.90 and a bound parameter barely moving |
+| Beat tracking | Works. The grid is **predicted, not chased**: once locked it free-runs, takes a slow trim, and moves not at all for a single disagreeing estimate — re-acquiring takes eight consecutive consistent revisions. **The octave is folded, not judged**: every candidate period is halved or doubled into a one-octave window centred on the grid, which starts at `--bpm`. So a window centred an octave off tracks an octave off, `,` and `.` are the fix, and there is deliberately no automatic one — the alternative is a heuristic that can be confidently wrong, which is the failure that shows on stage. A 3:2 error is a different problem and is not touched. The correction leads by the analysis lag plus the output lag, so what is shown lands on the beat rather than behind it |
+| Where the lead comes from | The measurable part is computed and the rest is a **signed operator offset**, on `o`/`p`. That is not a gap waiting for a better sensor: sound and picture leave by different paths, neither ends at this machine, and what has to line up is what a person in the room sees and hears. So the measured half aims at being *stable* rather than complete — a constant unknown costs one adjustment, a drifting one costs the whole night — and the offset goes negative, because a delayed PA makes the sound the late one |
+| Per-slot metering | Works. Mean and peak linear Rec.709 luminance per drawn slot — Live, or being auditioned — reduced on the GPU and read back without ever waiting, so it lags a few frames and says by how many. A slot nobody is drawing reads nothing rather than reading what it last drew. Texels whose luminance is not a finite number are counted and left out of both figures: one NaN admitted to a sum makes the mean NaN, and dividing by a value that reaches zero is ordinary enough in a shader that a routine artifact would otherwise cost a slot the number its fader is set by |
+| `kind Field` | Works. A signed distance function in a file of its own: handed a `point`, it assigns a `distance`, and it draws nothing and holds no elements. **It has a file and no node** — the L5 argument run backwards, since a `kind` says what a procedure lowers to and this has only code to lower — so it is spliced as one WGSL function per *slot* into whichever procedures declare one, and into no others. **A caller says what it takes and the Set says which** — `uses shape : Field` in the header, `shape(p)` in the body, `--edge field_lens.shape=melt_blob` on the command line — and a slot nothing binds is refused rather than filled in from whatever field is lying around. That replaced `field(p)`, a reserved word, which is a breaking change to the language and is exactly what capped a procedure at one field. Its cost is **per evaluation** and the caller pays it once per call, so a marcher and a field that each fit alone can still be refused together, with both figures in the message. Several per Set, each a node with a name and an address of its own |
+| Masks | Works: a straight front at an angle, and an iris, per slot. A mask multiplies the layer's opacity per texel — everything the fader does, done to part of the frame — so it needed no new place in the composite. Both ends of the front are exact, 0 revealing nothing anywhere and 1 revealing everything everywhere, which is what lets a layer masked to nothing be **skipped**: a third escape from material that has gone NaN, beside residency and the fader. **A wipe is a mask and one scheduled move** (`c`), and neither half knows about the other. Out: a mask read from a texture — an arbitrary shape, or another layer's luminance. `kind Field` now exists and is what such a mask would be written as; what is missing is the deck's mask reading one, since `shaders/composite.wgsl` is a hand-written engine shader with a fixed set of mask kinds rather than a generated one |
+| Transitions | Works. One scheduled move — a control, a destination, a musical duration, a curve — and a crossfade is two of them sharing a start and a length. `f`/`g` fade the focused slot out and in, `x` crossfades to the next slot, `n` and `j` choose where a fade starts and how long it lasts. **The first thing in the engine that schedules on the beat clock** — the transport already *follows* it — and a fade is a function of the session's beat count and of nothing else, so the same records reproduce it on a machine at a different frame rate and a tempo change mid-fade moves the fade with it. One record schedules the whole move and the values it produces are not recorded, which is `tick`'s shape from the other end. A hand on a control cancels whatever was moving it. A wipe is one of these carrying a mask's front, which is why there is no `wipe` record and no `crossfade` record — the first-class things are the shape and the move |
+| Slot preview | Works. `v` cycles what the output shows: the mix, then each slot. An audition **adds a draw and never a step**, so an off-air slot is drawn while it is being looked at and nothing moves that would not have moved anyway — an allocated slot shows the still it stopped at, a priming one shows what it is warming into. Not a second pass: the mix runs as always with that slot's terms at unity and the others skipped, so what lands is its own texels through the same tone mapper. Shown ignoring its faders, and metered, because the number wanted before putting it on air is the level the material arrives at. What is not built is a default renderer per topology — there is no slot holding geometry with no L4 to draw it, so there is nothing yet for one to do |
+| MIDI in | Works. `--midi-in` opens a port, `--midi-map` says what each knob and pad does, and every action ends in **the same record a key press writes** — so a surface can do nothing a key cannot, and a session recorded from one replays with neither attached. The map is a file and is deliberately **not** in the stream: which knob is which belongs to the hardware in the room. With no map, every message prints the line that would map it, which is how a surface is discovered until M5 has a UI to assign one in. 7-bit; the 14-bit MSB/LSB convention is not implemented, which is about 0.8% of a fader's range per step. **MIDI out is not built**, so a surface's LEDs and motorised faders do not follow the deck — which starts to matter the moment two things can move one fader, and a transition is now one of them |
+| Window output | Works, and it is a **preview**. `--canvas` is what a run renders at (1920x1080 by default) and `--size` is only how big the window is; the canvas is fitted into the window and the leftover is black, so dragging one changes what an operator can see and nothing about what is drawn. `a` sizes the window to the canvas one texel to one texel, which is what a downstream window capture wants. Three things came out of splitting them: the canvas now goes through a **record**, so a replay is at the size the performance ran at rather than at whatever `--size` says; a window resize no longer reallocates every slot's target on the render thread, which was the last GPU allocation on the frame path; and `present_mode` is now chosen (`Fifo`) rather than taken from whatever order the driver listed, which had made frame pacing a property of the machine with nothing saying so. Not built: fullscreen and display selection, because anything past a preview is the output-routing seam's job |
+| MCP | Works. `--mcp PORT` serves the Model Context Protocol on loopback, so a chat client can read a slot's procedure, rewrite it, and be told what the compiler and the frame budget made of it — **vibe live coding**, where "the one that's showing, a bit more vivid" is a small edit to a declarative file. It is the **third control surface** after the keyboard and MIDI and obeys the same rule, so **a set a model rewrote replays with no model attached** — which is not a feature anyone could retrofit but this invariant used for something it was not designed for. It was not true when this landed: a review found that a procedure change went through a *file* and not a record, so an AI-driven set replayed with the procedures it started with. `procedure` records close it, and the material is now the last thing a session was missing. Most of it never touches the frame — reading is a file, writing is a check and a file, and the compile, the frame-boundary swap and the rollback are `--watch`'s, so **a model that writes something too expensive is caught by the machinery that already catches a human who does**. `write_procedure` returns the checker's diagnostics rather than a bare failure, which is what closes the loop. `save_set` is the fourth tool and the first control in this system a hand, a model and a future interface all want: it is the `k` key, reachable from a client, and it is one control rather than three — a call names a slot and may name the file, and everything after that is the key press's own code path, refusals and session records included. It needed a **server-to-loop request channel**, because what a slot is playing lives on the render thread and this server is a thread that cannot reach it; the tool waits for the outcome and says which id it landed under, because a model told "saved" before the disk has answered will tell its user something nobody can support. **The wait happens with the server's state unlocked** — there is a thread per connection and one mutex, so a call that waited while holding it would stop a client that only wanted to read a procedure. Two resources come with it: the IR spec, and a built-in vocabulary **generated from the checker's own table**, because prose drifts from code and a generated list cannot. Loopback only, on purpose; `ssh -L` is the way in |
+| Tempo source | Works, and the verification is the interesting part. `--tempo-source` runs a separate program that reports where the beat is, as an **anchor** — a beat, a tempo, and the source's own clock reading at which both were true — so the pipe's delay never becomes phase error. The first anchor aligns the grid and every one after it is trimmed, because the source is another program from another repository; a shared grid carries a beat *number*, which is the one thing a beat tracker structurally cannot find. **The first implementation is Ableton Link, and what it is for changed when it was tested.** rekordbox joins a Link session and its decks can be made to follow it, but it never publishes the deck's BPM — Pioneer's answer is that Link has no master for a tempo fader to be the master of — so with rekordbox the picture does not follow the music by itself. That is a smaller failure than it first reads: a set is not a rehearsed timeline, matching the timing on the night is the craft, and "set by hand" is the answer this milestone gave to gain, the tempo octave and the panic key alike. What Link adds even when set by hand is that the setting is **shared** — `b` taps a grid on this machine, a Link tap puts every peer on it at once. With a peer that *drives* Link it follows on its own |
+| **A panic key** | Deliberately not built, and the reasoning is in `roadmap.md`. Everything it would undo is already manually recoverable, and an anomaly is usually one frame and usually harmless — so a control that resets a performance in response to one does more damage than the thing it responds to. What was missing was a way to *see*, not a way to recover, which is the third time this milestone has landed on **show the number, act on nothing** |
+| **Bloom** | Does not exist. Values above 1.0 are what would feed it |
+| **Automatic gain** | Deliberately not built. The meter shows the number; nothing acts on it. An exposure that moves by itself is the worst thing that can happen on stage, and the honest order is to show the measurement first |
+| Hot swap | Works. Built on a worker thread, installed at a frame boundary, watched for a window, rolled back automatically. `--watch` on the CLI. Starts cold — no state transfer |
+| **Prompt-driven generation** | No in-app prompt. Generation happens through MCP from an outside client, and what reaches the engine is a file whoever wrote it — see the MCP row. What is not built is a control *here* that asks for material |
+
+One thing known to be fragile rather than merely absent:
+
+- **GPU timestamps.** See the working style in [contributing.md](contributing.md).
+  Every performance number in this repository came from a host clock.
+
+Simulation time used to be an f32 running sum (`t += dt * steps`), whose rounding depended
+on how a frame's steps were grouped — twenty steps taken one at a time and ten taken two at
+a time landed two ULP apart at `dt = 1/60`, which the built-in camera could turn into a
+different last bit of a rendered pixel. It is now `steps_taken * dt` from an integer
+counter, and `t` advances once per substep rather than once per frame: a frame of two steps
+runs its two `element` passes at the two instants two frames of one step would.
+
+The scan, measured because the spec asks for it rather than assuming it is free: **0.083 ms
+per frame at capacity 262144** on this machine — a host clock, taken as the slope between
+4 and 64 back-to-back scans in one submit so that submit overhead cancels. The same workload
+under `TIMESTAMP_QUERY` resolves to 0.000 ms, which is the flakiness
+[contributing.md](contributing.md)'s working style describes rather than a fast shader.
+
+The hand-written `Points` pipeline is still present. It was the vertical slice that had to
+keep working while everything else was built, and it can go once the generated path covers
+what it covers.
+
+---
+
+
 ## Milestones
 
 Sizes are rough and relative — a sense of which milestone is larger than which, not an
 estimate of anyone's calendar.
 
-### M1 — Closing the loop *(= V1, scoped in `docs/status.md`)*
+### M1 — Closing the loop — **closed**
 
-**Proves:** an LLM can generate constrained IR, we can validate it, compile it to WGSL,
-and hot-swap it without dropping a frame.
-
-One Set, hardcoded slots, no UI, synthesized signals only, L1 and L4 only. If this loop
-does not close, the whole concept needs rethinking. Everything after this is engineering.
-
-**Closed.** All three clauses hold; what remains unbuilt inside V1's scope is tracked in
-`docs/status.md`, not here.
-
-What it cost, since it is the only evidence about how the later estimates should be read:
-the loop closed, and then four separate things that had checked clean were found to come
-up short at runtime — an unimplemented derivation rule, a Set-composition check that was
-specified and written nowhere, a `spawn_rate` requirement no pass enforced, and a clock
-that stood still across a frame's substeps. None was found by a test that existed.
-Three were found by reading the code against the specification, and the fourth by
-disbelieving a comment. Budget for that in every milestone below: the implementation is
-not the expensive half.
-
-~2–3 weeks.
+Proved the assumption the whole project rests on: an LLM can generate constrained IR, it can
+be validated and compiled to WGSL, and it can be hot-swapped without dropping a frame.
+[history/m1.md](history/m1.md).
 
 ---
 
-### M2 — Playable
-
-**Goal:** play a real one-hour set on this and survive.
-
-**Landed so far**, in order: the deck with an L5 mix and a per-slot level meter; tone
-mapping once after the mix; signal binding; priming, the budget governor and `closed_form`;
-audio input with beat tracking; a record vocabulary for the mix; the `beats` ambient;
-per-slot transport; Set files, saved and loaded; a session writer and a replay driver; L5
-blend modes; slot preview; MIDI in; transitions; masks; window output as a preview. Each bullet below says what it cost
-against what it promised — the ones marked **Done** are worth reading for where the promise
-was wrong, not only for the fact that it is kept.
-
-**Ableton Link is built and verified**, and the verification changed what it is for.
-
-`--tempo-source` works — a helper joins a Link session and Karakuri follows the shared beat,
-checked end to end through a real peer, a proposed tempo change, and into a recorded
-session. What does not work is the pairing. rekordbox joins the session and its decks can be
-made to *follow* Link, but it never publishes the deck's BPM: Pioneer's own answer is that
-Link has no master mechanism, so a tempo fader cannot be the thing that drives a session
-tempo. The Link tempo is entered by hand in a subscreen, or from a MIDI-mapped knob, and
-nothing connects it to the track that is playing.
-
-So with rekordbox, Link does not make the picture follow the music by itself. It was chosen
-on the expectation that it would, and it does not.
-
-**That is a narrower failure than it first looked, and the first draft of this paragraph
-got it wrong.** A set is not a rehearsed timeline played back; matching the timing on the
-night is the craft, and an operator is riding controls all evening anyway. "It has to be set
-by hand" is the same answer this milestone gave to semi-automatic gain, the tempo octave and
-the panic key — and calling it a failure here contradicted the position taken everywhere
-else.
-
-What Link gives even when it is set by hand is that the setting is **shared**. `b` taps a
-grid on this machine; a tap in the Link subscreen puts every peer on it at once, which is
-worth having the moment there is more than one machine or more than one application in the
-rig. The downbeat is only as good as the hand that set it — and it is that good on every
-peer simultaneously.
-
-Where it does deliver what was hoped for is a peer that *drives* Link, such as Ableton
-Live.
-
-What that does *not* invalidate is the seam. `--tempo-source` is an interface for tempo
-sources in general and was deliberately not Link's, so the next candidate — a MIDI clock
-from the controller, which does follow the deck — arrives as another implementation rather
-than another design. Whether a MIDI clock can carry a *downbeat* is the open question there,
-and the honest answer today is probably not: it carries tempo and beat phase, which fixes
-the octave problem and leaves the bar where it was.
-
-**MCP landed inside this milestone rather than M5 or M6**, and it is worth saying why it
-was cheap. `--mcp` served three tools — read a procedure, write one, ask what the swap
-machinery did — and every hard part was already built for something else. (M4 added a
-fourth, `save_set`, and that one was *not* free: see the save control at the head of M4,
-where the channel it needed is what it cost.) The hot-swap watchdog was written so a
-*human* editing a file could not wreck a set; it now catches a
-model doing the same, unchanged. The record invariant was written so a session would replay;
-it now means an AI-driven set replays with no AI attached. The IR was designed so a model
-could write it from the specification alone, which was tested in M1 with three models and is
-the reason "rewrite this procedure" is a plausible instruction at all.
-
-What it needed of its own was the loop: `write_procedure` hands back the checker's
-diagnostics rather than a bare failure, and `swap_outcome` says whether the result reached
-the screen. A model that cannot see the compiler's answer is guessing; one that can is
-iterating.
-
-There is deliberately **no undo tool**, and the argument for that needed correcting once it
-was reviewed. When a client reads before it writes, the previous version is in the
-conversation and undo is context rather than API — a property a prompt box could not have
-had. But nothing *makes* a client read first, and a write replaces the operator's file with
-no backup, so the claim describes a well-behaved client rather than the interface.
-
-**The one that mattered most was the replay claim, and it was simply false** — and it is
-now true, because it was worth closing rather than qualifying. A procedure rewrite was a
-file and not a record, so an AI-driven set replayed with the procedures it started with. The
-hole predated MCP by as long as `--watch` has existed, but until this feature nothing had
-claimed otherwise, and the claim was the whole reason the feature looked safe.
-
-`Record::Procedure` closes it, and the shape is worth recording because it needed something
-of the engine. The record is one line naming a slot, a layer and a content address; the
-source goes in the store where a Set file's already does. What was missing was a way to say
-*which build landed*: `label` is for a human and repeats on every rebuild of the same pair,
-and the queue collapses superseded builds, so counting does not work either. So a build
-request carries an **id** now and every event about it echoes it back — which is a thing an
-asynchronous build queue should have had anyway, and which `Request`'s own documentation was
-already reaching for when it said a request must not depend on what happens to be live.
-
-One infidelity is named rather than hidden: a rollback restores the outgoing Set at the `t`
-it was parked at, and a replay meeting these records builds afresh, so `t` restarts there. A
-swap *in* is defined to start cold and so replays exactly. A rollback means the candidate
-was over budget, which is an exceptional frame already.
-
-**It connects to a real client.** `claude mcp add --transport http karakuri
-http://127.0.0.1:8737/` and Claude Code drives it — read a procedure, rewrite it, ask what
-happened. That was genuinely uncertain until it was tried: what is implemented here is the
-minimum of the Streamable HTTP transport, POST with a JSON reply and 405 on anything else,
-and no real client had ever spoken to it. The caveat worth keeping is that the same model
-wrote both ends, so shared assumptions may be carrying more of the weight than the
-specification is.
-
-**What the first real session revealed is worth more than the feature.** Asked for line
-art, the model could not find an example to copy — the deck had one slot — and fell back on
-the compiler as its only source of truth, deliberately: *"compilation failing means the file
-is not written, so probing is safe."* The check-before-write ordering exists so a model can
-see the checker's answer; it turns out to double as a **free, safe probe**, and the model
-found that on its own.
-
-Then the diagnostics taught it the language. `hint: v0.2 defines 'points' only` closed off
-line primitives in one try. And this one changed its whole approach rather than its syntax:
-
-> `hint: loop bounds cannot reference a param, an ambient, or any other expression — cost
-> estimation needs them fixed at parse time`
-
-A hint that only corrected the syntax would have produced a working `for` loop and a
-procedure that could not be afforded. Because the hint carried the *why*, the model
-concluded that integrating a streamline per element was incompatible with the cost model at
-all, and switched to an analytic curve with curl displacement — same per-element cost,
-continuous strands. **Hints were written to be kind to a human and turned out to be the
-specification an LLM reads.** Seventy-two of them exist; that number should grow, and every
-one should say why rather than what.
-
-The result also moderates this milestone's own complaint about a single topology. Denied a
-line primitive, the model decomposed `seed` into a strand id and a position along the
-strand, laid points densely along an analytic curve, moved hue and width from the element to
-the strand — *"per-element hue would give each sample along a line its own colour and the
-line would read as noise"* — and dropped exposure by a factor of four because additive
-samples along a strand overlap. It got line art out of a point cloud. So the limit is real
-and it is softer than "everything looks alike": what it costs is a halved element budget and
-a technique nobody would find without being pushed into it.
-
-One thing it wanted and did not have: **an example to read.** It looked for another slot's
-procedure first. A library of procedures exposed as MCP resources would have answered in one
-call what four failed compiles answered slowly — see M4, where a slice of that library is
-now scheduled ahead of the search it was originally about.
-
-The review also found the surface was a network service written like a local one: an
-attacker-supplied `Content-Length` was allocated before it was believed, and a fifty-six byte
-request aborted the render process. Loopback was treated as a boundary and is not one — a
-page on any site can POST to `127.0.0.1`, and a write needs no readable reply to have
-happened. Both are fixed, and the second is a reminder that **"it is only on loopback" is a
-sentence to distrust**.
-
-**M2 is closed.** What it delivered, in one sentence each: a deck with four slots, an L5
-mix with blend modes and masks, transitions on the beat clock, a per-slot meter, tone
-mapping once after the mix, priming with a budget governor, audio in with beat tracking,
-per-slot transport, Set files and session recording and replay, MIDI in, the window as a
-preview with the canvas as a recorded property of the run, a tempo source, and MCP.
-
-**What it taught, beyond the bullets above**, is that the two invariants stated at the start
-paid for themselves in ways nobody planned. "Everything an operator moves goes through a
-record" is why a session driven by a model can be replayed without one. "No allocation on
-the frame path" is why the frame loop could be handed to a `Sink` and a test double at all.
-Both were also *wrong* in places nobody had checked until something new leaned on them —
-which is the argument for stating an invariant as a claim rather than keeping it as a habit,
-made four times over.
-
-**What M2 did not touch, and should have worried about sooner**, is what any of this draws.
-See the next milestone. Output routing is **out of this
-milestone** — the window is a preview and an OBS capture of it covers the ordinary case, so
-Syphon changes where the pixels go and not what the system does.
-
-Link is the opposite, and the reason is sharper than "a better tempo source", which is how
-it was described here for a long time. Link carries a shared beat **number**. The beat
-tracker can find how fast beats go and where they are; it cannot find *which one is beat
-one*, because downbeat detection is a separate and harder problem that this project does not
-attempt. So `bar` in a binding, "the next bar" on `n`, and an 8-beat fade are today on the
-right grid at an offset decided by whenever the session happened to start — musical in
-length, arbitrary in alignment by up to three beats. That is not a precision improvement
-waiting to happen; it is information the system does not have and cannot get from audio.
-
-There is also a licensing fact that decides the shape: Ableton Link is **GPL-2.0-or-later**
-and this workspace is MIT. That does not forbid the combination, but it does mean a binary
-linking it is distributed under the GPL. A separate process is the clean boundary, and it is
-the same boundary `docs/plugins.md` already requires for stability reasons — the constraint
-that the interface may pass only what survives a process boundary turns out to have two
-independent justifications.
-
-The seam's in-repo half — one frame loop, and a `Sink` trait with the window and the PNG
-writer behind it — is built. What is not built is the interface a plugin crosses, deliberately, because an interface designed before its first implementation is a guess. Both bring a non-Rust toolchain into a workspace
-that is otherwise cleanly closed — Syphon wants Objective-C, Link wants cmake and a C++
-compiler — and both are outside the deterministic path, which is what makes them safe to
-put behind an interface rather than into the build. See `docs/plugins.md`. The panic key is
-**decided against** rather than pending — see its bullet.
-
-The one debt this milestone was carrying — **`Deck::set_opacity` unreachable**, no key and
-no flag, and therefore no `opacity` record — **is paid**, and it was paid by building the
-thing that made a second fader mean something rather than by wiring a key to it. See the
-L5 mixer bullet.
-
-Five things the milestone has taught, all worth carrying:
-
-- **A fader at zero must mean zero.** It did not: `0.0 * NaN` is NaN, and one NaN in one
-  slot took the whole mix with it. A fader is the operator's last way out of broken
-  material, and material generated by an LLM will be broken sometimes.
-- **The watchdog judged Sets that were not on screen**, in both directions. The
-  false-reject is the worse one — a tight budget plus busy neighbours discards good
-  generated material in silence — and it is the shape every automatic decision in this
-  milestone can take. Whatever the governor measures, it has to be measuring the thing it
-  is judging.
-- **A confidently wrong automatic decision is worse than no decision.** Tempo's octave was
-  chosen by heuristics that read plausible and were wrong above 160 bpm; replacing them with
-  a fold into a window centred on the grid deleted the judgement entirely and handed the
-  residual case to the operator. Prefer arithmetic that cannot be subtly wrong, plus a key,
-  over a rule that is usually right.
-- **A test can pass against the exact defect it is named for.** Eight of those were found by
-  review across this milestone — including one asserting that a callback allocates nothing,
-  which fed the analyser a signal so flat that it returned before reaching the code under
-  test. Watch a test fail before trusting it.
-- **Two runs of the same path agree with each other under a wrong implementation.** The
-  test for the priming fix compared two *warming* runs, so it pinned the rate out of the
-  arithmetic and said nothing about which instant was right — a clock a whole frame early
-  passed it, and so did one at the wrong scale entirely. It took a comparison against the
-  *on-air* path to find that the fix had made full-rate warming diverge from Live within a
-  second. **An invariance test needs a reference run, not a second run of the thing under
-  test.**
-
-Getting on stage early is not a vanity milestone. Live use surfaces failure modes that no
-amount of desk testing finds — thermal throttling, a laptop lid closing, a set that looked
-fine alone and is unreadable next to lights.
-
-**Adds**
-
-- Multiple Sets with a lifecycle. This bullet named five states — Cold / Warming / Priming /
-  Live / Cooling — and three were built: **Live**, **Priming**, **Allocated**. Warming and
-  Cooling turned out to be transitions rather than states: a Set arrives compiled from the
-  build worker with nothing to warm into, and a slot taken off air simply stops being
-  stepped. If a real Cooling appears it will be because something needs to fade rather than
-  cut, which is the Transitions bullet below and not a residency level
-- **The deck** — the one place prepared-but-not-showing material lives, at Set granularity.
-  Priming Sets, the staging lane M5 draws, the pool an agent fills in M6, and whatever M7
-  schedules ahead of a phrase are all this, seen from different angles. Naming it once here
-  stops each of those milestones inventing its own waiting area. Between one and four members
-  are Live and composited, and the rest are resident — **except that "the rest" is currently
-  empty**: `Deck::new` asserts a deck holds at most `MAX_SLOTS` members in total, and
-  `MAX_SLOTS` is the same four the compositing shader declares inputs for. So a deck holds
-  four Sets, not four *shown* out of more, and the waiting area named here is the residency
-  levels of those four rather than a fifth member.
-
-  **That is the first thing a variant pool runs into**: three alternatives would take three
-  of the instrument's four slots. Decoupling the two numbers is a small edit — the shader's
-  four bindings are the cap on *Live*, not on membership — and it lands on the one budget
-  the governor says it cannot keep. See `governor.rs`: it bounds compute and not VRAM,
-  "because bounding VRAM means being able to refuse an allocation and to free one on demand,
-  which needs an allocator's cooperation that does not exist in this engine". A pool is the
-  first feature that makes that gap bite.
-- Residency has three levels: **Live**, **Priming** (stepping hidden, at reduced rate), and
-  **Allocated** (compiled, buffers held, not stepping). **The governor does not move slots
-  between them** — it computes an *effective* level each pass from the operator's *requested*
-  one, which it never writes. A refusal is therefore a deferral: a slot parked for lack of
-  budget primes again by itself when there is room. Built, and the same shape as M5's
-  greyed-out sync toggles — a surface shows what was asked for and, separately, what is
-  happening. Two instances now; do not invent a third vocabulary for it.
-
-  Allocated keeps its state, so returning to Priming resumes where it stopped rather than
-  starting over — `t` is simulation time and does not advance while parked. Going straight
-  from Allocated to Live shows an unwarmed image, which is the operator's call to make.
-- ~~Live preview of any slot's output, not just a Set's.~~ **Done for what a slot can hold
-  today**, and the rule it turned out to need is one line: **an audition adds a draw and
-  never a step.** Stepping a slot because somebody looked at it would break the property
-  every residency level rests on — `t` advances through `Set::prepare` and nowhere else, so
-  a slot taken off air and put back resumes where it stopped — in the least visible way
-  available: the operator watches a running image, puts it on air, and it is somewhere other
-  than where they left it.
-
-  It is **not a second pass**. The mix runs as it always does with the previewed slot's
-  terms forced to unity and every other slot skipped, so `0.0 + 1.0 * src` puts that slot's
-  own texels in the target and the tone mapper, the present pass and a readback are all
-  unchanged. An operator judges the material through the transfer curve it will be shown
-  through. The faders are deliberately ignored: what is being judged is the level the
-  material arrives at, which is the input to setting a fader rather than the output of
-  having set one — the same ordering the meter measures in. The previewed slot is metered
-  for that reason, which is what makes an audition an audition rather than a look.
-
-  **Priming and preview compose, and neither had to learn about the other.** A Set that has
-  never been stepped has no element state to draw, so auditioning a candidate that arrived
-  into an off-air slot shows black — and the level that exists for exactly this steps it out
-  of sight. Park it, prime it, look at it.
-
-  Three things it costs, all named where the code is rather than only here. **The extra
-  pass is unbudgeted** — the governor charges an Allocated slot nothing and a Priming one a
-  fraction, and an audition makes both pay a full L4 pass; it also lands inside the frame
-  interval the hot-swap watchdog judges candidates on, so auditioning something heavy can
-  roll back an unrelated slot's build. **An audition is unfiltered**, so it bypasses the
-  fader's skip and material that has gone NaN reaches the output — right for what an
-  audition is *for*, and the one place "a fader at zero means zero" does not hold. And
-  **auditioning a warming slot shows it at its own grid position**, which is behind the
-  room's, so material that reads `beats` moves when it goes on air. That last one was
-  invisible while priming did not draw, and `Set::prepare_warming` argued the split was safe
-  precisely because "the frame before was not drawn" — an audition is the case where it is.
-
-  What is **not** built is the other half this bullet named: a **default renderer per
-  topology**, a built-in L4 that draws raw geometry so a generated L1 can be seen without
-  whatever L4 it happens to be paired with. It is not built because it cannot yet be needed:
-  `Set::build` takes an L1 and an L4, so there is no such thing as a slot holding geometry
-  with nothing to draw it. That arrives with M5's staging lane and M6's generation, and it
-  should be built then rather than guessed at now
-- Priming — **stepping** hidden so stateful simulations reach their attractor before
-  becoming visible. Without this, every fade-in shows particles being born, which usually
-  looks bad. Built, and this bullet's original wording — "rendering hidden at reduced rate
-  and resolution" — was superseded on contact: L1 owns every piece of per-element state and
-  L4 is stateless, so warming is the compute passes and the render is skipped outright.
-  There is no resolution to reduce, and skipping the draw makes "primed then Live"
-  *identical* to "always Live" rather than close to it. Reduced rate survives and means
-  stepping on one frame in *n*.
-
-  **That identity cost one repair to be true of bound material.** A warming slot was
-  handed the session's oscillator at the frame's phase, so a slot stepping one frame in
-  *n* had its bound params swept *n* times as fast per step as the same Set warming at
-  full rate — the governor's rate, chosen from frame budget and shown to nobody, deciding
-  what the Set warmed into. It reads the same grid held back by the steps it has not
-  taken instead. Two things that does not reach, both narrow and both recorded in the
-  code: a tempo *change* during a slow warm-up, and measured audio, which has no past
-  value to be read at
-- Budget governor. Built, with two corrections to this bullet's original wording. Not
-  per-Set **GPU timestamps** — a per-Set measurement taken by the probe on the build worker,
-  calibrated and labelled with its method, because timestamps are advertised, enabled and
-  unreliable here. And not priming **resolution** — step rate only, since priming does not
-  render. A Set is measured before it goes on air, because an unmeasured Live slot is
-  unbudgetable rather than free, and treating unknown as headroom is the same mistake as
-  treating an unmeasured candidate as costless.
-
-  **VRAM budgeting was not built**, and the original wording expected it: the deck was to
-  have two budgets, compute bounding how many slots can step and VRAM bounding how many can
-  be Allocated at all, with deck size an output rather than a layout constant. Only the
-  compute half exists. VRAM needs an allocator's cooperation this engine does not have, and
-  `MAX_SLOTS` is still the constant it was supposed to replace.
-- ~~Closed-form procedures skip priming entirely.~~ **Done**, and it takes three conditions
-  rather than the one this bullet named: no read of an emitted attribute, no `spawn` block,
-  and no `kill()`. Spawning disqualifies however pure the `element` block is, because *which
-  elements exist* is history — jumping to `t=30` gives one frame of newborns, not thirty
-  seconds of population. The check pass decides it and the artifact carries it; the governor
-  refuses to prime a closed-form slot because there is nothing to warm.
-
-  Its larger payoff is not priming but **scrubbing** — see Transport above. Because the
-  classification produces no diagnostic it can only ever be wrong silently, which is why it
-  is deliberately conservative: strict-wrong costs a warm-up nobody needed, permissive-wrong
-  is a scrub that renders garbage.
-- ~~L5 mixer.~~ **Done for gain, opacity, blend and masks; a mask read from a texture is
-  not built.** This bullet said
-  gain and opacity were "indistinguishable under additive blending, and blend modes and
-  masks are what would separate them", and blend modes duly separated them: every mode
-  composites as `acc <- mix(acc, f(acc, gain * src), opacity)`, so gain is the level the
-  material arrives at and opacity is the fader across the blend. It also **discharged the
-  debt this milestone was carrying** — `Deck::set_opacity` had no key, no flag and no record
-  precisely because there was nothing for a second number to mean.
-
-  **The modes are `add`, `over` and `max`, and the set was chosen by the pipeline rather
-  than by the vocabulary.** A VJ mixer lists `screen` and `multiply`; both are
-  display-referred, defined on `[0, 1]`, and this mix is unbounded linear HDR with no tone
-  map upstream of it — `screen` of two 2.0s is 0.0, which is not a blend mode but a bug with
-  a familiar name. They belong after the transfer curve or not at all. That is worth
-  carrying past M2: **an operator's vocabulary is not automatically well defined in the
-  space the engine works in**, and importing it unexamined is how a control comes to mean
-  something the operator did not ask for.
-
-  `over` cost one change outside L5, and it is the interesting one: it needs to know what a
-  layer *covers*, and the alpha channel of a slot target was written by nothing. The L4 pass
-  now accumulates coverage there — colour adds, alpha composes as `over` — so the mix reads
-  premultiplied colour. Sparse material barely covers, which makes `over` on a thin point
-  cloud read close to `add`: correct rather than a defect, and worth saying because it looks
-  like one.
-
-  **What that channel is not is bounded**, and finding out cost a review pass. Nothing in
-  the pipeline clamps what a `fragment` block assigns to alpha — the IR says values above
-  1.0 are expected and means it — so an L4 writing `1.5` gives `over` a coverage of 1.5,
-  and `A*(1 - 1.5)` is a hiding layer that *subtracts*. At 2.0 and beyond it amplifies with
-  the sign flipped. The mix saturates on the way in rather than L4 clamping on the way out,
-  because clamping the fragment would change the colour too: additive blending multiplies
-  colour by that same alpha.
-
-  The general shape is worth more than the fix: **a channel nothing wrote and nothing read
-  was a free variable, and giving it a reader made every value the material could put there
-  into an input.** It had been out of range all along and there was nothing to notice
-
-  The layer stack is still slot order, which is what determinism wanted anyway, and there is
-  no reordering control.
-
-  **Masks landed too, and they cost less than the bullet implied.** A mask multiplies a
-  layer's opacity per texel — everything the fader does, done to part of the frame — so it
-  needed no new place in the composite and no second notion of what a layer contributes.
-  Two shapes: a straight front at an angle, and an iris. Both ends of the front are exact,
-  0 revealing nothing anywhere and 1 revealing everything everywhere, which is what lets a
-  layer masked to nothing be *skipped* — a third escape from broken material beside
-  residency and the fader — and what makes a wipe actually finish.
-
-  **A wipe turned out to be a mask and one scheduled move**, and neither half knows about
-  the other: the transition carries a number and the mask reads one. `docs/ir-spec.md` says
-  a crossfade is two `transition`s and there is no `crossfade` record; the same is true here
-  and for the same reason. What is not built is a mask read from a **texture** — an
-  arbitrary shape, or another layer's luminance — because that needs somewhere for the shape
-  to come from, and the answer is M3's `Field` rather than a third kind
-- Tone mapping, once, after the mix. Three different things get called exposure and only
-  one of them belongs to the artifact: the `param exposure` inside a procedure is how bright
-  that material is, the per-Set gain at L5 is how it balances against the others, and tone
-  mapping is the transfer from unbounded linear HDR to something displayable. Today the
-  first is standing in for the third, which is why an artifact authored at high element
-  counts carries an exposure far below 1.0 — and that breaks the second, because a mixer
-  fader means nothing if each Set arrives at a different nominal level. Semi-automatic gain
-  needs a measured level per Set, which is the same per-Set measurement hook the budget
-  governor needs.
-
-  **Done, and it read true.** The tone mapper landed, the example's exposure went back to
-  1.0, and the per-slot meter is the measurement semi-automatic gain would need — which is
-  deliberately not built: the meter shows the number and nothing acts on it, because an
-  exposure that moves by itself is the worst thing that can happen on stage.
-- ~~**`beats`, the tempo grid readable from IR.**~~ **Done.** Before it a procedure had `t`
-  and nothing else, so the picture ran at wall time whatever the music did — a tempo change
-  moved the grid every binding is sampled on and moved nothing that was drawn. A `bind`
-  could not close it: a binding writes one `param`, and what follows a tempo is not a
-  parameter value but the passage of time. Per substep like `t`, the same instant `t` names,
-  and continuous across a correction, which matters because a trim arrives several times a
-  second and a grid that recomputed history on each one would shimmer.
-
-  **This is following, not seeking.** A procedure reading `beats` knows where the room is;
-  it still cannot be evaluated at another time, and that is the whole of what the transport
-  below adds. What `beats` did settle is the question underneath it: a procedure that reads
-  the grid is a function of the grid as well as of `t`, and the grid at a past `t` is not a
-  function of `t` — so a scrub answers against the grid **as it stands**, which is what
-  seeking to bar 32 should mean, rather than against the grid that was running then, which
-  nothing keeps
-- ~~**Transport, per slot.**~~ **Done**, and driven by a position exactly as this bullet
-  asked. Three modes: `free` is wall time, `tempo` scales the rate, `beat` locks the slot's
-  clock to the room's musical position and therefore jumps and reverses. The scrub is on a
-  key so that the reversing path runs today rather than waiting for a source that can
-  reverse — audio only ever moves forward, and a deck link (M7) arrives at the same entry
-  point.
-
-  **It turned out to be two mechanisms rather than one**, and `closed_form` is the seam:
-  a seek can place a closed-form clock in one element pass, and an accumulating one can
-  only be given a rate. So `beat` is refused on accumulating material — where the operator
-  asks, not where it would misbehave, because seeking an accumulating Set evaluates it once
-  from wherever it happened to be and that is garbage rather than an error.
-
-  **A second refusal was not foreseen and is the more interesting one.** Material that reads
-  `beats` already follows the room; scaling its clock by the tempo as well makes it follow
-  twice, at roughly the square of the tempo ratio. The check pass records whether a
-  procedure reads the ambient, and `tempo` is refused on material that does. Two controls
-  that each look right and compound into nonsense is a shape worth watching for elsewhere.
-
-  The anchor — what tempo this material calls 1× — is a per-slot dial because **material has
-  no intrinsic tempo**: a `.kir` declares parameters and a capacity, not a bar length. It
-  defaults to the tempo at the moment sync is engaged, so engaging it moves nothing
-- **What the transport can do depends on `closed_form`**, which the check pass now decides
-  and the artifact carries. A closed-form procedure evaluates at any `t`, so scrubbing it is
-  free. An accumulating one can only be run forward — but "cannot rewind" is too strong:
-  because the engine is bit-exactly reproducible, restarting it and running to the target is
-  *the same state*, not an approximation. So a rewind is priced rather than impossible, and
-  the governor's per-Set measurement is what prices it. That is a second payoff of the
-  determinism invariant, alongside undo, replay, A/B and session recording
-- ~~Transitions as first-class objects, not just crossfade.~~ **Done, and the object it
-  wanted turned out to be smaller than a crossfade rather than larger**: one control, one
-  destination, one musical duration, one curve. A crossfade is two of them issued together,
-  a fade-in is one, and a cut on the bar is one with a duration of zero — so what is
-  first-class is the *scheduled move*, and every gesture anyone names is made of those. A
-  `Crossfade` type would have been one gesture with the other three left out.
-
-  **It is the first thing in the engine that *schedules* on the middle clock.** The
-  three-clock table has said since M1 that beat and bar are for "variant switching,
-  parameter morphs, transitions"; `Sync::Beat` already follows the grid continuously, and
-  this is the first thing to arrange to happen at a named instant on it. A transition is a
-  function of the
-  beat count and of nothing else — not wall time, not frames — so the same records produce
-  the same fade on a machine running at a different rate, and a tempo correction mid-fade is
-  *correct* rather than a glitch. Eight beats is eight beats.
-
-  Where a fade starts *from* is read when it is **scheduled**, not when it begins, and the
-  reason is the paragraph above: the start is a musical instant, so "the value at the start"
-  would be captured on the first *frame* at or after it and a machine at a different rate
-  would capture it at a different beat. Nothing can move a control in between anyway — a
-  hand cancels, another transition replaces. What a scheduled move does *not* do is touch
-  its control before it starts, which would freeze a fader for up to a bar between the press
-  and the music.
-
-  Two rules it needed, both of which state something larger than themselves. **The values a
-  fade produces are not recorded** — one record schedules it and the grid determines the
-  rest, which is `tick`'s shape seen from the other end and is what the three-clock model
-  means by the runtime selecting rather than computing. And **the operator wins**: a hand on
-  a control cancels whatever was moving it, because the one place an operator reaches when
-  something is wrong must not be the one place an automatic thing is writing. That is M6's
-  rule for agents — manual intervention demoting a layer to `Suggest` — arriving early
-  because the first automatic writer arrived early.
-
-  What is not built: a transition that is not a fade. A wipe wants a mask and a stutter
-  wants a clock the transport does not offer, so both are the next bullet's and the
-  transport's rather than this one's
-- ~~`VideoSource` interface with `color` required~~ — **built**, and it is the seam the probe
-  measures through. AOVs are not built and nothing produces one
-- ~~Audio input. Spectrum, energy, onset detection, tempo estimation~~ **Done**, plus beat
-  tracking with latency compensation. Analysis runs in the driver's callback rather than on
-  the frame path. Two records carry it — `audio` per frame and `tempo` for corrections — on
-  `tick`'s terms, so replay reads them back and opens no device. `tempo` carries the
-  **correction, not the estimate**, so a session recorded today replays the same after the
-  analyser improves
-- ~~Wiring the signal bus into parameters.~~ **Done**, except for the decoder: a binding
-  samples, curves, maps and blends by confidence into the uniform write, and the spawn
-  accumulator reads the same value. What is missing is that a `Record::Bind` never becomes
-  one, because nothing loads a Set file into the engine — bindings arrive by CLI flag,
-  shaped like the record so that replacing the flag is deleting a parser. **The decoder
-  has landed and the debt is paid** — the two diagnostics that guarded the flag, a `bpm`
-  binding and a `noise.octaves` on a kind that has none, live in the decoder now and the
-  flag reaches them by *building the record and decoding it*. One rule rather than two
-  copies of it, so a command line and a Set file cannot mean different things by the same
-  fields. The one check that stayed with the flag is the one a record cannot express:
-  `BindNoise::octaves` has a serde default, deliberately, so a record cannot say whether
-  `octaves` was named and only the flag knows
-- **A record vocabulary for the mix.** `gain`, `opacity`, `blend`, `residency` and `look`,
-  built on every key
-  that moves them, decoded back, and only then applied — the same arrangement `audio` and
-  `tempo` have. Without it a session would replay the material and not the *performance*:
-  the same Sets, on the same beat, all at whatever gain they happened to start at, with
-  nothing ever going on or off air. `residency` carries the **request** and never the
-  effective level, because the governor recomputes that from the budget of whatever machine
-  is running, and replaying one machine's budget onto another's is not replaying a
-  performance. `opacity` deliberately had no record here — the deck had the control and
-  nothing reached it, and a record for a control the operator cannot move is one more record
-  nobody writes, which is the condition this closes rather than extends. **It got a record
-  when it got a control**, which is the rule working rather than an exception to it
-- ~~**Parameter values keyed by `(layer, name)`.**~~ **Done**, and by node rather than by
-  layer, since a Set holds several renderers. The engine held one flat map, so an L1 and an
-  L4 declaring one name shared a value; `Set::build` refused the collision, which was
-  correct and was not the answer — a Set whose two procedures both want a `hue` is not an
-  error. The *external* half closed in M3: `--param L4:1:exposure=2.0` and `--bind index=1`
-  address one node, and both records carry an optional `index`. A bare name still reaches
-  every node declaring it, which is the useful default rather than the remaining gap
-- ~~PLL correction of the local oscillator against external tempo~~ **Done**, and shaped by
-  what it is for: tempo is stable except at a track change, so the grid is **predicted, not
-  chased**. A locked grid free-runs and takes a slow trim; a single disagreeing estimate
-  moves it not at all; re-acquisition needs eight consecutive consistent revisions. The
-  correction **leads** by the analysis lag plus the output lag, because a loop that merely
-  tracks shows its beat late by both, consistently — which reads as wrong rather than as
-  noise
-- ~~Ableton Link as a passive peer that never proposes a tempo~~ — **built and verified**,
-  out of process behind `--tempo-source`. See `docs/plugins.md`
-- ~~MIDI control surface on a dedicated controller, not the DJ controller.~~ **Done for
-  input**, and it turned out to be the first real test of an invariant rather than a feature
-  of its own. `docs/invariants.md` says the record stream is the sole mutation path, and the reason
-  M6's agents will be safe to run is that they can do nothing a human could not do through
-  the same interface — a surface is the first thing to put that claim under load, because it
-  is the first thing that is not the keyboard. Every arm of the connection ends in the
-  method a key press ends in, so it holds by construction: **a session recorded from a
-  controller replays with neither controller nor map attached.**
-
-  Building it is what found the one arm where it was already false: the beat tap moved the
-  grid and dropped the `tempo` record it had just built, so a session replayed on a
-  different phase from the one it was played on. Two keys had been doing that; the claim is
-  what made it visible. Where it is still short is the replay driver rather than the
-  surface: a session stream has no way to say what a deck *held*, so `--replay` builds a
-  deck of one and reports every record naming another slot — and `examples/surface.map` is
-  four slots wide, so most of a surface's moves are skipped on the way back. That gap is
-  the format's and it is named in `docs/ir-spec.md` where the records are.
-
-  The map is a **file and is not in the stream**, which is the same argument `residency`
-  makes from the other end: which knob is which belongs to the hardware in the room, and
-  replaying one room's wiring in another is replaying the furniture. With no map, every
-  message prints the line that would map it — a learn mode with no UI to learn into, which
-  is what M5 arrives to replace.
-
-  Two things not built and named rather than implied: **MIDI out**, so a surface's LEDs and
-  motorised faders do not follow the deck, which matters the moment two things can move a
-  fader; and **14-bit control changes**, so a fader is 128 positions, about 0.8% of its
-  range per step
-- ~~Output routing: Syphon / Spout / NDI.~~ **Moved outside the repository, and the line
-  is drawn in `docs/plugins.md`.**
-
-  The window is the default output and it landed as a **preview**: `--canvas` is what a run
-  renders at and `--size` is only how big the window is, with the canvas fitted into it and
-  the leftover black. Splitting them paid three times. The canvas became a **record**, so a
-  replay renders at the size the performance ran at — before, a session played in a small
-  window and replayed with a large `--size` produced different pixels and nothing in the
-  stream said which was the performance. A window resize stopped reallocating every slot's
-  target, which was the **last GPU allocation on the frame path** and it fired once per
-  frame of a drag. And `present_mode` became a choice rather than `caps.present_modes[0]`,
-  which had made frame pacing a property of whatever order the driver listed.
-
-  A fourth thing came out of looking at that path at all, and it belongs with the beat-tap
-  hole rather than here: the frame loop recorded a `tick` **before** discovering the
-  swapchain had no texture, so an abandoned frame told the stream it had simulated steps the
-  deck never took. `Outdated` arrives on every resize.
-
-  What is *not* built is fullscreen and display selection. That was deliberate rather than
-  deferred — the window is a preview, an OBS capture of it covers the ordinary case, and
-  anything past that is the plugin seam's job rather than a bigger window's — and **M5
-  supersedes half of it**. A projector window is a second `Sink` and belongs in this
-  repository; fullscreen is what an application on an operating system does rather than an
-  output mode of its own. What stays outside is Syphon, Spout and NDI, which are the plugin
-  sinks `docs/plugins.md` draws the line at
-- ~~Panic key to a known-good Set.~~ **Decided against, and the reasoning is worth more
-  than the key would have been.**
-
-  Everything a panic key would undo is already manually recoverable: `space` takes a slot
-  off air, `\` returns the gain, `'` walks the fader back to 1.0 in ten presses, `` ` ``
-  returns the exposure, and the status line says what each of them currently is. So the key
-  would not add a *capability* — it would add doing all of it at once, without choosing.
-
-  What killed it is what "without choosing" costs. **An anomaly is usually one frame and
-  usually harmless**: a shader dividing by a value that reaches zero is one of the most
-  ordinary things a shader does, and what it produces is a blown-out pixel nobody notices.
-  A control that resets a performance in response to that does far more damage than the
-  thing it is responding to — and an operator who has learned that the panic key is
-  sometimes the wrong answer has a control they hesitate over, which is the one property a
-  panic key must not have.
-
-  It also could not have done the job it was named for. "A known-good Set" implies rolling
-  a slot back to what it was showing, and there is nothing to roll back to:
-  `HotSwap::previous` exists only inside a judging window and is retired the moment a build
-  is accepted. A standing rollback target would mean holding a whole Set resident per slot,
-  which is the VRAM budget this milestone did not build.
-
-  **What was missing was not a recovery action but a way to see.** The meter now reports
-  the texels it left out of a reading — the bullet directly below — and decides nothing.
-  That is the third time this milestone has landed on the same answer, after the tempo
-  octave and semi-automatic gain: *show the number, act on nothing.*
-- **The meter no longer loses a slot's reading to one bad texel.** Luminance that is not a
-  finite number is counted and excluded rather than summed, because one NaN admitted to a
-  sum makes the mean NaN — so a routine shader artifact used to take away the number an
-  operator sets faders by. The count is reported beside the mean and the peak and is
-  deliberately **not** a fault indicator: being ordinary and mostly harmless is exactly what
-  makes it a bad proxy for "this material is wrong", and a warning that fires on normal
-  material teaches an operator to ignore warnings
-
-**Demands on earlier work**
-
-- Set must already be the compilation and lifecycle unit in M1, even with one Set
-- `VideoSource` must exist as a type in M1
-- **One `begin_frame` per encoder has to become structural before there are several Sets.**
-  M1's hot swap replaces the live Set only at the top of `begin_frame`, which is correct but
-  is a convention rather than something the types enforce: a caller can open one encoder,
-  end the borrow, take a second Set, and record both into it. With one Set and one frame
-  loop that is a comment; with a deck compositing up to four and priming the rest it is a
-  frame built from two different simulations. The fix is a guard owning both the `&mut Set`
-  and the encoder, submitting on drop — cheap now, a change to every call site later.
-  **Discharged**: `Deck::begin_frame` owns the encoder and a second frame while one is open
-  is `E0499`. What it does *not* stop is named in `deck.rs` rather than left implied —
-  `mem::forget` on a frame desynchronises a Set permanently, and no guard closes that
-- Every signal consumer must branch on confidence, never on provider presence
-- The fork-and-swap invariant must hold from M1, because it is how Sets get edited live
-
-**Decide before building**
-
-- ~~Whether GPU timestamps work on the performing machine.~~ **Decided: do not steer on
-  them.** They are advertised, enabled and unreliable here, and flaky is worse than absent
-  because it quietly returns a usable-looking number. The governor budgets against a
-  calibrated, method-labelled probe measurement taken on the build worker instead — off the
-  frame path, comparable between slots, and honest about being a reference figure rather
-  than a prediction of frame time. What it cannot see is written down where a reader of the
-  report will look: one frame of a cold Set at a fixed resolution, never re-measured.
-- ~~Whether noise rate stays tempo-relative once tempo is corrected.~~ **Decided: it
-  stays.** A noise binding follows a *tempo* correction and ignores a *phase* one — the
-  oscillator carries two anchored beat counts so that a rate is a rate while a grid
-  realignment does not re-hash the lattice. A seconds-relative mode and a freeze-at-bind-time
-  were both rejected for making two kinds of noise and leaving every existing `bind` record
-  ambiguous. The question was live rather than hypothetical the moment correction landed,
-  which is when it was answered.
-
-~6–8 weeks.
+### M2 — Playable — **closed**
+
+A deck of Sets, a mix, transitions on a beat grid, MIDI and audio in, a session recorded and
+replayed frame for frame. [history/m2.md](history/m2.md).
+
+**Still owed.** MIDI *out*, so a surface's LEDs and motorised faders follow the deck, which
+matters the moment two things can move a fader; 14-bit control changes, so a fader is more
+than 128 positions. And **a session stream still cannot say what a deck held** — a Set file
+describes one Set, so only slot 0's material reaches the head of a recording and a multi-slot
+session replays the rest against a deck of one, reporting what it skipped. Closing that is a
+format change.
 
 ---
 
-### M3 — Expressive depth
+### M3 — Expressive depth — **closed**
 
-**Goal:** the combinatorial range that makes the library worth having.
-
-**Closed.** Every `Ln` in the algebra is a node with a `kind` behind it, and a Set holds a
-chain of them: one or more L1 geometries, a list of L2 deformations, an optional L3 camera,
-a list of L4 renderers, an optional L5 folding those, and a `kind Field` any of them may
-call. `--set` reaches all of it with no new syntax — files are sorted by the `kind` each
-declares. Parameters, bindings, the edit history and the MCP surface address a *node* rather
+Every `Ln` in the algebra is a node with a `kind` behind it, and a Set holds a chain of them.
+`--set` reaches all of it with no new syntax, parameters and bindings address a *node* rather
 than a layer, and a Set can say which of them a console sees.
+[history/m3.md](history/m3.md).
 
-Every item on the Adds list below is struck. Four things that were inside those items were
-**not** built; three still are not, and each is struck through to where it went rather than
-left implied:
-
-- The **graph compiler**, split in two. Its authoring half opens M4 as "Naming what a Set
-  holds"; its fusion half is in "Deferred by decision" with a trigger.
-- ~~A source's **salt is derived rather than assigned**~~ — **built.** A `seed` record per
-  geometry, written by `--save-set` and read back by `--load-set`, so a saved Set keeps its
-  colours whatever order its records are in. What it wanted was not the naming below but an
-  address, and `seed` already had one.
-- **How a mask names a source**, and the `source` uniform it would read — M4, same item.
-- **What an L3 points at**: a reduction, or element zero. Decided, refused by name in the
-  checker, and waiting on the same naming — M4, same item.
-
-That is one piece of work under four headings, which is why it is scheduled once.
-
-**What it cost**, on M1's terms, since that section promised this accounting would be worth
-more than the estimates: 64 commits, 21000 lines, 9 test files, 9 examples, 844 tests. The
-implementation was again not the expensive half.
-
-**Six `.kir` files that checked clean took the process down**, one of them found on the last
-day of the milestone by an audit rather than by anything running. Every one is the same
-shape — a feature widened what the checker accepts, and some position the widened thing can
-now reach had nothing to emit — and every one was a *different* position: a fullscreen L4
-has no element, a `spawn` block has no derived attribute yet, an L3 has no field, a field
-cannot evaluate itself, an amplified chain outgrows the device, and a field has no `seed`.
-Being able to say that shape out loud did not stop the sixth.
-
-**Three review passes returned about fifteen real defects**, and a documentation audit at
-the close returned five more — including that sixth process death, a second geometry running
-at the first one's capacity, and a Set file discarding the capacity it had just recorded. A
-claim in prose is a test nobody runs, and roughly a third of the time the prose was the half
-that was right.
-
-**The recurring defect has a name now: one fact derived in two places.** Slot arithmetic
-that a constant `1` was right about until a Set could hold two L1s. A layer list built twice.
-`l1_count` against `sources.len()`. A comment stating what a loop does beside a loop that
-does something else, since the day the loop was written. None of these is a hard problem;
-all of them are invisible until the second place moves.
-
-**And the tests learned three things about their own material.** A fixture below the
-workgroup size cannot see a wrong dispatch count — 64 elements is the floor. A freshly
-allocated buffer is zeroed, so "never written" and "written correctly" are the same picture.
-And a measurement has to be able to see the defect: a band count cannot see overlapping
-elements where additive light can, and a light total cannot see a position where a centroid
-can.
+**Still owed.** The graph compiler's second half — fusing adjacent nodes into one pass —
+which the authoring half in M4 was the precondition for. And **how a mask names a source**,
+with the `source` uniform it would read.
 
 ---
 
-**A validation error is now a diagnostic rather than a dead process**, and that is worth
-recording here because of how it was learned. wgpu answers a validation error by reporting it
-to an uncaptured handler that *panics the thread that made the call*: on the swap worker that
-is a `SetError::Panicked` and the running Set survives, and at startup there is no
-`catch_unwind` above it and the process exits. `Set::build_many` now runs inside a validation
-error scope, and per the WebGPU rules an error a scope captures is not reported to the
-uncaptured handler — so it arrives as a value.
-
-**Five process deaths in one milestone is what prompted it**, and they were not all the same
-shape: `seed` in a fullscreen L4, a derived attribute read in `spawn`, an L3 evaluating a
-field the Set has none of, a field evaluating itself, and an amplified chain past the device's
-buffer limit. Four are generated WGSL that naga refuses; **the fifth is a resource limit and
-not a shader at all**, which is why the scope is the right net and validating with naga before
-the call would only have caught four of five. Each was injected with its own refusal disabled
-and each came back as a message.
-
-**The sixth arrived after this paragraph was written**, which is the paragraph earning its
-keep: `seed` in a `field` block, found by an audit on the last day of the milestone. It is
-refused now, and it would have been a message rather than a crash if it had not been.
-
-**Rust's memory safety does not reach any of this**, and it is worth saying why: the failure
-is in a *different language*, generated at run time, whose type system runs after this
-compiler has already shipped its answer. That is the whole reason the check pass carries the
-burden it does, and the reason every widening of what checks clean opens a hole — six of
-them, here, in one milestone.
-
-**The net is a net and not a plan.** Everything it catches is something the check pass should
-have refused with a sentence about the `.kir`, and `SetError::Invalid` says exactly that: an
-author who sees it has found a compiler bug rather than made a mistake. What it buys is that
-finding the sixth hole costs a message instead of a crash.
-
-What it does **not** reach: device loss, a GPU hang, a driver crash. Those are the cases a
-separate process would rescue, and none of the six was one — a compile is not where a device
-dies. Rescuing those means the *render* crossing a process boundary, which is a frame-path
-cost, or `Device::set_device_lost_callback` and rebuilding, which the deck already has the
-material for since it can rebuild a Set from records.
-
-**How it went, item by item.** Cross-source interpolation was the last to land,
-as an L2 that declares a second geometry — `uses <name> : Geometry` on the header,
-`<name>.<attr>` for the far element, and a Set that holds exactly two sources when the chain
-begins with one. Multiple L1 sources landed
-before it, and the nested L5's motivating case landed with those — "two pipelines, one knob"
-was waiting on nothing but a Set able to hold two geometries, and it now renders and is
-tested: two sources, two renderers, two composited targets, and one published control that
-moves all four instances.
-
-**Slot interface contracts landed as the attribute derivation** and **`Field` landed as a
-kind**; both are struck below.
-
-**A correction to a sentence this replaces.** An earlier revision called multiple L1 sources
-*"decided in full"*, and they are not: what shipped is the merging, not the identity. Another
-said every Adds item was built, written from the list of things that had just landed rather
-than from the list this section names — which is the kind of claim a milestone summary exists
-to prevent rather than to make.
-
-**L2 amplification is built**, and so is the rendering front this milestone owed —
-`topology lines`, a fullscreen L4 that marches, and `blend weighted`.
-
-**L3 is built, edge first.** `L4 : (Geometry, Camera) -> Texture` makes a camera an input
-*edge*, and it is one: the six numbers a camera *is* go into a GPU buffer, a compute pass
-derives the `view_proj`, ray basis and `depth_range` a renderer reads, and every L4 binds the
-result. Nothing about a camera is *derived* on the host any more — the six numbers still
-live there and are uploaded, and everything computed from them moved onto the GPU. The producer is either the built-in
-orbit, host-written, or a `.kir` with a `camera` block, which is a second compute pass writing
-the same buffer.
-
-**Building the edge before the producer was the load-bearing decision.** The tempting
-increment is a `kind L3` the host evaluates, leaving the L4 uniform alone; it works for every
-camera expressible today and has to be undone by the first one that follows an element, since
-that reads a buffer and reading it back is the one thing this architecture is built to avoid.
-Deciding *where the camera lives* is what the geometry-reading case forces, and it forces it
-whether or not anything reads geometry yet.
-
-What is left on this front is what an L3 can point at — a reduction, or element zero — which
-is addressing the language does not have and which the checker refuses by name; **scheduled,
-at the head of M4, as one item with the other three things that want a node to have a name.**
-And state, which the layer is allowed to hold and which is what damping a follow needs —
-nothing has needed it, so nothing has built it. `examples/beat_jump.kir` is the half that needs neither:
-a cut chosen by hashing the beat number is a pure function of the clock, so it is seekable.
-
-**L5 is a node kind, and that is two words this project had been using as one.** A `.kir`'s
-`kind` says what a procedure lowers to; an L5 has no code to lower, since the compositing is
-fixed. So there is no `kind L5` file and there should not be — `crate::node::Merge` is the
-node, `crate::mix` is the shader and the per-input controls both roles share, and `--merge
-<slot>` is how a Set asks for one.
-
-**The motivating case has landed**, and it needed no change to the L5 at all. "Two pipelines
-merged by a nested L5, published as one control" was waiting on nothing but a Set able to
-hold two geometries: a merge composites *renderers*, and every source draws into the target
-its renderer owns, so "first onto this attachment clears it" carried the whole of it. Two
-sources, two renderers, two targets, four instances and one knob.
-
-**What a Set publishes** landed alongside it, and is struck in the list below: an interface
-names which controls a console sees, under what name, over what part of their declared
-range.
-
-**First, and before any of the list below: more than one way to draw.**
-
-`Topology` had one value and `Blend` had one value. Every frame this project had ever
-rendered was an additive point sprite, and every example looked like a relative of every
-other for that reason and no other. No amount of L2 amplification, cross-source
-interpolation or graph compilation changes what a pixel can be while that is true — those
-multiply the ways geometry can be *arranged*, over a single way it can be *seen*.
-
-**`Topology::Lines` is built**, and it is the cheapest thing in this milestone by a wide
-margin. Three things about how it landed are worth carrying.
-
-**It cost the engine nothing.** A line primitive in WebGPU is one pixel wide, exactly as a
-point primitive is, so `lines` is the *same quad* the sprite path already expands: six
-vertices per instance, a `TriangleList` pipeline, the same indirect draw arguments,
-`VERTICES_PER_ELEMENT` unchanged. Only where the six corners land differs. Nothing in
-`karakuri-engine` was touched to add a rendering mode — which is the bet the enum was
-declared with one variant to make, paying off exactly as stated.
-
-**The connectivity question answered itself in the opposite direction from the plan.** This
-bullet used to read "drawn between elements a procedure nominates", and nomination is
-precisely what compaction forbids: an element naming another is an index into the element
-buffer, and the scan moves elements between steps, so the one shape that expresses a shared
-vertex is the one that spawning material invalidates. **A segment whose two ends both belong
-to one element has no such dependency.** A polyline is *n* segments, a trail is one segment
-per particle, and both survive spawning and killing because neither refers to anything
-outside itself. It costs the duplication of shared endpoints, which is the price of the
-primitive being smaller than the gesture — the same answer transitions gave in M2, arrived
-at from a different direction.
-
-**It closed the "give an L4 a way to say what it renders" question below, without adding a
-declaration.** An L4 draws segments by assigning `clip_b`, a second clip-space endpoint, and
-sprites by not assigning it; the check pass infers the topology from that and records it in
-`Checked::topology`, which was previously an L1-only field. A `topology` line on an L4 header
-would have been a second place for one fact to be stated and a first place for a file to
-contradict its own `vertex` block. **`blend` is not the same shape** and should not be given
-the same treatment: nothing an L4 writes could imply `weighted` over `additive`, because the
-two differ in how identical assignments are combined.
-
-**And a check that looked principled turned out to be wrong.** With a topology on both sides
-it is natural to refuse a pair that disagrees, and `Set::build` briefly did. It would have
-forbidden the one thing this milestone exists for: the same cloud drawn as sprites by one L4
-and as strokes by another. A segment gets both ends from attributes the L4 already
-`consumes`, so a renderer needs *nothing* from the geometry that the composition check does
-not already cover, and requiring agreement invents a dependency the lowering does not have.
-The declaration on the L1 side says what the geometry is meant to read as; it constrains no
-renderer.
-
-**Nothing remains.** The vocabulary no longer runs ahead of the engine: `sd_sphere`,
-`sd_box`, `sd_torus`, `sd_plane` and the four CSG operators have a renderer now, and
-`examples/field_march.kir` uses five of the eight. `Topology` has three values, `Blend` has
-two, and neither enum is a promise any more.
-
-- ~~**A fullscreen L4.**~~ **Built.** An L4 with no `vertex` block covers the frame and
-  marches instead, and `examples/field_march.kir` is the first picture here made of no
-  elements — a sphere, a box smoothly unioned into it, a torus through both, all from
-  builtins that had passed the checker since M1 with nothing able to draw them.
-
-  Four things it turned out to need, and the last two are the ones worth carrying.
-
-  **The declaration is the absence of a `vertex` block**, exactly as `clip_b`'s presence is
-  the declaration for lines. One place for the fact.
-
-  **The ray is given, not derived.** `Orbit::basis` hands a fragment the eye and three
-  pre-scaled vectors, so `ray` is an interpolation and a normalize. Handing a procedure an
-  inverse camera instead would put the projection convention inside every shader that
-  marches, and a convention restated is a convention that drifts.
-
-  **`consumes` must be empty, and that is a rule rather than a consequence.** With no vertex
-  block there is nowhere to read an element from — but *stating* it is what makes skipping
-  the paired L1's entire simulation provable instead of plausible. The same fact left
-  implicit would have been an optimisation resting on a reading of the language.
-
-  **The fragment cost ceiling had to become two numbers**, and the reason generalises. 512
-  ops was a stand-in for a quantity nobody knows: `capacity` sprites, times their area, times
-  their overdraw. A fullscreen pass covers the canvas exactly once, so the number is known
-  and the stand-in has nothing to stand in for — and applied anyway it forbids raymarching
-  outright, because thirty-odd iterations of a distance function is what a marcher *is*.
-  **A ceiling calibrated against one shape refuses the next one.** It was worth remembering
-  before `blend weighted`, and the warning half landed: what bit there was a borrowed
-  weight function's constant rather than this table.
-
-  What it did *not* change: a Set always has an L1, so a fullscreen renderer is paired with
-  geometry it ignores, and the operator has to choose it. Half-answered since, by the
-  renderer stack — a fullscreen node beside a per-element one reads nothing and the geometry
-  is not dead weight, because the other node reads it. A Set that can hold *no* geometry is
-  still the graph model's.
-
-- ~~**`blend weighted`.**~~ **Built.** The other half of the point-sprite monotony:
-  additive is why everything glowed, and lines did not change that — a stroke glowed
-  exactly as a sprite did. **Material in this project now occludes**, which nothing it had
-  ever drawn did.
-
-  Four things it turned out to need, and the last two are the ones worth carrying.
-
-  **A second attachment, because a slot target has room for two of the three running
-  quantities.** `sum(c * a * w)` and `sum(a * w)` fit in one `Rgba16Float`; `prod(1 - a)`
-  composes by multiplication where those compose by addition, and a colour attachment has
-  one blend state. So the revealage is its own `R16Float` target with `dst * (1 - src)` on
-  it — `R16Float` rather than the published technique's `R8Unorm`, because 8 bits quantises
-  coverage to 1/255 exactly where soft material is thinnest.
-
-  **It cost L5 nothing.** The resolve writes premultiplied colour and coverage in alpha,
-  which is precisely what the additive path writes, so `composite.wgsl` reads a weighted
-  slot without knowing the mode exists. That was not luck — it is what picking the resolve's
-  output convention to match the existing one buys, and it was worth checking before
-  building anything, because the alternative was OIT knowledge in the mix.
-
-  **The ceiling this section warned about did arrive, in a different shape.** The caution
-  was that a number calibrated against one thing refuses the next; what actually bit was
-  the published weight function's `3e3` factor, which assumes colours in `[0, 1]` and
-  overflows `f16` immediately in a pipeline where colours of 20 are ordinary. The fix was to
-  notice that **the resolve divides the weight out**, so its absolute scale means nothing
-  and only the ratio survives — the constant could simply be dropped. A borrowed formula
-  carries its author's assumptions in its constants, and the useful question is which of
-  them the code around it still holds.
-
-  **`Set::resize` takes a device now**, because a Set can own render targets. Twenty-odd
-  call sites, all mechanical — and it is *joining* a convention rather than breaking one:
-  `Present::resize`, `Deck::resize`, `Composite::rebind` and `Meters::rebind` all already
-  take one, and `Set::resize` was the outlier only because it had nothing to allocate.
-
-  What it does *not* do: sort. It is an approximation, and where it is coarse is stated in
-  the spec rather than hidden — material occupying a thin slice of a wide frustum gets
-  near-equal weights and the resolve approaches a plain alpha-weighted average. That
-  degradation is graceful, because what still separates it from `additive` there is the
-  occlusion rather than the ordering.
-
-**How hard the old limit actually bit** was measured once, by accident, and the measurement
-is now a fixed point to compare against: asked for line art, a model denied a line primitive
-decomposed `seed` into a strand id and a position along a strand, laid points densely along
-an analytic curve, and moved hue and width from the element to the strand. It works — it
-reads as strokes. It cost roughly twice the elements and a technique nobody finds without
-being forced into it. `examples/strand_shell.kir` is kept as written for that reason, beside
-`examples/drift_streaks.kir`, which gets the same look out of one assignment.
-
-**Next, and it is not on the list below because it is underneath three things that are: a
-Set stops owning everything, and `Ln` becomes a node.**
-
-Reading the Adds list after the rendering front closed, three of its nine items turn out to
-be pushing on one fact rather than on three. **L2 and L3 as slots** needed a stage between
-L1 and L4, and there was nowhere to put one because a Set *was* a pair. **L2 stacking and
-amplification** need several such stages in a row. **Multiple L4 renderers over shared
-geometry** needed the element buffers to outlive the renderer reading them — which is built,
-and is what the tenses in this paragraph are now marking. This document
-already says so in the L4-multiple bullet — *"it is the part that needs a Set to stop being
-the unit that owns everything"* — and what is new is only that it is now true of most of the
-milestone rather than of one bullet.
-
-**The shape is nodes, and that came from Toyoshima rather than from this document.** My
-first draft split a Set into a Geometry and a list of Renderers — a two-level hierarchy with
-a star baked into it. The correction: *「ノード系ツールであるようにLnがノード、Setと読んでいる
-のはノードグラフのグループ化みたいな緩い意味になるかもね」*. `Ln` is a node; a Set is a
-grouping drawn around some nodes. That is not a different implementation of the same idea, it
-is a different idea, and the Adds list already ends at it — **"node graph as authoring
-representation, render graph as execution representation"**. A fixed one-geometry-many-
-renderers type is a shape the graph compiler would have to demolish.
-
-So: **the unit that owns GPU state is the node**, not the Set. An L1 node owns element
-buffers and produces `Geometry`. An L2 node takes `Geometry` and produces `Geometry`. An L4
-node takes `Geometry` and `Camera` and produces `Texture`. A Set is a list of nodes, the
-edges between them, and one output; evaluation is dependency order, which for every shape
-that exists today is list order with a check.
-
-What this buys, stated as what stops being a special case. "Multiple L4 renderers over
-shared geometry" is no longer a feature — it is two L4 nodes with an edge from the same L1,
-and there is nothing to add for it beyond the edge existing. "L2 as a slot" is a node kind
-and an insertion, not a third position in a fixed pipeline. And the render graph the graph
-compiler is supposed to target exists in miniature from the start, rather than being what it
-has to replace.
-
-What it does not buy, and this is worth saying so nobody reads more into it: **today's graph
-is a star with two node kinds in it.** There is no authoring representation, no fan-in, no
-`Field` chain to fuse. Building a general graph runtime now would be one shape's worth of
-machinery pretending to be a system. What is being built is the *ownership* — a node holds
-its own buffers, pipelines and uniforms, and names its inputs — which is the part L2 and
-multi-L4 both need and the part a graph compiler cannot be bolted onto later.
-
-A Renderer node is not portable between Geometry nodes and is not meant to be: its bind
-groups name specific buffers and its `Element` struct is compiled against a specific layout.
-That edge is typed, in other words, and `Set::build`'s composition check is already the type
-check for it — informally, and against a pair rather than against an edge.
-
-**A fourth reason, from somewhere else, and the one an operator would name first.** A swap
-transfers no state: `swap.rs` says so plainly, and it is correct for what it was written
-for. The consequence nobody wrote down is that **editing an L4 restarts the simulation** —
-change one number in a renderer under `--watch` and the cloud goes back to `t = 0`, because
-the unit rebuilt was the pair. M2's priming answers "warm a Set before showing it"; it does
-not answer "this node did not need rebuilding at all". Per node, the rule is one sentence:
-**a swap costs what it invalidates.** Editing a renderer costs a pipeline. Editing geometry
-costs the simulation, and every node downstream of it.
-
-What falls out with no further work: `examples/drift_shell.kir` drawn as sprites *and* as
-streaks *and* as a solid, for one simulation and three draw passes — the payoff the
-primitive-centric bet was made for, which today costs three simulations.
-
-**Built, and reachable from the command line.** `--set L1.kir,L4.kir,L4.kir` is one
-geometry with two renderers, and there is genuinely no new syntax for it: one
-comma-separated list, read as one L1 and however many L4s. A third path used to be refused
-as a stray comma, which was right while a Set was a pair. `--demo lines` is now what it was
-always demonstrating — it was two slots running `drift_shell` twice so a second L4 could
-read it, and it is one slot with two renderers.
-
-A Set file says a stack as **several `slot` records on `L4`**, in draw order, and needed no
-new record to say it. A session stream says it as several `procedure` records carrying an
-`index` — absent when 0, so a stream written before stacks existed replays byte for byte.
-
-Both are closed: the edit history and the MCP surface are keyed by `(slot, layer, index)`,
-which is the address the params grew at the same time. What is *not* addressable is a node
-with no ordinal to be found by — a second geometry — which is the head of M4.
-
-**Built: several renderers over one geometry.** `Set::build_many` takes the L4s in draw
-order and they run in that order over the one attachment — the first clears, the rest load —
-so `drift_shell` drawn as sprites *and* as streaks *and* as a solid is one simulation and
-three draw passes, where it used to be three simulations. **Nothing about a renderer had to
-change to be in a list**, which is the node split paying for itself: it was already a node
-owning its pipeline, its uniform and its targets, reading the geometry across a typed edge.
-
-Two rules moved to where their premises live. `SetError::WeightedFullscreen` said `blend
-weighted` on a fullscreen procedure is the identity — true only while that procedure is the
-*only* one drawing, since a later one composites `over` what is under it rather than
-replacing a clear. It was refused inside `Renderer::build`, which cannot know the count; it is
-now refused in `Set::build_many`, which can, and only for a lone renderer. And the fullscreen
-simulation skip became a question about *every* renderer rather than the one: a node that
-reads no attribute does not excuse the simulation if another reads them all.
-
-**Built: both nodes own their state.** `crate::node` holds an L1 node and an L4 node —
-element buffers, counts, compaction, the spawn accumulator, pipelines and bind groups on one
-side; pipeline, uniform, accumulation targets and its own bind groups on the other — with
-`Geometry` the edge between them, resolved once at build time from the node that offers it
-rather than assembled by the Set out of buffers it reached into. `set.rs` halved on the day —
-1557 lines to 927 — and what was left was the grouping: camera, parameter values and
-bindings, viewport, clock, and which nodes run in what order. It is larger than either
-number now, and what grew is the grouping's own business: lists, chains, sources and the
-refusals that go with them. **One node of each kind still**, on the day, so nothing an author
-could see had changed.
-
-**Three places still reach into a node, and naming them is naming what the list changes.**
-`Set::draw` reads the simulation's parity and counts buffer; `Set::step` asks the renderer
-whether it is fullscreen before running a simulation nothing would read; `Set::bind` asks
-both which params they declare. Only the first two are shape: with several renderers the
-fullscreen skip becomes a question about *every* renderer, and parity-and-counts stops
-wanting to be fetched once per reader. Which is the finding worth carrying: **`Geometry` is
-only the build-time half of the edge from L1.** The per-frame half — which parity holds what
-was last written, and where the instance count lives — is routed around it as two arguments,
-so a `Renderer` cannot draw from a `Geometry` alone. Fine for one reader; the point at which
-it wants a type is the same commit that makes the list.
-
-**The clock deliberately did not move.** `t` is the grouping's — one clock serves every node
-— so the simulation node is *handed* the instants its substeps land on rather than deriving
-them from a step counter of its own. It was the one piece of the old `Set` that was tempting
-to move along with the code that reads it, and moving it would have made two nodes in one Set
-able to disagree about what this frame was.
-
-**Two holes in the tests, both the same shape, and the shape is the finding.** Neither was a
-defect in the code — both were things nothing was watching, which is the same thing one edit
-later. They were found by injecting defects into the seams the split moved and noting which
-injections *passed*.
-
-This repository tests almost everything by **comparing one run against another**: same record
-stream, same image; primed then live, same as always live; two frames of one step, same as
-one frame of two. That is the right shape for an invariance claim, and it is structurally
-blind to anything that moves *both* sides equally. Two such defects passed every suite then
-in the repository:
-
-- **Shift every substep's `t` by one whole `dt`** — every procedure in the system reads a
-  clock a frame out, and every comparison shifts with it. Closed by
-  `beats.rs::the_instants_a_substep_reads_are_the_sets_own_clock`: absolute arithmetic instead
-  of a comparison, pinning the last substep's instant against `Set::time` and the sum over
-  every substep against `dt * (1 + 2 + … + n)`, so where the sequence *starts* is asserted as
-  well as where it ends.
-- **Drop the spawn accumulator's fractional carry** — the mechanism a nineteen-line comment
-  and the ir-spec's "Spawn timing" both rest on. Existing rates that do not divide evenly by
-  60 did not help, because both sides of every comparison truncated identically. Closed by
-  `lifecycle.rs::the_spawn_rate_is_exact_over_many_substeps_because_the_fraction_carries`,
-  which asserts a *rate* — and does it at half an element per substep, where losing the carry
-  is not an inaccuracy but a silent total failure: `floor(0.5)` is zero forever, so no rate
-  under 60/s would ever spawn anything.
-
-The rule this leaves: **a comparison test needs an anchor beside it.** Invariance says the
-system agrees with itself; only arithmetic says it agrees with what it was asked for.
-
-Three forks, **all three decided as recommended** (*「全部推奨通りで問題ないと思う」*). All
-three read differently under the node framing than they did under the hierarchy one, which is
-the reframe earning its keep.
-
-**How several `Texture` nodes reach the Set's one output.** **Their passes run in order over
-the one attachment — the first clears and the rest load.** Then order
-among renderer nodes is the same kind of order slot order is in the mix, and each blend mode
-already knows how to meet what is under it: `additive`'s blend state accumulates into
-whatever is there, and a weighted node's resolve composites `over` instead of replacing,
-which is the identical result on the cleared target it writes today. The alternative — a
-texture per node and an implicit combining node — is L5 rebuilt inside a Set, at a render
-target apiece. It was also written as the answer that becomes wrong first — *"a real graph has nodes
-that consume textures, and then the combine is a node"* — and that turned out to be true the
-same day rather than later. It is **the rule for one of two shapes**: several L4s straight to
-the output is overdraw and costs one target, several L4s into an L5 is compositing and costs
-a target apiece. See `docs/ir-spec.md`, "Overdraw and compositing are different operations".
-
-**What a Set file and a command line look like.** **No new syntax at all.**
-`--set drift_shell.kir,soft_points.kir,drift_streaks.kir` already parses; every file declares
-its own `kind`, so the loader reads list order as order within a kind. The edges are
-*inferred* while the graph is a star — every L4 reads the only L1 — and the moment that stops
-being true they have to be spelled. Inferring them was not a shortcut being taken; it is that
-there was exactly one edge set consistent with the nodes, so writing them down would have been
-a second place for the same fact.
-
-**That moment has passed, and the debt it left is paid for one edge.** A Set can hold two
-L1s and an L2 can read two of them, so there is no longer exactly one consistent edge set —
-which geometry the second input takes was decided by `--set` order and written nowhere. This
-paragraph promised that "when fan-in arrives it brings the notation with it"; fan-in arrived
-twice and brought none. The notation is now built: a procedure declares a named input slot
-(`uses far : Geometry`) and the Set binds it (an `edge` record, `--edge morph.far=sphere`).
-What is left is carrying it to the other capped-at-one places — ~~the field~~, ~~the
-camera~~, ~~a mask's source~~. All three are done: `uses shape : Field`, `uses view : Camera`
-and `uses only : Source` declare them, an `edge` binds each, and a Set holds as many of the
-first two as its files declare. See "Naming what a Set holds".
-
-**How a param is addressed.** Under the hierarchy framing this was "layer and position";
-under nodes it is simply **the node**, which is the same key with a name that will still be
-right after the graph exists. Superseded in part by what a Set publishes, below: the node and
-the name is the *internal* address, and the console sees whatever the Set called it. It is
-forced rather than chosen, and it paid a debt recorded in `SetError::ParamCollision`:
-`Set::params` was keyed by name alone across the whole Set, so two procedures declaring
-`exposure` were refused — and every L4 in `examples/` declares `exposure`, so the check
-forbade the feature it was guarding.
-
-**Built, both halves.** The engine keys parameter values by node and the error is deleted;
-`--param L4:1:exposure=2.0`, `--bind index=1`, and an `index` on the `param` and `bind`
-records reach one node from outside. A bare name still means **every node that declares
-it** — one knob moving both renderers, the useful default and the "one control driving both"
-case an interface would offer — so the address is what closes the gap a wildcard cannot, and
-neither replaces the other.
-
-**The `index` is an `Option` on these two records and a plain number on `slot` and
-`procedure`, and that is not an inconsistency.** Those name exactly one node and always did,
-so absent is 0. These address a *value*, where absent is a **wildcard** — which is both what
-a bare name has always meant and what keeps every Set file ever written reading the same way:
-`layer` on a `param` record was a placeholder the loader ignored, so honouring it now would
-have silently retargeted them. The address is `(layer, index)` present or absent as a unit,
-which makes `layer` load-bearing exactly when an `index` appears beside it.
-
-**The same address closed two more surfaces**, which is why it was worth doing first. The
-edit history was keyed by (slot, layer), so every renderer of a stack shared one chain and
-one memory of what it last wrote — two renderers recorded one snapshot per save, alternating
-between procedures neither of which had changed. And the MCP `read_procedure` /
-`write_procedure` pair handed back renderer 0 for any `L4`, so a model told to rewrite the
-strokes of a slot that draws sprites *and* strokes would have rewritten the sprites. Both
-now take an `index`, and an index past the end is refused with the range named rather than
-folded to the first.
-
-What this is *not*: L2. The split makes the space a stage goes into; putting one there is
-the next thing after, and it should be built against a Set that already holds a list rather
-than against one being taught to.
-
-**Adds**
-
-- ~~**L2 as an IR `kind` with its own node.**~~ **Built.** `kind L2`, a `deform`
-  block, a compute pass between the simulation and the renderers, and a `Set` that
-  holds a chain of them. What it cost was small because the node split had already
-  paid for it: `Geometry -> Geometry` is the edge that existed, and an L2 is a node
-  that reads one and offers another.
-
-  **Statelessness is structural rather than checked**, which is the part worth
-  keeping. Every generated `deform` opens by overwriting its output from its input,
-  so there is no previous value left to accumulate onto and a drifting modulator
-  cannot be written. That is what keeps the layer freely stackable and keeps
-  `closed_form` an L1 question however long a chain gets.
-
-  What it cannot do is `kill()`, and the diagnostic now says why in the layer's own
-  terms rather than pointing at an `element` block an L2 does not have: compaction
-  runs once, after L1, so liveness is settled before a deformation sees anything.
-
-  The composition check became a **walk** rather than a comparison. An L2 may `emit`
-  an attribute no L1 in the library produces, and everything below it can consume
-  that — so `consumes ⊆ available at this position`, and the error names the
-  position.
-
-  **Reachable from the command line, with nothing new to spell.** `--set
-  L1.kir,L2.kir,L4.kir` works because every `.kir` declares its own `kind`: the first path
-  is the geometry and the rest are sorted by what they say they are, list order being chain
-  order for L2s and draw order for L4s. `examples/swirl_warp.kir` is the first one — a twist
-  that goes over any geometry emitting `position`, which is the argument for the layer
-  existing rather than folding the same maths into the L1 and needing a second `.kir` to
-  have it without.
-- ~~**L3 as an IR `kind` with its own node.**~~ **Built, except what it can point at**, which
-  is decided and refused rather than implemented: the checker rejects reading geometry from a
-  `camera` block by name, with "that addressing is specified in `docs/ir-spec.md` but not
-  built" as the hint. It needs the same naming M4 opens with — pointing at something is
-  addressing it. A camera belongs
-  to an **L4**, not to a Set or a deck: `L4 : (Geometry, Camera) -> Texture` makes it an input
-  edge, so two renderers on one camera is one viewpoint drawn twice and two renderers on two
-  cameras is a Set that composites two scenes. And an L3 is a `.kir` procedure rather than the
-  `camera` record it is today, because what an author wants from one is dynamic — *follow an
-  element, jump on the beat while facing the centre* — and two numbers in a record carry
-  neither. The first of those expectations also broke a claim this project had held for a day:
-  an L3 that follows an element **reads geometry**, which is in a GPU buffer that cannot be
-  read back on the frame path, so the `Camera` edge is a GPU buffer written either by the host
-  or by a small compute pass. **What an L3 points at is a reduction — centroid or bounds — or
-  element zero**, and the second is where order-preserving compaction paid for itself a third
-  time: a live element at index 0 has nothing alive before it, so it stays there until it
-  dies, which makes index 0 *the oldest living element* rather than an arbitrary slot. Nothing
-  is declared and nothing is checked; an L1 that expects to be looked at can make that element
-  a leader, and one that does not still offers its oldest survivor. **That much is the
-  design.** What exists is the camera as an edge, a `camera` block, and a refusal where the
-  targeting would go
-- ~~**A Set declares what it publishes.**~~ **Built**, and it is the other half of the console
-  being a real layer. Today every `param` of every procedure reaches the desk, flat and by name — nine
-  controls for a pair, twenty-five for a graph, most of them authoring decisions the author
-  already made. So a Set names which of its controls appear, under what name, over what part
-  of their declared range; the rest keep the values they were left at. **Publishing decides
-  what is shown, never what is reachable** — a `param` record still addresses any control in
-  any node, because a surface is a choice about attention and not about authority, which is
-  this project's standing position everywhere else it has come up. Driving a control from
-  something other than a knob is not a third mechanism: `bind` already maps a source through a
-  curve and a range, so its source becomes "a signal, or a published control" and macros fall
-  out of it. `SetError::ParamCollision` is already gone — the engine keys values by node —
-  so what an interface adds here is the *external* name: two renderers both declaring
-  `exposure` become two published controls or one driving both, which is an authoring
-  decision rather than an error
-- ~~**L5 becomes a `kind`, with two roles and one implementation.**~~ **Built — as a *node*
-  kind, which is the distinction this bullet was eliding.** A `.kir`'s `kind` says what a
-  procedure lowers to and an L5 has no code to lower, so there is no `kind L5` file:
-  `crate::node::Merge` is the node and `--merge <slot>` asks for one. The console an operator
-  mixes on is the top-level one; the same node nested inside a Set folds several L4s into one
-  texture. What differs is only whether a surface is wired to it — which finally separates
-  the *mix* (gain, opacity, blend, mask: properties of an edge into an L5) from the *deck*
-  (residency, priming, hot swap, budget, transport, preview, meters: properties of a Set being
-  played, which have nothing to do with mixing and sit beside L5 only because that is where a
-  performance happens)
-- ~~**Multiple L1 sources**~~ — **built, except the identity**, which is M4's. Per-source
-  `seed` counters starting at zero so structured layouts survive, and a per-source hash salt
-  so randomness differs without structure differing. A Set holds a *list* of sources, each
-  one a simulation and the chain over it, and `--set a.kir,b.kir,renderer.kir` fills it. The
-  `source` value is not exposed to any procedure, so nothing can mask on one; the value it
-  would carry is the salt, and that half is built — see the salt paragraph below.
-
-  **The chain is per source rather than the geometry being concatenated**, and two things
-  force that. Two sources kill independently, so compaction is each source's own and there is
-  no shared live range to concatenate into. And with a chain instance per source, **two
-  sources need not agree on what they `emit`** — each instance is compiled against the layout
-  of the source it runs over, which is a question with no answer at all if one buffer has to
-  hold both.
-
-  What falls out is that **`source` need not be an element slot**, which the spec assumed it
-  would be and has since stopped assuming. A chain instance knows statically which source it
-  belongs to, so what varies with the source is a *uniform* — and an element slot is four
-  more bytes on every element of every merged Set, plus whatever alignment it drags behind
-  it. That is the third time in this milestone a per-element cost the spec took for
-  granted turned out to be avoidable, after `velocity`'s third buffer and the always-on
-  derivation storage.
-
-  **Addressing is by procedure and not by instance.** `--param L2:0:x` names the first L2
-  *procedure*, and the Set writes it into every source's instance of it — the same
-  relationship a spliced field's params already have with their callers. "First onto this
-  attachment clears it" needed no second rule for several sources, since it was already about
-  the attachment rather than about the list.
-
-  **The salt is assigned and recorded**, which was the provisional half and is no longer.
-  `--save-set` writes a `seed` record per geometry carrying the value that source was running
-  at — asked of the same function the run is built from, so a file cannot record a salt the
-  run was not using — and `--load-set` gives each back to the source its `index` names. A
-  saved Set therefore keeps its colours whatever order its records arrive in, where before
-  reordering `--set` changed which colour was which.
-
-  **What this needed was an address and not a name.** It was written here as waiting on a Set
-  file able to carry sources; the file gained that, and `seed` turned out to have carried the
-  address all along. A bare `--set` still derives each source's salt from the ordinal and
-  that is the finished behaviour rather than a remainder — the spec licenses it in the same
-  paragraph that asks for recording: *where it came from stops mattering once it is
-  recorded*, so the first save is what turns an ordinal into an assignment.
-
-  Still open for the same reason: **how a mask names a source.** The spec says a name resolved
-  where the Set is built, and every worked example writes an ordinal — which is the spelling
-  the same section rejects. Nothing reads `source` yet, so nothing is wrong today; what is
-  missing is the half that makes two sources treatable *differently*. **Outstanding, and
-  scheduled** — same item
-- ~~**L2 amplification**~~ — **built.** `amplify <factor>` on an L2 header, `copy` readable
-  as the index of the copy being made, and `examples/kaleidoscope.kir` for the picture. Three
-  things it turned out to need that the paragraph this replaces did not mention, and all
-  three are about buffers rather than about the language.
-
-  **An amplifier owns its liveness**, because its buffer is `factor` times as long as its
-  input's and cannot be the same one. That is not the layer deciding liveness — still refused
-  — but the L1's decision re-indexed. The flags go down **before** the dead-slot return: a
-  killed element sits inside the live range for exactly one frame before the next scan
-  compacts it, and copies whose flags were merely left alone still draw in that frame.
-
-  **It owns a `Counts` too**, and a `Counts` is three numbers at once: the workgroups a pass
-  is dispatched in, the range a pass bounds itself by, and the instances a renderer draws.
-  Two of those are separately load-bearing for a stage *below* an amplifier — one is fixed at
-  build, the other at record — so a chain can be right about one and wrong about the other.
-
-  **A fixture smaller than one workgroup sees neither mistake.** Eight elements run in one
-  workgroup whatever range they were told, so every test here that means to catch a wrong
-  dispatch count needs more than 64 of them. Two injected defects survived a whole test file
-  before that was noticed, which is the argument for injecting them
-- ~~**Cross-source interpolation**~~ — **built**, restricted to static sources where `seed` is the slot index
-  and the far read is a direct one. **The language half is built**: `uses far : Geometry` on
-  an L2 header, `far.<attr>` for the far element. **And the engine half**: the node binds the
-  second geometry as a third input buffer and reads it at the same slot index, and
-  `examples/morph.kir` slides a lattice onto a sphere on one fader. Five preconditions are
-  refused where the Set is built, because none of them is a property of one file — two
-  sources, the node with the slot first in the chain, both static, both the same size, and
-  the far source able to supply what the chain derives.
-
-  **It needed no new syntactic category.** `far.position` reaches the checker as a swizzle
-  — `expr . ident` is the grammar — so deciding it there costs one header declaration and one
-  name, and nothing else in the language moves. That is the same shape `amplify` had, and the
-  two now break the L2 endomorphism on its two different axes: count and arity.
-
-  **A pairing Set is one source made of two simulations**, not two sources — which is what
-  answers "is the far geometry also drawn?" by construction rather than by a rule: there is
-  one chain and one set of renderers over the pair, and the second simulation feeds the
-  pairing node and nothing else.
-
-  **Two defects, and both were a second copy of one fact.** The paired simulation was built
-  without the chain's derived-attribute list, so its element struct was a slot short of the
-  one the pairing node addresses it with and `other[i].position` read from the middle of the
-  element before it. And every L1 resolved its params against the *first* source's map, so a
-  name the two did not share came back a miss and reached the shader as zero — a picture with
-  a shape in it, drawn from a value nobody set. `examples/morph.kir` is the picture.
-
-  **Which geometry is the Set's answer and is now written down.** It shipped as `--set`
-  order — the file said "two" and nothing said *which*, on the reasoning that this was the
-  system's first fan-in and a general notation should arrive with the thing that needed one.
-  It has: the slot is named by the procedure and bound by an `edge`, so a `.kir` still names
-  no node and the command line's order decides nothing. An unbound slot is refused. See
-  "Naming what a Set holds"
-- ~~**Slot interface contracts, attribute declarations, automatic adapters**~~ — **built as
-  the derivation, and the three words above turned out to name one thing.** An unmet
-  `consumes` is no longer an unconditional error: `age` and `velocity` are synthesised where
-  nothing emits them, so a renderer wanting a motion streak composes with an L1 that never
-  thought to emit `velocity`. That coupling is the whole of what the contract existed to
-  remove.
-
-  **The contract is the element layout, subsumed rather than sat beside**, which is what the
-  note further down asked for. `generate_element_layout` no longer takes `emit` alone: it
-  takes what the *Set* decided, so a slot can exist that no procedure named, and an
-  `ElementLayout` now answers what it holds — as a slot, or as a derivation — rather than only
-  listing fields.
-
-  **Three things the design paragraph got wrong, all in the same direction.** It said
-  `velocity` needed a third buffer; it needs a slot, because the obstacle is compaction
-  reordering rather than buffer count. It said the storage would be always-on; it is
-  conditional, because the Set knows whether anything consumes the attribute. And it implied
-  adapters would be *nodes*; both rules are pure functions of the element and the clock, so
-  they are a substitution at the read site and a write in a pass that already runs. Nothing
-  was inserted into the chain.
-
-  What is **not** built from that bullet: user-declared attribute names, and the count-mode
-  and spatial-domain fields the algebra above mentions. Neither was needed by anything, and
-  `amplify` already carries the count mode where it matters
-- ~~L2 stacking with weights and attribute-based masks~~ — **built.** `weight` is a declared
-  `param` and `mask` is a block writing a `strength` in `[0, 1]`; keeping them separate is
-  what keeps the operator's control a `param`, since faders, bindings, transitions and a
-  published interface all reach a `param` and none of them reaches an expression
-- ~~Multiple L4 renderers over shared geometry~~ **Built**, and it cost almost nothing once
-  `Ln` was a node: `Set::build_many` takes the L4s in draw order, they run in that order over
-  one attachment (first clears, rest load), and no renderer changed to be in a list.
-  `--set L1.kir,L4.kir,L4.kir` reaches it. What it *did* cost was the parameter model — every
-  L4 in `examples/` declares `exposure`, so the collision refusal had to go first
-- ~~**The `Field` type**~~ — **built.** `kind Field`, a `field` block, `point` in and
-  `distance` out; a procedure declares `uses shape : Field` and evaluates it as `shape(p)`;
-  `examples/melt_blob.kir` is a shape and `examples/field_lens.kir` is a marcher that
-  contains no shape at all.
-
-  **It turned out to need no new syntactic category, and therefore not to reopen the
-  "user-defined functions" non-goal.** The shape is one more kind, one more block, one more
-  ambient and one more output — exactly what L2 and L3 added. What made that possible is the
-  L5 argument run backwards: a `kind` says what a procedure *lowers to*, an L5 has no `kind`
-  because it has no code to lower, and a field has *only* code to lower, so it has a file and
-  no node. A consumer evaluates it through a slot its own header declared, and one per Set is
-  what the *engine* still holds rather than what the language says — the naming that "several
-  would need" is built, and the `Option<Field>` behind it is not yet a `Vec`.
-- ~~Graph compiler~~. Node graph as authoring representation, render graph as execution
-  representation, with fusion of `Field` chains into single shaders. **Split and rescheduled
-  rather than built**: the authoring half opens M4 as "Naming what a Set holds", and fusion is
-  deferred with a trigger. Neither is M3's any more
-- ~~`blend weighted` (weighted blended OIT) alongside `blend additive`~~ — **built**
-
-**Demands on earlier work**
-
-- The `blend` declaration must exist in the L4 header from M1, even with one legal value
-- Identity must already be per element and carried, not a slot index, or multiple sources
-  cannot be told apart at all. **Two thirds of it, in the end**: `seed` is per element and
-  `copy` is where something amplified, but `source` is a uniform — a chain instance knows
-  statically which source it runs over — so the half of this demand that was about telling
-  sources apart is answered off the element rather than on it
-- IR must be a real IR from M1, not a thin wrapper over WGSL, or fusion has nothing to work
-  with
-- `capacity` must already be a Set-level value rather than baked into the artifact.
-  **Discharged, and then outgrown**: it is a uniform and not a constant, which is the half
-  that mattered — the generated WGSL is the same at any capacity — but it is no longer
-  Set-level. Each source runs at the default its own procedure declares. The demand was
-  written when a Set held one geometry, and what it was really asking for was that capacity
-  not be baked into a *compiled artifact*, which still holds
-
-**Clear before building**
-
-- ~~Pack attributes into one storage buffer per direction.~~ **Done in M1**, because
-  compaction had to be written against the packed layout or written twice. The compute
-  stage binds 4 buffers now and stops growing with the attribute count, so L2 stacking no
-  longer walks into the WebGPU default limit of 8. What was *not* done is narrowing each
-  slot to its attribute's natural width: every slot is still a padded 16 bytes, which
-  doubles VRAM per element against what it needs. That bill comes due at M2's deck, where
-  the constraint is how many Sets fit resident, and it is one function in `layout.rs`.
-
-  **Two milestones later it is still 16 bytes, and both halves of that sentence need
-  correcting.**
-
-  *"Doubles VRAM"* overstates it. A `vec3` is 16-byte aligned in `std430` whatever the
-  layout does, so the recoverable waste is the scalars: `seed`, `birth_frac` and `copy` take
-  a full slot each to hold four bytes, and `size` and `age` could ride in the `.w` of the
-  vector above them. For `drift_shell` — `emit position, velocity, tint` — that is 5 slots
-  to 4, **80 bytes to 64, a fifth**. For a procedure emitting six attributes it is nearer
-  two fifths. Worth having, and not a factor of two.
-
-  *"The bill comes due at M2's deck"* was measured against the wrong machine, and this
-  document has made that mistake once before — see **Performance discipline**, where the
-  same development machine's GPU timestamps are already recorded as unrepresentative. The
-  numbers, so that a target can be held against them rather than a feeling:
-
-  | | |
-  |---|---|
-  | One slot, `drift_shell` at 262144, no chain | **57.8 MiB** — 40 element, 2 alive, 15.8 render target |
-  | A deck of four of those | **231 MiB** |
-  | The same L1 at its declared maximum, 1048576 | 160 MiB of element buffer alone |
-  | One `amplify 6` stage on it | **+120 MiB**, single-buffered, per frame |
-  | One `amplify 64` stage on it | **+1.25 GiB** |
-
-  So the element layout is not what decides whether a deck fits at the default capacity;
-  **amplification is**, because it multiplies the same stride the layout would narrow. A
-  fifth off an amplified chain is a fifth off the largest allocation in the system, which is
-  the argument for doing it that "four Sets fit here" hid.
-
-  **And it was scheduled on a principle rather than on a threshold** — see "What a machine's
-  size is allowed to decide", below. Sixteen bytes holding four is not a trade that buys
-  anything at any capacity on any machine; it is slack, and slack is tightened because it is
-  slack. Waiting for a Set that does not fit would be waiting for a *rich* machine to notice
-  something a small one pays for every frame. It is `generate_element_layout` and the offsets
-  that read it, and it was the second item of M4.
-
-  **Built there, and it beat the estimate above.** The fifth-to-two-fifths figure counted the
-  scalars sitting *before* the attributes and missed that a `vec3` is 12 bytes in a 16-byte
-  alignment, so it leaves four addressable bytes behind it — `position, size` packs into one
-  block with no reordering. It is **39%** off every element buffer across the geometries this
-  repository ships: `drift_shell` 80 bytes to 48, `lattice_shell` 64 to 48. See
-  "~~Narrowing the element slot~~ — built".
-- **An L4 is now compiled against a specific L1's element layout**, since both declare the
-  same struct over the same buffer. That is the slot interface contract arriving early and
-  informally. When the contract becomes a real declaration, it should subsume this rather
-  than sit beside it.
-
-  **It did.** `emit` and `consumes` are the declaration, `Set::build_many` is the check, and
-  attribute derivation is the adapter — so `consumes ⊆ available at this position` is now
-  stated and enforced rather than being a property of two files happening to agree. The
-  layout compilation stayed, and is now the *mechanism* under a declaration rather than the
-  whole of the arrangement. That is the shape this note asked for.
-- ~~**Give an L4 procedure a way to say what it renders.**~~ **Done, and the answer was to
-  add no declaration at all.** The problem was real: quad expansion was justified by
-  `topology points` while `topology` was an L1 header field a checked L4 tree had no
-  counterpart for. What closed it is *inference* — an L4 that assigns `clip_b` is drawing a
-  segment and there is nothing else it could be doing, so the check pass reads it off the
-  `vertex` block and fills in `Checked::topology`. One place for the fact, and no way for a
-  file to disagree with itself. The same move does **not** work for `blend`, which is why it
-  stays declared: two blend modes differ in how identical assignments are combined, so
-  nothing an L4 writes distinguishes them.
-
-~8–10 weeks.
+### M4 — Library at scale — **closed**
+
+A Set can be named, saved from a running session as the material on screen, listed, read
+without compiling anything, round-tripped whole with its layering and fold, and sent to
+somebody else as one self-contained file whose every inlined source is checked against the
+address it claims. [history/m4.md](history/m4.md).
+
+The goal sentence — *finding the right thing among two thousand artifacts is faster than
+generating a new one* — cannot be checked, because there are no two thousand artifacts and
+nothing generates one. What closed is the machinery, tested at the scale that exists.
+
+**Still owed, and each with what would revive it.**
+
+- **`parent`, recorded from the first generated artifact**, or the genealogy has a hole at
+  its root that no later pass can fill. Untouched deliberately: nothing generates procedures,
+  so an empty one written now would fill the hole rather than leave it visible. This is the
+  sharpest demand in this document and it lands on M6.
+- **`perf`, which needs the stage-7 probe.** What a compile pass can answer is
+  `ops_per_element`, a different quantity in different units, and publishing one under the
+  other's name is a mistake this project has made once already.
+- **Thumbnails**, where the missing piece is a decision rather than machinery: a metadata
+  card is per artifact, an artifact is one procedure, and one procedure cannot be rendered —
+  so *what a thumbnail is of* has to be settled. M5's Set browser is where somebody will next
+  be in a position to judge a framing.
+- **Dual embeddings**, blocked on both halves: the text side needs `origin` and `tag`, which
+  have no producer, and the visual side needs the thumbnail above.
+- **Search over more than a node's name**, and grouping — the card fields both would need
+  have no producer yet.
+- **A deck-slot variant pool**, where alternatives differ at L1 or L2 and so carry state of
+  their own. It needs the unselected ones primed off air, which does not exist. The half that
+  lives inside one Set is built.
 
 ---
-
-### M4 — Library at scale
-
-**Goal:** finding the right thing among two thousand artifacts is faster than generating a
-new one.
-
-**Closed, and the goal sentence is not the evidence for it.** There are no two thousand
-artifacts and nothing generates one, so the sentence above cannot be checked and will not be
-until M6. What can be said is what a library can be asked, and every one of these was
-impossible when the milestone opened: a Set can be **named** so an edge points at a node
-rather than at a position; **saved** from a running session as the material that is on screen
-rather than what the flags said; **listed**, so the ids of everything kept before this
-conversation are findable rather than guessable; **read** — every knob, its range, its
-default, the element count, the attributes — without fetching a source or compiling it;
-**round-tripped** whole, layering and fold included, so a kept variant pool is still
-selectable; and **sent to somebody else** as one self-contained file whose every inlined
-source is checked against the address it claims. The machinery is there and it is tested at
-the scale that exists.
-
-**What is not built is named below with what would revive it**, and in two of the three cases
-the trigger is a producer that does not exist rather than a cost nobody wanted to pay. One of
-them was mis-filed as waiting for scale and is not — see the thumbnails bullet, where the
-missing piece turned out to be a design question the Adds list hides.
-
-**And a second goal this milestone turned out to have, which the first one hides.** Read
-through the Adds list, M4 adds no new pixels — no primitive, no blend, no material. That
-reading is wrong about what a milestone is for. **What changes is what can be done in front
-of an audience**: a morph that could be played and not edited, a chain that could be built
-and not kept, three layers of the language a model could not reach. The scene was always
-constructible; being able to *reach* it during a set is the thing, and it is worth stating
-because a feature table cannot show it.
-
-That was also the order it was worked in, and the split it was worked by holds up. The items
-below divide into debts that were costing something and capacity for a scale that has not
-arrived — twenty-one procedures and no generation loop is not two thousand artifacts. The
-first three, variant pools and bundling were the first kind, and all of them are built.
-Thumbnails, embeddings and genealogy were the second; they stay unbuilt and are revived on
-evidence, the way "Procedures a model can read" already was.
-
-**On the estimate below.** It was written when naming sat in M3. Naming is now the first work
-of this milestone, so read it as the *rest* of M4 rather than the whole of it.
-
-#### Naming what a Set holds
-
-**This is the graph compiler's authoring half, rescheduled out of M3, and it is the first
-work of this milestone rather than a nicety inside it.** A library of Sets you cannot save is
-not a library, and that is exactly where this lands.
-
-**Its stated precondition arrived, inverted into a debt, and the debt is now paid for one
-edge.** The condition was "wait for the fan-in that multiple sources bring". Fan-in arrived
-twice in M3 — two geometries in a Set, and an L2 that reads both — and neither brought a
-notation, so which geometry the second input took was `--set` order, written nowhere, and
-reordering the command line silently changed the picture. **Both halves are built now**:
-identity, and the first edge.
-
-**What is capped, blocked or quietly broken today, all of it for the same reason — a node has
-no name:**
-
-| | Where it shows |
-|---|---|
-| ~~A slot with two geometries cannot be rebuilt under `--watch`~~ | **Closed.** Every node of a slot rebuilds, and each geometry at the capacity it declares |
-| ~~A slot holding a chain or a second geometry cannot be saved as a Set file~~ | **Closed.** One `slot` record per node, one `capacity` per geometry |
-| ~~MCP reaches an L1 and the renderers and no other node~~ | **Closed.** A model reads and writes every node at `(slot, layer, index)` |
-| ~~Which geometry a node's second input takes is `--set` order~~ | **Closed.** `uses far : Geometry` declares a named slot and an `edge` binds it; an unbound slot is refused |
-| ~~One `kind Field` per Set, one L3 per Set~~ | **Closed, both halves.** The field's call carries a name — `uses shape : Field` and `shape(p)` — and the camera's read carries one too: `uses view : Camera`, `view.clip`, bound by the same `edge`. The half this row said was "a rule rather than a limit" was the cap again in the rule's clothes: *a Set is a grouping around one viewpoint* is only true while nothing can say **which** viewpoint, and a renderer can now. A Set holds as many cameras as its files declare, each a node with a name, an address (`L3:1:radius`) and a `slot` record of its own — and **the built-in orbit is a node too**, called `orbit`, so a renderer can be bound to it rather than reaching it only by saying nothing |
-| ~~A mask cannot say which source it applies to~~ | **Closed.** `source` is readable, and `uses only : Source` with `--edge dissolve.only=lattice` gives a mask the other half of the comparison. The slot binds a `u32` where a `Geometry` slot binds an element buffer, which is why several are legal on one node and a geometry slot is still capped at one |
-| ~~A source's salt is derived from `--set` order rather than assigned~~ | **Closed.** A `seed` record per geometry, written by `--save-set` and read by `--load-set` |
-
-The first three are the sharp ones, because they are surfaces that *already exist* and stop
-working the moment a Set holds what M3 taught it to hold. **All three are closed**, and the
-loop they were breaking — play, edit live, keep what you liked — closes with them. The rest
-are features that were capped at one rather than designed for several, and they are the
-*edges* half rather than the identity half.
-
-**Two gaps the identity half leaves, recorded so they are not rediscovered:**
-
-- ~~**A rebuild carries no node names.**~~ **Closed**, and closed because an edge forced it:
-  a rebuild that renamed every node resolved its edges against spellings that were no longer
-  there. `Watch` holds the names the slot was spelled with and restates them, so the
-  uniqueness check runs on the rebuild path too.
-- **`history::seed` and `mcp::Slots` answer "which layer is this file" by scanning the text**,
-  because both run before anything is compiled. That is a genuine second reader rather than a
-  copy — but `seed` still falls back to treating the head as an L1, which is the assumption
-  the watcher was just cured of.
-
-**What it is, concretely.** Names for nodes, written where they are used rather than in the
-`.kir` — on the terms HTML gives an `id`, since a procedure used twice is two nodes. The
-execution side needs nothing new: the render graph a compiler would target already exists in
-miniature, because a node owns its buffers, pipelines and uniforms and names its inputs.
-
-**Identity first, edges second, and they were scheduled apart.** Naming a node and recording
-it closed every sharp row above; spelling the *edges* was a second design with a fork of its
-own in it, since **a `.kir` may not name a node** — naming one couples the procedure to one
-Set and it stops being a library part.
-
-**The fork was resolved by naming the slot rather than the node.** A procedure declares a
-named input — `uses far : Geometry`, which names an input the way `consumes position` names
-an attribute — and the Set binds it: an `edge` record, written from the command line as
-`--edge morph.far=sphere_shell`. The name in the `.kir` is the procedure's own, so nothing
-couples; the name in the Set is a node's, which every node has whether or not one was
-written. **An unbound slot is refused**, deliberately and not as an oversight: "if there is
-exactly one, use it" is the implicit rule being removed, and reinstating it under a new
-spelling would cap the next fan-in at one the same way.
-
-**One edge is spelled and the rest follow the same shape**: which source a mask applies to
-and the `source` uniform it would read, ~~several fields per Set~~, ~~several cameras~~. Each
-needs the same two halves — a declaration on the procedure and a binding on the Set — and the
-one that shipped first is the one that had a working picture behind it, `examples/morph.kir`.
-The fields and the cameras followed it, in that order, and each cost one `SlotTy` variant and
-a `Vec` where an `Option` was. **The mask's source came last and it is half a slot, which is
-what the earlier reading of this line got wrong.** The value an element compares — `source`,
-its own identity — is an ambient and needed only a spelling, because the salt was already in
-every uniform block. The value it is compared *against* is a slot, because a `.kir` may not
-name a node: `uses only : Source`, bound by an `edge` like the other three. What separates it
-from `uses far : Geometry` is what the binding costs — a `u32` in a uniform against a
-bind-group entry per node — which is why several `Source` slots are legal on a node that may
-declare one `far`.
-
-**A mask on `source` is an on/off for a whole chain, and the cheap form of it is not to
-build the node.** `source == only` compares two uniforms, so it is the same value in every
-lane — the branch a GPU costs least rather than the one it costs most, which is the half of
-this that made a uniform the right place for `source`. But it is also *constant for the whole
-chain instance*, because a chain is instantiated per source and knows statically which one it
-runs over. So the deformation still runs on every element of every source and multiplies by a
-strength that was decided before the frame began.
-
-The honest optimisation is not to instantiate the node in the chains its slot excludes at
-all, which the per-source chain structure makes nearly free — the Set already builds a
-separate chain per source, and this is a node it would skip rather than a branch it would
-fold. **It is not free where it matters, though**: skipping a node changes what that source's
-elements carry, because the skipped node's `emit` is no longer in the layout. Two sources
-need not agree on what they `emit`, so this is permitted rather than blocked — but it lands
-directly on the element placement work of this milestone, and doing both at once is how a
-layout ends up with two owners again.
-
-**Trigger**: a probe measurement where a masked-out deformation is a measurable share of a
-frame, on a Set whose sources differ enough that the excluded chain is most of the elements.
-Until then the compare is a few instructions on work that was going to run anyway, and the
-picture is identical either way.
-
-**What a renderer can read of a camera, and what it is deliberately not given yet.** The
-three members `uses view : Camera` offers — `view.clip`, `view.eye`, `view.ray` — are the
-three ambients under another name: an L4 could already read all of them and could not say
-*which* camera, so the slot is a new spelling for an old capability. The other four values an
-L3 writes are not:
-
-| Deferred | Why it is a new capability rather than a new spelling |
-|---|---|
-| `view.target` | An L4 cannot read it today under any spelling. `camera`, `eye` and `ray` are *derivations* the engine makes; these are the state itself |
-| `view.up` | The same, and the pair `target`/`up` is what a renderer would use to build its own basis — restating the engine's projection convention inside every shader that wanted it, which is the thing deriving on the GPU exists to prevent |
-| `view.fov_y` | The same, plus an aspect ratio it would need beside it, which belongs to the canvas rather than to the camera |
-| `view.near`, `view.far` | Already read by `blend weighted` through `depth_range`, which is a derivation. Exposing the planes themselves is a second way to depend on them, and the coupling `blend weighted` already has to them is the one nobody predicted |
-
-**`Kind::L3`'s own doc argues them the other way and that argument is why they wait**: an L3
-produces *state, not a matrix*, precisely so that a blend of two trajectories means something
-— so handing a renderer the state is a decision about what a camera is to a renderer, not a
-member list. Adding them is cheap when something wants them; nothing does, and a member set
-invented for no case is a member set nobody can check against one.
-
-**A name lives in a Set file, and the command line can write one.** The file is where a use
-is recorded, so it is where the name belongs, and the GUI M5 builds writes it there. The
-command line gets a spelling anyway — it is the only authoring surface that exists today, and
-a name has to be writable before a file can be saved carrying one. It overrides a loaded
-file's name on the rule `--param` already follows beside `--load-set`. See `docs/ir-spec.md`,
-"Naming a source, on the terms HTML gives an `id`", where this replaces a stated *preference*
-whose reasoning the code had falsified.
-
-**Two records moved ahead of it**, which is why the naming below is now a parser change and
-little more: `Record::Capacity` and `Record::Seed` carried a `layer` and no index, so two
-geometries at different capacities and a per-source salt were both inexpressible in the
-format however they were spelled on the way in. Both carry an index now, and both are written
-and read per geometry.
-
-What this is *not* is fusion. That half is deferred with a trigger — see "Deferred by
-decision".
-
-#### ~~Narrowing the element slot~~ — built
-
-**39% off every element buffer across the geometries this repository ships**, and the same
-39% off the largest allocation in the system, because an amplifying stage multiplies exactly
-that number: one `amplify 6` on a Set at 262144 elements was 120 MiB of derived buffer.
-`drift_shell` went 80 bytes to 48, `lattice_shell` 64 to 48.
-
-Every field used to be padded to a `vec4` so the stride was `(2 + emit.len()) * 16` with no
-per-attribute case analysis. Now each field is its own width at the offset WGSL's own
-placement rules give it, which does better than the estimate above — the estimate counted
-only the scalars *before* the attributes and missed that a `vec3` leaves four addressable
-bytes behind it, so `position, size` is one 16-byte block and `velocity, age` is another.
-
-It was done on the principle in "What a machine's size is allowed to decide" rather than on a
-budget: those bytes bought nothing at any capacity on any machine.
-
-**What it cost is that something now has to know WGSL's layout rules**, where nothing did
-before. The host writes bytes at a published offset and the shader reads them through the
-struct, so a disagreement is not a compile error anywhere — it is an element reading the
-middle of the element before it. The align/size table is in one place, `karakuri-ir::layout`,
-and the naga tests assert it against a real WGSL module: they compile the emitted struct and
-compare the member offsets and array stride *naga* computed from its own rules against the
-ones the table gave.
-
-**Validating the module is the weaker check and would never have caught a wrong table.**
-Nothing emits an `@offset`, so a front end handed a wrong table recomputes the same offsets
-from the same declarations and agrees with itself, and `validate()` only ever asked whether
-the module parsed. Only reading back what naga's answer *was* can disagree.
-
-One test had to change its question rather than its number, and it is the interesting part:
-`a_derivations_slot_exists_only_where_something_consumes_it` measured the *stride* to prove a
-slot existed, which worked while every slot was sixteen bytes. `birth_t` is a `f32` that now
-lands in the four bytes `seed` and `birth_frac` leave — it is free — so the stride assertion
-would have read a slot that exists as a slot that does not.
-
-#### Surfacing what a Set holds in memory
-
-**~~The figure has an owner and no reader.~~ Closed.** MCP's `read_set` reports it per node
-and as a total, for a saved Set at the capacities its file records — computed from the file
-plus a compile pass rather than written into a record, which is not the shape this section
-expected and is argued in ADR-0145. `Set::element_storage` reports what every node of
-a Set allocated, per node, off `wgpu::Buffer::size()` of the buffers that node created, and
-`Set::element_storage_bytes` totals a slot's worth of it — see "Narrowing the element slot"
-above for why it lives there rather than in stage 4. Grepping for it finds the two node
-impls that produce it and the tests that assert it. **What no binary prints during a run is
-element storage**, which is a narrower gap than the one this section opened with: the figure
-is answered on demand, for a saved Set, and never volunteered by the run that allocated it.
-
-**That is a regression, accepted rather than overlooked, and it is recorded here because a
-hole nobody wrote down gets rediscovered as a bug.** `karakuri-cli` printed a `bytes/element`
-beside its two op counts as it loaded a procedure, until the figure moved. That number was
-stage 4's, and stage 4 modelled a layout that had already changed underneath it:
-`drift_shell` was printed at 192 bytes an element where its buffers are 104. Correcting it
-was the obvious repair and it was the wrong one — a figure computed from one procedure is a
-*floor* for every kind rather than a measurement of any, since three of the layout's inputs
-are settled two stages later, and `kaleidoscope`'s floor is 96 against the 312 the engine
-allocates. **A floor published under a name that reads as a measurement fails in the
-dangerous direction**: a budget check that passes and an allocation that then does not. So
-an 85%-wrong number was replaced by no number, deliberately, and the capability is owed back.
-
-**What should read it is the metadata file this milestone already owes**, and one constraint
-decides the shape it can take there: bytes an element is not a property of a procedure, so it
-cannot be a key on `perf` — `docs/ir-spec.md`, "On `perf`", says why, and that reasoning does
-not weaken with a better estimator. It is a property of a *Set* at the capacities its nodes
-were instantiated at, so what can carry it is a record written against a saved Set, which
-`--save-set` already puts in the content-addressed store. Which record that is, and whether a
-deck-wide total is worth having beside a per-Set one, is undecided here on purpose: the
-figure is available to be read the moment something wants it, and inventing a surface for it
-before then is how the last wrong number got published.
-
-**The loader's silence is not part of the debt.** It holds one procedure and no Set, so it
-genuinely cannot know the chain the procedure will be allocated under; the comment beside the
-print in `crates/karakuri-cli/src/compile.rs` says so, so that two figures and no third reads
-as a decision rather than as a line somebody forgot to restore.
-
-#### Procedures a model can read
-
-**A slice of this was scheduled long before the rest — procedures a model can read — and is
-now deferred on evidence rather than on cost.**
-
-It was scheduled because the *first* real MCP session opened by looking for an example —
-*"is there a worked example of lines in another slot?"* — found none, because the deck had
-one slot, and fell back on four failed compiles to learn what the language allows. A handful
-of readable procedures would have answered in one call.
-
-**The second session did not reproduce that**, and the difference is worth reading before
-this is picked up again. Asked for line art with `topology lines` in the language, a model
-wrote three procedures that landed and held the frame budget, and worked out two hazards the
-specification does not state — that scaling a segment by anything but 1.0 pulls consecutive
-segments apart, and that a per-segment taper scallops a joined strand. It did that from the
-spec resource and the generated vocabulary, with no example to copy.
-
-What changed in between was not the library. It was the *reference material*: the vocabulary
-page is generated from the checker's own tables and now carries the topologies and the stage
-outputs as well as the builtins, and `docs/ir-spec.md` gained a worked lines example. The
-gap the first session hit was a documentation gap that read as a library gap.
-
-So this waits for the failure to recur. **What would revive it**: a session where a model
-reaches for something the spec and the vocabulary describe correctly and still gets it wrong,
-or asks for an example twice. That is a specific observation to watch for rather than a
-feeling, and it is the point of writing it down instead of quietly dropping the item.
-
-The two steps, if it does recur, in order of cost:
-
-- **The shipped examples as MCP resources.** They are files in the repository and they
-  already work; exposing them is a `resources/list` entry each. Nothing infrastructural.
-- ~~**Saved Sets and their artifacts as resources.**~~ **Built, and built as a tool** —
-  `read_set` takes the id of a saved Set and answers with what each of its nodes declares,
-  read off the metadata cards. The design point below is what decided the shape rather than
-  a preference: a user's Sets are not curated, not few, and not knowable when the server
-  starts, so they are asked for and not listed. It also fixed **which handle a model can
-  hold**: a card is filed under a content hash and nothing on this surface has ever handed a
-  model one, so a hash-addressed tool could not have been called a first time.
-
-The first now has a complication it did not have when it was scheduled: **`examples/` is
-app presets and a user's Sets are their own**, so a resource list has to say which is which.
-See the file layout in `docs/manual.md`. The second stopped needing that answer by not being
-a list.
-
-Embeddings, thumbnails and genealogy stay here in M4, because they answer *"which of two
-thousand"* and the above answers *"how is this written"*.
-
-**One design point worth fixing before either is built: the resource list is a curriculum,
-not an index.** A model handed two thousand procedures learns nothing it could not have
-guessed; a model handed four good ones, chosen to span what the language can do, writes
-better code immediately. So resources stay a curated few and *search* over a large library is
-a tool call — which is also the only way round the fact that `resources/list` is a list a
-client reads in full.
-
-**One gap the three-place layout opened, now closed for the two surfaces that
-exist.** A user preset can now be loaded into the scratch, edited by a hand or a
-model, and every version that compiles is kept — but ~~**nothing saves the
-result from a running session**. `--save-set` writes what the flags say and
-exits, so the loop ends at "find the version you liked in `<store>/history/` and
-start a run from it".~~ The `k` key writes the focused slot's current material as
-a Set file, named after the moment it was pressed, reading everything the Set
-holds off the Set on screen rather than off the flags — which is what makes it a
-save of what was *played* rather than of what was started. The `save_set` MCP
-tool asks for exactly that, for a slot it names: one control and one code path,
-whichever end it is reached from. Two things it cannot read that way,
-because the Set does not hold them: the edges, which nothing rewires mid-run,
-and each node's spelled name, which belongs to the use rather than the
-procedure. `Live::edges` says why that is a copy of a value and not of a rule.
-It goes into the session stream as a `save` record, and a replay skips it and
-says so: see "Records with an effect outside the stream" in `docs/ir-spec.md`.
-
-**This was the first control to want three ways in, and two of them are
-built.** No control in this system had three-way reach before it, which is worth
-stating plainly rather than assuming: keys and MIDI converge, because every
-action a surface produces ends in the method a key press ends in — `midi.rs`
-says so at its head — and MCP's surface was `read_procedure`, `write_procedure`
-and `swap_outcome`, none of which a key can reach and none of which reaches a
-procedure from the other side. So nothing had ever needed the channel this did.
-
-**MCP was the one that was missing and costing something**, because a model that
-has just rewritten a procedure is exactly the caller with something worth
-keeping and no way to ask for it. It was not the same shape of work as the key:
-the save has to happen on the render thread's terms, where the live Set is, and
-the MCP server is a thread that cannot reach it. ~~So it needs a server-to-loop
-request channel, which nothing in this program has yet.~~ The `save_set` tool is
-built and that channel is what it cost — a request carrying the slot, an optional
-id and a one-shot reply, taken where the MIDI surface is taken, ending in
-`Live::save_set` itself rather than in a second saver. Two things it had to get
-right and they are worth naming, because the next thing over this channel
-inherits both. **The wait for the outcome happens with the server's state
-unlocked**: `handle` runs a thread per connection under one mutex, so a call
-that waited while holding it would have stopped a client that only wanted to
-read a procedure. And **the tool waits rather than answering on acceptance**,
-because a model told "saved" before the disk has answered reports a set as kept
-that may not be — with a bounded wait, after which what comes back says it is
-neither a success nor a failure and names the id to look for. That second one is
-two messages and not one, and the *first* of them is the load-bearing half: the
-loop says "taken, under this id" at the frame it takes the save, so a client
-whose deadline passes has something to look for. Without it the honest answer to
-a timeout collapses into the dishonest one — "nothing was saved, asking again is
-safe" — about a save that is running and will land.
-
-**A name a caller chooses overwrites**, which is a decision rather than an
-omission. `--save-set ID` has always obeyed the name it was given, and
-`history::unused` — which exists because two saves in one millisecond produced
-one stamp and the second file replaced the first — deliberately does not run over
-a client's id: it *renames*, `keeper` becoming `keeper-1`, and a name somebody
-typed is an instruction rather than a suggestion. It is in the tool description
-and in `docs/manual.md`, because the thing that was not allowed was leaving it
-undocumented.
-
-**The M5 surface still costs nothing beyond that channel, and is not built.**
-What it needs from here is a caller: the slot is an argument now rather than the
-focus, the refusals are the same sentences whoever meets them — literally so, as
-of this change: `no_such_slot` had four spellings across the keys, `--mcp`, MIDI
-and the record decoder, and the four surfaces now call one function and each pin
-it with an `assert_eq!` — and nothing about the save assumes a pair of hands.
-
-The difference this closes is still worth stating: a library you can put things
-into, rather than one you can only put things into before you start playing.
-
-~~**A known gap the saver runs into and does not cause: a rebuild resets the
-camera.**~~ **Closed.** `swap::Request` carried no camera and `Set::build_many`
-starts every built Set from `Orbit::default()`, so under `--load-set X --watch`
-the first rebuild of a `.kir` silently put a loaded camera back to its defaults.
-The saver was faithful — it records `set.camera`, which is what the Set on
-screen holds — so the first `k` after any rebuild wrote the defaults into a new
-preset, and the loss stopped being a display accident and became a file. **It
-predated the save control and was not caused by it**, and closing it cost
-exactly what this paragraph said it would: the request carries the camera the
-way it already carries the salts and the params, `watch::Watch` restates it on
-every rebuild, and the build worker applies it where the loader does — for the
-reason those are restated, that a rebuild which lets a value be re-derived is a
-rebuild that quietly discards what was loaded.
-
-**An `Orbit` and not an `Option<Orbit>`**, which is where it parts company with
-the `capacity` beside it: a capacity may come from the *new* file's declaration,
-so `None` there is an answer only the rebuild knows, while a Set holds a
-built-in camera whatever its files declare and is built at exactly that default.
-A slot that loaded no `camera` record states the default and means it —
-"nothing loaded" is not a second case, and an option would have been a
-distinction nothing downstream could act on. Recorded in the Set file format
-section of `docs/ir-spec.md`, where a reader meets the `camera` record.
-
-**Adds**
-
-- Library thumbnails. Every artifact gets a short loop and a still at promotion time, for
-  browsing. Distinct from the live slot preview built in M2 — that one renders a running
-  instance, this one is a stored asset, and it is `thumbnail` in the metadata vocabulary
-  for exactly that reason — see "Metadata file format" in `docs/ir-spec.md`.
-
-  **Not built, and it was mis-filed as waiting for scale.** The machinery is one command:
-  `--load-set ID --render out.png` writes a still from a stored Set offscreen, in under a
-  second, and `<store>/thumbnails/` already exists for the file to land in. What is actually
-  missing is a decision the sentence above hides. **A card is per artifact, an artifact is
-  one procedure, and one procedure cannot be rendered** — an L1 is elements nothing draws and
-  an L4 is a way of drawing nothing. So "every artifact gets a still" has to say *in what
-  Set*, and the honest answers differ: a canonical minimal Set per kind describes the
-  procedure and not the material, while the Set it was saved in describes the material and
-  gives two artifacts of one Set the same picture. Deciding that is the work, not the
-  rendering, and it is worth deciding beside M5's browser rather than before it — a thumbnail
-  nothing displays is a file whose framing nobody can judge
-- Dual embeddings. Text embedding of prompt and tags, plus a visual embedding of the
-  thumbnail. Visual search matters more than it sounds — under stage conditions people
-  search by look, not by words. **Not built, and blocked on both halves.** The text half
-  needs `origin` and `tag`, which have no producer — `list_sets` searches on what a node is
-  *called* for exactly that reason, which is the shallowest of the three things a card could
-  be searched on. The visual half needs the thumbnail above. It also wants a model and a
-  place to keep vectors, neither of which this tree has, and the network rule in the
-  invariants applies: whatever this becomes has to degrade to the name search that exists
-- Genealogy. Derivation graph via `parent`, enabling "make ten variations of this"
-  evolutionary workflows. **Not built, and it is the one item that must not be built early.**
-  `parent` has no producer because nothing generates procedures, and a graph is only worth
-  walking once there are derivations in it. The demand this leaves on M6 is below and it is
-  the sharpest one in this document: recorded from the *first* generated artifact, or the
-  genealogy has a hole at its root that no later pass can fill
-- ~~Variant pools. A slot holds several compiled alternatives, selectable at beat resolution.
-  Mechanically these are pre-forked Sets sharing every other slot, so they are deck members
-  rather than a separate structure~~ — **a pool is a Set, and the deck-members mechanism is
-  not the design** ([ADR-0148](adr/0148-a-variant-pool-is-a-set-and-the-deck-stays-a-mixer.md)).
-  The alternatives are nodes of one Set and `r` selects among them on the grid; the deck
-  stays a mixer, where selecting is a cut and fading between two things is what an operator
-  does at the final stage with faders that already exist.
-
-  What survives of the paragraph is the cost arithmetic, once it is read of one Set rather
-  than of several: three alternatives that differ only in L4 share one simulation, and three
-  that differ in L1 are three simulations. The other claim does not survive — "close to free
-  for closed-form and expensive for accumulating" is about *priming*, which is a deck
-  concept, and inside one Set there is nothing to warm.
-
-  **A composited Set round-trips now, so a pool can be kept.** `Layering` is a Set file
-  record — `merge`, with a `live` field carrying which renderer the fold is left with, argued
-  in the [Set file format](ir-spec.md#set-file-format) section of `docs/ir-spec.md` where a
-  reader meets it — and the rule it was held out by turned out to be the wrong reading: what holds is that *a node
-  with no procedure is described by a record of its own*, which is what the built-in camera
-  already did. `--save-set`, `k` and the MCP `save_set` tool all write it, `--load-set` and a
-  session's head build at it, and a rebuild under `--watch` restates it rather than deriving
-  it from `--merge`. A flag and a file cannot disagree, because the flag can only turn
-  compositing on.
-
-  **What this still leaves owed, in order.** The selection is one-way: nothing folds every
-  renderer back in, and restoring the fold wants its own spelling, of the shape
-  `Record::Preview`'s null-for-the-mix has — a saved `live` can now be *round-tripped* but
-  still not *cleared* from the console. And an L1 alternative is stepped whether it is
-  selected or not, because `Set::step` walks every source; parking one while another runs does
-  not exist, so an L1 pool is not the cheap thing an L4 pool is. The mechanism and the record
-  are argued in [ADR-0146](adr/0146-a-selection-is-its-own-record-and-lands-once.md).
-
-  **The smaller half is built, and it is the half that lives inside one Set.** A composited
-  slot — `--merge N` — already gives every renderer a target of its own and an edge into an
-  L5, so `r` makes one of them live and the rest not, on the beat grid, through a `select`
-  record that replays like any other. That is "three alternatives that differ only in L4
-  share one simulation", and it is the sentence above that is true *today*: they share one
-  because they are renderers of one Set rather than three Sets that happen to agree.
-
-  **What is not built is everything the paragraph says about deck slots.** Alternatives that
-  differ at L1 or L2 carry state of their own, so they are separate Sets — and holding
-  several of them as one pool needs the deck to know they are alternatives, and needs the
-  unselected ones primed off air so a cut does not arrive cold. Neither exists. The
-  pre-forked-Sets-as-deck-members mechanism is the design and nothing implements it.
-
-  **The third thing it would have needed is not coming.** Sharing geometry across those Sets
-  — so that three variants of one shell are not three simulations of it — is **rejected**,
-  not pending: the drawing pipeline is closed within a Set, and a slot that wants the same
-  geometry holds its own copy. See [ADR-0147](adr/0147-geometry-is-not-shared-across-sets.md)
-  for why the saving loses to keeping the Set a boundary. So a deck-slot pool costs one
-  simulation per alternative, permanently, even when they differ only at L4 — which is worth
-  having for alternatives that differ at L1 or L2, where separate simulations are the point
-  rather than an inefficiency.
-
-  **That is also where the two cost claims come apart, and the passage above reads as though
-  they were one claim.** "Cheap for closed-form and dear for accumulating" is a statement
-  about *priming*: it is dear exactly when the alternative has a history to re-run before it
-  can be cut to, which is a property of a Set being warmed in a deck slot. Inside one Set
-  there is nothing to warm — the alternatives are renderers over a simulation that is
-  already running — so selection costs one uniform write whether the material is closed-form
-  or accumulating, and the distinction does not apply. What it costs instead is memory and
-  passes: every alternative goes on drawing into its own frame-sized target, 7.03 MB at
-  1280x720, selected or not. Cheap, not free, and cheap in a different currency than the one
-  this bullet was written in
-- Bundle and unbundle for sharing single self-contained patch files. **Built**, as two
-  flags that print and stop: `--bundle ID` writes the Set filed under `ID` to standard
-  output with every source it names inlined as `src` records — one run per artifact
-  however many nodes reference it, since the reader keys them by hash — and refuses the
-  whole bundle naming the node where the store cannot supply one. `--unbundle FILE`
-  takes one in: every inlined source is checked against the address its `slot` names
-  before anything is written, each becomes an artifact with a metadata card, and the Set
-  is filed under the id the file itself carries — refused rather than overwritten where
-  that id is taken, which is deliberately not `--save-set`'s rule. A source this build
-  cannot compile is stored and keeps its slot, reported with what the checker said, so
-  the failure lands on `--load-set` with a span rather than on the whole file with none.
-  **What it deliberately leaves out**: a bundle is one *Set* and not a session — a
-  session stream carries its own material at its head and nothing folds a stream into a
-  bundle. It carries no metadata cards, deliberately: a card is derived from a compile
-  pass, so the receiving build regenerates it from the source and an artifact that does
-  not compile there arrives without one rather than with a card from a build that is not
-  theirs. It says nothing about **provenance** — `origin`, `parent` and `tag` still have
-  no producer, so a bundle cannot say who made the material or what it was derived from,
-  which is the gap that would have to close before anything like a shared library — and
-  it is neither signed nor compressed. And there is no way to rename on the way in: an
-  id collision is fixed by editing the file's `set` record, because a flag that
-  overrode it would be the overwrite this refuses, spelled differently
-
-**Demands on earlier work**
-
-- Content addressing and separate metadata files from M1. **The store is content-addressed
-  and tested, and the metadata file now has a producer.** Both of the paths that store an
-  artifact from a compile — `Placed::put` and `Sources::into_nodes`, through `put_meta` —
-  write a `<hash>.meta.ndjson` beside it carrying `meta`, `param_decl`, `capacity_decl` and
-  `emit`, the four of the nine records a compile pass can answer; and `karakuri-store`
-  decodes them, can read the file back and refuses them from a Set file. `Store::put_artifact`
-  writes no card of its own: it is content-addressed bytes and does not compile, so a card
-  is the caller's to add, and `crates/karakuri-store/tests/store.rs` is full of puts that
-  add none — an artifact with no card is uncarded, not damaged. **The reading half now has a
-  caller**, which it did not for as long as the writing half existed: the `read_set` MCP tool
-  takes the id of a saved Set, resolves its `slot` records to their cards and renders what
-  each node declares — every knob with its range and its default, the element count a
-  geometry may run at, the attributes it emits — so the question *"which of these kept things
-  should I use, and what can I turn on it"* is answered without fetching a source and
-  compiling it, which for a Set nobody has loaded nothing could answer at all. An artifact
-  with no card is described as uncarded there too, in words that do not read as a damaged
-  store, and one this store has never held is told apart from it. **And the library around that lookup now exists**, which
-  is what this milestone is named for: `Store::list_sets` and `Store::list_artifacts`
-  enumerate at the cost of one directory read, the `list_sets` MCP tool renders every kept
-  Set most recently written first — filtered by what a node is called or by which layer a
-  Set has a node on, and **capped with the cap announced**, so a partial answer cannot be
-  read as a whole library — and `--list-sets` prints the same answer at a terminal without
-  compiling anything or opening a window. What a node is called there is what `read_set`
-  calls it, from one function, rather than a second derivation that agrees until somebody
-  edits one of them. What is still owed is what the *cards* would add: search is over node
-  names because `origin` and `tag` have no producer, nothing groups, and genealogy needs the
-  `parent` below. See "Metadata file format" in `docs/ir-spec.md`
-- `parent` recorded from the first generated artifact, or the genealogy has a hole at the
-  root. **Untouched, deliberately.** Nothing generates procedures, so `parent` has no
-  producer and the first generated artifact is still close — an empty one written now
-  would fill the hole rather than leave it visible. This stays the demand most likely to
-  be missed by simply arriving late, and the file it goes in exists now, which removes the
-  only excuse for missing it
-- `perf` needs the stage-7 probe, and is not a compile pass's to write. What a compile
-  pass can answer is `ops_per_element`, returned by `cost::estimate` — and not held by
-  `Checked::cost`, the field named for it, which is unconditionally `None`; the record's
-  field is `ns_per_element`, which is a measurement — see "Metadata file format" in
-  `docs/ir-spec.md`, which withdrew a published number for exactly this once already
-
-~4–6 weeks. **What it actually cost**, since M1's note says the estimates are only readable
-against evidence: the naming work and the four `####` items above, the variant-pool
-round-trip and bundling, against three of the five Adds left standing. The expensive half was
-not the implementation again — it was finding that a fact derived in two places had already
-drifted (a live save could write a version never on screen; a listing would have had a second
-answer to what a node is called), and that a plausible explanation is not a measurement.
-
----
-
 ### M5 — Interface
 
 **Goal: the application.** Karakuri is a GUI application for playing a VJ set in real time —
@@ -2405,10 +602,10 @@ the manual's operations pages are written, since those are what the vocabulary i
   and a filter nobody can save. **How learning works is settled above**: a control is bound to
   a deck and a position in that published interface, the assignment lives in the control's own
   tooltip, and the map is a file saved per controller
-- Set browser with live previews of priming Sets. **It carries M4's thumbnail decision with
+- Set browser with live previews of priming Sets. **It carries M4's unsettled thumbnail question with
   it**: a stored still is not the live preview beside it, and what a thumbnail is *of* is
   undecided because a metadata card is per artifact and one procedure cannot be rendered
-  alone — see M4's thumbnails bullet, which has the machinery costed and the question stated
+  alone — see what M4 still owes, where the machinery is costed and the question stated
 - Staging lane — where candidates appear before they go live. Its first producer is the
   operator's own regeneration of a slot, which needs no agents and makes the lane useful
   and testable as soon as it exists; M6's agents write to the same place rather than
@@ -2638,21 +835,20 @@ rejected, the field does not.
 |---|---|
 | `README.md` | The front door: what this is, a quickstart, and where every other document is |
 | `docs/invariants.md` | The rules in force, and the tests that hold them |
-| `docs/status.md` | V1 scope, and what exists part by part |
 | `docs/ir-spec.md` | The IR: grammar, semantics, lowering, record formats |
 | `docs/manual.md` | How to play it: every flag, every key, and what each does |
 | `docs/plugins.md` | The out-of-process boundary, and why those two things are outside it |
 | This file | Milestones, their demands on earlier work, and the settled decisions above |
 
 None of the others should restate this one, and this one should not restate them. The two
-that overlap most are `docs/status.md` and the manual, and the line between them is
+that overlap most are this document's *What exists today* and the manual, and the line between them is
 audience: the status document says what exists, the manual says how to use it.
 
 ---
 
 ## Reading order for implementation
 
-1. `docs/invariants.md`, then `docs/status.md` — the rules, then V1 scope
+1. `docs/invariants.md`, then this document's *What exists today* — the rules, then what is built
 2. `docs/ir-spec.md` — the whole thing before writing any parser code
 3. This document — the **Demands on earlier work** sections only, during M1
 4. `docs/manual.md` — when there is something to run

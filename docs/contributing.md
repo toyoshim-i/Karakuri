@@ -351,8 +351,8 @@ Before marking a task or pull request as complete, ensure the following checklis
   HTML rather than Markdown, which is the same distinction said in the file extension: a
   designed document with readers who never open this repository
 - [plugins.md](plugins.md): Out-of-process helper plugin specification
-- [roadmap.md](roadmap.md): Architectural roadmap and future milestones
-- [status.md](status.md): V1 scope, and what exists part by part
+- [roadmap.md](roadmap.md): What exists today, and where the project is going, milestone by milestone
+- [history/](history/): Milestones that closed, kept whole — history, never the present tense
 - [adr/](adr/): Every decision, with the alternatives that lost — append-only
 - [principles/](principles/): The rules in force, one per file — current only
 

@@ -85,7 +85,6 @@ docs/
   manual.md           how to play it: flags, keys, and what each does
   plugins.md          out-of-process helpers, and why they are out of process
   roadmap.md          where this goes after V1
-  status.md           V1 scope, and what exists part by part
 examples/             app presets: seven L1, four L2, one L3, one Field,
                       nine L4, and a control-surface map to copy
 .karakuri/            the store: artifacts, sets, sessions, scratch and the
@@ -260,7 +259,6 @@ graph LR
 
 - [README.md](../README.md): The front door — what this is, a quickstart, and the document map
 - [invariants.md](invariants.md): The rules in force, and the tests that hold them
-- [status.md](status.md): V1 scope, and what exists part by part
 - [ir-spec.md](ir-spec.md): `.kir` DSL language specification
 - [roadmap.md](roadmap.md): Architectural vision and implementation roadmap
 - [manual.md](manual.md): VJ operator manual

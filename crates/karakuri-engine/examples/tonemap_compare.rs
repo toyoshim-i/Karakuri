@@ -29,7 +29,7 @@ const SEED: u32 = 19_274;
 
 /// Simulation steps to run before capturing, at `dt = 1/60`. `spark_fountain`
 /// needs to reach the steady population its lifetime and spawn rate settle at
-/// — `docs/status.md` puts that around 74000 of 262144 slots, reached well inside
+/// — the roadmap puts that around 74000 of 262144 slots, reached well inside
 /// five seconds — and `drift_shell` is run the same distance so both scenes
 /// are compared at the same simulation instant rather than at frame zero.
 const WARMUP_STEPS: u32 = 300;
