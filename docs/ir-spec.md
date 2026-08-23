@@ -2995,11 +2995,21 @@ says what a procedure *declares*. The check is `Record::is_metadata` and not
 and telling an operator a `capacity_decl` was rejected for carrying time sends them looking
 in the wrong place.
 
-**One reader exists, and it is a narrow one.** MCP's `read_set` resolves a saved Set's
-nodes to their cards and renders what each procedure *declares*, so a model can weigh saved
-material without fetching and compiling every source. What is still M4's is the library
-around it: searching, grouping and walking genealogy over these files, none of which a
-per-Set lookup answers.
+**Two readers exist, and between them a library can be found rather than only opened.**
+MCP's `read_set` resolves a saved Set's nodes to their cards and renders what each procedure
+*declares*, so a model can weigh saved material without fetching and compiling every source;
+`list_sets` is what makes that reachable, because `read_set` answers about an id its caller
+already has and nothing could say which ids exist. It lists every Set the store holds, most
+recently written first, filtered by what a node is called or by which layer a Set has a node
+on — and `--list-sets` prints the same answer at a terminal. **What a node is called is one
+function's answer**, `setfile::node_called`, so a name read in a listing is the name found on
+opening that Set.
+
+What is still M4's is what the *cards* would let a library do and cannot yet. Search is over
+node names because that is what a card can be searched on today: `origin` and `tag` have no
+producer, so nothing finds a Set by the prompt that made it or by a word somebody filed it
+under. Nothing groups, and nothing walks genealogy, which needs a `parent` that nothing
+writes.
 
 **The other five wait on a producer, and an empty one would be worse than none.** `perf`
 is a measurement and wants the stage-7 probe — what a compile pass can answer is
@@ -3015,8 +3025,8 @@ has a hole at its root — which is a demand on whatever writes the first one, n
 write empty now.
 
 The store is content-addressed from M1, which is half of what M4 asks of it. This is the
-producing half of the other, and one lookup over it; the *library* half — searching,
-grouping and walking genealogy over these files — is still M4's.
+producing half of the other, with a lookup over one Set and a listing over all of them;
+what is still M4's is grouping and genealogy, and a search over more than a node's name.
 
 Artifact metadata lives in a separate file, not in the `.kir` header. The `.kir` stays
 purely a source file that a human or an LLM can read and edit.
