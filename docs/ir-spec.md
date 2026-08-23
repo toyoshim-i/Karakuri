@@ -1916,7 +1916,19 @@ procedures where the Set is built, which is why the `edge` can name `morph` and 
 without either appearing in the file.
 
 - `proc` is a hash reference. When bundled, the source is inlined as a run of
-  `{"t":"src","hash":"…","line":0,"s":"…"}` records.
+  `{"t":"src","hash":"…","line":0,"s":"…"}` records — **one run per artifact**, however
+  many `slot` records reference it, because a reader keys `src` by hash; and appended
+  after the records that were already there, the file's own order otherwise untouched.
+  **`--bundle ID` writes one**, to standard output, and refuses whole where the store
+  cannot supply one of the sources: a bundle short of one procedure is a file that looks
+  self-contained and is not. The run is the source `split` on `\n` and the reader
+  rejoins it the same way, which is exactly invertible — so an artifact that travels
+  through a bundle comes back byte for byte and keeps its address, where dropping a
+  trailing newline would not. **`--unbundle FILE` reads one back into a store**, and what
+  it guarantees is that check: every inlined run must hash to the address its `slot`
+  record names, or the file is refused with nothing stored. Without it a `src` run would
+  be a way to file arbitrary text under an address the receiving operator recognises,
+  which is the one thing content addressing is for.
 - `capacity` is optional; without it the `.kir` default applies. A value outside the range
   the `.kir` declares is rejected at Set build time.
 - **A `slot` may carry a `name`**, which is what an `edge`, a `--param` address, a rebuild

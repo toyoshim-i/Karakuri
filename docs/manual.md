@@ -323,6 +323,8 @@ pressed it. See the keys below.
 | `--list-sets` | print what the store holds — a line per Set: its id, when it was saved, and how many nodes on each layer — and stop. Nothing is compiled and no window opens |
 | `--save-set ID` | write the material as a Set file and stop — the whole chain, at the capacity and the salt the run would have drawn with |
 | `--load-set ID` | build from one |
+| `--bundle ID` | write that Set to standard output with every source it names inlined — one self-contained file to send somebody. Refused whole, naming the node, if this store is missing one of the artifacts. Nothing is compiled and no window opens |
+| `--unbundle FILE` | take a bundled Set file into this store: its inlined sources become artifacts with a metadata card each, and its Set file is filed under the id the file itself carries. Every inlined source must hash to the address its `slot` names, and an id already taken is refused rather than overwritten |
 | `--record-session ID` | write the timeline as it happens |
 | `--replay ID` | render a session back. Needs `--render` or `--seq` |
 
@@ -583,6 +585,49 @@ it. `--save-set` writes what the flags say and exits; `k` writes what the focuse
 slot is playing, right now, into `<store>/sets/` under a timestamp, and a model
 asks for the same thing by naming a slot. So load, edit, watch — by hand or by
 asking — and keep the version you liked without leaving the run.
+
+### Sending somebody a Set
+
+A Set file names its procedures by hash, which is what makes it a few dozen readable
+lines instead of a copy of the material — and it is also why mailing one to somebody
+gets them a file that will not open: their store has never held those artifacts.
+A **bundle** is the same file with every source it names inlined after it, as a run of
+`src` records per artifact, and it loads in a store that has never seen the material:
+
+```sh
+karakuri-cli --bundle night01 > night01.ndjson     # yours
+karakuri-cli --unbundle night01.ndjson             # theirs
+```
+
+**It goes to standard output rather than into the store**, because a bundle is a thing
+you *send* rather than something the library keeps: the store already holds this Set
+under an id, and a second copy of it beside the first would only raise the question of
+which one is the Set. Redirect it wherever you are sending it from.
+
+**A bundle carries every source or it is not a bundle.** An artifact this store does not
+hold refuses the whole thing, naming the node — a file that is short one procedure looks
+self-contained and is not, and the machine it is opened on is the worst place to find
+that out.
+
+Coming back in, two rules:
+
+- **Every inlined source must hash to the address its `slot` record names.** A store's
+  whole guarantee is that a hash names those bytes; a `src` run that hashes to something
+  else is a way to file arbitrary text under an address you recognise. One that fails is
+  refused with nothing stored, naming the node. A `slot` whose artifact you already have
+  and which the file does not inline is fine — that is an ordinary partial bundle.
+- **A Set id already in your store is refused, not overwritten.** This is deliberately
+  not `--save-set`'s rule, which overwrites without asking. **An id you type is an
+  instruction; an id that arrived inside somebody else's file is not** — and a preset you
+  built disappearing because a stranger's file happened to pick the same word is the
+  failure worth being annoying about. Rename it in the file's `set` record, or move the
+  one you have.
+
+A source this build's checker will not compile is **still stored and still keeps its
+slot**, and is reported as a note carrying what the checker said. `--load-set` will then
+fail against the source itself, with a span on the line that is wrong — which is
+something you can fix, where refusing the whole file would only have told you that
+something was.
 
 ### The edit history
 
