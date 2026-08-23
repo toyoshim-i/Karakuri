@@ -198,7 +198,7 @@
 
   /* ══ the console ══════════════════════════════════════════════════════ */
 
-  .console-frame { overflow-x: auto; padding-bottom: 5rem; }
+  .console-frame { overflow-x: auto; padding-bottom: 0.5rem; }
 
   .console {
     min-width: 1010px;
@@ -236,17 +236,24 @@
 
   /* hover says: what it is, what state it is in, what a click does */
   [data-tip] { position: relative; cursor: default; }
+  /* `display: none` and not `visibility: hidden`, because a hidden box is still
+     a box: it keeps its place in the scrollable area and puts scrollbars on a
+     panel that fits. And a scroll container is one in *both* axes — `overflow-x:
+     auto` computes `overflow-y` to auto — so a tip hanging below the last row
+     was enough to scroll the whole console. */
   [data-tip]::after {
-    content: attr(data-tip); position: absolute; left: 0; top: calc(100% + 6px); z-index: 30;
+    content: attr(data-tip); display: none; position: absolute; left: 0; top: calc(100% + 6px); z-index: 30;
     min-width: 150px; max-width: 236px; padding: 7px 9px;
     background: var(--c-panel); border: 1px solid var(--c-line); border-radius: 9px;
     color: var(--c-text); font-family: var(--f-round); font-size: 10.5px; line-height: 1.55;
     white-space: normal; box-shadow: 0 8px 26px rgba(0,0,0,0.22);
-    opacity: 0; visibility: hidden; transition: opacity 90ms ease;
   }
-  [data-tip]:hover::after { opacity: 1; visibility: visible; }
-  [data-tip].tip-right::after { left: auto; right: 0; }
-  @media (prefers-reduced-motion: reduce) { [data-tip]::after { transition: none; } }
+  [data-tip]:hover::after { display: block; }
+  /* A tip never widens or lengthens the panel: the right column opens leftward
+     and the bottom row opens upward, so hovering cannot summon a scrollbar. */
+  [data-tip].tip-right::after,
+  .body-grid .col:last-child [data-tip]::after { left: auto; right: 0; }
+  .outputs [data-tip]::after { top: auto; bottom: calc(100% + 6px); }
 
   /* transport */
   .transport { display: flex; align-items: center; gap: 14px; padding: 9px 12px; flex-wrap: wrap; }
