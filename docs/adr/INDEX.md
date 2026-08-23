@@ -197,4 +197,5 @@ Re-pointing the records that cited a retired principle is permitted, and why, is
 A principle with no ADR is one whose reasoning is still only in the code and the specification.
 
 - [P-0005](../principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md) — A swap happens on a frame boundary, and an over-budget Set rolls back on its own
+- [P-0067](../principles/0067-the-language-is-bounded-so-a-procedure-can-be-priced-before-it-runs.md) — The language is bounded, so a procedure can be priced before it runs. It predates the recovered history; the reasoning is in `ir-spec.md` and the check pass
 - [P-0065](../principles/0065-the-signal-bus-is-not-readable-from-ir.md) — The signal bus is not readable from IR. It predates the recovered history and has no decision to record. **Renumbered from 0061 on 2026-08-23**, which two writers had reached for within three hours of each other; the earlier file keeps the number, and 0061 is [a refusal a person can reach from two surfaces is one sentence](../principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md)
