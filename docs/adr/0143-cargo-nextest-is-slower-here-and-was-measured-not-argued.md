@@ -1,10 +1,10 @@
 ---
 id: 0143
 title: cargo-nextest is slower here, and was measured rather than argued
-status: accepted
+status: superseded
 date: 2026-08-22
 supersedes: []
-superseded_by: []
+superseded_by: [0144]
 principles: []
 tags: [testing, workflow]
 ---

@@ -162,7 +162,8 @@ number; new records continue from the end.
 | [ADR-0140](0140-a-gpu-test-lives-under-mod-gpu-and-the-rule-is-enforced-both-ways.md) | A GPU test lives under `mod gpu`, and the rule is enforced both ways | 2026-08-22 | accepted |
 | [ADR-0141](0141-a-gpu-test-with-no-adapter-fails-rather-than-skipping.md) | A GPU test with no adapter fails rather than skipping | 2026-08-22 | accepted |
 | [ADR-0142](0142-validation-runs-without-a-device-and-hands-build-a-plan.md) | Validation runs without a device, and hands `build` a plan | 2026-08-22 | accepted |
-| [ADR-0143](0143-cargo-nextest-is-slower-here-and-was-measured-not-argued.md) | cargo-nextest is slower here, and was measured rather than argued | 2026-08-22 | accepted |
+| [ADR-0143](0143-cargo-nextest-is-slower-here-and-was-measured-not-argued.md) | cargo-nextest is slower here, and was measured rather than argued | 2026-08-22 | **superseded by ADR-0144** |
+| [ADR-0144](0144-the-test-suites-largest-cost-was-a-directory-listing.md) | The test suite's largest cost was a directory listing | 2026-08-23 | accepted |
 
 ## Retired numbers
 
