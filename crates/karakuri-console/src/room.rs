@@ -253,4 +253,12 @@ pub mod size {
     /// `.divider-v`, the bar between the inspector's panes:
     /// `.insp-split`'s middle track.
     pub const PANE_DIVIDER: f32 = 9.0;
+
+    /// `.program-body`'s `padding: 9px`: the ring of ground the Program bay
+    /// leaves between its head, its edges and the picture inside it. The
+    /// arrangement's 378 is written from the same 9 — see the Program bay's
+    /// own derivation in `lib.rs` — so the padding a rectangle is inset by
+    /// here and the padding the bay's height was derived from are one number
+    /// or neither.
+    pub const PROGRAM_BODY_PAD: f32 = 9.0;
 }

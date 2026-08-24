@@ -122,6 +122,12 @@ const BAY_DIVIDER: f32 = 10.0;
 /// is not 10, and the mock draws it as a grabbable bar (`cursor: col-resize`).
 const INSPECTOR_DIVIDER: f32 = 9.0;
 
+/// Between the Program bay's two regions: `.program-body`'s `gap: 8px`, which
+/// is the gap the mock leaves between the picture and the row of deck
+/// previews under it. The second divider in the console that is not 10, and
+/// like the inspector's it is inside a card rather than in the ground.
+const PROGRAM_DIVIDER: f32 = 8.0;
+
 /// The console's default arrangement.
 ///
 /// A column of three — the transport, the row of three columns, and the
@@ -160,6 +166,13 @@ const INSPECTOR_DIVIDER: f32 = 9.0;
 /// `inspector` plus an index and the panes need no name for *that*; they have
 /// one because a view's name is required, and because a pane is the unit the
 /// mock's `2 up` control counts.
+///
+/// `program-view` and `deck-previews` are the Program bay's two regions, and
+/// **both are addressed rather than merely named**: the manual lists the
+/// picture in Outputs as *program view* and says it is on screen exactly when
+/// that sink is on, which is a fold by name, and it says *"the deck previews
+/// under it are auditions of their own, so they stay when it goes"*, which is
+/// the other one not folding with it. See [`program`].
 pub fn arrangement() -> Spec {
     Spec::column(
         ROOT_DIVIDER,
@@ -246,45 +259,98 @@ fn left_pane() -> Spec {
 
 /// The program over the inspector.
 fn centre() -> Spec {
+    Spec::column(BAY_DIVIDER, vec![program(), inspector()])
+        .named("centre")
+        // `.body-grid`'s middle track: `minmax(340px, 1fr)` — flexible, with the
+        // minimum the CSS states.
+        .flex(1.0)
+        .min(340.0)
+        // No maximum: the centre is what a fold gives its width to, and what a
+        // solo on the program has to be able to fill.
+        .max(f32::INFINITY)
+}
+
+/// The Program bay, which is a split: the picture, and the row of deck
+/// previews under it.
+///
+/// **Two regions that fold apart, because `console.html` says so**: *"The bay
+/// is two regions and they fold apart. The picture is a sink, listed in
+/// Outputs as program view, and it is on screen exactly when that sink is on
+/// — so there is no state where it is hidden and still costing a pass. The
+/// deck previews under it are auditions of their own, so they stay when it
+/// goes."* A fold is the operation that turns a sink off here, and a fold acts
+/// on a node — so the picture has to *be* a node, and so does the row that
+/// outlives it.
+///
+/// # The bay is still 378, and the split is that 378 read out loud
+///
+/// The number is the height the mock's own program bay has at the narrowest
+/// console the mock will draw: `.console`'s `min-width: 1010px` less its 10px
+/// padding either side is 990, so the centre track is
+/// 990 - 218 - 268 - two 10px gaps = 484. `.program-body`'s 9px padding leaves
+/// 466 for the picture, which at 16:9 is 262 tall; the four `.preview` cells
+/// are (466 - three 6px gaps) / 4 = 112 wide and so 63 tall. **Bay head 27,
+/// padding 9 + 9, picture 262, gap 8, previews 63 = 378** — and that sum is
+/// the split, term for term, with the 8 as the divider:
+///
+/// - `program-view` is 27 + 9 + 262 = **298**. The bay head is inside it
+///   because a bay's head is painted over the top of whatever tiles the bay —
+///   which is what the inspector's two panes already do — and the top 9 is
+///   `.program-body`'s padding above the picture.
+/// - `deck-previews` is 63 + 9 = **72**: the row of previews and the padding
+///   under it.
+///
+/// 298 + 8 + 72 = 378, so nothing about the bay's height changed and the
+/// tests that assert 378 are asserting the same thing they were.
+///
+/// What "fixed" buys is the whole argument: widen the window and this stays
+/// 378 instead of following the width up to the 763 the manual works out for a
+/// 1900-wide window. The picture letterboxes into the width it has, which is
+/// the program view's job.
+///
+/// # The minimum splits the same way
+///
+/// The bay's chrome at that width is 27 + 18 + 63 + 8 = 116, so the stated 200
+/// leaves 84 for the picture — small on purpose, because a preview's size is a
+/// machine's answer and a weak machine's answer is small rather than absent.
+/// Term for term again: `program-view` at 27 + 9 + 84 = **120**, the divider's
+/// 8, and `deck-previews` at **72**, which is its size — a row of four cells
+/// at a fixed type size has nothing in it that gets smaller, exactly as the
+/// mixer's strips have not. 120 + 8 + 72 = 200, so the bay's own minimum is
+/// still the one it declares rather than a number its children now imply.
+///
+/// # No maximum anywhere in here
+///
+/// Load bearing on the bay for ADR-0157's reason — `solo` on the program has
+/// to leave the program holding the window — and load bearing on both children
+/// for the same reason one level down: *"Solo the program view: the panel
+/// folds away and only the picture is left"* is a solo on `program-view`, and
+/// a maximum on it would leave a margin in a window somebody is capturing.
+fn program() -> Spec {
     Spec::column(
-        BAY_DIVIDER,
+        PROGRAM_DIVIDER,
         vec![
-            // **Fixed, and this is the manual's "sized by height".** The
-            // number is the height the mock's own program bay has at the
-            // narrowest console the mock will draw: `.console`'s
-            // `min-width: 1010px` less its 10px padding either side is 990, so
-            // the centre track is 990 - 218 - 268 - two 10px gaps = 484.
-            // `.program-body`'s 9px padding leaves 466 for the picture, which
-            // at 16:9 is 262 tall; the four `.preview` cells are
-            // (466 - three 6px gaps) / 4 = 112 wide and so 63 tall. Bay head
-            // 27, padding 9 + 9, picture 262, gap 8, previews 63 = 378.
-            //
-            // What "fixed" buys is the whole argument: widen the window and
-            // this stays 378 instead of following the width up to the 763 the
-            // manual works out for a 1900-wide window. The picture letterboxes
-            // into the width it has, which is the program view's job.
-            //
-            // Minimum: the bay's chrome at that width is 27 + 18 + 63 + 8 =
-            // 116, so 200 leaves 84 for the picture. Small on purpose — a
-            // preview's size is a machine's answer, and a weak machine's
-            // answer is small rather than absent. The mock states no minimum.
-            //
-            // No maximum, and it is load bearing: `solo` on the program has to
-            // leave the program holding the window (ADR-0157).
-            Spec::view("program")
-                .fixed(378.0)
-                .min(200.0)
+            // The picture, and what absorbs the bay's height: dragging the
+            // program's bottom edge is the operator answering *how big should
+            // the picture be*, and the preview row underneath is not part of
+            // that answer.
+            Spec::view("program-view")
+                .flex(1.0)
+                .min(120.0)
                 .max(f32::INFINITY),
-            inspector(),
+            // The previews, at the height four `.preview` cells are — the same
+            // reading of the mock that makes `staging` content-height and the
+            // library flexible, and the same reason the mixer is fixed: there
+            // is nothing in the row that gets smaller.
+            Spec::view("deck-previews")
+                .fixed(72.0)
+                .min(72.0)
+                .max(f32::INFINITY),
         ],
     )
-    .named("centre")
-    // `.body-grid`'s middle track: `minmax(340px, 1fr)` — flexible, with the
-    // minimum the CSS states.
-    .flex(1.0)
-    .min(340.0)
-    // No maximum: the centre is what a fold gives its width to, and what a
-    // solo on the program has to be able to fill.
+    .named("program")
+    .fixed(378.0)
+    .min(200.0)
     .max(f32::INFINITY)
 }
 

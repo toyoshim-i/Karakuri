@@ -15,20 +15,37 @@
 //!
 //! # What this is for
 //!
-//! Four things, and none of them is a bay.
+//! Five things, and only one of them is a bay.
 //!
 //! 1. That `egui` renders through `wgpu` 30 into this window at all, which is
 //!    the bet
 //!    [ADR-0155](../../../docs/adr/0155-egui-draws-the-panel-and-the-price-is-wgpu-30.md)
 //!    made.
-//! 2. That the arrangement's numbers look right at real sizes against
+//! 2. **That the engine's rendered texture reaches the panel**, which is the
+//!    other half of that bet: a `Deck` of one Set on the same `Device`, drawn
+//!    through `Present` into the picture's rectangle, sampled by `egui` in the
+//!    same submission. See [`Engine`].
+//! 3. That the arrangement's numbers look right at real sizes against
 //!    `docs/manual/console.html`.
-//! 3. That dragging a boundary still works with a toolkit in the loop.
-//! 4. **What a still panel costs**, printed once the window has gone quiet —
-//!    the claim P-0072's first clause makes, measured rather than asserted.
+//! 4. That dragging a boundary still works with a toolkit in the loop.
+//! 5. **What the window costs**, printed once nobody has touched it for a
+//!    while. It used to be *what a still panel costs*, and with a live picture
+//!    in the Program bay there is no still panel to measure — so what is
+//!    printed is the price of the thing that replaced it. See [`Costs::say`].
 //!
-//! **It is deliberately not the start of a bay.** Every body is empty; see
+//! **It is deliberately not the start of a bay.** Every body is empty except
+//! the picture, and the picture is empty of everything this file could have
+//! invented — no label, no frame, no placeholder; see
 //! [`karakuri_console::view`].
+//!
+//! # The engine here is scaffolding and looks it
+//!
+//! One slot, built from two of the repository's own `examples/*.kir` the way
+//! `karakuri-cli` builds them, and **no more than that**: no audio, no MIDI,
+//! no store, no argument parsing, no governor, no records. What
+//! `karakuri-cli` puts around a deck is a program; this is the shortest path
+//! from two files to texels, because the question being answered is whether
+//! the texels arrive.
 //!
 //! # This file owns none of the model, and none of the view
 //!
@@ -90,8 +107,8 @@ use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Dragged, Op, Outcome, Panel, Pressed, Released, Visibility};
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
-use karakuri_console::view::{Kind, View};
-use karakuri_engine::Gpu;
+use karakuri_console::view::{picture_rect, Kind, Picture, View};
+use karakuri_engine::{Deck, Gpu, HotSwap, Present, Set};
 use karakuri_layout::{Axis, NodeId, Point};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, StartCause, WindowEvent};
@@ -185,11 +202,18 @@ static ALLOCATOR: Counting = Counting;
 /// What one frame cost.
 #[derive(Debug, Clone, Copy, Default)]
 struct Cost {
+    /// **The engine's half**: `Deck::begin_frame` through the present pass
+    /// into the picture — every install, the deck's render, and the recording
+    /// of both. CPU time only, like everything else here; what the GPU then
+    /// does with the command buffer is not on this clock, and
+    /// `docs/contributing.md` §1 says why there is no other one.
+    engine: Duration,
     /// `take_egui_input` through `tessellate`: the whole immediate-mode pass,
     /// including this console's own layout walk and every shape it emits.
     ui: Duration,
-    /// Uploading the tessellated geometry and recording the render pass.
-    /// Excludes `present`, which is the display's pace and not a cost.
+    /// Uploading the tessellated geometry, recording the panel's render pass,
+    /// and the one submission that carries both halves. Excludes `present`,
+    /// which is the display's pace and not a cost.
     paint: Duration,
     /// Allocations and bytes during `ui`, on this thread.
     allocs: u64,
@@ -225,6 +249,11 @@ struct Costs {
     /// What has been drawn since `quiet_since` that nothing asked for.
     still: Still,
     said: bool,
+    /// **Whether there is a live picture in the Program bay.** It decides
+    /// which sentence the reading prints about the frames it counted, and
+    /// nothing else: the frames are counted the same way either way, which is
+    /// the point — the number is not adjusted for knowing the answer.
+    live: bool,
 }
 
 impl Costs {
@@ -236,6 +265,7 @@ impl Costs {
             owed: false,
             still: Still::default(),
             said: false,
+            live: false,
         }
     }
 
@@ -307,7 +337,17 @@ impl Costs {
         self.said = true;
 
         println!();
-        println!("what a still panel costs, measured on this window:");
+        println!(
+            "{}",
+            match self.live {
+                // There is no still panel to cost while the picture is live,
+                // and calling it one would be the reading describing a program
+                // that is not running — which is the failure the sample this
+                // replaces made, one revision ago.
+                true => "what an untouched window costs with a live picture in it:",
+                false => "what a still panel costs, measured on this window:",
+            }
+        );
         println!(
             "  over {:.1} s with nothing touching it: {} frames drawn, {} allocations, \
              {} bytes",
@@ -316,21 +356,47 @@ impl Costs {
             self.still.allocs,
             self.still.bytes
         );
-        println!(
-            "  {}",
-            match self.still == Still::default() {
-                true =>
-                    "so P-0072's first clause holds here: no per-frame work is done to \
-                         redraw what nobody has touched and nothing has moved.",
-                false =>
-                    "so P-0072's first clause does NOT hold here — something is asking \
-                          for frames on an untouched window, and the likeliest something \
-                          is an `egui` repaint delay answered immediately instead of \
-                          waited out.",
+        let rate = self.still.frames as f64 / STILL.as_secs_f64();
+        match (self.live, self.still == Still::default()) {
+            // The reading this was written for, and it is now only reachable
+            // with the picture off.
+            (false, true) => println!(
+                "  so P-0072's first clause holds here: no per-frame work is done to \
+                 redraw what nobody has touched and nothing has moved."
+            ),
+            (false, false) => println!(
+                "  so P-0072's first clause does NOT hold here — something is asking \
+                 for frames on an untouched window, and with no picture running the \
+                 likeliest something is an `egui` repaint delay answered immediately \
+                 instead of waited out."
+            ),
+            // **The expected reading now**, and the whole of what this run is
+            // for. It is stated as a price rather than as a failure, because
+            // that is what it is: the clause is about a panel with nothing
+            // changing on it, and a live picture is something changing on it.
+            (true, _) => {
+                println!(
+                    "  so P-0072's first clause has stopped holding, and the reason is the \
+                     picture: there is a live engine frame in the Program bay, so every \
+                     one of those frames was asked for by the picture rather than by \
+                     anybody touching the window."
+                );
+                println!(
+                    "  that is {rate:.1} frames a second, against 0 with the engine out — \
+                     which is the whole of the difference, since what one frame costs is \
+                     below and did not change."
+                );
+                println!(
+                    "  it is P-0072's second clause from here — what moves declares its \
+                     price — and this is the price, measured. Nothing in this run \
+                     schedules, caches the panel to a texture or declares anything; the \
+                     number is what the next decision gets made on."
+                );
             }
-        );
+        }
 
         if !self.frames.is_empty() {
+            let mut engine: Vec<f64> = self.frames.iter().map(|c| ms(c.engine)).collect();
             let mut ui: Vec<f64> = self.frames.iter().map(|c| ms(c.ui)).collect();
             let mut paint: Vec<f64> = self.frames.iter().map(|c| ms(c.paint)).collect();
             // **Median, where the figure this replaces was a mean.** The mean
@@ -341,6 +407,7 @@ impl Costs {
             // is that one frame with two others attached.
             let mut allocs: Vec<u64> = self.frames.iter().map(|c| c.allocs).collect();
             let mut bytes: Vec<u64> = self.frames.iter().map(|c| c.bytes).collect();
+            engine.sort_by(f64::total_cmp);
             ui.sort_by(f64::total_cmp);
             paint.sort_by(f64::total_cmp);
             allocs.sort_unstable();
@@ -352,6 +419,12 @@ impl Costs {
                 "what a frame costs when something asks for one, over the {} drawn so far \
                  ({} sampled):",
                 self.drawn, n
+            );
+            println!(
+                "  engine pass  median {:.3} ms   p95 {:.3} ms   worst {:.3} ms",
+                engine[n / 2],
+                engine[n * 95 / 100],
+                engine[n - 1]
             );
             println!(
                 "  egui pass    median {:.3} ms   p95 {:.3} ms   worst {:.3} ms",
@@ -374,24 +447,43 @@ impl Costs {
                 bytes[n - 1] as f64 / 1024.0
             );
             println!(
-                "  that per-frame price is not what changed, and immediate mode pays it by \
-                 construction: ADR-0164 measured 184 allocations and 226.2 kB a frame here \
-                 with every bay empty. What changed is how many frames pay it — the loop \
-                 this replaces drew 180 whether or not anything was happening, which at \
-                 60 Hz is the three seconds above."
+                "  the whole frame is a median {:.3} ms, so at {:.1} frames a second the \
+                 loop is spending {:.1}% of a second drawing.",
+                engine[n / 2] + ui[n / 2] + paint[n / 2],
+                rate,
+                (engine[n / 2] + ui[n / 2] + paint[n / 2]) * rate / 10.0
             );
             println!(
-                "  taken here, on this window at {:.0}x{:.0} logical with every bay empty — \
-                 NOT at the workspace's reference workload (262144 elements at 1280x720, \
-                 docs/contributing.md §1), which this has nothing to do with. Host clock, \
-                 debug profile with dependencies at opt-level 3.",
-                WINDOW.0, WINDOW.1
+                "  that per-frame price is not what changed, and immediate mode pays it by \
+                 construction: ADR-0164 measured 184 allocations and 226.2 kB a frame here \
+                 with every bay empty, and the egui pass above is still that. What changed \
+                 is how many frames pay it — 0 with a still panel and nothing in the \
+                 Program bay, and the rate above with a picture in it."
+            );
+            println!(
+                "  the panel half is taken on this window at {:.0}x{:.0} logical with every \
+                 other bay empty, which is NOT the workspace's reference workload. The \
+                 engine half IS: one Set of {} elements at {}x{}, one step a frame, \
+                 letterboxed into the picture's region \
+                 (docs/contributing.md §1). Host clock, debug profile with dependencies \
+                 at opt-level 3.",
+                WINDOW.0, WINDOW.1, CAPACITY, CANVAS.0, CANVAS.1
             );
         }
         println!();
         println!(
-            "the loop is on `ControlFlow::Wait` from here: it does nothing at all until the \
-             window is touched or `egui` names a deadline of its own."
+            "{}",
+            match self.live {
+                true =>
+                    "the loop asks for the next frame from inside the last one for as long \
+                     as the picture is live, so `ControlFlow::Wait` never gets to block. \
+                     Fold the picture away (f over it) and it does — that is the same \
+                     window drawing nothing, and it is what P-0072's remaining clauses are \
+                     for.",
+                false =>
+                    "the loop is on `ControlFlow::Wait` from here: it does nothing at all \
+                     until the window is touched or `egui` names a deadline of its own.",
+            }
         );
         println!();
     }
@@ -681,6 +773,7 @@ impl Readout {
                     Kind::Bay { .. } => "bay".to_owned(),
                     Kind::Row => "row, no heading".to_owned(),
                     Kind::Pane => "pane, inside a bay".to_owned(),
+                    Kind::Picture => "the picture, a sink".to_owned(),
                 },
                 None => match layout.axis(node.id) {
                     Some(Axis::Row) => "split, left to right".to_owned(),
@@ -733,6 +826,208 @@ fn folding(folded: bool) -> &'static str {
 }
 
 // ---------------------------------------------------------------------------
+// The engine in the Program bay
+// ---------------------------------------------------------------------------
+
+/// The canvas: what the Set renders at, and what the deck is sized to.
+///
+/// **The workspace's reference workload**, 262144 elements at 1280x720
+/// (`docs/contributing.md` §1), and it is that on purpose rather than by
+/// default: this is the one place in the console where a number is about the
+/// engine rather than about the panel, and a number taken at the reference
+/// workload can be put beside every other one in this repository. **Not the
+/// size of the picture** — see [`Present::draw`], which letterboxes this into
+/// whatever it is drawn into, and which is what the manual means by *"it
+/// letterboxes into the width it has"*.
+const CANVAS: (u32, u32) = (1280, 720);
+
+/// `drift_shell.kir`'s own `capacity [4096, 1048576] = 262144`, written here
+/// because `Set::build` takes a number rather than reading the `.kir`'s
+/// default. The same number `karakuri-cli` runs by default, for the reason
+/// above.
+const CAPACITY: u32 = 262144;
+
+/// The seed salt, which decides where the elements start. Any value is a
+/// picture; 7 is the one `karakuri-cli`'s own tests use, so this looks like
+/// what they look like.
+const SEED_SALT: u32 = 7;
+
+/// **One simulation step per frame drawn, and no clock anywhere.**
+///
+/// [P-0002](../../../docs/principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md)
+/// says simulation time comes from a record and never from a clock. There is
+/// no record here — this is a panel harness, not a session — so the honest
+/// third option is neither: a fixed count per frame, which makes the picture's
+/// motion a function of frames drawn and of nothing else. It is not a
+/// performance, and a `karakuri-cli` that measured an interval and wrote a
+/// `tick` is what a performance is.
+const STEPS_A_FRAME: u8 = 1;
+
+/// What the picture is rendered in: an sRGB format, so the hardware does the
+/// one encode `Present`'s shader relies on ([P-0064](../../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md)).
+const PICTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+
+/// **The same texels, read as if they were not sRGB, which is how `egui` wants
+/// them.**
+///
+/// `egui`'s fragment shader says so outright — *"We expect 'normal' textures
+/// that are NOT sRGB-aware"* — and multiplies the sample by the vertex tint in
+/// gamma space. A view in [`PICTURE_FORMAT`] would have the hardware decode to
+/// linear on the way in and `egui` would then write those linear values into a
+/// gamma-space surface, which is a picture that comes out visibly dark with no
+/// error anywhere. So the render target is sRGB, the sampled view is this, and
+/// the encode still happens exactly once — in the present pass.
+const PICTURE_SAMPLED_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+
+/// **The engine behind the picture: a deck of one Set, the present pass, and
+/// the texture the two of them land in.**
+///
+/// Scaffolding, and it looks it: one slot, no audio, no MIDI, no store, no
+/// arguments. What `karakuri-cli` does around this is a program; what is here
+/// is the shortest path from two `.kir` files to texels, which is the whole of
+/// what the Program bay needs to be shown to be reachable.
+struct Engine {
+    deck: Deck,
+    present: Present,
+    /// The picture. Held because the views below are of it, and because
+    /// freeing the `egui` registration does not free this — `egui-wgpu` stores
+    /// a bind group for a registered native texture and no texture at all, so
+    /// dropping this is the only thing that releases the memory. Read only by
+    /// `mod gpu`, which asks it what size it came out, and that is the whole
+    /// of why the lint has to be told: the window does not read it and the
+    /// window is not what it is for.
+    #[allow(dead_code)]
+    texture: wgpu::Texture,
+    /// What [`Present::draw`] draws into: sRGB, so the encode is the
+    /// hardware's.
+    target: wgpu::TextureView,
+    /// The registration `egui` draws by, of a view in
+    /// [`PICTURE_SAMPLED_FORMAT`].
+    id: egui::TextureId,
+    /// The texture's size in physical pixels — **the picture region's**, not
+    /// the window's.
+    size: (u32, u32),
+    /// How many registrations have been freed. The atlas leak this exists to
+    /// prevent is invisible from outside: a resize that registers without
+    /// freeing leaves a bind group per drag frame and nothing says so, so the
+    /// count is kept and `mod gpu` asserts on it.
+    freed: usize,
+}
+
+impl Engine {
+    fn new(gpu: &Gpu, renderer: &mut egui_wgpu::Renderer, size: (u32, u32)) -> Engine {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let l1 = checked(&root.join("examples/drift_shell.kir"));
+        let l4 = checked(&root.join("examples/soft_points.kir"));
+        let set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, SEED_SALT)
+            .expect("the example pair builds a Set");
+        let deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], CANVAS.0, CANVAS.1);
+        let present = Present::new(&gpu.device, PICTURE_FORMAT, CANVAS.0, CANVAS.1);
+        let (texture, target, id) = picture(gpu, renderer, size);
+        Engine {
+            deck,
+            present,
+            texture,
+            target,
+            id,
+            size,
+            freed: 0,
+        }
+    }
+
+    /// **The picture's region is a different size, so the texture is remade at
+    /// that size and the registration it replaces is freed.**
+    ///
+    /// Returns whether anything was remade, which is `false` on all but a
+    /// handful of frames — every frame of a drag on the program's height is
+    /// one of them, and that is exactly the case the free is for. A
+    /// `register_native_texture` per dragged frame with no `free_texture`
+    /// beside it is a bind group and a sampler leaked per frame, for as long
+    /// as somebody keeps hold of a divider.
+    ///
+    /// A reallocation, so it is the frame's first act and not something done
+    /// mid-pass ([P-0001](../../../docs/principles/0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md)
+    /// is about the render thread, and this is that thread; what it costs is
+    /// paid on the frames a size changed and on no others).
+    fn fit(&mut self, gpu: &Gpu, renderer: &mut egui_wgpu::Renderer, size: (u32, u32)) -> bool {
+        if size == self.size {
+            return false;
+        }
+        renderer.free_texture(&self.id);
+        self.freed += 1;
+        let (texture, target, id) = picture(gpu, renderer, size);
+        self.texture = texture;
+        self.target = target;
+        self.id = id;
+        self.size = size;
+        true
+    }
+}
+
+/// The picture's texture, the view the engine draws into, and the
+/// registration `egui` reads it by. One function because the three are made
+/// together and are replaced together.
+fn picture(
+    gpu: &Gpu,
+    renderer: &mut egui_wgpu::Renderer,
+    size: (u32, u32),
+) -> (wgpu::Texture, wgpu::TextureView, egui::TextureId) {
+    let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("program view"),
+        size: wgpu::Extent3d {
+            width: size.0.max(1),
+            height: size.1.max(1),
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: PICTURE_FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        // Declared so the sampled view below may reinterpret it — the two
+        // formats differ only in whether the transfer function is applied.
+        view_formats: &[PICTURE_SAMPLED_FORMAT],
+    });
+    let target = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let sampled = texture.create_view(&wgpu::TextureViewDescriptor {
+        label: Some("program view, as egui reads it"),
+        format: Some(PICTURE_SAMPLED_FORMAT),
+        ..Default::default()
+    });
+    let id = renderer.register_native_texture(&gpu.device, &sampled, wgpu::FilterMode::Linear);
+    (texture, target, id)
+}
+
+/// A `.kir` off disk, parsed and checked — the two stages `Set::build` wants a
+/// `Checked` from, and no more. `karakuri-cli`'s `compile::load` is the same
+/// two with a cost estimate and a source it keeps; neither is wanted here.
+fn checked(path: &std::path::Path) -> karakuri_ir::typed::Checked {
+    let src = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let parsed = karakuri_ir::parse(&src)
+        .unwrap_or_else(|e| panic!("{}:\n{}", path.display(), rendered(&e, &src)));
+    karakuri_ir::check::check(&parsed)
+        .unwrap_or_else(|e| panic!("{}:\n{}", path.display(), rendered(&e, &src)))
+}
+
+fn rendered(errors: &[karakuri_ir::IrError], src: &str) -> String {
+    errors
+        .iter()
+        .map(|e| e.render(src))
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+/// A rectangle in logical pixels, in physical ones. **The picture's texture is
+/// sized from this and from nothing else**, which is what makes it the
+/// region's size rather than the window's.
+fn physical(rect: egui::Rect, scale: f32) -> (u32, u32) {
+    (
+        ((rect.width() * scale).round() as u32).max(1),
+        ((rect.height() * scale).round() as u32).max(1),
+    )
+}
+
+// ---------------------------------------------------------------------------
 // The window
 // ---------------------------------------------------------------------------
 
@@ -782,6 +1077,11 @@ struct Gfx {
     config: wgpu::SurfaceConfiguration,
     egui: egui_winit::State,
     renderer: egui_wgpu::Renderer,
+    /// **The engine, on the same device as the panel.** It lives beside the
+    /// renderer rather than beside the model because everything in it takes a
+    /// device: that is the seam `karakuri-console` keeps, and this is the side
+    /// of it that is allowed one.
+    engine: Engine,
 }
 
 struct App {
@@ -920,6 +1220,18 @@ impl ApplicationHandler for App {
             size.width as f32 / self.scale as f32,
             size.height as f32 / self.scale as f32,
         );
+
+        // The picture's first size is the region's, at the window this opened
+        // at — not the window's, and not a guess that the first frame then
+        // corrects. `fit` takes it from here on.
+        let mut renderer = renderer;
+        self.readout.panel.solve();
+        let first = picture_rect(self.readout.panel.layout())
+            .map(|rect| physical(rect, self.scale as f32))
+            .unwrap_or((1, 1));
+        let engine = Engine::new(&gpu, &mut renderer, first);
+        self.costs.live = true;
+
         self.readout.print_legend();
 
         // The first frame is owed to the window appearing, not drawn on a
@@ -933,6 +1245,7 @@ impl ApplicationHandler for App {
             config,
             egui,
             renderer,
+            engine,
         });
     }
 
@@ -1170,6 +1483,32 @@ impl ApplicationHandler for App {
 
                 let mut cost = Cost::default();
 
+                // -- where the picture goes, and how big it is ---------
+                // **Before the `egui` pass**, because the pass draws the
+                // texture and a texture registered after it would be a frame
+                // behind. The rectangle and the texture's size are the same
+                // statement: one call to `picture_rect`, one conversion to
+                // physical pixels, and both the region's rather than the
+                // window's.
+                self.readout.panel.solve();
+                self.readout.view.picture = match picture_rect(self.readout.panel.layout()) {
+                    Some(rect) => {
+                        gfx.engine.fit(
+                            &gfx.gpu,
+                            &mut gfx.renderer,
+                            physical(rect, self.scale as f32),
+                        );
+                        Some(Picture {
+                            id: gfx.engine.id,
+                            rect,
+                        })
+                    }
+                    // Folded away: no rectangle, so no picture is drawn
+                    // and — see below — no pass is recorded for one
+                    // either.
+                    None => None,
+                };
+
                 // -- the egui pass -------------------------------------
                 let started = Instant::now();
                 let (allocs, bytes) = counted();
@@ -1202,6 +1541,48 @@ impl ApplicationHandler for App {
                 gfx.egui
                     .handle_platform_output(&gfx.window, output.platform_output);
 
+                // -- the engine's pass, and it is first -----------------
+                //
+                // **One encoder and one submission, engine before panel.**
+                // The encoder is the deck frame's, which is the only encoder
+                // `karakuri-engine` will record a Set into — `Frame::encoder`
+                // exists precisely so that a caller's own further work belongs
+                // to the frame that produced it, and the present pass and a
+                // readback in `karakuri-cli` are already recorded through it.
+                // The panel's pass goes in after, so the picture is written
+                // and then sampled inside one command buffer and `wgpu`
+                // places the barrier between them.
+                //
+                // The alternative — an encoder of this file's own, submitted
+                // beside the deck's — is two submissions whose order is the
+                // queue's business rather than this file's, over a texture
+                // that is a colour attachment in one and a sampled resource in
+                // the other. It would work today and it would be a race
+                // nobody wrote down.
+                let started = Instant::now();
+                let mut drawing = gfx.engine.deck.begin_frame(&gfx.gpu.device, &gfx.gpu.queue);
+                // Rendered even where the picture is folded away, and that is
+                // not the manual's *"no state where it is hidden and still
+                // costing a pass"* being broken: the deck's own render is what
+                // steps the simulation, and only the present pass into the
+                // picture is skipped. Turning the deck off with the sink is
+                // the sink's decision to make and there is no sink here yet.
+                drawing.render(
+                    gfx.engine.present.hdr_view(),
+                    gfx.engine.present.size(),
+                    STEPS_A_FRAME,
+                );
+                if self.readout.view.picture.is_some() {
+                    // The canvas, letterboxed into the picture's rectangle —
+                    // `Present::draw` does the fitting, which is the manual's
+                    // *"it letterboxes into the width it has"* and is why
+                    // nothing in this file computes an aspect ratio.
+                    gfx.engine
+                        .present
+                        .draw(drawing.encoder(), &gfx.engine.target, gfx.engine.size);
+                }
+                cost.engine = started.elapsed();
+
                 // -- the wgpu pass -------------------------------------
                 let started = Instant::now();
                 let screen = egui_wgpu::ScreenDescriptor {
@@ -1217,16 +1598,10 @@ impl ApplicationHandler for App {
                             .update_texture(&gfx.gpu.device, &gfx.gpu.queue, *id, delta);
                     }
                 }
-                let mut encoder =
-                    gfx.gpu
-                        .device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("console"),
-                        });
                 let user = gfx.renderer.update_buffers(
                     &gfx.gpu.device,
                     &gfx.gpu.queue,
-                    &mut encoder,
+                    drawing.encoder(),
                     &primitives,
                     &screen,
                 );
@@ -1234,25 +1609,27 @@ impl ApplicationHandler for App {
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
                 {
-                    let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("console"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &view_target,
-                            depth_slice: None,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                // The console's own ground is painted by the
-                                // central panel; this only matters for the
-                                // frame before the first one lands.
-                                load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                                store: wgpu::StoreOp::Store,
-                            },
-                        })],
-                        depth_stencil_attachment: None,
-                        timestamp_writes: None,
-                        occlusion_query_set: None,
-                        multiview_mask: None,
-                    });
+                    let pass = drawing
+                        .encoder()
+                        .begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("console"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: &view_target,
+                                depth_slice: None,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    // The console's own ground is painted by
+                                    // the central panel; this only matters for
+                                    // the frame before the first one lands.
+                                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                                    store: wgpu::StoreOp::Store,
+                                },
+                            })],
+                            depth_stencil_attachment: None,
+                            timestamp_writes: None,
+                            occlusion_query_set: None,
+                            multiview_mask: None,
+                        });
                     gfx.renderer
                         .render(&mut pass.forget_lifetime(), &primitives, &screen);
                 }
@@ -1264,21 +1641,48 @@ impl ApplicationHandler for App {
                 // on macOS is an abort rather than an error. Every delta above
                 // has been handed to the renderer, so this says so.
                 output.textures_delta.clear();
-                gfx.gpu
-                    .queue
-                    .submit(user.into_iter().chain([encoder.finish()]));
+                // **`update_buffers` hands back a command buffer per `egui`
+                // paint callback that asked for one**, and this console
+                // registers no paint callbacks — the picture is a registered
+                // texture drawn as an image, not a callback. So this is empty,
+                // and an empty submission is skipped rather than made. It is
+                // not dropped: a callback's prepared work submitted after the
+                // pass that reads it would be a frame behind, so if one ever
+                // appears it goes in ahead, and the engine and the panel stay
+                // in the one submission below.
+                if !user.is_empty() {
+                    gfx.gpu.queue.submit(user);
+                }
+                // The one submission: the deck's passes, the present pass into
+                // the picture, and the panel's pass over the window, in the
+                // order they were recorded.
+                drawing.finish();
                 cost.paint = started.elapsed();
 
                 gfx.gpu.queue.present(frame);
 
                 self.costs.push(cost);
-                // **Nothing here asks for another frame.** The loop this
-                // replaces did, until its sample was full, and that was the
-                // whole of what made the 180-frame measurement possible; it is
-                // also exactly the per-frame work P-0072's first clause
-                // forbids. What is left is `egui`'s own request, honoured with
-                // its delay.
                 App::wants(gfx, &mut self.egui_due, &mut self.costs, asked);
+                // **The picture is live, so the next frame is asked for here
+                // — and asked for without `Costs::owes`.**
+                //
+                // Nothing used to ask for a frame at this point, and that was
+                // P-0072's first clause holding: a panel with nothing changing
+                // on it drew nothing. A picture that moves is something
+                // changing on it, so the clause stops holding the moment the
+                // engine runs — which is expected, is what the rest of P-0072
+                // exists for, and is **not fixed here**. There is no scheduler
+                // in this file, the panel is not cached to a texture, and
+                // `karakuri_console::repaint` has not been given a fourth
+                // answer.
+                //
+                // What is done instead is to make the price visible.
+                // `Costs::owes` is deliberately not called, so every frame the
+                // picture asks for lands in the still-panel reading as what it
+                // is: a frame drawn on a window nobody touched. The reading
+                // then prints the rate rather than the zero, and the next
+                // decision gets made on a number.
+                gfx.window.request_redraw();
             }
             _ => App::to_egui(gfx, &mut self.costs, &event),
         }
@@ -1456,6 +1860,324 @@ mod gpu {
     //! The console, through `egui`, through `wgpu` 30, onto a real device.
 
     use super::*;
+
+    /// **ADR-0155's other half, as an assertion: the engine's texels reach the
+    /// panel.**
+    ///
+    /// The first half — `egui` and `karakuri-engine` resolving one `wgpu` and
+    /// sharing one `Device` — is what
+    /// `egui_paints_the_console_onto_a_device` below settles. This is the
+    /// question that was left: a Set is built, a deck frame is rendered, the
+    /// present pass letterboxes the canvas into the picture's rectangle, and
+    /// the panel's own pass samples that texture — **all into one command
+    /// encoder and one submission, engine first** — and what lands in the
+    /// window is read back.
+    ///
+    /// # Why the assertion is "lit" and not "not the bay's colour"
+    ///
+    /// A picture that never had anything drawn into it is black, and black is
+    /// already not `--c-panel`. So "the picture is not the card" passes for a
+    /// texture that was registered, sampled and never rendered — which is
+    /// exactly what the ordering defect produces: record the panel's pass
+    /// before the engine's and the frame samples an empty texture, with no
+    /// complaint from anywhere. **The particles are the evidence**, so the
+    /// count of lit texels inside the picture is what is asserted, and the two
+    /// controls beside it — the bay's own body, and the deck preview row —
+    /// say the picture stayed in its region.
+    #[test]
+    fn the_engines_frame_reaches_the_picture_in_the_program_bay() {
+        // Gamma space, and 1408 rather than 1440 because
+        // `copy_texture_to_buffer` wants `bytes_per_row` a multiple of 256.
+        const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+        const W: u32 = 1408;
+        const H: u32 = 900;
+        const ROOM: Room = Room::Night;
+
+        let gpu = Gpu::headless().expect("no GPU");
+        let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("program probe"),
+            size: wgpu::Extent3d {
+                width: W,
+                height: H,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let target_view = target.create_view(&wgpu::TextureViewDescriptor::default());
+        let mut renderer =
+            egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
+
+        let mut panel = Panel::new(W as f32, H as f32);
+        panel.solve();
+        let rect = picture_rect(panel.layout()).expect("the picture is on screen");
+        let mut engine = Engine::new(&gpu, &mut renderer, physical(rect, 1.0));
+
+        let mut view = View::new(ROOM);
+        view.picture = Some(Picture {
+            id: engine.id,
+            rect,
+        });
+
+        let ctx = egui::Context::default();
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(W as f32, H as f32),
+            )),
+            ..Default::default()
+        };
+        let mut output = ctx.run_ui(input, |ui| view.draw(ui, &mut panel));
+        let primitives = ctx.tessellate(output.shapes, output.pixels_per_point);
+        let screen = egui_wgpu::ScreenDescriptor {
+            size_in_pixels: [W, H],
+            pixels_per_point: 1.0,
+        };
+        for (id, deltas) in &output.textures_delta.set {
+            for delta in deltas {
+                renderer.update_texture(&gpu.device, &gpu.queue, *id, delta);
+            }
+        }
+
+        // **The frame, in the order the window loop records it**: the deck's
+        // encoder, the deck's render, the present pass into the picture, then
+        // the panel over the top of all of it — one encoder, one submission.
+        let mut drawing = engine.deck.begin_frame(&gpu.device, &gpu.queue);
+        drawing.render(
+            engine.present.hdr_view(),
+            engine.present.size(),
+            STEPS_A_FRAME,
+        );
+        engine
+            .present
+            .draw(drawing.encoder(), &engine.target, engine.size);
+        let user = renderer.update_buffers(
+            &gpu.device,
+            &gpu.queue,
+            drawing.encoder(),
+            &primitives,
+            &screen,
+        );
+        {
+            let pass = drawing
+                .encoder()
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("program probe"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &target_view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+            renderer.render(&mut pass.forget_lifetime(), &primitives, &screen);
+        }
+        for id in &output.textures_delta.free {
+            renderer.free_texture(id);
+        }
+        output.textures_delta.clear();
+
+        let row = W * 4;
+        let readback = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("program probe"),
+            size: (row * H) as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        drawing.encoder().copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &target,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(row),
+                    rows_per_image: Some(H),
+                },
+            },
+            wgpu::Extent3d {
+                width: W,
+                height: H,
+                depth_or_array_layers: 1,
+            },
+        );
+        assert!(
+            user.is_empty(),
+            "a paint callback appeared: it has to be submitted ahead of the pass"
+        );
+        drawing.finish();
+
+        readback.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+        gpu.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("the device stopped");
+        let texels = readback.slice(..).get_mapped_range().expect("readback");
+        let at = |x: u32, y: u32| {
+            let i = (y * row + x * 4) as usize;
+            [texels[i], texels[i + 1], texels[i + 2]]
+        };
+        let brightest = |rgb: [u8; 3]| rgb.into_iter().max().unwrap_or(0);
+
+        // **The picture, and it is lit.** Every texel of the region the
+        // rectangle names, counted rather than sampled: the material is
+        // additive points on a black clear, so a handful of rows through the
+        // middle could miss and a count cannot.
+        // Two counts over every texel of the region, rather than a handful of
+        // samples through the middle: the material is additive points on a
+        // black clear, so a row that missed would say nothing and a count
+        // cannot.
+        //
+        // **Dark** is the present pass's own clear — the letterbox bars, and
+        // the empty sky between the particles — and it is what the bay's card
+        // is not: `--c-panel` at night is `#17142a`, whose brightest channel
+        // is 42. It is the half the ordering defect fails, and it fails it
+        // completely rather than by a margin: an unwritten texture is
+        // `rgba(0, 0, 0, 0)` and `egui` blends premultiplied, so a picture
+        // sampled before it was drawn is not black — it is *transparent*, and
+        // the card shows through every texel of it. Recording the panel's pass
+        // before the engine's, and leaving the present pass out altogether,
+        // both read here as **zero** dark texels.
+        //
+        // **Bright** is the particles, well past anything the panel draws. It
+        // is the control on the fixture, in the sense `karakuri-cli`'s frame
+        // tests use: a picture that is opaque and empty — a deck compositing
+        // nothing — is all dark and no bright, and would satisfy the first
+        // count while showing an operator a black rectangle.
+        let mut dark = 0usize;
+        let mut bright = 0usize;
+        let mut inside = 0usize;
+        for y in rect.min.y as u32..rect.max.y as u32 {
+            for x in rect.min.x as u32..rect.max.x as u32 {
+                inside += 1;
+                match brightest(at(x, y)) {
+                    b if b <= 8 => dark += 1,
+                    b if b >= 192 => bright += 1,
+                    _ => {}
+                }
+            }
+        }
+        assert!(
+            dark * 2 > inside,
+            "only {dark} of {inside} texels in the picture are darker than anything the \
+             panel draws — the picture is the bay's card, so the engine's texture never \
+             reached it"
+        );
+        assert!(
+            bright * 100 > inside,
+            "{bright} of {inside} texels in the picture are lit — the picture reached the \
+             panel and there is nothing in it, so the deck composited nothing and this \
+             would pass over a black rectangle"
+        );
+
+        // **And it stayed in its region.** Two controls, because a picture
+        // drawn over the whole window would satisfy the count above: the deck
+        // preview row under it is still the bay's card, and so is a bay the
+        // Program is nowhere near.
+        let pal = ROOM.palette();
+        let panel_rgb = [pal.panel.r(), pal.panel.g(), pal.panel.b()];
+        let previews = panel
+            .layout()
+            .rect(panel.layout().find("deck-previews").expect("previews"));
+        assert_eq!(
+            at(
+                (previews.x + previews.w * 0.5) as u32,
+                (previews.y + previews.h * 0.5) as u32
+            ),
+            panel_rgb,
+            "the picture painted over the deck previews, which are not its region"
+        );
+        let library = panel
+            .layout()
+            .rect(panel.layout().find("library").expect("library"));
+        assert_eq!(
+            at(
+                (library.x + library.w * 0.5) as u32,
+                (library.y + library.h * 0.5) as u32
+            ),
+            panel_rgb,
+            "the picture reached the Library bay"
+        );
+    }
+
+    /// **The picture's texture is the size of its region, and a resize frees
+    /// the registration it replaces.**
+    ///
+    /// Two claims that fail the same silent way. A texture sized from the
+    /// window looks perfectly correct — the picture fills whatever rectangle
+    /// it is given — and is wrong by however much the panel is not the
+    /// picture, which here is most of it. And a `register_native_texture` with
+    /// no `free_texture` beside it leaks a bind group and a sampler per remade
+    /// frame: every frame of a drag on the program's height is one, and
+    /// nothing on screen or in a log says a word about it.
+    #[test]
+    fn the_pictures_texture_is_its_regions_size_and_a_resize_frees_the_old_one() {
+        const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+        const W: u32 = 1440;
+        const H: u32 = 900;
+
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer =
+            egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
+
+        let mut panel = Panel::new(W as f32, H as f32);
+        panel.solve();
+        let rect = picture_rect(panel.layout()).expect("on screen");
+        let want = physical(rect, 1.0);
+        let mut engine = Engine::new(&gpu, &mut renderer, want);
+
+        // The region's, in both axes, and **neither of them is the window's**
+        // — the picture is narrower than the window by both panes and taller
+        // by nothing like the window's height.
+        assert_eq!((engine.texture.width(), engine.texture.height()), want);
+        assert_ne!(engine.size, (W, H));
+        assert!(engine.size.0 < W && engine.size.1 < H / 2);
+        assert!(renderer.texture(&engine.id).is_some());
+
+        // A wider window is a wider picture and the same height, which is the
+        // arrangement's "sized by height" arriving at the texture.
+        let was = engine.id;
+        panel.set_viewport(W as f32 + 400.0, H as f32);
+        panel.solve();
+        let grown = physical(picture_rect(panel.layout()).expect("on screen"), 1.0);
+        assert_eq!(grown.1, want.1, "the height followed the window");
+        assert_ne!(grown.0, want.0);
+
+        assert!(
+            engine.fit(&gpu, &mut renderer, grown),
+            "a region that changed size did not remake the texture"
+        );
+        assert_eq!(engine.size, grown);
+        assert_eq!((engine.texture.width(), engine.texture.height()), grown);
+        assert_ne!(engine.id, was);
+        assert!(renderer.texture(&engine.id).is_some());
+        assert!(
+            renderer.texture(&was).is_none(),
+            "the registration the resize replaced is still in the atlas, so the atlas \
+             grows once per dragged frame"
+        );
+        assert_eq!(engine.freed, 1);
+
+        // And a frame where nothing moved remakes nothing, which is what keeps
+        // all of the above on the resize path instead of on every frame.
+        assert!(!engine.fit(&gpu, &mut renderer, grown));
+        assert_eq!(engine.freed, 1);
+        assert!(renderer.texture(&engine.id).is_some());
+    }
 
     /// **ADR-0155's bet, as an assertion.**
     ///

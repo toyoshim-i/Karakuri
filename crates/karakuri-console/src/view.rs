@@ -15,6 +15,13 @@
 //! and the next person to open the panel should be in no doubt about what
 //! exists.
 //!
+//! **One body is not empty, and it is not an exception to that.** The Program
+//! bay's picture is a [`Kind::Picture`], and what it draws is a texture handed
+//! in from outside — real texels off a real device, not a mock-up of some. It
+//! draws nothing at all when there is no texture, which is what the row of
+//! deck previews beside it still does and what every other body does. See
+//! [`Picture`] and [`picture_rect`].
+//!
 //! The transport and the outputs are **rows, not bays**: they carry no
 //! heading, because they have none in the mock — both carry `class="bay"`,
 //! which is the card styling, and neither carries a `.bay-head`
@@ -43,6 +50,15 @@ use karakuri_layout::{Axis, Hit, NodeId};
 
 use crate::panel::{Panel, GRAB};
 use crate::room::{size, Palette, Room};
+
+/// The whole of a texture, in `egui`'s texture coordinates. The picture fills
+/// its rectangle: the fitting happened when the engine drew into it, and doing
+/// it again here would be two answers to *how does a 16:9 canvas sit in this
+/// box*.
+const WHOLE_TEXTURE: Rect = Rect {
+    min: Pos2::new(0.0, 0.0),
+    max: Pos2::new(1.0, 1.0),
+};
 
 /// What the console draws in a region — the third thing about a region, after
 /// its name and its rectangle, and the only one this module owns.
@@ -73,8 +89,24 @@ pub enum Kind {
     /// (ADR-0159).
     Row,
     /// One subdivision of a bay, which has no head of its own because the bay
-    /// around it has one. The inspector's two panes.
+    /// around it has one. The inspector's two panes, and the row of deck
+    /// previews under the picture.
     Pane,
+    /// **The one region a texture is drawn into**: the picture in the Program
+    /// bay, which is a sink and whose texels somebody else rendered.
+    ///
+    /// A pane in every other respect — it is inside the Program bay's card and
+    /// has no head of its own — and it is a kind of its own for one reason:
+    /// [`View::draw`] has to know *which* pane the picture goes in, and the
+    /// alternative is comparing a name in the frame path, which puts a string
+    /// where the table already says what a region is.
+    ///
+    /// **It carries no label**, and the manual says why: *"The picture carries
+    /// no label of its own. The bay head already says Program, and this is a
+    /// region somebody may be capturing: a capture that is neither the canvas
+    /// nor a clean crop of it is worse than useless, and a word burnt into the
+    /// corner is exactly that."*
+    Picture,
 }
 
 /// One region of the console: the name the arrangement knows it by, and what
@@ -130,6 +162,14 @@ pub const REGIONS: &[Region] = &[
             pills: &["solo"],
             grip: true,
         },
+    },
+    Region {
+        name: "program-view",
+        kind: Kind::Picture,
+    },
+    Region {
+        name: "deck-previews",
+        kind: Kind::Pane,
     },
     Region {
         name: "inspector",
@@ -220,10 +260,95 @@ pub fn plan_into(panel: &mut Panel, out: &mut Vec<Placed>) {
     }
 }
 
+/// **A picture to draw in the Program bay: a texture somebody else rendered,
+/// and where it goes.**
+///
+/// The id is `egui`'s, which means it has already been registered with an
+/// [`egui_wgpu::Renderer`](crate::egui_wgpu::Renderer) — and that registration
+/// needs a device, which is exactly what this crate does not have. So the
+/// caller does it and hands the result over; this module draws an id and a
+/// rectangle and knows nothing about either. It is the same seam the whole
+/// crate is built on, one level in: `src/` reads and paints, and everything
+/// that takes a device is the example's.
+///
+/// **The rectangle is passed rather than looked up**, and that is what makes
+/// the pair checkable: whoever sized the texture and whoever placed it are the
+/// same statement, so a texture sized from the window and drawn into the
+/// picture's region cannot be written by accident. [`picture_rect`] is what a
+/// caller derives both from.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Picture {
+    /// The registered texture. Whatever it holds is drawn as-is: the console
+    /// tints it with nothing.
+    pub id: egui::TextureId,
+    /// Where to draw it, in the same logical pixels the arrangement is stated
+    /// in — [`picture_rect`]'s answer for the frame this is being drawn on.
+    pub rect: Rect,
+}
+
+/// **Where the picture goes**: inside the `program-view` region, below the bay
+/// head that is painted over the top of it and inside `.program-body`'s
+/// padding.
+///
+/// `None` where there is no picture to draw, which is the manual's *"it is on
+/// screen exactly when that sink is on — so there is no state where it is
+/// hidden and still costing a pass"*: a caller that renders into this
+/// rectangle records no pass at all when there is no rectangle. A folded
+/// picture is the case that matters and it is not a case of its own — see the
+/// note in the body.
+///
+/// # The insets are the bay's own derivation, read backwards
+///
+/// The arrangement gives `program-view` 27 + 9 + 262 at the mock's width — bay
+/// head, `.program-body`'s padding above the picture, and the 16:9 picture
+/// itself. So the picture is that region less [`size::HEAD_H`] and one
+/// [`size::PROGRAM_BODY_PAD`] at the top, less a pad either side, and **less
+/// nothing at the bottom**: the 9 under the picture in the CSS is the gap
+/// between it and the previews, which is the split's divider, and the other 9
+/// is under the preview row and belongs to `deck-previews`.
+///
+/// At the narrowest console the mock will draw this is exactly 466 x 262,
+/// which is 16:9. At any wider window it is wider than 16:9 and the picture
+/// letterboxes into it, which is the engine's job and not this crate's.
+///
+/// `layout` must be solved: `Layout::rect` refuses to answer from a dirty one.
+pub fn picture_rect(layout: &karakuri_layout::Layout) -> Option<Rect> {
+    let id = layout.find("program-view")?;
+    let region = to_egui(layout.rect(id));
+    let rect = Rect::from_min_max(
+        Pos2::new(
+            region.min.x + size::PROGRAM_BODY_PAD,
+            region.min.y + size::HEAD_H + size::PROGRAM_BODY_PAD,
+        ),
+        Pos2::new(region.max.x - size::PROGRAM_BODY_PAD, region.max.y),
+    );
+    // **One rule, and it is the size rather than the visibility.** A folded
+    // region keeps its rectangle and loses its extent along its parent's axis,
+    // and so does one inside a fold and one a solo left out — so `visible`
+    // would be a second answer to a question this already asks, and the two
+    // would agree until somebody found the case where they did not. What is
+    // left over is the case `visible` never covered anyway: the inset is
+    // bigger than the region, which is a rectangle `egui` draws inside out
+    // rather than refuses.
+    match rect.width() > 0.0 && rect.height() > 0.0 {
+        true => Some(rect),
+        false => None,
+    }
+}
+
 /// The console's view: which room it is in, and the frame's plan, kept so a
 /// frame does not allocate one.
 pub struct View {
     pub room: Room,
+    /// **What to draw in the Program bay's picture this frame**, or `None` for
+    /// a console with no engine behind it — which is every test in this crate
+    /// and the whole of what `cargo test -p karakuri-console` sees.
+    ///
+    /// Set per frame by whoever owns the device, because that is who knows
+    /// whether the texture it names is still the right size. A stale id here
+    /// is a freed registration, so it is written beside the frame that made it
+    /// rather than kept.
+    pub picture: Option<Picture>,
     placed: Vec<Placed>,
 }
 
@@ -231,6 +356,7 @@ impl View {
     pub fn new(room: Room) -> View {
         View {
             room,
+            picture: None,
             // Every region the console has, so the frame path never grows it.
             placed: Vec::with_capacity(REGIONS.len()),
         }
@@ -243,6 +369,7 @@ impl View {
         self.cursor(ui.ctx(), panel);
         plan_into(panel, &mut self.placed);
 
+        let picture = self.picture;
         let frame = egui::Frame::NONE.fill(pal.ground);
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
             for placed in &self.placed {
@@ -262,6 +389,24 @@ impl View {
                     // inside the bay's — and no head, and its body is as empty
                     // as every other body in this pass.
                     Kind::Pane => {}
+                    // The one body that is not empty, because its texels are
+                    // not this crate's to invent: a texture is there or it is
+                    // not, and where it is not the bay's card shows through
+                    // exactly as every other empty body does. No placeholder,
+                    // for the reason this module's documentation gives.
+                    Kind::Picture => {
+                        if let Some(picture) = picture {
+                            // Clipped to the region: the rectangle came from
+                            // outside, and a stale one is a picture painted
+                            // over the inspector rather than a wrong picture.
+                            ui.painter().with_clip_rect(rect).image(
+                                picture.id,
+                                picture.rect,
+                                WHOLE_TEXTURE,
+                                Color32::WHITE,
+                            );
+                        }
+                    }
                 }
             }
         });
