@@ -16,11 +16,8 @@
 
 use std::path::Path;
 
-use karakuri_engine::{Deck, Gpu, Present};
-
-use crate::frame::{Committed, Sink, Skip};
-
-use crate::Look;
+use karakuri_engine::frame::{self, Committed, Sink, Skip};
+use karakuri_engine::{Deck, Gpu, Look, Present};
 
 /// Rows in a texture-to-buffer copy must be a multiple of this.
 const COPY_ALIGN: u32 = 256;
@@ -258,7 +255,7 @@ impl Sink for PngSink {
 /// the frame index and the deck, applies whatever the stream says belongs
 /// before that frame, and returns what to advance by and under what look.
 ///
-/// **The loop itself is [`crate::frame::compose`]**, which is also what the
+/// **The loop itself is [`frame::compose`]**, which is also what the
 /// window runs. This function is now the offscreen half of the seam and nothing
 /// else: a sink, a driver, and the decision to stop after `frames`.
 fn sequence_driven(
@@ -283,7 +280,7 @@ fn sequence_driven(
         let mut refusal = None;
         let outcome = {
             let mut sinks: [&mut dyn Sink; 1] = [&mut sink];
-            crate::frame::compose(
+            frame::compose(
                 gpu,
                 deck,
                 &present,

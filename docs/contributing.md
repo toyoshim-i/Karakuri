@@ -190,7 +190,7 @@ cargo test -p karakuri-cli         # flags, replay, MCP, live save (needs a GPU)
 ```
 
 **Two crates take a device, not one.** Most of `karakuri-engine`'s integration suites do,
-and so does part of `karakuri-cli`: eleven tests in the binary build a Set, and the five in
+and so does part of `karakuri-cli`: eight tests in the binary build a Set, and the five in
 `tests/replay.rs` drive `karakuri-cli` as a subprocess, which takes a device of its own. The
 other six crates are pure CPU.
 

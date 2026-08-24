@@ -27,7 +27,7 @@ Why each is the way it is — and what was rejected to get there — is in
 
 ## 2. Workspace & Crate Architecture
 
-Karakuri is structured as a Cargo workspace with 8 dedicated crates under [crates/](../crates):
+Karakuri is structured as a Cargo workspace with 10 dedicated crates under [crates/](../crates):
 
 ```mermaid
 graph TD
@@ -37,6 +37,9 @@ graph TD
     CLI --> STORE[karakuri-store]
     CLI --> IR[karakuri-ir]
     CLI --> SIGNAL[karakuri-signal]
+
+    CONSOLE[karakuri-console] --> LAYOUT[karakuri-layout]
+    CONSOLE -.->|example only| ENGINE
 
     ENGINE --> CODEGEN[karakuri-codegen]
     ENGINE --> IR
@@ -53,12 +56,14 @@ graph TD
 |---|---|---|
 | [karakuri-ir](../crates/karakuri-ir) | `crates/karakuri-ir` | DSL (`.kir`) parsing, lexing, type checking, contract verification, and static cost estimation |
 | [karakuri-codegen](../crates/karakuri-codegen) | `crates/karakuri-codegen` | WGSL shader code generation from typed AST (`Checked`), uniform struct layout computation |
-| [karakuri-engine](../crates/karakuri-engine) | `crates/karakuri-engine` | `wgpu` pipeline management, `Deck`/`Set` composition, `HotSwap`, `Governor`, OIT, `Present` |
+| [karakuri-engine](../crates/karakuri-engine) | `crates/karakuri-engine` | `wgpu` pipeline management, `Deck`/`Set` composition, `HotSwap`, `Governor`, OIT, `Present`, and the one frame loop (`compose` over a slice of `Sink`s) |
 | [karakuri-signal](../crates/karakuri-signal) | `crates/karakuri-signal` | Complete signal bus (`SignalBus`), signal `confidence` tracking, local `Oscillator` |
 | [karakuri-audio](../crates/karakuri-audio) | `crates/karakuri-audio` | Real-time audio capture (`cpal`), FFT band analysis, beat tracking, latency offset management |
 | [karakuri-midi](../crates/karakuri-midi) | `crates/karakuri-midi` | MIDI input event parsing and signal/parameter binding |
 | [karakuri-store](../crates/karakuri-store) | `crates/karakuri-store` | Content-addressed artifact storage (keyed by `.kir` hash), `.set` files, `.ndjson` session logs |
-| [karakuri-cli](../crates/karakuri-cli) | `crates/karakuri-cli` | Application entry point, `winit` event loop, hot-reloading watcher, MCP server integration |
+| [karakuri-layout](../crates/karakuri-layout) | `crates/karakuri-layout` | The console's arrangement as arithmetic: views and splits with a size, a minimum and a maximum each, solved to rectangles. No toolkit, no device, no window (ADR-0156) |
+| [karakuri-console](../crates/karakuri-console) | `crates/karakuri-console` | The console: its arrangement, the panel model a pointer and a keyboard act on, and the `egui` view. **The destination the CLI is scaffolding for** — `src/` still takes no device, and the window is `examples/panel.rs`'s |
+| [karakuri-cli](../crates/karakuri-cli) | `crates/karakuri-cli` | V1 entry point, and **scaffolding rather than the destination** (`README.md`): flag parsing, the `winit` event loop, the clock, session recording and replay, the PNG writer, the hot-reloading watcher, MCP server integration |
 
 ### Repository Layout
 
@@ -73,7 +78,9 @@ crates/
   karakuri-audio/     input device, analysis, tempo tracking, the beat lock
   karakuri-midi/      wire messages, and the operator's map of them
   karakuri-store/     content-addressed artifact store, ndjson I/O
-  karakuri-cli/       V1 entry point
+  karakuri-layout/    the console's arrangement, solved to rectangles
+  karakuri-console/   the console: arrangement, panel model, and the egui view
+  karakuri-cli/       V1 entry point, and scaffolding rather than the destination
 .githooks/            pre-commit: `cargo fmt --check` on what is staged
                       pre-push:   fmt, clippy and every test
                       enable with `git config core.hooksPath .githooks`
@@ -83,6 +90,8 @@ docs/
   contributing.md     engineering principles, build/test commands, and verification rules
   ir-spec.md          the IR. Settled; open questions are empty
   manual.md           how to play it: flags, keys, and what each does
+  manual/             the console's manual, published — the seven rules, the
+                      words, the console region by region, every operation
   plugins.md          out-of-process helpers, and why they are out of process
   principles/         the rules in force, one per file — current only
   roadmap.md          where this goes after V1
@@ -172,9 +181,10 @@ sequenceDiagram
 
 ### 4.3 karakuri-engine
 
-- **Purpose**: `wgpu` pipeline management, render graph execution, and compositing.
+- **Purpose**: `wgpu` pipeline management, render graph execution, compositing, and the one frame loop every output is driven from.
 - **Key Modules**:
   - `deck.rs`: Manages up to 4 deck slots and composites them using `add`, `over`, or `max` blend modes.
+  - `frame.rs`: The one frame loop — `compose` asks every `Sink` for a target, commits, renders the deck, and draws into and presents the sinks that answered. `WindowSink` is the default one.
   - `set.rs`: Manages a node graph (`Set`) representing a complete visual scene.
   - `swap.rs`: `HotSwap` state machine for safe pipeline transitions.
   - `governor.rs`: Tracks frame execution budget (`budget_ms`) and enforces rollbacks.
