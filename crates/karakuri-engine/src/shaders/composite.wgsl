@@ -190,6 +190,43 @@ fn layer(acc: vec4<f32>, src: vec4<f32>, gain: f32, opacity: f32, mode: u32) -> 
     // and it is written down as one: the test will catch it on the backend
     // where it matters, and there is no backend here on which to watch it.
     let covered = opacity * select(0.0, min(src.a, 1.0), src.a > 0.0);
+    // **Colour, held to the finite, on the way in and for the same reason.**
+    //
+    // Saturating the coverage above is not enough, because the coverage is not
+    // where the damage starts. The L4 pass blends with `src_factor: SrcAlpha`
+    // — `node/renderer.rs`, and it is what makes the colour arrive
+    // premultiplied — so what lands in a slot target is `a * rgb`. For an
+    // infinite alpha over a black card that is `inf * 0`, which is a NaN, and
+    // it is a NaN in the *colour* before this shader is reached. Every arm
+    // below then multiplies it by a finite weight and it survives into the mix.
+    //
+    // `tests/deck.rs`'s `an_alpha_that_is_not_a_coverage_cannot_invert_the_mix_
+    // or_nan_it` asserts that it does not, and on AMD's Vulkan driver it did:
+    // 93630 channels of the frame. Metal's blend hardware does not produce the
+    // NaN, which is why the test passed for as long as there was one backend.
+    //
+    // **Comparisons rather than `clamp` or a `min`/`max` pair**, exactly as
+    // above: WGSL leaves `min`/`max` indeterminate when an operand is a NaN, so
+    // a NaN filtered by one of them is filtered at the vendor's discretion. A
+    // comparison against a NaN is false everywhere, so the zero arm wins by the
+    // rule. Both bounds are needed — one of them alone lets an infinity of the
+    // other sign through.
+    //
+    // Zero rather than a clamp to the limit, because a channel that is not a
+    // number is not a bright channel: there is no magnitude here to preserve,
+    // and the layer contributing nothing is what a coverage nothing draws with
+    // already means one line above.
+    //
+    // **The other place this could live is the L4 fragment's own output**, and
+    // it was not chosen here: `renderer.rs` rejects clamping there because
+    // additive blending multiplies colour by that same alpha, so bounding alpha
+    // to `[0, 1]` would dim material the IR says may exceed it. Rejecting only
+    // the *non-finite* would not hit that objection — it changes no finite
+    // value — but it is a change to generated WGSL and to every artifact's
+    // shader, where this is one expression in the one shader that already owns
+    // the on-the-way-in job.
+    let finite = (src.rgb > vec3<f32>(-3.4e38)) & (src.rgb < vec3<f32>(3.4e38));
+    let lit = select(vec3<f32>(0.0), src.rgb, finite);
     var rgb: vec3<f32>;
     switch mode {
         // `mix(acc, s + acc*(1 - s.a), o)` reduced, which is why `opacity`
@@ -197,7 +234,7 @@ fn layer(acc: vec4<f32>, src: vec4<f32>, gain: f32, opacity: f32, mode: u32) -> 
         // level down dims what it draws, and a black card still covers what is
         // behind it. Turning its *fader* down is what stops it covering.
         case MODE_OVER: {
-            rgb = (gain * opacity) * src.rgb + acc.rgb * (1.0 - covered);
+            rgb = (gain * opacity) * lit + acc.rgb * (1.0 - covered);
         }
         // `mix(acc, max(acc, g*s), o)` — a crossfade *into* the maximum, so
         // the fader still runs the layer smoothly in and out rather than
@@ -205,7 +242,7 @@ fn layer(acc: vec4<f32>, src: vec4<f32>, gain: f32, opacity: f32, mode: u32) -> 
         // not: `screen` is `d + s - d*s` and means nothing above 1.0, and
         // nothing has tone mapped yet at this point in the pipeline.
         case MODE_MAX: {
-            rgb = mix(acc.rgb, max(acc.rgb, gain * src.rgb), opacity);
+            rgb = mix(acc.rgb, max(acc.rgb, gain * lit), opacity);
         }
         // MODE_ADD — `mix(acc, acc + g*s, o)` reduced, and identical term for
         // term and rounding for rounding to the single `weight * src` this
@@ -214,7 +251,7 @@ fn layer(acc: vec4<f32>, src: vec4<f32>, gain: f32, opacity: f32, mode: u32) -> 
         // not know arrives as the mode this deck comes up in, which is the one
         // that cannot look broken.
         default: {
-            rgb = acc.rgb + (gain * opacity) * src.rgb;
+            rgb = acc.rgb + (gain * opacity) * lit;
         }
     }
     return vec4<f32>(rgb, covered + acc.a * (1.0 - covered));

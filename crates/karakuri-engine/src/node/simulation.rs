@@ -79,6 +79,28 @@ pub(crate) struct Simulation {
     capacity: u32,
     seed_salt: u32,
     has_spawn: bool,
+    /// **This node asked the device for a buffer larger than it allows**, so
+    /// the buffers above are error objects and the validation error is already
+    /// in `Set::build_many`'s scope, waiting to be returned as a value.
+    ///
+    /// Recorded here because [`Simulation::initialize`] is the one thing left
+    /// that would touch a capacity the device has refused, and it has no device
+    /// to ask. The alternative — making [`Simulation::build`] fallible — is
+    /// ruled out by that constructor's own doc comment, and for a reason that
+    /// still holds: a capacity is refused by `capacity_in_range` before
+    /// anything is built, and a second `Err` in the constructor is a second
+    /// place for that refusal to live.
+    ///
+    /// **Windows found this and macOS hid it.** `initial_state` allocates
+    /// `capacity * stride` bytes on the host, so a Set built at `u32::MAX`
+    /// asked for 128 GiB before the refusal it had already earned could be
+    /// read: on macOS that is a lazy reservation and the build limps on to
+    /// return the error, and on Windows the allocator aborts the process.
+    /// `crates/karakuri-engine/tests/generated.rs`'s
+    /// `a_validation_error_at_build_is_returned_rather_than_fatal` is the test
+    /// that says this must be a diagnostic, and on Windows it was the thing
+    /// killing the test binary.
+    refused_by_device: bool,
     /// The monotone spawn ordinal the next new element gets. Advances by
     /// what the engine *asked* for, not by what the GPU managed to fit: a
     /// gap in the seed sequence is harmless, a repeated seed would break
@@ -184,6 +206,17 @@ impl Simulation {
                 b: make("b"),
             }
         };
+        // **Asked before it is allocated, because the answer decides whether a
+        // host image is built at all.** `create_buffer` reports a size past the
+        // device's limit into the enclosing error scope and hands back an error
+        // object, which is exactly the refusal `Set::build_many` is there to
+        // turn into a value — but only if nothing between here and the `pop()`
+        // dies first. See `Simulation::refused_by_device`.
+        let ceiling = device.limits().max_buffer_size;
+        let refused_by_device = storage.element_buffer() > ceiling
+            || storage.alive_buffer() > ceiling
+            || storage.dest_buffer().is_some_and(|dest| dest > ceiling);
+
         let element_buf = make_pair("element", storage.element_buffer());
         let alive_buf = make_pair("alive", storage.alive_buffer());
 
@@ -410,6 +443,7 @@ impl Simulation {
             capacity,
             seed_salt,
             has_spawn: shader.has_spawn,
+            refused_by_device,
             seed_base: 0,
             spawn_carry: 0.0,
             step_spawn_counts: [0; MAX_STEPS as usize],
@@ -479,6 +513,14 @@ impl Simulation {
     /// step's invariant assumes: `prev` holds `range` entries at
     /// `[0, range)`, all of them alive.
     pub(crate) fn initialize(&self, queue: &wgpu::Queue) {
+        // **Nothing to initialize, and the host image would be the size the
+        // device just refused.** The refusal is already in the build's error
+        // scope; writing into error buffers would add nothing to it, and
+        // building the image first is how the diagnostic became a dead process.
+        // See `Simulation::refused_by_device`.
+        if self.refused_by_device {
+            return;
+        }
         let (elements, alive) = initial_state(self.capacity, self.has_spawn, &self.element_layout);
 
         queue.write_buffer(&self.element_buf.a, 0, &elements);
