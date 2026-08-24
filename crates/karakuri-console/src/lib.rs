@@ -36,6 +36,14 @@
 //! panel's and everything else is `egui`'s, and both would otherwise think
 //! they were dragging.
 //!
+//! [`repaint`] is here for the same reason and it is the same kind of rule:
+//! **whether a frame is owed at all.** P-0072's first clause says a panel with
+//! nothing changing on it does no per-frame work, and the way that clause is
+//! got wrong is by omission — one path that changes the screen and reaches no
+//! repaint, which shows as a stale control and says nothing anywhere. So the
+//! decision is a value with one list of everything that can change the
+//! console, and a test asks it rather than an operator noticing.
+//!
 //! # Where the numbers come from
 //!
 //! `docs/manual/console.html` is the reference the panel is checked against,
@@ -81,6 +89,7 @@
 
 pub mod input;
 pub mod panel;
+pub mod repaint;
 pub mod room;
 pub mod view;
 

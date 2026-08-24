@@ -57,7 +57,20 @@ remove the cost, it clumps it, and a periodic hitch is more visible than a const
 
 ## Where it holds
 
-**Nowhere yet.** The panel exists and is drawn every frame at 0.268 ms median with every bay empty;
-this states what it is being built to, before the bays that would make it expensive are written.
-The reasoning, and the alternatives that lost, are
-[ADR-0164](../adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md).
+**The first clause holds and is measured.** `crates/karakuri-console/examples/panel.rs` reports
+what a still panel costs on the window it opens: over three seconds with nothing touching it, **0
+frames drawn, 0 allocations, 0 bytes**. A twelve-second run draws three frames in total. The
+decision is [`repaint.rs`](../../crates/karakuri-console/src/repaint.rs), one closed list of
+everything that can change what the console shows —
+[ADR-0165](../adr/0165-the-repaint-decision-is-one-closed-list.md).
+
+**Nothing else holds yet.** No region declares a cost or a staleness, there is no scheduler, and
+neither condition is checked anywhere, because nothing on the panel is live: the bays are empty.
+The rest of this is what those bays are being built to.
+
+The per-frame price on the frames that *are* drawn is unchanged and was never the target — a
+median of 179 allocations and 202.1 kB, against the 184 and 226.2 kB
+[ADR-0164](../adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md) measured. The
+two are taken differently and say so: that one was a mean over 180 frames of a loop that always
+drew, and this is a median over the three a still window draws, where a mean would be dominated by
+the first frame building the font atlas at 1907 allocations.
