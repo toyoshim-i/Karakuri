@@ -34,7 +34,11 @@
       Mixing lives <em>between</em> decks; shaping lives <em>inside</em> one.
       Every divider drags, because a preview's size is a machine's answer rather
       than a layout's &mdash; and the whole panel follows the room, pastel on
-      white by day and lit on black in a dark hall.
+      white by day and lit on black in a dark hall. <strong>The grip in a bay's
+      head says whose size you are setting</strong>: a bay with one is yours to
+      size, and a bay without one is the height of what is in it. Both sides of
+      a divider move either way; the grip says which side the number belongs
+      to.
     </p>
     <p class="lede">
       Three columns, and they are named because you address them: a
@@ -125,7 +129,7 @@
                 </span>
               </div>
               <div class="program-body">
-                <div class="program-view"><span>PROGRAM</span></div>
+                <div class="program-view"></div>
                 <div class="previews">
                   <div class="preview a">A</div>
                   <div class="preview b">B</div>
@@ -405,7 +409,7 @@
         <div class="bay">
           <div class="outputs">
             <span style="color:var(--c-faint);font-family:var(--f-round);font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase">Outputs</span>
-            <span class="sink on" data-tip="This window, the default sink. Enabled, and it cannot be turned off &mdash; it is where you are watching."><i class="dot"></i>this window</span>
+            <span class="sink on" data-tip="The picture in the Program bay. Turn it off and that picture goes, giving its height to the inspector &mdash; which is what you want when the projector is fullscreen on another display and this one is costing you a pass and the space. The deck previews under it are auditions of their own and keep running."><i class="dot"></i>program view</span>
             <span class="sink on" data-tip="A second window on the DELL, fullscreen. It is an ordinary window that an ordinary operating system made fullscreen, not an output mode of its own. Click to disable."><i class="dot"></i>projector &middot; DELL U2720Q</span>
             <span class="sink" data-tip="Syphon, publishing as `karakuri`. Off. Click to enable &mdash; a slow sink has its frame dropped and never delays the window."><i class="dot"></i>Syphon</span>
             <span class="sink absent tip-right" data-tip="NDI. No plugin is loaded, so there is nothing to enable. Install the plugin and it appears here as a sink."><i class="dot"></i>NDI &middot; no plugin</span>
@@ -585,19 +589,43 @@
           A 16:9 view filling a wide centre column would be 763 pixels tall and
           eat the inspector whole. So you drag its <em>height</em> and it
           letterboxes into the width it has &mdash; which is what the engine
-          already does. Height given back is rows: roughly 48 in the library, and
-          near 40 per inspector pane.
+          already does. Height given back is rows in the library and the
+          inspector, which are the two bays that take it.
+        </p>
+        <p>
+          <strong>The bay is two regions and they fold apart.</strong> The
+          picture is a sink, listed in Outputs as <em>program view</em>, and it
+          is on screen exactly when that sink is on &mdash; so there is no state
+          where it is hidden and still costing a pass. The deck previews under
+          it are auditions of their own, so they stay when it goes.
+        </p>
+        <p>
+          <strong>The picture carries no label of its own.</strong> The bay head
+          already says Program, and this is a region somebody may be capturing:
+          a capture that is neither the canvas nor a clean crop of it is worse
+          than useless, and a word burnt into the corner is exactly that. The
+          A&ndash;D under it keep their letters, which are outside anything you
+          would capture and are the only thing naming a deck.
         </p>
       </div>
 
       <div class="note">
         <h3>Outputs</h3>
         <p>
-          A composited frame already goes to <em>n</em> sinks; this is that list,
-          made switchable. A projector window is a second sink and lives in the
-          repository; Syphon, Spout and NDI are plugin sinks and appear only when
-          a plugin is loaded. <strong>Fullscreen is just what an application
-          does.</strong>
+          Every place a composited frame goes, as one switchable list. A
+          projector window is a second sink and lives in the repository; Syphon,
+          Spout and NDI are plugin sinks and appear only when a plugin is
+          loaded. <strong>Fullscreen is just what an application does.</strong>
+          The picture in the Program bay is a sink like any other and is the
+          first row.
+        </p>
+        <p>
+          <strong>All of them may be off, and that is a state worth having.</strong>
+          The deck previews are auditions rather than outputs, so with every sink
+          off you can still see the decks and work on them &mdash; which is what
+          setting up before doors is. Nothing is refused here, so nothing has to
+          be explained: a control that quietly declines the last of something is
+          a rule an operator can only find by experiment.
         </p>
       </div>
 

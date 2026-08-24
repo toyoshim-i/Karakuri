@@ -46,7 +46,10 @@
       <span><i class="gap"></i> nothing &mdash; this surface cannot reach it at all</span>
     </div>
     <p>
-      <strong>41 operations, and 50 of the 179 ways in exist.</strong> Every
+      <strong>46 operations, and 50 of the 199 ways in exist.</strong> Five of them
+      arrived with the console's own shape &mdash; moving a boundary, folding a bay
+      or a pane, bringing one back, and solo &mdash; and every one of their twenty
+      routes is empty except the pointer. Every
       <em>panel</em> route is marked designed rather than built, because the
       panel itself is not built &mdash; where it says a region, that is where
       the control lives in <a href="console.html">the console</a>. The counts
@@ -487,6 +490,63 @@
   </section>
 
   <section>
+    <h2>Arranging the console</h2>
+    <p class="lede">The panel's own shape, which is the operator's and not the layout's.</p>
+    <div class="opgroup">
+      <div class="op">
+        <div class="op-head"><h3>Move a boundary</h3><span class="op-when ">immediate</span></div>
+        <p>Every divider drags, and stops where the regions either side say they will go no further. A window dragged too small to hold everything gives everything less and forgets nothing: widen it again and the arrangement comes back exactly.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>drag</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Fold a bay away</h3><span class="op-when ">immediate</span></div>
+        <p>A folded bay takes no space at all and no divider is drawn beside it; what it had goes to the bay that takes height back in that pane. Its size is remembered, so bringing it back puts it where it was.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>bay head</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Fold a pane away</h3><span class="op-when ">immediate</span></div>
+        <p>The whole left or right pane, with everything in it, and the centre takes the width. The centre is not a third pane and does not fold &mdash; what you want there is solo.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>pane edge</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Bring back what is folded</h3><span class="op-when ">immediate</span></div>
+        <p><strong>A folded region has no rectangle, so a pointer cannot reach it.</strong> That makes this the one operation here that a mouse cannot be the only way into &mdash; folding is one-way for a pointer, and something else has to undo it.</p>
+        <div class="rts">
+          <span class="rt gap">panel <b>&mdash;</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Solo a region</h3><span class="op-when ">immediate</span></div>
+        <p>Everything that is not this region, on the way to it, or inside it folds away, and it holds the window. On the program that is the panel folding away and only the picture left, which is also how you capture this window. Undoing it restores what was folded before, including whatever was already folded.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>solo</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
     <h2>Output and recording</h2>
     <p class="lede">Where the frame goes, and what is kept of the performance.</p>
     <div class="opgroup">
@@ -503,7 +563,7 @@
       </div>
       <div class="op">
         <div class="op-head"><h3>Choose where the frame goes</h3><span class="op-when ">immediate</span></div>
-        <p>The window, a projector window, and the plugin sinks. A composited frame already goes to as many sinks as are listening.</p>
+        <p>The picture in the Program bay, a projector window, and the plugin sinks &mdash; one switchable list, and the program view is a row in it like any other. All of them may be off: the deck previews are auditions rather than outputs and keep running, so nothing is refused here.</p>
         <div class="rts">
           <span class="rt plan">panel <b>outputs</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -550,6 +610,15 @@
       MCP edits material, reports swaps and reads the library, and touches
       nothing in the mix, the clock or what is on air. It can make a deck
       unrecognisable and cannot put it on air.
+    </p>
+    <p>
+      <strong>Arranging the console is reachable from a pointer and nothing else</strong>,
+      which is the first rule broken by the surface the first rule is about. A
+      divider that can only be dragged is a control the keyboard cannot touch,
+      and folding is worse than that: a folded region has no rectangle, so a
+      pointer cannot even reach it to undo itself. <strong>How a pane is sized and
+      unfolded without a mouse is not decided</strong>, and it is decided by naming
+      these operations rather than by drawing anything.
     </p>
     <p>
       <strong>The command line is the only way into most of what a Set is</strong>
