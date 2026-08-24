@@ -215,6 +215,29 @@ struct Cost {
     /// and the one submission that carries both halves. Excludes `present`,
     /// which is the display's pace and not a cost.
     paint: Duration,
+    /// **The submission alone, out of [`Cost::paint`]** — `finish` on the
+    /// frame's encoder and `Queue::submit` — and it is five sixths of it.
+    ///
+    /// Printed because the whole of the rest of `paint` is what caching a bay
+    /// into a texture would make cheaper, and this is not: it is `wgpu`'s
+    /// per-submission cost, it is proportional to what was recorded rather
+    /// than to what the GPU then does with it, and it is unmoved by a canvas
+    /// 256 times the area. It is host-side work and not a wait — measured
+    /// against `CLOCK_THREAD_CPUTIME_ID` it burns 99% of its wall time on the
+    /// CPU. **The wait is [`Cost::wait`], which is a different number
+    /// entirely.**
+    submit: Duration,
+    /// **What the frame spent blocked in `get_current_texture`**, waiting for
+    /// the display to free a swapchain image. `PresentMode::Fifo`, so at 60 Hz
+    /// this is most of the 16.6 ms and the frame is not paying for it: on the
+    /// same clock as above it burns under 1% of itself on the CPU.
+    ///
+    /// It is in none of the three numbers above, which is why it is here — a
+    /// reader who sums those three and compares the total to a frame gets an
+    /// answer that is 12% of the truth, and the missing 88% is this doing
+    /// nothing on purpose. Switching to `PresentMode::Immediate`, which this
+    /// adapter does offer, moves it and nothing else.
+    wait: Duration,
     /// Allocations and bytes during `ui`, on this thread.
     allocs: u64,
     bytes: u64,
@@ -399,6 +422,8 @@ impl Costs {
             let mut engine: Vec<f64> = self.frames.iter().map(|c| ms(c.engine)).collect();
             let mut ui: Vec<f64> = self.frames.iter().map(|c| ms(c.ui)).collect();
             let mut paint: Vec<f64> = self.frames.iter().map(|c| ms(c.paint)).collect();
+            let mut submit: Vec<f64> = self.frames.iter().map(|c| ms(c.submit)).collect();
+            let mut wait: Vec<f64> = self.frames.iter().map(|c| ms(c.wait)).collect();
             // **Median, where the figure this replaces was a mean.** The mean
             // was over 180 frames and the first one was lost in it; the sample
             // here is however many frames somebody asked for, which on a run
@@ -410,6 +435,8 @@ impl Costs {
             engine.sort_by(f64::total_cmp);
             ui.sort_by(f64::total_cmp);
             paint.sort_by(f64::total_cmp);
+            submit.sort_by(f64::total_cmp);
+            wait.sort_by(f64::total_cmp);
             allocs.sort_unstable();
             bytes.sort_unstable();
             let n = self.frames.len();
@@ -437,6 +464,20 @@ impl Costs {
                 paint[n / 2],
                 paint[n * 95 / 100],
                 paint[n - 1]
+            );
+            println!(
+                "    of which submit  median {:.3} ms   p95 {:.3} ms   worst {:.3} ms — \
+                 `wgpu`'s per-submission work, not the GPU's and not a wait",
+                submit[n / 2],
+                submit[n * 95 / 100],
+                submit[n - 1]
+            );
+            println!(
+                "  waiting for vsync  median {:.3} ms   p95 {:.3} ms   worst {:.3} ms — \
+                 blocked in `get_current_texture`, and in none of the three above",
+                wait[n / 2],
+                wait[n * 95 / 100],
+                wait[n - 1]
             );
             println!(
                 "  the egui pass allocates a median {} times a frame, {:.1} kB a frame \
@@ -468,6 +509,12 @@ impl Costs {
                  (docs/contributing.md §1). Host clock, debug profile with dependencies \
                  at opt-level 3.",
                 WINDOW.0, WINDOW.1, CAPACITY, CANVAS.0, CANVAS.1
+            );
+            println!(
+                "  and every figure above is taken on a core that spends the vsync wait \
+                 asleep, so it is measured at the clock a mostly-idle machine runs at: \
+                 the identical run with this machine's other cores loaded reports about a \
+                 sixth of these numbers, with the proportions between them unchanged."
             );
         }
         println!();
@@ -1448,7 +1495,9 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::RedrawRequested => {
+                let waited = Instant::now();
                 let acquired = gfx.surface.get_current_texture();
+                let waited = waited.elapsed();
                 if let Some(missed) = missed(&acquired) {
                     match missed {
                         Missed::Remake => {
@@ -1481,7 +1530,10 @@ impl ApplicationHandler for App {
                     _ => return,
                 };
 
-                let mut cost = Cost::default();
+                let mut cost = Cost {
+                    wait: waited,
+                    ..Cost::default()
+                };
 
                 // -- where the picture goes, and how big it is ---------
                 // **Before the `egui` pass**, because the pass draws the
@@ -1650,6 +1702,7 @@ impl ApplicationHandler for App {
                 // pass that reads it would be a frame behind, so if one ever
                 // appears it goes in ahead, and the engine and the panel stay
                 // in the one submission below.
+                let submitting = Instant::now();
                 if !user.is_empty() {
                     gfx.gpu.queue.submit(user);
                 }
@@ -1657,6 +1710,7 @@ impl ApplicationHandler for App {
                 // the picture, and the panel's pass over the window, in the
                 // order they were recorded.
                 drawing.finish();
+                cost.submit = submitting.elapsed();
                 cost.paint = started.elapsed();
 
                 gfx.gpu.queue.present(frame);
