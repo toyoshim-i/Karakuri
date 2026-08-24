@@ -12,7 +12,7 @@ use common::{assert_sane, assert_within_bounds, id_of, near, rect_of, rects, sol
 #[test]
 fn folding_the_left_pane_gives_its_width_to_the_centre() {
     let mut layout = solved(PLAUSIBLE);
-    let centre = rect_of(&layout, "centre-pane");
+    let centre = rect_of(&layout, "centre");
     let right = rect_of(&layout, "right-pane");
 
     layout.collapse(id_of(&layout, "left-pane"));
@@ -23,10 +23,7 @@ fn folding_the_left_pane_gives_its_width_to_the_centre() {
     // The centre took the pane's width *and* the divider that is no longer
     // drawn beside it. Nothing else moved: the right pane is exactly where and
     // what it was.
-    assert!(near(
-        rect_of(&layout, "centre-pane").w,
-        centre.w + 218.0 + 10.0
-    ));
+    assert!(near(rect_of(&layout, "centre").w, centre.w + 218.0 + 10.0));
     assert!(near(rect_of(&layout, "right-pane").w, right.w));
     assert!(near(rect_of(&layout, "right-pane").x, right.x));
     assert!(near(rect_of(&layout, "left-pane").w, 0.0));
@@ -36,7 +33,7 @@ fn folding_the_left_pane_gives_its_width_to_the_centre() {
     layout.expand(id_of(&layout, "left-pane"));
     layout.solve();
     assert!(near(rect_of(&layout, "left-pane").w, 218.0));
-    assert!(near(rect_of(&layout, "centre-pane").w, centre.w));
+    assert!(near(rect_of(&layout, "centre").w, centre.w));
 }
 
 /// The right pane folds the same way and to the same place, which is what says
@@ -44,17 +41,14 @@ fn folding_the_left_pane_gives_its_width_to_the_centre() {
 #[test]
 fn folding_the_right_pane_gives_its_width_to_the_centre() {
     let mut layout = solved(PLAUSIBLE);
-    let centre = rect_of(&layout, "centre-pane");
+    let centre = rect_of(&layout, "centre");
     let left = rect_of(&layout, "left-pane");
 
     layout.collapse(id_of(&layout, "right-pane"));
     layout.solve();
     assert_sane(&layout);
 
-    assert!(near(
-        rect_of(&layout, "centre-pane").w,
-        centre.w + 268.0 + 10.0
-    ));
+    assert!(near(rect_of(&layout, "centre").w, centre.w + 268.0 + 10.0));
     assert!(near(rect_of(&layout, "left-pane").w, left.w));
 }
 
@@ -63,8 +57,8 @@ fn folding_the_right_pane_gives_its_width_to_the_centre() {
 ///
 /// So the program's rectangle is the window's, exactly. ADR-0157 says what
 /// would spoil it: a maximum is honoured and the leftover is trailing space,
-/// so a maximum anywhere on the path — on `program`, on `centre-pane`, or on
-/// the pane row — would leave a margin the operator cannot get rid of, in a
+/// so a maximum anywhere on the path — on `program`, on `centre`, or on the
+/// body row — would leave a margin the operator cannot get rid of, in a
 /// window they are about to record.
 #[test]
 fn solo_on_the_program_leaves_the_program_holding_the_window() {
@@ -102,7 +96,7 @@ fn solo_on_the_program_leaves_the_program_holding_the_window() {
 #[test]
 fn the_program_height_drags_from_small_to_large() {
     let mut layout = solved(PLAUSIBLE);
-    let centre = id_of(&layout, "centre-pane");
+    let centre = id_of(&layout, "centre");
     let top = rect_of(&layout, "program").y;
 
     // A weak machine: as small as the arrangement lets it be, and it really is
@@ -118,7 +112,7 @@ fn the_program_height_drags_from_small_to_large() {
     layout.solve();
     assert_sane(&layout);
     assert_within_bounds(&layout);
-    let centre_h = rect_of(&layout, "centre-pane").h;
+    let centre_h = rect_of(&layout, "centre").h;
     assert!(near(rect_of(&layout, "program").h, centre_h - 10.0 - 126.0));
     assert!(rect_of(&layout, "program").h > 800.0);
 }
@@ -132,11 +126,11 @@ fn the_program_height_drags_from_small_to_large() {
 fn dragging_a_divider_and_dragging_it_back_reproduces_the_arrangement() {
     let mut layout = solved(PLAUSIBLE);
     let before = rects(&layout);
-    let panes = layout.children(layout.root())[1];
-    let centre = id_of(&layout, "centre-pane");
+    let body = layout.children(layout.root())[1];
+    let centre = id_of(&layout, "centre");
 
     // The boundary starts at the left pane's far edge, 218.
-    let landed = layout.set_divider(panes, 0, 300.0);
+    let landed = layout.set_divider(body, 0, 300.0);
     layout.solve();
     assert!(
         near(landed, 300.0),
@@ -154,7 +148,7 @@ fn dragging_a_divider_and_dragging_it_back_reproduces_the_arrangement() {
     assert_sane(&layout);
 
     layout.set_divider(centre, 0, top + program_edge);
-    layout.set_divider(panes, 0, 218.0);
+    layout.set_divider(body, 0, 218.0);
     layout.solve();
     assert_eq!(before, rects(&layout));
 }

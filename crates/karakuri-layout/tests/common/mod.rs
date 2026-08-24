@@ -129,7 +129,7 @@ pub fn named_console() -> Layout {
                             Spec::view("inspector").flex(1.0).min(100.0),
                         ],
                     )
-                    .named("centre-pane")
+                    .named("centre")
                     .flex(1.0)
                     .min(320.0),
                     Spec::column(

@@ -656,7 +656,7 @@ and `+` on the scope list — so it is one gap, drawn five times.
 strips side by side) *and* a height floor (a strip is never cut off), and both could be stated only
 because they happen to sit at different levels of the tree. Two constraints on one node cannot be.
 
-**A split's minimum is not derived from its children's.** The pane row declares 530, which is the
+**A split's minimum is not derived from its children's.** The body row declares 530, which is the
 right pane's three bays and its dividers added up by hand three levels away. A test recomputes it
 so the two cannot drift, and that test helper wants to be a method on `Layout` rather than a copy
 in every consumer.

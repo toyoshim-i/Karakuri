@@ -31,19 +31,23 @@ const MANUAL: &[&str] = &[
     "outputs",
 ];
 
-/// Names the manual has no word for, each with what it is and where the word
-/// came from.
+/// Names that are not headings of *What each region is standing on*, each with
+/// what it is and where the word came from.
 ///
-/// The three panes are `karakuri-layout`'s own: its crate documentation names
-/// *the console's left pane* as a split that "fold the left pane away" reaches
-/// by name, and the centre and right are the same operation on the other two.
+/// The three columns are the manual's lede: a left pane and a right pane
+/// "which fold away to give room, and the centre, which is what they give it
+/// to". `left-pane` is `karakuri-layout`'s own word for the first of them, the
+/// split that "fold the left pane away" reaches by name, and `right-pane` is
+/// that operation on the other side. `centre` is deliberately not a third
+/// pane (ADR-0159) — folding it is not an operation anybody wants — and it is
+/// named because the drag on the program's height addresses it.
 ///
 /// The inspector's panes are the *n* the manual describes ("**n** panes, each
 /// showing whatever you point it at"), numbered because the mock's control for
 /// them counts — `2 up` — and because a view's name is required.
 const STRUCTURAL: &[&str] = &[
     "left-pane",
-    "centre-pane",
+    "centre",
     "right-pane",
     "inspector-1",
     "inspector-2",
@@ -79,14 +83,15 @@ fn nothing_resolves_that_is_not_a_named_region() {
     );
 }
 
-/// The row holding the three panes is deliberately anonymous: nothing folds,
-/// solos or drags it, and `karakuri-layout` gives a split a name only where an
-/// operation addresses it. This is here so that giving it one is a decision
-/// somebody makes rather than a line somebody adds.
+/// The body row — the one holding the two panes and the centre — is
+/// deliberately anonymous: nothing folds, solos or drags it, and
+/// `karakuri-layout` gives a split a name only where an operation addresses
+/// it. This is here so that giving it one is a decision somebody makes rather
+/// than a line somebody adds.
 #[test]
-fn the_row_of_three_panes_is_unnamed() {
+fn the_row_holding_the_panes_and_the_centre_is_unnamed() {
     let layout = karakuri_console::layout();
-    let panes = layout.children(layout.root())[1];
-    assert_eq!(layout.name(panes), None);
-    assert_eq!(layout.children(panes).len(), 3);
+    let body = layout.children(layout.root())[1];
+    assert_eq!(layout.name(body), None);
+    assert_eq!(layout.children(body).len(), 3);
 }

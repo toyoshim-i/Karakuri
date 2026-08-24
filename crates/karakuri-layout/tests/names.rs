@@ -21,7 +21,7 @@ fn find_resolves_a_named_split_a_named_view_and_nothing_else() {
     // same one the arrangement's structure gives.
     assert_eq!(l.find("panes"), Some(ids.panes));
     assert_eq!(l.find("left-pane"), Some(ids.left));
-    assert_eq!(l.find("centre-pane"), Some(ids.centre));
+    assert_eq!(l.find("centre"), Some(ids.centre));
     assert_eq!(l.find("right-pane"), Some(ids.right));
     assert_eq!(l.name(ids.left), Some("left-pane"));
     assert_eq!(l.axis(ids.left), Some(Axis::Column));
