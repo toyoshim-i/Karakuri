@@ -20,13 +20,17 @@
 //!
 //! # Nothing here shadows the layout
 //!
-//! Where [`Layout`] can answer a question it is asked; where it cannot, the
-//! answer is derived from the tree rather than kept in a field of its own. A
-//! folded region is [`Layout::is_collapsed`], a solo is
-//! [`Layout::is_soloed`], and where a drag landed is what
-//! [`Layout::set_divider`] returned. [`Node::parent`] is the one derivation
-//! that has to be stored, because `Layout` has no `parent` and a hit only ever
-//! resolves to a leaf.
+//! Every question [`Layout`] can answer is asked of it, and it now answers
+//! every one this file used to answer for itself. A folded region is
+//! [`Layout::is_collapsed`], a solo is [`Layout::soloed`], the split enclosing
+//! a region is [`Layout::parent`], the children a divider index counts are
+//! [`Layout::visible_children`], where a boundary is is [`Layout::boundary`],
+//! every boundary is [`Layout::boundaries`], and where a drag landed is what
+//! [`Layout::set_divider`] returned.
+//!
+//! **Nothing here stores a fact about the arrangement.** [`Node`] is the tree
+//! flattened for a caller that iterates it, and the only thing it carries that
+//! the arena does not is how deep the flattening got.
 //!
 //! The two things held across events are the pointer and the drag — which
 //! boundary is in hand and where along it the pointer took hold. Both are the
@@ -34,9 +38,9 @@
 //!
 //! # Solve once, then read
 //!
-//! [`Layout::rect`] and [`Layout::hit`] carry a `debug_assert!` that the
-//! layout is not dirty, so an operation followed by a read is a panic in a
-//! debug build. Everything here that reads calls [`solve`](Panel::solve)
+//! [`Layout::rect`], [`Layout::hit`] and [`Layout::boundary`] each carry a
+//! `debug_assert!` that the layout is not dirty, so an operation followed by a
+//! read is a panic in a debug build. Everything here that reads calls [`solve`](Panel::solve)
 //! first, which on a frame where nothing moved is a flag test, and every
 //! operation leaves the layout clean behind it.
 
@@ -47,19 +51,47 @@ use karakuri_layout::{Axis, Hit, Layout, NodeId, Point, Rect};
 /// grab at all: a 9px gap is not a target a hand finds.
 pub const GRAB: f32 = 6.0;
 
+/// How far short of the ask a boundary has to land before a **stop** is what
+/// put it there, in pixels.
+///
+/// A drag that nothing stops still does not land exactly where it was asked:
+/// [`Layout::set_divider`] writes a size — or, for a flexible pair, a weight
+/// chosen to reproduce one — and reads the position back out of the next
+/// solve, so a landing is a few ten-thousandths of a pixel off its ask by
+/// arithmetic alone. This is the line between that and a constraint, and there
+/// is nothing between the two to be careful about: it is two orders of
+/// magnitude above single-precision noise at these coordinates and an order
+/// below anything an eye or a display can resolve, so a `held` is a stop and
+/// nothing else.
+const STOPPED: f32 = 0.05;
+
+/// How far the boundary has to have moved since the last thing this drag said
+/// before it is worth saying anything again, in pixels.
+///
+/// **A drag reports what the layout did, not what the pointer asked**, and at
+/// sixty asks a second the difference is a readout a person can follow against
+/// one they cannot. Half a pixel is the smallest move that can change what is
+/// drawn — below it the boundary is on the same physical pixel it was — so
+/// this reports every move a viewer could see and none that they could not. A
+/// stop starting or stopping to hold the drag is reported whatever the
+/// distance: that is a change in *what is happening*, not in where the
+/// boundary is.
+const WORTH_SAYING: f32 = 0.5;
+
 /// One node of the arrangement, flattened in tree order.
+///
+/// **Two facts, and both of them are about the flattening rather than about
+/// the node.** Everything else — whether it is a view, what encloses it, where
+/// it solved to — is [`Layout`]'s to answer and is asked of it by `id`. This
+/// carried a `parent` until [`Layout::parent`] existed, which is the shape of
+/// the mistake: a second copy of the arena, rebuilt whenever the layout was
+/// replaced, and wrong the day the arena can insert or remove.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Node {
     pub id: NodeId,
-    /// **Derived, because [`Layout`] has no `parent`.** Folding the split that
-    /// encloses the region under the pointer needs it, and a hit only ever
-    /// resolves to a leaf.
-    pub parent: Option<NodeId>,
-    /// How deep in the tree, for a caller that indents.
+    /// How deep in the tree, for a caller that indents. The one thing tree
+    /// order costs to work out and the arena does not store.
     pub depth: usize,
-    /// A leaf is a region something paints; a split is the thing whose gaps
-    /// are visible between its children.
-    pub leaf: bool,
 }
 
 /// A boundary in hand: which one, and where along it the pointer took hold.
@@ -272,7 +304,7 @@ impl Panel {
     /// that colours or indents by position reads top to bottom.
     fn rebuild(&mut self) {
         let mut nodes = Vec::new();
-        walk(&self.layout, self.layout.root(), None, 0, &mut nodes);
+        walk(&self.layout, self.layout.root(), 0, &mut nodes);
         self.nodes = nodes;
     }
 
@@ -292,75 +324,13 @@ impl Panel {
     /// The two regions a boundary is between. A split is often unnamed — the
     /// console's body row is, deliberately — so a split and an index alone do
     /// not say which boundary a pointer has hold of, and the pair does.
-    pub fn pair(&self, split: NodeId, index: usize) -> Option<(NodeId, NodeId)> {
-        let children = self.visible_children(split);
-        match (children.get(index), children.get(index + 1)) {
-            (Some(&a), Some(&b)) => Some((a, b)),
-            _ => None,
-        }
-    }
-
-    /// The split enclosing `id`, which [`Layout`] does not answer for — see
-    /// [`Node::parent`].
-    pub fn parent_of(&self, id: NodeId) -> Option<NodeId> {
-        self.nodes.iter().find(|n| n.id == id)?.parent
-    }
-
-    /// The children a divider index counts, which is the visible ones.
-    pub fn visible_children(&self, split: NodeId) -> Vec<NodeId> {
-        self.layout
-            .children(split)
-            .iter()
-            .copied()
-            .filter(|c| !self.layout.is_collapsed(*c))
-            .collect()
-    }
-
-    /// Where boundary `index` of `split` currently is, along the split's axis:
-    /// the far edge of the visible child before it.
     ///
-    /// Reads solved rectangles, so the caller has solved.
-    pub fn boundary(&self, split: NodeId, index: usize) -> Option<f32> {
-        let axis = self.layout.axis(split)?;
-        let before = *self.visible_children(split).get(index)?;
-        Some(far(axis, self.layout.rect(before)))
-    }
-
-    /// Every boundary in the arrangement. A window has a pointer to find them
-    /// with; a caller with no pointer has this.
-    pub fn dividers(&mut self) -> Vec<(NodeId, usize)> {
-        self.solve();
-        let splits: Vec<NodeId> = self
-            .nodes
-            .iter()
-            .filter(|n| !n.leaf)
-            .map(|n| n.id)
-            .collect();
-        let mut out = Vec::new();
-        for split in splits {
-            let visible = self.visible_children(split).len();
-            for index in 0..visible.saturating_sub(1) {
-                out.push((split, index));
-            }
-        }
-        out
-    }
-
-    /// A point in the middle of a boundary's gap — what a hand aims at, and
-    /// what a caller with no hand presses instead.
-    pub fn grab_point(&self, split: NodeId, index: usize) -> Option<Point> {
-        let axis = self.layout.axis(split)?;
-        let (a, b) = self.pair(split, index)?;
-        let (ra, rb) = (self.layout.rect(a), self.layout.rect(b));
-        let along = (far(axis, ra) + near(axis, rb)) / 2.0;
-        let across = match axis {
-            Axis::Row => ra.y + ra.h / 2.0,
-            Axis::Column => ra.x + ra.w / 2.0,
-        };
-        Some(match axis {
-            Axis::Row => Point::new(along, across),
-            Axis::Column => Point::new(across, along),
-        })
+    /// [`Layout::visible_children`] is what an index counts, and this is that
+    /// twice: the readout wants both names, and asking for the pair is what
+    /// every caller of it was doing.
+    pub fn pair(&self, split: NodeId, index: usize) -> Option<(NodeId, NodeId)> {
+        let mut children = self.layout.visible_children(split).skip(index);
+        Some((children.next()?, children.next()?))
     }
 
     // -- input ----------------------------------------------------------
@@ -373,10 +343,11 @@ impl Panel {
         match self.layout.hit(p, GRAB) {
             Hit::Divider { split, index } => {
                 let axis = self.layout.axis(split).expect("a divider is on a split");
-                let Some(boundary) = self.boundary(split, index) else {
+                let Some(gap) = self.layout.boundary(split, index) else {
                     return Pressed::NoPair { split, index };
                 };
-                let offset = along(axis, p) - boundary;
+                let boundary = axis.origin(gap);
+                let offset = axis.coord(p) - boundary;
                 self.drag = Some(Drag {
                     split,
                     index,
@@ -413,17 +384,17 @@ impl Panel {
         self.cursor = p;
         let drag = self.drag.as_ref()?;
         let (split, index, axis, offset) = (drag.split, drag.index, drag.axis, drag.offset);
-        let asked = along(axis, p) - offset;
+        let asked = axis.coord(p) - offset;
         let landed = self.layout.set_divider(split, index, asked);
         // `set_divider` solves before it returns, so the reads below are of a
         // clean layout.
         let by = landed - asked;
-        let held = by.abs() >= 0.05;
+        let held = by.abs() >= STOPPED;
 
         let drag = self.drag.as_mut()?;
         let say = match drag.said {
             None => true,
-            Some(said) => (landed - said).abs() >= 0.5 || drag.held != held,
+            Some(said) => (landed - said).abs() >= WORTH_SAYING || drag.held != held,
         };
         if !say {
             return None;
@@ -446,8 +417,16 @@ impl Panel {
         let drag = self.drag.take()?;
         self.solve();
         let (split, index) = (drag.split, drag.index);
-        Some(match self.boundary(split, index) {
-            Some(at) => Released::Rests { split, index, at },
+        // `Gone` is what an operation during the drag leaves behind: fold
+        // either side of the boundary and there is no longer a pair for this
+        // index, which is [`Layout::boundary`] returning `None` rather than a
+        // coordinate for something else.
+        Some(match self.layout.boundary(split, index) {
+            Some(gap) => Released::Rests {
+                split,
+                index,
+                at: drag.axis.origin(gap),
+            },
             None => Released::Gone { split, index },
         })
     }
@@ -468,10 +447,9 @@ impl Panel {
             Op::FoldEnclosing => {
                 let target = match self.layout.hit(self.cursor, 0.0) {
                     // A divider already names its split; a region's enclosing
-                    // split is its parent, which `Layout` does not answer for
-                    // — see `Node::parent`.
+                    // split is its parent.
                     Hit::Divider { split, .. } => Some(split),
-                    Hit::View(id) => self.parent_of(id),
+                    Hit::View(id) => self.layout.parent(id),
                     Hit::Nothing => None,
                 };
                 match target {
@@ -542,48 +520,9 @@ impl Panel {
     }
 }
 
-fn walk(layout: &Layout, id: NodeId, parent: Option<NodeId>, depth: usize, out: &mut Vec<Node>) {
-    out.push(Node {
-        id,
-        parent,
-        depth,
-        leaf: layout.axis(id).is_none(),
-    });
+fn walk(layout: &Layout, id: NodeId, depth: usize, out: &mut Vec<Node>) {
+    out.push(Node { id, depth });
     for child in layout.children(id) {
-        walk(layout, *child, Some(id), depth + 1, out);
-    }
-}
-
-/// [`Axis`]'s own `coord`, `origin` and `extent` are `pub(crate)`, so a caller
-/// outside that crate writes them again. These four are that, once, where
-/// everything that needs them can reach them.
-pub fn along(axis: Axis, p: Point) -> f32 {
-    match axis {
-        Axis::Row => p.x,
-        Axis::Column => p.y,
-    }
-}
-
-/// The near edge of `r` along `axis`.
-pub fn near(axis: Axis, r: Rect) -> f32 {
-    match axis {
-        Axis::Row => r.x,
-        Axis::Column => r.y,
-    }
-}
-
-/// The far edge of `r` along `axis`.
-pub fn far(axis: Axis, r: Rect) -> f32 {
-    match axis {
-        Axis::Row => r.x + r.w,
-        Axis::Column => r.y + r.h,
-    }
-}
-
-/// The extent of `r` along `axis`.
-pub fn extent(axis: Axis, r: Rect) -> f32 {
-    match axis {
-        Axis::Row => r.w,
-        Axis::Column => r.h,
+        walk(layout, *child, depth + 1, out);
     }
 }

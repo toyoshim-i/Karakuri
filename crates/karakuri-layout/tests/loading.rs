@@ -248,3 +248,38 @@ fn a_saved_arrangement_with_a_node_nothing_reaches_fails_to_load() {
         "loaded, or failed for the wrong reason: {err}"
     );
 }
+
+/// A solo is an index like any other, and one that addresses no node is
+/// refused rather than handed to a caller.
+///
+/// It is the newest of these and the easiest to write off, because a solo is
+/// "just a flag": it is not, it is a node, and `Layout::soloed` gives it to a
+/// status line that will ask for its name or its rectangle. An out-of-range
+/// one indexes past the arena at whatever later moment that happens, which is
+/// exactly the class of failure this loader exists to move to load time.
+#[test]
+fn a_saved_arrangement_soloed_on_a_node_that_is_not_there_fails_to_load() {
+    let mut file = saved();
+    let len = len(&file);
+    file["soloed"] = json!(len);
+
+    let err = refused(file);
+    assert!(
+        err.contains(&format!("node {len} is recorded as soloed")),
+        "loaded, or failed for the wrong reason: {err}"
+    );
+
+    // The negative control: the same field, addressing a node, loads and comes
+    // back soloed on it. Without this the test above passes against a loader
+    // that refuses every file carrying a solo at all.
+    let mut file = saved();
+    let program = node(&file, "program");
+    file["soloed"] = json!(program);
+    let back: Layout = serde_json::from_value(file).expect("a solo on a real node loads");
+    assert!(back.is_soloed());
+    assert_eq!(
+        back.soloed(),
+        back.find("program"),
+        "node {program} was recorded as soloed and something else came back"
+    );
+}
