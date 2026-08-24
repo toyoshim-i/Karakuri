@@ -282,4 +282,31 @@ pub mod size {
     /// bottom-left corner of a cell (`align-items: flex-end`).
     pub const PREVIEW_PAD_X: f32 = 5.0;
     pub const PREVIEW_PAD_Y: f32 = 3.0;
+
+    /// `.outputs`'s `padding: 8px 11px`. The 8 is the same 8 the arrangement's
+    /// 34 was written from (`lib.rs`: 8 + 18.5 + 8, rounded), so the row's
+    /// height and the space around what is in it are one derivation or
+    /// neither.
+    pub const OUTPUTS_PAD_X: f32 = 11.0;
+    pub const OUTPUTS_PAD_Y: f32 = 8.0;
+
+    /// `.outputs`'s `gap: 8px`: between the word OUTPUTS and the first sink,
+    /// and between two sinks when there is a second one.
+    pub const OUTPUTS_GAP: f32 = 8.0;
+
+    /// `.sink`'s `padding: 1px 10px`, around a dot and a name at [`BASE`].
+    pub const SINK_PAD_X: f32 = 10.0;
+    pub const SINK_PAD_Y: f32 = 1.0;
+
+    /// A sink's box: [`BASE`] at [`LINE`] inside that padding — **18.5**,
+    /// which is the 18.5 in the arrangement's `8 + 18.5 + 8` for the outputs
+    /// row. The row is 34 because a sink is this tall, so the two are read
+    /// off each other rather than measured twice.
+    pub const SINK_H: f32 = BASE * LINE + SINK_PAD_Y * 2.0;
+
+    /// `.sink`'s own `gap: 6px`, between its dot and its name.
+    pub const SINK_GAP: f32 = 6.0;
+
+    /// `.dot`'s `width: 7px; height: 7px; border-radius: 50%`.
+    pub const SINK_DOT: f32 = 7.0;
 }

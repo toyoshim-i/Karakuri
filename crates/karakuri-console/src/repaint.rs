@@ -209,13 +209,21 @@ impl Change<'_> {
                     false => Repaint::Now,
                     true => Repaint::Never,
                 },
-                // A report is a print and nothing else. The pointer on a
-                // divider, and nothing under the pointer, are operations that
-                // found nothing to act on. None of the three moved anything on
-                // screen, and **these are the arms that make the clause true**:
-                // a key that reaches the model and changes nothing costs
-                // nothing.
-                Outcome::Report(_) | Outcome::OnDivider { .. } | Outcome::Nothing => Repaint::Never,
+                // A report is a print and nothing else, and `Nothing` is an
+                // operation that had nothing to act on — `g` on the root,
+                // which is the one node with no split enclosing it. Neither
+                // moved anything on screen, and **these are the arms that make
+                // the clause true**: a key that reaches the model and changes
+                // nothing costs nothing.
+                //
+                // Two more used to be here — the pointer on a divider, and
+                // nothing under the pointer — and they left with the pointer
+                // itself when an operation started naming its target
+                // (`panel::Op`). They are not gone: they are what
+                // `Panel::under` answers, in the caller, *before* an operation
+                // is emitted, so those two keys now reach no `Change` at all
+                // and are stiller than they were.
+                Outcome::Report(_) | Outcome::Nothing => Repaint::Never,
             },
 
             Change::Room | Change::Viewport => Repaint::Now,

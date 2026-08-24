@@ -200,6 +200,8 @@ number; new records continue from the end.
 | [ADR-0172](0172-the-frame-loop-is-the-engines-because-the-cli-is-scaffolding.md) | The frame loop is the engine's, because the CLI is scaffolding | 2026-08-25 | accepted |
 | [ADR-0173](0173-a-frames-submission-is-not-only-its-sinks.md) | A frame's submission is not only its sinks | 2026-08-25 | accepted |
 | [ADR-0174](0174-a-node-claims-only-what-its-visible-content-can-use.md) | A node claims only what its visible content can use | 2026-08-25 | accepted |
+| [ADR-0175](0175-an-operation-carries-what-it-acts-on.md) | An operation carries what it acts on, and unfolding means making a region visible | 2026-08-25 | accepted |
+| [ADR-0176](0176-a-control-the-console-draws-is-the-panels.md) | A control the console draws is the panel's, and it clears the grab | 2026-08-25 | accepted |
 
 ## Retired numbers
 

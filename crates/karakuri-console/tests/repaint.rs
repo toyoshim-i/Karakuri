@@ -17,7 +17,7 @@ mod common;
 
 use std::time::Duration;
 
-use common::PLAUSIBLE;
+use common::{drawn_once, PLAUSIBLE};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Op, Outcome, Panel};
 use karakuri_console::repaint::{Change, Repaint};
@@ -30,15 +30,6 @@ fn panel() -> Panel {
     panel
 }
 
-/// A point inside a named region, well clear of its edges and so of every
-/// boundary's grab.
-fn inside(panel: &mut Panel, name: &str) -> Point {
-    panel.solve();
-    let layout = panel.layout();
-    let rect = layout.rect(layout.find(name).expect("no such region"));
-    Point::new(rect.x + rect.w * 0.5, rect.y + rect.h * 0.5)
-}
-
 /// The middle of the first boundary the arrangement has.
 fn on_a_boundary(panel: &mut Panel) -> Point {
     panel.solve();
@@ -48,10 +39,20 @@ fn on_a_boundary(panel: &mut Panel) -> Point {
     Point::new(gap.x + gap.w * 0.5, gap.y + gap.h * 0.5)
 }
 
-/// Do an operation with the pointer somewhere, and hand back what it did.
-fn did(panel: &mut Panel, at: Point, op: Op) -> Outcome {
-    panel.set_cursor(at);
+/// Do an operation and hand back what it did.
+///
+/// **It used to take a point**, because an operation meant *whatever is under
+/// the pointer* and the pointer was how a test aimed one. An operation names
+/// its target now (`panel::Op`), so the aiming is `node` and this is what is
+/// left of the helper.
+fn did(panel: &mut Panel, op: Op) -> Outcome {
     panel.op(op)
+}
+
+/// The id of a named region.
+fn node(panel: &mut Panel, name: &str) -> karakuri_layout::NodeId {
+    panel.solve();
+    panel.layout().find(name).expect("no such region")
 }
 
 // ---------------------------------------------------------------------------
@@ -74,36 +75,38 @@ fn did(panel: &mut Panel, at: Point, op: Op) -> Outcome {
 #[test]
 fn a_still_panel_asks_for_no_repaint() {
     let mut panel = panel();
-    let in_a_bay = inside(&mut panel, "library");
-    let on_a_gap = on_a_boundary(&mut panel);
+    let root = panel.layout().root();
 
-    // A key that reaches the model and finds nothing to do.
-    let nowhere = Point::new(-50.0, -50.0);
+    // **An operation with nothing to act on.** Two of the cases that used to
+    // be here — a fold with nothing under the pointer, and a fold with the
+    // pointer on a divider — could only be written while an operation *was*
+    // the pointer: the model resolved the cursor itself and answered
+    // `Outcome::Nothing` or `Outcome::OnDivider` when the resolution failed.
+    // The resolution is the caller's now (`Panel::under`), so those two keys
+    // emit no operation at all and reach no `Change` to ask about — stiller
+    // than they were, and asserted where they now happen, in
+    // `examples/panel.rs`. What is left is the case that is about the
+    // arrangement and not about a hand: the root has no split enclosing it.
     assert_eq!(
-        Change::Operated(&did(&mut panel, nowhere, Op::Fold)).repaint(),
+        Change::Operated(&did(&mut panel, Op::FoldEnclosing(root))).repaint(),
         Repaint::Never,
-        "a fold with nothing under the pointer moved nothing"
-    );
-    assert_eq!(
-        Change::Operated(&did(&mut panel, on_a_gap, Op::Fold)).repaint(),
-        Repaint::Never,
-        "a fold with the pointer on a divider moved nothing"
+        "a fold of the split enclosing the root, which has none, moved nothing"
     );
     // Asked speculatively, and both say they did nothing.
     assert_eq!(
-        Change::Operated(&did(&mut panel, in_a_bay, Op::UnfoldAll)).repaint(),
+        Change::Operated(&did(&mut panel, Op::UnfoldAll)).repaint(),
         Repaint::Never,
         "an unfold with nothing folded moved nothing"
     );
     assert_eq!(
-        Change::Operated(&did(&mut panel, in_a_bay, Op::Unsolo)).repaint(),
+        Change::Operated(&did(&mut panel, Op::Unsolo)).repaint(),
         Repaint::Never,
         "an unsolo with nothing soloed moved nothing"
     );
     // A report is a print. It is the case most obviously worth catching: it
     // returns a `Vec` of every region, which reads like a change and is not.
     assert_eq!(
-        Change::Operated(&did(&mut panel, in_a_bay, Op::Report)).repaint(),
+        Change::Operated(&did(&mut panel, Op::Report)).repaint(),
         Repaint::Never,
         "a report printed and moved nothing"
     );
@@ -148,47 +151,61 @@ fn a_still_panel_asks_for_no_repaint() {
 #[test]
 fn everything_that_changes_the_console_asks_for_a_frame() {
     let mut panel = panel();
-    let in_a_bay = inside(&mut panel, "library");
-    let on_a_gap = on_a_boundary(&mut panel);
+    let library = node(&mut panel, "library");
+    let picture = node(&mut panel, "program-view");
 
     // A fold, and the split enclosing one. Both move every sibling in the
     // split as well as the region named — folding the left pane widens the
     // centre, which is the "operation whose outcome changes another region"
     // that a per-region decision would miss.
     assert_eq!(
-        Change::Operated(&did(&mut panel, in_a_bay, Op::Fold)).repaint(),
+        Change::Operated(&did(&mut panel, Op::Fold(library))).repaint(),
         Repaint::Now,
         "a fold"
     );
     assert_eq!(
-        Change::Operated(&did(&mut panel, in_a_bay, Op::UnfoldAll)).repaint(),
+        Change::Operated(&did(&mut panel, Op::UnfoldAll)).repaint(),
         Repaint::Now,
         "an unfold that unfolded something"
     );
     assert_eq!(
-        Change::Operated(&did(&mut panel, on_a_gap, Op::FoldEnclosing)).repaint(),
+        Change::Operated(&did(&mut panel, Op::FoldEnclosing(library))).repaint(),
         Repaint::Now,
-        "folding the split a divider belongs to"
+        "folding the split a region belongs to"
     );
     assert_eq!(
-        Change::Operated(&did(&mut panel, in_a_bay, Op::UnfoldAll)).repaint(),
+        Change::Operated(&did(&mut panel, Op::UnfoldAll)).repaint(),
         Repaint::Now,
         "an unfold that brought a folded split back"
     );
 
+    // **The two directions the Outputs dot asks for**, which is the path that
+    // has no key behind it: a control that changed the arrangement and reached
+    // no repaint is a picture still on screen with the sink dark beside it.
+    assert_eq!(
+        Change::Operated(&did(&mut panel, Op::Fold(picture))).repaint(),
+        Repaint::Now,
+        "the sink turned off"
+    );
+    assert_eq!(
+        Change::Operated(&did(&mut panel, Op::Unfold(picture))).repaint(),
+        Repaint::Now,
+        "the sink turned back on"
+    );
+
     // A solo folds everything else away, and undoing it brings it all back.
     assert_eq!(
-        Change::Operated(&did(&mut panel, in_a_bay, Op::Solo)).repaint(),
+        Change::Operated(&did(&mut panel, Op::Solo(library))).repaint(),
         Repaint::Now,
         "a solo"
     );
     assert_eq!(
-        Change::Operated(&did(&mut panel, in_a_bay, Op::Unsolo)).repaint(),
+        Change::Operated(&did(&mut panel, Op::Unsolo)).repaint(),
         Repaint::Now,
         "an unsolo that undid a solo"
     );
     assert_eq!(
-        Change::Operated(&did(&mut panel, in_a_bay, Op::Reset)).repaint(),
+        Change::Operated(&did(&mut panel, Op::Reset)).repaint(),
         Repaint::Now,
         "a reset"
     );
@@ -198,7 +215,7 @@ fn everything_that_changes_the_console_asks_for_a_frame() {
     // the resize cursor from the hit.
     let mut panel = self::panel();
     let gap = on_a_boundary(&mut panel);
-    assert_eq!(claim(&mut panel, gap), Claim::Panel);
+    assert_eq!(claim(&mut panel, &drawn_once(), gap), Claim::Panel);
     assert_eq!(
         Change::Pointer(Claim::Panel).repaint(),
         Repaint::Now,
@@ -207,7 +224,7 @@ fn everything_that_changes_the_console_asks_for_a_frame() {
     panel.press(gap);
     let away = Point::new(gap.x + 200.0, gap.y);
     assert_eq!(
-        claim(&mut panel, away),
+        claim(&mut panel, &drawn_once(), away),
         Claim::Panel,
         "a drag keeps its claim wherever the pointer has gone"
     );
@@ -282,7 +299,7 @@ fn a_drag_too_small_to_report_still_asks_for_a_frame() {
 
     // And the frame is owed all the same.
     assert_eq!(
-        claim(&mut panel, creep),
+        claim(&mut panel, &drawn_once(), creep),
         Claim::Panel,
         "a drag in hand keeps its claim"
     );

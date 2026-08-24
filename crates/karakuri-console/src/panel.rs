@@ -1,5 +1,5 @@
 //! The panel's model: the arrangement, the drag in progress, and the
-//! operations that act on whatever is under the pointer.
+//! operations, each of which names what it acts on ([`Op`]).
 //!
 //! This is what a view drives. It holds a [`Layout`] and a pointer, and
 //! nothing else: no window, no device, no toolkit. Everything here runs on a
@@ -118,17 +118,96 @@ struct Drag {
 
 /// What an operation acts on. Named as operations rather than as keys, so a
 /// caller with no keyboard can ask for one.
+///
+/// # An operation carries what it acts on, and the pointer is a way of
+/// choosing that
+///
+/// **Every operation here used to mean *the region under the pointer***:
+/// `Fold` was *fold whatever [`Panel::cursor`] is over*, and the model
+/// resolved the pointer itself, once per operation. That reads fine while the
+/// keyboard is the only surface, and it is wrong as soon as anything else asks
+/// — because *under the pointer* is not part of what folding **is**. It is one
+/// way of naming which region to fold.
+///
+/// The console's Outputs row is the case that proves it. Its one control folds
+/// `program-view` — the picture — whatever the pointer happens to be over,
+/// because the pointer is over the control, at the other end of the panel. A
+/// pointer-relative vocabulary has no way to say that: it would need a second
+/// operation meaning *fold that one instead*, and then two names for one act.
+///
+/// So the four operations that act on a node take the node, and the four that
+/// act on the arrangement as a whole take nothing:
+///
+/// - [`Fold`](Op::Fold), [`Unfold`](Op::Unfold),
+///   [`FoldEnclosing`](Op::FoldEnclosing) and [`Solo`](Op::Solo) name a
+///   [`NodeId`].
+/// - [`UnfoldAll`](Op::UnfoldAll), [`Unsolo`](Op::Unsolo),
+///   [`Reset`](Op::Reset) and [`Report`](Op::Report) have nothing to name.
+///
+/// **Resolving the pointer is the caller's**, and it is [`Panel::under`]: the
+/// harness does it for a key press, and the Outputs control does not need it.
+/// That also moves two answers out of [`Outcome`] and into the caller, where
+/// they were always about the pointer rather than about the operation — *the
+/// pointer is on a divider* and *there is nothing under the pointer* are
+/// things a resolution finds, not things a fold reports.
+///
+/// # Folding and unfolding are not mirror images, and that is the point
+///
+/// [`Fold`](Op::Fold) folds one node and nothing else. [`Unfold`](Op::Unfold)
+/// makes one node **visible**, which takes its collapsed ancestors with it and
+/// a solo that is hiding it. **Hiding a thing hides one thing; showing a thing
+/// means showing the way to it** — the ordinary shape of revealing a node in a
+/// tree, and the reason the two are not each other's inverse.
+///
+/// The alternative is `expand(id)` and nothing else, and the console's one
+/// control is what settles it against: with the Program bay folded around the
+/// picture, the Outputs dot is dark, and a press that expanded the picture
+/// inside a still-folded bay would light nothing, move nothing and say
+/// nothing. `docs/manual/console.html` rules on exactly that shape, in the
+/// note about this very row — *"Nothing is refused here, so nothing has to be
+/// explained: a control that quietly declines the last of something is a rule
+/// an operator can only find by experiment."* A control that appears not to
+/// respond is that rule with no words at all.
+///
+/// [`UnfoldAll`](Op::UnfoldAll) keeps its own meaning and is not folded into
+/// this: it is what reaches a fold **nobody has a name for**, and `Unfold`
+/// undoes only what stands between one named node and the screen.
+///
+/// # Fold and unfold are two operations, and there is no toggle
+///
+/// A toggle is an affordance built **over** two operations by whoever draws it
+/// — the Outputs dot asks for [`Fold`](Op::Fold) when the picture is on and
+/// [`Unfold`](Op::Unfold) when it is off — and it is not one itself. The
+/// vocabulary is what every surface routes into: a MIDI map with a button per
+/// direction, an MCP call that says which one it wants, and a keyboard, all
+/// have to be able to say *fold this* and mean it. `Fold` folded-or-unfolded
+/// could never be asked for the direction it will take, which is the same
+/// reason a `Toggle` variant is not here.
+///
+/// It cost nothing where the pointer is the surface: a folded region has no
+/// rectangle, so the pointer could never be over one, so `f` on the keyboard
+/// only ever folded. What changes is that a *named* target can be folded
+/// already, and now the caller says which way it means.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Op {
-    /// Fold the region under the pointer.
-    Fold,
-    /// Fold the split enclosing whatever is under the pointer.
-    FoldEnclosing,
+    /// Fold this region away.
+    Fold(NodeId),
+    /// **Make this region visible**, undoing whatever stands between it and
+    /// the screen: `id` itself, every collapsed ancestor of it, and a solo
+    /// that is keeping it off screen.
+    ///
+    /// **Not the same as [`UnfoldAll`](Op::UnfoldAll)**: a sink turned back on
+    /// brings back *that* picture and the way to it, and nothing else that
+    /// happens to be folded. **Not the mirror of [`Fold`](Op::Fold)** either —
+    /// see the note above.
+    Unfold(NodeId),
+    /// Fold the split enclosing this region.
+    FoldEnclosing(NodeId),
     /// Unfold everything folded. A folded region has no rectangle, so the
     /// pointer cannot reach it to unfold it.
     UnfoldAll,
-    /// Solo the region under the pointer.
-    Solo,
+    /// Solo this region.
+    Solo(NodeId),
     /// Undo the solo.
     Unsolo,
     /// A fresh arrangement, at the same viewport.
@@ -228,17 +307,15 @@ pub struct Placement {
 /// same place. Which variant an operation can produce is on the operation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Outcome {
-    /// [`Op::Fold`] or [`Op::FoldEnclosing`]: `folded` says which way it went,
-    /// and `root` that what folded was the root — so the panel is now empty,
-    /// and only [`Op::UnfoldAll`] brings it back.
+    /// [`Op::Fold`], [`Op::Unfold`] or [`Op::FoldEnclosing`]: `folded` is what
+    /// the node **is** afterwards, read back out of the layout rather than
+    /// assumed from the operation, and `root` that what folded was the root —
+    /// so the panel is now empty, and only [`Op::UnfoldAll`] brings it back.
     Folded {
         id: NodeId,
         folded: bool,
         root: bool,
     },
-    /// [`Op::Fold`] with the pointer on a divider rather than in a region.
-    /// Nothing folded.
-    OnDivider { split: NodeId, index: usize },
     /// [`Op::UnfoldAll`]: everything that was folded, in tree order. Empty
     /// when nothing was.
     Unfolded(Vec<NodeId>),
@@ -251,7 +328,13 @@ pub enum Outcome {
     Reset,
     /// [`Op::Report`].
     Report(Vec<Placement>),
-    /// The operation found nothing under the pointer to act on.
+    /// The operation had nothing to act on: [`Op::FoldEnclosing`] on the root,
+    /// which is the one node with nothing enclosing it.
+    ///
+    /// **It used to be the answer to *nothing under the pointer* as well**,
+    /// and that half of it moved out to the caller with the pointer itself —
+    /// see [`Op`] and [`Panel::under`]. What is left is the case that is about
+    /// the arrangement rather than about where a hand is.
     Nothing,
 }
 
@@ -449,36 +532,69 @@ impl Panel {
         })
     }
 
-    /// Act on whatever the pointer is over.
+    /// **What the pointer is over, for a caller about to name an
+    /// [`Op`]'s target.**
+    ///
+    /// The resolution [`op`](Panel::op) used to do for itself, out where it
+    /// belongs: *the region under the pointer* is how a keyboard chooses what
+    /// to fold, and it is not part of what folding means — see [`Op`]. A
+    /// caller with a control under the pointer instead of a region, or with no
+    /// pointer at all, never asks this.
+    ///
+    /// **No grab**, which is [`Layout::hit`] with a zero-width divider: this
+    /// answers *what did the operator mean*, and a boundary's six pixels
+    /// either side exist so that a **hand** can find a nine-pixel gap. An
+    /// operation that took them would fold the wrong region six pixels from
+    /// every edge. [`press`](Panel::press) is the other one and it uses
+    /// [`GRAB`], because that one is the hand.
+    pub fn under(&mut self) -> Hit {
+        self.solve();
+        self.layout.hit(self.cursor, 0.0)
+    }
+
+    /// Act.
     pub fn op(&mut self, op: Op) -> Outcome {
         self.solve();
         let outcome = match op {
-            Op::Fold => match self.layout.hit(self.cursor, 0.0) {
-                Hit::View(id) => Outcome::Folded {
-                    id,
-                    folded: self.layout.toggle(id),
-                    root: id == self.layout.root(),
-                },
-                Hit::Divider { split, index } => Outcome::OnDivider { split, index },
-                Hit::Nothing => Outcome::Nothing,
-            },
-            Op::FoldEnclosing => {
-                let target = match self.layout.hit(self.cursor, 0.0) {
-                    // A divider already names its split; a region's enclosing
-                    // split is its parent.
-                    Hit::Divider { split, .. } => Some(split),
-                    Hit::View(id) => self.layout.parent(id),
-                    Hit::Nothing => None,
-                };
-                match target {
-                    Some(id) => Outcome::Folded {
-                        id,
-                        folded: self.layout.toggle(id),
-                        root: id == self.layout.root(),
-                    },
-                    None => Outcome::Nothing,
-                }
+            // Two directions and no toggle, and the answer is read back out of
+            // the layout rather than assumed: `folded` is what the node is
+            // now, so an operation that found the node already there says the
+            // truth rather than the intent.
+            Op::Fold(id) => {
+                self.layout.collapse(id);
+                self.folded(id)
             }
+            Op::Unfold(id) => {
+                // **The solo first, because it is what the expanding would
+                // otherwise be undone by.** A solo collapses everything it did
+                // not name and keeps the flags it replaced; `unsolo` puts
+                // exactly those back — so expanding under a live solo leaves
+                // `Layout::soloed` naming a region that is no longer the only
+                // one on screen, and the next unsolo quietly throws the expand
+                // away. Dropped only when the solo is what is hiding `id`: a
+                // solo that already has it on screen is not this operation's
+                // business.
+                if self.layout.is_soloed() && !self.layout.visible(id) {
+                    self.layout.unsolo();
+                }
+                // The node and the way to it. `expand` on a node that is not
+                // collapsed changes nothing and marks nothing dirty, so this
+                // is the path that was folded and no more than it.
+                let mut node = Some(id);
+                while let Some(step) = node {
+                    self.layout.expand(step);
+                    node = self.layout.parent(step);
+                }
+                self.folded(id)
+            }
+            Op::FoldEnclosing(id) => match self.layout.parent(id) {
+                Some(split) => {
+                    self.layout.collapse(split);
+                    self.folded(split)
+                }
+                // The root is the one node with nothing enclosing it.
+                None => Outcome::Nothing,
+            },
             Op::UnfoldAll => {
                 let folded: Vec<NodeId> = self
                     .nodes
@@ -491,13 +607,10 @@ impl Panel {
                 }
                 Outcome::Unfolded(folded)
             }
-            Op::Solo => match self.layout.hit(self.cursor, 0.0) {
-                Hit::View(id) => {
-                    self.layout.solo(id);
-                    Outcome::Soloed(id)
-                }
-                _ => Outcome::Nothing,
-            },
+            Op::Solo(id) => {
+                self.layout.solo(id);
+                Outcome::Soloed(id)
+            }
             Op::Unsolo => {
                 let was = self.layout.is_soloed();
                 self.layout.unsolo();
@@ -535,6 +648,17 @@ impl Panel {
         };
         self.solve();
         outcome
+    }
+
+    /// What a fold or an unfold left behind, read out of the layout. One
+    /// place, because the three operations that fold differ in what they aim
+    /// at and not at all in what they report.
+    fn folded(&self, id: NodeId) -> Outcome {
+        Outcome::Folded {
+            id,
+            folded: self.layout.is_collapsed(id),
+            root: id == self.layout.root(),
+        }
     }
 }
 

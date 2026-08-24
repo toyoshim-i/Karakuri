@@ -301,6 +301,33 @@ together and neither reachable from a test. There is one `aims(layout)` now. The
 line used to record — size deck A's texture from the picture's rectangle — was caught by **nothing**
 before and fails **three** tests now.
 
+**The Outputs row is built, and it is the console's first clickable control.** One sink —
+`program view` — and nothing else, because the projector window, the plugin sinks and `+ add
+output` do not exist and a row of dead names is scaffolding that looks finished. The dot is lit
+when `layout.visible("program-view")` is, stored nowhere (ADR-0161's test run the other way: this
+*can* be derived, so it is).
+
+**It cost the operation vocabulary its pointer**, which is what M5 said it would open with.
+`Op::Fold` meant *fold the region under the pointer*; the operations that act on a node now carry
+the node ([ADR-0175](adr/0175-an-operation-carries-what-it-acts-on.md)), and *under the pointer* is
+one way of naming which region rather than part of what folding is. `Op::Unfold` is new and means
+**make this region visible** — the node, its collapsed ancestors, and a solo that is hiding it —
+because a dot that expanded the picture inside a still-folded bay would light nothing and say
+nothing. **A press on a lit dot darkens it and a press on a dark dot lights it, always**, and that
+is a test rather than a sentence.
+
+**And `input`'s standing warning came due.** Its documentation has said since it was written that
+the claim rule holds *only while the gaps stay empty*, and that the first control drawn near a
+bay's edge would sit under a boundary's grab. It clears by 1.75 pixels, measured rather than
+assumed, and that is now a test that fails if the control moves, the row shortens or `GRAB` widens
+([ADR-0176](adr/0176-a-control-the-console-draws-is-the-panels.md)).
+
+**Owed, and found by building this: `Layout::soloed()` can lie.** The solve never reads it and
+`check_structure` only checks that it addresses a node, so a solo's exclusivity lives entirely in
+collapsed flags any later `expand` may contradict — and the next `unsolo` restores its snapshot and
+throws the expand away with nothing said. Nothing in the console reaches that state today. What
+`expand` under a solo should do is a decision nobody has taken.
+
 The table below is what exists, part by part. What is still absent, and why, is in the
 milestones further down rather than listed here: agents, the library, the node editor.
 

@@ -55,6 +55,25 @@ pub const SMALLEST: Rect = Rect {
     h: 632.0,
 };
 
+/// **An `egui` context that has drawn once.**
+///
+/// What laying out the Outputs row takes, and it is a real requirement rather
+/// than a test's ceremony: the chip's width is the width of the name in it, so
+/// asking where the control is means asking `egui` to lay that name out, and
+/// `Context::fonts` is *"not valid until first call to `Context::run()`"*. A
+/// window loop has drawn thousands of frames before a hand arrives; a test has
+/// to say so in one line.
+///
+/// The texture delta is cleared because `epaint` panics if one is dropped
+/// unapplied — there is no renderer here to apply it to, which is the whole of
+/// what makes this a test and not a window.
+pub fn drawn_once() -> egui::Context {
+    let ctx = egui::Context::default();
+    let mut out = ctx.run_ui(egui::RawInput::default(), |_| {});
+    out.textures_delta.clear();
+    ctx
+}
+
 /// A solved layout at `viewport`.
 pub fn solved(viewport: Rect) -> Layout {
     let mut layout = karakuri_console::layout();
