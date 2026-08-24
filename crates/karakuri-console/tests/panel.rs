@@ -15,7 +15,7 @@ mod common;
 
 use common::EPS;
 use karakuri_console::panel::{Op, Outcome, Panel, Pressed};
-use karakuri_layout::{Axis, NodeId, Point, Rect};
+use karakuri_layout::{Axis, Hit, NodeId, Point, Rect};
 
 /// Every rectangle in the arrangement, in tree order — what "the same
 /// arrangement" is compared as.
@@ -262,15 +262,30 @@ fn a_sweep_of_hostile_input() {
                 point,
             ] {
                 let _ = p.moved(to);
-                for op in [
-                    Op::Fold,
-                    Op::FoldEnclosing,
-                    Op::Report,
-                    Op::Solo,
-                    Op::Report,
-                    Op::Unsolo,
-                    Op::UnfoldAll,
-                ] {
+                // **This loop used to be a list of seven `Op`s** and it
+                // compiled only because an operation meant *whatever is under
+                // the pointer*: the hostile part of it was that the pointer
+                // was at `f32::MAX`, and the model did the resolving. The
+                // resolution is the caller's now, so the sweep does it — which
+                // is the same hostility, with the failing resolution visible
+                // rather than swallowed into an `Outcome::Nothing`.
+                let target = match p.under() {
+                    Hit::View(id) => Some(id),
+                    Hit::Divider { split, .. } => Some(split),
+                    Hit::Nothing => None,
+                };
+                for op in target
+                    .into_iter()
+                    .flat_map(|id| {
+                        [
+                            Op::Fold(id),
+                            Op::Unfold(id),
+                            Op::FoldEnclosing(id),
+                            Op::Solo(id),
+                        ]
+                    })
+                    .chain([Op::Report, Op::Unsolo, Op::UnfoldAll])
+                {
                     p.op(op);
                 }
                 // A resize in the middle of a drag, which a window can do.
@@ -329,8 +344,13 @@ fn every_operation_leaves_the_layout_readable_and_undoes_exactly() {
             .count()
     };
 
+    // **The pointer resolves to a target and the operation names it.** The
+    // cursor is set above and `under` is what a surface asks; the assertion is
+    // the same one it always was — `f` folds the region under the pointer —
+    // with the two halves of that sentence now in the two places they belong.
+    assert_eq!(p.under(), Hit::View(leaf.0), "the pointer lost its region");
     assert_eq!(
-        p.op(Op::Fold),
+        p.op(Op::Fold(leaf.0)),
         Outcome::Folded {
             id: leaf.0,
             folded: true,
@@ -354,7 +374,7 @@ fn every_operation_leaves_the_layout_readable_and_undoes_exactly() {
     // the outcome carries a `root` flag for.
     let is_root = enclosing == p.layout().root();
     assert_eq!(
-        p.op(Op::FoldEnclosing),
+        p.op(Op::FoldEnclosing(leaf.0)),
         Outcome::Folded {
             id: enclosing,
             folded: true,
@@ -366,7 +386,7 @@ fn every_operation_leaves_the_layout_readable_and_undoes_exactly() {
     p.op(Op::UnfoldAll);
     assert!(same(&before, &rects(&mut p)), "an unfold did not restore");
 
-    assert_eq!(p.op(Op::Solo), Outcome::Soloed(leaf.0));
+    assert_eq!(p.op(Op::Solo(leaf.0)), Outcome::Soloed(leaf.0));
     assert!(p.layout().is_soloed());
     assert!(
         p.layout().visible(leaf.0),
@@ -516,7 +536,12 @@ fn a_fold_during_a_drag_leaves_the_release_with_no_boundary() {
     let cursor = Point::new(inside.x + inside.w / 2.0, inside.y + inside.h / 2.0);
     let _ = p.moved(cursor);
     assert_eq!(
-        p.op(Op::Fold),
+        p.under(),
+        Hit::View(far_side),
+        "the pointer is not in the region beyond the boundary"
+    );
+    assert_eq!(
+        p.op(Op::Fold(far_side)),
         Outcome::Folded {
             id: far_side,
             folded: true,

@@ -8,7 +8,7 @@
 
 mod common;
 
-use common::{id_of, near, rect_of, solved, PLAUSIBLE, SMALLEST};
+use common::{drawn_once, id_of, near, rect_of, solved, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{Palette, Room};
@@ -30,7 +30,9 @@ const BAYS: &[&str] = &[
 ];
 
 /// The transport and the outputs, which carry `class="bay"` for the card
-/// styling and no `.bay-head` at all (ADR-0159).
+/// styling and no `.bay-head` at all (ADR-0159). Two kinds and one rule: the
+/// outputs row is a [`Kind::Outputs`] because it has a control in it, and it
+/// is as headless as the transport.
 const ROWS: &[&str] = &["transport", "outputs"];
 
 fn planned(panel: &mut Panel) -> Vec<Placed> {
@@ -131,12 +133,21 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
         }
     }
     for name in ROWS {
-        assert_eq!(
-            region(name).unwrap().kind,
-            Kind::Row,
+        assert!(
+            matches!(region(name).unwrap().kind, Kind::Row | Kind::Outputs),
             "{name} has no heading in the mock and is being given one"
         );
     }
+    // And the difference between the two rows is what is *in* one of them,
+    // not a head on it: the outputs row draws the console's one control, which
+    // `View::draw` has to be told about by the table rather than by comparing
+    // a name on the frame path.
+    assert_eq!(region("transport").unwrap().kind, Kind::Row);
+    assert_eq!(
+        region("outputs").unwrap().kind,
+        Kind::Outputs,
+        "the Outputs row is where the one sink is drawn"
+    );
     for name in ["inspector-1", "inspector-2"] {
         assert_eq!(
             region(name).unwrap().kind,
@@ -583,29 +594,33 @@ fn on_the_solo_pill(panel: &mut Panel) -> Point {
 fn a_pointer_on_a_boundary_is_the_panels() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
     let p = on_a_boundary(&mut panel);
-    assert_eq!(claim(&mut panel, p), Claim::Panel);
+    assert_eq!(claim(&mut panel, &drawn_once(), p), Claim::Panel);
 }
 
 /// **A pointer anywhere else is `egui`'s** — including on the one thing the
 /// panel draws that a hand would reach for.
 #[test]
 fn a_pointer_off_a_boundary_is_eguis() {
+    let ctx = drawn_once();
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
     panel.solve();
 
     let library = rect_of(panel.layout(), "library");
     let middle = Point::new(library.x + library.w * 0.5, library.y + library.h * 0.5);
-    assert_eq!(claim(&mut panel, middle), Claim::Egui);
+    assert_eq!(claim(&mut panel, &ctx, middle), Claim::Egui);
 
     let pill = on_the_solo_pill(&mut panel);
     assert_eq!(
-        claim(&mut panel, pill),
+        claim(&mut panel, &ctx, pill),
         Claim::Egui,
         "the solo pill is not on a boundary, so it is egui's"
     );
 
     // Outside the window entirely: nothing to grab, so egui's.
-    assert_eq!(claim(&mut panel, Point::new(-40.0, -40.0)), Claim::Egui);
+    assert_eq!(
+        claim(&mut panel, &ctx, Point::new(-40.0, -40.0)),
+        Claim::Egui
+    );
 }
 
 /// **A drag in hand keeps its claim, wherever the pointer wanders.**
@@ -619,6 +634,7 @@ fn a_pointer_off_a_boundary_is_eguis() {
 /// never saw the button-down for.
 #[test]
 fn a_drag_in_hand_keeps_its_claim_wherever_the_pointer_goes() {
+    let ctx = drawn_once();
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
     let start = on_a_boundary(&mut panel);
     let pill = on_the_solo_pill(&mut panel);
@@ -627,15 +643,15 @@ fn a_drag_in_hand_keeps_its_claim_wherever_the_pointer_goes() {
     let middle = Point::new(library.x + library.w * 0.5, library.y + library.h * 0.5);
 
     // Before the press, the two elsewhere-points are egui's.
-    assert_eq!(claim(&mut panel, pill), Claim::Egui);
-    assert_eq!(claim(&mut panel, middle), Claim::Egui);
+    assert_eq!(claim(&mut panel, &ctx, pill), Claim::Egui);
+    assert_eq!(claim(&mut panel, &ctx, middle), Claim::Egui);
 
     panel.press(start);
     assert!(panel.dragging());
 
     for wandered in [pill, middle, Point::new(-500.0, 4000.0), start] {
         assert_eq!(
-            claim(&mut panel, wandered),
+            claim(&mut panel, &ctx, wandered),
             Claim::Panel,
             "a boundary is in hand and the claim was given away at {wandered:?}"
         );
@@ -644,13 +660,13 @@ fn a_drag_in_hand_keeps_its_claim_wherever_the_pointer_goes() {
 
     // The release is still the panel's, and it has to be asked before
     // `released` takes the drag out of hand.
-    assert_eq!(claim(&mut panel, middle), Claim::Panel);
+    assert_eq!(claim(&mut panel, &ctx, middle), Claim::Panel);
     panel.released();
     assert!(!panel.dragging());
 
     // And afterwards the claim is back where it was.
-    assert_eq!(claim(&mut panel, pill), Claim::Egui);
-    assert_eq!(claim(&mut panel, middle), Claim::Egui);
+    assert_eq!(claim(&mut panel, &ctx, pill), Claim::Egui);
+    assert_eq!(claim(&mut panel, &ctx, middle), Claim::Egui);
     let boundary = on_a_boundary(&mut panel);
-    assert_eq!(claim(&mut panel, boundary), Claim::Panel);
+    assert_eq!(claim(&mut panel, &ctx, boundary), Claim::Panel);
 }

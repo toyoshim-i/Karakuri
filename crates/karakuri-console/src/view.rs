@@ -45,6 +45,21 @@
 //! which is the card styling, and neither carries a `.bay-head`
 //! ([ADR-0159](../../../docs/adr/0159-the-consoles-words-are-the-manuals-and-the-middle-one-is-not-a-pane.md)).
 //!
+//! # The Outputs row has one control in it, and it is the console's first
+//!
+//! [`Kind::Outputs`] draws the word OUTPUTS and **one** `.sink` — the picture,
+//! which the manual lists as *program view*. Everything else in the mock's row
+//! is a control over something that does not exist, and [`outputs`] names each
+//! of them and says why it is not drawn. The dot is lit from
+//! [`Layout::visible`] on the picture's node and a press on it asks for
+//! [`Op::Fold`] or [`Op::Unfold`] by name, so the control and the keyboard
+//! reach one operation between them rather than two states that agree until
+//! they do not.
+//!
+//! It is also the first thing on the panel a press has to *reach*, which is
+//! the rule [`crate::input`] was written for and the clearance
+//! `tests/outputs.rs` holds.
+//!
 //! # The bay head is one component with seven call sites
 //!
 //! [`bay_head`] is written once and [`REGIONS`] calls it seven times, which is
@@ -66,7 +81,7 @@ use egui::epaint::text::{LayoutJob, TextFormat};
 use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, StrokeKind, Ui};
 use karakuri_layout::{Axis, Hit, NodeId};
 
-use crate::panel::{Panel, GRAB};
+use crate::panel::{Op, Panel, GRAB};
 use crate::room::{size, Palette, Room};
 
 /// The whole of a texture, in `egui`'s texture coordinates. The picture fills
@@ -124,9 +139,22 @@ pub enum Kind {
         /// and the mock is the reference.
         grip: bool,
     },
-    /// A strip of readouts with no heading: the transport and the outputs
-    /// (ADR-0159).
+    /// A strip with no heading: the transport (ADR-0159). Its body is empty
+    /// and looks it, like every other body in this pass.
     Row,
+    /// **The Outputs row**, which is a [`Row`](Kind::Row) with the console's
+    /// one control in it.
+    ///
+    /// A row in every other respect — it carries `class="bay"` for the card
+    /// and no `.bay-head`, which is ADR-0159 — and it is a kind of its own for
+    /// the reason [`Kind::Picture`] is one: [`View::draw`] has to know *which*
+    /// row the sinks go in, and the alternative is comparing a name on the
+    /// frame path, which puts a string where the table already says what a
+    /// region is.
+    ///
+    /// See [`outputs`] for what is drawn here, for the state the dot is read
+    /// from, and for the four things in the mock's row that are **not** drawn.
+    Outputs,
     /// One subdivision of a bay, which has no head of its own because the bay
     /// around it has one. The inspector's two panes.
     Pane,
@@ -267,7 +295,7 @@ pub const REGIONS: &[Region] = &[
     },
     Region {
         name: "outputs",
-        kind: Kind::Row,
+        kind: Kind::Outputs,
     },
 ];
 
@@ -481,6 +509,231 @@ fn preview_cells(region: Rect) -> Option<[Rect; DECKS]> {
     }))
 }
 
+/// **The word at the head of the Outputs row**, in the source's own
+/// capitalisation for the reason [`Kind::Bay`]'s title is: the mock
+/// upper-cases in CSS, and that is done at paint time here so the word a
+/// reader searches for is the word in the source.
+///
+/// It is **not** a [`bay_head`]. The mock's markup is an inline span with
+/// `.bay-head`'s type on it — `font-size: 10px`, `letter-spacing: 0.16em`,
+/// `text-transform: uppercase`, `--c-faint` — inside a row that has no head at
+/// all (ADR-0159), so it is that typography and none of that structure: no
+/// hairline under it, no pills or grip beside it, and the row's own padding
+/// rather than a head's.
+const OUTPUTS_LABEL: &str = "Outputs";
+
+/// **The one sink the console has**, and the manual's name for it: *"The
+/// picture in the Program bay is a sink like any other and is the first
+/// row."*
+const PROGRAM_VIEW: &str = "program view";
+
+/// **The Outputs row, laid out**: where the word goes, where the console's one
+/// control is, and whether that control is lit.
+///
+/// # One derivation, because a control drawn where it cannot be clicked is
+/// silent
+///
+/// [`View::draw`] paints exactly these rectangles and [`crate::input::claim`]
+/// hit-tests exactly these rectangles, the way [`preview_cells`] serves both
+/// [`preview_rects`] and the frame. Two copies of this arithmetic is a dot
+/// that lights up under a pointer that cannot switch it, and nothing on screen
+/// says so.
+///
+/// # `on` is read, never stored
+///
+/// The manual: *"The picture is a sink, listed in Outputs as program view, and
+/// **it is on screen exactly when that sink is on**."* So the sink's state is
+/// [`Layout::visible`] on the picture's node and there is no second copy of it
+/// to drift — a fold from the keyboard lights the dot down, and the dot folds
+/// the same node the keyboard does.
+/// [ADR-0161](../../../docs/adr/0161-a-solo-is-stored-because-it-cannot-be-derived.md)
+/// stored `soloed` because it could not be derived; this can.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Outputs {
+    /// Where the word OUTPUTS is painted: its top-left, and the box the
+    /// galley fills.
+    pub label: Rect,
+    /// **The control**: `.sink`'s capsule, dot and name together, which is
+    /// what a press has to land in. The mock gives the whole chip the click,
+    /// not the dot alone — a 7px dot is not a target a hand finds, which is
+    /// [`GRAB`]'s argument one control along.
+    pub sink: Rect,
+    /// The `.dot` inside it.
+    pub dot: Rect,
+    /// The node this sink switches: the picture, `program-view`.
+    pub id: NodeId,
+    /// Whether the picture is on screen — `layout.visible(id)`, read here.
+    pub on: bool,
+}
+
+impl Outputs {
+    /// **What a press on the control asks for.** Two operations and no toggle:
+    /// [`Op::Fold`] while the picture is on, [`Op::Unfold`] while it is off.
+    /// The toggle is this method — an affordance over two operations — and the
+    /// vocabulary underneath it stays two things a MIDI map or an MCP call can
+    /// ask for by name. See [`Op`].
+    ///
+    /// **A press on a dark dot always lights it**, whatever darkened it — the
+    /// picture folded on its own, the Program bay folded around it, a solo
+    /// that left it out. That is [`Op::Unfold`]'s rule and not a special case
+    /// here: an unfold makes its node *visible*, so it undoes the way to it as
+    /// well as the node. This control is why the rule is written that way, and
+    /// the manual's own note on this row is the argument — *"Nothing is
+    /// refused here, so nothing has to be explained: a control that quietly
+    /// declines the last of something is a rule an operator can only find by
+    /// experiment."* A press that lit nothing would be that rule with no words
+    /// at all.
+    pub fn op(&self) -> Op {
+        match self.on {
+            true => Op::Fold(self.id),
+            false => Op::Unfold(self.id),
+        }
+    }
+
+    /// Whether `p` is on the control.
+    pub fn hit(&self, p: karakuri_layout::Point) -> bool {
+        self.sink.contains(Pos2::new(p.x, p.y))
+    }
+}
+
+/// **The Outputs row's furniture, derived**: the word, and the one sink.
+///
+/// `None` where there is no row to draw in — the row folded away, a solo
+/// somewhere else, or a window too small to hold the chip — which is
+/// [`picture_rect`]'s rule stated on a control instead of a picture: a
+/// rectangle with nothing in it is not something to paint or to click.
+///
+/// # What is in the mock's row and is deliberately not here
+///
+/// The mock draws four `.sink`s and a `+ add output` pill. **One of them
+/// exists.** Drawing the others is the scaffolding this module's
+/// documentation refuses — a control that looks finished does not get
+/// replaced, and each of these is a control over something that has not been
+/// built:
+///
+/// - `projector · DELL U2720Q` is a second window on another display. That is
+///   a second `Sink` and a second surface, and neither exists.
+/// - `Syphon` and `NDI · no plugin` are plugin sinks. There is no plugin
+///   system, and `NDI`'s own row says so — it is drawn `.absent`, which is a
+///   control explaining that the thing it would switch is not installed.
+/// - `+ add output` adds a region while the panel is running, which the arena
+///   cannot do: `docs/roadmap.md` records it as **one gap drawn five times**
+///   (`+ lane`, `+ add`, `+ add output`, `+` on the scope list, and the
+///   inspector's `2 up`), and it arrives with the arena operations, not with
+///   this row.
+///
+/// # The tooltip is not drawn, and not half-drawn either
+///
+/// Every `.sink` in the mock carries a `data-tip`, and the manual makes a
+/// point of it: *"hover says three things: what the control is, what state it
+/// is in, and what a click will do."* A tooltip needs `egui` to **own a
+/// widget** — a `Response` with a hover state and a layer above the panel —
+/// and this console paints, with no widget anywhere in it
+/// ([`crate::input`]). Giving one control a widget is a decision about who
+/// owns the pointer, and it is its own; so no tooltip is drawn here and no
+/// half of one is left behind.
+///
+/// # The row does not wrap, and the mock's does
+///
+/// `.outputs` is `flex-wrap: wrap`, which is a rule about what happens to the
+/// *fifth* thing in a row that is too narrow to hold it. There is one sink and
+/// it fits at every width the console draws — 172 of a narrowest 990 — so
+/// wrapping is a rule with nothing to apply to, and it is a decision to take
+/// with the second sink rather than a behaviour to write for one.
+///
+/// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
+/// one. `ctx` is asked for the type: the chip's width is the width of the name
+/// in it, and where the name goes is where the word before it ended.
+pub fn outputs(ctx: &egui::Context, layout: &karakuri_layout::Layout) -> Option<Outputs> {
+    // **Fonts are not valid until `egui` has run a pass**, and it says so
+    // outright. A pointer event can reach this before the first frame — the
+    // window is up and the loop has not drawn yet — so the answer there is
+    // that there is no control, which is also the true one: a control that has
+    // never been drawn is not one a press can be on.
+    if ctx.cumulative_pass_nr() == 0 {
+        return None;
+    }
+    let row = to_egui(layout.rect(layout.find("outputs")?));
+    let id = layout.find("program-view")?;
+    let label = ctx.fonts_mut(|f| f.layout_job(label_job(Color32::PLACEHOLDER)).size().x);
+    let name = ctx.fonts_mut(|f| {
+        f.layout_no_wrap(
+            PROGRAM_VIEW.to_owned(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            Color32::PLACEHOLDER,
+        )
+        .size()
+        .x
+    });
+    outputs_row(row, label, name).map(|(label, sink, dot)| Outputs {
+        label,
+        sink,
+        dot,
+        id,
+        on: layout.visible(id),
+    })
+}
+
+/// The arithmetic of the row, away from the type it measures and the layout it
+/// reads — the two rectangles [`outputs`] hands out and the dot inside the
+/// second.
+///
+/// Term for term from `.outputs` and `.sink` in `style.css`:
+///
+/// - `.outputs { display: flex; align-items: center; gap: 8px;
+///   padding: 8px 11px }` — the word and the chip laid left to right from
+///   [`size::OUTPUTS_PAD_X`], one [`size::OUTPUTS_GAP`] between them, and both
+///   **centred in the row** rather than sat on its padding.
+/// - `.sink { padding: 1px 10px; gap: 6px; border-radius: 999px }` — a
+///   [`size::SINK_H`] capsule holding a [`size::SINK_DOT`] dot, a
+///   [`size::SINK_GAP`], and the name.
+///
+/// **The centring is where the 34 comes back.** The row is 34 and a sink is
+/// 18.5, so there is (34 - 18.5) / 2 = 7.75 of row above the chip and 7.75
+/// below — more than the six pixels [`GRAB`] widens the boundary above it by,
+/// which is the whole reason this control can be clicked at all. `.outputs`'s
+/// own padding is 8 and the arrangement rounded 8 + 18.5 + 8 down to 34, so
+/// the quarter pixel the CSS and the row disagree by is spent here rather than
+/// argued about: `align-items: center` is what the CSS says, and it is what
+/// leaves the two clearances equal.
+fn outputs_row(row: Rect, label_w: f32, name_w: f32) -> Option<(Rect, Rect, Rect)> {
+    let mid = row.center().y;
+    let label = Rect::from_min_size(
+        Pos2::new(row.min.x + size::OUTPUTS_PAD_X, mid - size::HEAD_SIZE * 0.5),
+        egui::vec2(label_w, size::HEAD_SIZE),
+    );
+    let sink = Rect::from_min_size(
+        Pos2::new(label.max.x + size::OUTPUTS_GAP, mid - size::SINK_H * 0.5),
+        egui::vec2(
+            size::SINK_PAD_X * 2.0 + size::SINK_DOT + size::SINK_GAP + name_w,
+            size::SINK_H,
+        ),
+    );
+    let dot = Rect::from_center_size(
+        Pos2::new(sink.min.x + size::SINK_PAD_X + size::SINK_DOT * 0.5, mid),
+        egui::vec2(size::SINK_DOT, size::SINK_DOT),
+    );
+    // The same rule [`picture_rect`] states, on the chip rather than on the
+    // row because the chip is what is drawn and clicked: a row folded away has
+    // a rectangle with no extent in it, and one too narrow for the chip has
+    // nowhere to put it. Either way there is no control.
+    match row.contains_rect(sink) {
+        true => Some((label, sink, dot)),
+        false => None,
+    }
+}
+
+/// The word OUTPUTS as one laid-out run, so that measuring it and painting it
+/// cannot be two different runs of type.
+fn label_job(colour: Color32) -> LayoutJob {
+    spaced(
+        &OUTPUTS_LABEL.to_uppercase(),
+        size::HEAD_SIZE,
+        colour,
+        size::HEAD_TRACKING,
+    )
+}
+
 /// The console's view: which room it is in, and the frame's plan, kept so a
 /// frame does not allocate one.
 pub struct View {
@@ -548,6 +801,16 @@ impl View {
                         pane_dividers(ui, &pal, panel, placed.id, rect);
                     }
                     Kind::Row => card(ui, &pal, rect),
+                    // The one row with something in it, and the something is
+                    // one control. Where it goes is `outputs`'s answer and
+                    // not this pass's: the same call `input::claim` makes, so
+                    // the chip that is painted is the chip that is clicked.
+                    Kind::Outputs => {
+                        card(ui, &pal, rect);
+                        if let Some(row) = outputs(ui.ctx(), panel.layout()) {
+                            outputs_into(ui, &pal, &row);
+                        }
+                    }
                     // A pane draws nothing of its own. It has no card — it is
                     // inside the bay's — and no head, and its body is as empty
                     // as every other body in this pass.
@@ -687,6 +950,76 @@ fn preview(ui: &Ui, pal: &Palette, cell: Rect, deck: usize, picture: Option<Pict
         colour,
     );
 }
+
+/// **The Outputs row's contents**: the word, and the one `.sink`.
+///
+/// Where everything goes is [`outputs`]'s, so this paints and derives nothing.
+/// Term for term from `style.css`:
+///
+/// - `.sink` — `background: var(--c-well)`, `color: var(--c-dim)`, and
+///   `border-radius: 999px`, which on a box this short is a capsule.
+/// - `.sink.on` — `color: var(--c-text)` over
+///   `color-mix(in srgb, var(--c-mint) 14%, transparent)`, which is
+///   `pal.mint` at 14% alpha exactly (see `room`'s documentation).
+/// - `.dot` — `var(--c-faint)` off, and `var(--c-mint)` with
+///   `box-shadow: 0 0 8px var(--c-glow)` on. The halo is an
+///   [`egui::epaint::Shadow`] with the blur the CSS names and a corner radius
+///   of half the dot, which is a blurred circle — the same mechanism the bay's
+///   card draws its drop shadow with, and the first thing in this crate to use
+///   `--c-glow`, which `room` transcribed against the day a control was drawn.
+fn outputs_into(ui: &Ui, pal: &Palette, row: &Outputs) {
+    let painter = ui.painter();
+
+    // The word: `.bay-head`'s type on a row that has no head — see
+    // `OUTPUTS_LABEL`.
+    let galley = painter.layout_job(label_job(pal.faint));
+    painter.galley(row.label.min, galley, pal.faint);
+
+    let (ink, fill, dot) = match row.on {
+        true => (
+            pal.text,
+            Color32::from_rgba_unmultiplied(pal.mint.r(), pal.mint.g(), pal.mint.b(), TINT_14),
+            pal.mint,
+        ),
+        false => (pal.dim, pal.well, pal.faint),
+    };
+    painter.rect_filled(
+        row.sink,
+        CornerRadius::same((size::SINK_H * 0.5) as u8),
+        fill,
+    );
+    if row.on {
+        painter.add(
+            egui::epaint::Shadow {
+                offset: [0, 0],
+                blur: 8,
+                spread: 0,
+                color: pal.glow,
+            }
+            .as_shape(row.dot, CornerRadius::same((size::SINK_DOT * 0.5) as u8)),
+        );
+    }
+    painter.circle_filled(row.dot.center(), size::SINK_DOT * 0.5, dot);
+
+    let galley = painter.layout_no_wrap(
+        PROGRAM_VIEW.to_owned(),
+        FontId::new(size::BASE, FontFamily::Proportional),
+        ink,
+    );
+    painter.galley(
+        Pos2::new(
+            row.dot.max.x + size::SINK_GAP,
+            row.sink.center().y - galley.size().y * 0.5,
+        ),
+        galley,
+        ink,
+    );
+}
+
+/// `color-mix(in srgb, X 14%, transparent)`, as the alpha it is: 14% of 255,
+/// rounded. The mock's own wash behind an armed control, and `room`'s
+/// documentation is where the equivalence is argued.
+const TINT_14: u8 = 36;
 
 /// A bay's card: `.bay`'s panel fill, 11px radius and drop shadow.
 fn card(ui: &Ui, pal: &Palette, rect: Rect) {

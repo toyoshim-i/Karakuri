@@ -127,11 +127,11 @@ use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Dragged, Op, Outcome, Panel, Pressed, Released, Visibility};
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
-use karakuri_console::view::{picture_rect, preview_rects, Kind, Picture, View, DECKS};
+use karakuri_console::view::{outputs, picture_rect, preview_rects, Kind, Picture, View, DECKS};
 use karakuri_engine::{
     compose, Committed, Deck, Gpu, HotSwap, Look, Present, Set, Sink, Skip, TonemapOp,
 };
-use karakuri_layout::{Axis, NodeId, Point};
+use karakuri_layout::{Axis, Hit, NodeId, Point};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -831,7 +831,7 @@ impl Readout {
         match outcome {
             Outcome::Folded { id, folded, root } => {
                 let what = match op {
-                    Op::FoldEnclosing => "the split ",
+                    Op::FoldEnclosing(_) => "the split ",
                     _ => "",
                 };
                 println!(
@@ -844,10 +844,6 @@ impl Readout {
                     }
                 );
             }
-            Outcome::OnDivider { split, index } => println!(
-                "fold: the pointer is on divider {}#{index} — move it into a region",
-                self.label(*split)
-            ),
             Outcome::Unfolded(ids) => match ids.is_empty() {
                 true => println!("unfold: nothing is folded"),
                 false => {
@@ -892,17 +888,13 @@ impl Readout {
                     .collect();
                 println!("{}", lines.join("\n"));
             }
-            // The three operations that act on what is under the pointer are
-            // the only ones that can find nothing there.
-            Outcome::Nothing => println!(
-                "{}",
-                match op {
-                    Op::Fold => "fold: nothing under the pointer".to_owned(),
-                    Op::FoldEnclosing => "fold: nothing encloses the pointer".to_owned(),
-                    Op::Solo => "solo: no region under the pointer".to_owned(),
-                    other => format!("{other:?}: nothing under the pointer"),
-                }
-            ),
+            // One operation can still find nothing to act on, and it is not
+            // about the pointer: the root has no split enclosing it. *Nothing
+            // under the pointer* is said by `key`, before an operation is
+            // named at all — see `Panel::under`.
+            Outcome::Nothing => {
+                println!("fold: that is the root, and nothing encloses it")
+            }
         }
     }
 
@@ -923,7 +915,7 @@ impl Readout {
     /// gesture can be driven without a window: `winit` cannot be asked for an
     /// `ActiveEventLoop` outside its own loop, so an event handler is not
     /// something a test can call, and the part worth testing is this.
-    fn pointer(&mut self, event: Pointer) -> Claim {
+    fn pointer(&mut self, ctx: &egui::Context, event: Pointer) -> (Claim, Option<Outcome>) {
         let at = match event {
             Pointer::Moved(p) => p,
             _ => self.panel.cursor(),
@@ -932,17 +924,97 @@ impl Readout {
         // hand, so a claim asked after it would see no drag, route the release
         // to `egui`, and hand `egui` a button-up it never saw the button-down
         // for.
-        let claim = claim(&mut self.panel, at);
+        let claim = claim(&mut self.panel, ctx, at);
+        let mut did = None;
         match (event, claim) {
             // The panel learns where the pointer is either way — every
             // keyboard operation is addressed to it — and drags if a boundary
             // is in hand. Whether `egui` is also told is the claim.
             (Pointer::Moved(p), _) => self.moved(p),
-            (Pointer::Down, Claim::Panel) => self.press(at),
+            // **A press the panel claimed is either on a control or on the
+            // panel itself**, and the control is asked first for the reason
+            // `claim` asked it last: rule 2 has already had its refusal, so a
+            // press that got here and is on the chip is the chip's. It is the
+            // same `outputs` call `claim` made — asked again, not copied.
+            (Pointer::Down, Claim::Panel) => {
+                self.panel.solve();
+                match outputs(ctx, self.panel.layout()).filter(|row| row.hit(at)) {
+                    Some(row) => did = Some(self.sink(row.op())),
+                    None => self.press(at),
+                }
+            }
             (Pointer::Up, Claim::Panel) => self.released(),
             (Pointer::Down | Pointer::Up | Pointer::Wheel, _) => {}
         }
-        claim
+        (claim, did)
+    }
+
+    /// A press on the Outputs row's one control. **The dot says what it did**
+    /// — which of the two operations it asked for, and what the picture is
+    /// now — because the whole point of the control is that it is the same
+    /// fold `f` over the picture performs, reached from the other end of the
+    /// panel.
+    fn sink(&mut self, op: Op) -> Outcome {
+        // Two operations and no third, which is `Outputs::op`'s whole
+        // argument: the toggle is the dot choosing between them, and what
+        // arrives here is one of the two by name.
+        println!(
+            "outputs: program view — {}",
+            match op {
+                Op::Fold(_) =>
+                    "the sink was on, so the picture folds away and the \
+                                inspector takes its height",
+                Op::Unfold(_) =>
+                    "the sink was off, so the picture comes back — with \
+                                  whatever was folded over it",
+                other => unreachable!("the dot asked for {other:?}"),
+            }
+        );
+        self.op(op)
+    }
+
+    /// **What the pointer is over, resolved to a target for a key press.**
+    ///
+    /// The half of an operation that used to be inside it: `f` means *fold*
+    /// and the pointer is how this surface says *which*. A key that lands on
+    /// a divider or outside every region names nothing, so nothing is emitted
+    /// — and the two sentences that used to be [`Outcome`]s are said here,
+    /// where the resolution failed, rather than by a model that was asked to
+    /// fold something nobody had named.
+    fn target(&mut self, key: &str) -> Option<NodeId> {
+        match self.panel.under() {
+            Hit::View(id) => Some(id),
+            Hit::Divider { split, index } => {
+                println!(
+                    "{key}: the pointer is on divider {}#{index} — move it into a region",
+                    self.label(split)
+                );
+                None
+            }
+            Hit::Nothing => {
+                println!("{key}: nothing under the pointer");
+                None
+            }
+        }
+    }
+
+    /// `g`'s target, which is the one resolution with two answers: **a
+    /// divider already names its split**, so over a gap the split to fold is
+    /// that one and the operation is a plain [`Op::Fold`] of it, while over a
+    /// region it is [`Op::FoldEnclosing`] and the model reads the parent.
+    ///
+    /// Both arms were inside `Op::FoldEnclosing` when an operation meant
+    /// *whatever is under the pointer*; they are the same two arms, out where
+    /// the pointer is.
+    fn enclosing(&mut self) -> Option<Op> {
+        match self.panel.under() {
+            Hit::View(id) => Some(Op::FoldEnclosing(id)),
+            Hit::Divider { split, .. } => Some(Op::Fold(split)),
+            Hit::Nothing => {
+                println!("g: nothing under the pointer");
+                None
+            }
+        }
     }
 
     // -- the legend -----------------------------------------------------
@@ -983,6 +1055,10 @@ impl Readout {
                     Kind::Bay { grip: true, .. } => "bay, with a grip".to_owned(),
                     Kind::Bay { .. } => "bay".to_owned(),
                     Kind::Row => "row, no heading".to_owned(),
+                    // The one row with something in it: the console's first
+                    // control, and the only thing on the panel a press acts
+                    // on that is not a boundary.
+                    Kind::Outputs => "row, one sink: program view".to_owned(),
                     Kind::Pane => "pane, inside a bay".to_owned(),
                     Kind::Picture => "the picture, a sink".to_owned(),
                     // Four cells, and this file knows which of them are on:
@@ -1005,7 +1081,14 @@ impl Readout {
             );
         }
         println!();
+        println!(
+            "the outputs row's dot is the one control on the panel: it folds the picture by \n\
+             name, so clicking it and pressing f over the picture are the same operation \n\
+             reached from two surfaces. it is lit while the picture is on screen."
+        );
+        println!();
         println!("keys — the pointer's position decides what each one acts on:");
+        println!("  click    the outputs dot: turn the program view sink off, and on again");
         println!("  drag     press the left button in a gap and move: the boundary follows");
         println!("  f        fold the region under the pointer");
         println!("  g        fold the split enclosing the region under the pointer");
@@ -1905,7 +1988,8 @@ impl ApplicationHandler for App {
                     (position.x / self.scale) as f32,
                     (position.y / self.scale) as f32,
                 );
-                let claim = self.readout.pointer(Pointer::Moved(p));
+                let ctx = gfx.egui.egui_ctx().clone();
+                let (claim, _) = self.readout.pointer(&ctx, Pointer::Moved(p));
                 if claim == Claim::Egui {
                     App::to_egui(gfx, &mut self.costs, &event);
                 }
@@ -1925,19 +2009,25 @@ impl ApplicationHandler for App {
                     ElementState::Pressed => Pointer::Down,
                     ElementState::Released => Pointer::Up,
                 };
-                let claim = self.readout.pointer(which);
+                let ctx = gfx.egui.egui_ctx().clone();
+                let (claim, did) = self.readout.pointer(&ctx, which);
                 if claim == Claim::Egui {
                     App::to_egui(gfx, &mut self.costs, &event);
                 }
-                App::wants(
-                    gfx,
-                    &mut self.egui_due,
-                    &mut self.costs,
-                    Change::Pointer(claim).repaint(),
-                );
+                // **A press on a control earns its frame from what it did**,
+                // and not from the claim: `Change::Pointer(Claim::Panel)` is
+                // already a frame, but the operation the dot asked for is the
+                // thing that moved every region in the Program bay, and it is
+                // the outcome that says so.
+                let repaint = match &did {
+                    Some(outcome) => Change::Operated(outcome).repaint(),
+                    None => Change::Pointer(claim).repaint(),
+                };
+                App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
             }
             WindowEvent::MouseWheel { .. } => {
-                let claim = self.readout.pointer(Pointer::Wheel);
+                let ctx = gfx.egui.egui_ctx().clone();
+                let (claim, _) = self.readout.pointer(&ctx, Pointer::Wheel);
                 if claim == Claim::Egui {
                     App::to_egui(gfx, &mut self.costs, &event);
                 }
@@ -1965,10 +2055,24 @@ impl ApplicationHandler for App {
                         event_loop.exit();
                         return;
                     }
-                    Key::Character("f") => Op::Fold,
-                    Key::Character("g") => Op::FoldEnclosing,
+                    // **The pointer is resolved here and not inside the
+                    // operation.** `f` means fold and this is the surface
+                    // saying which region — see `karakuri_console::panel::Op`.
+                    // A key that names nothing emits nothing, and the readout
+                    // says why from `target`.
+                    Key::Character("f") => match self.readout.target("f") {
+                        Some(id) => Op::Fold(id),
+                        None => return,
+                    },
+                    Key::Character("g") => match self.readout.enclosing() {
+                        Some(op) => op,
+                        None => return,
+                    },
                     Key::Character("z") => Op::UnfoldAll,
-                    Key::Character("s") => Op::Solo,
+                    Key::Character("s") => match self.readout.target("s") {
+                        Some(id) => Op::Solo(id),
+                        None => return,
+                    },
                     Key::Character("u") => Op::Unsolo,
                     Key::Character("r") => Op::Reset,
                     Key::Character("p") => Op::Report,
@@ -2425,6 +2529,7 @@ mod tests {
     /// click is not a test.
     #[test]
     fn a_drag_through_the_window_loops_own_routing_never_reaches_egui() {
+        let ctx = drawn_once();
         let mut readout = Readout::new(1440.0, 900.0);
         readout.panel.solve();
         let layout = readout.panel.layout();
@@ -2436,22 +2541,26 @@ mod tests {
 
         // Approaching it is egui's until the pointer is on it.
         assert_eq!(
-            readout.pointer(Pointer::Moved(Point::new(start.x - 60.0, start.y))),
+            readout
+                .pointer(&ctx, Pointer::Moved(Point::new(start.x - 60.0, start.y)))
+                .0,
             Claim::Egui
         );
-        assert_eq!(readout.pointer(Pointer::Moved(start)), Claim::Panel);
-        assert_eq!(readout.pointer(Pointer::Down), Claim::Panel);
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(start)).0, Claim::Panel);
+        assert_eq!(readout.pointer(&ctx, Pointer::Down).0, Claim::Panel);
 
         // A hand does not stay on the boundary: it runs on across the panel,
         // and every one of these is inside a bay.
         for x in [start.x + 40.0, start.x + 120.0, start.x + 200.0] {
             assert_eq!(
-                readout.pointer(Pointer::Moved(Point::new(x, start.y))),
+                readout
+                    .pointer(&ctx, Pointer::Moved(Point::new(x, start.y)))
+                    .0,
                 Claim::Panel,
                 "the drag lost its claim at x = {x}"
             );
             // A wheel in the middle of a drag is the panel's too.
-            assert_eq!(readout.pointer(Pointer::Wheel), Claim::Panel);
+            assert_eq!(readout.pointer(&ctx, Pointer::Wheel).0, Claim::Panel);
         }
         readout.panel.solve();
         let wide = pane_width(&readout);
@@ -2465,8 +2574,8 @@ mod tests {
         // is the ordinary end of a drag and the case that catches a release
         // routed after `released` rather than before it.
         let far = Point::new(start.x - 200.0, start.y);
-        assert_eq!(readout.pointer(Pointer::Moved(far)), Claim::Panel);
-        assert_eq!(readout.pointer(Pointer::Up), Claim::Panel);
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(far)).0, Claim::Panel);
+        assert_eq!(readout.pointer(&ctx, Pointer::Up).0, Claim::Panel);
 
         readout.panel.solve();
         assert!(
@@ -2476,7 +2585,7 @@ mod tests {
         );
 
         // And afterwards the pointer, where it is standing, is egui's again.
-        assert_eq!(readout.pointer(Pointer::Moved(far)), Claim::Egui);
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(far)).0, Claim::Egui);
     }
 
     /// The left pane's width, solved. A helper because the test asks three
@@ -2484,6 +2593,91 @@ mod tests {
     fn pane_width(readout: &Readout) -> f32 {
         let layout = readout.panel.layout();
         layout.rect(layout.find("left-pane").expect("left-pane")).w
+    }
+
+    /// **A context that has drawn once**, which is what routing a pointer
+    /// takes: the claim rule asks where the Outputs row's control is, that is
+    /// the width of the type in it, and `egui`'s fonts are not valid until a
+    /// pass has run. The window loop has drawn long before a hand arrives;
+    /// a test has to say so.
+    ///
+    /// The texture delta is cleared because `epaint` panics if one is dropped
+    /// unapplied — there is no renderer here to apply it to, which is the
+    /// whole of what makes this a test and not a window.
+    fn drawn_once() -> egui::Context {
+        let ctx = egui::Context::default();
+        let mut out = ctx.run_ui(egui::RawInput::default(), |_| {});
+        out.textures_delta.clear();
+        ctx
+    }
+
+    /// **A press on the outputs dot, through the window loop's own routing.**
+    ///
+    /// The other half of the test above: that one is a boundary the panel
+    /// claims and `egui` never sees, and this is the console's one control,
+    /// which the panel claims for a different reason — `egui` owns no widget
+    /// anywhere here, so a press routed to it would reach nothing at all.
+    ///
+    /// What is asserted is the round trip an operator makes: the picture is on
+    /// screen, a click on the dot folds it away by name, and a click on the
+    /// same dot brings it back. The dot is where it is drawn and the press is
+    /// the panel's at every step.
+    #[test]
+    fn a_press_on_the_outputs_dot_folds_the_picture_and_unfolds_it() {
+        let ctx = drawn_once();
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.panel.solve();
+        let picture = readout
+            .panel
+            .layout()
+            .find("program-view")
+            .expect("program-view");
+        let dot = |readout: &mut Readout| {
+            readout.panel.solve();
+            let row = outputs(&ctx, readout.panel.layout()).expect("the row draws its sink");
+            (Point::new(row.sink.center().x, row.sink.center().y), row.on)
+        };
+
+        let (at, on) = dot(&mut readout);
+        assert!(on, "the picture is on screen, so the sink is on");
+
+        // The pointer arrives, and the control is the panel's.
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        let (claim, did) = readout.pointer(&ctx, Pointer::Down);
+        assert_eq!(claim, Claim::Panel);
+        assert_eq!(
+            did,
+            Some(Outcome::Folded {
+                id: picture,
+                folded: true,
+                root: false
+            }),
+            "the press did not reach the sink"
+        );
+        assert!(
+            !readout.panel.dragging(),
+            "the press took a boundary in hand"
+        );
+        readout.pointer(&ctx, Pointer::Up);
+
+        // And the dot is dark, where it still is, and turns the picture back
+        // on rather than unfolding whatever else is folded.
+        let (at, on) = dot(&mut readout);
+        assert!(!on, "the picture is folded and the sink is still lit");
+        assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
+        assert_eq!(
+            readout.pointer(&ctx, Pointer::Down).1,
+            Some(Outcome::Folded {
+                id: picture,
+                folded: false,
+                root: false
+            }),
+            "the dark dot did not turn the picture back on"
+        );
+        assert!(
+            dot(&mut readout).1,
+            "the picture is back and the dot is dark"
+        );
     }
 
     /// **Anything that makes texels this frame keeps the loop awake, and the
@@ -3195,15 +3389,12 @@ mod gpu {
         // records no present pass into it, the deck still advances, and deck A
         // goes on auditioning underneath. Both halves matter: a fold that took
         // the preview with it is the console going dark from one keystroke.
-        let program = panel
-            .layout()
-            .rect(panel.layout().find("program-view").expect("program-view"));
-        panel.moved(Point::new(
-            program.x + program.w * 0.5,
-            program.y + program.h * 0.5,
-        ));
+        let picture_node = panel.layout().find("program-view").expect("program-view");
         assert!(
-            matches!(panel.op(Op::Fold), Outcome::Folded { folded: true, .. }),
+            matches!(
+                panel.op(Op::Fold(picture_node)),
+                Outcome::Folded { folded: true, .. }
+            ),
             "the picture did not fold"
         );
         panel.solve();
