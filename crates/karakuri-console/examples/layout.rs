@@ -1,60 +1,69 @@
 //! The console's arrangement, on screen and under a mouse.
 //!
-//! `karakuri-layout` solves an arrangement and `karakuri-console` states one,
-//! and until this example nothing had ever *driven* either: every claim about
-//! the panel was a test's. This is the other half — a window that paints each
-//! visible region as a flat rectangle, with the gaps between them left
-//! unpainted so the dividers are exactly what is not drawn, and real pointer
-//! and key input on top of it.
+//! `karakuri-layout` solves an arrangement and `karakuri-console` states one
+//! and drives it, and until this example nothing had ever driven it *by hand*:
+//! every claim about the panel was a test's. This is the other half — a window
+//! that paints each visible region as a flat rectangle, with the gaps between
+//! them left unpainted so the dividers are exactly what is not drawn, and real
+//! pointer and key input on top of it.
 //!
 //! It draws no text, on purpose: whether a divider drags is answered by
 //! watching a rectangle move, and a text toolkit here would pre-empt the
 //! decision this harness exists to inform. **stdout is the readout instead** —
 //! a legend of every region and the colour it was given at startup, and one
 //! line per operation as it happens. The line that matters most is a drag's:
-//! it prints what was asked for beside what [`Layout::set_divider`] returned,
+//! it prints what was asked for beside where [`Panel::moved`] says it landed,
 //! and the gap between "asked for 400" and "landed at 378" is a constraint
 //! biting, which is the thing a person is here to see.
 //!
 //! ```sh
 //! cargo run -p karakuri-console --example layout
-//! cargo test -p karakuri-console --example layout   # the drag, without a window
-//! cargo test -p karakuri-console --example layout -- --skip gpu::
+//! cargo test -p karakuri-console                    # the model, without a window
+//! cargo test -p karakuri-console --example layout   # this file's own two tests
 //! ```
 //!
-//! **The crate's own suite does not run these**: `cargo test -p
-//! karakuri-console` builds an example but does not run the tests inside one,
-//! so the command above is how they are run until someone gives the target a
-//! `test = true` of its own. One of them takes a device and lives under `mod
-//! gpu` for the reason every other one in the workspace does.
+//! # This file owns none of the model
+//!
+//! The arrangement, the drag in progress and the operations that act on what
+//! is under the pointer are [`karakuri_console::panel`], and they are there
+//! rather than here because the egui view needs exactly them: a model grown a
+//! second time is two answers to *how a pointer moves a divider*, and two
+//! answers disagree quietly, each with its own passing tests. What is left in
+//! this file is a window, a painter, and the formatting — a [`Dragged`] into
+//! the line above, an [`Outcome`] into the line a key prints. **The model
+//! returns what happened; the English is this file's.**
+//!
+//! So the tests that drive the model are `tests/panel.rs`, and the two that
+//! remain here are the two that cannot leave: the table of what to do about a
+//! frame that could not be acquired, which is a `wgpu` enum, and the painter
+//! on a device, under `mod gpu` for the reason every other one in the
+//! workspace is.
 //!
 //! # Two rules this obeys, because they are what a real view will have to
 //!
-//! **Solve once per frame, after the input.** [`Layout::rect`] and
-//! [`Layout::hit`] carry a `debug_assert!` that the layout is not dirty, so an
+//! **Solve once per frame, after the input.** `Layout::rect` and
+//! `Layout::hit` carry a `debug_assert!` that the layout is not dirty, so an
 //! operation followed by a read is a panic in a debug build. Every frame here
-//! solves once and then reads; an input event that has to hit-test solves
-//! first, which is a flag test on a frame where nothing moved, and never once
-//! per read.
+//! solves once and then reads, which the `Panel` does on its behalf; an input
+//! event that has to hit-test solves first, which is a flag test on a frame
+//! where nothing moved, and never once per read.
 //!
-//! **Nothing here shadows the model.** Where the crate could not answer a
-//! question, this file derives the answer from the tree it can walk rather
-//! than keeping a field of its own — a folded region is `is_collapsed`, a
-//! solo is `is_soloed`, and what a drag did is what `set_divider` returned.
-//! The places that took deriving are listed in the report this example was
-//! written for; they are the crate's missing accessors, not this harness's
-//! bookkeeping. The one thing held across events is the drag itself — which
-//! boundary is in hand and where on it the pointer took hold — because that
-//! is the pointer's state and not the layout's.
+//! **Nothing here shadows the model.** Not one fact about the arrangement is
+//! kept in this file — a folded region is `is_collapsed`, a solo is
+//! `is_soloed`, and what a drag did is what `moved` returned. The one thing
+//! this file does hold is a colour per region, which is the readout's and not
+//! the panel's.
 //!
 //! # The readout is driven by the layout, not by the pointer
 //!
 //! A line is printed when the boundary **moves**, and a stop is announced
-//! once. It is tempting to print a line per pointer event — it is one
-//! comparison less — and it is wrong twice over: the interesting lines are
-//! buried under identical ones, and a hand held against the edge of the
-//! window, which is where a drag ends up, produces hundreds of them a second
-//! into a terminal that has to keep up with them while the window waits.
+//! once. That is [`Panel::moved`]'s doing rather than this file's: it returns
+//! nothing at all for a move that changed nothing. It is tempting to print a
+//! line per pointer event — it is one comparison less — and it is wrong twice
+//! over: the interesting lines are buried under identical ones, and a hand
+//! held against the edge of the window, which is where a drag ends up,
+//! produces hundreds of them a second into a terminal that has to keep up with
+//! them while the window waits.
 //!
 //! # Every frame that could not be acquired gets a decision
 //!
@@ -67,25 +76,21 @@
 //!
 //! # No region is named anywhere in this file
 //!
-//! Every region is reached by walking from [`Layout::root`] with
-//! [`Layout::children`] and asking [`Layout::name`] what it is called. So the
-//! harness is whatever the arrangement currently says it is, and renaming a
-//! region does not touch this file.
+//! Every region is reached by walking the arrangement and asking
+//! `Layout::name` what it is called. So the harness is whatever the
+//! arrangement currently says it is, and renaming a region does not touch this
+//! file.
 
 use std::sync::Arc;
 
+use karakuri_console::panel::{extent, Dragged, Op, Outcome, Panel, Pressed, Released, Visibility};
 use karakuri_engine::Gpu;
-use karakuri_layout::{Axis, Hit, Layout, NodeId, Point, Rect};
+use karakuri_layout::{Axis, NodeId, Point, Rect};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
-
-/// How far either side of a boundary still grabs it. Wider than any divider
-/// the console draws, which is [`Layout::hit`]'s whole argument for taking a
-/// grab at all: a 9px gap is not a target a hand finds.
-const GRAB: f32 = 6.0;
 
 /// The window this opens, in logical pixels. Comfortably above the smallest
 /// viewport the arrangement is claimed to work at, so nothing starts clamped.
@@ -96,107 +101,53 @@ const WINDOW: (f64, f64) = (1440.0, 900.0);
 const MAX_RECTS: usize = 64;
 
 // ---------------------------------------------------------------------------
-// The harness: the model, the input, and the readout. No window, no device.
+// The readout: a colour per region, and English for what the model returned.
+// No window, no device.
 // ---------------------------------------------------------------------------
 
-/// One node of the arrangement as this file needs it: what the crate could not
-/// be asked for.
-struct Entry {
-    id: NodeId,
-    /// **Derived, because [`Layout`] has no `parent`.** Folding the split that
-    /// encloses the region under the pointer needs it, and a hit only ever
-    /// resolves to a leaf.
-    parent: Option<NodeId>,
-    depth: usize,
-    /// A leaf paints; a split is the thing whose gaps are visible between its
-    /// children.
-    colour: Option<[f32; 3]>,
+/// The panel, plus the two things a readout needs that a model has no business
+/// holding: a colour per region and the words for what just happened.
+struct Readout {
+    panel: Panel,
+    /// One per [`Panel::nodes`], in the same order. A leaf gets a colour; a
+    /// split gets `None`, because a split is the thing whose gaps are visible
+    /// between its children rather than something painted.
+    colours: Vec<Option<[f32; 3]>>,
 }
 
-/// A boundary in hand: which one, and where along it the pointer took hold.
-struct Drag {
-    split: NodeId,
-    index: usize,
-    axis: Axis,
-    /// Pointer coordinate minus the boundary's, at the moment of the press.
-    /// Subtracted from every later coordinate so the boundary does not jump to
-    /// the pointer on the first move.
-    offset: f32,
-    /// Where the boundary was when this drag last said anything, and whether
-    /// what it said was that a stop was holding it.
-    ///
-    /// **The readout is driven by what the layout did, not by what the pointer
-    /// did.** A pointer dragged on past a stop asks for a new position sixty
-    /// times a second and the boundary does not move for any of them; a line
-    /// per ask is a flood that says the same thing every time, and it is worst
-    /// exactly where a person is looking hardest. So a stop is announced once,
-    /// and the next line is the one where the boundary moves again.
-    said: Option<f32>,
-    held: bool,
-}
-
-/// What a key does. Named as operations rather than as keys so the tests can
-/// ask for one without a keyboard.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Op {
-    Fold,
-    FoldEnclosing,
-    UnfoldAll,
-    Solo,
-    Unsolo,
-    Reset,
-    Report,
-}
-
-struct Harness {
-    layout: Layout,
-    /// The tree, flattened, rebuilt whenever the layout is.
-    entries: Vec<Entry>,
-    cursor: Point,
-    drag: Option<Drag>,
-}
-
-impl Harness {
-    fn new(width: f32, height: f32) -> Harness {
-        let mut harness = Harness {
-            layout: karakuri_console::layout(),
-            entries: Vec::new(),
-            cursor: Point::new(-1.0, -1.0),
-            drag: None,
+impl Readout {
+    fn new(width: f32, height: f32) -> Readout {
+        let mut readout = Readout {
+            panel: Panel::new(width, height),
+            colours: Vec::new(),
         };
-        harness.rebuild();
-        harness.set_viewport(width, height);
-        harness
+        readout.recolour();
+        readout
     }
 
-    /// Walk the arrangement and give every leaf a colour. Order is the tree's,
-    /// so neighbours differ and the legend reads top to bottom.
-    fn rebuild(&mut self) {
-        let mut entries = Vec::new();
-        walk(&self.layout, self.layout.root(), None, 0, &mut entries);
-        let leaves = entries.iter().filter(|e| e.colour.is_some()).count().max(1);
+    /// Give every leaf a colour, in tree order, so neighbours differ and the
+    /// legend reads top to bottom. Called again whenever the panel rebuilds.
+    fn recolour(&mut self) {
+        let leaves = self.panel.nodes().iter().filter(|n| n.leaf).count().max(1);
         let mut nth = 0;
-        for entry in &mut entries {
-            if entry.colour.is_some() {
-                entry.colour = Some(hue(nth as f32 / leaves as f32));
-                nth += 1;
-            }
-        }
-        self.entries = entries;
+        self.colours = self
+            .panel
+            .nodes()
+            .iter()
+            .map(|node| {
+                node.leaf.then(|| {
+                    let colour = hue(nth as f32 / leaves as f32);
+                    nth += 1;
+                    colour
+                })
+            })
+            .collect();
     }
 
-    fn set_viewport(&mut self, width: f32, height: f32) {
-        self.layout.set_viewport(Rect::new(0.0, 0.0, width, height));
-    }
-
-    /// The one solve. Everything that reads calls this first; on a frame where
-    /// nothing changed it is a flag test.
-    fn solve(&mut self) {
-        self.layout.solve();
-    }
+    // -- the words ------------------------------------------------------
 
     fn label(&self, id: NodeId) -> String {
-        match self.layout.name(id) {
+        match self.panel.layout().name(id) {
             Some(name) => name.to_owned(),
             None => "(unnamed split)".to_owned(),
         }
@@ -206,322 +157,190 @@ impl Harness {
     /// console's body row is, deliberately — so `split #0` alone does not say
     /// which boundary the pointer has hold of, and the pair does.
     fn pair(&self, split: NodeId, index: usize) -> String {
-        let children = self.visible_children(split);
-        match (children.get(index), children.get(index + 1)) {
-            (Some(&a), Some(&b)) => format!("{} | {}", self.label(a), self.label(b)),
-            _ => "no pair".to_owned(),
+        match self.panel.pair(split, index) {
+            Some((a, b)) => format!("{} | {}", self.label(a), self.label(b)),
+            None => "no pair".to_owned(),
         }
-    }
-
-    fn parent_of(&self, id: NodeId) -> Option<NodeId> {
-        self.entries.iter().find(|e| e.id == id)?.parent
-    }
-
-    /// The children a divider index counts, which is the visible ones.
-    fn visible_children(&self, split: NodeId) -> Vec<NodeId> {
-        self.layout
-            .children(split)
-            .iter()
-            .copied()
-            .filter(|c| !self.layout.is_collapsed(*c))
-            .collect()
-    }
-
-    /// Where boundary `index` of `split` currently is, along the split's axis:
-    /// the far edge of the visible child before it.
-    ///
-    /// Reads solved rectangles, so the caller has solved.
-    fn boundary(&self, split: NodeId, index: usize) -> Option<f32> {
-        let axis = self.layout.axis(split)?;
-        let before = *self.visible_children(split).get(index)?;
-        Some(far(axis, self.layout.rect(before)))
-    }
-
-    /// Every boundary in the arrangement. The window has a pointer to find
-    /// them with; the tests do not, so this is theirs.
-    #[cfg(test)]
-    fn dividers(&mut self) -> Vec<(NodeId, usize)> {
-        self.solve();
-        let splits: Vec<NodeId> = self
-            .entries
-            .iter()
-            .filter(|e| e.colour.is_none())
-            .map(|e| e.id)
-            .collect();
-        let mut out = Vec::new();
-        for split in splits {
-            let visible = self.visible_children(split).len();
-            for index in 0..visible.saturating_sub(1) {
-                out.push((split, index));
-            }
-        }
-        out
-    }
-
-    /// A point in the middle of a boundary's gap — what a hand aims at, and
-    /// what a test presses instead of having one.
-    #[cfg(test)]
-    fn grab_point(&self, split: NodeId, index: usize) -> Option<Point> {
-        let axis = self.layout.axis(split)?;
-        let children = self.visible_children(split);
-        let (a, b) = (*children.get(index)?, *children.get(index + 1)?);
-        let (ra, rb) = (self.layout.rect(a), self.layout.rect(b));
-        let along = (far(axis, ra) + near(axis, rb)) / 2.0;
-        let across = match axis {
-            Axis::Row => ra.y + ra.h / 2.0,
-            Axis::Column => ra.x + ra.w / 2.0,
-        };
-        Some(match axis {
-            Axis::Row => Point::new(along, across),
-            Axis::Column => Point::new(across, along),
-        })
     }
 
     // -- input ----------------------------------------------------------
 
     fn press(&mut self, p: Point) {
-        self.solve();
-        self.cursor = p;
-        match self.layout.hit(p, GRAB) {
-            Hit::Divider { split, index } => {
-                let axis = self.layout.axis(split).expect("a divider is on a split");
-                let Some(boundary) = self.boundary(split, index) else {
-                    println!("press ({:.0}, {:.0}): a divider with no pair", p.x, p.y);
-                    return;
-                };
-                let offset = along(axis, p) - boundary;
-                println!(
-                    "press ({:.0}, {:.0}): the boundary {} — divider #{} of {}, {:?} — is at \
-                     {:.1}, grabbed {:+.1} from it",
-                    p.x,
-                    p.y,
-                    self.pair(split, index),
-                    index,
-                    self.label(split),
-                    axis,
-                    boundary,
-                    offset
-                );
-                self.drag = Some(Drag {
-                    split,
-                    index,
-                    axis,
-                    offset,
-                    said: None,
-                    held: false,
-                });
+        match self.panel.press(p) {
+            Pressed::Grabbed {
+                split,
+                index,
+                axis,
+                at,
+                offset,
+            } => println!(
+                "press ({:.0}, {:.0}): the boundary {} — divider #{} of {}, {:?} — is at \
+                 {:.1}, grabbed {:+.1} from it",
+                p.x,
+                p.y,
+                self.pair(split, index),
+                index,
+                self.label(split),
+                axis,
+                at,
+                offset
+            ),
+            Pressed::NoPair { .. } => {
+                println!("press ({:.0}, {:.0}): a divider with no pair", p.x, p.y)
             }
-            Hit::View(id) => {
-                let r = self.layout.rect(id);
-                println!(
-                    "press ({:.0}, {:.0}): region {} at {:.0},{:.0} {:.0}x{:.0}",
-                    p.x,
-                    p.y,
-                    self.label(id),
-                    r.x,
-                    r.y,
-                    r.w,
-                    r.h
-                );
-            }
-            Hit::Nothing => println!("press ({:.0}, {:.0}): nothing", p.x, p.y),
+            Pressed::Region { id, rect } => println!(
+                "press ({:.0}, {:.0}): region {} at {:.0},{:.0} {:.0}x{:.0}",
+                p.x,
+                p.y,
+                self.label(id),
+                rect.x,
+                rect.y,
+                rect.w,
+                rect.h
+            ),
+            Pressed::Nothing => println!("press ({:.0}, {:.0}): nothing", p.x, p.y),
         }
     }
 
-    /// A move with a boundary in hand. **Absolute**: the pointer's coordinate
-    /// along the split's axis, less the offset it grabbed at, straight into
-    /// `set_divider`. Nothing accumulates, which is what a drag past a stop and
-    /// back is here to demonstrate.
-    ///
-    /// Returns the line the readout should carry, if this move changed
-    /// anything worth a line. The caller prints it — which is what lets a test
-    /// count the lines a drag produces without capturing stdout.
-    fn moved(&mut self, p: Point) -> Option<String> {
-        self.cursor = p;
-        let drag = self.drag.as_ref()?;
-        let (split, index, axis, offset) = (drag.split, drag.index, drag.axis, drag.offset);
-        let asked = along(axis, p) - offset;
-        let landed = self.layout.set_divider(split, index, asked);
-        // `set_divider` solves before it returns, so the reads below are of a
-        // clean layout.
-        let by = landed - asked;
-        let held = by.abs() >= 0.05;
-
-        let drag = self.drag.as_mut()?;
-        let say = match drag.said {
-            None => true,
-            Some(said) => (landed - said).abs() >= 0.5 || drag.held != held,
+    fn moved(&mut self, p: Point) {
+        let Some(dragged) = self.panel.moved(p) else {
+            return;
         };
-        if !say {
-            return None;
-        }
-        drag.said = Some(landed);
-        drag.held = held;
+        println!("{}", self.say_drag(dragged));
+    }
 
-        let children = self.visible_children(split);
-        let sizes = match (children.get(index), children.get(index + 1)) {
-            (Some(&a), Some(&b)) => format!(
+    /// A drag, in words. Separate from the printing so the shape of the line
+    /// is one expression: what was asked, where it landed, what held it, and
+    /// what the pair either side is now.
+    fn say_drag(&self, d: Dragged) -> String {
+        let sizes = match self.panel.pair(d.split, d.index) {
+            Some((a, b)) => format!(
                 "{} {:.0} | {} {:.0}",
                 self.label(a),
-                extent(axis, self.layout.rect(a)),
+                extent(d.axis, self.panel.layout().rect(a)),
                 self.label(b),
-                extent(axis, self.layout.rect(b))
+                extent(d.axis, self.panel.layout().rect(b))
             ),
-            _ => "no pair".to_owned(),
+            None => "no pair".to_owned(),
         };
-        let stop = match held {
-            true => format!(" — held {by:+.1} by a stop, and it stays there until it moves"),
-            false => String::new(),
+        let stop = match d.held {
+            Some(by) => format!(" — held {by:+.1} by a stop, and it stays there until it moves"),
+            None => String::new(),
         };
-        Some(format!(
-            "  drag: asked {asked:.1}, landed {landed:.1}{stop} [{sizes}]"
-        ))
+        format!(
+            "  drag: asked {:.1}, landed {:.1}{stop} [{sizes}]",
+            d.asked, d.landed
+        )
     }
 
     fn released(&mut self) {
-        let Some(drag) = self.drag.take() else {
-            return;
-        };
-        self.solve();
-        match self.boundary(drag.split, drag.index) {
-            Some(at) => println!(
-                "release: {} rests at {at:.1}",
-                self.pair(drag.split, drag.index)
-            ),
-            None => println!("release: {} is gone", self.pair(drag.split, drag.index)),
+        match self.panel.released() {
+            Some(Released::Rests { split, index, at }) => {
+                println!("release: {} rests at {at:.1}", self.pair(split, index))
+            }
+            Some(Released::Gone { split, index }) => {
+                println!("release: {} is gone", self.pair(split, index))
+            }
+            None => {}
         }
     }
 
     fn op(&mut self, op: Op) {
-        self.solve();
-        match op {
-            Op::Fold => match self.layout.hit(self.cursor, 0.0) {
-                Hit::View(id) => {
-                    let folded = self.layout.toggle(id);
-                    println!("fold: {} is now {}", self.label(id), folding(folded));
-                }
-                Hit::Divider { split, index } => println!(
-                    "fold: the pointer is on divider {}#{} — move it into a region",
-                    self.label(split),
-                    index
-                ),
-                Hit::Nothing => println!("fold: nothing under the pointer"),
-            },
-            Op::FoldEnclosing => {
-                let target = match self.layout.hit(self.cursor, 0.0) {
-                    // A divider already names its split; a region's enclosing
-                    // split is its parent, which `Layout` does not answer for
-                    // — see `Entry::parent`.
-                    Hit::Divider { split, .. } => Some(split),
-                    Hit::View(id) => self.parent_of(id),
-                    Hit::Nothing => None,
+        let outcome = self.panel.op(op);
+        if outcome == Outcome::Reset {
+            self.recolour();
+        }
+        self.say_op(op, &outcome);
+    }
+
+    /// What an operation did, in words. The model returns the facts; which
+    /// English they take is the operation that was asked for, which is why
+    /// this has both.
+    fn say_op(&self, op: Op, outcome: &Outcome) {
+        match outcome {
+            Outcome::Folded { id, folded, root } => {
+                let what = match op {
+                    Op::FoldEnclosing => "the split ",
+                    _ => "",
                 };
-                match target {
-                    Some(split) => {
-                        let root = split == self.layout.root();
-                        let folded = self.layout.toggle(split);
-                        println!(
-                            "fold: the split {} is now {}{}",
-                            self.label(split),
-                            folding(folded),
-                            match root && folded {
-                                true =>
-                                    " — that was the root, so the panel is empty; z brings it back",
-                                false => "",
-                            }
-                        );
-                    }
-                    None => println!("fold: nothing encloses the pointer"),
-                }
-            }
-            Op::UnfoldAll => {
-                let folded: Vec<NodeId> = self
-                    .entries
-                    .iter()
-                    .map(|e| e.id)
-                    .filter(|id| self.layout.is_collapsed(*id))
-                    .collect();
-                match folded.is_empty() {
-                    true => println!("unfold: nothing is folded"),
-                    false => {
-                        let names: Vec<String> = folded.iter().map(|id| self.label(*id)).collect();
-                        for id in folded {
-                            self.layout.expand(id);
-                        }
-                        println!("unfold: {}", names.join(", "));
-                    }
-                }
-            }
-            Op::Solo => match self.layout.hit(self.cursor, 0.0) {
-                Hit::View(id) => {
-                    self.layout.solo(id);
-                    println!(
-                        "solo: {} — everything else folded (soloed = {})",
-                        self.label(id),
-                        self.layout.is_soloed()
-                    );
-                }
-                _ => println!("solo: no region under the pointer"),
-            },
-            Op::Unsolo => {
-                let was = self.layout.is_soloed();
-                self.layout.unsolo();
                 println!(
-                    "unsolo: {}",
-                    match was {
-                        true => "the arrangement before the solo is back",
-                        false => "nothing was soloed",
+                    "fold: {what}{} is now {}{}",
+                    self.label(*id),
+                    folding(*folded),
+                    match *root && *folded {
+                        true => " — that was the root, so the panel is empty; z brings it back",
+                        false => "",
                     }
                 );
             }
-            Op::Reset => {
-                let viewport = self.layout.viewport();
-                self.layout = karakuri_console::layout();
-                self.layout.set_viewport(viewport);
-                self.rebuild();
-                self.drag = None;
-                println!("reset: a fresh arrangement, at the same viewport");
-            }
-            Op::Report => {
-                // No solve of its own: the one at the top of this method is
-                // the frame's, and a second here would hide an operation that
-                // left one owed rather than catch it. See the test.
+            Outcome::OnDivider { split, index } => println!(
+                "fold: the pointer is on divider {}#{index} — move it into a region",
+                self.label(*split)
+            ),
+            Outcome::Unfolded(ids) => match ids.is_empty() {
+                true => println!("unfold: nothing is folded"),
+                false => {
+                    let names: Vec<String> = ids.iter().map(|id| self.label(*id)).collect();
+                    println!("unfold: {}", names.join(", "));
+                }
+            },
+            Outcome::Soloed(id) => println!(
+                "solo: {} — everything else folded (soloed = {})",
+                self.label(*id),
+                self.panel.layout().is_soloed()
+            ),
+            Outcome::Unsoloed { was } => println!(
+                "unsolo: {}",
+                match was {
+                    true => "the arrangement before the solo is back",
+                    false => "nothing was soloed",
+                }
+            ),
+            Outcome::Reset => println!("reset: a fresh arrangement, at the same viewport"),
+            Outcome::Report(rows) => {
                 println!("regions:");
-                let rows: Vec<String> = self
-                    .entries
+                let lines: Vec<String> = rows
                     .iter()
-                    .map(|e| {
-                        let r = self.layout.rect(e.id);
-                        let state =
-                            match (self.layout.is_collapsed(e.id), self.layout.visible(e.id)) {
-                                (true, _) => "folded",
-                                (false, false) => "inside a fold",
-                                (false, true) => "",
-                            };
+                    .map(|row| {
                         format!(
                             "  {:width$}{:<18} {:>7.1},{:>7.1}  {:>7.1} x {:>7.1} {}",
                             "",
-                            self.label(e.id),
-                            r.x,
-                            r.y,
-                            r.w,
-                            r.h,
-                            state,
-                            width = e.depth * 2
+                            self.label(row.id),
+                            row.rect.x,
+                            row.rect.y,
+                            row.rect.w,
+                            row.rect.h,
+                            match row.state {
+                                Visibility::Folded => "folded",
+                                Visibility::InsideAFold => "inside a fold",
+                                Visibility::Visible => "",
+                            },
+                            width = row.depth * 2
                         )
                     })
                     .collect();
-                println!("{}", rows.join("\n"));
+                println!("{}", lines.join("\n"));
             }
+            // The three operations that act on what is under the pointer are
+            // the only ones that can find nothing there.
+            Outcome::Nothing => println!(
+                "{}",
+                match op {
+                    Op::Fold => "fold: nothing under the pointer".to_owned(),
+                    Op::FoldEnclosing => "fold: nothing encloses the pointer".to_owned(),
+                    Op::Solo => "solo: no region under the pointer".to_owned(),
+                    other => format!("{other:?}: nothing under the pointer"),
+                }
+            ),
         }
-        self.solve();
     }
 
-    // -- the readout ----------------------------------------------------
+    // -- the legend -----------------------------------------------------
 
     fn print_legend(&mut self) {
-        self.solve();
-        let viewport = self.layout.viewport();
+        self.panel.solve();
+        let layout = self.panel.layout();
+        let viewport = layout.viewport();
         println!();
         println!(
             "the console's arrangement, in a {:.0} x {:.0} viewport. every leaf is painted in \
@@ -529,8 +348,8 @@ impl Harness {
             viewport.w, viewport.h
         );
         println!();
-        for entry in &self.entries {
-            let (min, max) = self.layout.bounds(entry.id);
+        for (node, colour) in self.panel.nodes().iter().zip(&self.colours) {
+            let (min, max) = layout.bounds(node.id);
             let bounds = format!(
                 "min {min:.0}, max {}",
                 match max.is_finite() {
@@ -538,12 +357,12 @@ impl Harness {
                     false => "none".to_owned(),
                 }
             );
-            let colour = match entry.colour {
+            let colour = match colour {
                 Some(c) => {
-                    let [r, g, b] = encode(c);
+                    let [r, g, b] = encode(*c);
                     format!("rgb({r:>3}, {g:>3}, {b:>3})")
                 }
-                None => match self.layout.axis(entry.id) {
+                None => match layout.axis(node.id) {
                     Some(Axis::Row) => "split, left to right".to_owned(),
                     Some(Axis::Column) => "split, top to bottom".to_owned(),
                     None => "empty".to_owned(),
@@ -552,10 +371,10 @@ impl Harness {
             println!(
                 "  {:width$}{:<16} {:<22} {}",
                 "",
-                self.label(entry.id),
+                self.label(node.id),
                 colour,
                 bounds,
-                width = entry.depth * 2
+                width = node.depth * 2
             );
         }
         println!();
@@ -576,18 +395,18 @@ impl Harness {
     /// Every rectangle to paint this frame, in tree order. Solves first, and
     /// this is the only solve a quiet frame does.
     fn painted(&mut self, out: &mut Vec<(Rect, [f32; 3])>) {
-        self.solve();
+        self.panel.solve();
         out.clear();
-        for entry in &self.entries {
-            let Some(colour) = entry.colour else {
+        for (node, colour) in self.panel.nodes().iter().zip(&self.colours) {
+            let Some(colour) = colour else {
                 continue;
             };
-            if !self.layout.visible(entry.id) {
+            if !self.panel.layout().visible(node.id) {
                 continue;
             }
-            let r = self.layout.rect(entry.id);
+            let r = self.panel.layout().rect(node.id);
             if r.w > 0.0 && r.h > 0.0 {
-                out.push((r, colour));
+                out.push((r, *colour));
             }
         }
     }
@@ -597,51 +416,6 @@ fn folding(folded: bool) -> &'static str {
     match folded {
         true => "folded",
         false => "unfolded",
-    }
-}
-
-fn walk(layout: &Layout, id: NodeId, parent: Option<NodeId>, depth: usize, out: &mut Vec<Entry>) {
-    let leaf = layout.axis(id).is_none();
-    out.push(Entry {
-        id,
-        parent,
-        depth,
-        // A placeholder the second pass replaces; a split keeps `None`.
-        colour: leaf.then_some([0.0; 3]),
-    });
-    for child in layout.children(id) {
-        walk(layout, *child, Some(id), depth + 1, out);
-    }
-}
-
-/// `Axis`'s own `coord`, `origin` and `extent` are `pub(crate)`, so a caller
-/// outside the crate writes them again. These three are that.
-fn along(axis: Axis, p: Point) -> f32 {
-    match axis {
-        Axis::Row => p.x,
-        Axis::Column => p.y,
-    }
-}
-
-#[cfg(test)]
-fn near(axis: Axis, r: Rect) -> f32 {
-    match axis {
-        Axis::Row => r.x,
-        Axis::Column => r.y,
-    }
-}
-
-fn far(axis: Axis, r: Rect) -> f32 {
-    match axis {
-        Axis::Row => r.x + r.w,
-        Axis::Column => r.y + r.h,
-    }
-}
-
-fn extent(axis: Axis, r: Rect) -> f32 {
-    match axis {
-        Axis::Row => r.w,
-        Axis::Column => r.h,
     }
 }
 
@@ -907,7 +681,7 @@ struct App {
     gfx: Option<Gfx>,
     /// A validation fault is said once rather than sixty times a second.
     faulted: bool,
-    harness: Harness,
+    readout: Readout,
     /// Reused by every frame.
     rects: Vec<(Rect, [f32; 3])>,
     /// Logical size, so the numbers printed are the arrangement's own units
@@ -920,7 +694,7 @@ impl App {
         App {
             gfx: None,
             faulted: false,
-            harness: Harness::new(WINDOW.0 as f32, WINDOW.1 as f32),
+            readout: Readout::new(WINDOW.0 as f32, WINDOW.1 as f32),
             rects: Vec::with_capacity(MAX_RECTS),
             scale: 1.0,
         }
@@ -966,11 +740,11 @@ impl ApplicationHandler for App {
         surface.configure(&gpu.device, &config);
         let painter = Painter::new(&gpu.device, format);
 
-        self.harness.set_viewport(
+        self.readout.panel.set_viewport(
             size.width as f32 / self.scale as f32,
             size.height as f32 / self.scale as f32,
         );
-        self.harness.print_legend();
+        self.readout.print_legend();
 
         window.request_redraw();
         self.gfx = Some(Gfx {
@@ -997,7 +771,7 @@ impl ApplicationHandler for App {
                     size.width as f32 / self.scale as f32,
                     size.height as f32 / self.scale as f32,
                 );
-                self.harness.set_viewport(w, h);
+                self.readout.panel.set_viewport(w, h);
                 println!("viewport: {w:.0} x {h:.0}");
                 gfx.window.request_redraw();
             }
@@ -1006,9 +780,7 @@ impl ApplicationHandler for App {
                     (position.x / self.scale) as f32,
                     (position.y / self.scale) as f32,
                 );
-                if let Some(line) = self.harness.moved(p) {
-                    println!("{line}");
-                }
+                self.readout.moved(p);
                 gfx.window.request_redraw();
             }
             WindowEvent::MouseInput {
@@ -1018,10 +790,10 @@ impl ApplicationHandler for App {
             } => {
                 match state {
                     ElementState::Pressed => {
-                        let cursor = self.harness.cursor;
-                        self.harness.press(cursor);
+                        let cursor = self.readout.panel.cursor();
+                        self.readout.press(cursor);
                     }
-                    ElementState::Released => self.harness.released(),
+                    ElementState::Released => self.readout.released(),
                 }
                 gfx.window.request_redraw();
             }
@@ -1043,11 +815,11 @@ impl ApplicationHandler for App {
                     Key::Character("p") => Op::Report,
                     _ => return,
                 };
-                self.harness.op(op);
+                self.readout.op(op);
                 gfx.window.request_redraw();
             }
             WindowEvent::RedrawRequested => {
-                self.harness.painted(&mut self.rects);
+                self.readout.painted(&mut self.rects);
                 let acquired = gfx.surface.get_current_texture();
                 if let Some(missed) = missed(&acquired) {
                     match missed {
@@ -1079,7 +851,7 @@ impl ApplicationHandler for App {
                 let view = frame
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
-                let viewport = self.harness.layout.viewport();
+                let viewport = self.readout.panel.layout().viewport();
                 gfx.painter
                     .draw(&gfx.gpu, &view, &self.rects, (viewport.w, viewport.h));
                 gfx.gpu.queue.present(frame);
@@ -1097,175 +869,16 @@ fn main() {
 }
 
 // ---------------------------------------------------------------------------
-// The drag, without a window
+// The two tests that cannot leave this file
 // ---------------------------------------------------------------------------
 
-/// The input handling above is a plain `Harness` method, so a drag is a test:
-/// press at a point, move to another, release, and read the rectangles. No
-/// event loop and no device.
+/// Everything that drove the panel's model moved with it and is
+/// `tests/panel.rs`, which `cargo test -p karakuri-console` runs. What is left
+/// here is what is about a `wgpu` type: the table below, and the painter on a
+/// device under `mod gpu`.
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Pixel coordinates in the hundreds; the same tolerance the crate's own
-    /// tests use.
-    const EPS: f32 = 1e-3;
-
-    fn rects(h: &mut Harness) -> Vec<Rect> {
-        h.solve();
-        h.entries.iter().map(|e| h.layout.rect(e.id)).collect()
-    }
-
-    fn offset(axis: Axis, p: Point, by: f32) -> Point {
-        match axis {
-            Axis::Row => Point::new(p.x + by, p.y),
-            Axis::Column => Point::new(p.x, p.y + by),
-        }
-    }
-
-    fn same(a: &[Rect], b: &[Rect]) -> bool {
-        a.len() == b.len()
-            && a.iter().zip(b).all(|(x, y)| {
-                (x.x - y.x).abs() <= EPS
-                    && (x.y - y.y).abs() <= EPS
-                    && (x.w - y.w).abs() <= EPS
-                    && (x.h - y.h).abs() <= EPS
-            })
-    }
-
-    /// Every divider in the arrangement, dragged and dragged back — including
-    /// far past whatever stops it — leaves the arrangement exactly as it was,
-    /// and at least one of them moves on the way.
-    ///
-    /// The second half is the point: `set_divider` takes an absolute
-    /// coordinate, so the frames spent past a stop contribute nothing to
-    /// accumulate. A harness that fed it deltas would come back short.
-    #[test]
-    fn a_drag_out_and_back_leaves_the_arrangement_where_it_was() {
-        let mut probe = Harness::new(1600.0, 1000.0);
-        let dividers = probe.dividers();
-        assert!(!dividers.is_empty(), "the arrangement has no dividers");
-        let total = dividers.len();
-
-        let mut moved = 0;
-        let mut grabbed = 0;
-        for (split, index) in dividers {
-            let mut h = Harness::new(1600.0, 1000.0);
-            h.solve();
-            let before = rects(&mut h);
-            let axis = h.layout.axis(split).expect("a divider is on a split");
-            let start = h.boundary(split, index).expect("a boundary");
-            let point = h.grab_point(split, index).expect("a gap to aim at");
-
-            h.press(point);
-            let Some(drag) = &h.drag else {
-                // Reported rather than asserted: a divider a pointer cannot
-                // reach is a finding about `hit`, not about the drag.
-                continue;
-            };
-            assert_eq!((drag.split, drag.index), (split, index));
-            grabbed += 1;
-
-            let _ = h.moved(offset(axis, point, 40.0));
-            if (h.boundary(split, index).expect("a boundary") - start).abs() > EPS {
-                moved += 1;
-                assert!(
-                    !same(&before, &rects(&mut h)),
-                    "the boundary moved and no rectangle changed"
-                );
-            }
-
-            // Past every stop there is, in both directions, and back to the
-            // exact pointer position the drag began at.
-            let _ = h.moved(offset(axis, point, 9000.0));
-            let _ = h.moved(offset(axis, point, -9000.0));
-            let _ = h.moved(point);
-            h.released();
-
-            let after = rects(&mut h);
-            assert!(
-                same(&before, &after),
-                "divider {}#{index} did not come back: {:?} against {:?}",
-                h.label(split),
-                before,
-                after
-            );
-        }
-        assert_eq!(
-            grabbed, total,
-            "a boundary the arrangement has that a pointer cannot grab"
-        );
-        // Two of the console's boundaries cannot move at all — a region whose
-        // minimum meets its maximum is pinned — so this is "at least one", not
-        // "all of them", and the restore above is what holds for every one.
-        assert!(moved > 0, "no divider moved under a 40px drag");
-    }
-
-    /// A drag that runs off the left edge of the window. winit reports
-    /// negative pointer coordinates there, and the operator dragged into them.
-    #[test]
-    fn a_drag_past_the_left_edge_of_the_window() {
-        let mut probe = Harness::new(1920.0, 1080.0);
-        let dividers = probe.dividers();
-        for (split, index) in dividers {
-            let mut h = Harness::new(1920.0, 1080.0);
-            h.solve();
-            let axis = h.layout.axis(split).expect("a divider is on a split");
-            let point = h.grab_point(split, index).expect("a gap to aim at");
-            h.press(point);
-            for to in [-40.0, -200.0, -1000.0, -5000.0] {
-                let p = match axis {
-                    Axis::Row => Point::new(to, point.y),
-                    Axis::Column => Point::new(point.x, to),
-                };
-                let _ = h.moved(p);
-            }
-            h.released();
-        }
-    }
-
-    /// A pointer dragged on past a stop says so once.
-    ///
-    /// This is the readout's own bug, and it is worst exactly where a person
-    /// is looking hardest: at a stop the boundary does not move, and a line
-    /// per pointer event is hundreds of identical lines a second into a
-    /// terminal that has to keep up with them.
-    #[test]
-    fn a_drag_held_at_a_stop_says_so_once() {
-        let mut probe = Harness::new(1600.0, 1000.0);
-        let mut stops = 0;
-        for (split, index) in probe.dividers() {
-            let mut h = Harness::new(1600.0, 1000.0);
-            h.solve();
-            let axis = h.layout.axis(split).expect("a divider is on a split");
-            let point = h.grab_point(split, index).expect("a gap to aim at");
-            h.press(point);
-
-            // Well past whatever stops it, and then on, a pixel at a time,
-            // the way a hand held against the edge of the window does.
-            let _ = h.moved(offset(axis, point, -9000.0));
-            let at = h.boundary(split, index).expect("a boundary");
-            let mut said = 0;
-            for step in 1..=200 {
-                if h.moved(offset(axis, point, -9000.0 - step as f32))
-                    .is_some()
-                {
-                    said += 1;
-                }
-            }
-            let still = h.boundary(split, index).expect("a boundary");
-            assert!(
-                (still - at).abs() <= EPS,
-                "the boundary was supposed to be against a stop and moved"
-            );
-            assert_eq!(
-                said, 0,
-                "a boundary that did not move said something 200 times over"
-            );
-            stops += 1;
-        }
-        assert!(stops > 0, "no divider was driven against a stop");
-    }
 
     /// Nothing that comes back from `get_current_texture` is dropped without a
     /// decision. The loop waits for events, so an outcome that neither
@@ -1284,188 +897,6 @@ mod tests {
         assert_eq!(missed(&Acquired::Occluded), Some(Missed::Idle));
         // Not self-correcting, so it is said rather than retried.
         assert_eq!(missed(&Acquired::Validation), Some(Missed::Fault));
-    }
-
-    /// A sweep of everything the window can do to the harness, at viewports
-    /// from comfortable down to below the arrangement's own minima, with the
-    /// pointer walked well outside each of them.
-    #[test]
-    fn a_sweep_of_hostile_input() {
-        for (vw, vh) in [
-            (1920.0_f32, 1080.0_f32),
-            (1440.0, 900.0),
-            (990.0, 632.0),
-            (400.0, 300.0),
-            (1.0, 1.0),
-        ] {
-            let mut probe = Harness::new(vw, vh);
-            for (split, index) in probe.dividers() {
-                let mut h = Harness::new(vw, vh);
-                h.solve();
-                let Some(point) = h.grab_point(split, index) else {
-                    continue;
-                };
-                h.press(point);
-                for to in [
-                    Point::new(-1.0, -1.0),
-                    Point::new(-4000.0, point.y),
-                    Point::new(point.x, -4000.0),
-                    Point::new(vw + 4000.0, vh + 4000.0),
-                    Point::new(0.0, 0.0),
-                    Point::new(f32::MAX, f32::MAX),
-                    point,
-                ] {
-                    let _ = h.moved(to);
-                    for op in [
-                        Op::Fold,
-                        Op::FoldEnclosing,
-                        Op::Report,
-                        Op::Solo,
-                        Op::Report,
-                        Op::Unsolo,
-                        Op::UnfoldAll,
-                    ] {
-                        h.op(op);
-                    }
-                    // A resize in the middle of a drag, which a window can do.
-                    h.set_viewport(vw / 2.0, vh / 2.0);
-                    let _ = h.moved(to);
-                    h.set_viewport(0.0, 0.0);
-                    let _ = h.moved(to);
-                    h.set_viewport(vw, vh);
-                }
-                h.released();
-                // A release with nothing in hand, and a press outside.
-                h.released();
-                h.press(Point::new(-10.0, -10.0));
-                let _ = h.moved(Point::new(-10.0, -10.0));
-                h.op(Op::Reset);
-            }
-        }
-    }
-
-    /// Every operation, in a debug build, with a read after each one.
-    ///
-    /// `rect()` and `hit()` both `debug_assert!` that the layout is not dirty,
-    /// so this fails if any operation here leaves a solve owed — which is the
-    /// mistake a real view will make first, and the reason the harness solves
-    /// at the top of everything that reads.
-    ///
-    /// It also asserts what each operation is *for*: a fold folds, an unfold
-    /// puts the arrangement back exactly, a solo leaves one region visible,
-    /// and an unsolo restores what it replaced.
-    #[test]
-    fn every_operation_leaves_the_layout_readable_and_undoes_exactly() {
-        let mut h = Harness::new(1600.0, 1000.0);
-        h.solve();
-        let before = rects(&mut h);
-
-        // Name-free: the pointer goes to the middle of the first leaf big
-        // enough to aim at.
-        let leaf = h
-            .entries
-            .iter()
-            .filter(|e| e.colour.is_some())
-            .map(|e| (e.id, h.layout.rect(e.id)))
-            .find(|(_, r)| r.w > 20.0 && r.h > 20.0)
-            .expect("a leaf to point at");
-        h.cursor = Point::new(leaf.1.x + leaf.1.w / 2.0, leaf.1.y + leaf.1.h / 2.0);
-
-        let folded = |h: &Harness| {
-            h.entries
-                .iter()
-                .filter(|e| h.layout.is_collapsed(e.id))
-                .count()
-        };
-
-        h.op(Op::Fold);
-        assert_eq!(folded(&h), 1, "f folded something other than one region");
-        h.op(Op::UnfoldAll);
-        assert_eq!(folded(&h), 0);
-        assert!(same(&before, &rects(&mut h)), "an unfold did not restore");
-
-        h.op(Op::FoldEnclosing);
-        assert!(folded(&h) > 0, "g folded nothing");
-        h.op(Op::UnfoldAll);
-        assert!(same(&before, &rects(&mut h)), "an unfold did not restore");
-
-        h.op(Op::Solo);
-        assert!(h.layout.is_soloed());
-        assert!(
-            h.layout.visible(leaf.0),
-            "a solo folded the region it was aimed at"
-        );
-        // Straight into an operation that reads every rectangle, with nothing
-        // solving in between: this is the pair that catches a stale solve, and
-        // it fails on `rect() read a stale solve` if `op` stops solving.
-        h.op(Op::Report);
-        h.op(Op::Unsolo);
-        assert!(!h.layout.is_soloed());
-        assert!(same(&before, &rects(&mut h)), "an unsolo did not restore");
-
-        // A drag, then a reset: the arrangement is fresh, at the same viewport.
-        let (split, index) = h.dividers()[0];
-        let point = h.grab_point(split, index).expect("a gap to aim at");
-        let axis = h.layout.axis(split).expect("a divider is on a split");
-        h.press(point);
-        let _ = h.moved(offset(axis, point, 60.0));
-        h.released();
-        h.op(Op::Reset);
-        assert!(same(&before, &rects(&mut h)), "a reset did not restore");
-    }
-
-    /// A drag lands where it is asked unless something stops it, and what
-    /// `set_divider` returns is what actually happened — the pair either side
-    /// keeps its combined extent whatever was asked for.
-    #[test]
-    fn a_drag_returns_where_it_landed_and_moves_only_the_pair() {
-        let mut h = Harness::new(1600.0, 1000.0);
-        let dividers = h.dividers();
-        let mut checked = 0;
-        for (split, index) in dividers {
-            let mut h = Harness::new(1600.0, 1000.0);
-            h.solve();
-            let axis = h.layout.axis(split).expect("a divider is on a split");
-            let children = h.visible_children(split);
-            let (a, b) = (children[index], children[index + 1]);
-            let span = extent(axis, h.layout.rect(a)) + extent(axis, h.layout.rect(b));
-            let others: Vec<Rect> = children
-                .iter()
-                .filter(|c| **c != a && **c != b)
-                .map(|c| h.layout.rect(*c))
-                .collect();
-
-            let point = h.grab_point(split, index).expect("a gap to aim at");
-            h.press(point);
-            if h.drag.is_none() {
-                continue;
-            }
-            checked += 1;
-            let _ = h.moved(offset(axis, point, 9000.0));
-
-            let landed = h.boundary(split, index).expect("a boundary");
-            let after: Vec<Rect> = children
-                .iter()
-                .filter(|c| **c != a && **c != b)
-                .map(|c| h.layout.rect(*c))
-                .collect();
-            assert!(
-                same(&others, &after),
-                "a drag moved a sibling that is not either side of it"
-            );
-            let now = extent(axis, h.layout.rect(a)) + extent(axis, h.layout.rect(b));
-            assert!(
-                (now - span).abs() <= EPS,
-                "the pair's combined extent changed: {span} to {now}"
-            );
-            let (min, max) = h.layout.bounds(a);
-            assert!(
-                landed - near(axis, h.layout.rect(a)) <= max + EPS
-                    && landed - near(axis, h.layout.rect(a)) >= min - EPS,
-                "a drag landed outside the bounds it was stopped by"
-            );
-        }
-        assert!(checked > 0, "no divider could be grabbed at all");
     }
 }
 
