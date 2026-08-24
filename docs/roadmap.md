@@ -224,16 +224,35 @@ rather than its elements — a `u32` in a uniform against a bind-group entry —
 can finally say which of a Set's geometries it applies to, with `source == only`, and a
 node may declare several where it may declare one `far`.
 
-**Work is in M5, the interface, and two pieces of it exist.** The workspace is on `wgpu` 30
-and `naga` 30, which is what `egui` needs and which nothing else here wanted
-([ADR-0155](adr/0155-egui-draws-the-panel-and-the-price-is-wgpu-30.md)). And
-[`karakuri-layout`](../crates/karakuri-layout/) holds the console's regions: an arrangement of
-views and splits with a size, a minimum and a maximum each, solved to rectangles, with dividers
-that drag, panes that fold away and a `solo` that leaves one region holding the window. It has
-no toolkit, no device and no window in it, so its 35 tests run in a fifth of a second on a
-machine with no adapter — which is the property
-[ADR-0156](adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md) chose to own the
-arrangement for. **Nothing draws any of it yet.**
+**Work is in M5, and the console opens.** A window, every region of the mock in its place with
+its bay head, both rooms, dividers that drag under a pointer, panes that fold, `solo`, and **a
+real engine frame in the Program bay**.
+
+Underneath it, in three crates that do not know about each other's problems. The workspace is on
+`wgpu` 30 and `naga` 30, which is what `egui` needs and nothing else here wanted
+([ADR-0155](adr/0155-egui-draws-the-panel-and-the-price-is-wgpu-30.md)).
+[`karakuri-layout`](../crates/karakuri-layout/) is the arrangement — views and splits with a
+size, a minimum and a maximum each, solved to rectangles — with no toolkit, no device and no
+window in it, which is the property
+[ADR-0156](adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md) chose to own it
+for. [`karakuri-console`](../crates/karakuri-console/) holds the console's own arrangement, every
+number read off `docs/manual/style.css`; the panel's model, which is what a pointer and a keyboard
+act on; and the `egui` view, whose palette is the mock's and whose seven bay heads are one
+component. Its tests still run without a device.
+
+**Every bay is empty except the picture**, on purpose — a bay that looks finished does not get
+replaced. What a panel frame costs is measured and printed by the example rather than estimated:
+still, it is **0 frames and 0 allocations**
+([P-0072](principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)'s
+first clause); with the picture live it is 60 fps and 10.7% of a second, which is the price the
+rest of P-0072 is for. **The rest of P-0072 is not built** — nothing declares a cost or a
+staleness and there is no scheduler, because nothing but the picture is live.
+
+**Next, in this order.** The four deck previews under the picture. Then **making the picture a
+sink in fact** rather than in the manual: folding it skips the present pass today and the deck
+goes on rendering, so *hidden and still costing a pass* is half-answered — and closing it is the
+same change the outputs row needs, since advancing a frame and presenting it are one thing in
+`compose` and have to become two.
 
 The table below is what exists, part by part. What is still absent, and why, is in the
 milestones further down rather than listed here: agents, the library, the node editor.
