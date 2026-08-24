@@ -1419,6 +1419,7 @@ dependencies = [
  "egui-wgpu",
  "egui-winit",
  "karakuri-engine",
+ "karakuri-ir",
  "karakuri-layout",
  "pollster",
  "serde_json",

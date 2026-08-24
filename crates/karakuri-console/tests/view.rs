@@ -8,12 +8,12 @@
 
 mod common;
 
-use common::{id_of, rect_of, PLAUSIBLE};
+use common::{id_of, near, rect_of, solved, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{Palette, Room};
-use karakuri_console::view::{plan_into, region, Kind, Placed, REGIONS};
-use karakuri_layout::Point;
+use karakuri_console::view::{picture_rect, plan_into, region, Kind, Placed, REGIONS};
+use karakuri_layout::{NodeId, Point};
 
 /// The seven bays, read off the mock's `.bay-head`s — `console.html` heads
 /// exactly these and nothing else.
@@ -65,19 +65,26 @@ fn every_leaf_of_the_arrangement_is_drawn_and_none_is_skipped() {
         }
     }
 
-    // The inspector is the one bay that is a split: its head sits above the
-    // two panes that tile it, so it is drawn and they are drawn inside it.
-    let inspector = id_of(layout, "inspector");
-    assert!(
-        placed.iter().any(|p| p.id == inspector),
-        "the inspector bay's own head is not drawn"
-    );
+    // Two bays are splits: their heads sit above the regions that tile them,
+    // so each is drawn and its parts are drawn inside it. The inspector is one
+    // and the Program bay is the other — the picture and the deck previews
+    // fold apart, so the bay around them is a split.
+    let split_bays: Vec<NodeId> = ["inspector", "program"]
+        .iter()
+        .map(|name| id_of(layout, name))
+        .collect();
+    for (name, id) in ["inspector", "program"].iter().zip(&split_bays) {
+        assert!(
+            placed.iter().any(|p| p.id == *id),
+            "the {name} bay's own head is not drawn"
+        );
+    }
 
     // And nothing else. `left-pane`, `centre` and `right-pane` are splits an
     // operator folds, not things with a face.
     for p in &placed {
         assert!(
-            layout.is_view(p.id) || p.id == inspector,
+            layout.is_view(p.id) || split_bays.contains(&p.id),
             "{:?} is a split and is being drawn as a region",
             layout.name(p.id)
         );
@@ -88,13 +95,17 @@ fn every_leaf_of_the_arrangement_is_drawn_and_none_is_skipped() {
         );
     }
 
-    // Ten leaves and the inspector, which is every row of the table.
+    // Twelve leaves and the inspector, which is every row of the table.
     assert_eq!(placed.len(), REGIONS.len());
 
-    // Tree order, which is what puts the inspector's card under its panes.
+    // Tree order, which is what puts a split bay's card under the regions that
+    // tile it — the inspector's panes, and the Program bay's picture and
+    // preview row.
     let at = |name: &str| placed.iter().position(|p| p.region.name == name).unwrap();
     assert!(at("inspector") < at("inspector-1"));
     assert!(at("inspector-1") < at("inspector-2"));
+    assert!(at("program") < at("program-view"));
+    assert!(at("program-view") < at("deck-previews"));
 }
 
 /// **A bay gets a head and a row does not.**
@@ -124,13 +135,25 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
             "{name} has no heading in the mock and is being given one"
         );
     }
-    for name in ["inspector-1", "inspector-2"] {
+    for name in ["inspector-1", "inspector-2", "deck-previews"] {
         assert_eq!(
             region(name).unwrap().kind,
             Kind::Pane,
-            "{name} sits inside the Inspector bay and has no head of its own"
+            "{name} sits inside a bay and has no head of its own"
         );
     }
+    // *"The picture carries no label of its own"* — so it is not a bay, and it
+    // is the one region that draws a texture.
+    assert_eq!(
+        region("program-view").unwrap().kind,
+        Kind::Picture,
+        "the picture in the Program bay is what a texture is drawn into"
+    );
+    assert_eq!(
+        REGIONS.iter().filter(|r| r.kind == Kind::Picture).count(),
+        1,
+        "a second picture region: `View::draw` has one texture to give"
+    );
     assert_eq!(
         REGIONS
             .iter()
@@ -139,6 +162,113 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
         BAYS.len(),
         "the bay head has seven call sites, which is the whole of why it is a component"
     );
+}
+
+/// **The picture's rectangle comes off its own region, and it is 16:9 at the
+/// width the mock draws.**
+///
+/// This is the rectangle a caller sizes a texture from, so getting it from
+/// anything but `program-view` is a texture the wrong size — and the wrong
+/// size in a way nothing on screen shows, because the picture fills whatever
+/// rectangle it is given either way. At `SMALLEST` the bay's own derivation
+/// says exactly what it should be: the centre track is 484, `.program-body`'s
+/// 9px padding leaves 466, and 466 at 16:9 is 262. Those are the two numbers
+/// the arrangement's 378 was built from, arrived at from the other end.
+#[test]
+fn the_pictures_rectangle_is_its_region_less_the_head_and_the_padding() {
+    let layout = solved(SMALLEST);
+    let rect = picture_rect(&layout).expect("the picture is on screen");
+
+    assert!(near(rect.width(), 466.0), "{} wide", rect.width());
+    assert!(near(rect.height(), 262.0), "{} tall", rect.height());
+    assert!(
+        (rect.width() / rect.height() - 16.0 / 9.0).abs() < 0.01,
+        "the mock's own picture is 16:9 and this is {}:{}",
+        rect.width(),
+        rect.height()
+    );
+
+    // And it is that region's, term for term: the bay head is painted over the
+    // top of it and `.program-body`'s padding is inside it.
+    let region = rect_of(&layout, "program-view");
+    assert!(near(rect.min.x, region.x + 9.0));
+    assert!(near(rect.min.y, region.y + 27.0 + 9.0));
+    assert!(near(rect.max.x, region.x + region.w - 9.0));
+    // Nothing under it: the 9 below the picture in the CSS is the gap to the
+    // previews, which is the split's divider, and the other 9 is under the
+    // preview row and belongs to `deck-previews`.
+    assert!(near(rect.max.y, region.y + region.h));
+}
+
+/// **It follows the region and not the window**, which is the failure a
+/// texture sized once from the window looks exactly like until somebody drags
+/// something.
+#[test]
+fn the_pictures_rectangle_follows_its_region_rather_than_the_window() {
+    let narrow = picture_rect(&solved(SMALLEST)).expect("on screen");
+    let wide = picture_rect(&solved(PLAUSIBLE)).expect("on screen");
+
+    // A window nearly twice as wide gives the picture the width and none of
+    // the height — the manual's "sized by height", seen in the rectangle a
+    // texture is made from.
+    assert!(wide.width() > narrow.width() + 900.0);
+    assert!(near(wide.height(), narrow.height()));
+    assert!(
+        wide.width() < PLAUSIBLE.w && wide.height() < PLAUSIBLE.h,
+        "the picture is the window's size, so it was taken from the window"
+    );
+
+    // Dragging the program's bottom edge is the operator changing the
+    // picture's height, and the rectangle says so.
+    let mut layout = solved(PLAUSIBLE);
+    let centre = id_of(&layout, "centre");
+    layout.set_divider(centre, 0, rect_of(&layout, "program").y + 600.0);
+    layout.solve();
+    let dragged = picture_rect(&layout).expect("on screen");
+    assert!(near(dragged.height(), wide.height() + 222.0));
+    assert!(near(dragged.width(), wide.width()));
+}
+
+/// **No rectangle where the picture is folded away**, which is the manual's
+/// *"there is no state where it is hidden and still costing a pass"*: a caller
+/// that renders into this rectangle records no pass at all when there is none.
+///
+/// **What carries it is the size test and not a visibility test**, and that
+/// was learnt from this test rather than assumed: written with both, deleting
+/// the visibility check left it passing, because a folded region keeps its
+/// rectangle and loses its extent. So the check went and this is what holds
+/// the remaining line — including for a picture folded by its bay rather than
+/// by itself, which a visibility test and a size test answer alike and which
+/// is asserted here so that the equivalence is not left as a belief.
+#[test]
+fn a_folded_picture_has_no_rectangle() {
+    let mut layout = solved(PLAUSIBLE);
+    assert!(picture_rect(&layout).is_some());
+
+    layout.collapse(id_of(&layout, "program-view"));
+    layout.solve();
+    assert_eq!(picture_rect(&layout), None);
+
+    // The previews are still there, so this is the picture being folded and
+    // not the bay.
+    assert!(layout.visible(id_of(&layout, "deck-previews")));
+
+    layout.expand(id_of(&layout, "program-view"));
+    layout.solve();
+    assert!(picture_rect(&layout).is_some());
+
+    // The bay folded around it, which is `g` over the picture rather than `f`.
+    let mut layout = solved(PLAUSIBLE);
+    layout.collapse(id_of(&layout, "program"));
+    layout.solve();
+    assert_eq!(picture_rect(&layout), None);
+
+    // And a solo on the previews, which leaves the picture out rather than
+    // folding anything above it.
+    let mut layout = solved(PLAUSIBLE);
+    layout.solo(id_of(&layout, "deck-previews"));
+    layout.solve();
+    assert_eq!(picture_rect(&layout), None);
 }
 
 // ---------------------------------------------------------------------------

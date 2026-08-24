@@ -45,6 +45,12 @@ winit = "0.30.13"
 # its async constructor is reached off the event loop.
 karakuri-engine.workspace = true
 pollster = "1.0.1"
+# The `.kir` pair the example's Set is built from goes through parse and check
+# before `Set::build` will take it, and those two stages are `karakuri-ir`'s.
+# `karakuri-cli` reaches them the same way; there is no shorter route to a
+# `Checked` and inventing one would be a second answer to *what does this
+# procedure compile to*.
+karakuri-ir.workspace = true
 
 # **The example carries tests, so it is a test target.** Cargo builds an example
 # under `cargo test` but does not run the tests inside one unless it is asked,

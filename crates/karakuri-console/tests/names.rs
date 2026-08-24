@@ -45,12 +45,22 @@ const MANUAL: &[&str] = &[
 /// The inspector's panes are the *n* the manual describes ("**n** panes, each
 /// showing whatever you point it at"), numbered because the mock's control for
 /// them counts — `2 up` — and because a view's name is required.
+///
+/// The Program bay's two regions are the last two, and they are the one pair
+/// here the manual names outright without heading them. *"The bay is two
+/// regions and they fold apart. The picture is a sink, listed in Outputs as
+/// **program view** ... The **deck previews** under it are auditions of their
+/// own, so they stay when it goes."* Both words are the manual's, and both are
+/// addressed: turning the sink off is a fold on `program-view`, and the row
+/// staying when it goes is `deck-previews` not folding with it.
 const STRUCTURAL: &[&str] = &[
     "left-pane",
     "centre",
     "right-pane",
     "inspector-1",
     "inspector-2",
+    "program-view",
+    "deck-previews",
 ];
 
 #[test]
