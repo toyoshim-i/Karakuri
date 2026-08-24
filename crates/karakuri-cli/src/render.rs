@@ -18,7 +18,7 @@ use std::path::Path;
 
 use karakuri_engine::{Deck, Gpu, Present};
 
-use crate::frame::{Committed, Outcome, Sink, Skip};
+use crate::frame::{Committed, Sink, Skip};
 
 use crate::Look;
 
@@ -278,15 +278,33 @@ fn sequence_driven(
     // what makes an offline preview and a live run agree.
     for i in 0..frames {
         sink.want(wanted(i));
-        let outcome = crate::frame::compose(gpu, deck, &present, &mut sink, |deck| {
-            let (steps, look) = drive(i, deck);
-            Committed { steps, look }
-        })?;
-        // A `PngSink` never skips, so this cannot happen — and saying so out
-        // loud is cheaper than a reader wondering what an offscreen run does
-        // about a missing target.
-        if let Outcome::Skipped(skip) = outcome {
-            return Err(format!("the offscreen sink skipped a frame: {skip:?}"));
+        // Where a refusal would be said, if one could happen. See the check
+        // below the call.
+        let mut refusal = None;
+        let outcome = {
+            let mut sinks: [&mut dyn Sink; 1] = [&mut sink];
+            crate::frame::compose(
+                gpu,
+                deck,
+                &present,
+                &mut sinks,
+                &mut |at, skip| refusal = Some((at, skip)),
+                |deck| {
+                    let (steps, look) = drive(i, deck);
+                    Committed { steps, look }
+                },
+            )?
+        };
+        // **A `PngSink` never refuses, so nothing reaches this** — and it is
+        // written down rather than left out because a frame is no longer gated
+        // by its sinks: `compose` composes for however many of them answered,
+        // including none, so an offscreen run whose sink stopped answering
+        // would write exactly the files it was asked for, minus the pictures.
+        // One line here is cheaper than a reader wondering.
+        if outcome.reached != 1 {
+            return Err(format!(
+                "the offscreen sink skipped a frame: {outcome:?} {refusal:?}"
+            ));
         }
     }
     Ok(())

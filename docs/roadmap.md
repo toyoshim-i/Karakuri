@@ -264,18 +264,31 @@ power management rather than the extra pass. **The rest of P-0072 is not built**
 declares a cost or a staleness and there is no scheduler, because nothing but the Program bay is
 live.
 
-**Next: making the picture a sink in fact** rather than in the manual. Folding it skips the
-present pass today and the deck goes on rendering, so *hidden and still costing a pass* is
-half-answered — and closing it is the same change the outputs row needs, since advancing a frame
-and presenting it are one thing in `compose` and have to become two.
+**Half of *making the picture a sink in fact* is built, and it is the half that had to come
+first.** `frame::compose` no longer gates the frame on a sink: it takes a slice of them, asks each
+one, advances the deck whatever they answer, and draws into and presents the ones that took it
+([ADR-0171](adr/0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md)). Every
+output may be off and the instrument keeps running, which is what the outputs row needs and what
+the manual already promises.
+
+**What is left is that the console cannot reach it.** `frame::compose` lives in `karakuri-cli`,
+which has no library target, so `karakuri-console`'s example hand-rolls its own frame loop and its
+picture is a sink in the manual and not in the code. The move is `Sink`, `Skip`, `Committed`,
+`Outcome`, `compose`, `Look` and `WindowSink` into `karakuri-engine`, leaving `PngSink` — a file
+writer — behind: `karakuri-engine` already depends on `winit` and already opens surfaces in
+`gpu.rs`, `Look`'s three fields are exactly `Present::set_tonemap`'s arguments, and
+`karakuri-console`'s example already depends on `karakuri-engine`, so **no crate gains a
+dependency**. The argument for it is the one the README makes — the CLI is scaffolding rather than
+the destination — and a frame loop inside the scaffolding is a frame loop the application cannot
+use.
 
 **And there is a hole to close on the way, which the preview row made visible rather than made.**
-*Which rectangle a sink's texture is sized from* is decided inside the example's `window_event`,
-which no test can call, so `mod gpu` asserts what `Engine::new` does and not what the frame
-chooses. Sizing deck A's texture from the picture's rectangle was injected there and every test
-still passed; the picture has had exactly this gap since it was written. The fix is to lift *which
-rectangle, at what size* out of the frame into something both it and `resumed` call — which is the
-same list-of-sinks the item above turns `compose` into, so it is owed once rather than twice.
+*Which rectangle a sink's texture is sized from* is decided inside the console example's
+`window_event`, which no test can call, so `mod gpu` asserts what `Engine::new` does and not what
+the frame chooses. Sizing deck A's texture from the picture's rectangle was injected there and
+every test still passed; the picture has had exactly this gap since it was written. Lifting *which
+rectangle, at what size* out of the frame into something both it and `resumed` call is the same
+work as putting the console's two textures behind `Sink`, so it is owed once rather than twice.
 
 The table below is what exists, part by part. What is still absent, and why, is in the
 milestones further down rather than listed here: agents, the library, the node editor.
@@ -379,7 +392,7 @@ governor and is not built, alongside the decision about whether GPU timestamps c
 | Linear HDR end to end, sRGB once at output | Works |
 | Store | Works, and the engine obeys it. `--save-set` writes a Set file and puts every node's `.kir` source in the store as a content-addressed artifact; `--load-set` reads it back and builds from it, resolving each procedure by hash or from inlined `src` when the file is bundled. `--bundle ID` **writes** that bundled form — the Set file plus one `src` run per artifact it names, to standard output, because a bundle is a thing you send somebody rather than something the library keeps — and refuses whole, naming the node, where the store cannot supply one of the sources. `--unbundle FILE` takes one back in: every inlined source must hash to the address its `slot` names before anything is stored, each becomes an artifact with a metadata card, and a Set id this store already holds is refused rather than overwritten, because an id you type is an instruction and an id that arrived inside somebody else's file is not. The `k` key — and the `save_set` MCP tool, which is the same control and the same code — writes the same file from a *running* session, for the focused slot or for one a call names, reading the capacities, params, bindings, camera, layering, selected renderer, seeds and sources off the Set on screen rather than off the flags — bar the two the Set does not hold, which come from the run: the edges, which nothing can rewire mid-run, and each node's spelled name. **Every record type has a writer.** `audio` and `tempo` go through a record every frame, `gain`, `residency`, `look` and `transport` on every key that moves them, `set`/`slot`/`capacity`/`param`/`bind`/`edge`/`camera`/`merge`/`seed` on every save and load, `src` on every `--bundle` and read back by `--unbundle` and by any `--load-set` of a bundled file, `save` on every live save that reached the disk — a save still being written when the window closes is waited for, up to five seconds, so quitting straight after pressing `k` still records it, and past that bound the run says how many it left behind rather than letting a hung disk hold the quit — and `tick` once a frame into a session stream. `--record-session` writes the timeline as it happens and `--replay` renders it back, so a performance is replayed rather than only rebuilt |
 | What a Set file cannot carry | Named rather than dropped, and printed on load. A `param` may be a vector and the engine's map holds `f32`; and a `camera` record carries two of `Orbit`'s six fields, so the other four come back as defaults. Each is a real disagreement between the format and the engine rather than an omission in the loader, and a Set file that half-applied in silence is the failure this repository keeps refusing. Two have left this list. `seed`, `capacity` and `param` keyed by layer against an engine holding one of each per Set: params are per node now, the salt is per source, and each source runs at its own capacity. And a `slot`'s **name**, which used to be recorded and reported because no surface pointed at a node by one — an `edge` does, so a name is carried back to the node it belongs to |
-| One frame loop | Works. There were two — the window's and the offscreen PNG's — and the seam between them was meant to be a single line (a live run measures its step count from a clock, a replay reads it from a `tick`). It had become five, and **every replay defect this project has found was one of the four extras**: the look applied once instead of per frame, the governor running on one path only, the present pass skipped on unkept frames. Now `frame::compose` is the loop and a `Sink` is where it goes — a window, a PNG writer, and a test double. The **ordering is structural**: `compose` takes the committing work as a closure and calls it only after the sink has a target, so a frame with nowhere to draw cannot record a `tick` claiming steps the deck never took. That was two statements in the right order before, and getting it wrong was invisible. The test sink is what finally reaches `Live::frame`'s claims, which no test in this program had ever done |
+| One frame loop | Works. There were two — the window's and the offscreen PNG's — and the seam between them was meant to be a single line (a live run measures its step count from a clock, a replay reads it from a `tick`). It had become five, and **every replay defect this project has found was one of the four extras**: the look applied once instead of per frame, the governor running on one path only, the present pass skipped on unkept frames. Now `frame::compose` is the loop and a `Sink` is where it goes — a window, a PNG writer, and a test double. The **ordering is structural**: `compose` takes the committing work as a closure and calls it in one place, with the deck's render adjacent and nothing between them, so a `tick` cannot claim steps the deck never took. That was two statements in the right order before, and getting it wrong was invisible. It used to be structural the other way round — the closure was withheld until a sink had a target — and that could not survive a second sink ([ADR-0171](adr/0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md)): **the deck advances on every frame `compose` composes, and each sink takes that frame or misses it on its own.** `compose` takes a slice of them, zero included. The test sink is what finally reaches `Live::frame`'s claims, which no test in this program had ever done |
 | Replay fidelity | Works, and it is now checked end to end rather than argued: `crates/karakuri-cli/tests/replay.rs` runs the binary, replays two sessions differing in one record, and reads the pixels. Every assertion there is paired with a **control** — the same session replayed twice, byte for byte — because this material moves on `t`, so "the frames differ" is true whatever the code does. Building it closed a real hole: a `look` record moved nothing on replay. The offscreen renderer took a look and applied it once before the loop while the replay driver wrote every decoded one into a variable nothing read again, so a session replayed under the look it *started* with however many times the operator changed it — and with no automatic gain by design, the exposure is a control an operator is expected to ride. It also closed a second one of the same family: a `tick` is a **terminator, not a header** — `split` files each record into the frame of the next tick — and a frame used to push its `tick` before the `audio` and `tempo` it had just measured, so a replay showed frame N what frame N−1 heard, in the two signals every binding is driven by. Both bugs were in the record ordering of the one function that has no test reaching it, `Live::frame`, which needs a window; the splitter half is tested and the writer half is checked by reading, and that is said where the test is rather than left to assume |
 | Session recording | Works, and it carries its own material: `--record-session` writes the Set at the head of the stream — from `--load-set` when given and saved under `ID-material` when not — so `--replay` needs nothing else and neither does this flag. It is now **refused** with `--render`, `--seq` and `--replay` rather than silently dropped: the recorder is only built on the path that opens a window, so those runs exited 0 having written no session and said nothing, which is the failure the recorder's own construction site carries a comment warning against. It used to write the `--load-set` file *or nothing*, and "or nothing" was a timeline of ticks with no material under it — a session that refused to replay long after the set was over, with nothing said at the time. What is still short: a session stream has no way to say what a **deck** held, so only slot 0's material is at the head and a multi-slot session replays the rest of the performance against a deck of one |
 | Set file and session stream | The two projections are kept apart by `Record::is_set_state` and `project`. A Set file drops the mix as well as the ticks, and for a different reason: a gain is state, but the *session's*, and a Set file that restored one would pull down whatever fader it was next loaded under. A session folds *down* to a Set file — `Store::save_session_as_set`, ticks dropped and state folded — which is the projection the format specifies. What does not exist is the other one: folding a session to the deck state it ends at, so a run could resume where the last one stopped. Nothing needs it yet |
@@ -626,17 +639,25 @@ Recorded here because they are decisions, and the manual states behaviour rather
   output mode of its own, which supersedes the "not built, deliberately" note in M2's output
   routing bullet.
 
-  *(One sentence here was wrong and is removed: it said a composited frame "already goes to *n*
-  sinks". `docs/plugins.md` designs that and the `Sink` trait exists, but `compose` takes exactly
-  one sink and all eight call sites pass one. What is built is the seam, not the fan-out.)*
+  *(One sentence here was wrong and was removed, and has since come true: it said a composited
+  frame "already goes to *n* sinks", when `docs/plugins.md` designed that, the `Sink` trait
+  existed, and `compose` took exactly one. The fan-out is built now — what is owed is a second
+  sink to put in the slice.)*
 
-  **And the sink gates the whole frame today, which the outputs row will have to undo.**
-  `compose` returns `Skipped` before calling the closure that commits, so a frame with no target
-  reads no clock, writes no record and does not advance the deck. That is right for a lost
-  swapchain, which is momentary. It is wrong as a steady state: an operator who turns every
-  output off would stop the instrument rather than stop publishing it. Advancing a frame and
-  presenting it are one thing in this code and have to become two — which is the same change *n*
-  sinks needs, so it is owed once rather than twice.
+  **And the sink no longer gates the frame**
+  ([ADR-0171](adr/0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md)).
+  `compose` used to return `Skipped` before calling the closure that commits, so a frame with no
+  target read no clock, wrote no record and did not advance the deck — right for a lost swapchain,
+  wrong as a steady state, and meaningless with two sinks. Advancing a frame and publishing it are
+  two things now: every sink is asked first, the deck advances whatever they answer, and each sink
+  that took the frame is drawn into and presented. **Every output may be off and the instrument
+  keeps running**, which is what the manual promises about setting up before doors.
+
+  It cost three early returns in `Live::frame`, and all three were bugs waiting: a transient
+  refusal — every frame of a resize, every frame of a minimised window — used to skip the deck's
+  event drain, the `procedure` records, the governor and the status line, and a latched fault
+  skipped them for good, so a build landing while the window was wedged was never announced and
+  never recorded.
 - **`gain` is a trim and `opacity` is the fader**, which `karakuri-engine/src/mix.rs` says
   outright and which the two behave as: opacity at zero silences under every blend mode, gain
   at zero does not silence `over`. Drawing them as two identical sliders throws that away.

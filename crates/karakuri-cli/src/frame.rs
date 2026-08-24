@@ -31,19 +31,46 @@
 //!
 //! ## The ordering is structural, not stated
 //!
-//! A frame must acquire somewhere to draw **before** it records anything about
-//! itself, because a `tick` is a promise that the deck advanced and a frame
-//! that is abandoned did not. That used to be two statements in the right order
-//! inside one long function, and getting it wrong was invisible — a replay
-//! diverged from the performance by however many frames the window had
-//! abandoned, which on a resize is several. That one *was* this module's to
-//! fix, and it was fixed by making it unrepresentable rather than by putting
-//! the statements back in order.
+//! **A frame commits before it draws, and there is no path between the two.**
+//! [`compose`] takes the committing work as a closure and calls it in exactly
+//! one place — after every sink has been asked for a target, immediately before
+//! the deck is rendered — so the order is the shape of the call rather than two
+//! statements a reader has to keep in the right sequence. That was the point of
+//! this module and it still is: the same move `Deck::begin_frame` makes with
+//! its guard, one level up.
 //!
-//! [`compose`] takes the committing work as a closure and calls it only once
-//! [`Sink::acquire`] has returned a target. There is no order left to get
-//! wrong. This is the same move `Deck::begin_frame` makes with its guard — a
-//! second frame while one is open does not compile — one level up.
+//! **What changed is what the closure is conditional on: nothing.** This module
+//! was written around the opposite rule, and the rule is worth keeping on the
+//! page rather than quietly deleting — *"a frame must acquire somewhere to draw
+//! before it records anything about itself, because a `tick` is a promise that
+//! the deck advanced and a frame that is abandoned did not."* The defect behind
+//! it was real, and is
+//! `docs/adr/0078-a-frame-that-is-discarded-must-not-already-have-been-recorded.md`:
+//! the loop read the clock, wrote a `tick` claiming those steps, and only then
+//! found the swapchain had nothing — and `Outdated` arrives on every resize,
+//! so resizing during a recording made the replay diverge from the
+//! performance by however many frames the window had abandoned. So `compose`
+//! withheld the closure until [`Sink::acquire`] had returned a target, and an
+//! abandoned frame committed nothing at all.
+//!
+//! **That rule could not survive a second sink.** With one sink, "the frame was
+//! abandoned" and "the sink had no target" are the same sentence. With a
+//! projector beside the window they are not: a frame that reached the projector
+//! and missed the window did not *not happen*, and there is no answer to "did
+//! this frame advance the deck?" that is right for both of them. Nor was it
+//! right with one sink as a steady state — an operator who turns every output
+//! off stops publishing the instrument, and stopping the instrument is a
+//! different thing that nobody asked for.
+//!
+//! **The guarantee it was protecting is stronger now, not abandoned.** The deck
+//! advances on every frame `compose` composes, so a `tick` is an honest promise
+//! *unconditionally* rather than on the frames that happened to find a target:
+//! the question the old rule answered by refusing to commit — can a `tick`
+//! claim steps the deck never took? — is now answered by the commit and the
+//! render being adjacent, with no acquire, no sink and no early return between
+//! them. Acquiring moved out from under it: every sink is asked first, each
+//! answers for itself, and what an answer decides is whether that sink is drawn
+//! into and presented. Publishing is what a sink gates; the instrument runs.
 
 use karakuri_engine::{Deck, Gpu, Present};
 #[cfg(test)]
@@ -51,13 +78,15 @@ use karakuri_store::record::MAX_STEPS;
 
 use crate::Look;
 
-/// Why a frame is not being drawn.
+/// Why a frame is not reaching **one sink**.
 ///
 /// Not an error: a sink that has no target right now is an ordinary event —
-/// a window between swapchain configurations, a display coming back. What
-/// matters is that **nothing was committed**, so the caller's clock and record
-/// stream should behave as though the frame never happened, which is what
-/// [`compose`] guarantees by not calling the committing closure at all.
+/// a window between swapchain configurations, a display coming back, an output
+/// the operator has switched off. It says nothing about the frame, which is
+/// composed and committed either way: what a refusal decides is that this sink
+/// is not drawn into and not presented, and [`compose`] hands it to the
+/// caller's reporting closure so that something can be said about a window that
+/// has stopped taking frames.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Skip {
     /// Ask again next frame; there is nothing worth saying about it. Ordinary
@@ -95,14 +124,19 @@ pub struct Committed {
 /// with two it is an extraction. A third, in the tests, is what finally lets
 /// the frame loop be driven without a display.
 ///
-/// **Everything here is called exactly once per drawn frame, in this order:**
-/// `acquire`, then `view` and `size`, then `after_draw`, then `present`. A sink
-/// that returns `Err` from `acquire` has none of the rest called.
+/// **Everything here is called exactly once per frame per sink, in this
+/// order:** `acquire`, then `view` and `size`, then `after_draw`, then
+/// `present`. A sink that returns `Err` from `acquire` has **none of the rest
+/// called on it** — and the frame still happens, into whichever other sinks
+/// took it, and into none of them if that is all of them. Each sink answers for
+/// itself and hears nothing about what the others answered.
 pub trait Sink {
     /// Take hold of this frame's attachment.
     ///
-    /// Called **before anything about the frame is recorded or measured**, so
-    /// returning `Err` costs nothing but the frame.
+    /// Called on every sink **before anything about the frame is recorded or
+    /// measured**, so a sink is never asked to answer for work already done and
+    /// an `Err` costs nothing but this sink's copy of the frame. It does not
+    /// cost the frame: the deck advances whatever every sink answers.
     fn acquire(&mut self, gpu: &Gpu) -> Result<(), Skip>;
 
     /// The attachment acquired above.
@@ -124,26 +158,54 @@ pub trait Sink {
     /// After the frame's encoder has been submitted.
     ///
     /// A window presents; a PNG writer maps its readback and writes the file.
-    /// An `Err` here is a real failure rather than a skip — the frame happened.
+    /// An `Err` here is a real failure rather than a skip — the frame happened,
+    /// and it happened for the other sinks too, so [`compose`] presents all of
+    /// them before it returns the first error.
     fn present(&mut self, gpu: &Gpu) -> Result<(), String>;
 }
 
-/// What [`compose`] did.
-#[derive(Debug)]
-pub enum Outcome {
-    /// The frame was committed and drawn.
-    Drawn,
-    /// The sink had no target. **The committing closure was never called**, so
-    /// no clock was read, no record was written, and the deck did not advance.
-    Skipped(Skip),
+/// Where a composed frame went, counted.
+///
+/// **Not whether it happened** — it happened; [`compose`] commits and renders
+/// unconditionally. A summary rather than a per-sink report because a `Vec` of
+/// outcomes would allocate on the frame path once per frame forever, for
+/// something every caller so far reduces to a number: *which* sink refused and
+/// why goes to the reporting closure instead, at the moment it refuses, and
+/// `Skip::Fault` already latches so that costs nothing per frame.
+///
+/// `reached + missed` is how many sinks were asked, and **both being zero is an
+/// ordinary state**: every output off is a frame that ran and published
+/// nowhere, which is what setting up before doors looks like.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Outcome {
+    /// How many sinks were drawn into and presented.
+    pub reached: usize,
+    /// How many were asked and had no target for this frame.
+    pub missed: usize,
 }
 
-/// Compose one frame: acquire a target, commit, render, draw, present.
+/// Compose one frame for `sinks`: ask every sink, commit, render, draw into the
+/// ones that answered, present them.
 ///
 /// `commit` is where everything a frame decides about itself happens —
 /// measuring the clock, applying whatever the stream says belongs before this
-/// frame, writing the records. **It is called only after a target exists**, and
-/// that is the whole reason it is a closure rather than a parameter.
+/// frame, writing the records. **It is called once, whatever the sinks
+/// answered**, and being a closure is what keeps it adjacent to the render with
+/// nothing between them.
+///
+/// `sinks` is a borrowed slice rather than anything owned because this is the
+/// frame path and the frame path allocates nothing; `refused` is called once
+/// per sink that had no target, with that sink's index in the slice.
+///
+/// **[`compose`] may reorder `sinks`.** The sinks that acquired are moved to
+/// the front, keeping their order among themselves, which is how the draw loop
+/// knows who answered without a `Vec<bool>` to hold it. Indices handed to
+/// `refused` are the caller's, taken before anything moves.
+///
+/// An `Err` is one sink's [`Sink::present`] failing, reported after **every**
+/// acquired sink has been presented: the frame reached them and a projector
+/// failing is no reason for the window to miss a frame it had in hand. The
+/// first error is the one returned.
 ///
 /// Note what is *not* here: no clock, no recorder, no window. The frame loop
 /// does not know whether it is live. That is what makes it one loop.
@@ -151,12 +213,30 @@ pub fn compose(
     gpu: &Gpu,
     deck: &mut Deck,
     present: &Present,
-    sink: &mut impl Sink,
+    sinks: &mut [&mut dyn Sink],
+    refused: &mut dyn FnMut(usize, Skip),
     commit: impl FnOnce(&mut Deck) -> Committed,
 ) -> Result<Outcome, String> {
-    if let Err(skip) = sink.acquire(gpu) {
-        return Ok(Outcome::Skipped(skip));
+    // **Every sink is asked before anything is committed**, which is the half of
+    // the old ordering that is still load-bearing: a sink is never asked to
+    // answer for a frame that has already been recorded.
+    let mut reached = 0;
+    for at in 0..sinks.len() {
+        match sinks[at].acquire(gpu) {
+            // Moved down beside the ones that already answered, which costs a
+            // rotate of at most the length of the slice and saves the
+            // allocation a per-sink answer would otherwise live in. `at` is
+            // still this sink's own index: rotations only ever touch positions
+            // at or below the one being visited.
+            Ok(()) => {
+                sinks[reached..=at].rotate_right(1);
+                reached += 1;
+            }
+            Err(skip) => refused(at, skip),
+        }
     }
+    let missed = sinks.len() - reached;
+    let (drawn, _) = sinks.split_at_mut(reached);
 
     let Committed { steps, look } = commit(deck);
 
@@ -179,13 +259,34 @@ pub fn compose(
         // one path and not the other. The pass is a fullscreen triangle; the
         // expensive half is the readback, and that is still conditional — a
         // sink keeps that decision to itself, in `after_draw`.
-        present.draw(frame.encoder(), sink.view(), sink.size());
-        sink.after_draw(frame.encoder());
+        //
+        // **Once per sink that took the frame, and no times at all when none
+        // did** — a frame with every output off is drawn nowhere and still
+        // rendered above. Every sink is handed the same canvas and fits it into
+        // whatever size it has: `Present::draw` letterboxes per target, so a
+        // window and a projector of different shapes need one `Present` between
+        // them rather than one each.
+        for sink in drawn.iter_mut() {
+            present.draw(frame.encoder(), sink.view(), sink.size());
+            sink.after_draw(frame.encoder());
+        }
         frame.finish();
     }
 
-    sink.present(gpu)?;
-    Ok(Outcome::Drawn)
+    // **Every sink is presented before any error is reported.** Returning at
+    // the first one would let a wedged output cost every sink below it a frame
+    // it had already been drawn into, which is the window waiting on a plugin —
+    // the one thing `docs/plugins.md` says never happens.
+    let mut failed = None;
+    for sink in drawn.iter_mut() {
+        if let Err(e) = sink.present(gpu) {
+            failed.get_or_insert(e);
+        }
+    }
+    match failed {
+        Some(e) => Err(e),
+        None => Ok(Outcome { reached, missed }),
+    }
 }
 
 /// The default sink: the window on the operator's desk.
@@ -302,7 +403,7 @@ impl Sink for WindowSink {
 mod tests {
     use super::*;
     use karakuri_engine::{HotSwap, Set, TonemapOp};
-    use std::cell::RefCell;
+    use std::cell::Cell;
 
     use crate::{Clock, DT};
     use std::time::Instant;
@@ -321,24 +422,44 @@ mod tests {
     struct TestSink {
         target: wgpu::Texture,
         view: wgpu::TextureView,
-        /// So a test can look at what was drawn. `SIZE * 4` is 256, so the rows
-        /// need no padding — see `render::unpad_rows` for when they do.
+        /// So a test can look at what was drawn. Every width used here times
+        /// four is a multiple of 256, so the rows need no padding — see
+        /// `render::unpad_rows` for when they do.
         readback: wgpu::Buffer,
+        width: u32,
+        height: u32,
         /// What `acquire` answers, popped front to back. Empty means accept.
         answers: Vec<Result<(), Skip>>,
+        /// What `present` answers, every time. `None` accepts.
+        present_answer: Option<String>,
         acquired: usize,
+        /// **Every call the contract names, counted separately**, because the
+        /// claim a refusing sink makes is about what was *not* called on it and
+        /// a single "was it drawn" flag cannot tell "never asked" from "asked
+        /// and did nothing". `view` takes `&self`, hence the `Cell`.
+        viewed: Cell<usize>,
+        after_drawn: usize,
         presented: usize,
         /// Whether the last presented frame had any light in it at all.
         lit: Option<bool>,
+        /// And the frame itself, so a test can ask *where* the light is. A
+        /// `Vec` on a test double, which is the one place in this file where
+        /// that is nobody's business.
+        pixels: Vec<u8>,
     }
 
     impl TestSink {
         fn new(gpu: &Gpu, answers: Vec<Result<(), Skip>>) -> TestSink {
+            TestSink::sized(gpu, SIZE, SIZE, answers)
+        }
+
+        fn sized(gpu: &Gpu, width: u32, height: u32, answers: Vec<Result<(), Skip>>) -> TestSink {
+            assert_eq!(width * 4 % 256, 0, "a padded readback would need unpadding");
             let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("test sink"),
                 size: wgpu::Extent3d {
-                    width: SIZE,
-                    height: SIZE,
+                    width,
+                    height,
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
@@ -351,7 +472,7 @@ mod tests {
             let view = target.create_view(&Default::default());
             let readback = gpu.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("test sink readback"),
-                size: u64::from(SIZE * SIZE * 4),
+                size: u64::from(width * height * 4),
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
                 mapped_at_creation: false,
             });
@@ -359,11 +480,35 @@ mod tests {
                 target,
                 view,
                 readback,
+                width,
+                height,
                 answers,
+                present_answer: None,
                 acquired: 0,
+                viewed: Cell::new(0),
+                after_drawn: 0,
                 presented: 0,
                 lit: None,
+                pixels: Vec::new(),
             }
+        }
+
+        /// Whether any texel in a column band of the last presented frame has
+        /// light in it. The band is what says `Present::draw` fitted the canvas
+        /// into *this* sink's size rather than into somebody else's.
+        fn lit_between(&self, from: u32, to: u32) -> bool {
+            (0..self.height).any(|y| {
+                (from..to).any(|x| {
+                    let at = ((y * self.width + x) * 4) as usize;
+                    self.pixels[at..at + 3].iter().any(|&b| b > 0)
+                })
+            })
+        }
+
+        /// Nothing at all was called on this sink but `acquire`, which is the
+        /// whole of what a refusal promises.
+        fn untouched_after_refusing(&self) -> bool {
+            self.viewed.get() == 0 && self.after_drawn == 0 && self.presented == 0
         }
     }
 
@@ -378,25 +523,27 @@ mod tests {
             answer
         }
         fn view(&self) -> &wgpu::TextureView {
+            self.viewed.set(self.viewed.get() + 1);
             &self.view
         }
         fn size(&self) -> (u32, u32) {
-            (SIZE, SIZE)
+            (self.width, self.height)
         }
         fn after_draw(&mut self, encoder: &mut wgpu::CommandEncoder) {
+            self.after_drawn += 1;
             encoder.copy_texture_to_buffer(
                 self.target.as_image_copy(),
                 wgpu::TexelCopyBufferInfo {
                     buffer: &self.readback,
                     layout: wgpu::TexelCopyBufferLayout {
                         offset: 0,
-                        bytes_per_row: Some(SIZE * 4),
-                        rows_per_image: Some(SIZE),
+                        bytes_per_row: Some(self.width * 4),
+                        rows_per_image: Some(self.height),
                     },
                 },
                 wgpu::Extent3d {
-                    width: SIZE,
-                    height: SIZE,
+                    width: self.width,
+                    height: self.height,
                     depth_or_array_layers: 1,
                 },
             );
@@ -409,22 +556,35 @@ mod tests {
             gpu.device
                 .poll(wgpu::PollType::wait_indefinitely())
                 .expect("poll");
+            self.pixels = slice.get_mapped_range().expect("map").to_vec();
+            self.readback.unmap();
             // **Colour only.** The present pass returns `vec4(rgb, 1.0)`, so
             // every texel's alpha is 255 and a scan over all four channels
             // answers "lit" for a frame that is entirely black.
-            let lit = slice
-                .get_mapped_range()
-                .expect("map")
-                .chunks(4)
-                .any(|texel| texel[..3].iter().any(|&b| b > 0));
-            self.readback.unmap();
-            self.lit = Some(lit);
-            Ok(())
+            self.lit = Some(
+                self.pixels
+                    .chunks(4)
+                    .any(|texel| texel[..3].iter().any(|&b| b > 0)),
+            );
+            match &self.present_answer {
+                Some(e) => Err(e.clone()),
+                None => Ok(()),
+            }
         }
     }
 
     const SIZE: u32 = 64;
+    /// A second sink twice as wide as the canvas and the same height, so the
+    /// canvas letterboxes into a band with black either side of it. `128 * 4`
+    /// is 512, which is aligned, and the band is exactly `[32, 96)`.
+    const WIDE: u32 = 128;
+    const BAND: (u32, u32) = ((WIDE - SIZE) / 2, (WIDE + SIZE) / 2);
     const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+
+    /// One sink, no refusals worth reporting: what most of these tests want.
+    fn one(sink: &mut TestSink) -> [&mut dyn Sink; 1] {
+        [sink]
+    }
 
     fn look() -> Look {
         Look {
@@ -444,7 +604,19 @@ mod tests {
         Deck::new(&gpu.device, vec![HotSwap::fixed(set)], SIZE, SIZE)
     }
 
-    /// **An abandoned frame's interval is not lost — the next frame counts it.**
+    /// **The interval of a frame that never ran is not lost — the next frame
+    /// counts it.**
+    ///
+    /// **This used to be about a frame that found nowhere to draw**, which was
+    /// the only way the clock could go unread: `compose` withheld the
+    /// committing closure from a refused frame, so `Clock::steps` was not
+    /// called and the interval carried. That is no longer a case at all —
+    /// every frame `compose` composes reads the clock, whatever the sinks
+    /// answered — and the property it was checking is the same one, now
+    /// carrying the gap where the frame loop itself does not run: a paused
+    /// event loop, a window the operating system stopped sending redraws to, a
+    /// long stall. The arithmetic below never mentioned a sink, which is why
+    /// the assertion stands unchanged while its subject moved.
     ///
     /// The claim the frame loop's ordering rests on, and until `steps` could be
     /// told what time it is there was no way to state it: the first version of
@@ -458,7 +630,7 @@ mod tests {
     /// total. That is what "the time survives" means, and it is false for any
     /// clock that resets `last` somewhere other than a frame that goes ahead.
     #[test]
-    fn a_frame_that_never_drew_leaves_its_time_for_the_next_one() {
+    fn a_frame_that_never_ran_leaves_its_time_for_the_next_one() {
         let start = Instant::now();
         let ms = |n: u64| start + std::time::Duration::from_millis(n);
 
@@ -466,8 +638,8 @@ mod tests {
         let both =
             u32::from(drew_every_frame.steps(ms(16))) + u32::from(drew_every_frame.steps(ms(32)));
 
-        // The same thirty-two milliseconds, with the frame at 16 ms abandoned:
-        // `steps` is not called, so `last` does not move.
+        // The same thirty-two milliseconds, with the frame at 16 ms never run
+        // at all: `steps` is not called, so `last` does not move.
         let mut skipped_one = Clock::new(start);
         let one = u32::from(skipped_one.steps(ms(32)));
 
@@ -507,25 +679,35 @@ mod tests {
         assert_eq!(steps, MAX_STEPS, "five seconds is not four steps' worth");
     }
 
-    // Three of the six drive a real `Present`; the refusal arithmetic above does not.
+    // Seven of the ten drive a real `Present`; the clock arithmetic above does not.
     // See `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs`.
     mod gpu {
         use super::*;
 
-        /// **A frame with nowhere to draw commits nothing.**
+        /// **A frame with nowhere to draw commits anyway.**
         ///
-        /// The defect this replaces was invisible: the loop read the clock, wrote a
-        /// `tick` claiming those steps, measured the audio, and only then found the
-        /// swapchain had no texture — so an abandoned frame told the session it had
-        /// simulated steps the deck never took, and a replay obeyed the record.
-        /// `Outdated` arrives on every resize, so resizing during a recording was
-        /// enough to make the replay diverge.
+        /// This test used to be `a_refused_frame_never_reaches_the_committing_work`
+        /// and asserted the exact opposite: refuse, and the closure never runs.
+        /// The defect behind that was real and is still worth knowing — the loop
+        /// read the clock, wrote a `tick` claiming those steps, measured the
+        /// audio, and only then found the swapchain had no texture, so an
+        /// abandoned frame told the session it had simulated steps the deck
+        /// never took and a replay obeyed the record. `Outdated` arrives on
+        /// every resize, so resizing during a recording was enough to diverge
+        /// the replay.
         ///
-        /// It cannot happen now because the committing work is a closure `compose`
-        /// only calls once a target exists, and this is that claim: refuse, and the
-        /// closure never runs.
+        /// **It stopped being the right question the moment a frame could reach
+        /// more than one sink.** "Was this frame abandoned?" has no answer that
+        /// is right for a frame the projector took and the window missed, and it
+        /// was already the wrong answer for one sink held off for a whole set:
+        /// every output off stopped the instrument rather than stopped
+        /// publishing it. What keeps a `tick` honest now is that there is
+        /// nothing between the commit and the render — which is
+        /// `a_frame_commits_before_it_draws` below, the claim that survived —
+        /// and the deck advancing on every frame makes the promise
+        /// unconditional rather than conditional on a swapchain.
         #[test]
-        fn a_refused_frame_never_reaches_the_committing_work() {
+        fn a_refused_frame_still_reaches_the_committing_work() {
             let gpu = Gpu::headless().expect("no GPU");
             let mut deck = one_slot_deck(&gpu);
             let present = Present::new(&gpu.device, FORMAT, SIZE, SIZE);
@@ -537,62 +719,358 @@ mod tests {
                     Ok(()),
                 ],
             );
-            let commits = RefCell::new(0);
+            let mut commits = 0;
+            let mut refusals: Vec<(usize, Skip)> = Vec::new();
 
-            for expected in [false, false, true] {
-                let before = *commits.borrow();
-                let outcome = compose(&gpu, &mut deck, &present, &mut sink, |_| {
-                    *commits.borrow_mut() += 1;
-                    Committed {
-                        steps: 1,
-                        look: look(),
-                    }
-                })
-                .expect("compose");
-                let committed = *commits.borrow() > before;
+            for at in 0..3 {
+                let outcome = {
+                    let mut sinks = one(&mut sink);
+                    compose(
+                        &gpu,
+                        &mut deck,
+                        &present,
+                        &mut sinks,
+                        &mut |sink_at, skip| refusals.push((sink_at, skip)),
+                        |_| {
+                            commits += 1;
+                            Committed {
+                                steps: 1,
+                                look: look(),
+                            }
+                        },
+                    )
+                    .expect("compose")
+                };
                 assert_eq!(
-                    committed, expected,
-                    "committing on a refused frame is the whole defect: {outcome:?}"
+                    commits,
+                    at + 1,
+                    "frame {at} did not commit: the committing closure is conditional again"
+                );
+                let reached = usize::from(at == 2);
+                assert_eq!(
+                    outcome,
+                    Outcome {
+                        reached,
+                        missed: 1 - reached
+                    },
+                    "frame {at} counted its sinks wrong"
                 );
             }
-            assert_eq!(*commits.borrow(), 1, "only the accepted frame committed");
-            assert_eq!(sink.presented, 1, "and only it was presented");
+            assert_eq!(sink.presented, 1, "only the accepted frame was presented");
+            assert_eq!(
+                refusals,
+                vec![(0, Skip::Transient), (0, Skip::Fault("gone".into()))],
+                "a refusal is reported once, with its sink's index and its reason"
+            );
         }
-        /// A refused frame does not advance the deck either — the other half of the
-        /// same promise, seen from the material rather than from the stream.
+
+        /// **And it advances the deck** — the other half of the same reversal,
+        /// seen in the material rather than in the stream.
+        ///
+        /// This was `a_refused_frame_does_not_advance_the_simulation` and
+        /// asserted that the deck stood still. It stopped being the right
+        /// question for the reason above, and the assertion that replaces it is
+        /// the stronger one: a refused frame advances the deck by **the same**
+        /// amount an accepted one does. "It moved" would pass on a deck that
+        /// moved by anything at all; the promise is that a sink has no say in
+        /// how far the simulation goes.
         #[test]
-        fn a_refused_frame_does_not_advance_the_simulation() {
+        fn a_refused_frame_still_advances_the_simulation() {
             let gpu = Gpu::headless().expect("no GPU");
             let mut deck = one_slot_deck(&gpu);
             let present = Present::new(&gpu.device, FORMAT, SIZE, SIZE);
             let mut sink = TestSink::new(&gpu, vec![Err(Skip::Transient)]);
 
             let before = deck.slot(0).set().time();
-            compose(&gpu, &mut deck, &present, &mut sink, |_| Committed {
-                steps: 4,
-                look: look(),
-            })
-            .expect("compose");
-            assert_eq!(
-                deck.slot(0).set().time(),
-                before,
-                "a frame with nowhere to draw stepped the simulation"
+            {
+                let mut sinks = one(&mut sink);
+                compose(
+                    &gpu,
+                    &mut deck,
+                    &present,
+                    &mut sinks,
+                    &mut |_, _| {},
+                    |_| Committed {
+                        steps: 4,
+                        look: look(),
+                    },
+                )
+                .expect("compose");
+            }
+            let refused = deck.slot(0).set().time() - before;
+            assert!(
+                refused > 0.0,
+                "a frame with nowhere to draw did not step the simulation"
             );
 
-            // And an accepted one does, so the assertion above is about the refusal
-            // rather than about a deck that never moves.
-            compose(&gpu, &mut deck, &present, &mut sink, |_| Committed {
-                steps: 4,
-                look: look(),
-            })
-            .expect("compose");
+            // The accepted frame is the control: without it, "it moved" could
+            // be a deck that moves for some other reason, and the equality
+            // below is what says a sink has no say in how far it moves.
+            let mid = deck.slot(0).set().time();
+            {
+                let mut sinks = one(&mut sink);
+                compose(
+                    &gpu,
+                    &mut deck,
+                    &present,
+                    &mut sinks,
+                    &mut |_, _| {},
+                    |_| Committed {
+                        steps: 4,
+                        look: look(),
+                    },
+                )
+                .expect("compose");
+            }
+            let accepted = deck.slot(0).set().time() - mid;
+            assert!(
+                (accepted - refused).abs() < 1e-6,
+                "a refused frame advanced by {refused} and an accepted one by {accepted}"
+            );
+            assert_eq!(sink.presented, 1, "and only the accepted one was presented");
+        }
+
+        /// **Every output off is a frame, and the deck still runs.**
+        ///
+        /// `docs/manual/console.html`'s promise about the outputs row — *"all
+        /// of them may be off, and that is a state worth having"*, because the
+        /// deck previews are auditions rather than outputs — is this: with no
+        /// sink at all the frame is composed, the closure commits, the deck
+        /// steps, and nothing is published. `reached` being zero *is* "nothing was
+        /// presented": it is the count of the sinks that were drawn into and
+        /// presented.
+        ///
+        /// Zero sinks is also not a miss. Nothing was asked, so nothing
+        /// refused, and the reporting closure has nothing to say — a run with
+        /// the outputs off must not print a line a second about it.
+        #[test]
+        fn a_frame_with_no_sinks_at_all_still_advances_the_deck() {
+            let gpu = Gpu::headless().expect("no GPU");
+            let mut deck = one_slot_deck(&gpu);
+            let present = Present::new(&gpu.device, FORMAT, SIZE, SIZE);
+            let mut none: [&mut dyn Sink; 0] = [];
+            let mut commits = 0;
+            let mut refusals = 0;
+
+            let before = deck.slot(0).set().time();
+            let outcome = compose(
+                &gpu,
+                &mut deck,
+                &present,
+                &mut none,
+                &mut |_, _| refusals += 1,
+                |_| {
+                    commits += 1;
+                    Committed {
+                        steps: 4,
+                        look: look(),
+                    }
+                },
+            )
+            .expect("a frame that publishes nowhere is not an error");
+
+            assert_eq!(commits, 1, "the frame did not commit");
             assert!(
                 deck.slot(0).set().time() > before,
-                "an accepted frame did not step either — the test proves nothing"
+                "the deck stopped when the outputs went off"
+            );
+            assert_eq!(
+                outcome,
+                Outcome {
+                    reached: 0,
+                    missed: 0
+                },
+                "nothing was asked, so nothing was reached and nothing missed"
+            );
+            assert_eq!(refusals, 0, "nothing refused, because nothing was asked");
+        }
+
+        /// **A sink that refuses costs the others nothing, and is told nothing
+        /// else.**
+        ///
+        /// Three sinks rather than the two this is really about, and the
+        /// arrangement is the point. The **first** refuses, so a `compose` that
+        /// drew into the slice in the order it was given rather than into the
+        /// ones that answered would draw into it. The **last** refuses too, so
+        /// its reported index is 2 while the number of sinks that had answered
+        /// by then is 1 — with two sinks those two numbers coincide and the
+        /// index asserts nothing.
+        #[test]
+        fn a_sink_that_refuses_costs_the_others_nothing() {
+            let gpu = Gpu::headless().expect("no GPU");
+            let mut deck = one_slot_deck(&gpu);
+            let present = Present::new(&gpu.device, FORMAT, SIZE, SIZE);
+            let mut first = TestSink::new(&gpu, vec![Err(Skip::Transient)]);
+            let mut taking = TestSink::new(&gpu, vec![]);
+            let mut last = TestSink::new(&gpu, vec![Err(Skip::Fault("wedged".into()))]);
+            let mut refusals: Vec<(usize, Skip)> = Vec::new();
+
+            let outcome = {
+                let mut sinks: [&mut dyn Sink; 3] = [&mut first, &mut taking, &mut last];
+                compose(
+                    &gpu,
+                    &mut deck,
+                    &present,
+                    &mut sinks,
+                    &mut |at, skip| refusals.push((at, skip)),
+                    |_| Committed {
+                        steps: 1,
+                        look: look(),
+                    },
+                )
+                .expect("compose")
+            };
+
+            assert_eq!(
+                outcome,
+                Outcome {
+                    reached: 1,
+                    missed: 2
+                }
+            );
+            assert_eq!(
+                refusals,
+                vec![(0, Skip::Transient), (2, Skip::Fault("wedged".into()))],
+                "each refusal is reported once, at the sink's own place in the slice"
+            );
+            for (which, sink) in [("the first", &first), ("the last", &last)] {
+                assert!(
+                    sink.untouched_after_refusing(),
+                    "{which} sink refused and was then drawn into: {} view, {} after_draw, \
+                     {} present",
+                    sink.viewed.get(),
+                    sink.after_drawn,
+                    sink.presented
+                );
+            }
+            assert_eq!(
+                taking.viewed.get(),
+                1,
+                "the sink that answered was not drawn"
+            );
+            assert_eq!(taking.after_drawn, 1, "its `after_draw` did not run");
+            assert_eq!(taking.presented, 1, "it was not presented");
+            assert_eq!(
+                taking.lit,
+                Some(true),
+                "it was presented and there was nothing in it"
             );
         }
+
+        /// **One canvas, two sinks of different shapes, fitted per sink.**
+        ///
+        /// What the console example already does with one `Present` and two
+        /// targets — the picture and a deck preview a fifth the size — and what
+        /// a projector beside a window will be. `Present::draw` letterboxes into
+        /// whatever `Sink::size` says, so the wide sink gets the canvas in a
+        /// centred band with black either side of it.
+        ///
+        /// The black is the half that catches the defect worth catching: "both
+        /// are lit" passes on a `compose` that hands every sink the *first*
+        /// sink's size, or its own canvas size, and draws the canvas into a
+        /// corner. Where the light stops is the only thing that says which size
+        /// was used.
+        #[test]
+        fn two_sinks_of_different_sizes_both_get_the_canvas() {
+            let gpu = Gpu::headless().expect("no GPU");
+            let mut deck = one_slot_deck(&gpu);
+            let present = Present::new(&gpu.device, FORMAT, SIZE, SIZE);
+            let mut square = TestSink::new(&gpu, vec![]);
+            let mut wide = TestSink::sized(&gpu, WIDE, SIZE, vec![]);
+
+            let outcome = {
+                let mut sinks: [&mut dyn Sink; 2] = [&mut square, &mut wide];
+                compose(
+                    &gpu,
+                    &mut deck,
+                    &present,
+                    &mut sinks,
+                    &mut |_, _| {},
+                    |_| Committed {
+                        steps: 1,
+                        look: look(),
+                    },
+                )
+                .expect("compose")
+            };
+
+            assert_eq!(
+                outcome,
+                Outcome {
+                    reached: 2,
+                    missed: 0
+                }
+            );
+            assert_eq!(square.lit, Some(true), "the fixture drew nothing to fit");
+            assert!(
+                wide.lit_between(BAND.0, BAND.1),
+                "the wide sink got no canvas: the second sink was not drawn into"
+            );
+            assert!(
+                !wide.lit_between(0, BAND.0) && !wide.lit_between(BAND.1, WIDE),
+                "the wide sink has light outside the canvas's rectangle, so the canvas \
+                 was fitted to a size that is not this sink's"
+            );
+        }
+
+        /// **A sink whose `present` fails does not cost the sinks after it their
+        /// frame.**
+        ///
+        /// `docs/plugins.md` is explicit that the window never waits on
+        /// anything else, and returning at the first error is exactly how a
+        /// wedged output would make it: every sink below it in the slice had
+        /// already been drawn into and would go unpresented. So all of them are
+        /// presented and the **first** error is the one returned — two failing
+        /// sinks here, so "first" is falsifiable rather than a word.
+        #[test]
+        fn a_present_that_fails_does_not_cost_the_next_sink_its_frame() {
+            let gpu = Gpu::headless().expect("no GPU");
+            let mut deck = one_slot_deck(&gpu);
+            let present = Present::new(&gpu.device, FORMAT, SIZE, SIZE);
+            let mut first = TestSink::new(&gpu, vec![]);
+            first.present_answer = Some("the projector went".into());
+            let mut taking = TestSink::new(&gpu, vec![]);
+            let mut last = TestSink::new(&gpu, vec![]);
+            last.present_answer = Some("and so did the recorder".into());
+
+            let failure = {
+                let mut sinks: [&mut dyn Sink; 3] = [&mut first, &mut taking, &mut last];
+                compose(
+                    &gpu,
+                    &mut deck,
+                    &present,
+                    &mut sinks,
+                    &mut |_, _| {},
+                    |_| Committed {
+                        steps: 1,
+                        look: look(),
+                    },
+                )
+                .expect_err("the failing sink's error")
+            };
+
+            assert_eq!(
+                failure, "the projector went",
+                "the error reported is not the first one"
+            );
+            assert_eq!(
+                taking.presented, 1,
+                "a sink after a failing one never had its frame presented"
+            );
+            assert_eq!(taking.lit, Some(true), "and it was presented empty");
+            assert_eq!(
+                last.presented, 1,
+                "the last sink was never asked to present at all"
+            );
+        }
+
         /// The committing closure runs **before** anything is drawn, seen in the
         /// pixels rather than in the deck.
+        ///
+        /// **This is the claim that survived the reversal, and it is now the
+        /// only thing keeping a `tick` honest** — the closure is no longer
+        /// withheld from a frame with nowhere to draw, so what a `tick` promises
+        /// rests entirely on the commit and the render being adjacent.
         ///
         /// This test was vacuous first, and the mutation is what said so: it set a
         /// gain in the closure and asserted the deck held it afterwards, which is
@@ -610,11 +1088,21 @@ mod tests {
             // this size the assertion below would hold for the wrong reason.
             let mut deck = one_slot_deck(&gpu);
             let mut sink = TestSink::new(&gpu, vec![]);
-            compose(&gpu, &mut deck, &present, &mut sink, |_| Committed {
-                steps: 1,
-                look: look(),
-            })
-            .expect("compose");
+            {
+                let mut sinks = one(&mut sink);
+                compose(
+                    &gpu,
+                    &mut deck,
+                    &present,
+                    &mut sinks,
+                    &mut |_, _| {},
+                    |_| Committed {
+                        steps: 1,
+                        look: look(),
+                    },
+                )
+                .expect("compose");
+            }
             assert_eq!(sink.lit, Some(true), "the fixture drew nothing to darken");
 
             // The same frame, with the fader taken to zero inside the closure.
@@ -622,14 +1110,24 @@ mod tests {
             // blend mode and gain does not silence `over`.
             let mut deck = one_slot_deck(&gpu);
             let mut sink = TestSink::new(&gpu, vec![]);
-            compose(&gpu, &mut deck, &present, &mut sink, |deck| {
-                deck.set_opacity(0, 0.0);
-                Committed {
-                    steps: 1,
-                    look: look(),
-                }
-            })
-            .expect("compose");
+            {
+                let mut sinks = one(&mut sink);
+                compose(
+                    &gpu,
+                    &mut deck,
+                    &present,
+                    &mut sinks,
+                    &mut |_, _| {},
+                    |deck| {
+                        deck.set_opacity(0, 0.0);
+                        Committed {
+                            steps: 1,
+                            look: look(),
+                        }
+                    },
+                )
+                .expect("compose");
+            }
             assert_eq!(
                 sink.lit,
                 Some(false),
