@@ -189,6 +189,7 @@ number; new records continue from the end.
 | [ADR-0161](0161-solo-remembers-which-region-because-it-cannot-be-derived.md) | Solo remembers which region, because it cannot be derived | 2026-08-24 | accepted |
 | [ADR-0162](0162-the-panels-surface-is-not-srgb.md) | The panel's surface is not sRGB | 2026-08-24 | accepted |
 | [ADR-0163](0163-a-boundary-gets-first-refusal-on-a-pointer.md) | A boundary gets first refusal on a pointer | 2026-08-24 | accepted |
+| [ADR-0164](0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md) | The panel is budgeted rather than forbidden to allocate | 2026-08-24 | accepted |
 
 ## Retired numbers
 

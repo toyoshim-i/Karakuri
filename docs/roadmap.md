@@ -684,10 +684,18 @@ divider drags* and the mock draws a grip on four bays of eight. And *"height giv
 roughly 48 in the library, and near 40 per inspector pane"* does not divide: a `.lib-row` and a
 `.param` are the same box, so the same height is the same number of rows.
 
-Two rules the panel is built to whatever draws it. It must not allocate on the render frame
-path, and **it must be testable without a GPU or a window** — the model and the command layer
-answer headless and the view stays thin, which is what keeps this milestone's tests off the
-`mod gpu` side of `docs/contributing.md`'s split.
+Two rules the panel is built to whatever draws it. **It must be testable without a GPU or a
+window** — the model and the command layer answer headless and the view stays thin, which is what
+keeps this milestone's tests off the `mod gpu` side of `docs/contributing.md`'s split. And **a
+still panel costs nothing, while what must be live declares a cost and a staleness** —
+[P-0072](principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md).
+
+*(That second rule replaces one that said the panel "must not allocate on the render frame path",
+which was P-0001 carried across and is false of any immediate-mode toolkit: `egui` allocates 184
+times and 226.2 kB per frame with every bay empty. P-0001 forbids deferred work landing an
+unbounded stall on whichever frame is first, and that hazard is unchanged on the engine's path.
+The panel's is a budget, and its two schedulability conditions are arithmetic a test can assert —
+[ADR-0164](adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md).)*
 
 **The sequencing starts from the bottom, and the first piece is the layout.** It had been left
 until the manual's operations page existed, since that is what the vocabulary is read off; the
