@@ -192,6 +192,9 @@ number; new records continue from the end.
 | [ADR-0164](0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md) | The panel is budgeted rather than forbidden to allocate | 2026-08-24 | accepted |
 | [ADR-0165](0165-the-repaint-decision-is-one-closed-list.md) | The repaint decision is one closed list, never an operation's return value | 2026-08-24 | accepted |
 | [ADR-0166](0166-the-engines-frame-and-the-panels-are-one-submission.md) | The engine's frame and the panel's are one submission | 2026-08-24 | accepted |
+| [ADR-0167](0167-the-panel-keeps-re-uploading-what-did-not-change.md) | The panel keeps re-uploading what did not change | 2026-08-25 | accepted |
+| [ADR-0168](0168-a-backend-override-is-honoured-because-a-no-op-cannot-be-caught.md) | A backend override is honoured, because a no-op cannot be caught | 2026-08-25 | accepted |
+| [ADR-0169](0169-the-timestamp-verdict-is-the-backends-not-the-machines.md) | The timestamp verdict is the backend's, not the machine's | 2026-08-25 | accepted |
 
 ## Retired numbers
 

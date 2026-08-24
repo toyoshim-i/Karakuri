@@ -42,15 +42,21 @@ anything on the frame path; the colour rule in particular is
   screen, then never break it"
 - Keep it running. Do not commit a state that does not build
 - Before adding an abstraction, confirm it has at least two call sites
-- Any change touching performance comes with a GPU-timestamp measurement — **which does not
-  currently work on the development machine.** On Apple M4 Pro via Metal, wgpu advertises
-  and enables both `TIMESTAMP_QUERY` and `TIMESTAMP_QUERY_INSIDE_ENCODERS`, and a
-  deliberately enormous workload still resolves to zero, to a negative delta, or
-  occasionally to something plausible. Flaky is worse than broken: a probe returning 0.0 ms
-  reads as a very fast shader. `Probe` therefore calibrates against a known-heavy workload
-  rather than trusting the feature flag, and falls back to a host measurement that says so
-  in the result. Treat every performance number produced here as host-side and biased high
-  until this rule can be honoured on real hardware
+- Any change touching performance comes with a GPU-timestamp measurement — **which does not work
+  on the two backends this project is developed and run on.** `wgpu` advertises and enables
+  `TIMESTAMP_QUERY`, and a deliberately enormous workload still resolves to zero or to a negative
+  delta. Flaky is worse than broken: a probe returning 0.0 ms reads as a very fast shader. `Probe`
+  therefore calibrates against a known-heavy workload rather than trusting the feature flag, and
+  falls back to a host measurement that says so in the result. **Treat every performance number
+  produced here as host-side and biased high.**
+
+  **It is the backend rather than the hardware, which took three machines to find out** and is
+  [ADR-0169](adr/0169-the-timestamp-verdict-is-the-backends-not-the-machines.md). One machine, one
+  driver, one binary: calibration clears **23 of 25 on DX12 and 0 of 25 on Vulkan**, and Metal
+  falls back 20 times out of 20. The two faults are not even the same — on Vulkan the gate fails
+  while the numbers are good, and on Metal the values themselves come back as zero. **We do not
+  switch backends to get a clock**: DX12 costs 3.5× the frame on the same hardware, so it would buy
+  the measurement by changing what is measured
 - **One reference workload: 262144 elements at 1280x720.** Every host-clock figure quoted in
   this repository is taken there, which is the only reason two of them written a month apart can
   be put beside each other. It is neither a target nor a limit — it is the `.kir` default
@@ -248,6 +254,31 @@ of those returned in silence; they were changed when this filter landed, because
 with no adapter `--skip gpu::` is a better answer than a green run that measured nothing. If
 you are on such a machine, the filtered command is the suite you have, and it says as much.
 
+### Known failures off macOS
+
+Two things fail on Windows and neither is new. **Do not report them as new**, and do not serialise
+or delete them to make a run green — both are worth more failing than passed over.
+
+- **Ten tests in `karakuri-cli`, because there is no `sh` on `PATH`.** `try_fake` writes a script to
+  a temp directory and spawns `sh <script>`; `Source::open` itself takes any program name and
+  assumes nothing about it, so this is a fixture rather than the product. Git for Windows ships an
+  `sh` and it is not on `PATH`, on two machines set up independently. Every way out is a decision
+  somebody should take on purpose — a `.cmd` beside the `.sh` is a platform branch in a fixture, a
+  helper binary is a second target in the package, and re-entering the test executable as its own
+  fake source is a mode a test binary does not otherwise have.
+- **`karakuri-cli --test replay`, intermittently, and this one is not a fixture.** Zero to three of
+  the five fail per run on a Radeon 780M, a different set each time, and all five pass with
+  `--test-threads=1`. Each test spawns `karakuri-cli` as a subprocess and each subprocess takes a
+  device of its own. Reproduced outside the harness: six concurrent `--store … --replay … --render`
+  runs, and one round in two has one or two exit `0xC0000409` — `STATUS_STACK_BUFFER_OVERRUN` —
+  **with no Rust panic message at all**, which a Rust `abort` would have printed, so it looks like a
+  fault in native code rather than a panic. Six concurrent `--render` runs without the store and
+  replay path did not reproduce it. **Not diagnosed.** A wrong answer here is *the test suite is
+  flaky*; the right one may be *concurrent device use is not safe on this driver*. An RTX 2070 SUPER
+  passed 5 of 5 in one run, which against a zero-to-three-per-run failure is not evidence — closing
+  that costs about a minute of running `cargo test -p karakuri-cli --test replay` twenty times and
+  writing down the fraction.
+
 ### At a boundary — before a tag, after a refactor, before calling a change done
 ```sh
 cargo test --workspace
@@ -373,10 +404,6 @@ Before marking a task or pull request as complete, ensure the following checklis
 - [plugins.md](plugins.md): Out-of-process helper plugin specification
 - [roadmap.md](roadmap.md): What exists today, and where the project is going, milestone by milestone
 - [history/](history/): Milestones that closed, kept whole — history, never the present tense
-- [experiments/](experiments/): **A protocol, not a document.** One file per question this
-  machine cannot answer — something to run elsewhere, with what to run, what was measured here
-  to compare against, and the traps. When the numbers come back they go into a record and
-  **the file is deleted**, which is what keeps this directory from accumulating
 - [adr/](adr/): Every decision, with the alternatives that lost — append-only
 - [principles/](principles/): The rules in force, one per file — current only
 
