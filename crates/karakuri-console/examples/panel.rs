@@ -26,7 +26,11 @@
 //!    through `Present` into the picture's rectangle **and again into deck A's
 //!    preview cell**, sampled by `egui` in the same submission. One `Present`
 //!    and two targets of different sizes, because `Present::draw` letterboxes
-//!    into whatever it is handed. See [`Engine`] and [`Presented`].
+//!    into whatever it is handed. Both are `karakuri_engine::Sink`s and the
+//!    frame is one `frame::compose`; the panel goes into that frame's own
+//!    encoder through its `finally`, because the panel is not a sink — it does
+//!    not receive the composited frame, it samples what a sink produced. See
+//!    [`Engine`] and [`Presented`].
 //! 3. That the arrangement's numbers look right at real sizes against
 //!    `docs/manual/console.html`.
 //! 4. That dragging a boundary still works with a toolkit in the loop.
@@ -40,6 +44,14 @@
 //! the picture and the preview row, and both are empty of everything this file
 //! could have invented — no label, no frame, no placeholder; see
 //! [`karakuri_console::view`].
+//!
+//! **There is one frame loop now, and it is not in this file.**
+//! `frame::compose` is `karakuri-engine`'s, and `karakuri-cli`'s window and
+//! its PNG writer are the other two callers — which is the point of it: this
+//! example used to hand-roll `begin_frame`, a render, a conditional present
+//! pass per target, the panel and a submit, beside a loop in another crate
+//! that said the same thing differently, and every replay defect this project
+//! has found came from two such loops disagreeing.
 //!
 //! # The engine here is scaffolding and looks it
 //!
@@ -116,7 +128,9 @@ use karakuri_console::panel::{Dragged, Op, Outcome, Panel, Pressed, Released, Vi
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
 use karakuri_console::view::{picture_rect, preview_rects, Kind, Picture, View, DECKS};
-use karakuri_engine::{Deck, Gpu, HotSwap, Present, Set};
+use karakuri_engine::{
+    compose, Committed, Deck, Gpu, HotSwap, Look, Present, Set, Sink, Skip, TonemapOp,
+};
 use karakuri_layout::{Axis, NodeId, Point};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, StartCause, WindowEvent};
@@ -210,20 +224,30 @@ static ALLOCATOR: Counting = Counting;
 /// What one frame cost.
 #[derive(Debug, Clone, Copy, Default)]
 struct Cost {
-    /// **The engine's half**: `Deck::begin_frame` through the present passes
-    /// into the picture and into deck A's preview — every install, the deck's
-    /// render, and the recording of all of it. **Two present passes and one
-    /// deck render**, because an audition is a second present of the same
-    /// canvas and not a second simulation of it. CPU time only, like
-    /// everything else here; what the GPU then does with the command buffer is
-    /// not on this clock, and `docs/contributing.md` §1 says why there is no
-    /// other one.
+    /// **The engine's half**: [`compose`] from its first statement up to the
+    /// moment it hands the encoder back for the panel — both sinks' `acquire`,
+    /// the committing closure, the tone-map write, `Deck::begin_frame` with
+    /// every install in it, the deck's render, and the present passes into
+    /// whichever sinks took the frame. **Two present passes and one deck
+    /// render** with both sinks on, because an audition is a second present of
+    /// the same canvas and not a second simulation of it — and one pass, or
+    /// none, when a region is folded away and its sink refuses.
+    ///
+    /// **Where it stops is the start of [`Cost::paint`] and not a second
+    /// clock**: the panel's half begins when `compose` calls `finally`, so the
+    /// two are adjacent by construction and no part of the frame falls between
+    /// them. CPU time only, like everything else here; what the GPU then does
+    /// with the command buffer is not on this clock, and
+    /// `docs/contributing.md` §1 says why there is no other one.
     engine: Duration,
     /// `take_egui_input` through `tessellate`: the whole immediate-mode pass,
     /// including this console's own layout walk and every shape it emits.
     ui: Duration,
     /// Uploading the tessellated geometry, recording the panel's render pass,
-    /// and the one submission that carries both halves. Excludes `present`,
+    /// and the one submission that carries both halves — the whole of what the
+    /// example records from inside [`compose`]'s `finally`, plus `compose`'s
+    /// own tail: `Frame::finish`, and each sink's `present`, which for these
+    /// two sinks is nothing at all. Excludes `Queue::present` on the surface,
     /// which is the display's pace and not a cost.
     paint: Duration,
     /// **Uploading `egui`'s texture deltas, out of [`Cost::paint`]** — the
@@ -254,8 +278,11 @@ struct Cost {
     /// view, the pass, and `egui`'s draw calls into it. Recording only; what
     /// the GPU then does with it is on no clock here.
     record: Duration,
-    /// **The submission alone, out of [`Cost::paint`]** — `finish` on the
-    /// frame's encoder and `Queue::submit` — and it is five sixths of it.
+    /// **The submission alone, out of [`Cost::paint`]** — `Queue::submit` and
+    /// `finish` on the frame's encoder, which is [`compose`]'s last act and is
+    /// why this is measured from inside `finally` to after `compose` returns.
+    /// The only other thing in that window is each sink's `present`, and both
+    /// of this example's are `Ok(())` — it is five sixths of `paint`.
     ///
     /// Printed because the whole of the rest of `paint` is what caching a bay
     /// into a texture would make cheaper, and this is not: it is `wgpu`'s
@@ -1051,6 +1078,22 @@ const SEED_SALT: u32 = 7;
 /// `tick` is what a performance is.
 const STEPS_A_FRAME: u8 = 1;
 
+/// **The look every sink is drawn under**, and it is exactly what
+/// [`Present::new`] uploads before anybody calls `set_tonemap`.
+///
+/// [`compose`] writes the tone-map uniform on every frame from the
+/// [`Committed`] the closure hands back, so a harness that has no operator on
+/// a key still has to say what the look is. Saying *what `Present` already
+/// defaults to* is the honest answer here: this file has no session, no `look`
+/// record and no key that changes it, so a different value would be this
+/// example inventing an aesthetic the rest of the workspace does not run
+/// under.
+const LOOK: Look = Look {
+    op: TonemapOp::Aces,
+    exposure: 1.0,
+    white_point: 1.0,
+};
+
 /// What the picture and every preview are rendered in: an sRGB format, so the
 /// hardware does the one encode `Present`'s shader relies on ([P-0064](../../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md)).
 const PICTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
@@ -1084,6 +1127,28 @@ const SAMPLED_LABEL: &str = "as egui reads it";
 /// deck A's preview cell under it. The four fields were `Engine`'s own until
 /// the second one needed them, and every argument written on them then is
 /// written on them here, because all of it is still true of both.
+///
+/// # It is a [`Sink`], and the aiming is the half a `Sink` cannot carry
+///
+/// [`Sink::acquire`] is handed a `&Gpu` and nothing else, and sizing one of
+/// these needs the region's rectangle, the scale factor and the
+/// [`egui_wgpu::Renderer`] the registration lives in. So the frame does that
+/// first, through [`Presented::aim`], and `acquire` answers from what it was
+/// aimed at: a rectangle means a target, no rectangle means [`Skip::Transient`]
+/// and nothing at all is drawn into it.
+///
+/// **The split is where it is because of what a test can call.** Deciding
+/// *which rectangle, at what size* inside `window_event` is deciding it
+/// somewhere `winit` will not let a test reach — and sizing deck A's texture
+/// from the picture's rectangle was injected there once and every test still
+/// passed. [`aims`] and [`Presented::aim`] are that decision, whole, outside
+/// the event handler; `mod gpu` calls them the way the frame does.
+///
+/// **Neither of these is presented anywhere**, which is why
+/// [`Sink::present`] is `Ok(())` for both: the picture and the preview cell
+/// are textures the panel samples, and the thing that reaches a display is the
+/// window — which is not a sink here. `karakuri-cli`'s window shows the
+/// canvas; this window shows the panel, and the panel goes in `finally`.
 struct Presented {
     /// The texture. Held because the views below are of it, and because
     /// freeing the `egui` registration does not free this — `egui-wgpu` stores
@@ -1108,13 +1173,51 @@ struct Presented {
     /// one it replaces was called; and its own per texture, so a device
     /// message about the preview does not read as one about the picture.
     label: &'static str,
+    /// **Whether this sink has a rectangle on screen this frame**, written by
+    /// [`Presented::aim`] and read by nothing but [`Sink::acquire`].
+    ///
+    /// It is a field rather than an argument because the two questions are
+    /// asked at different moments and by different callers: the frame aims
+    /// every sink before it composes, and `compose` then asks each one for
+    /// itself. A `Presented` that has never been aimed answers no, which is
+    /// the right answer — it has a 1x1 placeholder texture and nothing has
+    /// said where it goes.
+    aimed: bool,
 }
 
 impl Presented {
-    /// The texture, the view the engine draws into, and the registration
-    /// `egui` reads it by. One constructor because the three are made together
-    /// and are replaced together.
+    /// **A sink aimed at the rectangle its region has**, or at nothing where
+    /// the region is folded away.
+    ///
+    /// It goes through [`Presented::aim`] rather than sizing the texture here,
+    /// so that *which rectangle, at what size* has exactly one derivation in
+    /// this file and the window's first frame cannot disagree with the window
+    /// it opened at. The 1x1 below is never drawn into and never on screen: it
+    /// is what `aim` replaces on the same statement.
+    ///
+    /// The `freed` it counts into is discarded, and that is the one place in
+    /// this file where it may be. [`Engine::freed`] is a tally of registrations
+    /// leaked by a **resize**, and this is construction — a caller that saw a
+    /// 1 here would be told a leak had already happened before the window drew.
     fn new(
+        gpu: &Gpu,
+        renderer: &mut egui_wgpu::Renderer,
+        label: &'static str,
+        at: Option<egui::Rect>,
+        scale: f32,
+    ) -> Presented {
+        let mut presented = Presented::made(gpu, renderer, label, (1, 1));
+        let mut construction = 0;
+        presented.aim(gpu, renderer, at, scale, &mut construction);
+        presented
+    }
+
+    /// The texture, the view the engine draws into, and the registration
+    /// `egui` reads it by, at a size in physical pixels. One constructor
+    /// because the three are made together and are replaced together, and
+    /// private to this type because a caller aims at a rectangle — turning one
+    /// into a size is [`Presented::aim`]'s and [`Presented::fit`]'s alone.
+    fn made(
         gpu: &Gpu,
         renderer: &mut egui_wgpu::Renderer,
         label: &'static str,
@@ -1149,7 +1252,46 @@ impl Presented {
             id,
             size,
             label,
+            aimed: false,
         }
+    }
+
+    /// **Where this sink goes this frame, and how big its texture therefore
+    /// is** — one statement, and it is the whole of what [`Sink::acquire`]
+    /// then answers from.
+    ///
+    /// Returns what the console should draw, or `None` where there is no
+    /// rectangle. **The returned [`Picture`] carries the same rectangle the
+    /// texture was just sized from and the id the sizing may have just
+    /// replaced**, which is the pairing `karakuri_console::view::Picture`'s own
+    /// documentation asks for: whoever sized the texture and whoever placed it
+    /// are one statement, so a texture sized from the window and drawn into the
+    /// picture's region cannot be written by accident, and a resize cannot
+    /// leave a freed id in the view.
+    ///
+    /// **Called before [`compose`], and it has to be**: `acquire` takes only a
+    /// `&Gpu`, and this needs the rectangle, the scale factor and the
+    /// renderer. It is also a reallocation on the frames a size changed, so it
+    /// belongs at the top of the frame rather than mid-pass — see
+    /// [`Presented::fit`].
+    fn aim(
+        &mut self,
+        gpu: &Gpu,
+        renderer: &mut egui_wgpu::Renderer,
+        at: Option<egui::Rect>,
+        scale: f32,
+        freed: &mut usize,
+    ) -> Option<Picture> {
+        self.aimed = at.is_some();
+        // **No rectangle, so nothing to fit.** The texture is left exactly as
+        // it was rather than shrunk: a folded region is one an operator
+        // unfolds, and remaking it small and large again would put two
+        // reallocations on a fold that costs none. Nothing is drawn into it
+        // meanwhile — `acquire` refuses, which is the whole of what a fold
+        // has to mean.
+        let rect = at?;
+        self.fit(gpu, renderer, physical(rect, scale), freed);
+        Some(Picture { id: self.id, rect })
     }
 
     /// **The region is a different size, so the texture is remade at that size
@@ -1187,8 +1329,47 @@ impl Presented {
         // bind group until this call and nothing else ever drops it.
         renderer.free_texture(&self.id);
         *freed += 1;
-        *self = Presented::new(gpu, renderer, self.label, size);
+        // Carried across, because a resize is not an un-aiming: the rectangle
+        // this was aimed at is the one it was just resized to.
+        let aimed = self.aimed;
+        *self = Presented::made(gpu, renderer, self.label, size);
+        self.aimed = aimed;
         true
+    }
+}
+
+/// **The two textures are sinks, and this is the whole of what that costs.**
+///
+/// `acquire` answers from [`Presented::aim`] and nothing else; `present` is
+/// `Ok(())` because neither of these is presented anywhere — they are sampled
+/// by the panel, and the panel is drawn in [`compose`]'s `finally` rather than
+/// by a sink. See the type's own documentation.
+impl Sink for Presented {
+    fn acquire(&mut self, _gpu: &Gpu) -> Result<(), Skip> {
+        match self.aimed {
+            true => Ok(()),
+            // **[`Skip::Transient`] and never a `Fault`.** A folded region is
+            // an operator's choice and the next `f` over it undoes it, so
+            // there is nothing to say about it — and a `Fault` here would be
+            // a line printed the first frame of every fold.
+            false => Err(Skip::Transient),
+        }
+    }
+
+    fn view(&self) -> &wgpu::TextureView {
+        &self.target
+    }
+
+    fn size(&self) -> (u32, u32) {
+        self.size
+    }
+
+    /// **Nothing.** The picture and deck A's cell are textures the panel
+    /// samples in the same submission; what reaches a display is the window,
+    /// and the window is not a sink here — `karakuri-cli`'s window shows the
+    /// canvas, and this one shows the panel.
+    fn present(&mut self, _gpu: &Gpu) -> Result<(), String> {
+        Ok(())
     }
 }
 
@@ -1230,11 +1411,16 @@ struct Engine {
 }
 
 impl Engine {
+    /// **Sized from the arrangement rather than from the window**, by the same
+    /// two calls the frame aims with — see [`aims`]. The window this opens at
+    /// gives the picture and deck A's cell their first rectangles, so no frame
+    /// has to correct a guess and there is no second derivation here to drift
+    /// from the one in [`Engine::aim`].
     fn new(
         gpu: &Gpu,
         renderer: &mut egui_wgpu::Renderer,
-        picture: (u32, u32),
-        preview: (u32, u32),
+        layout: &karakuri_layout::Layout,
+        scale: f32,
     ) -> Engine {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let l1 = checked(&root.join("examples/drift_shell.kir"));
@@ -1243,17 +1429,74 @@ impl Engine {
             .expect("the example pair builds a Set");
         let deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], CANVAS.0, CANVAS.1);
         let present = Present::new(&gpu.device, PICTURE_FORMAT, CANVAS.0, CANVAS.1);
+        let [picture, preview] = aims(layout);
         Engine {
             deck,
             present,
-            picture: Presented::new(gpu, renderer, "program view", picture),
+            picture: Presented::new(gpu, renderer, "program view", picture, scale),
             // Named for the deck it is of, because there is one of these per
             // audition and a device message that says `deck preview` four
             // times over says nothing.
-            preview: Presented::new(gpu, renderer, "deck A preview", preview),
+            preview: Presented::new(gpu, renderer, "deck A preview", preview, scale),
             freed: 0,
         }
     }
+
+    /// **Aim every sink at its own rectangle, and hand back what the console
+    /// should draw in each** — the picture, and one entry per preview cell.
+    ///
+    /// This is *which rectangle, at what size* for the whole engine, in one
+    /// call that takes a solved layout and a scale factor and touches no
+    /// window. That is the point of it: the same decision used to live inside
+    /// `window_event`, which `winit` will not let a test call, so **sizing
+    /// deck A's texture from the picture's rectangle was injected there and
+    /// every test still passed**. `mod gpu` calls this the way the frame does.
+    ///
+    /// **B, C and D stay `None`, and that is this example rather than a gap in
+    /// it**: the deck above has one slot, so deck A is the only audition there
+    /// is and there is no second one to put in a cell. An empty cell is what
+    /// off looks like, and the console draws it saying `off`.
+    fn aim(
+        &mut self,
+        gpu: &Gpu,
+        renderer: &mut egui_wgpu::Renderer,
+        layout: &karakuri_layout::Layout,
+        scale: f32,
+    ) -> (Option<Picture>, [Option<Picture>; DECKS]) {
+        let [picture_at, preview_at] = aims(layout);
+        let picture = self
+            .picture
+            .aim(gpu, renderer, picture_at, scale, &mut self.freed);
+        let mut previews = [None; DECKS];
+        previews[0] = self
+            .preview
+            .aim(gpu, renderer, preview_at, scale, &mut self.freed);
+        (picture, previews)
+    }
+}
+
+/// **Which rectangle each of the engine's sinks is sized from and drawn into,
+/// and there is no second answer to it anywhere in this file.**
+///
+/// In sink order: the Program bay's picture, and deck A's preview cell. `None`
+/// is a region folded away, a bay folded, or the picture soloed — the sink
+/// then has no target and [`Sink::acquire`] refuses, so no present pass is
+/// recorded for it. That is the manual's *"it is on screen exactly when that
+/// sink is on — so there is no state where it is hidden and still costing a
+/// pass"*, and it is now `compose`'s doing rather than an `if` in this file.
+///
+/// A function rather than two lines in [`Engine::aim`] for the reason
+/// [`live`] is a function: it is the statement that has actually been got
+/// wrong, and it is worth being somewhere a test can hold it on its own.
+fn aims(layout: &karakuri_layout::Layout) -> [Option<egui::Rect>; 2] {
+    [
+        picture_rect(layout),
+        // The **cell**, not the row it is in and not the region the row is
+        // in. The row holds four of these side by side with ground between
+        // them, so a texture sized from anything but the cell is out by a
+        // factor of four in one axis before it is out by the scale.
+        preview_rects(layout).map(|cells| cells[0]),
+    ]
 }
 
 /// **Is anything making texels this frame?** — which is the whole of what
@@ -1299,7 +1542,9 @@ fn rendered(errors: &[karakuri_ir::IrError], src: &str) -> String {
 /// A rectangle in logical pixels, in physical ones. **Both of the engine's
 /// textures are sized from this and from nothing else** — the picture from its
 /// region, deck A's preview from its cell — which is what makes each of them
-/// the size of what it is drawn into rather than of the window.
+/// the size of what it is drawn into rather than of the window. Which
+/// rectangle each one gets is [`aims`]; this is the *at what size* half, and
+/// [`Presented::aim`] is the one place the two meet.
 fn physical(rect: egui::Rect, scale: f32) -> (u32, u32) {
     (
         ((rect.width() * scale).round() as u32).max(1),
@@ -1522,17 +1767,17 @@ impl ApplicationHandler for App {
 
         // The picture's first size is the region's, at the window this opened
         // at — not the window's, and not a guess that the first frame then
-        // corrects. `fit` takes it from here on, and deck A's cell is sized
-        // the same way from the same solved layout.
+        // corrects. **It is the same call the frame makes**: `Engine::new`
+        // aims both sinks through `aims`, so this and `RedrawRequested` cannot
+        // disagree about which rectangle a texture is sized from.
         let mut renderer = renderer;
         self.readout.panel.solve();
-        let first = picture_rect(self.readout.panel.layout())
-            .map(|rect| physical(rect, self.scale as f32))
-            .unwrap_or((1, 1));
-        let first_cell = preview_rects(self.readout.panel.layout())
-            .map(|cells| physical(cells[0], self.scale as f32))
-            .unwrap_or((1, 1));
-        let engine = Engine::new(&gpu, &mut renderer, first, first_cell);
+        let engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            self.readout.panel.layout(),
+            self.scale as f32,
+        );
         let info = gpu.adapter.get_info();
         self.costs.taken_on = format!(
             "{:?} — {} ({:?})",
@@ -1795,66 +2040,29 @@ impl ApplicationHandler for App {
                     ..Cost::default()
                 };
 
-                // -- where the picture goes, and how big it is ---------
-                // **Before the `egui` pass**, because the pass draws the
-                // texture and a texture registered after it would be a frame
-                // behind. The rectangle and the texture's size are the same
-                // statement: one call to `picture_rect`, one conversion to
-                // physical pixels, and both the region's rather than the
-                // window's.
+                // -- where each sink goes, and how big it is -----------
+                // **Before the `egui` pass**, because the pass draws these
+                // textures and one registered after it would be a frame
+                // behind. **And before `compose`**, because `Sink::acquire` is
+                // handed a `&Gpu` and nothing else, while deciding this needs
+                // the rectangle, the scale factor and the renderer — see
+                // `Presented::aim`.
+                //
+                // One call, and it is the same one `resumed` sized both
+                // textures with. *Which rectangle, at what size* is `aims` and
+                // `Engine::aim` and nowhere else, which is what lets a test
+                // ask the question this handler used to answer where nothing
+                // could reach it.
                 self.readout.panel.solve();
                 let scale = self.scale as f32;
-                self.readout.view.picture = match picture_rect(self.readout.panel.layout()) {
-                    Some(rect) => {
-                        gfx.engine.picture.fit(
-                            &gfx.gpu,
-                            &mut gfx.renderer,
-                            physical(rect, scale),
-                            &mut gfx.engine.freed,
-                        );
-                        Some(Picture {
-                            id: gfx.engine.picture.id,
-                            rect,
-                        })
-                    }
-                    // Folded away: no rectangle, so no picture is drawn
-                    // and — see below — no pass is recorded for one
-                    // either.
-                    None => None,
-                };
-
-                // -- and where deck A's audition goes ------------------
-                // The same two statements again, one cell down: the cell the
-                // texture is sized from and the cell it is drawn into are one
-                // call to `preview_rects`, exactly as the picture's are one
-                // call to `picture_rect`.
-                self.readout.view.previews = match preview_rects(self.readout.panel.layout()) {
-                    Some(cells) => {
-                        gfx.engine.preview.fit(
-                            &gfx.gpu,
-                            &mut gfx.renderer,
-                            physical(cells[0], scale),
-                            &mut gfx.engine.freed,
-                        );
-                        let mut previews = [None; DECKS];
-                        previews[0] = Some(Picture {
-                            id: gfx.engine.preview.id,
-                            rect: cells[0],
-                        });
-                        // **B, C and D stay `None`, and that is this example
-                        // rather than a gap in it**: the `Engine` above is a
-                        // deck of one slot, so deck A is the only audition
-                        // there is and there is no second one to put in a
-                        // cell — an empty cell is what off looks like, and it
-                        // says `off`.
-                        previews
-                    }
-                    // The row folded, the bay folded, or the picture soloed:
-                    // no cells, so nothing is drawn in one and — see below —
-                    // no pass is recorded for one either. The same shape the
-                    // picture has, for the same reason.
-                    None => [None; DECKS],
-                };
+                let (picture, previews) = gfx.engine.aim(
+                    &gfx.gpu,
+                    &mut gfx.renderer,
+                    self.readout.panel.layout(),
+                    scale,
+                );
+                self.readout.view.picture = picture;
+                self.readout.view.previews = previews;
 
                 // -- the egui pass -------------------------------------
                 let started = Instant::now();
@@ -1888,150 +2096,180 @@ impl ApplicationHandler for App {
                 gfx.egui
                     .handle_platform_output(&gfx.window, output.platform_output);
 
-                // -- the engine's pass, and it is first -----------------
+                // -- the frame: one compose, one encoder, one submission --
                 //
-                // **One encoder and one submission, engine before panel.**
-                // The encoder is the deck frame's, which is the only encoder
-                // `karakuri-engine` will record a Set into — `Frame::encoder`
-                // exists precisely so that a caller's own further work belongs
-                // to the frame that produced it, and the present pass and a
-                // readback in `karakuri-cli` are already recorded through it.
-                // The panel's pass goes in after, so the picture is written
-                // and then sampled inside one command buffer and `wgpu`
-                // places the barrier between them.
+                // **The engine and the panel are one command buffer, engine
+                // first.** `frame::compose` asks both sinks, advances the deck
+                // whatever they answer, draws the canvas into the ones that
+                // took the frame, and then hands **the frame's own encoder**
+                // to the closure below — which is where the whole panel goes.
                 //
-                // The alternative — an encoder of this file's own, submitted
-                // beside the deck's — is two submissions whose order is the
-                // queue's business rather than this file's, over a texture
-                // that is a colour attachment in one and a sampled resource in
-                // the other. It would work today and it would be a race
-                // nobody wrote down.
-                let started = Instant::now();
-                let mut drawing = gfx.engine.deck.begin_frame(&gfx.gpu.device, &gfx.gpu.queue);
-                // Rendered even where the picture is folded away, and that is
-                // not the manual's *"no state where it is hidden and still
-                // costing a pass"* being broken: the deck's own render is what
-                // steps the simulation, and only the present pass into the
-                // picture is skipped. Turning the deck off with the sink is
-                // the sink's decision to make and there is no sink here yet.
-                drawing.render(
-                    gfx.engine.present.hdr_view(),
-                    gfx.engine.present.size(),
-                    STEPS_A_FRAME,
-                );
-                if self.readout.view.picture.is_some() {
-                    // The canvas, letterboxed into the picture's rectangle —
-                    // `Present::draw` does the fitting, which is the manual's
-                    // *"it letterboxes into the width it has"* and is why
-                    // nothing in this file computes an aspect ratio.
-                    gfx.engine.present.draw(
-                        drawing.encoder(),
-                        &gfx.engine.picture.target,
-                        gfx.engine.picture.size,
-                    );
-                }
-                // **The same canvas again, into deck A's cell, and this is
-                // where the audition costs its pass.** The manual says *"each
-                // preview is an audition and costs a pass"*; this is that
-                // sentence with nothing between it and the device — one more
-                // `Present::draw`, the same canvas fitted into a target a
-                // fifth the size, and no second `Present` to hold it.
+                // The panel is not a sink, and the argument is written on
+                // `compose`: it does not receive the composited frame, it
+                // receives the panel, and it happens to sample what a sink
+                // produced. An encoder of this file's own would be a second
+                // submission over a texture that is a colour attachment in one
+                // and a sampled resource in the other, ordered by whatever the
+                // queue happened to do — it would work today and be a race
+                // nobody wrote down. That is
+                // `docs/adr/0166-the-engines-frame-and-the-panels-are-one-submission.md`.
                 //
-                // Under the same condition on its own `Option` as the picture
-                // is, so a cell that is not on screen costs nothing at all:
-                // fold the preview row away and the pass is not recorded.
-                if self.readout.view.previews[0].is_some() {
-                    gfx.engine.present.draw(
-                        drawing.encoder(),
-                        &gfx.engine.preview.target,
-                        gfx.engine.preview.size,
-                    );
-                }
-                cost.engine = started.elapsed();
-
-                // -- the wgpu pass -------------------------------------
-                let started = Instant::now();
+                // **This used to be a second frame loop.** `begin_frame`, a
+                // render, a conditional present pass per target, the panel,
+                // the submit — all spelled out here, beside the one in
+                // `karakuri-cli` that says the same thing differently. That is
+                // the drift `karakuri_engine::frame` exists to end, and it is
+                // one call now.
                 let screen = egui_wgpu::ScreenDescriptor {
                     size_in_pixels: [gfx.config.width, gfx.config.height],
                     pixels_per_point: output.pixels_per_point,
                 };
-                // One id can carry several deltas in a frame: a font atlas
-                // that grew arrives as the whole image followed by its
-                // patches, and applying only the first would leave holes.
-                let uploading = Instant::now();
-                for (id, deltas) in &output.textures_delta.set {
-                    for delta in deltas {
-                        gfx.renderer
-                            .update_texture(&gfx.gpu.device, &gfx.gpu.queue, *id, delta);
-                    }
-                }
-                cost.textures = uploading.elapsed();
-                let uploading = Instant::now();
-                let user = gfx.renderer.update_buffers(
-                    &gfx.gpu.device,
-                    &gfx.gpu.queue,
-                    drawing.encoder(),
-                    &primitives,
-                    &screen,
-                );
-                cost.buffers = uploading.elapsed();
-                let recording = Instant::now();
                 let view_target = frame
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
-                {
-                    let pass = drawing
-                        .encoder()
-                        .begin_render_pass(&wgpu::RenderPassDescriptor {
-                            label: Some("console"),
-                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view: &view_target,
-                                depth_slice: None,
-                                resolve_target: None,
-                                ops: wgpu::Operations {
-                                    // The console's own ground is painted by
-                                    // the central panel; this only matters for
-                                    // the frame before the first one lands.
-                                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                                    store: wgpu::StoreOp::Store,
-                                },
-                            })],
-                            depth_stencil_attachment: None,
-                            timestamp_writes: None,
-                            occlusion_query_set: None,
-                            multiview_mask: None,
-                        });
-                    gfx.renderer
-                        .render(&mut pass.forget_lifetime(), &primitives, &screen);
+                // **Read from inside the closure, because that is where the
+                // engine's half ends and the panel's begins.** `Cost::engine`
+                // and `Cost::paint` are then adjacent by construction, rather
+                // than two `Instant::now()`s a statement could get between.
+                let mut panel_started = None;
+                let mut submitting = None;
+                let engine_started = Instant::now();
+                let composed = {
+                    let Gfx {
+                        gpu,
+                        renderer,
+                        engine,
+                        ..
+                    } = &mut *gfx;
+                    let gpu = &*gpu;
+                    let Engine {
+                        deck,
+                        present,
+                        picture,
+                        preview,
+                        ..
+                    } = engine;
+                    let textures_delta = &mut output.textures_delta;
+                    let cost = &mut cost;
+                    // **The console's sinks are the picture and deck A's
+                    // preview cell, and nothing else.** Both are textures the
+                    // panel samples and neither is presented anywhere. The
+                    // window is not one of them: `karakuri-cli`'s window shows
+                    // the canvas, and this window shows the panel.
+                    let mut sinks: [&mut dyn Sink; 2] = [picture, preview];
+                    compose(
+                        gpu,
+                        deck,
+                        present,
+                        &mut sinks,
+                        // A region folded away refuses with `Transient` every
+                        // frame it stays folded, and there is nothing to say
+                        // about it sixty times a second. Neither of these
+                        // sinks can fault — a `Presented` either has a
+                        // rectangle or it has not — so the arm is what a third
+                        // sink would need rather than what these two do.
+                        &mut |_at, skip| {
+                            if let Skip::Fault(why) = skip {
+                                println!("a sink stopped taking frames: {why}");
+                            }
+                        },
+                        // No clock and no record anywhere: see
+                        // `STEPS_A_FRAME` and `LOOK`.
+                        |_| Committed {
+                            steps: STEPS_A_FRAME,
+                            look: LOOK,
+                        },
+                        // -- the panel, into the frame's encoder ------
+                        |encoder| {
+                            panel_started = Some(Instant::now());
+                            // One id can carry several deltas in a frame: a
+                            // font atlas that grew arrives as the whole image
+                            // followed by its patches, and applying only the
+                            // first would leave holes.
+                            let uploading = Instant::now();
+                            for (id, deltas) in &textures_delta.set {
+                                for delta in deltas {
+                                    renderer.update_texture(&gpu.device, &gpu.queue, *id, delta);
+                                }
+                            }
+                            cost.textures = uploading.elapsed();
+                            let uploading = Instant::now();
+                            let user = renderer.update_buffers(
+                                &gpu.device,
+                                &gpu.queue,
+                                encoder,
+                                &primitives,
+                                &screen,
+                            );
+                            cost.buffers = uploading.elapsed();
+                            let recording = Instant::now();
+                            {
+                                let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                                    label: Some("console"),
+                                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                        view: &view_target,
+                                        depth_slice: None,
+                                        resolve_target: None,
+                                        ops: wgpu::Operations {
+                                            // The console's own ground
+                                            // is painted by the central
+                                            // panel; this only matters
+                                            // for the frame before the
+                                            // first one lands.
+                                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                                            store: wgpu::StoreOp::Store,
+                                        },
+                                    })],
+                                    depth_stencil_attachment: None,
+                                    timestamp_writes: None,
+                                    occlusion_query_set: None,
+                                    multiview_mask: None,
+                                });
+                                renderer.render(&mut pass.forget_lifetime(), &primitives, &screen);
+                            }
+                            for id in &textures_delta.free {
+                                renderer.free_texture(id);
+                            }
+                            // **`epaint` panics on a `TexturesDelta` dropped
+                            // unapplied**, and a panic here is reached from a
+                            // `winit` callback, which on macOS is an abort
+                            // rather than an error. Every delta above has been
+                            // handed to the renderer, so this says so.
+                            textures_delta.clear();
+                            cost.record = recording.elapsed();
+                            // **`update_buffers` hands back a command buffer
+                            // per `egui` paint callback that asked for one**,
+                            // and this console registers no paint callbacks —
+                            // the picture is a registered texture drawn as an
+                            // image, not a callback. So this is empty, and an
+                            // empty submission is skipped rather than made. It
+                            // is not dropped: a callback's prepared work
+                            // submitted after the pass that reads it would be a
+                            // frame behind, so if one ever appears it goes in
+                            // ahead — and the engine and the panel stay in the
+                            // one submission `compose` makes the moment this
+                            // closure returns.
+                            submitting = Some(Instant::now());
+                            if !user.is_empty() {
+                                gpu.queue.submit(user);
+                            }
+                        },
+                    )
+                };
+                // The engine's half ran from the top of `compose` to the
+                // moment it handed the encoder over; the panel's is the rest
+                // of the call, the one submission included.
+                let panel_started = panel_started.expect("`finally` runs on every frame");
+                cost.engine = panel_started - engine_started;
+                cost.paint = panel_started.elapsed();
+                cost.submit = submitting.expect("`finally` runs on every frame").elapsed();
+                // **Said and not returned on**, and neither of this example's
+                // sinks can produce it — `Presented::present` is `Ok(())`. It
+                // is here because a third sink could, and because a frame the
+                // other sinks took is not one this window may drop.
+                if let Err(e) = composed {
+                    println!("a sink failed to present: {e}");
                 }
-                for id in &output.textures_delta.free {
-                    gfx.renderer.free_texture(id);
-                }
-                // **`epaint` panics on a `TexturesDelta` dropped unapplied**,
-                // and a panic here is reached from a `winit` callback, which
-                // on macOS is an abort rather than an error. Every delta above
-                // has been handed to the renderer, so this says so.
-                output.textures_delta.clear();
-                cost.record = recording.elapsed();
-                // **`update_buffers` hands back a command buffer per `egui`
-                // paint callback that asked for one**, and this console
-                // registers no paint callbacks — the picture is a registered
-                // texture drawn as an image, not a callback. So this is empty,
-                // and an empty submission is skipped rather than made. It is
-                // not dropped: a callback's prepared work submitted after the
-                // pass that reads it would be a frame behind, so if one ever
-                // appears it goes in ahead, and the engine and the panel stay
-                // in the one submission below.
-                let submitting = Instant::now();
-                if !user.is_empty() {
-                    gfx.gpu.queue.submit(user);
-                }
-                // The one submission: the deck's passes, the present pass into
-                // the picture, and the panel's pass over the window, in the
-                // order they were recorded.
-                drawing.finish();
-                cost.submit = submitting.elapsed();
-                cost.paint = started.elapsed();
 
                 gfx.gpu.queue.present(frame);
 
@@ -2378,24 +2616,24 @@ mod gpu {
         panel.solve();
         let rect = picture_rect(panel.layout()).expect("the picture is on screen");
         let cells = preview_rects(panel.layout()).expect("the preview row is on screen");
-        let mut engine = Engine::new(
-            &gpu,
-            &mut renderer,
-            physical(rect, 1.0),
-            physical(cells[0], 1.0),
-        );
+        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
 
+        // **Aimed by the call the window makes, and the view is what that
+        // answered** rather than three lines this test writes by hand: an id
+        // or a rectangle assembled here is a test agreeing with itself about
+        // the one thing `Engine::aim` exists to decide. Deck A auditions and
+        // B, C and D are off, which is the whole of what one slot can show.
         let mut view = View::new(ROOM);
-        view.picture = Some(Picture {
-            id: engine.picture.id,
+        (view.picture, view.previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
+        assert_eq!(
+            view.picture.expect("the picture was not aimed").rect,
             rect,
-        });
-        // Deck A auditions and B, C and D are off, which is the whole of what
-        // one slot can show.
-        view.previews[0] = Some(Picture {
-            id: engine.preview.id,
-            rect: cells[0],
-        });
+            "the picture is drawn somewhere other than the region it was sized from"
+        );
+        assert_eq!(
+            view.previews[0].expect("deck A was not aimed").rect,
+            cells[0]
+        );
 
         let ctx = egui::Context::default();
         let input = egui::RawInput {
@@ -2417,60 +2655,6 @@ mod gpu {
             }
         }
 
-        // **The frame, in the order the window loop records it**: the deck's
-        // encoder, the deck's render, the present pass into the picture, then
-        // the panel over the top of all of it — one encoder, one submission.
-        let mut drawing = engine.deck.begin_frame(&gpu.device, &gpu.queue);
-        drawing.render(
-            engine.present.hdr_view(),
-            engine.present.size(),
-            STEPS_A_FRAME,
-        );
-        engine.present.draw(
-            drawing.encoder(),
-            &engine.picture.target,
-            engine.picture.size,
-        );
-        // **The second pass, into a target a fifth the size** — one `Present`,
-        // one canvas, one deck render, and an audition that costs a pass.
-        engine.present.draw(
-            drawing.encoder(),
-            &engine.preview.target,
-            engine.preview.size,
-        );
-        let user = renderer.update_buffers(
-            &gpu.device,
-            &gpu.queue,
-            drawing.encoder(),
-            &primitives,
-            &screen,
-        );
-        {
-            let pass = drawing
-                .encoder()
-                .begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("program probe"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &target_view,
-                        depth_slice: None,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                });
-            renderer.render(&mut pass.forget_lifetime(), &primitives, &screen);
-        }
-        for id in &output.textures_delta.free {
-            renderer.free_texture(id);
-        }
-        output.textures_delta.clear();
-
         let row = W * 4;
         let readback = gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("program probe"),
@@ -2478,32 +2662,108 @@ mod gpu {
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
-        drawing.encoder().copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo {
-                texture: &target,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::TexelCopyBufferInfo {
-                buffer: &readback,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(row),
-                    rows_per_image: Some(H),
+
+        // **The frame, through the call the window loop makes** — not a
+        // hand-rolled copy of it beside it, which is what this used to be and
+        // is the drift `karakuri_engine::frame` exists to end. `compose` asks
+        // both sinks, advances the deck, presents the canvas into each of
+        // them, and hands the frame's own encoder to the closure: the panel,
+        // over the top of all of it, in one submission.
+        let mut user_empty = false;
+        let mut refusals: Vec<(usize, Skip)> = Vec::new();
+        let outcome = {
+            let textures_delta = &mut output.textures_delta;
+            let Engine {
+                deck,
+                present,
+                picture,
+                preview,
+                ..
+            } = &mut engine;
+            let mut sinks: [&mut dyn Sink; 2] = [picture, preview];
+            compose(
+                &gpu,
+                deck,
+                present,
+                &mut sinks,
+                &mut |at, skip| refusals.push((at, skip)),
+                |_| Committed {
+                    steps: STEPS_A_FRAME,
+                    look: LOOK,
                 },
-            },
-            wgpu::Extent3d {
-                width: W,
-                height: H,
-                depth_or_array_layers: 1,
-            },
-        );
+                |encoder| {
+                    let user = renderer.update_buffers(
+                        &gpu.device,
+                        &gpu.queue,
+                        encoder,
+                        &primitives,
+                        &screen,
+                    );
+                    {
+                        let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("program probe"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: &target_view,
+                                depth_slice: None,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                                    store: wgpu::StoreOp::Store,
+                                },
+                            })],
+                            depth_stencil_attachment: None,
+                            timestamp_writes: None,
+                            occlusion_query_set: None,
+                            multiview_mask: None,
+                        });
+                        renderer.render(&mut pass.forget_lifetime(), &primitives, &screen);
+                    }
+                    for id in &textures_delta.free {
+                        renderer.free_texture(id);
+                    }
+                    textures_delta.clear();
+                    encoder.copy_texture_to_buffer(
+                        wgpu::TexelCopyTextureInfo {
+                            texture: &target,
+                            mip_level: 0,
+                            origin: wgpu::Origin3d::ZERO,
+                            aspect: wgpu::TextureAspect::All,
+                        },
+                        wgpu::TexelCopyBufferInfo {
+                            buffer: &readback,
+                            layout: wgpu::TexelCopyBufferLayout {
+                                offset: 0,
+                                bytes_per_row: Some(row),
+                                rows_per_image: Some(H),
+                            },
+                        },
+                        wgpu::Extent3d {
+                            width: W,
+                            height: H,
+                            depth_or_array_layers: 1,
+                        },
+                    );
+                    user_empty = user.is_empty();
+                },
+            )
+            .expect("neither of the console's sinks presents anything")
+        };
         assert!(
-            user.is_empty(),
+            user_empty,
             "a paint callback appeared: it has to be submitted ahead of the pass"
         );
-        drawing.finish();
+        assert!(refusals.is_empty(), "a sink refused: {refusals:?}");
+        // **Both sinks took the frame, and nothing else was in the slice.**
+        // The panel is not one of them — it is drawn in `finally`, and a
+        // `reached` of 3 here would be the console counting a consumer as an
+        // output. See `frame::compose`.
+        assert_eq!(
+            outcome,
+            karakuri_engine::Outcome {
+                reached: 2,
+                missed: 0
+            }
+        );
 
         readback.slice(..).map_async(wgpu::MapMode::Read, |_| {});
         gpu.device
@@ -2657,8 +2917,7 @@ mod gpu {
         panel.solve();
         let rect = picture_rect(panel.layout()).expect("on screen");
         let want = physical(rect, 1.0);
-        let cell = physical(preview_rects(panel.layout()).expect("on screen")[0], 1.0);
-        let mut engine = Engine::new(&gpu, &mut renderer, want, cell);
+        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
 
         // The region's, in both axes, and **neither of them is the window's**
         // — the picture is narrower than the window by both panes and taller
@@ -2749,7 +3008,7 @@ mod gpu {
         let picture = physical(picture_rect(panel.layout()).expect("on screen"), 1.0);
         let cells = preview_rects(panel.layout()).expect("the preview row is on screen");
         let want = physical(cells[0], 1.0);
-        let mut engine = Engine::new(&gpu, &mut renderer, picture, want);
+        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
 
         // **The cell's, in both axes** — not the row's, not the picture's and
         // not the window's. The row holds four of these side by side with
@@ -2830,6 +3089,139 @@ mod gpu {
         assert_eq!(
             engine.freed, 2,
             "the freed tally did not count both textures"
+        );
+    }
+
+    /// **Which rectangle each sink's texture is sized from, and where the
+    /// console then draws it — asked of the call the frame actually makes.**
+    ///
+    /// This is the hole `docs/roadmap.md` recorded, closed. The decision used
+    /// to be two `match`es inside `App::window_event`, and `winit` will not
+    /// hand a test an `ActiveEventLoop`, so nothing could call it: `mod gpu`
+    /// asserted what `Engine::new` did and not what the frame chose.
+    /// **Sizing deck A's texture from the picture's rectangle was injected
+    /// there and every test still passed.** It is [`aims`] and [`Engine::aim`]
+    /// now, which take a solved layout and a scale factor and touch no window,
+    /// and this asks them at a viewport and a scale neither of which
+    /// `Engine::new` was given — so what is asserted is what `aim` decided
+    /// rather than what construction left behind.
+    ///
+    /// Every half of it fails silently. A texture sized from the wrong
+    /// rectangle looks perfectly correct — the cell is drawn at whatever size
+    /// it is and the texture fills it — and is four to twenty times the texels
+    /// the audition needs, per frame, for as long as the deck runs. A
+    /// `Picture` carrying an id from before a resize is a freed registration,
+    /// which `egui` draws as nothing at all. And a folded region whose sink
+    /// still acquires is the manual's *"no state where it is hidden and still
+    /// costing a pass"* quietly stopping being true.
+    #[test]
+    fn the_frame_aims_each_sink_at_its_own_rectangle() {
+        const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+        const W: u32 = 1440;
+        const H: u32 = 900;
+        /// A display of a different scale, because the size is the rectangle
+        /// **and** the scale and a test at 1.0 cannot tell them apart.
+        const SCALE: f32 = 2.0;
+
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer =
+            egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
+
+        let mut panel = Panel::new(W as f32, H as f32);
+        panel.solve();
+        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
+
+        // A different window on a different display, so nothing asserted below
+        // can be what construction happened to leave in place.
+        panel.set_viewport(W as f32 + 320.0, H as f32 - 120.0);
+        panel.solve();
+        let rect = picture_rect(panel.layout()).expect("the picture is on screen");
+        let cell = preview_rects(panel.layout()).expect("the preview row is on screen")[0];
+        let (picture, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), SCALE);
+
+        // **Each texture is the size of its own rectangle, at this scale.**
+        assert_eq!(
+            engine.picture.size,
+            physical(rect, SCALE),
+            "the picture's texture is not the size of the picture's region"
+        );
+        assert_eq!(
+            engine.preview.size,
+            physical(cell, SCALE),
+            "deck A's texture is not the size of deck A's cell — it was sized from some \
+             other rectangle, and nothing on screen would say so"
+        );
+        assert_ne!(
+            engine.preview.size, engine.picture.size,
+            "deck A's texture is the picture's size"
+        );
+        assert!(
+            engine.preview.size.0 * 4 < engine.picture.size.0,
+            "a preview cell is not much smaller than the picture: {:?} against {:?}",
+            engine.preview.size,
+            engine.picture.size
+        );
+
+        // **And where the console draws it is the same statement**: the
+        // rectangle the texture was just sized from, and the id the sizing may
+        // have just replaced.
+        let drawn = picture.expect("the picture is on screen and the frame aimed nothing at it");
+        assert_eq!(
+            drawn.rect, rect,
+            "the picture is drawn somewhere other than the region \
+             its texture was sized from"
+        );
+        assert_eq!(
+            drawn.id, engine.picture.id,
+            "the view carries the id from before the resize, which is a freed registration"
+        );
+        assert!(renderer.texture(&drawn.id).is_some());
+        let audition =
+            previews[0].expect("deck A is auditioning and the frame aimed nothing at it");
+        assert_eq!(audition.rect, cell);
+        assert_eq!(audition.id, engine.preview.id);
+        assert!(renderer.texture(&audition.id).is_some());
+        assert!(
+            previews[1..].iter().all(Option::is_none),
+            "a deck with no slot behind it was aimed at a cell"
+        );
+
+        // **Aimed is what `Sink::acquire` answers from**, and that is the
+        // whole of what `compose` asks either of them.
+        assert_eq!(engine.picture.acquire(&gpu), Ok(()));
+        assert_eq!(engine.preview.acquire(&gpu), Ok(()));
+
+        // **Fold the picture away and its sink has no target** — so `compose`
+        // records no present pass into it, the deck still advances, and deck A
+        // goes on auditioning underneath. Both halves matter: a fold that took
+        // the preview with it is the console going dark from one keystroke.
+        let program = panel
+            .layout()
+            .rect(panel.layout().find("program-view").expect("program-view"));
+        panel.moved(Point::new(
+            program.x + program.w * 0.5,
+            program.y + program.h * 0.5,
+        ));
+        assert!(
+            matches!(panel.op(Op::Fold), Outcome::Folded { folded: true, .. }),
+            "the picture did not fold"
+        );
+        panel.solve();
+        assert!(picture_rect(panel.layout()).is_none());
+        let (picture, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), SCALE);
+        assert!(
+            picture.is_none(),
+            "the picture is folded away and the frame still gave the console one to draw"
+        );
+        assert_eq!(
+            engine.picture.acquire(&gpu),
+            Err(Skip::Transient),
+            "the picture is folded away and its sink still took the frame, so a present \
+             pass is recorded into a texture nothing shows"
+        );
+        assert!(
+            previews[0].is_some() && engine.preview.acquire(&gpu) == Ok(()),
+            "folding the picture away stopped deck A auditioning under it"
         );
     }
 

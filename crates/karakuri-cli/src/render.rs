@@ -290,6 +290,10 @@ fn sequence_driven(
                     let (steps, look) = drive(i, deck);
                     Committed { steps, look }
                 },
+                // Nothing of this program's belongs in the frame's encoder: a
+                // PNG's readback is the sink's own `after_draw`, which is
+                // already inside it. See `frame::compose`.
+                |_| {},
             )?
         };
         // **A `PngSink` never refuses, so nothing reaches this** — and it is

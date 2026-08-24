@@ -154,6 +154,10 @@ pub struct Committed {
 /// called on it** — and the frame still happens, into whichever other sinks
 /// took it, and into none of them if that is all of them. Each sink answers for
 /// itself and hears nothing about what the others answered.
+///
+/// **[`compose`]'s `finally` sits between the last `after_draw` and the first
+/// `present`**, and it is not part of this contract: it is the caller's own
+/// work in the frame's encoder, downstream of every sink. See [`compose`].
 pub trait Sink {
     /// Take hold of this frame's attachment.
     ///
@@ -221,6 +225,43 @@ pub struct Outcome {
 /// frame path and the frame path allocates nothing; `refused` is called once
 /// per sink that had no target, with that sink's index in the slice.
 ///
+/// ## `finally`, and why it is not a hook looking for a user
+///
+/// `finally` is recorded into the frame's own encoder **after every sink that
+/// took the frame has been drawn into and had [`Sink::after_draw`] called, and
+/// before the encoder is submitted**. It runs on every frame, including one
+/// that no sink took at all.
+///
+/// It is there because **a frame's submission is not only its sinks.**
+/// `karakuri-console` draws its whole panel — the `egui` pass — into the same
+/// command buffer the deck's frame is recorded in, because the picture is a
+/// colour attachment in the deck's pass and a sampled texture in the panel's,
+/// and two submissions over one texture is a race whose order is the queue's
+/// business rather than the caller's. That is
+/// `docs/adr/0166-the-engines-frame-and-the-panels-are-one-submission.md`. And
+/// it is **not a sink**: the panel does not receive the composited frame, it
+/// receives the panel, and it happens to sample what a sink produced.
+///
+/// **Rejected, and it is the one that will be re-proposed:** make the panel a
+/// [`Sink`] whose recording work is the `egui` pass rather than the canvas —
+/// no new parameter, and the panel goes in the slice beside the picture. It
+/// loses on two things.
+///
+/// - **It changes what [`Sink`] means**, from *where a composited frame goes*
+///   to *anything that wants a slot in this encoder*, and it puts a consumer
+///   in a list of producers: the panel is downstream of the picture rather
+///   than its peer, and it is the only thing in the slice that would be
+///   handed a target it does not want the present pass drawn into.
+/// - **It makes [`Outcome::reached`] count two different things at once.**
+///   With the picture turned off from Outputs the panel is still in the slice,
+///   so a frame that reached *no output at all* would report `reached: 1` —
+///   and *every output may be off*, which the manual promises and
+///   `docs/adr/0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md`
+///   made representable, stops being something the number can say.
+///
+/// A caller with nothing to add passes `|_| {}`, which is both of
+/// `karakuri-cli`'s call sites.
+///
 /// **[`compose`] may reorder `sinks`.** The sinks that acquired are moved to
 /// the front, keeping their order among themselves, which is how the draw loop
 /// knows who answered without a `Vec<bool>` to hold it. Indices handed to
@@ -240,6 +281,7 @@ pub fn compose(
     sinks: &mut [&mut dyn Sink],
     refused: &mut dyn FnMut(usize, Skip),
     commit: impl FnOnce(&mut Deck) -> Committed,
+    finally: impl FnOnce(&mut wgpu::CommandEncoder),
 ) -> Result<Outcome, String> {
     // **Every sink is asked before anything is committed**, which is the half of
     // the old ordering that is still load-bearing: a sink is never asked to
@@ -294,6 +336,14 @@ pub fn compose(
             present.draw(frame.encoder(), sink.view(), sink.size());
             sink.after_draw(frame.encoder());
         }
+        // **Last, and into the same encoder.** Everything a sink is owed has
+        // been recorded, so a caller adding work here is adding it downstream
+        // of every sink that took the frame — which is what the console's
+        // panel pass is: it samples the picture a sink was drawn into, in the
+        // one command buffer, so the barrier between the two is `wgpu`'s
+        // rather than the queue's guess. See this function's own
+        // documentation for why it is not a sink.
+        finally(frame.encoder());
         frame.finish();
     }
 
@@ -430,6 +480,7 @@ mod tests {
     use crate::swap::HotSwap;
     use karakuri_ir::typed::Checked;
     use std::cell::Cell;
+    use std::rc::Rc;
 
     /// A sink that draws nowhere and can be told to refuse.
     ///
@@ -463,6 +514,18 @@ mod tests {
         viewed: Cell<usize>,
         after_drawn: usize,
         presented: usize,
+        /// **A tick shared with the other sinks and with the caller's
+        /// `finally`**, so the order of the calls across all of them is read
+        /// off afterwards rather than inferred from a per-sink counter. A
+        /// count says how many times; only a shared tick says *when*.
+        order: Rc<Cell<usize>>,
+        /// The tick this sink's `after_draw` took, and the address of the
+        /// encoder it was handed. The second is what says `finally` was given
+        /// **this** encoder rather than one `compose` made for it — an
+        /// encoder of its own would be a second command buffer, which is
+        /// exactly the race ADR-0166 is about.
+        drawn_at: usize,
+        encoder_at: usize,
         /// Whether the last presented frame had any light in it at all.
         lit: Option<bool>,
         /// And the frame itself, so a test can ask *where* the light is. A
@@ -511,9 +574,18 @@ mod tests {
                 viewed: Cell::new(0),
                 after_drawn: 0,
                 presented: 0,
+                order: Rc::new(Cell::new(0)),
+                drawn_at: 0,
+                encoder_at: 0,
                 lit: None,
                 pixels: Vec::new(),
             }
+        }
+
+        /// Take the ticks from the caller's clock rather than from one of this
+        /// sink's own, which is what makes two sinks and a `finally` comparable.
+        fn ordered_by(&mut self, order: &Rc<Cell<usize>>) {
+            self.order = Rc::clone(order);
         }
 
         /// Whether any texel in a column band of the last presented frame has
@@ -554,6 +626,9 @@ mod tests {
         }
         fn after_draw(&mut self, encoder: &mut wgpu::CommandEncoder) {
             self.after_drawn += 1;
+            self.order.set(self.order.get() + 1);
+            self.drawn_at = self.order.get();
+            self.encoder_at = std::ptr::from_ref(&*encoder) as usize;
             encoder.copy_texture_to_buffer(
                 self.target.as_image_copy(),
                 wgpu::TexelCopyBufferInfo {
@@ -707,6 +782,7 @@ mod tests {
                                 look: look(),
                             }
                         },
+                        |_| {},
                     )
                     .expect("compose")
                 };
@@ -763,6 +839,7 @@ mod tests {
                         steps: 4,
                         look: look(),
                     },
+                    |_| {},
                 )
                 .expect("compose");
             }
@@ -788,6 +865,7 @@ mod tests {
                         steps: 4,
                         look: look(),
                     },
+                    |_| {},
                 )
                 .expect("compose");
             }
@@ -835,6 +913,7 @@ mod tests {
                         look: look(),
                     }
                 },
+                |_| {},
             )
             .expect("a frame that publishes nowhere is not an error");
 
@@ -886,6 +965,7 @@ mod tests {
                         steps: 1,
                         look: look(),
                     },
+                    |_| {},
                 )
                 .expect("compose")
             };
@@ -959,6 +1039,7 @@ mod tests {
                         steps: 1,
                         look: look(),
                     },
+                    |_| {},
                 )
                 .expect("compose")
             };
@@ -1014,6 +1095,7 @@ mod tests {
                         steps: 1,
                         look: look(),
                     },
+                    |_| {},
                 )
                 .expect_err("the failing sink's error")
             };
@@ -1069,6 +1151,7 @@ mod tests {
                         steps: 1,
                         look: look(),
                     },
+                    |_| {},
                 )
                 .expect("compose");
             }
@@ -1094,6 +1177,7 @@ mod tests {
                             look: look(),
                         }
                     },
+                    |_| {},
                 )
                 .expect("compose");
             }
@@ -1101,6 +1185,282 @@ mod tests {
                 sink.lit,
                 Some(false),
                 "the frame was drawn before the closure that faded it"
+            );
+        }
+
+        /// **`finally` is recorded into the frame's own encoder, after every
+        /// sink that took the frame has been drawn into.**
+        ///
+        /// This is the parameter `karakuri-console`'s panel pass goes in, and
+        /// the argument for it is on [`compose`]: a frame's submission is not
+        /// only its sinks. Three things have to hold for that to be worth
+        /// anything, and each fails a different way.
+        ///
+        /// - **It runs**, or the panel is never drawn.
+        /// - **It runs after every sink was drawn into.** A panel recorded
+        ///   before the present pass samples a picture nothing has written
+        ///   yet, and that is not an error anywhere — an unwritten texture is
+        ///   transparent and `egui` blends premultiplied, so what an operator
+        ///   gets is the bay's card showing through. So the order is read off
+        ///   the texels the closure copies out rather than off a call count:
+        ///   the canvas is already there when it records.
+        /// - **It is handed the frame's own encoder.** An encoder of
+        ///   `compose`'s own would be a second command buffer over a texture
+        ///   the first one is still writing, whose order is the queue's
+        ///   business rather than the caller's — which is ADR-0166's whole
+        ///   subject and is the failure that would look correct here. The
+        ///   address is what says so; pixels cannot, because two submissions
+        ///   in the right order produce the right pixels.
+        #[test]
+        fn finally_is_recorded_after_every_sink_into_the_frames_own_encoder() {
+            let gpu = Gpu::headless().expect("no GPU");
+            let mut deck = one_slot_deck(&gpu);
+            let present = Present::new(&gpu.device, FORMAT, SIZE, SIZE);
+            let mut square = TestSink::new(&gpu, vec![]);
+            let mut wide = TestSink::sized(&gpu, WIDE, SIZE, vec![]);
+            let order = Rc::new(Cell::new(0));
+            square.ordered_by(&order);
+            wide.ordered_by(&order);
+
+            // **The sinks' own textures, held here as well.** A `wgpu::Texture`
+            // is a handle, so these are the same two textures rather than
+            // copies of them, and holding them is what lets the closure read
+            // what the sinks were drawn into while `compose` has the sinks
+            // themselves borrowed.
+            let sizes = [(SIZE, SIZE), (WIDE, SIZE)];
+            let targets = [square.target.clone(), wide.target.clone()];
+            let seen: Vec<wgpu::Buffer> = sizes
+                .iter()
+                .map(|(w, h)| {
+                    gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                        label: Some("what finally saw"),
+                        size: u64::from(w * h * 4),
+                        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                        mapped_at_creation: false,
+                    })
+                })
+                .collect();
+
+            let mut ran = 0usize;
+            let mut finally_at = 0usize;
+            let mut finally_encoder = 0usize;
+            {
+                let mut sinks: [&mut dyn Sink; 2] = [&mut square, &mut wide];
+                compose(
+                    &gpu,
+                    &mut deck,
+                    &present,
+                    &mut sinks,
+                    &mut |_, _| {},
+                    |_| Committed {
+                        steps: 1,
+                        look: look(),
+                    },
+                    |encoder| {
+                        ran += 1;
+                        order.set(order.get() + 1);
+                        finally_at = order.get();
+                        finally_encoder = std::ptr::from_ref(&*encoder) as usize;
+                        for (at, target) in targets.iter().enumerate() {
+                            let (width, height) = sizes[at];
+                            encoder.copy_texture_to_buffer(
+                                target.as_image_copy(),
+                                wgpu::TexelCopyBufferInfo {
+                                    buffer: &seen[at],
+                                    layout: wgpu::TexelCopyBufferLayout {
+                                        offset: 0,
+                                        bytes_per_row: Some(width * 4),
+                                        rows_per_image: Some(height),
+                                    },
+                                },
+                                wgpu::Extent3d {
+                                    width,
+                                    height,
+                                    depth_or_array_layers: 1,
+                                },
+                            );
+                        }
+                    },
+                )
+                .expect("compose");
+            }
+
+            assert_eq!(ran, 1, "`finally` did not run at all");
+            assert_eq!(square.after_drawn, 1, "the square sink was not drawn into");
+            assert_eq!(wide.after_drawn, 1, "the wide sink was not drawn into");
+            assert!(
+                finally_at > square.drawn_at && finally_at > wide.drawn_at,
+                "`finally` was called at tick {finally_at}, and the sinks were drawn into at \
+                 {} and {} — so it ran before a sink that took the frame",
+                square.drawn_at,
+                wide.drawn_at
+            );
+            assert_ne!(finally_encoder, 0, "`finally` never saw an encoder");
+            assert_eq!(
+                (finally_encoder, finally_encoder),
+                (square.encoder_at, wide.encoder_at),
+                "`finally` was handed an encoder that is not the one the sinks were drawn \
+                 into, so the panel's pass would be a second command buffer over a texture \
+                 the first is still writing"
+            );
+
+            // And what it recorded is in the frame's submission, downstream of
+            // the present passes: the canvas is already in both textures, and
+            // in the wide one it is in that sink's own band rather than
+            // anybody else's.
+            let read = |at: usize| {
+                let slice = seen[at].slice(..);
+                slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
+                gpu.device
+                    .poll(wgpu::PollType::wait_indefinitely())
+                    .expect("poll");
+                let texels = slice.get_mapped_range().expect("map").to_vec();
+                seen[at].unmap();
+                texels
+            };
+            let lit_between = |texels: &[u8], width: u32, from: u32, to: u32| {
+                (0..SIZE).any(|y| {
+                    (from..to).any(|x| {
+                        let i = ((y * width + x) * 4) as usize;
+                        texels[i..i + 3].iter().any(|&b| b > 0)
+                    })
+                })
+            };
+            let square_seen = read(0);
+            assert!(
+                lit_between(&square_seen, SIZE, 0, SIZE),
+                "`finally` copied the square sink out and there was nothing in it, so it \
+                 was recorded ahead of the present pass that draws it"
+            );
+            let wide_seen = read(1);
+            assert!(
+                lit_between(&wide_seen, WIDE, BAND.0, BAND.1),
+                "`finally` copied the wide sink out and its band was empty"
+            );
+            assert!(
+                !lit_between(&wide_seen, WIDE, 0, BAND.0)
+                    && !lit_between(&wide_seen, WIDE, BAND.1, WIDE),
+                "the wide sink has light outside the canvas's rectangle"
+            );
+        }
+
+        /// **`finally` runs on a frame no sink took, and what it records is
+        /// submitted with that frame.**
+        ///
+        /// The case that decides whether the parameter is the frame's or the
+        /// sinks': `karakuri-console`'s panel is drawn whether or not the
+        /// picture is on screen — folding the picture away hides the picture,
+        /// not the console — so a `finally` conditional on a sink having
+        /// answered would black the whole window the moment an operator folded
+        /// one region. It is asked twice, because there are two ways to have
+        /// no sink and they are different code paths: a slice with nothing in
+        /// it, and a slice whose every sink refused.
+        ///
+        /// **What is asserted is the buffer and not the call count.** A
+        /// closure that ran and was handed an encoder `compose` then dropped
+        /// would satisfy "it ran" and record nothing at all, so the sentinel
+        /// is written first and the clear is what has to reach it.
+        #[test]
+        fn finally_runs_when_no_sink_took_the_frame() {
+            const SENTINEL: [u8; 256] = [0xAA; 256];
+            let gpu = Gpu::headless().expect("no GPU");
+            let mut deck = one_slot_deck(&gpu);
+            let present = Present::new(&gpu.device, FORMAT, SIZE, SIZE);
+            let mark = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("what finally recorded"),
+                size: SENTINEL.len() as u64,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            let cleared = |gpu: &Gpu, mark: &wgpu::Buffer| {
+                let slice = mark.slice(..);
+                slice.map_async(wgpu::MapMode::Read, |r| r.expect("map"));
+                gpu.device
+                    .poll(wgpu::PollType::wait_indefinitely())
+                    .expect("poll");
+                let read = slice.get_mapped_range().expect("map").to_vec();
+                mark.unmap();
+                read.iter().all(|&b| b == 0)
+            };
+
+            // No sink at all: the outputs are off, and the console's panel is
+            // still on the operator's screen.
+            gpu.queue.write_buffer(&mark, 0, &SENTINEL);
+            let mut none: [&mut dyn Sink; 0] = [];
+            let mut ran = 0usize;
+            let outcome = compose(
+                &gpu,
+                &mut deck,
+                &present,
+                &mut none,
+                &mut |_, _| {},
+                |_| Committed {
+                    steps: 1,
+                    look: look(),
+                },
+                |encoder| {
+                    ran += 1;
+                    encoder.clear_buffer(&mark, 0, None);
+                },
+            )
+            .expect("compose");
+            assert_eq!(
+                outcome,
+                Outcome {
+                    reached: 0,
+                    missed: 0
+                }
+            );
+            assert_eq!(ran, 1, "`finally` did not run on a frame with no sinks");
+            assert!(
+                cleared(&gpu, &mark),
+                "`finally` ran on a frame with no sinks and what it recorded never \
+                 reached the device — the encoder it was handed was not submitted"
+            );
+
+            // And a sink that refused, which is the same frame arrived at the
+            // other way: something was asked and had no target.
+            gpu.queue.write_buffer(&mark, 0, &SENTINEL);
+            let mut sink = TestSink::new(&gpu, vec![Err(Skip::Transient)]);
+            let mut ran = 0usize;
+            let outcome = {
+                let mut sinks = one(&mut sink);
+                compose(
+                    &gpu,
+                    &mut deck,
+                    &present,
+                    &mut sinks,
+                    &mut |_, _| {},
+                    |_| Committed {
+                        steps: 1,
+                        look: look(),
+                    },
+                    |encoder| {
+                        ran += 1;
+                        encoder.clear_buffer(&mark, 0, None);
+                    },
+                )
+                .expect("compose")
+            };
+            assert_eq!(
+                outcome,
+                Outcome {
+                    reached: 0,
+                    missed: 1
+                }
+            );
+            assert_eq!(
+                ran, 1,
+                "`finally` did not run on a frame every sink refused"
+            );
+            assert!(
+                cleared(&gpu, &mark),
+                "`finally` ran on a frame every sink refused and what it recorded never \
+                 reached the device"
+            );
+            assert!(
+                sink.untouched_after_refusing(),
+                "the refusing sink was drawn into anyway"
             );
         }
     }
