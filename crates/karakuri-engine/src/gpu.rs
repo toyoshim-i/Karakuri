@@ -32,13 +32,21 @@ impl Gpu {
     /// adapter that must be compatible with it, so a windowed caller needs the
     /// three steps apart.
     pub fn instance() -> wgpu::Instance {
-        // **Exactly what `Default` was**, which wgpu 30 removed: every field
-        // defaulted and no display handle. The handle is the one field that is
-        // new, and it is unused on Metal, Vulkan and DX12 — only GLES needs
-        // it, and on Wayland it is required to present at all. So a GL backend
-        // on Linux is where this constructor stops being the right one, and
-        // the handle to pass there is winit's `OwnedDisplayHandle`.
-        wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle())
+        // **`_from_env` is load-bearing**, and its absence is invisible.
+        // `new_without_display_handle` — one word shorter, otherwise the same
+        // call, same arguments, same type — ignores `WGPU_BACKEND` entirely.
+        // With it, setting that variable does nothing and says nothing: the
+        // run produces a plausible number on the default backend and the
+        // operator writes down the one they asked for. Do not shorten this
+        // back.
+        //
+        // Otherwise every field defaulted and no display handle. The handle is
+        // the one field wgpu 30 added, and it is unused on Metal, Vulkan and
+        // DX12 — only GLES needs it, and on Wayland it is required to present
+        // at all. So a GL backend on Linux is where this constructor stops
+        // being the right one, and the handle to pass there is winit's
+        // `OwnedDisplayHandle`.
+        wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env())
     }
 
     pub async fn from_instance(
