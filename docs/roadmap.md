@@ -257,12 +257,21 @@ grows taller with the window and the arrangement's is pinned at 72.
 What a panel frame costs is measured and printed by the example rather than estimated: still, it
 is **0 frames and 0 allocations**
 ([P-0072](principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)'s
-first clause); with the picture and deck A live it is 59.7 fps and 8.2% of a second on an M4 Pro
-at 1440x900, which is the price the rest of P-0072 is for. **Do not read that against the 10.7%
-this line used to carry** — the readout's own last paragraph says why, and it is this machine's
-power management rather than the extra pass. **The rest of P-0072 is not built** — nothing
-declares a cost or a staleness and there is no scheduler, because nothing but the Program bay is
-live.
+first clause); with the picture and deck A live it is 59.7 fps and **10.9%** of a second on an M4
+Pro at 1440x900, which is the price the rest of P-0072 is for.
+
+**Three figures have stood on this line and the spread is the machine, not the work.** It has read
+10.7%, then 8.2%, then this, across a preview row being added and the console adopting
+`frame::compose`; on the run that gave 8.2% the three passes were *each* about two thirds of what
+they are here, which is a clock moving under all of them rather than work leaving one. The readout
+says it in its own last paragraph — this machine reports about a sixth of these numbers with its
+other cores loaded, proportions unchanged — so **compare ratios, and take a figure here as the
+order of magnitude a decision gets made on rather than as a quantity two of them can be subtracted
+from.** The number is restated whenever the code under it changes shape, because a figure taken on
+a shape that no longer exists reads as current forever.
+
+**The rest of P-0072 is not built** — nothing declares a cost or a staleness and there is no
+scheduler, because nothing but the Program bay is live.
 
 **Half of *making the picture a sink in fact* is built, and it is the half that had to come
 first.** `frame::compose` no longer gates the frame on a sink: it takes a slice of them, asks each
