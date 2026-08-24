@@ -45,9 +45,10 @@ use karakuri_engine::binding::Curve;
 use karakuri_engine::deck::{Blend, Mask, MaskKind, Residency};
 use karakuri_engine::transition::Control;
 use karakuri_engine::transport::{Sync, Transport};
+use karakuri_engine::Look;
 use karakuri_store::record::Record;
 
-use crate::{op_wire_name, op_wire_names, Look};
+use crate::{op_wire_name, op_wire_names};
 
 /// What one mix record says, decoded into what the engine takes.
 ///

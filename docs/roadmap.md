@@ -271,16 +271,17 @@ one, advances the deck whatever they answer, and draws into and presents the one
 output may be off and the instrument keeps running, which is what the outputs row needs and what
 the manual already promises.
 
-**What is left is that the console cannot reach it.** `frame::compose` lives in `karakuri-cli`,
-which has no library target, so `karakuri-console`'s example hand-rolls its own frame loop and its
-picture is a sink in the manual and not in the code. The move is `Sink`, `Skip`, `Committed`,
-`Outcome`, `compose`, `Look` and `WindowSink` into `karakuri-engine`, leaving `PngSink` — a file
-writer — behind: `karakuri-engine` already depends on `winit` and already opens surfaces in
-`gpu.rs`, `Look`'s three fields are exactly `Present::set_tonemap`'s arguments, and
-`karakuri-console`'s example already depends on `karakuri-engine`, so **no crate gains a
-dependency**. The argument for it is the one the README makes — the CLI is scaffolding rather than
-the destination — and a frame loop inside the scaffolding is a frame loop the application cannot
-use.
+**And the console can reach it now.** The frame loop was in `karakuri-cli`, which has no library
+target, so the application could not call the one loop and `karakuri-console`'s example hand-rolled
+a second — the two-loops-that-drift failure `frame.rs` was written to end, one crate over. `Sink`,
+`Skip`, `Committed`, `Outcome`, `compose`, `Look` and `WindowSink` are `karakuri-engine`'s now;
+`PngSink`, the clock and the recorder stayed with the program that owns them. No crate gained a
+dependency, and the workspace count did not move, which is what a move should do.
+
+**What is left is the console using it.** The picture and deck A's cell are two textures the
+example presents into by hand; behind `Sink` they are two sinks in a slice, the row folding away
+takes one out of it, and *hidden and still costing a pass* stops being a claim the example makes
+about itself. That is the same work as the sizing hole below, so it is owed once.
 
 **And there is a hole to close on the way, which the preview row made visible rather than made.**
 *Which rectangle a sink's texture is sized from* is decided inside the console example's

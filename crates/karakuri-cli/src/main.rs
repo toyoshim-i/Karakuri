@@ -19,7 +19,6 @@
 
 mod audio;
 mod compile;
-mod frame;
 mod history;
 mod mcp;
 mod meta;
@@ -39,10 +38,11 @@ use std::time::{Duration, Instant};
 
 use karakuri_engine::binding::{Curve, CONTROL_PREFIX, CURVES, DEFAULT_BPM, NOISE_SIGNAL};
 use karakuri_engine::deck::MAX_SLOTS;
+use karakuri_engine::frame;
 use karakuri_engine::swap::Event;
 use karakuri_engine::transport::{Sync, Transport};
 use karakuri_engine::{
-    Binding, Blend, Deck, Gpu, HotSwap, Mask, MaskKind, ParamWrite, Present, Residency, Set,
+    Binding, Blend, Deck, Gpu, HotSwap, Look, Mask, MaskKind, ParamWrite, Present, Residency, Set,
     Signals, TonemapOp, DEFAULT_BUDGET_MS,
 };
 use karakuri_midi::Action;
@@ -676,24 +676,6 @@ keys:
   h ?        print these bindings
   esc        quit
 ";
-
-/// The output look: everything the tone mapper is told, in one value, so the
-/// window and an offscreen render can be given the same thing and agree.
-#[derive(Clone, Copy, PartialEq)]
-#[cfg_attr(test, derive(Debug))]
-pub struct Look {
-    pub op: TonemapOp,
-    pub exposure: f32,
-    /// Reinhard's only, ignored by the other three. Not on a key: it is one
-    /// operator's parameter rather than a control the mix needs.
-    pub white_point: f32,
-}
-
-impl Look {
-    fn name(&self) -> &'static str {
-        op_name(self.op)
-    }
-}
 
 /// Every tone map operator there is. The one list, and its length is in its
 /// type, so adding an operator to it is a deliberate act rather than an
@@ -2688,7 +2670,7 @@ fn replay_session(args: &Args, id: &str) {
     let frames = u32::try_from(stream.frames.len()).unwrap_or(u32::MAX);
     eprintln!(
         "replaying session `{id}`: {frames} frames, {w}x{h}, {} at exposure {:.2} -> {}",
-        args.look.name(),
+        op_name(args.look.op),
         args.look.exposure,
         out.display()
     );
@@ -4002,7 +3984,7 @@ fn main() {
                 deck.slot_count(),
                 if deck.slot_count() == 1 { "" } else { "s" },
                 args.frames,
-                args.look.name(),
+                op_name(args.look.op),
                 args.look.exposure,
                 path.display()
             );
@@ -6888,7 +6870,7 @@ impl Live {
         self.record(mix::look_record(&look));
         eprintln!(
             "tonemap {} (exposure {:.2})",
-            self.look.name(),
+            op_name(self.look.op),
             self.look.exposure
         );
     }
@@ -6899,7 +6881,11 @@ impl Live {
             ..self.look
         };
         self.record(mix::look_record(&look));
-        eprintln!("exposure {:.3} ({})", self.look.exposure, self.look.name());
+        eprintln!(
+            "exposure {:.3} ({})",
+            self.look.exposure,
+            op_name(self.look.op)
+        );
     }
 
     /// **Every mix change goes through here, and here goes through a record.**
@@ -7393,7 +7379,7 @@ impl Live {
         eprintln!(
             "{}| {} exp {:.2} | {fps:.1} fps",
             self.status,
-            self.look.name(),
+            op_name(self.look.op),
             self.look.exposure
         );
     }
@@ -9062,6 +9048,95 @@ mod tests {
              and no more: {counted:?}"
         );
         assert!(counted[0].starts_with("1 record after"), "{counted:?}");
+    }
+
+    // -- the clock ---------------------------------------------------------
+    //
+    // These three came here with `frame` when the frame loop moved to
+    // `karakuri-engine`. They never touched a sink and never took a device:
+    // they are about [`Clock`], which is this program's and stays here, because
+    // reading a clock is the one thing a live run does that a replay must not.
+
+    /// **The interval of a frame that never ran is not lost — the next frame
+    /// counts it.**
+    ///
+    /// **This used to be about a frame that found nowhere to draw**, which was
+    /// the only way the clock could go unread: `frame::compose` withheld the
+    /// committing closure from a refused frame, so `Clock::steps` was not
+    /// called and the interval carried. That is no longer a case at all —
+    /// every frame `frame::compose` composes reads the clock, whatever the
+    /// sinks answered — and the property it was checking is the same one, now
+    /// carrying the gap where the frame loop itself does not run: a paused
+    /// event loop, a window the operating system stopped sending redraws to, a
+    /// long stall. The arithmetic below never mentioned a sink, which is why
+    /// the assertion stands unchanged while its subject moved.
+    ///
+    /// The claim the frame loop's ordering rests on, and until `steps` could be
+    /// told what time it is there was no way to state it: the first version of
+    /// this test asserted that the step count did not exceed `MAX_STEPS` (it
+    /// cannot: `steps` clamps to it) and that the carry was under one (it is:
+    /// `steps` subtracts its own floor). Both survived deleting the body of
+    /// `Clock::steps`.
+    ///
+    /// Two clocks over the same span, one reading it in two frames and one in
+    /// a single frame because the other was abandoned, must hand out the same
+    /// total. That is what "the time survives" means, and it is false for any
+    /// clock that resets `last` somewhere other than a frame that goes ahead.
+    #[test]
+    fn a_frame_that_never_ran_leaves_its_time_for_the_next_one() {
+        let start = Instant::now();
+        let ms = |n: u64| start + std::time::Duration::from_millis(n);
+
+        let mut drew_every_frame = Clock::new(start);
+        let both =
+            u32::from(drew_every_frame.steps(ms(16))) + u32::from(drew_every_frame.steps(ms(32)));
+
+        // The same thirty-two milliseconds, with the frame at 16 ms never run
+        // at all: `steps` is not called, so `last` does not move.
+        let mut skipped_one = Clock::new(start);
+        let one = u32::from(skipped_one.steps(ms(32)));
+
+        assert_eq!(
+            one, both,
+            "the abandoned frame's interval was dropped rather than carried"
+        );
+        assert!(both > 0, "thirty-two milliseconds is at least one step");
+    }
+
+    /// The carry is what makes that true across a frame rate that does not
+    /// divide the step rate: whole steps out, the fraction kept.
+    #[test]
+    fn the_clock_hands_out_whole_steps_and_keeps_the_fraction() {
+        let start = Instant::now();
+        let mut clock = Clock::new(start);
+        let mut total = 0u32;
+        // Sixty frames of 16 ms is 960 ms, and at `DT` per step that is a known
+        // number of steps — known well enough that dropping the carry loses
+        // several of them.
+        for i in 1..=60u64 {
+            total += u32::from(clock.steps(start + std::time::Duration::from_millis(i * 16)));
+        }
+        let expected = (0.960 / f64::from(DT)).floor() as u32;
+        assert_eq!(
+            total, expected,
+            "the fraction between frames was dropped: {total} steps for 960 ms"
+        );
+    }
+
+    /// And the anti-spiral clamp holds: a stall does not become a catch-up.
+    #[test]
+    fn a_long_gap_falls_behind_rather_than_catching_up() {
+        // **The stream's cap, not this crate's copy of it.** `Clock::steps`
+        // clamps to the `MAX_STEPS` above, and a `tick` that named more steps
+        // than a reader will accept is unreplayable — so the assertion is
+        // against the number the record format publishes, and the two agreeing
+        // is what is being checked.
+        use karakuri_store::record::MAX_STEPS;
+
+        let start = Instant::now();
+        let mut clock = Clock::new(start);
+        let steps = clock.steps(start + std::time::Duration::from_secs(5));
+        assert_eq!(steps, MAX_STEPS, "five seconds is not four steps' worth");
     }
 }
 

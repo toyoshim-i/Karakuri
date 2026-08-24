@@ -85,9 +85,9 @@ to *n* sinks rather than being handed to one. A plugin that is slow or wedged ge
 dropped; presenting is never delayed for it. The per-frame call is non-blocking by
 specification, not by convention.
 
-**The in-repo half of this is built.** `karakuri-cli`'s `frame` module has a `Sink` trait —
-acquire a target, draw into it, present — with the window and the PNG writer behind it and
-one frame loop over both. That was worth doing on its own account, because the two loops it
+**The in-repo half of this is built.** `karakuri-engine`'s `frame` module has a `Sink` trait —
+acquire a target, draw into it, present — with the window behind it, `karakuri-cli`'s PNG
+writer behind it, and one frame loop over both. That was worth doing on its own account, because the two loops it
 replaced had drifted apart and every replay defect this project has found came from the
 difference. What it means here is that a plugin is a third sink rather than a change to how
 a frame works, and that the interface a plugin needs already has two implementations to be

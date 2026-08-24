@@ -1,11 +1,11 @@
 //! One frame, and the one place it is composed.
 //!
-//! There were two frame loops: `Live::frame` drove the window and
-//! `render::sequence_driven` drove a PNG, and the only difference that was ever
-//! *meant* to exist between them is where the step count comes from — a live
-//! run measures it from a clock, a replay reads it from a `tick`. Everything
-//! else about drawing a frame is the same, and `render`'s own documentation
-//! said so.
+//! There were two frame loops, both in `karakuri-cli`: its `Live::frame` drove
+//! the window and its `render::sequence_driven` drove a PNG, and the only
+//! difference that was ever *meant* to exist between them is where the step
+//! count comes from — a live run measures it from a clock, a replay reads it
+//! from a `tick`. Everything else about drawing a frame is the same, and
+//! `render`'s own documentation said so.
 //!
 //! It was not the same. The seam that was meant to be one line had become five,
 //! and **the extra four are where this project's replay defects came from**:
@@ -71,12 +71,36 @@
 //! them. Acquiring moved out from under it: every sink is asked first, each
 //! answers for itself, and what an answer decides is whether that sink is drawn
 //! into and presented. Publishing is what a sink gates; the instrument runs.
+//!
+//! ## Why it is in the engine
+//!
+//! It was written in `karakuri-cli`, which is scaffolding rather than the
+//! destination, and that crate has no library target — so the application
+//! could not reach it, and `karakuri-console`'s example hand-rolled a second
+//! frame loop instead. That is the two-loops-that-drift failure this module was
+//! written to end, one crate over. Nothing here needed the CLI: a frame is a
+//! deck, a `Present` and somewhere to put the result, and all three are the
+//! engine's. What stayed behind is what genuinely belongs to a program rather
+//! than to a frame — the clock, the recorder, the PNG writer.
 
-use karakuri_engine::{Deck, Gpu, Present};
-#[cfg(test)]
-use karakuri_store::record::MAX_STEPS;
+use crate::deck::Deck;
+use crate::gpu::Gpu;
+use crate::present::{Present, TonemapOp};
 
-use crate::Look;
+/// The output look: everything the tone mapper is told, in one value, so the
+/// window and an offscreen render can be given the same thing and agree.
+///
+/// Exactly [`Present::set_tonemap`]'s arguments, which is why it is here rather
+/// than with whoever puts an operator on a key: a look is what a frame is drawn
+/// under, and every sink is drawn under the same one.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Look {
+    pub op: TonemapOp,
+    pub exposure: f32,
+    /// Reinhard's only, ignored by the other three. Not on a key: it is one
+    /// operator's parameter rather than a control the mix needs.
+    pub white_point: f32,
+}
 
 /// Why a frame is not reaching **one sink**.
 ///
@@ -99,7 +123,7 @@ pub enum Skip {
     /// The latch has to be here rather than in the caller. A caller that
     /// formatted the message and then decided not to print it would allocate
     /// on the frame path sixty times a second for as long as a wedged window
-    /// stayed wedged, which is the one thing this program's frame path may
+    /// stayed wedged, which is the one thing this crate's frame path may
     /// never do.
     Fault(String),
 }
@@ -119,10 +143,10 @@ pub struct Committed {
 
 /// Where a composited frame goes.
 ///
-/// Two implementations exist in this program — a window and a PNG writer — and
-/// that is the point: an abstraction with one implementation is a guess, and
-/// with two it is an extraction. A third, in the tests, is what finally lets
-/// the frame loop be driven without a display.
+/// Two implementations exist in this workspace — [`WindowSink`] below and
+/// `karakuri-cli`'s PNG writer — and that is the point: an abstraction with one
+/// implementation is a guess, and with two it is an extraction. A third, in the
+/// tests, is what finally lets the frame loop be driven without a display.
 ///
 /// **Everything here is called exactly once per frame per sink, in this
 /// order:** `acquire`, then `view` and `size`, then `after_draw`, then
@@ -293,8 +317,8 @@ pub fn compose(
 ///
 /// It owns the surface and its configuration because it is the only thing that
 /// should touch them — a swapchain follows the window, and nothing about a
-/// window reaches what is drawn. `Live` used to hold both and reconfigure them
-/// from three places.
+/// window reaches what is drawn. `karakuri-cli`'s `Live` used to hold both and
+/// reconfigure them from three places.
 pub struct WindowSink {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
@@ -402,17 +426,16 @@ impl Sink for WindowSink {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use karakuri_engine::{HotSwap, Set, TonemapOp};
+    use crate::set::Set;
+    use crate::swap::HotSwap;
+    use karakuri_ir::typed::Checked;
     use std::cell::Cell;
-
-    use crate::{Clock, DT};
-    use std::time::Instant;
 
     /// A sink that draws nowhere and can be told to refuse.
     ///
     /// **This is the third implementation, and the reason the other two were
-    /// worth putting behind a trait.** `Live::frame` had never been reached by
-    /// a test in this program: it needs a window, and `Outdated` — the case
+    /// worth putting behind a trait.** `karakuri-cli`'s `Live::frame` had never
+    /// been reached by a test: it needs a window, and `Outdated` — the case
     /// that produced a real defect — cannot be synthesised at all. (It was
     /// `SurfaceError::Outdated` until wgpu 30 replaced the `Result` with
     /// `CurrentSurfaceTexture`; the point survives the rename.)
@@ -424,7 +447,7 @@ mod tests {
         view: wgpu::TextureView,
         /// So a test can look at what was drawn. Every width used here times
         /// four is a multiple of 256, so the rows need no padding — see
-        /// `render::unpad_rows` for when they do.
+        /// `karakuri-cli`'s `render::unpad_rows` for when they do.
         readback: wgpu::Buffer,
         width: u32,
         height: u32,
@@ -594,92 +617,38 @@ mod tests {
         }
     }
 
-    /// A one-slot deck built from the example pair, which is what every other
-    /// test in this crate reaches for when it needs real material.
+    /// The three stages a `.kir` goes through before [`Set::build`] will take
+    /// it, the way every other test in this crate spells them — except that
+    /// these tests read the shipped `examples/` pair rather than an inline
+    /// fixture, because what they want is material that draws something at
+    /// [`SIZE`] and the workspace already has some.
+    fn compile(path: &std::path::Path) -> Checked {
+        let src =
+            std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let render = |errs: &[karakuri_ir::IrError]| {
+            errs.iter()
+                .map(|e| e.render(&src))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        let proc = karakuri_ir::parse(&src).unwrap_or_else(|e| panic!("{}", render(&e)));
+        let checked = karakuri_ir::check::check(&proc).unwrap_or_else(|e| panic!("{}", render(&e)));
+        karakuri_ir::cost::estimate(&checked).unwrap_or_else(|e| panic!("{}", render(&e)));
+        checked
+    }
+
+    /// A one-slot deck built from the example pair — the same pair
+    /// `karakuri-engine`'s own examples build from, and the one the CLI's
+    /// window opens on by default.
     fn one_slot_deck(gpu: &Gpu) -> Deck {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let (l1, _) = crate::compile::load(&root.join("examples/drift_shell.kir")).expect("L1");
-        let (l4, _) = crate::compile::load(&root.join("examples/soft_points.kir")).expect("L4");
+        let l1 = compile(&root.join("examples/drift_shell.kir"));
+        let l4 = compile(&root.join("examples/soft_points.kir"));
         let set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, 4096, 7).expect("set");
         Deck::new(&gpu.device, vec![HotSwap::fixed(set)], SIZE, SIZE)
     }
 
-    /// **The interval of a frame that never ran is not lost — the next frame
-    /// counts it.**
-    ///
-    /// **This used to be about a frame that found nowhere to draw**, which was
-    /// the only way the clock could go unread: `compose` withheld the
-    /// committing closure from a refused frame, so `Clock::steps` was not
-    /// called and the interval carried. That is no longer a case at all —
-    /// every frame `compose` composes reads the clock, whatever the sinks
-    /// answered — and the property it was checking is the same one, now
-    /// carrying the gap where the frame loop itself does not run: a paused
-    /// event loop, a window the operating system stopped sending redraws to, a
-    /// long stall. The arithmetic below never mentioned a sink, which is why
-    /// the assertion stands unchanged while its subject moved.
-    ///
-    /// The claim the frame loop's ordering rests on, and until `steps` could be
-    /// told what time it is there was no way to state it: the first version of
-    /// this test asserted that the step count did not exceed `MAX_STEPS` (it
-    /// cannot: `steps` clamps to it) and that the carry was under one (it is:
-    /// `steps` subtracts its own floor). Both survived deleting the body of
-    /// `Clock::steps`.
-    ///
-    /// Two clocks over the same span, one reading it in two frames and one in
-    /// a single frame because the other was abandoned, must hand out the same
-    /// total. That is what "the time survives" means, and it is false for any
-    /// clock that resets `last` somewhere other than a frame that goes ahead.
-    #[test]
-    fn a_frame_that_never_ran_leaves_its_time_for_the_next_one() {
-        let start = Instant::now();
-        let ms = |n: u64| start + std::time::Duration::from_millis(n);
-
-        let mut drew_every_frame = Clock::new(start);
-        let both =
-            u32::from(drew_every_frame.steps(ms(16))) + u32::from(drew_every_frame.steps(ms(32)));
-
-        // The same thirty-two milliseconds, with the frame at 16 ms never run
-        // at all: `steps` is not called, so `last` does not move.
-        let mut skipped_one = Clock::new(start);
-        let one = u32::from(skipped_one.steps(ms(32)));
-
-        assert_eq!(
-            one, both,
-            "the abandoned frame's interval was dropped rather than carried"
-        );
-        assert!(both > 0, "thirty-two milliseconds is at least one step");
-    }
-
-    /// The carry is what makes that true across a frame rate that does not
-    /// divide the step rate: whole steps out, the fraction kept.
-    #[test]
-    fn the_clock_hands_out_whole_steps_and_keeps_the_fraction() {
-        let start = Instant::now();
-        let mut clock = Clock::new(start);
-        let mut total = 0u32;
-        // Sixty frames of 16 ms is 960 ms, and at `DT` per step that is a known
-        // number of steps — known well enough that dropping the carry loses
-        // several of them.
-        for i in 1..=60u64 {
-            total += u32::from(clock.steps(start + std::time::Duration::from_millis(i * 16)));
-        }
-        let expected = (0.960 / f64::from(DT)).floor() as u32;
-        assert_eq!(
-            total, expected,
-            "the fraction between frames was dropped: {total} steps for 960 ms"
-        );
-    }
-
-    /// And the anti-spiral clamp holds: a stall does not become a catch-up.
-    #[test]
-    fn a_long_gap_falls_behind_rather_than_catching_up() {
-        let start = Instant::now();
-        let mut clock = Clock::new(start);
-        let steps = clock.steps(start + std::time::Duration::from_secs(5));
-        assert_eq!(steps, MAX_STEPS, "five seconds is not four steps' worth");
-    }
-
-    // Seven of the ten drive a real `Present`; the clock arithmetic above does not.
+    // All seven drive a real `Present`, so all seven are here.
     // See `karakuri-engine/tests/gpu_tests_are_under_mod_gpu.rs`.
     mod gpu {
         use super::*;
