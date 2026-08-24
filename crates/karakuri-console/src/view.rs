@@ -18,9 +18,27 @@
 //! **One body is not empty, and it is not an exception to that.** The Program
 //! bay's picture is a [`Kind::Picture`], and what it draws is a texture handed
 //! in from outside — real texels off a real device, not a mock-up of some. It
-//! draws nothing at all when there is no texture, which is what the row of
-//! deck previews beside it still does and what every other body does. See
-//! [`Picture`] and [`picture_rect`].
+//! draws nothing at all when there is no texture, exactly as every other empty
+//! body does. See [`Picture`] and [`picture_rect`].
+//!
+//! # The deck previews are the one thing drawn with nothing behind it
+//!
+//! [`Kind::Previews`] paints four cells whether or not a deck is running in
+//! any of them, and that is **not** the scaffolding the paragraph above
+//! forbids. A greyed-out control is a placeholder for a control that does not
+//! exist yet; a preview cell is not a placeholder for anything, it is the
+//! region's own face. The mock's `.preview` is a well with a letter in it
+//! before it is a picture — three of its four cells hold no texels at all —
+//! and the Program bay's head reads *previews 2 of 4*, which is an operator's
+//! ordinary choice and not a state waiting to be finished. **An empty cell is
+//! what off looks like, not a stand-in for a full one**, and the label says
+//! so: `A` where there is a picture and `C · off` where there is not.
+//!
+//! So the two rules are one rule. Nothing is drawn that claims something
+//! exists which does not; a cell that is off exists and says it is off.
+//! See [`DECKS`], [`preview_rects`] and [`View::previews`], and
+//! [ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
+//! for the alternative that lost and for what would reopen it.
 //!
 //! The transport and the outputs are **rows, not bays**: they carry no
 //! heading, because they have none in the mock — both carry `class="bay"`,
@@ -60,6 +78,27 @@ const WHOLE_TEXTURE: Rect = Rect {
     max: Pos2::new(1.0, 1.0),
 };
 
+/// **How many deck preview cells there are**, and it is derived rather than
+/// picked off the mock.
+///
+/// `karakuri_engine`'s `deck::MAX_SLOTS` is 4 — *"a deck holds 1 to 4
+/// slots"*, asserted in `Deck::new` — so four is the most auditions there can
+/// ever be at once, and a fifth cell would be a cell no deck can ever fill.
+/// The mock agrees from the other end: `.previews` is
+/// `grid-template-columns: repeat(4, 1fr)` with four `.preview` cells in it,
+/// and the Program bay's head reads *previews 2 of 4*. Two readings, one
+/// number.
+///
+/// `karakuri-engine` is not a dependency of this crate and is not becoming one
+/// for a `usize` — `src/` takes no device, which is the seam ADR-0156 left
+/// standing. The number is transcribed with its derivation, the way every
+/// number read off the mock is.
+pub const DECKS: usize = 4;
+
+/// The letters the mock puts in the four cells, which is how an operator says
+/// *which* deck. `A` through `D`, in slot order.
+const DECK_LETTERS: [&str; DECKS] = ["A", "B", "C", "D"];
+
 /// What the console draws in a region — the third thing about a region, after
 /// its name and its rectangle, and the only one this module owns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,8 +128,7 @@ pub enum Kind {
     /// (ADR-0159).
     Row,
     /// One subdivision of a bay, which has no head of its own because the bay
-    /// around it has one. The inspector's two panes, and the row of deck
-    /// previews under the picture.
+    /// around it has one. The inspector's two panes.
     Pane,
     /// **The one region a texture is drawn into**: the picture in the Program
     /// bay, which is a sink and whose texels somebody else rendered.
@@ -107,6 +145,22 @@ pub enum Kind {
     /// nor a clean crop of it is worse than useless, and a word burnt into the
     /// corner is exactly that."*
     Picture,
+    /// **The row of deck previews** under the picture, which is [`DECKS`]
+    /// cells side by side.
+    ///
+    /// A pane in every other respect, and a kind of its own for the reason
+    /// [`Kind::Picture`] is one, already written above: [`View::draw`] has to
+    /// know *which* pane the cells go in, and the alternative is comparing a
+    /// name on the frame path, which puts a string where the table already
+    /// says what a region is.
+    ///
+    /// **Each cell carries a label and the picture does not**, and the manual
+    /// states both in one breath: *"The picture carries no label of its own …
+    /// The A–D under it keep their letters, which are outside anything you
+    /// would capture and are the only thing naming a deck."* So the two are
+    /// consistent rather than at odds. See [`preview_rects`] and
+    /// [`View::previews`].
+    Previews,
 }
 
 /// One region of the console: the name the arrangement knows it by, and what
@@ -169,7 +223,7 @@ pub const REGIONS: &[Region] = &[
     },
     Region {
         name: "deck-previews",
-        kind: Kind::Pane,
+        kind: Kind::Previews,
     },
     Region {
         name: "inspector",
@@ -303,9 +357,11 @@ pub struct Picture {
 /// head, `.program-body`'s padding above the picture, and the 16:9 picture
 /// itself. So the picture is that region less [`size::HEAD_H`] and one
 /// [`size::PROGRAM_BODY_PAD`] at the top, less a pad either side, and **less
-/// nothing at the bottom**: the 9 under the picture in the CSS is the gap
-/// between it and the previews, which is the split's divider, and the other 9
-/// is under the preview row and belongs to `deck-previews`.
+/// nothing at the bottom**: what the CSS puts under the picture is
+/// `.program-body`'s `gap: 8px`, which is the split's divider and belongs to
+/// neither child, and the 9 further down is that body's bottom padding, which
+/// belongs to `deck-previews`. So the only 9s in this region are the one above
+/// the picture and the one either side of it.
 ///
 /// At the narrowest console the mock will draw this is exactly 466 x 262,
 /// which is 16:9. At any wider window it is wider than 16:9 and the picture
@@ -336,6 +392,95 @@ pub fn picture_rect(layout: &karakuri_layout::Layout) -> Option<Rect> {
     }
 }
 
+/// **Where the four deck previews go**: a row of [`DECKS`] cells inside the
+/// `deck-previews` region, under the picture.
+///
+/// The mirror of [`picture_rect`] and it carries the same `None` rule for the
+/// same reason — a folded row has a rectangle with no extent in it, so the
+/// cells come out degenerate and there is nothing to draw or to render into.
+/// **A fixed-size array rather than a `Vec`**: there are four decks and there
+/// is no fifth, so a caller cannot ask for one and cannot forget one either.
+///
+/// # The insets are `.program-body`'s, and only three of the four
+///
+/// The row is the region inset by [`size::PROGRAM_BODY_PAD`] left, right and
+/// **bottom**, and by nothing at the top. Read the Program bay's own
+/// derivation in `lib.rs`: `deck-previews` is 63 + 9, the row of cells and the
+/// padding under them. The 9 *above* the cells in the CSS is not in this
+/// region at all — it is the split's 8px divider plus `program-view`'s own
+/// bottom, which is why [`picture_rect`] takes nothing off the bottom.
+///
+/// At the narrowest console the mock will draw, that leaves 484 - 9 - 9 = 466
+/// for four tracks and three [`size::PREVIEW_GAP`]s: (466 - 18) / 4 = **112**
+/// wide, and 112 at 16:9 is **63** tall, which is exactly the height the row
+/// has. The mock's cell, arrived at from the other end.
+///
+/// # A cell is 16:9 and centred in its track, and the alternative is written
+/// down
+///
+/// The arrangement pins this region at 72 tall (`lib.rs`: fixed 72, minimum
+/// 72, because a row of four cells at a fixed type size has nothing in it that
+/// gets smaller). So a wider window widens the track and does **not** heighten
+/// the row, and past the reference width a cell cannot both fill its track and
+/// stay 16:9. One of the two has to give, and it is the track:
+///
+/// - **Taken:** the cell is 16:9, as large as the track's width and the row's
+///   height both allow, and centred in its track. At the reference width that
+///   is exactly 112 x 63 and fills the track; wider, it stays 63 tall with
+///   ground either side. The texture then fills the cell exactly, so nothing
+///   letterboxes twice and the cell is always the shape of what it shows.
+/// - **Rejected:** fill the track and letterbox the texels inside it. That
+///   keeps the row looking like a grid at every width, and pays for it by
+///   stretching the cell away from the shape of its picture — a 16:9 audition
+///   in a 200x63 well, with bars the console has drawn itself inside a
+///   rectangle the engine already fitted. Two fits for one question, which is
+///   the thing `WHOLE_TEXTURE` refuses one level up.
+///
+/// `layout` must be solved: `Layout::rect` refuses to answer from a dirty one.
+pub fn preview_rects(layout: &karakuri_layout::Layout) -> Option<[Rect; DECKS]> {
+    let id = layout.find("deck-previews")?;
+    preview_cells(to_egui(layout.rect(id)))
+}
+
+/// The four cells inside a `deck-previews` region, or `None` where there is no
+/// room for them.
+///
+/// **One derivation with two call sites**: [`preview_rects`], which a caller
+/// sizes textures from, and [`View::draw`], which paints them. A second copy
+/// of this arithmetic is a row of cells drawn somewhere the textures are not.
+fn preview_cells(region: Rect) -> Option<[Rect; DECKS]> {
+    let pad = size::PROGRAM_BODY_PAD;
+    let row = Rect::from_min_max(
+        Pos2::new(region.min.x + pad, region.min.y),
+        Pos2::new(region.max.x - pad, region.max.y - pad),
+    );
+    // The gaps are **between** the tracks and nowhere else, which is what
+    // `grid-template-columns: repeat(4, 1fr)` with a `gap` is: four tracks and
+    // three gaps, not four tracks each carrying one.
+    let gaps = size::PREVIEW_GAP * (DECKS - 1) as f32;
+    let track = (row.width() - gaps) / DECKS as f32;
+    // 16:9, as large as the track and the row both allow.
+    let h = row.height().min(track * 9.0 / 16.0);
+    let w = h * 16.0 / 9.0;
+    // The same rule `picture_rect` states, and stated on the cell rather
+    // than on the region because the cell is what gets drawn: a row too short
+    // or too narrow to hold one is a rectangle `egui` draws inside out rather
+    // than refuses.
+    if !(w > 0.0 && h > 0.0) {
+        return None;
+    }
+    Some(std::array::from_fn(|deck| {
+        let track_x = row.min.x + (track + size::PREVIEW_GAP) * deck as f32;
+        Rect::from_min_size(
+            Pos2::new(
+                track_x + (track - w) * 0.5,
+                row.min.y + (row.height() - h) * 0.5,
+            ),
+            egui::vec2(w, h),
+        )
+    }))
+}
+
 /// The console's view: which room it is in, and the frame's plan, kept so a
 /// frame does not allocate one.
 pub struct View {
@@ -349,6 +494,22 @@ pub struct View {
     /// is a freed registration, so it is written beside the frame that made it
     /// rather than kept.
     pub picture: Option<Picture>,
+    /// **What to draw in each of the four deck preview cells this frame**, in
+    /// slot order, or `None` for a cell whose deck is off.
+    ///
+    /// **The same seam as [`View::picture`], four times over**: registering a
+    /// texture takes a device, this crate has none, so whoever owns the device
+    /// registers them and writes this per frame beside the frame that made
+    /// them. A stale id here is a freed registration. Every test in this crate
+    /// leaves every entry `None`, which is what `cargo test -p
+    /// karakuri-console` sees and is a console with no engine behind it.
+    ///
+    /// **All `None` is a state, not an absence.** The manual's *previews 2 of
+    /// 4* is an operator choosing how many decks audition, so a cell with
+    /// nothing in it is a cell that is off and it is drawn saying so — see the
+    /// module documentation, and [`preview_rects`] for where the rectangles
+    /// come from.
+    pub previews: [Option<Picture>; DECKS],
     placed: Vec<Placed>,
 }
 
@@ -357,6 +518,7 @@ impl View {
         View {
             room,
             picture: None,
+            previews: [None; DECKS],
             // Every region the console has, so the frame path never grows it.
             placed: Vec::with_capacity(REGIONS.len()),
         }
@@ -370,6 +532,7 @@ impl View {
         plan_into(panel, &mut self.placed);
 
         let picture = self.picture;
+        let previews = self.previews;
         let frame = egui::Frame::NONE.fill(pal.ground);
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
             for placed in &self.placed {
@@ -407,6 +570,17 @@ impl View {
                             );
                         }
                     }
+                    // The other body that is not empty, and the only one that
+                    // draws something where nothing was handed in. It is the
+                    // region's face rather than a placeholder — the module
+                    // documentation is where that argument is.
+                    Kind::Previews => {
+                        if let Some(cells) = preview_cells(rect) {
+                            for (deck, cell) in cells.into_iter().enumerate() {
+                                preview(ui, &pal, cell, deck, previews[deck]);
+                            }
+                        }
+                    }
                 }
             }
         });
@@ -438,6 +612,80 @@ impl View {
             None => {}
         }
     }
+}
+
+/// **One deck preview cell**: the mock's `.preview`, with whatever is behind
+/// it and the letter that says which deck it is.
+///
+/// Painted the same whether a deck is running in it or not, because *off* is a
+/// state an operator chooses rather than a thing not built yet — the module
+/// documentation is where that argument is written out.
+///
+/// Term for term from `.preview` in `style.css`:
+///
+/// - `background: var(--c-well)` — `pal.well`, and it is the ground the
+///   texture is drawn over rather than a fallback for one, so a texture with
+///   any transparency in it reads as a recess and not as a hole.
+/// - `border-radius: 7px` — [`size::PREVIEW_RADIUS`].
+/// - `box-shadow: inset 0 0 0 1px var(--c-hair)` — a 1px stroke on the
+///   **inside** of the box in `pal.hair`, drawn last so it sits over the
+///   texture exactly as an inset shadow sits over a background image.
+/// - `display: flex; align-items: flex-end; padding: 3px 5px;
+///   font-size: 9px` — the letter in the bottom-left corner, inside that
+///   padding, at [`size::PREVIEW_SIZE`].
+///
+/// # The two colours the label takes, and what each is standing for
+///
+/// - **A picture behind it:** `.preview.a` and `.preview.b` set
+///   `color: rgba(255,255,255,0.7)`, which is white because the mock's cell is
+///   always a dark gradient. The console's cell holds real texels of unknown
+///   brightness in either room, and there is no *white at 70%* in the palette
+///   — so this is `pal.text`, `--c-text`, the mock's own colour for a value.
+///   It follows the room, which is the one thing the mock's literal white
+///   cannot do.
+/// - **Nothing behind it:** `.preview`'s own `color: var(--c-faint)`, which is
+///   `pal.faint` — *"a heading, and anything switched off"*, and this cell is
+///   switched off.
+///
+/// And the word follows the colour: the mock writes `C &middot; off` in a cell
+/// with nothing in it, so a cell that is off says `off` rather than leaving
+/// the reader to tell a dark thumbnail from an empty well.
+fn preview(ui: &Ui, pal: &Palette, cell: Rect, deck: usize, picture: Option<Picture>) {
+    let radius = CornerRadius::same(size::PREVIEW_RADIUS as u8);
+    // Clipped to the cell for the reason the picture is clipped to its region:
+    // the rectangle in `picture` came from outside, and a stale one is a
+    // thumbnail painted across the bay rather than a wrong thumbnail.
+    let painter = ui.painter().with_clip_rect(cell);
+    painter.rect_filled(cell, radius, pal.well);
+
+    if let Some(picture) = picture {
+        painter.image(picture.id, picture.rect, WHOLE_TEXTURE, Color32::WHITE);
+    }
+    painter.rect_stroke(
+        cell,
+        radius,
+        Stroke::new(size::HAIRLINE, pal.hair),
+        StrokeKind::Inside,
+    );
+
+    let letter = DECK_LETTERS[deck];
+    let (label, colour) = match picture {
+        Some(_) => (letter.to_owned(), pal.text),
+        None => (format!("{letter} · off"), pal.faint),
+    };
+    let galley = painter.layout_no_wrap(
+        label,
+        FontId::new(size::PREVIEW_SIZE, FontFamily::Proportional),
+        colour,
+    );
+    painter.galley(
+        Pos2::new(
+            cell.min.x + size::PREVIEW_PAD_X,
+            cell.max.y - size::PREVIEW_PAD_Y - galley.size().y,
+        ),
+        galley,
+        colour,
+    );
 }
 
 /// A bay's card: `.bay`'s panel fill, 11px radius and drop shadow.

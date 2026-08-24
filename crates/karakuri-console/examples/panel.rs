@@ -23,19 +23,22 @@
 //!    made.
 //! 2. **That the engine's rendered texture reaches the panel**, which is the
 //!    other half of that bet: a `Deck` of one Set on the same `Device`, drawn
-//!    through `Present` into the picture's rectangle, sampled by `egui` in the
-//!    same submission. See [`Engine`].
+//!    through `Present` into the picture's rectangle **and again into deck A's
+//!    preview cell**, sampled by `egui` in the same submission. One `Present`
+//!    and two targets of different sizes, because `Present::draw` letterboxes
+//!    into whatever it is handed. See [`Engine`] and [`Presented`].
 //! 3. That the arrangement's numbers look right at real sizes against
 //!    `docs/manual/console.html`.
 //! 4. That dragging a boundary still works with a toolkit in the loop.
 //! 5. **What the window costs**, printed once nobody has touched it for a
 //!    while. It used to be *what a still panel costs*, and with a live picture
-//!    in the Program bay there is no still panel to measure — so what is
-//!    printed is the price of the thing that replaced it. See [`Costs::say`].
+//!    in the Program bay and deck A auditioning under it there is no still
+//!    panel to measure — so what is printed is the price of the thing that
+//!    replaced it. See [`Costs::say`].
 //!
 //! **It is deliberately not the start of a bay.** Every body is empty except
-//! the picture, and the picture is empty of everything this file could have
-//! invented — no label, no frame, no placeholder; see
+//! the picture and the preview row, and both are empty of everything this file
+//! could have invented — no label, no frame, no placeholder; see
 //! [`karakuri_console::view`].
 //!
 //! # The engine here is scaffolding and looks it
@@ -46,6 +49,11 @@
 //! `karakuri-cli` puts around a deck is a program; this is the shortest path
 //! from two files to texels, because the question being answered is whether
 //! the texels arrive.
+//!
+//! **One slot is why three of the four preview cells are off.** There is no
+//! second deck here to audition, so deck A gets a live cell and B, C and D
+//! read `off` — which is a state an operator chooses rather than a thing not
+//! built yet, and is the truth about this example rather than a gap in it.
 //!
 //! # This file owns none of the model, and none of the view
 //!
@@ -107,7 +115,7 @@ use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Dragged, Op, Outcome, Panel, Pressed, Released, Visibility};
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
-use karakuri_console::view::{picture_rect, Kind, Picture, View};
+use karakuri_console::view::{picture_rect, preview_rects, Kind, Picture, View, DECKS};
 use karakuri_engine::{Deck, Gpu, HotSwap, Present, Set};
 use karakuri_layout::{Axis, NodeId, Point};
 use winit::application::ApplicationHandler;
@@ -202,11 +210,14 @@ static ALLOCATOR: Counting = Counting;
 /// What one frame cost.
 #[derive(Debug, Clone, Copy, Default)]
 struct Cost {
-    /// **The engine's half**: `Deck::begin_frame` through the present pass
-    /// into the picture — every install, the deck's render, and the recording
-    /// of both. CPU time only, like everything else here; what the GPU then
-    /// does with the command buffer is not on this clock, and
-    /// `docs/contributing.md` §1 says why there is no other one.
+    /// **The engine's half**: `Deck::begin_frame` through the present passes
+    /// into the picture and into deck A's preview — every install, the deck's
+    /// render, and the recording of all of it. **Two present passes and one
+    /// deck render**, because an audition is a second present of the same
+    /// canvas and not a second simulation of it. CPU time only, like
+    /// everything else here; what the GPU then does with the command buffer is
+    /// not on this clock, and `docs/contributing.md` §1 says why there is no
+    /// other one.
     engine: Duration,
     /// `take_egui_input` through `tessellate`: the whole immediate-mode pass,
     /// including this console's own layout walk and every shape it emits.
@@ -312,10 +323,14 @@ struct Costs {
     /// The adapter is asked rather than the environment, so an override that
     /// does not take reads as what it is.
     taken_on: String,
-    /// **Whether there is a live picture in the Program bay.** It decides
-    /// which sentence the reading prints about the frames it counted, and
-    /// nothing else: the frames are counted the same way either way, which is
-    /// the point — the number is not adjusted for knowing the answer.
+    /// **Whether anything in the Program bay is making texels** — the
+    /// picture, a deck auditioning in a preview cell, or both. [`live`] is the
+    /// rule and this is the frame's answer to it.
+    ///
+    /// It decides which sentence the reading prints about the frames it
+    /// counted, and nothing else: the frames are counted the same way either
+    /// way, which is the point — the number is not adjusted for knowing the
+    /// answer.
     live: bool,
 }
 
@@ -404,11 +419,14 @@ impl Costs {
         println!(
             "{}",
             match self.live {
-                // There is no still panel to cost while the picture is live,
-                // and calling it one would be the reading describing a program
+                // There is no still panel to cost while anything is live, and
+                // calling it one would be the reading describing a program
                 // that is not running — which is the failure the sample this
-                // replaces made, one revision ago.
-                true => "what an untouched window costs with a live picture in it:",
+                // replaces made, one revision ago. **"Something live" rather
+                // than "a live picture"**: the picture can be folded away with
+                // deck A still auditioning under it, and the window is no more
+                // still then than it was before.
+                true => "what an untouched window costs with something live in it:",
                 false => "what a still panel costs, measured on this window:",
             }
         );
@@ -430,20 +448,22 @@ impl Costs {
             ),
             (false, false) => println!(
                 "  so P-0072's first clause does NOT hold here — something is asking \
-                 for frames on an untouched window, and with no picture running the \
-                 likeliest something is an `egui` repaint delay answered immediately \
-                 instead of waited out."
+                 for frames on an untouched window, and with nothing on the panel \
+                 making texels the likeliest something is an `egui` repaint delay \
+                 answered immediately instead of waited out."
             ),
             // **The expected reading now**, and the whole of what this run is
             // for. It is stated as a price rather than as a failure, because
             // that is what it is: the clause is about a panel with nothing
-            // changing on it, and a live picture is something changing on it.
+            // changing on it, and a live engine frame is something changing on
+            // it.
             (true, _) => {
                 println!(
                     "  so P-0072's first clause has stopped holding, and the reason is the \
-                     picture: there is a live engine frame in the Program bay, so every \
-                     one of those frames was asked for by the picture rather than by \
-                     anybody touching the window."
+                     engine: there is a live frame in the Program bay — the picture, deck \
+                     A auditioning in the preview row under it, or both — so every one of \
+                     those frames was asked for by what is live rather than by anybody \
+                     touching the window."
                 );
                 println!(
                     "  that is {rate:.1} frames a second, against 0 with the engine out — \
@@ -575,14 +595,15 @@ impl Costs {
                  construction: ADR-0164 measured 184 allocations and 226.2 kB a frame here \
                  with every bay empty, and the egui pass above is still that. What changed \
                  is how many frames pay it — 0 with a still panel and nothing in the \
-                 Program bay, and the rate above with a picture in it."
+                 Program bay, and the rate above with anything live in it."
             );
             println!("  taken on {}", self.taken_on);
             println!(
                 "  the panel half is taken on this window at {:.0}x{:.0} logical with every \
                  other bay empty, which is NOT the workspace's reference workload. The \
-                 engine half IS: one Set of {} elements at {}x{}, one step a frame, \
-                 letterboxed into the picture's region \
+                 engine half IS: one Set of {} elements at {}x{}, one step a frame, and \
+                 that one canvas presented twice — letterboxed into the picture's region, \
+                 and again into deck A's preview cell \
                  (docs/contributing.md §1). Host clock, debug profile with dependencies \
                  at opt-level 3.",
                 WINDOW.0, WINDOW.1, CAPACITY, CANVAS.0, CANVAS.1
@@ -600,12 +621,20 @@ impl Costs {
         println!(
             "{}",
             match self.live {
+                // **Two sinks, so two folds.** This said "fold the picture
+                // away (f over it) and it does" while deck A was auditioning
+                // in the row underneath, which is a sentence that sends an
+                // operator to watch a window that is still drawing at full
+                // rate — the same false claim, in the same place, that cost
+                // this file 270 frames once already.
                 true =>
                     "the loop asks for the next frame from inside the last one for as long \
-                     as the picture is live, so `ControlFlow::Wait` never gets to block. \
-                     Fold the picture away (f over it) and it does — that is the same \
-                     window drawing nothing, and it is what P-0072's remaining clauses are \
-                     for.",
+                     as anything is making texels, so `ControlFlow::Wait` never gets to \
+                     block. Two things are: the picture, and deck A auditioning in the \
+                     preview row under it. Fold the picture away (f over it) and deck A \
+                     keeps the loop awake on its own; fold the preview row away as well \
+                     and `ControlFlow::Wait` finally blocks — that is the same window \
+                     drawing nothing, and it is what P-0072's remaining clauses are for.",
                 false =>
                     "the loop is on `ControlFlow::Wait` from here: it does nothing at all \
                      until the window is touched or `egui` names a deadline of its own.",
@@ -898,8 +927,16 @@ impl Readout {
         println!();
         println!(
             "the console, in a {:.0} x {:.0} viewport. every leaf gets its region; seven of \
-             them get a bay head, and every body is empty.",
+             them get a bay head, and every body is empty but the Program bay's two: the \
+             picture is a live engine frame, and deck A is auditioning in the first of the \
+             four preview cells under it.",
             viewport.w, viewport.h
+        );
+        println!(
+            "B, C and D read `off` because this example's engine is a deck of ONE slot — \
+             there is no second deck to audition, so three cells saying off are what this \
+             program is rather than something left unfinished. each cell that is on costs \
+             a present pass of its own."
         );
         println!();
         for node in self.panel.nodes() {
@@ -921,6 +958,9 @@ impl Readout {
                     Kind::Row => "row, no heading".to_owned(),
                     Kind::Pane => "pane, inside a bay".to_owned(),
                     Kind::Picture => "the picture, a sink".to_owned(),
+                    // Four cells, and this file knows which of them are on:
+                    // one slot in the deck, so deck A and no other.
+                    Kind::Previews => "four previews, A live".to_owned(),
                 },
                 None => match layout.axis(node.id) {
                     Some(Axis::Row) => "split, left to right".to_owned(),
@@ -983,9 +1023,10 @@ fn folding(folded: bool) -> &'static str {
 /// default: this is the one place in the console where a number is about the
 /// engine rather than about the panel, and a number taken at the reference
 /// workload can be put beside every other one in this repository. **Not the
-/// size of the picture** — see [`Present::draw`], which letterboxes this into
-/// whatever it is drawn into, and which is what the manual means by *"it
-/// letterboxes into the width it has"*.
+/// size of the picture, and not the size of a preview cell either** — see
+/// [`Present::draw`], which letterboxes this into whatever it is drawn into
+/// and is handed two rectangles of different sizes a frame, and which is what
+/// the manual means by *"it letterboxes into the width it has"*.
 const CANVAS: (u32, u32) = (1280, 720);
 
 /// `drift_shell.kir`'s own `capacity [4096, 1048576] = 262144`, written here
@@ -1010,8 +1051,8 @@ const SEED_SALT: u32 = 7;
 /// `tick` is what a performance is.
 const STEPS_A_FRAME: u8 = 1;
 
-/// What the picture is rendered in: an sRGB format, so the hardware does the
-/// one encode `Present`'s shader relies on ([P-0064](../../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md)).
+/// What the picture and every preview are rendered in: an sRGB format, so the
+/// hardware does the one encode `Present`'s shader relies on ([P-0064](../../../docs/principles/0064-the-pipeline-is-linear-hdr-and-srgb-is-encoded-once-at-final-output.md)).
 const PICTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
 /// **The same texels, read as if they were not sRGB, which is how `egui` wants
@@ -1026,17 +1067,25 @@ const PICTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 /// the encode still happens exactly once — in the present pass.
 const PICTURE_SAMPLED_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
-/// **The engine behind the picture: a deck of one Set, the present pass, and
-/// the texture the two of them land in.**
+/// What the view `egui` samples is called on the device. The **texture**
+/// carries the name that says which of the two it is — see
+/// [`Presented::label`] — and this says which view of that texture it is, so
+/// the pair reads as one thing in a validation message rather than as two with
+/// the same name.
+const SAMPLED_LABEL: &str = "as egui reads it";
+
+/// **A texture the engine presents into and the panel samples**: the texture
+/// itself, the view [`Present::draw`] draws into, the registration `egui`
+/// reads it by, and its size in physical pixels.
 ///
-/// Scaffolding, and it looks it: one slot, no audio, no MIDI, no store, no
-/// arguments. What `karakuri-cli` does around this is a program; what is here
-/// is the shortest path from two `.kir` files to texels, which is the whole of
-/// what the Program bay needs to be shown to be reachable.
-struct Engine {
-    deck: Deck,
-    present: Present,
-    /// The picture. Held because the views below are of it, and because
+/// **Two call sites on the day it is written**, which is this repository's
+/// rule about an abstraction and is the same standing
+/// [`karakuri_console::view::bay_head`] has: the Program bay's picture, and
+/// deck A's preview cell under it. The four fields were `Engine`'s own until
+/// the second one needed them, and every argument written on them then is
+/// written on them here, because all of it is still true of both.
+struct Presented {
+    /// The texture. Held because the views below are of it, and because
     /// freeing the `egui` registration does not free this — `egui-wgpu` stores
     /// a bind group for a registered native texture and no texture at all, so
     /// dropping this is the only thing that releases the memory. Read only by
@@ -1051,39 +1100,60 @@ struct Engine {
     /// The registration `egui` draws by, of a view in
     /// [`PICTURE_SAMPLED_FORMAT`].
     id: egui::TextureId,
-    /// The texture's size in physical pixels — **the picture region's**, not
-    /// the window's.
+    /// The texture's size in physical pixels — **its region's**, not the
+    /// window's.
     size: (u32, u32),
-    /// How many registrations have been freed. The atlas leak this exists to
-    /// prevent is invisible from outside: a resize that registers without
-    /// freeing leaves a bind group per drag frame and nothing says so, so the
-    /// count is kept and `mod gpu` asserts on it.
-    freed: usize,
+    /// What the texture is called on the device. Kept rather than passed to
+    /// [`Presented::fit`], so the texture a resize makes is called what the
+    /// one it replaces was called; and its own per texture, so a device
+    /// message about the preview does not read as one about the picture.
+    label: &'static str,
 }
 
-impl Engine {
-    fn new(gpu: &Gpu, renderer: &mut egui_wgpu::Renderer, size: (u32, u32)) -> Engine {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let l1 = checked(&root.join("examples/drift_shell.kir"));
-        let l4 = checked(&root.join("examples/soft_points.kir"));
-        let set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, SEED_SALT)
-            .expect("the example pair builds a Set");
-        let deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], CANVAS.0, CANVAS.1);
-        let present = Present::new(&gpu.device, PICTURE_FORMAT, CANVAS.0, CANVAS.1);
-        let (texture, target, id) = picture(gpu, renderer, size);
-        Engine {
-            deck,
-            present,
+impl Presented {
+    /// The texture, the view the engine draws into, and the registration
+    /// `egui` reads it by. One constructor because the three are made together
+    /// and are replaced together.
+    fn new(
+        gpu: &Gpu,
+        renderer: &mut egui_wgpu::Renderer,
+        label: &'static str,
+        size: (u32, u32),
+    ) -> Presented {
+        let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(label),
+            size: wgpu::Extent3d {
+                width: size.0.max(1),
+                height: size.1.max(1),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: PICTURE_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            // Declared so the sampled view below may reinterpret it — the two
+            // formats differ only in whether the transfer function is applied.
+            view_formats: &[PICTURE_SAMPLED_FORMAT],
+        });
+        let target = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampled = texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some(SAMPLED_LABEL),
+            format: Some(PICTURE_SAMPLED_FORMAT),
+            ..Default::default()
+        });
+        let id = renderer.register_native_texture(&gpu.device, &sampled, wgpu::FilterMode::Linear);
+        Presented {
             texture,
             target,
             id,
             size,
-            freed: 0,
+            label,
         }
     }
 
-    /// **The picture's region is a different size, so the texture is remade at
-    /// that size and the registration it replaces is freed.**
+    /// **The region is a different size, so the texture is remade at that size
+    /// and the registration it replaces is freed.**
     ///
     /// Returns whether anything was remade, which is `false` on all but a
     /// handful of frames — every frame of a drag on the program's height is
@@ -1096,53 +1166,115 @@ impl Engine {
     /// mid-pass ([P-0001](../../../docs/principles/0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md)
     /// is about the render thread, and this is that thread; what it costs is
     /// paid on the frames a size changed and on no others).
-    fn fit(&mut self, gpu: &Gpu, renderer: &mut egui_wgpu::Renderer, size: (u32, u32)) -> bool {
+    ///
+    /// **`freed` is handed in rather than kept here** because the tally is the
+    /// whole engine's — one number over both textures, which is what
+    /// [`Engine::freed`] is and what `mod gpu` asserts on. Taking it as an
+    /// argument is what makes it impossible for a call site to remake a
+    /// texture and forget to count what it freed.
+    fn fit(
+        &mut self,
+        gpu: &Gpu,
+        renderer: &mut egui_wgpu::Renderer,
+        size: (u32, u32),
+        freed: &mut usize,
+    ) -> bool {
         if size == self.size {
             return false;
         }
+        // Freed **before** the replacement is registered, which is the order
+        // the leak is about rather than a tidiness: the atlas holds the old
+        // bind group until this call and nothing else ever drops it.
         renderer.free_texture(&self.id);
-        self.freed += 1;
-        let (texture, target, id) = picture(gpu, renderer, size);
-        self.texture = texture;
-        self.target = target;
-        self.id = id;
-        self.size = size;
+        *freed += 1;
+        *self = Presented::new(gpu, renderer, self.label, size);
         true
     }
 }
 
-/// The picture's texture, the view the engine draws into, and the
-/// registration `egui` reads it by. One function because the three are made
-/// together and are replaced together.
-fn picture(
-    gpu: &Gpu,
-    renderer: &mut egui_wgpu::Renderer,
-    size: (u32, u32),
-) -> (wgpu::Texture, wgpu::TextureView, egui::TextureId) {
-    let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("program view"),
-        size: wgpu::Extent3d {
-            width: size.0.max(1),
-            height: size.1.max(1),
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: PICTURE_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-        // Declared so the sampled view below may reinterpret it — the two
-        // formats differ only in whether the transfer function is applied.
-        view_formats: &[PICTURE_SAMPLED_FORMAT],
-    });
-    let target = texture.create_view(&wgpu::TextureViewDescriptor::default());
-    let sampled = texture.create_view(&wgpu::TextureViewDescriptor {
-        label: Some("program view, as egui reads it"),
-        format: Some(PICTURE_SAMPLED_FORMAT),
-        ..Default::default()
-    });
-    let id = renderer.register_native_texture(&gpu.device, &sampled, wgpu::FilterMode::Linear);
-    (texture, target, id)
+/// **The engine behind the Program bay: a deck of one Set, the present pass,
+/// and the two textures it lands in.**
+///
+/// Scaffolding, and it looks it: one slot, no audio, no MIDI, no store, no
+/// arguments. What `karakuri-cli` does around this is a program; what is here
+/// is the shortest path from two `.kir` files to texels, which is the whole of
+/// what the Program bay needs to be shown to be reachable.
+///
+/// **One slot is also why three of the four preview cells are off.** A deck
+/// holds up to four and this one holds one, so deck A is the only audition
+/// there is to show: B, C and D have nothing behind them, and three cells
+/// reading `off` are the truth about this example rather than a gap in it.
+struct Engine {
+    deck: Deck,
+    present: Present,
+    /// The Program bay's picture.
+    picture: Presented,
+    /// **Deck A's preview cell**, and the second target the one [`Present`]
+    /// serves.
+    ///
+    /// [`Present::draw`] letterboxes the canvas into whatever target size it
+    /// is handed — it takes the size as an argument and fits to it, which is
+    /// what makes the picture letterbox into its region in the first place —
+    /// so a second target of a different size costs one extra pass and no
+    /// extra state: no second `Present`, no second canvas, no second deck
+    /// render. That is the manual's *"each preview is an audition and costs a
+    /// pass"*, made literally true.
+    preview: Presented,
+    /// How many registrations have been freed, **over both textures**. The
+    /// atlas leak this exists to prevent is invisible from outside: a resize
+    /// that registers without freeing leaves a bind group per drag frame and
+    /// nothing says so, so the count is kept and `mod gpu` asserts on it. It
+    /// is the whole engine's tally rather than either texture's, which is why
+    /// it lives here and is handed to [`Presented::fit`].
+    freed: usize,
+}
+
+impl Engine {
+    fn new(
+        gpu: &Gpu,
+        renderer: &mut egui_wgpu::Renderer,
+        picture: (u32, u32),
+        preview: (u32, u32),
+    ) -> Engine {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let l1 = checked(&root.join("examples/drift_shell.kir"));
+        let l4 = checked(&root.join("examples/soft_points.kir"));
+        let set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, SEED_SALT)
+            .expect("the example pair builds a Set");
+        let deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], CANVAS.0, CANVAS.1);
+        let present = Present::new(&gpu.device, PICTURE_FORMAT, CANVAS.0, CANVAS.1);
+        Engine {
+            deck,
+            present,
+            picture: Presented::new(gpu, renderer, "program view", picture),
+            // Named for the deck it is of, because there is one of these per
+            // audition and a device message that says `deck preview` four
+            // times over says nothing.
+            preview: Presented::new(gpu, renderer, "deck A preview", preview),
+            freed: 0,
+        }
+    }
+}
+
+/// **Is anything making texels this frame?** — which is the whole of what
+/// decides whether the loop asks for another frame.
+///
+/// **The rule, rather than the expression: anything that makes texels this
+/// frame keeps the loop awake, and the list is closed.** Every sink the engine
+/// draws into is read here — the picture and all [`DECKS`] preview cells — so
+/// a fifth sink added later and not added to this is the same bug again, and
+/// it is the bug this file has already shipped once: `live` was the picture
+/// alone, so folding the picture away left deck A auditioning under it while
+/// the loop stopped asking for frames. It fails in whichever direction the
+/// mistake is made — a window that goes on drawing what nobody asked for, or a
+/// panel that keeps changing while the loop sleeps.
+///
+/// A function rather than an expression in the frame path for the reason
+/// [`Readout::pointer`] is a method: `window_event` cannot be called from a
+/// test, so the part worth asserting is lifted out to where a test can reach
+/// it — see `anything_that_makes_texels_keeps_the_loop_awake`.
+fn live(view: &View) -> bool {
+    view.picture.is_some() || view.previews.iter().any(Option::is_some)
 }
 
 /// A `.kir` off disk, parsed and checked — the two stages `Set::build` wants a
@@ -1164,9 +1296,10 @@ fn rendered(errors: &[karakuri_ir::IrError], src: &str) -> String {
         .join("\n\n")
 }
 
-/// A rectangle in logical pixels, in physical ones. **The picture's texture is
-/// sized from this and from nothing else**, which is what makes it the
-/// region's size rather than the window's.
+/// A rectangle in logical pixels, in physical ones. **Both of the engine's
+/// textures are sized from this and from nothing else** — the picture from its
+/// region, deck A's preview from its cell — which is what makes each of them
+/// the size of what it is drawn into rather than of the window.
 fn physical(rect: egui::Rect, scale: f32) -> (u32, u32) {
     (
         ((rect.width() * scale).round() as u32).max(1),
@@ -1389,13 +1522,17 @@ impl ApplicationHandler for App {
 
         // The picture's first size is the region's, at the window this opened
         // at — not the window's, and not a guess that the first frame then
-        // corrects. `fit` takes it from here on.
+        // corrects. `fit` takes it from here on, and deck A's cell is sized
+        // the same way from the same solved layout.
         let mut renderer = renderer;
         self.readout.panel.solve();
         let first = picture_rect(self.readout.panel.layout())
             .map(|rect| physical(rect, self.scale as f32))
             .unwrap_or((1, 1));
-        let engine = Engine::new(&gpu, &mut renderer, first);
+        let first_cell = preview_rects(self.readout.panel.layout())
+            .map(|cells| physical(cells[0], self.scale as f32))
+            .unwrap_or((1, 1));
+        let engine = Engine::new(&gpu, &mut renderer, first, first_cell);
         let info = gpu.adapter.get_info();
         self.costs.taken_on = format!(
             "{:?} — {} ({:?})",
@@ -1666,15 +1803,17 @@ impl ApplicationHandler for App {
                 // physical pixels, and both the region's rather than the
                 // window's.
                 self.readout.panel.solve();
+                let scale = self.scale as f32;
                 self.readout.view.picture = match picture_rect(self.readout.panel.layout()) {
                     Some(rect) => {
-                        gfx.engine.fit(
+                        gfx.engine.picture.fit(
                             &gfx.gpu,
                             &mut gfx.renderer,
-                            physical(rect, self.scale as f32),
+                            physical(rect, scale),
+                            &mut gfx.engine.freed,
                         );
                         Some(Picture {
-                            id: gfx.engine.id,
+                            id: gfx.engine.picture.id,
                             rect,
                         })
                     }
@@ -1682,6 +1821,39 @@ impl ApplicationHandler for App {
                     // and — see below — no pass is recorded for one
                     // either.
                     None => None,
+                };
+
+                // -- and where deck A's audition goes ------------------
+                // The same two statements again, one cell down: the cell the
+                // texture is sized from and the cell it is drawn into are one
+                // call to `preview_rects`, exactly as the picture's are one
+                // call to `picture_rect`.
+                self.readout.view.previews = match preview_rects(self.readout.panel.layout()) {
+                    Some(cells) => {
+                        gfx.engine.preview.fit(
+                            &gfx.gpu,
+                            &mut gfx.renderer,
+                            physical(cells[0], scale),
+                            &mut gfx.engine.freed,
+                        );
+                        let mut previews = [None; DECKS];
+                        previews[0] = Some(Picture {
+                            id: gfx.engine.preview.id,
+                            rect: cells[0],
+                        });
+                        // **B, C and D stay `None`, and that is this example
+                        // rather than a gap in it**: the `Engine` above is a
+                        // deck of one slot, so deck A is the only audition
+                        // there is and there is no second one to put in a
+                        // cell — an empty cell is what off looks like, and it
+                        // says `off`.
+                        previews
+                    }
+                    // The row folded, the bay folded, or the picture soloed:
+                    // no cells, so nothing is drawn in one and — see below —
+                    // no pass is recorded for one either. The same shape the
+                    // picture has, for the same reason.
+                    None => [None; DECKS],
                 };
 
                 // -- the egui pass -------------------------------------
@@ -1752,9 +1924,28 @@ impl ApplicationHandler for App {
                     // `Present::draw` does the fitting, which is the manual's
                     // *"it letterboxes into the width it has"* and is why
                     // nothing in this file computes an aspect ratio.
-                    gfx.engine
-                        .present
-                        .draw(drawing.encoder(), &gfx.engine.target, gfx.engine.size);
+                    gfx.engine.present.draw(
+                        drawing.encoder(),
+                        &gfx.engine.picture.target,
+                        gfx.engine.picture.size,
+                    );
+                }
+                // **The same canvas again, into deck A's cell, and this is
+                // where the audition costs its pass.** The manual says *"each
+                // preview is an audition and costs a pass"*; this is that
+                // sentence with nothing between it and the device — one more
+                // `Present::draw`, the same canvas fitted into a target a
+                // fifth the size, and no second `Present` to hold it.
+                //
+                // Under the same condition on its own `Option` as the picture
+                // is, so a cell that is not on screen costs nothing at all:
+                // fold the preview row away and the pass is not recorded.
+                if self.readout.view.previews[0].is_some() {
+                    gfx.engine.present.draw(
+                        drawing.encoder(),
+                        &gfx.engine.preview.target,
+                        gfx.engine.preview.size,
+                    );
                 }
                 cost.engine = started.elapsed();
 
@@ -1846,8 +2037,8 @@ impl ApplicationHandler for App {
 
                 self.costs.push(cost);
                 App::wants(gfx, &mut self.egui_due, &mut self.costs, asked);
-                // **The picture is live, so the next frame is asked for here
-                // — and asked for without `Costs::owes`.**
+                // **Something is live, so the next frame is asked for here —
+                // and asked for without `Costs::owes`.**
                 //
                 // Nothing used to ask for a frame at this point, and that was
                 // P-0072's first clause holding: a panel with nothing changing
@@ -1866,14 +2057,23 @@ impl ApplicationHandler for App {
                 // then prints the rate rather than the zero, and the next
                 // decision gets made on a number.
                 //
-                // **Asked for only while the picture is on screen.** It used to
-                // be unconditional, with `live` set once when the engine was
-                // built and never cleared — so folding the picture away left
-                // the loop drawing at full rate for nothing, and the reading
-                // went on calling it live. Another machine found that by
-                // following this file's own instructions and getting 270
-                // frames out of a window that was supposed to have gone quiet.
-                self.costs.live = self.readout.view.picture.is_some();
+                // **Asked for only while something is on screen making
+                // texels.** It used to be unconditional, with `live` set once
+                // when the engine was built and never cleared — so folding the
+                // picture away left the loop drawing at full rate for nothing,
+                // and the reading went on calling it live. Another machine
+                // found that by following this file's own instructions and
+                // getting 270 frames out of a window that was supposed to have
+                // gone quiet.
+                //
+                // Then it became the picture alone, and deck A's audition put
+                // that wrong again in the same direction: fold the picture and
+                // the preview goes on rendering under it, so the panel keeps
+                // changing while the loop stops asking for frames. **The rule
+                // is anything that makes texels, and the list is closed** —
+                // [`live`] is where it is written and where a test can reach
+                // it.
+                self.costs.live = live(&self.readout.view);
                 if self.costs.live {
                     gfx.window.request_redraw();
                 }
@@ -2047,6 +2247,74 @@ mod tests {
         let layout = readout.panel.layout();
         layout.rect(layout.find("left-pane").expect("left-pane")).w
     }
+
+    /// **Anything that makes texels this frame keeps the loop awake, and the
+    /// list is closed.**
+    ///
+    /// [`live`] decides whether the loop asks for another frame, and it is the
+    /// one decision in this file that has already been got wrong twice in the
+    /// same direction. The first time it was set once and never cleared, so
+    /// folding the picture away left the window drawing at full rate — found
+    /// by an operator on another machine following this file's own
+    /// instructions, which said the window goes quiet, and getting 270 frames.
+    /// The second time it was **the picture alone**, which is the same failure
+    /// with a preview under it: fold the picture and deck A goes on
+    /// auditioning while the loop stops asking for frames, so the panel keeps
+    /// changing and nothing draws it.
+    ///
+    /// So the assertion is over every sink, not over the one this example
+    /// fills: a cell nobody has wired up yet is asserted live all the same,
+    /// because the failure is a sink left out of the list rather than a sink
+    /// that is off.
+    ///
+    /// It needs no device: an `egui::TextureId` is a number, and what is being
+    /// asserted is a rule about `Option`s.
+    #[test]
+    fn anything_that_makes_texels_keeps_the_loop_awake() {
+        let some = Picture {
+            id: egui::TextureId::User(0),
+            rect: egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(16.0, 9.0)),
+        };
+        let mut view = View::new(Room::Day);
+
+        // Nothing is making texels, so the loop has no reason of its own to
+        // draw and `ControlFlow::Wait` gets to block.
+        assert!(!live(&view), "an empty panel was called live");
+
+        // The picture, which is what this rule used to be the whole of.
+        view.picture = Some(some);
+        assert!(live(&view), "a live picture did not keep the loop awake");
+
+        // **The case the picture-alone rule gets wrong**: the picture folded
+        // away with deck A still auditioning under it.
+        view.picture = None;
+        view.previews[0] = Some(some);
+        assert!(
+            live(&view),
+            "the picture is folded away and deck A is still rendering, and the loop was \
+             told to sleep — which is the window that kept drawing 270 frames after it \
+             was said to have gone quiet"
+        );
+
+        // And the list is closed: every cell counts, including the three this
+        // example leaves off, because the bug is a sink that is not read here.
+        for deck in 0..DECKS {
+            let mut view = View::new(Room::Day);
+            view.previews[deck] = Some(some);
+            assert!(
+                live(&view),
+                "deck {deck} is rendering and the loop was told to sleep"
+            );
+        }
+
+        // The other direction, which costs frames rather than pixels: with
+        // every sink off the loop stops asking.
+        view.previews[0] = None;
+        assert!(
+            !live(&view),
+            "nothing is rendering and the loop stayed awake"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -2109,12 +2377,24 @@ mod gpu {
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
         let rect = picture_rect(panel.layout()).expect("the picture is on screen");
-        let mut engine = Engine::new(&gpu, &mut renderer, physical(rect, 1.0));
+        let cells = preview_rects(panel.layout()).expect("the preview row is on screen");
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            physical(rect, 1.0),
+            physical(cells[0], 1.0),
+        );
 
         let mut view = View::new(ROOM);
         view.picture = Some(Picture {
-            id: engine.id,
+            id: engine.picture.id,
             rect,
+        });
+        // Deck A auditions and B, C and D are off, which is the whole of what
+        // one slot can show.
+        view.previews[0] = Some(Picture {
+            id: engine.preview.id,
+            rect: cells[0],
         });
 
         let ctx = egui::Context::default();
@@ -2146,9 +2426,18 @@ mod gpu {
             engine.present.size(),
             STEPS_A_FRAME,
         );
-        engine
-            .present
-            .draw(drawing.encoder(), &engine.target, engine.size);
+        engine.present.draw(
+            drawing.encoder(),
+            &engine.picture.target,
+            engine.picture.size,
+        );
+        // **The second pass, into a target a fifth the size** — one `Present`,
+        // one canvas, one deck render, and an audition that costs a pass.
+        engine.present.draw(
+            drawing.encoder(),
+            &engine.preview.target,
+            engine.preview.size,
+        );
         let user = renderer.update_buffers(
             &gpu.device,
             &gpu.queue,
@@ -2252,19 +2541,28 @@ mod gpu {
         // tests use: a picture that is opaque and empty — a deck compositing
         // nothing — is all dark and no bright, and would satisfy the first
         // count while showing an operator a black rectangle.
-        let mut dark = 0usize;
-        let mut bright = 0usize;
-        let mut inside = 0usize;
-        for y in rect.min.y as u32..rect.max.y as u32 {
-            for x in rect.min.x as u32..rect.max.x as u32 {
-                inside += 1;
-                match brightest(at(x, y)) {
-                    b if b <= 8 => dark += 1,
-                    b if b >= 192 => bright += 1,
-                    _ => {}
+        // Two counts over every texel of a rectangle: dark, and lit. A helper
+        // because the picture and deck A's cell are the same question asked of
+        // two rectangles, and a second copy of the loop is a second threshold
+        // to keep in step.
+        let counted = |r: egui::Rect| {
+            let mut dark = 0usize;
+            let mut bright = 0usize;
+            let mut inside = 0usize;
+            for y in r.min.y as u32..r.max.y as u32 {
+                for x in r.min.x as u32..r.max.x as u32 {
+                    inside += 1;
+                    match brightest(at(x, y)) {
+                        b if b <= 8 => dark += 1,
+                        b if b >= 192 => bright += 1,
+                        _ => {}
+                    }
                 }
             }
-        }
+            (dark, bright, inside)
+        };
+
+        let (dark, bright, inside) = counted(rect);
         assert!(
             dark * 2 > inside,
             "only {dark} of {inside} texels in the picture are darker than anything the \
@@ -2278,22 +2576,49 @@ mod gpu {
              would pass over a black rectangle"
         );
 
-        // **And it stayed in its region.** Two controls, because a picture
-        // drawn over the whole window would satisfy the count above: the deck
-        // preview row under it is still the bay's card, and so is a bay the
-        // Program is nowhere near.
+        // **Deck A's cell, and the same two counts.** It is the second present
+        // pass arriving, and it fails the same two ways: a cell the pass never
+        // wrote is an unrendered texture, which is transparent rather than
+        // black, so the well shows through every texel of it and *nothing* is
+        // dark. The lit count is the control on that — a cell that is opaque
+        // and empty would satisfy the first and show an operator a black
+        // thumbnail.
+        //
+        // The cell is a fifth the picture's width, so this is also the claim
+        // that one `Present` fits its canvas into two targets of different
+        // sizes rather than drawing the picture's rectangle twice.
+        //
+        // **The same two thresholds as the picture**, on the same helper, and
+        // they are not tuned to this rectangle: measured here the cell comes
+        // out 76% dark and 16% lit, against the 50% and 1% asked for. A cell
+        // that reads anything like a lit picture passes; one the pass missed
+        // reads zero dark, which is a factor away rather than a margin.
+        let (dark, bright, inside) = counted(cells[0]);
+        assert!(
+            dark * 2 > inside,
+            "only {dark} of {inside} texels in deck A's cell are darker than anything the \
+             panel draws — the cell is still the mock's well, so the second present pass \
+             never reached it"
+        );
+        assert!(
+            bright * 100 > inside,
+            "{bright} of {inside} texels in deck A's cell are lit — the audition reached \
+             the panel and there is nothing in it"
+        );
+
+        // **And each stayed where it was put.** Three controls, because a
+        // picture drawn over the whole window would satisfy every count above:
+        // deck D's cell is off, so it is the mock's well and nothing else;
+        // and a bay the Program is nowhere near is still the bay's card.
         let pal = ROOM.palette();
         let panel_rgb = [pal.panel.r(), pal.panel.g(), pal.panel.b()];
-        let previews = panel
-            .layout()
-            .rect(panel.layout().find("deck-previews").expect("previews"));
+        let well_rgb = [pal.well.r(), pal.well.g(), pal.well.b()];
+        let d = cells[DECKS - 1].center();
         assert_eq!(
-            at(
-                (previews.x + previews.w * 0.5) as u32,
-                (previews.y + previews.h * 0.5) as u32
-            ),
-            panel_rgb,
-            "the picture painted over the deck previews, which are not its region"
+            at(d.x as u32, d.y as u32),
+            well_rgb,
+            "deck D's cell is off and is not the mock's well — either the picture painted \
+             over the preview row, or an audition was drawn outside its own cell"
         );
         let library = panel
             .layout()
@@ -2332,19 +2657,26 @@ mod gpu {
         panel.solve();
         let rect = picture_rect(panel.layout()).expect("on screen");
         let want = physical(rect, 1.0);
-        let mut engine = Engine::new(&gpu, &mut renderer, want);
+        let cell = physical(preview_rects(panel.layout()).expect("on screen")[0], 1.0);
+        let mut engine = Engine::new(&gpu, &mut renderer, want, cell);
 
         // The region's, in both axes, and **neither of them is the window's**
         // — the picture is narrower than the window by both panes and taller
         // by nothing like the window's height.
-        assert_eq!((engine.texture.width(), engine.texture.height()), want);
-        assert_ne!(engine.size, (W, H));
-        assert!(engine.size.0 < W && engine.size.1 < H / 2);
-        assert!(renderer.texture(&engine.id).is_some());
+        assert_eq!(
+            (
+                engine.picture.texture.width(),
+                engine.picture.texture.height()
+            ),
+            want
+        );
+        assert_ne!(engine.picture.size, (W, H));
+        assert!(engine.picture.size.0 < W && engine.picture.size.1 < H / 2);
+        assert!(renderer.texture(&engine.picture.id).is_some());
 
         // A wider window is a wider picture and the same height, which is the
         // arrangement's "sized by height" arriving at the texture.
-        let was = engine.id;
+        let was = engine.picture.id;
         panel.set_viewport(W as f32 + 400.0, H as f32);
         panel.solve();
         let grown = physical(picture_rect(panel.layout()).expect("on screen"), 1.0);
@@ -2352,13 +2684,21 @@ mod gpu {
         assert_ne!(grown.0, want.0);
 
         assert!(
-            engine.fit(&gpu, &mut renderer, grown),
+            engine
+                .picture
+                .fit(&gpu, &mut renderer, grown, &mut engine.freed),
             "a region that changed size did not remake the texture"
         );
-        assert_eq!(engine.size, grown);
-        assert_eq!((engine.texture.width(), engine.texture.height()), grown);
-        assert_ne!(engine.id, was);
-        assert!(renderer.texture(&engine.id).is_some());
+        assert_eq!(engine.picture.size, grown);
+        assert_eq!(
+            (
+                engine.picture.texture.width(),
+                engine.picture.texture.height()
+            ),
+            grown
+        );
+        assert_ne!(engine.picture.id, was);
+        assert!(renderer.texture(&engine.picture.id).is_some());
         assert!(
             renderer.texture(&was).is_none(),
             "the registration the resize replaced is still in the atlas, so the atlas \
@@ -2368,9 +2708,129 @@ mod gpu {
 
         // And a frame where nothing moved remakes nothing, which is what keeps
         // all of the above on the resize path instead of on every frame.
-        assert!(!engine.fit(&gpu, &mut renderer, grown));
+        assert!(!engine
+            .picture
+            .fit(&gpu, &mut renderer, grown, &mut engine.freed));
         assert_eq!(engine.freed, 1);
-        assert!(renderer.texture(&engine.id).is_some());
+        assert!(renderer.texture(&engine.picture.id).is_some());
+    }
+
+    /// **Deck A's texture is the size of its cell, a resize frees the
+    /// registration it replaces, and the tally counts both textures.**
+    ///
+    /// The picture's own test above, one cell down, and it fails the same
+    /// silent ways. A preview sized from anything but its cell — the row, the
+    /// region, the picture, the window — looks perfectly correct on screen,
+    /// because the cell is drawn at whatever size it is and the texture fills
+    /// it; it is simply four to twenty times more texels than the audition
+    /// needs, per frame, for as long as the deck runs. And a
+    /// `register_native_texture` with no `free_texture` beside it leaks a bind
+    /// group and a sampler per remade frame.
+    ///
+    /// **The size a cell is remade at is the scale rather than the window**,
+    /// which is the difference between this and the picture's test and is the
+    /// arrangement's doing: `deck-previews` is pinned at 72 tall, so a cell is
+    /// 16:9 inside a fixed height and stays exactly as big at any wider
+    /// window. What does change it is the display it is dragged onto, which is
+    /// `ScaleFactorChanged` and is `physical(cell, scale)` — so that is what
+    /// is asked here.
+    #[test]
+    fn deck_a_preview_texture_is_its_cells_size_and_a_resize_frees_the_old_one() {
+        const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+        const W: u32 = 1440;
+        const H: u32 = 900;
+
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer =
+            egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
+
+        let mut panel = Panel::new(W as f32, H as f32);
+        panel.solve();
+        let picture = physical(picture_rect(panel.layout()).expect("on screen"), 1.0);
+        let cells = preview_rects(panel.layout()).expect("the preview row is on screen");
+        let want = physical(cells[0], 1.0);
+        let mut engine = Engine::new(&gpu, &mut renderer, picture, want);
+
+        // **The cell's, in both axes** — not the row's, not the picture's and
+        // not the window's. The row holds four of these side by side with
+        // ground between them, so a texture sized from the row is out by a
+        // factor of four in one axis alone.
+        assert_eq!(
+            (
+                engine.preview.texture.width(),
+                engine.preview.texture.height()
+            ),
+            want
+        );
+        assert_eq!(engine.preview.size, want);
+        assert_ne!(engine.preview.size, (W, H));
+        assert_ne!(
+            engine.preview.size, engine.picture.size,
+            "deck A's texture is the picture's size, so it was sized from the wrong \
+             rectangle and nothing on screen would say so"
+        );
+        assert!(
+            engine.preview.size.0 * 4 < engine.picture.size.0
+                && engine.preview.size.1 * 2 < engine.picture.size.1,
+            "a preview cell is not much smaller than the picture: {:?} against {:?}",
+            engine.preview.size,
+            engine.picture.size
+        );
+        assert!(renderer.texture(&engine.preview.id).is_some());
+
+        // The row is pinned at 72 tall, so a wider window widens the track and
+        // leaves the cell exactly as it was — and a frame where nothing moved
+        // remakes nothing, which is what keeps the free on the resize path
+        // instead of on every frame.
+        panel.set_viewport(W as f32 + 400.0, H as f32);
+        panel.solve();
+        let wider = physical(preview_rects(panel.layout()).expect("on screen")[0], 1.0);
+        assert_eq!(wider, want, "a wider window changed the size of a cell");
+        assert!(!engine
+            .preview
+            .fit(&gpu, &mut renderer, wider, &mut engine.freed));
+        assert_eq!(engine.freed, 0);
+
+        // A display of a different scale is what does change it.
+        let was = engine.preview.id;
+        let retina = physical(preview_rects(panel.layout()).expect("on screen")[0], 2.0);
+        assert_eq!(retina, (want.0 * 2, want.1 * 2));
+        assert!(
+            engine
+                .preview
+                .fit(&gpu, &mut renderer, retina, &mut engine.freed),
+            "a cell that changed size did not remake the texture"
+        );
+        assert_eq!(engine.preview.size, retina);
+        assert_eq!(
+            (
+                engine.preview.texture.width(),
+                engine.preview.texture.height()
+            ),
+            retina
+        );
+        assert_ne!(engine.preview.id, was);
+        assert!(renderer.texture(&engine.preview.id).is_some());
+        assert!(
+            renderer.texture(&was).is_none(),
+            "the registration the resize replaced is still in the atlas, so the atlas \
+             grows once per remade frame"
+        );
+        assert_eq!(engine.freed, 1);
+
+        // **The tally is the whole engine's, over both textures.** Fitting the
+        // picture as well takes it to two: a count kept per texture would read
+        // one here, and `mod gpu` would be asserting on half the leak.
+        assert!(engine.picture.fit(
+            &gpu,
+            &mut renderer,
+            (picture.0 + 40, picture.1),
+            &mut engine.freed
+        ));
+        assert_eq!(
+            engine.freed, 2,
+            "the freed tally did not count both textures"
+        );
     }
 
     /// **ADR-0155's bet, as an assertion.**

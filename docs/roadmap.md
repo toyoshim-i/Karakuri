@@ -240,19 +240,42 @@ number read off `docs/manual/style.css`; the panel's model, which is what a poin
 act on; and the `egui` view, whose palette is the mock's and whose seven bay heads are one
 component. Its tests still run without a device.
 
-**Every bay is empty except the picture**, on purpose — a bay that looks finished does not get
-replaced. What a panel frame costs is measured and printed by the example rather than estimated:
-still, it is **0 frames and 0 allocations**
-([P-0072](principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)'s
-first clause); with the picture live it is 60 fps and 10.7% of a second, which is the price the
-rest of P-0072 is for. **The rest of P-0072 is not built** — nothing declares a cost or a
-staleness and there is no scheduler, because nothing but the picture is live.
+**Every bay is empty except the Program bay's two regions**, on purpose — a bay that looks
+finished does not get replaced. The picture is a live engine frame, and under it the **row of four
+deck previews** is built: four cells, with **deck A auditioning in the first** and B, C and D
+reading `off` because the example's engine is a deck of one slot and there is no second deck to
+put in a cell. A cell is painted whether or not a deck is behind it, which is the one place this
+crate draws something with nothing handed in, and
+[ADR-0170](adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md) is why:
+*off* is a state the operator chooses and *not built* is not a state at all, so drawing nothing
+would render the two the same. That record also carries the cell's shape — 16:9 and centred in its
+track rather than filling it — and names the disagreement forcing it, which is that the mock's row
+grows taller with the window and the arrangement's is pinned at 72.
 
-**Next, in this order.** The four deck previews under the picture. Then **making the picture a
-sink in fact** rather than in the manual: folding it skips the present pass today and the deck
-goes on rendering, so *hidden and still costing a pass* is half-answered — and closing it is the
-same change the outputs row needs, since advancing a frame and presenting it are one thing in
-`compose` and have to become two.
+**Each preview is an audition and costs a pass**, which is now literally what the code does: one
+`Present`, one canvas, presented twice — into the picture's region and again into deck A's cell.
+What a panel frame costs is measured and printed by the example rather than estimated: still, it
+is **0 frames and 0 allocations**
+([P-0072](principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)'s
+first clause); with the picture and deck A live it is 59.7 fps and 8.2% of a second on an M4 Pro
+at 1440x900, which is the price the rest of P-0072 is for. **Do not read that against the 10.7%
+this line used to carry** — the readout's own last paragraph says why, and it is this machine's
+power management rather than the extra pass. **The rest of P-0072 is not built** — nothing
+declares a cost or a staleness and there is no scheduler, because nothing but the Program bay is
+live.
+
+**Next: making the picture a sink in fact** rather than in the manual. Folding it skips the
+present pass today and the deck goes on rendering, so *hidden and still costing a pass* is
+half-answered — and closing it is the same change the outputs row needs, since advancing a frame
+and presenting it are one thing in `compose` and have to become two.
+
+**And there is a hole to close on the way, which the preview row made visible rather than made.**
+*Which rectangle a sink's texture is sized from* is decided inside the example's `window_event`,
+which no test can call, so `mod gpu` asserts what `Engine::new` does and not what the frame
+chooses. Sizing deck A's texture from the picture's rectangle was injected there and every test
+still passed; the picture has had exactly this gap since it was written. The fix is to lift *which
+rectangle, at what size* out of the frame into something both it and `resumed` call — which is the
+same list-of-sinks the item above turns `compose` into, so it is owed once rather than twice.
 
 The table below is what exists, part by part. What is still absent, and why, is in the
 milestones further down rather than listed here: agents, the library, the node editor.

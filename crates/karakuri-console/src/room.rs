@@ -261,4 +261,25 @@ pub mod size {
     /// here and the padding the bay's height was derived from are one number
     /// or neither.
     pub const PROGRAM_BODY_PAD: f32 = 9.0;
+
+    /// `.previews`'s `gap: 6px`: between two deck preview cells, and the only
+    /// gap in that row — the CSS grid is `repeat(4, 1fr)` with this between
+    /// the tracks and nothing outside them, so the padding either end is
+    /// [`PROGRAM_BODY_PAD`] and not this. The Program bay's 378 is written
+    /// from the same 6 (`(466 - three 6px gaps) / 4 = 112`), so a cell is 112
+    /// wide in both places or in neither.
+    pub const PREVIEW_GAP: f32 = 6.0;
+
+    /// `.preview`'s `border-radius: 7px`, one shade tighter than the bay's
+    /// [`BAY_RADIUS`] because the cell is inside it.
+    pub const PREVIEW_RADIUS: f32 = 7.0;
+
+    /// `.preview`'s `font-size: 9px`: the deck's letter, which is the only
+    /// type in the cell.
+    pub const PREVIEW_SIZE: f32 = 9.0;
+
+    /// `.preview`'s `padding: 3px 5px`, the box the letter sits in at the
+    /// bottom-left corner of a cell (`align-items: flex-end`).
+    pub const PREVIEW_PAD_X: f32 = 5.0;
+    pub const PREVIEW_PAD_Y: f32 = 3.0;
 }
