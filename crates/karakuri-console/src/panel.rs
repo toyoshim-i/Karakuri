@@ -294,6 +294,24 @@ impl Panel {
         self.cursor
     }
 
+    /// Whether a boundary is in hand.
+    ///
+    /// It exists for [`crate::input::claim`]: a drag in progress keeps the
+    /// pointer whatever the pointer is currently over, so the rule has to be
+    /// able to ask.
+    pub fn dragging(&self) -> bool {
+        self.drag.is_some()
+    }
+
+    /// The axis of the boundary in hand, for a view that draws a resize
+    /// cursor. `None` where nothing is in hand.
+    ///
+    /// The axis and nothing more: *which* boundary it is stays private,
+    /// because a caller that held it would be shadowing the drag.
+    pub fn drag_axis(&self) -> Option<Axis> {
+        self.drag.as_ref().map(|d| d.axis)
+    }
+
     /// Move the pointer without dragging anything.
     /// [`moved`](Panel::moved) is the same thing with a boundary in hand.
     pub fn set_cursor(&mut self, p: Point) {

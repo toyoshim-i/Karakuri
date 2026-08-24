@@ -1,28 +1,40 @@
 //! The console panel: its default arrangement — which regions the panel has,
-//! how they nest, and the sizes and constraints each of them starts with — and
-//! in [`panel`], the model a view drives that arrangement with.
+//! how they nest, and the sizes and constraints each of them starts with — the
+//! model a view drives that arrangement with, in [`panel`], and the view
+//! itself, in [`view`].
 //!
 //! The arrangement is one [`Spec`] value and nothing else. `karakuri-layout`
 //! knows how to solve an arrangement and knows nothing about *this* one; this
-//! crate knows this one and nothing about drawing.
+//! crate knows this one.
 //!
-//! **The code that reads the solved rectangles now lives here too**, in
-//! [`panel`] — what a pointer at a coordinate is touching, what a drag does to
-//! a boundary, and what a fold or a solo did. That half of the sentence this
-//! module used to carry has stopped being true, and it stopped on purpose: an
-//! egui view that grew its own model would be a second answer to *how a
-//! pointer moves a divider*, and two answers disagree quietly because each has
-//! its own passing tests.
+//! **The code that reads the solved rectangles lives here too**, in [`panel`]
+//! — what a pointer at a coordinate is touching, what a drag does to a
+//! boundary, and what a fold or a solo did. That is on purpose: an egui view
+//! that grew its own model would be a second answer to *how a pointer moves a
+//! divider*, and two answers disagree quietly because each has its own passing
+//! tests.
 //!
-//! **The other half stays true, and is the rule rather than the accident:
-//! nothing here pulls in a toolkit, a device or a window**
-//! ([ADR-0156](../../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)).
-//! [`panel`] holds a [`Layout`] and a pointer; it does not draw and it cannot.
-//! `wgpu`, `winit`, `karakuri-engine` and `pollster` are dev-dependencies for
-//! `examples/layout.rs` alone, and the crate's own dependency is
-//! `karakuri-layout`. That is what lets the panel's behaviour be a test on a
-//! machine with no adapter, and it is what a view is expected to be written
-//! *against* rather than inside.
+//! # Which half of "no toolkit here" is still true
+//!
+//! This module used to say the crate pulled in no toolkit at all, and that
+//! **half of it has stopped being true**: `egui`, `egui-wgpu` and `egui-winit`
+//! are dependencies, because [`view`] draws the console and it lives in this
+//! crate. [ADR-0155](../../../docs/adr/0155-egui-draws-the-panel-and-the-price-is-wgpu-30.md)
+//! is the decision, and this is the crate it lands in.
+//!
+//! **The half that stays is the one ADR-0156 was about, and it is the rule
+//! rather than the accident: the arrangement and [`panel`] know no toolkit,
+//! and their tests still run with no device.** [`arrangement`] is built from
+//! `karakuri-layout` and nothing else; [`panel`] holds a [`Layout`] and a
+//! pointer, and it does not draw and cannot. Every test of either runs at full
+//! speed on a machine with no adapter, and none of them is under `mod gpu`.
+//! What a toolkit is allowed to do here is *read* the solved rectangles and
+//! paint them, which is what [`view`] does and the whole of it.
+//!
+//! [`input`] is the seam between the two, and it is here rather than in the
+//! window loop because it is a rule and not plumbing: a boundary drag is the
+//! panel's and everything else is `egui`'s, and both would otherwise think
+//! they were dragging.
 //!
 //! # Where the numbers come from
 //!
@@ -67,7 +79,22 @@
 //! an unbounded maximum on `program`, `centre` and the body row is load
 //! bearing rather than a default nobody got round to changing.
 
+pub mod input;
 pub mod panel;
+pub mod room;
+pub mod view;
+
+/// The toolkit, re-exported, and **the version pairing is this crate's to
+/// state**.
+///
+/// `egui`, `egui-wgpu` and `egui-winit` have to move together, and
+/// `egui-wgpu` is what pins `wgpu`: 0.32 wants 25, 0.33 wants 27, 0.34 and
+/// 0.35 want 29, and 0.36 wants 30 (ADR-0155). A consumer that depended on
+/// `egui-wgpu` itself could pick a version that wants a different `wgpu`, and
+/// then the engine and the panel cannot share a `Device` — which is the whole
+/// of what ADR-0155 paid a major version for. So a window loop written against
+/// this crate takes all three from here.
+pub use {egui, egui_wgpu, egui_winit};
 
 use karakuri_layout::{Layout, Spec};
 

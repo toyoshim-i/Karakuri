@@ -187,6 +187,8 @@ number; new records continue from the end.
 | [ADR-0159](0159-the-consoles-words-are-the-manuals-and-the-middle-one-is-not-a-pane.md) | The console's words are the manual's, and the middle one is not a pane | 2026-08-24 | accepted |
 | [ADR-0160](0160-a-boundary-is-a-rectangle-not-a-coordinate.md) | A boundary is a rectangle, not a coordinate | 2026-08-24 | accepted |
 | [ADR-0161](0161-solo-remembers-which-region-because-it-cannot-be-derived.md) | Solo remembers which region, because it cannot be derived | 2026-08-24 | accepted |
+| [ADR-0162](0162-the-panels-surface-is-not-srgb.md) | The panel's surface is not sRGB | 2026-08-24 | accepted |
+| [ADR-0163](0163-a-boundary-gets-first-refusal-on-a-pointer.md) | A boundary gets first refusal on a pointer | 2026-08-24 | accepted |
 
 ## Retired numbers
 

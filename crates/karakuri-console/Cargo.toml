@@ -11,15 +11,28 @@ license.workspace = true
 # ADR-0156 — the panel is a client of this tree, not its owner.
 karakuri-layout = { version = "0.1.0", path = "../karakuri-layout" }
 
+# **The view lives in this crate, so the toolkit is a dependency of it.**
+# ADR-0155 chose `egui` and paid a `wgpu` major version for it; this is where
+# that lands. The three move together and are re-exported from `lib.rs` for the
+# same reason: a consumer that picked its own `egui-wgpu` could pick one that
+# wants a different `wgpu`, and then the engine and the panel cannot share a
+# device — which is the whole of what ADR-0155 bought.
+#
+# Checked on 2026-08-24 with the workspace on `wgpu` 30.0.1 and `winit` 0.30.13:
+# one `wgpu`, one `winit` and one `naga` in `Cargo.lock`.
+egui = "0.36"
+egui-wgpu = "0.36"
+egui-winit = "0.36"
+
 [dev-dependencies]
 # Only the round-trip test needs a concrete format; the arrangement itself is
 # format-agnostic, exactly as `karakuri-layout` is.
 serde_json.workspace = true
 
-# `examples/layout.rs` only, and dev-dependencies for exactly that reason: the
-# crate itself still pulls in no toolkit, no device and no window (ADR-0156).
-# The example is the first thing that ever drove the arrangement by hand, and a
-# window is what "drag the divider and watch" needs.
+# `examples/panel.rs` only. The half of ADR-0156 that still holds is that the
+# *arrangement* and `panel` pull in no toolkit, no device and no window and are
+# tested with none; a surface, a device and an event loop are the example's,
+# and stay dev-dependencies so that nothing in `src/` can reach for one.
 #
 # **The versions match `karakuri-engine`'s** — one `wgpu` and one `winit` in the
 # workspace, so the example builds against the same device path the CLI opens a
@@ -39,5 +52,5 @@ pollster = "1.0.1"
 # device-touching test is under `mod gpu` like every other one in this
 # workspace, so `--skip gpu::` still subtracts it.
 [[example]]
-name = "layout"
+name = "panel"
 test = true
