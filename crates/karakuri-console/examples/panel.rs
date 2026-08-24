@@ -215,6 +215,32 @@ struct Cost {
     /// and the one submission that carries both halves. Excludes `present`,
     /// which is the display's pace and not a cost.
     paint: Duration,
+    /// **Uploading `egui`'s texture deltas, out of [`Cost::paint`]** — the
+    /// font atlas and its patches. Zero on a steady frame, because the atlas
+    /// is built once.
+    ///
+    /// This and the two below exist because of what happens when they do not.
+    /// The split was taken once with temporary instrumentation, published as a
+    /// conclusion and removed, and the next machine asked to answer *how much
+    /// of the frame is the cost of moving data to the GPU* could not: the
+    /// question is about `buffers` and the readout stopped at `paint`. A
+    /// measurement that has to be re-instrumented to be repeated is one number
+    /// rather than a series.
+    textures: Duration,
+    /// **Uploading the tessellated geometry, out of [`Cost::paint`]** — and
+    /// the number the caching decision turns on.
+    ///
+    /// It is close to a memory copy where the GPU shares the CPU's memory and
+    /// crosses a bus where it does not, so **whether it is worth not
+    /// re-uploading the parts of the panel that did not change is a question
+    /// about this line and about no other.** Two of the machines this has run
+    /// on have unified memory; a discrete GPU is what the number is waiting
+    /// for.
+    buffers: Duration,
+    /// **Recording the panel's render pass, out of [`Cost::paint`]** — the
+    /// view, the pass, and `egui`'s draw calls into it. Recording only; what
+    /// the GPU then does with it is on no clock here.
+    record: Duration,
     /// **The submission alone, out of [`Cost::paint`]** — `finish` on the
     /// frame's encoder and `Queue::submit` — and it is five sixths of it.
     ///
@@ -422,6 +448,9 @@ impl Costs {
             let mut engine: Vec<f64> = self.frames.iter().map(|c| ms(c.engine)).collect();
             let mut ui: Vec<f64> = self.frames.iter().map(|c| ms(c.ui)).collect();
             let mut paint: Vec<f64> = self.frames.iter().map(|c| ms(c.paint)).collect();
+            let mut textures: Vec<f64> = self.frames.iter().map(|c| ms(c.textures)).collect();
+            let mut buffers: Vec<f64> = self.frames.iter().map(|c| ms(c.buffers)).collect();
+            let mut record: Vec<f64> = self.frames.iter().map(|c| ms(c.record)).collect();
             let mut submit: Vec<f64> = self.frames.iter().map(|c| ms(c.submit)).collect();
             let mut wait: Vec<f64> = self.frames.iter().map(|c| ms(c.wait)).collect();
             // **Median, where the figure this replaces was a mean.** The mean
@@ -435,6 +464,9 @@ impl Costs {
             engine.sort_by(f64::total_cmp);
             ui.sort_by(f64::total_cmp);
             paint.sort_by(f64::total_cmp);
+            textures.sort_by(f64::total_cmp);
+            buffers.sort_by(f64::total_cmp);
+            record.sort_by(f64::total_cmp);
             submit.sort_by(f64::total_cmp);
             wait.sort_by(f64::total_cmp);
             allocs.sort_unstable();
@@ -464,6 +496,34 @@ impl Costs {
                 paint[n / 2],
                 paint[n * 95 / 100],
                 paint[n - 1]
+            );
+            // **The four parts of `upload+pass`, and the reason they are
+            // printed rather than derived.** `submit` alone told the caching
+            // decision what it was *not* — the submission is not what caching
+            // a bay into a texture would make cheaper — without telling it
+            // what it was. The upload is the line that decision turns on, and
+            // it is worth what a bus costs on the machine reading it, so it
+            // has to be a number this program prints on every machine rather
+            // than one somebody instruments for once.
+            println!(
+                "    of which texture uploads  median {:.3} ms   p95 {:.3} ms   worst {:.3} ms — \
+                 the font atlas, built once, so zero on a steady frame",
+                textures[n / 2],
+                textures[n * 95 / 100],
+                textures[n - 1]
+            );
+            println!(
+                "    of which buffer uploads   median {:.3} ms   p95 {:.3} ms   worst {:.3} ms — \
+                 the tessellated geometry, and close to a memory copy on unified memory",
+                buffers[n / 2],
+                buffers[n * 95 / 100],
+                buffers[n - 1]
+            );
+            println!(
+                "    of which record the pass  median {:.3} ms   p95 {:.3} ms   worst {:.3} ms",
+                record[n / 2],
+                record[n * 95 / 100],
+                record[n - 1]
             );
             println!(
                 "    of which submit  median {:.3} ms   p95 {:.3} ms   worst {:.3} ms — \
@@ -1644,12 +1704,15 @@ impl ApplicationHandler for App {
                 // One id can carry several deltas in a frame: a font atlas
                 // that grew arrives as the whole image followed by its
                 // patches, and applying only the first would leave holes.
+                let uploading = Instant::now();
                 for (id, deltas) in &output.textures_delta.set {
                     for delta in deltas {
                         gfx.renderer
                             .update_texture(&gfx.gpu.device, &gfx.gpu.queue, *id, delta);
                     }
                 }
+                cost.textures = uploading.elapsed();
+                let uploading = Instant::now();
                 let user = gfx.renderer.update_buffers(
                     &gfx.gpu.device,
                     &gfx.gpu.queue,
@@ -1657,6 +1720,8 @@ impl ApplicationHandler for App {
                     &primitives,
                     &screen,
                 );
+                cost.buffers = uploading.elapsed();
+                let recording = Instant::now();
                 let view_target = frame
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
@@ -1693,6 +1758,7 @@ impl ApplicationHandler for App {
                 // on macOS is an abort rather than an error. Every delta above
                 // has been handed to the renderer, so this says so.
                 output.textures_delta.clear();
+                cost.record = recording.elapsed();
                 // **`update_buffers` hands back a command buffer per `egui`
                 // paint callback that asked for one**, and this console
                 // registers no paint callbacks — the picture is a registered

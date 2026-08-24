@@ -12,37 +12,49 @@ not.
 Every number below carries the conditions it was taken under, because that is the only thing that
 makes two of them comparable — `docs/principles/0012-a-measurement-carries-how-it-was-taken.md`.
 
+**The Windows run changed the program in three places, and you are running the changed one.** The
+readout records the upload split again, because without it the second machine could not answer the
+question this file was written to ask. And two of the four test failures it turned up were defects
+rather than platform gaps and were fixed. All three are described where they belong — the split
+under question 1, the defects in the catalogue at the end. Everything the *protocol* asks you to
+leave alone, you should still leave alone.
+
 ---
 
 ## Where the questions stand
 
-**1. How much of the frame is the cost of moving data to the GPU? — STILL OPEN, and it is now
-blocked on something other than hardware.**
+**1. How much of the frame is the cost of moving data to the GPU? — MEASURED ON TWO MACHINES,
+and both of them have unified memory, so the question it was asked for is still open.**
 
 The design decision waiting on it is **whether to stop re-uploading parts of the panel that did
 not change.** That is worth a lot where an upload crosses a bus and nearly nothing where it does
 not.
 
-The trouble is that the committed readout does not print an upload figure. The `0.166 ms` quoted
+**The readout prints the split now, and it did not when this file was written.** The `0.166 ms`
 below came from temporary instrumentation in commit `62478fa`, which split `upload+pass` into its
-parts, published the conclusion, and removed the instrumentation. `Cost` in
+parts, published the conclusion, and removed the instrumentation — so the second machine to run
+this could not answer the question the file exists for. `Cost` in
 [`crates/karakuri-console/examples/panel.rs`](../../crates/karakuri-console/examples/panel.rs)
-carries five numbers today — `engine`, `ui`, `paint`, `submit`, `wait` — and none of them is the
-buffer upload. **So this question cannot be answered by running the panel as it stands, on any
-machine.** Somebody has to decide whether to record that split again first. Until then, what the
-next machine can contribute to question 1 is the `upload+pass` total minus `submit`, which bounds
-it from above.
+carries the four parts again, and you get them by running the program.
 
-What separating the two variables has bought so far:
+| | memory | backend | texture uploads | **buffer uploads** | record the pass | submit |
+|---|---|---|---|---|---|---|
+| Apple M4 Pro | unified | Metal | 0.000 | **0.166 ms** | 0.014 | 1.001 |
+| AMD Radeon 780M | unified | Vulkan | 0.000 | **0.010 ms** | 0.011 | 0.273 |
+| **a discrete GPU** | **separate** | **Vulkan or DX12** | | **the row this is for** | | |
 
-| | memory | backend | `upload+pass` − `submit` |
-|---|---|---|---|
-| Apple M4 Pro | unified | Metal | 0.203 ms (of which 0.166 was the buffer upload) |
-| AMD Radeon 780M | unified | Vulkan | 0.023 ms |
-| **a discrete GPU** | **separate** | **Vulkan or DX12** | **the number this is for** |
+**The two rows that exist differ only in the backend, and together they say the upload is not what
+it looked like.** Recording the pass costs the same on both — 0.014 against 0.011, near enough
+identical — so the two backends agree about the work. The buffer upload differs by a factor of
+seventeen between two machines that *both* share memory between CPU and GPU, which means **the M4
+Pro's 0.166 ms cannot be the price of moving bytes across anything.** There is no bus in either
+row for it to be the price of. It is what that backend's upload path costs.
 
-The first two rows differ only in the backend, and the whole non-submit part of `upload+pass` fell
-by a factor of nine. The third row is what says whether that is about the bus or about the driver.
+What that leaves for the decision: on the Radeon 780M, not re-uploading the unchanged panel could
+save at most 0.010 ms out of a 0.514 ms frame — 2% of the frame, which is itself 4.6% of a 90 Hz
+second. On the M4 Pro the same change is worth 0.166 of 2.025 ms, or 8% of the frame. **A discrete
+GPU is the row that says whether the number can be large for the reason originally suspected**, and
+it is the strongest reason left to run this at all.
 
 **2. Do GPU timestamp queries work? — ANSWERED, and the answer is "not reliably here either".**
 
@@ -104,11 +116,14 @@ cargo test --workspace --no-fail-fast
 about one platform problem instead of all of them.
 
 It builds clean on Windows: no errors and no warnings, 2m 33s cold on the machine below. The suite
-takes about 80 s, against roughly a minute on the M4 Pro.
+takes about 80 s, against roughly a minute on the M4 Pro. `cargo fmt --all -- --check` and
+`cargo clippy --workspace --all-targets -- -D warnings` both pass.
 
-**Four test targets fail on Windows.** They are catalogued at the end of this file. Read that
+**Four test targets failed on Windows; two of them are now fixed and two are not.** All four are
+catalogued at the end of this file, with what changed for the two that were defects. Read that
 section before reporting failures of your own, so the ones that are already known do not crowd out
-the ones that are not.
+the ones that are not. What you should still see fail: the ten `sh` tests, always, and the replay
+tests, sometimes.
 
 ### If you are on Windows and starting from nothing
 
@@ -116,6 +131,13 @@ the ones that are not.
   linker: Visual Studio Build Tools 2022 with the C++ toolchain, plus a Windows SDK. If both are
   already installed, nothing else is needed and nothing has to be configured.
 - **There is no `sh`.** Ten tests spawn one, and that is the first failure below.
+- **Put `~/.cargo/bin` on the PATH the git hooks see, and reopen the shell after installing
+  rustup.** `.githooks/pre-commit` pipes the staged file through `rustfmt` and judges it by whether
+  anything came out — which is the right call for `rustfmt --check` reading stdin, since it prints
+  its diff and still exits 0. But it captures stderr too, so a `rustfmt` that is not on PATH reads
+  as `not formatted:` against a file that is perfectly formatted. Ten minutes went into a
+  formatting problem that did not exist. Nothing here is Windows-specific except how easy it is to
+  have a shell older than the toolchain.
 - **`cargo run --example panel` builds the example first.** If you want to drive the window from a
   script, build it once with `cargo build -p karakuri-console --example panel` and then launch
   `target\debug\examples\panel.exe` directly: same profile, same binary, and the process you start
@@ -183,62 +205,57 @@ Load the other cores and repeat run 1. **This one is not optional and the reason
 Medians, host clock, dev profile with dependencies at `opt-level = 3`, 1440x900 logical window,
 1280x720 canvas, 262144 elements, `PresentMode::Fifo`, 240 sampled frames, window untouched.
 
+The Apple column is the run in commit `62478fa`; its four `upload+pass` parts were taken with
+instrumentation that was removed, and the same numbers are in the finer table below with the two
+rows that are still not printed anywhere.
+
 | what the readout calls it | Apple M4 Pro, Metal, 60 Hz | AMD Radeon 780M, Vulkan, 90 Hz |
 |---|---|---|
-| engine pass | 0.336 ms | **0.072 ms** |
-| egui pass | 0.300 ms | **0.149 ms** |
-| upload+pass | 1.204 ms | **0.307 ms** |
-| — of which submit | 1.001 ms | **0.284 ms** |
-| waiting for vsync | 14.713 ms | **10.291 ms** |
-| the whole frame, CPU | 2.025 ms | **0.528 ms** |
+| engine pass | 0.336 ms | **0.071 ms** |
+| egui pass | 0.300 ms | **0.147 ms** |
+| upload+pass | 1.204 ms | **0.295 ms** |
+| — of which texture uploads | 0.000 ms | **0.000 ms** |
+| — of which buffer uploads | 0.166 ms | **0.010 ms** |
+| — of which record the pass | 0.014 ms | **0.011 ms** |
+| — of which submit | 1.001 ms | **0.273 ms** |
+| waiting for vsync | 14.713 ms | **10.309 ms** |
+| the whole frame, CPU | 2.025 ms | **0.514 ms** |
 | frames a second | 60 | 89.3 |
-| share of the second spent drawing | 12% | 4.7% |
+| share of the second spent drawing | 12% | 4.6% |
 | egui allocations a frame | 184 / 226.2 kB (ADR-0164) | 163 / 200.3 kB |
 
 **The shape survived and the magnitudes did not.** On both machines the submission dominates
 `upload+pass` and the vsync wait dominates everything; the Windows machine is about four times
 cheaper per frame across the board, and `submit` — `wgpu`'s per-submission bookkeeping — fell
-furthest, from 1.001 ms to 0.284.
+furthest, from 1.001 ms to 0.273.
 
 **The vsync wait lives in `get_current_texture` on both.** On Metal that is `nextDrawable`; on
 Vulkan the wait is inside the swapchain acquire the same way, and it appears in none of the other
-numbers. 10.291 ms of an 11.1 ms period at 90 Hz.
+numbers. 10.309 ms of an 11.1 ms period at 90 Hz.
 
-### The finer split, M4 Pro only
+**Two numbers the Windows run did not vary and the Apple one did.** `submit` is flat on Metal
+across canvases from 320x180 to 5120x2880 — a 256-fold range of pixel work — so it scales with what
+was *recorded* rather than with what the GPU does. Nothing here re-ran that sweep. It is worth doing
+on a discrete GPU, where the two might finally come apart.
 
-Taken once with temporary instrumentation, at 1440x900 window, 183 sampled frames, and **removed
-before it was committed**. It is here because it is the only place question 1 has ever been
-measured, not because you can reproduce it.
+### Two rows that are still nobody's
 
-| part | ms | what it is |
-|---|---|---|
-| acquire | 14.713 | `get_current_texture`, of which 99.1% is the thread blocked |
-| engine pass | 0.336 | recording the deck's passes |
-| egui pass | 0.300 | building and tessellating the panel's shapes |
-| upload+pass | 1.204 | everything from the uploads to the submission |
-| — texture uploads | 0.000 | the font atlas is built once |
-| — **buffer uploads** | **0.166** | **question 1** |
-| — record the pass | 0.014 | |
-| — submit | 1.001 | `encoder.finish` + `queue.submit`, and 99% of it is CPU |
-| present | 0.044 | |
-| period | 16.715 | 60 Hz |
-
-Established on the M4 Pro and worth checking rather than assuming:
-
-- **`submit` is work, not waiting.** On Metal it is flat across canvases from 320x180 to 5120x2880
-  — a 256-fold range of pixel work — so it scales with what was *recorded* rather than with what
-  the GPU does. The Windows run is consistent with that (it did not vary the canvas), and it is
-  four times cheaper.
+The M4 Pro run measured `acquire` at 14.713 ms — `get_current_texture`, of which 99.1% was the
+thread blocked — and `present` at 0.044 ms, in a 16.715 ms period. The readout prints the wait but
+not `present`, and not the period. Neither was worth a field: `present` is the display's pace rather
+than a cost, and the period is the refresh rate, which you are asked for anyway.
 
 ### Run 2, the picture folded — Radeon 780M
 
 `fold: program-view is now folded`, then 270 frames in 3.0 s at 90.0 fps. engine 0.071, egui 0.148,
-upload+pass 0.288, submit 0.265, vsync 10.321, whole frame 0.508 ms. See the run 2 section above
-for why folding changes nothing.
+upload+pass 0.288, submit 0.265, vsync 10.321, whole frame 0.508 ms — taken before the upload
+split landed. See the run 2 section above for why folding changes nothing.
 
 ### Run 3, the machine loaded — Radeon 780M
 
-14 of 16 logical processors spinning, everything else identical to run 1.
+14 of 16 logical processors spinning, everything else identical to run 1. **Both columns predate
+the upload split**, which is why they sit a hair above the table further up — the same run, a
+different build, and the difference is within what two runs of either build differ by.
 
 | | idle | loaded |
 |---|---|---|
@@ -381,27 +398,35 @@ mode except where this file asks you to.
 
 ## What Windows found that is not a measurement
 
-Four test targets fail. **None of them is a frame-cost result** — they are here so the next
+Four test targets failed. **None of them was a frame-cost result** — they are here so the next
 operator can tell a known failure from a new one, and because
 [`docs/contributing.md`](../contributing.md) says a test that fails only on your platform is worth
 more to this project than the measurements are.
 
-Nothing was fixed. All four were reproduced and characterised and left alone.
+**Two are fixed and two are not.** The two that are fixed were defects rather than platform gaps:
+in both cases the code was wrong everywhere and only Windows made it show. The fixes are described
+below with what changed, because you are running a build that has them and the maintainer reviewing
+this will want to know what to look at.
 
-### 1. `karakuri-cli`, 10 tests — there is no `sh` on Windows
+### 1. `karakuri-cli`, 10 tests — there is no `sh` on Windows. NOT FIXED.
 
 ```text
-thread 'tempo_source::runner_tests::...' panicked at crates\karakuri-cli\src\tempo_source.rs:755:17:
+thread 'tempo_source::runner_tests::...' panicked at `crates/karakuri-cli/src/tempo_source.rs` line 755:
 open: "`sh`: program not found"
 ```
 
 A test fixture, not the product. `try_fake` writes a script to a temp directory and spawns
-`sh <script>`; `Source::open` itself takes any program name and assumes nothing. A POSIX `sh` does
-exist on this machine — Git for Windows ships one — but it is not on `PATH`.
+`sh <script>`; `Source::open` itself takes any program name and assumes nothing about it. A POSIX
+`sh` does exist on this machine — Git for Windows ships one — but it is not on `PATH`.
 
-### 2. `karakuri-engine --test generated`, 1 test — the process dies where a message was promised
+Left alone deliberately. Every way out is a design choice somebody should make on purpose: a
+`.cmd` beside the `.sh` is a platform branch in a fixture, a helper binary is a second target in
+the package, and re-entering the test executable as its own fake source is a mode a test binary
+does not otherwise have. **Expect these ten to fail on Windows and do not report them as new.**
 
-`gpu::a_validation_error_at_build_is_returned_rather_than_fatal` aborts the whole test binary:
+### 2. `karakuri-engine --test generated`, 1 test — the process died where a message was promised. FIXED.
+
+`gpu::a_validation_error_at_build_is_returned_rather_than_fatal` aborted the whole test binary:
 
 ```text
 memory allocation of 137438953440 bytes failed
@@ -409,44 +434,56 @@ process didn't exit successfully: ... (exit code: 0xc0000409, STATUS_STACK_BUFFE
 ```
 
 `137438953440` is `u32::MAX × 32`: the element stride times the capacity the test deliberately asks
-for. The backtrace puts it in `Set::build` → `Set::build_many` → `Simulation::initialize` →
-`initial_state`, at the `vec![0u8; capacity as usize * stride]` in
-[`crates/karakuri-engine/src/node/simulation.rs`](../../crates/karakuri-engine/src/node/simulation.rs)
-— **a host allocation sized from the requested capacity, taken before the device's refusal has
-become a value.** The adapter's `max_buffer_size` is 2 GiB, so the device would certainly refuse.
+for. The backtrace put it in `Set::build` → `Set::build_many` → `Simulation::initialize` →
+`initial_state`, at a `vec![0u8; capacity as usize * stride]` — **a host allocation sized from the
+requested capacity, taken before the device's refusal had become a value.** The adapter's
+`max_buffer_size` is 2 GiB, so the device had already refused the buffers and put the error in
+`build_many`'s scope; nothing had read it yet.
 
-macOS survives it because a 128 GiB `alloc_zeroed` is a lazy virtual reservation there; Windows
-commits and the allocator aborts. **So the net this test exists to prove — a capacity past the
-device is a diagnostic and not a dead process — does not hold on Windows.** That is the test doing
-its job.
+macOS survives this because a 128 GiB `alloc_zeroed` is a lazy reservation there. Windows commits
+and the allocator aborts. So the net this test exists to prove — that a capacity past the device is
+a diagnostic and not a dead process — did not hold, and had not held anywhere: macOS was reaching
+the right answer by way of an allocation it should never have made.
 
-### 3. `karakuri-engine --test deck`, 1 test — an infinite alpha reaches the mix as NaN
+**The fix** is in
+[`crates/karakuri-engine/src/node/simulation.rs`](../../crates/karakuri-engine/src/node/simulation.rs):
+`Simulation::build` now asks `device.limits().max_buffer_size` before it allocates, records the
+answer on the node, and `Simulation::initialize` returns without building the host image when the
+device has already refused the buffers. `Simulation::build` stays infallible, which its own doc
+comment argues for and which is still right — a capacity is refused by `capacity_in_range` before
+anything is built, and a second `Err` in that constructor would be a second home for one refusal.
+
+### 3. `karakuri-engine --test deck`, 1 test — an infinite alpha reached the mix as NaN. FIXED.
 
 ```text
 gpu::an_alpha_that_is_not_a_coverage_cannot_invert_the_mix_or_nan_it
 93630 colour channels of the mix are NaN under the infinite card
 ```
 
-The test's own doc comment predicted a backend difference here, and one arrived — though not at the
-spelling it expected. It failed on the **infinite** card, not the NaN one, and the loop aborts
-there, so **the NaN card was never reached on this machine and its behaviour is still unknown.**
+The test's own doc comment predicted a backend difference here and one arrived — though not at the
+spelling it expected. It failed on the **infinite** card rather than the NaN one.
 
-The saturation in `composite.wgsl` is not where it goes wrong. `covered = opacity * select(0.0,
-min(src.a, 1.0), src.a > 0.0)` handles an infinite alpha correctly. The NaN is already in the slot
-target: the L4 pass blends with `src_factor: SrcAlpha` (see
+The saturation in `composite.wgsl` was not where it went wrong: `covered = opacity * select(0.0,
+min(src.a, 1.0), src.a > 0.0)` handles an infinite alpha correctly. The NaN was in the slot target
+before the mix was reached. The L4 pass blends with `src_factor: SrcAlpha` (see
 [`crates/karakuri-engine/src/node/renderer.rs`](../../crates/karakuri-engine/src/node/renderer.rs)),
-the card is black, and `inf × 0` is NaN. The mix then multiplies that colour by a finite weight and
-the NaN survives. Metal's blend hardware evidently does not produce it; AMD's Vulkan driver does,
-which is IEEE-correct.
+which is what makes the colour arrive premultiplied, the card is black, and `inf × 0` is a NaN. The
+mix then multiplied that colour by a finite weight and it survived. **Colour, not coverage — and the
+saturation only ever guarded coverage.**
 
-Colour, not coverage — and the saturation only ever guarded coverage. `renderer.rs` says clamping in
-L4 was rejected because it would change the colour too; that argument is still sound, and this is a
-case it did not cover.
+**The fix** is one expression in `composite.wgsl`'s `layer`, beside the coverage saturation and
+argued the same way: the colour is held to the finite on the way in, with comparisons rather than
+`clamp` or a `min`/`max` pair, because WGSL leaves `min`/`max` indeterminate on a NaN operand and a
+comparison against a NaN is false on every backend. It changes no finite value, and the deck's
+bit-exactness tests — a deck of one reproducing a bare Set, and the same seeds compositing
+identically — still pass.
 
-**Worth asking your machine:** does the infinite card NaN the mix on your driver, and what does the
-NaN card do once the infinite one stops aborting the loop?
+**And the card that had never been reached now is.** The loop tests four spellings in order and
+aborted at the third, so the NaN card's own behaviour on this backend was unknown when this failure
+was first written down. With the fix in place all four pass, which is the first time any machine has
+run that case against a driver that propagates NaN through fixed-function blending.
 
-### 4. `karakuri-cli --test replay`, intermittently — concurrent replays die silently
+### 4. `karakuri-cli --test replay`, intermittently — concurrent replays die silently. NOT FIXED.
 
 Zero to three of the five fail per run, a different set each time, and **all five pass with
 `--test-threads=1`**. Each test spawns `karakuri-cli` as a subprocess and each subprocess takes a
@@ -459,6 +496,7 @@ first, so this looks like a fault detected in native code rather than a panic. S
 `--render` runs at 1920x1080 *without* the store and replay path did not reproduce it in the
 attempts made.
 
-Not diagnosed further. **Report whether it happens on your driver**, since a wrong answer here is
+Not diagnosed and not fixed. Serialising the tests would make the suite green while hiding the
+thing worth knowing. **Report whether it happens on your driver**, since a wrong answer here is
 "the test suite is flaky" and the right one may be "concurrent device use is not safe on this
 driver".
