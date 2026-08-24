@@ -19,12 +19,12 @@ fn at_a_plausible_window_the_arrangement_is_sane() {
     assert!(near(rect_of(&layout, "left-pane").w, 218.0));
     assert!(near(rect_of(&layout, "right-pane").w, 268.0));
     assert!(near(
-        rect_of(&layout, "centre-pane").w,
+        rect_of(&layout, "centre").w,
         1920.0 - 218.0 - 268.0 - 20.0
     ));
 
-    // The transport and the outputs strip are the height of their contents and
-    // the pane row has the rest.
+    // The transport and the outputs row are the height of their contents and
+    // the body row has the rest.
     assert!(near(rect_of(&layout, "transport").h, 48.0));
     assert!(near(rect_of(&layout, "outputs").h, 34.0));
     assert!(near(rect_of(&layout, "transport").y, 0.0));
@@ -49,10 +49,10 @@ fn the_program_does_not_grow_when_the_window_widens() {
     assert!(near(rect_of(&narrow, "program").h, 378.0));
     assert!(near(rect_of(&wide, "program").h, 378.0));
 
-    // Had it followed the width, at 1920 the centre pane is 1414 wide, its
+    // Had it followed the width, at 1920 the centre is 1414 wide, its
     // body 1396, and a 16:9 picture in it 785 tall — more than twice what the
     // arrangement gives it, and the inspector's whole height and then some.
-    let centre = rect_of(&wide, "centre-pane");
+    let centre = rect_of(&wide, "centre");
     assert!(centre.w > 1400.0);
     assert!(rect_of(&wide, "program").h < (centre.w - 18.0) * 9.0 / 16.0);
 
@@ -79,7 +79,7 @@ fn the_panel_is_usable_at_the_smallest_window_it_claims() {
 
     // The height is the sum of the column-axis minima, recomputed from the
     // tree. The model does not derive a split's minimum from its children's,
-    // so the pane row carries the sum by hand and this is what keeps the two
+    // so the body row carries the sum by hand and this is what keeps the two
     // honest.
     let root = layout.root();
     assert!(

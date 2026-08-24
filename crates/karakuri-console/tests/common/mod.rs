@@ -35,15 +35,15 @@ pub const PLAUSIBLE: Rect = Rect {
 /// **990 wide** is `.console`'s `min-width: 1010px` less its own 10px of
 /// padding either side — the narrowest panel the mock will draw, and the
 /// narrowest at which the inspector's `.param` grid (`15px 88px 1fr 58px`,
-/// 8px gaps, 22 of padding — 207 before the fader) fits in a pane. At 990 the
-/// centre track is 484 and each inspector pane is 237.
+/// 8px gaps, 22 of padding — 207 before the fader) fits in an inspector pane.
+/// At 990 the centre track is 484 and each inspector pane is 237.
 ///
 /// **632 high** is the sum of the column-axis minima: the transport's 48, the
-/// pane row's 530, the outputs strip's 34 and the two 10px dividers. The pane
-/// row's 530 is the right pane's — a mixer that cannot lose a strip (316), a
-/// master chain of one effect (94), a sequencer of one lane (100) and two
-/// dividers. `arrangement.rs` recomputes both numbers from the tree, so this
-/// is a claim rather than a copy.
+/// body row's 530 — the row of three columns — the outputs row's 34 and the
+/// two 10px dividers. The body row's 530 is the right pane's: a mixer that
+/// cannot lose a strip (316), a master chain of one effect (94), a sequencer
+/// of one lane (100) and two dividers. `arrangement.rs` recomputes both
+/// numbers from the tree, so this is a claim rather than a copy.
 ///
 /// Not smaller, because below either figure the solve stops honouring minima
 /// and scales everything down together — which is the right behaviour and is
@@ -245,7 +245,7 @@ fn bounds(l: &Layout, id: NodeId) {
 ///
 /// **The model does not compute this.** A split's minimum is a number it is
 /// given, not a function of its children's, which is why the arrangement
-/// writes the pane row's out by hand and why this exists to check it.
+/// writes the body row's out by hand and why this exists to check it.
 pub fn implied_min(l: &Layout, id: NodeId, axis: Axis) -> f32 {
     match l.axis(id) {
         None => 0.0,

@@ -3,7 +3,7 @@
 //!
 //! It is one [`Spec`] value and nothing else. `karakuri-layout` knows how to
 //! solve an arrangement and knows nothing about *this* one; this crate knows
-//! this one and nothing about drawing. Later the view that reads the solved
+//! this one and nothing about drawing. Later the code that reads the solved
 //! rectangles lives here too — it does not yet, and nothing here pulls in a
 //! toolkit, a device or a window ([ADR-0156](../../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)).
 //!
@@ -27,12 +27,12 @@
 //! **"Every divider drags, because a preview's size is a machine's answer
 //! rather than a layout's."** So no region is pinned by having its minimum
 //! meet its maximum, except the transport and the outputs row, which have no
-//! divider to drag in the first place — they are content-height strips with no
+//! divider to drag in the first place — they are content-height rows with no
 //! grip drawn on them. Everywhere else there is room between the minimum and
 //! the viewport for the operator to make the program small on a weak machine
 //! and large on a strong one.
 //!
-//! **"Program, sized by height."** The centre pane is a *column*, so the
+//! **"Program, sized by height."** The centre is a *column*, so the
 //! boundary the operator drags there is the program's bottom edge, and the
 //! program is [`Sizing::Fixed`](karakuri_layout::Sizing::Fixed) along it. That
 //! is the whole of the manual's argument in the model: a 16:9 view that
@@ -40,26 +40,26 @@
 //! eat the inspector, so the width does not get to decide. The program keeps
 //! the height it was given when the window widens, the inspector absorbs the
 //! change, and the picture letterboxes into whatever width it has — which is
-//! the view's job and not this crate's.
+//! the program view's job and not this crate's.
 //!
-//! **The program has no maximum, and neither has any pane above it.** ADR-0157
+//! **The program has no maximum, and neither has anything above it.** ADR-0157
 //! is exactly why: a maximum is honoured, so a soloed region that had one
 //! would be left holding its maximum with the rest of the window as trailing
 //! space. `console.html` promises the opposite — *"the panel folds away and
 //! only the picture is left, which is also how you capture this window"* — so
-//! an unbounded maximum on `program`, `centre-pane` and the pane row is load
+//! an unbounded maximum on `program`, `centre` and the body row is load
 //! bearing rather than a default nobody got round to changing.
 
 use karakuri_layout::{Layout, Spec};
 
-/// Between the transport, the pane row and the outputs strip: `.console`'s
+/// Between the transport, the body row and the outputs row: `.console`'s
 /// `gap: 10px`.
 const ROOT_DIVIDER: f32 = 10.0;
 
-/// Between the three panes: `.body-grid`'s `gap: 10px`.
-const PANE_DIVIDER: f32 = 10.0;
+/// Between the three columns: `.body-grid`'s `gap: 10px`.
+const COLUMN_DIVIDER: f32 = 10.0;
 
-/// Between the bays stacked inside one pane: `.col`'s `gap: 10px`.
+/// Between the bays stacked inside one column: `.col`'s `gap: 10px`.
 const BAY_DIVIDER: f32 = 10.0;
 
 /// Between the inspector's two panes: `.insp-split`'s middle track,
@@ -69,8 +69,10 @@ const INSPECTOR_DIVIDER: f32 = 9.0;
 
 /// The console's default arrangement.
 ///
-/// A column of three — the transport, the row of three panes, and the outputs
-/// strip — where each pane holds its own stack of views.
+/// A column of three — the transport, the row of three columns, and the
+/// outputs row — where each column holds its own stack of bays. That middle
+/// child is `.body-grid` in the mock, and *the body row* wherever the
+/// comments below have to refer to it.
 ///
 /// # The names
 ///
@@ -80,15 +82,23 @@ const INSPECTOR_DIVIDER: f32 = 9.0;
 /// `sequencer`, `outputs` are the headings of *What each region is standing
 /// on* and the bay heads of the mock.
 ///
-/// Three names are not the manual's, and they are structure the manual has no
-/// word for: `left-pane`, `centre-pane` and `right-pane`. They come from
-/// `karakuri-layout`'s own documentation, which names the first of them —
-/// *"the console's left pane is a split, holding the library and the staging
-/// lane stacked, and 'fold the left pane away' is an operation the keyboard, a
-/// MIDI map and MCP each reach by that name"* — and the other two are the same
-/// operation on the other two. The row holding all three is left **unnamed**:
-/// nothing folds, solos or drags the pane row as a whole, and a split nobody
-/// addresses does not get a name.
+/// Three more names are the columns those bays are stacked in, which the
+/// manual names in its lede rather than as regions: `left-pane`, `centre` and
+/// `right-pane`. `left-pane` is `karakuri-layout`'s own word — *"the
+/// console's left pane is a split, holding the library and the staging lane
+/// stacked, and 'fold the left pane away' is an operation the keyboard, a
+/// MIDI map and MCP each reach by that name"* — and `right-pane` is that same
+/// operation on the other side.
+///
+/// **`centre` is deliberately not a third pane** (ADR-0159): the side panes
+/// are what an operator folds away to give room, and the centre is what they
+/// fold them away *for*, so one noun over all three would assert a symmetry
+/// the console does not have. It is named all the same, because it is
+/// addressed — the program's bottom edge is a divider of *this* split, and a
+/// drag on the program's height reaches it by name.
+///
+/// The body row holding all three is left **unnamed**: nothing folds, solos
+/// or drags it as a whole, and a split nobody addresses does not get a name.
 ///
 /// `inspector-1` and `inspector-2` are the inspector's two panes. The
 /// inspector itself is the split, so the divider between them is reached as
@@ -103,22 +113,23 @@ pub fn arrangement() -> Spec {
             // is 20px at the console's line-height 1.5 — 9 + 30 + 9.
             //
             // Minimum meets maximum, and that is the point: the transport is a
-            // strip of readouts at a fixed type size, it has no grip in the
+            // row of readouts at a fixed type size, it has no grip in the
             // mock, and there is no answer to "how tall should it be" other
             // than the height of its contents.
             Spec::view("transport").fixed(48.0).min(48.0).max(48.0),
-            Spec::row(PANE_DIVIDER, vec![left_pane(), centre_pane(), right_pane()])
+            Spec::row(COLUMN_DIVIDER, vec![left_pane(), centre(), right_pane()])
                 .flex(1.0)
-                // The pane row's minimum height is the tallest of the three panes'
-                // — the right one, at 530. **The model does not derive this**: a
-                // split's minimum is a number it is given, not a function of its
-                // children's, so the sum is written here and `tests/arrangement.rs`
-                // recomputes it from the tree so the two cannot drift apart.
+                // The body row's minimum height is the tallest of the
+                // three columns' — the right pane's, at 530. **The model
+                // does not derive this**: a split's minimum is a number it
+                // is given, not a function of its children's, so the sum is
+                // written here and `tests/arrangement.rs` recomputes it from
+                // the tree so the two cannot drift apart.
                 .min(530.0),
             // `.outputs`: 8px of padding above and below a `.sink` row, which
             // is 11px at line-height 1.5 plus its 1px border top and bottom —
             // 8 + 18.5 + 8, rounded. Fixed for the same reason the transport
-            // is: a strip of chips at a fixed type size, and no grip.
+            // is: a row of chips at a fixed type size, and no grip.
             Spec::view("outputs").fixed(34.0).min(34.0).max(34.0),
         ],
     )
@@ -135,7 +146,7 @@ pub fn layout() -> Layout {
 /// **Which of the two absorbs the change is stated by the mock**: the library
 /// bay carries `style="flex:1"` and the staging bay carries nothing, so
 /// staging is content-height and the library takes what is left. The same
-/// reading decides the other two panes, and the mock confirms it a second way
+/// reading decides the other two columns, and the mock confirms it a second way
 /// — a `.grip` is drawn in the bay head of exactly the bays that absorb, and
 /// on none of the others.
 fn left_pane() -> Spec {
@@ -144,7 +155,7 @@ fn left_pane() -> Spec {
         vec![
             // Minimum: the bay head (6 + 15 + 6 = 27), the scope row
             // (7 + 16.5 + 7 = 31), and a list of three rows (3 + 3 of
-            // `.lib-list` padding, plus 3 x 22.5) = 74. A library narrower
+            // `.lib-list` padding, plus 3 x 22.5) = 74. A library shorter
             // than one scope row and three results is not a library you can
             // ask a question of, which is what *What each region is standing
             // on* says it is for. The mock states no such minimum: this is
@@ -173,13 +184,13 @@ fn left_pane() -> Spec {
     .min(160.0)
     // No maximum. See the module documentation: a maximum is honoured, so one
     // here would put trailing space beside a soloed left pane. Nothing else
-    // needs it — the centre is the only flexible child of the pane row, so a
+    // needs it — the centre is the only flexible child of the body row, so a
     // wide window widens the centre and this track stays where it is put.
     .max(f32::INFINITY)
 }
 
 /// The program over the inspector.
-fn centre_pane() -> Spec {
+fn centre() -> Spec {
     Spec::column(
         BAY_DIVIDER,
         vec![
@@ -196,7 +207,7 @@ fn centre_pane() -> Spec {
             // What "fixed" buys is the whole argument: widen the window and
             // this stays 378 instead of following the width up to the 763 the
             // manual works out for a 1900-wide window. The picture letterboxes
-            // into the width it has, which is the view's job.
+            // into the width it has, which is the program view's job.
             //
             // Minimum: the bay's chrome at that width is 27 + 18 + 63 + 8 =
             // 116, so 200 leaves 84 for the picture. Small on purpose — a
@@ -212,7 +223,7 @@ fn centre_pane() -> Spec {
             inspector(),
         ],
     )
-    .named("centre-pane")
+    .named("centre")
     // `.body-grid`'s middle track: `minmax(340px, 1fr)` — flexible, with the
     // minimum the CSS states.
     .flex(1.0)
@@ -236,15 +247,16 @@ fn inspector() -> Spec {
         INSPECTOR_DIVIDER,
         vec![
             // Minimum: (340 - 9) / 2, rounded down — half of what the centre
-            // pane says it will not go below, less the divider between them.
+            // says it will not go below, less the divider between them.
             // Deriving it from the parent rather than from the content is
             // deliberate, because the content does not fit: `.param`'s track
             // list is `15px 88px 1fr 58px` with 8px gaps and 12 + 10 of
             // padding, which is 207 before the fader has any width at all. The
             // mock never meets that, because `.console`'s `min-width: 1010px`
-            // holds the centre at 484 and each pane at 237. See the report on
-            // 340 against 1010 — the two numbers in the CSS do not agree, and
-            // this takes the one the panel is actually held to by its parent.
+            // holds the centre at 484 and each inspector pane at 237. See
+            // the report on 340 against 1010 — the two numbers in the CSS do
+            // not agree, and this takes the one the panel is actually held to
+            // by its parent.
             Spec::view("inspector-1").flex(1.0).min(165.0),
             Spec::view("inspector-2").flex(1.0).min(165.0),
         ],
@@ -310,6 +322,6 @@ fn right_pane() -> Spec {
     // 6 + 6 padding is 172. The mock states no minimum for this track; this
     // one is read off the strip it has to hold.
     .min(172.0)
-    // No maximum, for the reason the other two panes have none.
+    // No maximum, for the reason the left pane and the centre have none.
     .max(f32::INFINITY)
 }

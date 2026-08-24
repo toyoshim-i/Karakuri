@@ -184,6 +184,7 @@ number; new records continue from the end.
 | [ADR-0156](0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md) | The console's arrangement is a tree this repository owns, not the toolkit's panels | 2026-08-23 | accepted |
 | [ADR-0157](0157-a-maximum-is-honoured-and-the-leftover-is-trailing-space.md) | A maximum is honoured, and the leftover is trailing space | 2026-08-23 | accepted |
 | [ADR-0158](0158-a-saved-arrangement-that-disagrees-with-itself-is-refused-not-repaired.md) | A saved arrangement that disagrees with itself is refused, not repaired | 2026-08-23 | accepted |
+| [ADR-0159](0159-the-consoles-words-are-the-manuals-and-the-middle-one-is-not-a-pane.md) | The console's words are the manual's, and the middle one is not a pane | 2026-08-24 | accepted |
 
 ## Retired numbers
 

@@ -13,10 +13,17 @@ tags: [ui]
 
 ## Context
 
-The console is a column holding a transport, a row of three panes, and a status line, where each
-pane holds its own stack of views. Every boundary in it drags, every pane has a width it will not
-go below and one it will not go above, and any of them can be folded away to give its space to the
-rest. `docs/manual/console.html` states the reason for the first of those: *a preview's size is a
+The console is a column holding a transport, a row of three, and an outputs strip, where each of
+the three holds its own stack of bays. Every boundary in it drags, every one of the three has a
+width it will not go below and one it will not go above, and any of them can be folded away to
+give its space to the rest.
+
+*(Two words in that sentence are corrected. It read "a status line", which is not what the manual
+calls that row — it heads it `Outputs` — and it called all three columns panes, which
+[ADR-0159](0159-the-consoles-words-are-the-manuals-and-the-middle-one-is-not-a-pane.md) later
+settled as `left pane`, `centre` and `right pane`. Both were descriptions of the console that were
+wrong about it, so both are corrected rather than left standing; nothing this record decided has
+changed.)* `docs/manual/console.html` states the reason for the first of those: *a preview's size is a
 machine's answer rather than a layout's*, so the operator sets it and the layout does not.
 
 [ADR-0155](0155-egui-draws-the-panel-and-the-price-is-wgpu-30.md) chose `egui` to draw it, and
