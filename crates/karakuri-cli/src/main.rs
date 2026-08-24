@@ -4744,10 +4744,18 @@ impl Clock {
         }
     }
 
-    /// How many steps to advance by, and **only called by a frame that is going
-    /// ahead.** `last` moves here and nowhere else, so an abandoned frame
-    /// leaves the interval it did not use to be counted by the next one — which
-    /// is why the acquire has to come first.
+    /// How many steps to advance by, called **once by every frame that runs**.
+    ///
+    /// It used to say *only by a frame that is going ahead*, because a frame
+    /// that found no surface committed nothing and this was not reached — the
+    /// interval it did not use was left for the next frame to count. A frame no
+    /// longer belongs to a sink (see [`frame::compose`]), so every frame the
+    /// loop runs reads the clock and there is nothing to carry between frames.
+    ///
+    /// `last` still moves here and nowhere else, and that is still what makes a
+    /// gap survive: the frame loop not running at all — a paused event loop, a
+    /// window the system stopped asking to redraw — is counted whole by the
+    /// next frame, up to `MAX_STEPS`.
     fn steps(&mut self, now: Instant) -> u8 {
         let elapsed = now.duration_since(self.last).as_secs_f32();
         self.last = now;
@@ -5861,9 +5869,11 @@ impl Live {
     /// iterator makes no allocation.
     ///
     /// Here rather than beside the swap drain below `frame::compose`, which was
-    /// the other candidate: a frame that finds no surface to draw on returns
-    /// early, and a client asking to keep what is playing should not be waiting
-    /// on a swapchain. Nothing a request reaches needs the GPU.
+    /// the other candidate: a client asking to keep what is playing should not
+    /// be waiting on a swapchain, and nothing a request reaches needs the GPU.
+    /// When that was written a frame with no surface returned before the drain,
+    /// so it *was* waiting on one; a frame no longer returns early at all, and
+    /// being above `frame::compose` is what the argument was always about.
     ///
     /// **[`Live::finished_saves`] is here for the same reason and used to be
     /// down there**, which meant this argument was made and then half applied:
@@ -6216,8 +6226,9 @@ impl Live {
     /// a disk nothing.
     ///
     /// **Called at the top of the frame, beside [`Live::run_requests`] and
-    /// above every early return** — not beside the swap-event drain, which is
-    /// where it used to be. See the comment at the head of [`Live::frame`]: a
+    /// above `frame::compose` and everything downstream of it** — not beside
+    /// the swap-event drain, which is where it used to be, below the early
+    /// returns a frame no longer has. See the comment at the head of [`Live::frame`]: a
     /// window that has faulted still has saves finishing behind it, and a run
     /// that told nobody about them until it quit was withholding the one answer
     /// a waiting client cannot get anywhere else. The swap drain stays below
@@ -7011,14 +7022,14 @@ impl Live {
     fn frame(&mut self) {
         self.run_demo();
         self.run_surface();
-        // **Both halves of the save path, and both above every early return
-        // below.** Taking the request here is [`Live::run_requests`]'s own
-        // reasoning: a client asking to keep what is playing should not be
-        // waiting on a swapchain, and nothing a request reaches needs the GPU.
-        // The drain used to sit under `frame::compose`, which implemented half
-        // of that and quietly withheld the other: a window latched to
-        // `Skip::Fault`, or returning `Outdated` every frame, returns before it
-        // — so the request was taken, the save thread wrote the file, and the
+        // **Both halves of the save path, and both above the GPU work below.**
+        // Taking the request here is [`Live::run_requests`]'s own reasoning: a
+        // client asking to keep what is playing should not be waiting on a
+        // swapchain, and nothing a request reaches needs the GPU. The drain
+        // used to sit under `frame::compose`, which implemented half of that
+        // and quietly withheld the other: a window latched to `Skip::Fault`, or
+        // returning `Outdated` every frame, returned before it — so the request
+        // was taken, the save thread wrote the file, and the
         // client waited out `SAVE_REPLY` to be told the outcome was neither
         // success nor failure about a save that had already landed. The
         // terminal never said "saved as set X" either, and the `save` record
@@ -7028,21 +7039,28 @@ impl Live {
         self.run_requests();
         self.finished_saves();
 
-        // **The ordering that used to be a comment is now the shape of the
-        // call.** A `tick` is a promise that the deck advanced by that many
-        // steps, so nothing about a frame may be measured or recorded until
-        // there is somewhere to draw it; `frame::compose` calls the closure
-        // below only after its sink has a target, so there is no order left to
-        // get wrong. It used to read the clock, write the `tick`, measure the
-        // audio, and *then* find out the swapchain had nothing — and `Outdated`
-        // arrives on every resize, so resizing during a recorded session made
-        // the replay diverge from the performance.
+        // **The ordering that used to be a comment is still the shape of the
+        // call, and what it orders has changed.** A `tick` is a promise that
+        // the deck advanced by that many steps, and what makes it honest is
+        // that `frame::compose` calls the closure below and renders the deck
+        // with nothing between them. It is no longer that a frame with nowhere
+        // to draw records nothing: it is that there is no such frame. The
+        // defect this all came from is unchanged and is
+        // `docs/adr/0078-a-frame-that-is-discarded-must-not-already-have-been-recorded.md`
+        // — the loop read the clock, wrote the `tick`, measured the audio, and
+        // *then* found the swapchain had nothing, and `Outdated` arrives on
+        // every resize, so resizing during a recorded session made the replay
+        // diverge from the performance.
         //
-        // The clock not being read on an abandoned frame is what makes the
-        // skipped interval *survive*: `Clock::last` moves only in `steps`, so
-        // the time this frame did not use is counted by the next one. Up to
-        // `MAX_STEPS`, which is the anti-spiral clamp and applies to any long
-        // gap however it arose.
+        // **The window is one sink and does not gate the frame.** A frame it
+        // refuses is composed anyway — the clock is read, the audio is
+        // measured, the `tick` is written, the deck advances — and the only
+        // thing the refusal costs is the picture, which is what an output being
+        // off has to mean before there is a second one. So `Clock::last` now
+        // moves on every frame this function runs and no interval is carried
+        // between frames: the gap that still has to survive is the one where
+        // this function does not run at all, and `MAX_STEPS` is the anti-spiral
+        // clamp on it however long it was.
         let Live {
             gpu,
             deck,
@@ -7055,47 +7073,62 @@ impl Live {
             tempo_source,
             ..
         } = self;
-        let outcome = frame::compose(gpu, deck, present, sink, |deck| {
-            let steps = clock.steps(Instant::now());
-            // **The source first, and it takes the grid with it.** Both end in
-            // a `tempo` record and `Oscillator::correct` is last-writer-wins,
-            // so running the source first and letting the tracker follow would
-            // have meant the tracker winning — it returns a trim on every
-            // frame once locked, against the source's four a second. The order
-            // is not what settles it: `Grid::Followed` is, by telling the
-            // tracker to keep tracking and keep quiet.
-            let grid = follow_tempo_source(tempo_source, deck, recorder);
-            // **Everything this frame decided, and only then the `tick` that
-            // closes it.** A tick is a terminator rather than a header:
-            // `session::split` files each record into the frame of the *next*
-            // tick, so a record written after this frame's tick belongs to the
-            // next frame. The audio was on the wrong side of that line, which
-            // showed a replay frame N what frame N−1 heard.
-            measure_audio(audio, deck, recorder, clock.interval(), steps, grid);
-            if let Some(recorder) = recorder {
-                recorder.push(karakuri_store::record::Record::Tick { steps });
-            }
-            frame::Committed { steps, look: *look }
-        });
+        // One sink today, and the slice is the whole of what a second one — a
+        // projector, a plugin — costs this function. See `docs/plugins.md`.
+        let mut sinks: [&mut dyn frame::Sink; 1] = [sink];
+        let outcome = frame::compose(
+            gpu,
+            deck,
+            present,
+            &mut sinks,
+            // A `Fault` is printed unconditionally, because it is already at
+            // most one per condition: the sink latches it — see `frame::Skip`.
+            // The latch used to be here, which meant the message was *built*
+            // every frame and thrown away, an allocation on the frame path for
+            // as long as the window stayed broken.
+            //
+            // `Transient` is the swapchain being remade and the next frame
+            // asking again; there is nothing to say about it sixty times a
+            // second. The index says which sink refused, and there is one, so
+            // nothing here reads it yet.
+            &mut |_at, skip| {
+                if let frame::Skip::Fault(why) = skip {
+                    eprintln!("surface: {why}");
+                }
+            },
+            |deck| {
+                let steps = clock.steps(Instant::now());
+                // **The source first, and it takes the grid with it.** Both end in
+                // a `tempo` record and `Oscillator::correct` is last-writer-wins,
+                // so running the source first and letting the tracker follow would
+                // have meant the tracker winning — it returns a trim on every
+                // frame once locked, against the source's four a second. The order
+                // is not what settles it: `Grid::Followed` is, by telling the
+                // tracker to keep tracking and keep quiet.
+                let grid = follow_tempo_source(tempo_source, deck, recorder);
+                // **Everything this frame decided, and only then the `tick` that
+                // closes it.** A tick is a terminator rather than a header:
+                // `session::split` files each record into the frame of the *next*
+                // tick, so a record written after this frame's tick belongs to the
+                // next frame. The audio was on the wrong side of that line, which
+                // showed a replay frame N what frame N−1 heard.
+                measure_audio(audio, deck, recorder, clock.interval(), steps, grid);
+                if let Some(recorder) = recorder {
+                    recorder.push(karakuri_store::record::Record::Tick { steps });
+                }
+                frame::Committed { steps, look: *look }
+            },
+        );
 
-        match outcome {
-            Ok(frame::Outcome::Drawn) => {}
-            // Ordinary: the swapchain is being remade and the next frame asks
-            // again. Nothing was committed, so there is nothing to undo.
-            Ok(frame::Outcome::Skipped(frame::Skip::Transient)) => return,
-            // Printed unconditionally, because a `Fault` is already at most
-            // one per condition: the sink latches it — see `frame::Skip`. The
-            // latch used to be here, which meant the message was *built* every
-            // frame and thrown away, an allocation on the frame path for as
-            // long as the window stayed broken.
-            Ok(frame::Outcome::Skipped(frame::Skip::Fault(why))) => {
-                eprintln!("surface: {why}");
-                return;
-            }
-            Err(e) => {
-                eprintln!("surface: {e}");
-                return;
-            }
+        // **Said and not returned on.** A present that failed costs this frame's
+        // picture; it does not cost the frame, which has already committed and
+        // advanced the deck. Everything below is about the frame rather than
+        // about the window — the builds that landed while it ran, the governor
+        // that has to hear about them, and the status line that says how many
+        // frames a second are arriving — and a run whose window has stopped
+        // taking them is exactly when an operator needs to be told the rest.
+        if let Err(e) = outcome {
+            eprintln!("surface: {e}");
         }
 
         // A build landing replaces the Set in a slot, and with it the
@@ -10378,21 +10411,32 @@ mod live_save_tests {
         );
     }
 
-    /// **Both halves of the save path sit above every early return in
-    /// [`Live::frame`]**, which is the whole of what makes an answer to a
+    /// **Both halves of the save path sit above everything in [`Live::frame`]
+    /// that could stop them**, which is the whole of what makes an answer to a
     /// waiting client independent of there being a swapchain.
     ///
-    /// [`Live::run_requests`] argues this for itself: a frame that finds no
-    /// surface to draw on returns early, and a client asking to keep what is
-    /// playing should not be waiting on one. The *outcome* drain used to sit
-    /// below `frame::compose`, past three returns, so the argument was made and
-    /// then half applied. On a window latched to `frame::Skip::Fault`, or
-    /// returning `Outdated` every frame, the request was taken and the save
-    /// thread wrote the file successfully — and the client waited out
-    /// `mcp::SAVE_REPLY` to be told the outcome was neither success nor failure
-    /// about a save already on disk, the terminal never said "saved as set X",
-    /// and the `save` record promised for every save that reached
-    /// the disk was withheld from the stream until the run quit.
+    /// [`Live::run_requests`] argues this for itself: a client asking to keep
+    /// what is playing should not be waiting on a surface. The *outcome* drain
+    /// used to sit below `frame::compose`, past three returns, so the argument
+    /// was made and then half applied. On a window latched to
+    /// `frame::Skip::Fault`, or returning `Outdated` every frame, the request
+    /// was taken and the save thread wrote the file successfully — and the
+    /// client waited out `mcp::SAVE_REPLY` to be told the outcome was neither
+    /// success nor failure about a save already on disk, the terminal never
+    /// said "saved as set X", and the `save` record promised for every save
+    /// that reached the disk was withheld from the stream until the run quit.
+    ///
+    /// **This used to demand an early return and assert the calls were above
+    /// it.** There is no longer one: a sink with no target stopped being a
+    /// reason to leave the function when a frame stopped belonging to one sink
+    /// — see `frame`'s module documentation — so a frame that publishes nowhere
+    /// now runs to the end. Demanding a `return` would make this test fail for
+    /// the reason the defect it guards was fixed, which is the wrong question.
+    /// What it asks instead is the property that outlives either shape: the two
+    /// calls come above `frame::compose`, which is the GPU work and everything
+    /// that has ever been a reason to bail out, **and** above the first
+    /// `return` if one ever comes back. The second half is dormant today and is
+    /// the half that matters on the day it is not.
     ///
     /// **Read off the source, and that is the honest description of what this
     /// can reach.** `Live::frame` needs a window, a GPU and an event loop, and
@@ -10404,7 +10448,7 @@ mod live_save_tests {
     /// lines are dropped first, so prose about returning cannot stand in for a
     /// `return`.
     #[test]
-    fn a_frame_attends_to_its_saves_before_it_can_return_early() {
+    fn a_frame_attends_to_its_saves_before_anything_can_stop_them() {
         let source = include_str!("main.rs");
         let body = source
             .split_once("\n    fn frame(&mut self) {")
@@ -10420,17 +10464,25 @@ mod live_save_tests {
             .collect();
         let code = code.join("\n");
 
-        let first_return = code
-            .find("return")
-            .expect("`Live::frame` no longer returns early, and this test is about when it does");
+        // The end of the function if it never returns early, which is what it
+        // does today — every position below is genuinely above it either way.
+        let first_return = code.find("return").unwrap_or(code.len());
+        let composed = code
+            .find("frame::compose(")
+            .expect("`Live::frame` no longer composes a frame, and this test is about where");
         for call in ["self.run_requests();", "self.finished_saves();"] {
             let at = code
                 .find(call)
                 .unwrap_or_else(|| panic!("`Live::frame` no longer calls `{call}`"));
             assert!(
+                at < composed,
+                "`{call}` is below `frame::compose` in `Live::frame`: a save's outcome has \
+                 nothing to do with whether there is a surface to draw on"
+            );
+            assert!(
                 at < first_return,
-                "`{call}` is below an early return in `Live::frame`: a frame with nowhere \
-                 to draw takes saves and never answers for them"
+                "`{call}` is below an early return in `Live::frame`: a frame that publishes \
+                 nowhere takes saves and never answers for them"
             );
         }
     }

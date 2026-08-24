@@ -196,6 +196,7 @@ number; new records continue from the end.
 | [ADR-0168](0168-a-backend-override-is-honoured-because-a-no-op-cannot-be-caught.md) | A backend override is honoured, because a no-op cannot be caught | 2026-08-25 | accepted |
 | [ADR-0169](0169-the-timestamp-verdict-is-the-backends-not-the-machines.md) | The timestamp verdict is the backend's, not the machine's | 2026-08-25 | accepted |
 | [ADR-0170](0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md) | A deck preview cell is drawn whether or not a deck is behind it | 2026-08-25 | accepted |
+| [ADR-0171](0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md) | The deck advances, and each sink either gets the frame or misses it | 2026-08-25 | accepted |
 
 ## Retired numbers
 

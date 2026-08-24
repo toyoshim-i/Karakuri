@@ -53,3 +53,14 @@ carries into the next one. As it stood, that time was recorded, never simulated,
 ## Evidence
 
 Session 2026-08-11T09:06Z.
+
+## What this became
+
+**The defect and the guarantee stand; the mechanism was replaced on 2026-08-25 by
+[ADR-0171](0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md).** The rule
+written here — withhold everything a frame records until a target is in hand — is the right answer
+when there is one sink, and it stops having a meaning when there are two: a frame that reached the
+projector and missed the window did not *not happen*. `frame::compose` now advances the deck on
+every frame it composes and lets each sink take or miss that frame on its own, so the question this
+record answered by refusing to commit — can a `tick` claim steps the deck never took? — is answered
+instead by the commit and the render being adjacent, with nothing between them.
