@@ -7104,6 +7104,9 @@ impl Live {
                 }
                 frame::Committed { steps, look: *look }
             },
+            // The window's frame is its sinks and nothing else — there is no
+            // panel over the top of it here. See `frame::compose`.
+            |_| {},
         );
 
         // **Said and not returned on.** A present that failed costs this frame's

@@ -198,6 +198,7 @@ number; new records continue from the end.
 | [ADR-0170](0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md) | A deck preview cell is drawn whether or not a deck is behind it | 2026-08-25 | accepted |
 | [ADR-0171](0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md) | The deck advances, and each sink either gets the frame or misses it | 2026-08-25 | accepted |
 | [ADR-0172](0172-the-frame-loop-is-the-engines-because-the-cli-is-scaffolding.md) | The frame loop is the engine's, because the CLI is scaffolding | 2026-08-25 | accepted |
+| [ADR-0173](0173-a-frames-submission-is-not-only-its-sinks.md) | A frame's submission is not only its sinks | 2026-08-25 | accepted |
 
 ## Retired numbers
 
