@@ -538,7 +538,10 @@ fade, and starting or stopping a session recording.
 could be edited there until nodes had names, and nothing can be routed here until operations
 do. [Every operation](manual/operations.html) is where that enumeration is written down, and a
 surface missing from an operation's row is a line of this milestone's work. **It is written**:
-41 operations, and 50 of the 179 ways in exist.
+46 operations, and 50 of the 199 ways in exist. **Five of those arrived from
+the console's own shape** — moving a boundary, folding a bay or a pane, bringing one back, and
+solo — and all twenty of their routes are empty except the pointer, which is the first rule broken
+by the surface the first rule is about.
 
 #### What was settled about the panel, and where each thing is argued
 
