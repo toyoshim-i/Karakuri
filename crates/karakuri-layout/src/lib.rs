@@ -213,6 +213,13 @@ pub enum Sizing {
     /// Where a split holds nothing flexible, its fixed children share the
     /// difference in proportion — up to their maxima, past which the space is
     /// left empty rather than forced on them. See [`Layout::solve`].
+    ///
+    /// **And it never claims more than what is visible inside it can use.** A
+    /// split that stores 378 and has been folded down to a single 72-tall
+    /// child claims 72, and its siblings get the difference; unfold the child
+    /// and it claims its 378 again, because nothing was written back. The same
+    /// cap applies to the node's `min`, for the same reason: a minimum is what
+    /// a region needs while it has something to show.
     Fixed(f32),
     /// Absorbs what is left, in proportion to the weight. The centre is this.
     Flex(f32),
