@@ -744,10 +744,22 @@ and `+` on the scope list — so it is one gap, drawn five times.
 strips side by side) *and* a height floor (a strip is never cut off), and both could be stated only
 because they happen to sit at different levels of the tree. Two constraints on one node cannot be.
 
-**A split's minimum is not derived from its children's.** The body row declares 530, which is the
-right pane's three bays and its dividers added up by hand three levels away. A test recomputes it
-so the two cannot drift, and that test helper wants to be a method on `Layout` rather than a copy
-in every consumer.
+**A split's minimum is not derived from its children's**, and it is half answered. The body row
+declares 530, which is the right pane's three bays and its dividers added up by hand three levels
+away, and a test recomputes it so the two cannot drift. The solver now measures the same quantity
+for itself — [ADR-0174](adr/0174-a-node-claims-only-what-its-visible-content-can-use.md) walks the
+arena bottom-up before placing anything — but it uses it as a **ceiling** rather than as the
+minimum: a declared minimum becomes `min(declared, what the visible content can use)`. Deriving the
+minimum outright is a separate decision and not obviously right, because a declared minimum may be
+*larger* than its children's sum and often should be — 530 is one. The hand-added copies stay for
+now, and so does the test that recomputes them.
+
+**And a fixed split no longer holds height its content cannot use** — the same record. Folding the
+picture used to leave the Program bay at its whole 378 with the preview row swollen to fill it,
+which made the manual's *"turn it off and that picture goes, giving its height to the inspector"* a
+sentence about nothing. A test asserted the swelling as correct, with a comment reasoning that the
+sentence was the sink's doing rather than the fold's — and the manual says the picture is on screen
+exactly when the sink is on, so there is one state and it cannot have two geometries.
 
 **And three places where the manual does not agree with itself**, all found by trying to build from
 it rather than to read it. `.body-grid`'s centre track says `minmax(340px, 1fr)`, at which each

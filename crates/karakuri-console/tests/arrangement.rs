@@ -159,9 +159,12 @@ fn the_program_bay_is_a_picture_over_a_preview_row() {
 #[test]
 fn the_picture_and_the_previews_fold_apart() {
     // The picture off: the previews stay, and they are what is left in the
-    // bay. *"Turn it off and that picture goes, giving its height to the
-    // inspector"* is the sink's doing on the bay's height and not the fold's,
-    // so what is asserted here is what the fold does — the row survives it.
+    // bay — at the 72 they are, not swollen to the height the picture was
+    // holding. The bay claims what its visible content can use, which is the
+    // preview row and nothing else, so the bay is 72 too. That the 306 it gave
+    // up goes to the inspector is the sink's own sentence and is asserted in
+    // the test below; what is asserted here is what the fold does — the row
+    // survives it, at its own size.
     let mut layout = solved(PLAUSIBLE);
     layout.collapse(id_of(&layout, "program-view"));
     layout.solve();
@@ -171,8 +174,8 @@ fn the_picture_and_the_previews_fold_apart() {
         layout.visible(id_of(&layout, "deck-previews")),
         "the previews went with the picture; they are auditions of their own"
     );
-    assert!(near(rect_of(&layout, "deck-previews").h, 378.0));
-    assert!(near(rect_of(&layout, "program").h, 378.0));
+    assert!(near(rect_of(&layout, "deck-previews").h, 72.0));
+    assert!(near(rect_of(&layout, "program").h, 72.0));
 
     // And the other way round, which is what says the first half is about the
     // two folding apart rather than about the picture.
@@ -190,4 +193,62 @@ fn the_picture_and_the_previews_fold_apart() {
     layout.solve();
     assert!(near(rect_of(&layout, "program-view").h, 298.0));
     assert!(near(rect_of(&layout, "deck-previews").h, 72.0));
+}
+
+/// **The sink's own sentence, as an assertion.**
+///
+/// *"The picture is a sink, listed in Outputs as program view ... Turn it off
+/// and that picture goes, giving its height to the inspector."* —
+/// `console.html`. The bay is `Fixed(378)` and the solve is top-down, so for
+/// as long as the bay claimed its stored size whatever was left inside it, the
+/// height went to the preview row instead and the manual's sentence was a
+/// sentence about nothing. What makes it true is the bay claiming what its
+/// visible content can use: with the picture folded that is the preview row's
+/// 72, and the flexible child of the same column — the inspector — takes the
+/// 306 the bay gave up.
+#[test]
+fn folding_the_picture_gives_the_bays_height_to_the_inspector() {
+    for viewport in [SMALLEST, PLAUSIBLE] {
+        let mut layout = solved(viewport);
+        let program = rect_of(&layout, "program").h;
+        let inspector = rect_of(&layout, "inspector").h;
+        assert!(near(program, 378.0));
+
+        layout.collapse(id_of(&layout, "program-view"));
+        layout.solve();
+        assert_sane(&layout);
+
+        // The bay claims the preview row and the preview row alone.
+        assert!(
+            near(rect_of(&layout, "program").h, 72.0),
+            "the bay is {} rather than the 72 its content can use",
+            rect_of(&layout, "program").h
+        );
+        // And the row is still its own size rather than swollen into the
+        // space the picture left — it is an audition, not a picture.
+        assert!(
+            near(rect_of(&layout, "deck-previews").h, 72.0),
+            "the preview row swelled to {}",
+            rect_of(&layout, "deck-previews").h
+        );
+        // Every pixel of the difference, to the inspector: 378 - 72 = 306.
+        assert!(
+            near(rect_of(&layout, "inspector").h, inspector + program - 72.0),
+            "the inspector is {} rather than {}",
+            rect_of(&layout, "inspector").h,
+            inspector + program - 72.0
+        );
+
+        // The bay declares a minimum of 200, and it does not hold it here: 200
+        // is what the bay needs while the picture is in it. Nothing was
+        // written back, so unfolding the sink restores the 378 and the
+        // inspector gives the 306 straight back.
+        assert_eq!(layout.bounds(id_of(&layout, "program")).0, 200.0);
+        layout.expand(id_of(&layout, "program-view"));
+        layout.solve();
+        assert_sane(&layout);
+        assert_within_bounds(&layout);
+        assert!(near(rect_of(&layout, "program").h, program));
+        assert!(near(rect_of(&layout, "inspector").h, inspector));
+    }
 }

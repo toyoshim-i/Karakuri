@@ -199,6 +199,7 @@ number; new records continue from the end.
 | [ADR-0171](0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md) | The deck advances, and each sink either gets the frame or misses it | 2026-08-25 | accepted |
 | [ADR-0172](0172-the-frame-loop-is-the-engines-because-the-cli-is-scaffolding.md) | The frame loop is the engine's, because the CLI is scaffolding | 2026-08-25 | accepted |
 | [ADR-0173](0173-a-frames-submission-is-not-only-its-sinks.md) | A frame's submission is not only its sinks | 2026-08-25 | accepted |
+| [ADR-0174](0174-a-node-claims-only-what-its-visible-content-can-use.md) | A node claims only what its visible content can use | 2026-08-25 | accepted |
 
 ## Retired numbers
 
@@ -218,6 +219,7 @@ Re-pointing the records that cited a retired principle is permitted, and why, is
 
 A principle with no ADR is one whose reasoning is still only in the code and the specification.
 
+- [P-0073](../principles/0073-a-node-claims-only-what-its-visible-content-can-use.md) — A node claims only what its visible content can use. [ADR-0174](0174-a-node-claims-only-what-its-visible-content-can-use.md)
 - [P-0005](../principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md) — A swap happens on a frame boundary, and an over-budget Set rolls back on its own
 - [P-0067](../principles/0067-the-language-is-bounded-so-a-procedure-can-be-priced-before-it-runs.md) — The language is bounded, so a procedure can be priced before it runs. It predates the recovered history; the reasoning is in `ir-spec.md` and the check pass
 - [P-0065](../principles/0065-the-signal-bus-is-not-readable-from-ir.md) — The signal bus is not readable from IR. It predates the recovered history and has no decision to record. **Renumbered from 0061 on 2026-08-23**, which two writers had reached for within three hours of each other; the earlier file keeps the number, and 0061 is [a refusal a person can reach from two surfaces is one sentence](../principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md)

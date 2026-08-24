@@ -132,6 +132,18 @@ struct Solved {
     /// any child, so one buffer serves the whole recursion.
     sizes: Vec<f32>,
     frozen: Vec<bool>,
+    /// Parallel to the arena's nodes, like `rects`: how much extent each node
+    /// **can use** along its parent's axis, written by [`measure`] at the top
+    /// of every solve and read while the split above it hands out sizes.
+    ///
+    /// **It is here, and not on a node, because it is derived.** It is the one
+    /// thing in the solve that is computed bottom-up, so the next reader will
+    /// expect it to have been written into the tree — it is not, and cannot
+    /// be: [`measure`] takes the arrangement by shared reference like the rest
+    /// of the solve, so P-0071 holds for it by the same construction. Nothing
+    /// here survives the solve that computed it; every entry is rewritten
+    /// before it is read again.
+    usable: Vec<f32>,
 }
 
 /// An arrangement of regions, and the rectangles it currently solves to.
@@ -492,6 +504,7 @@ impl Layout {
                 rects: vec![Rect::new(0.0, 0.0, 0.0, 0.0); n],
                 sizes: vec![0.0; n],
                 frozen: vec![false; n],
+                usable: vec![0.0; n],
             },
             dirty: true,
         }
@@ -846,6 +859,16 @@ impl Layout {
     /// it, so `size = pool * w / (others + w)` inverts to the line below. With
     /// no flexible sibling the child takes the whole pool whatever its weight
     /// is, and the weight is left alone.
+    ///
+    /// **A fixed sibling is counted at its stored size here, and the solve may
+    /// claim less of it** — see [`measure`]. Capping it here instead would be
+    /// reading a measurement taken before [`resize_pair`](Layout::resize_pair)
+    /// wrote the very sizes this is inverting, which for a fixed *view* is the
+    /// size it used to store. So the pool can be understated where a split
+    /// holds a capped fixed child *and* more than one flexible one, and the
+    /// drag lands a little short of where it was aimed —
+    /// [`set_divider`](Layout::set_divider) re-solves and returns where it
+    /// actually landed, so what a caller is told is still true.
     fn reweight(&mut self, split: usize, c: usize, size: f32) {
         let Some((axis, _)) = self.arrangement.split_of(split) else {
             return;
@@ -886,15 +909,28 @@ impl Layout {
     ///    re-opening a pane is a named operation, not a mouse target.
     /// 2. Dividers sit only *between visible children*, so what is left to
     ///    distribute is `extent - divider * (visible - 1)`, floored at zero.
-    /// 3. [`Sizing::Fixed`] children claim their stored size; [`Sizing::Flex`]
-    ///    children share what is left in proportion to their weights.
-    /// 4. Each child is clamped to its `[min, max]`. Clamping changes the
-    ///    total, so this iterates: whoever hit a bound freezes there and the
-    ///    remainder is redistributed among the rest. Each pass freezes at least
-    ///    one child, so it terminates. When nothing flexible is left unfrozen
-    ///    and there is still a discrepancy, the fixed children take it in
-    ///    proportion — which is also why a split with no flexible child at all
-    ///    still tiles its parent rather than leaving a gap.
+    /// 3. [`Sizing::Fixed`] children claim their stored size — or what they
+    ///    can use, whichever is smaller. See [`measure`]: **no node claims
+    ///    more than its visible content can use**, so a fixed split whose
+    ///    content has been folded down claims what is left of it rather than
+    ///    the size it stores, and its siblings get the difference.
+    ///    [`Sizing::Flex`] children share what is left in proportion to their
+    ///    weights.
+    /// 4. Each child is clamped to its `[min, max]` — where the minimum is
+    ///    also capped by what the child can use, since a minimum is what a
+    ///    node needs *while it has something to show*, and holding it with
+    ///    nothing behind it is holding space the node will leave empty.
+    ///    Clamping changes the total, so this iterates: whoever hit a bound
+    ///    freezes there and the remainder is redistributed among the rest.
+    ///    Each pass freezes at least one child, so it terminates. When nothing
+    ///    flexible is left unfrozen and there is still a discrepancy, the
+    ///    fixed children take it in proportion — which is also why a split
+    ///    with no flexible child at all still tiles its parent rather than
+    ///    leaving a gap. **The cap is on what a node claims, and that branch
+    ///    is what happens to what nobody claimed**, so it is the one place a
+    ///    fixed child scales from its stored size rather than its capped
+    ///    claim: only a `max` stops it growing there, which is ADR-0157
+    ///    unchanged.
     /// 5. If the viewport is smaller than the sum of the minima, everything
     ///    scales down in proportion, floored at zero. A minimum is a
     ///    preference, not a licence to overflow, and **a rectangle is never
@@ -927,6 +963,11 @@ impl Layout {
             dirty,
         } = self;
         let arrangement: &Arrangement = arrangement;
+        // Bottom-up first, top-down after: what each node can use is a
+        // question about its content, and step 3 is a question about its
+        // parent's extent. The first is finished for the whole tree before
+        // the second starts, so no split reads a stale one.
+        measure(arrangement, solved, arrangement.root.0, None);
         solved.rects[arrangement.root.0] = *viewport;
         solve_subtree(arrangement, solved, arrangement.root.0);
         *dirty = false;
@@ -1159,6 +1200,83 @@ impl Arrangement {
     }
 }
 
+/// How much extent node `i` **can use** along its parent's axis, written into
+/// `s.usable` for every node and returned for the caller that is summing it.
+/// `parent` is the axis the node is being laid out along, and `None` for the
+/// root, which is the viewport and is never asked.
+///
+/// **This is the one pass that runs bottom-up, and it still writes nothing
+/// into the arrangement.** It takes `&Arrangement` exactly as the rest of the
+/// solve does and puts its answer in the [`Solved`] buffers, so P-0071 is
+/// enforced here by the same borrow that enforces it everywhere else — the
+/// direction of the pass is not the direction of the writes. Said explicitly
+/// because a bottom-up pass is the shape a reader expects to see mutating
+/// nodes, and this one cannot.
+///
+/// The rule, which is short:
+///
+/// - a [`Sizing::Flex`] leaf can use any amount at all;
+/// - a [`Sizing::Fixed`] leaf can use exactly the size it stores;
+/// - a split can use the sum of its **visible** children's, plus the dividers
+///   that would go between them — infinite if any of them is, and **zero when
+///   none of them is visible**, since a split showing nothing needs no room to
+///   show it in;
+/// - and a node's own `max` caps all of the above, which is also what carries
+///   a maximum stated deep in a subtree up to the split that hands out the
+///   extent.
+///
+/// **A split laid out across its parent's axis is unbounded rather than a
+/// sum.** Every constraint inside it is stated along *its* axis, so its
+/// children's sizes are heights where the parent is handing out widths and
+/// adding them up would be arithmetic on two different questions. This crate
+/// measures one axis per node, so the honest answer there is "no cap", which
+/// is what `f32::INFINITY` says. The `visible` count is still consulted
+/// first: nothing is drawn inside a fully folded split whichever way it lays
+/// its children out.
+fn measure(a: &Arrangement, s: &mut Solved, i: usize, parent: Option<Axis>) -> f32 {
+    let content = match a.split_of(i) {
+        None => match a.nodes[i].sizing {
+            Sizing::Fixed(size) => size.max(0.0),
+            Sizing::Flex(_) => f32::INFINITY,
+        },
+        Some((axis, divider)) => {
+            let mut sum = 0.0;
+            let mut visible = 0usize;
+            for k in 0..a.child_count(i) {
+                let c = a.child(i, k);
+                let child = measure(a, s, c, Some(axis));
+                if a.nodes[c].collapsed {
+                    continue;
+                }
+                sum += child;
+                visible += 1;
+            }
+            let gaps = visible.saturating_sub(1) as f32;
+            if visible == 0 {
+                0.0
+            } else if parent == Some(axis) {
+                sum + divider.max(0.0) * gaps
+            } else {
+                f32::INFINITY
+            }
+        }
+    };
+    // `min` before `max` so that a NaN in either bound leaves the other one
+    // holding, and so nothing negative ever reaches a claim.
+    let usable = content.min(a.nodes[i].max).max(0.0);
+    s.usable[i] = usable;
+    usable
+}
+
+/// What child `c` of a split claims of its parent's extent: the size it
+/// stores, or what it can use, whichever is smaller.
+///
+/// Both halves of the cap are this one sentence — see the minimum in
+/// [`solve_split`], which is capped the same way and for the same reason.
+fn claim(s: &Solved, c: usize, size: f32) -> f32 {
+    size.max(0.0).min(s.usable[c])
+}
+
 /// The solve, as a function of the arrangement rather than a method on it.
 ///
 /// `a` is shared and `s` is exclusive, which is the whole enforcement of
@@ -1196,49 +1314,67 @@ fn solve_split(a: &Arrangement, s: &mut Solved, split: usize) {
     // freezes one; the `+ 1` is the pass that settles and breaks.
     for _ in 0..=n {
         let mut frozen_sum = 0.0;
-        let mut fixed_sum = 0.0;
+        let mut claimed = 0.0;
+        let mut stored = 0.0;
         let mut weight = 0.0;
         for k in 0..n {
             if s.frozen[k] {
                 frozen_sum += s.sizes[k];
                 continue;
             }
-            match a.nodes[a.child(split, k)].sizing {
-                Sizing::Fixed(size) => fixed_sum += size.max(0.0),
+            let c = a.child(split, k);
+            match a.nodes[c].sizing {
+                Sizing::Fixed(size) => {
+                    claimed += claim(s, c, size);
+                    stored += size.max(0.0);
+                }
                 Sizing::Flex(w) => weight += w.max(0.0),
             }
         }
 
         if weight > 0.0 {
-            let pool = (avail - frozen_sum - fixed_sum).max(0.0);
+            let pool = (avail - frozen_sum - claimed).max(0.0);
             for k in 0..n {
                 if s.frozen[k] {
                     continue;
                 }
-                s.sizes[k] = match a.nodes[a.child(split, k)].sizing {
-                    Sizing::Fixed(size) => size.max(0.0),
+                let c = a.child(split, k);
+                let size = match a.nodes[c].sizing {
+                    Sizing::Fixed(size) => claim(s, c, size),
                     Sizing::Flex(w) => pool * w.max(0.0) / weight,
                 };
+                s.sizes[k] = size;
             }
         } else {
             // Nothing flexible is left unfrozen, so the fixed children take
             // the discrepancy in proportion — in both directions, because a
             // split that came up short would otherwise leave a gap its
             // parent has no other child to fill.
+            //
+            // **This is the one place the claim is the stored size rather
+            // than the capped one, and the reason is that same gap.** A cap
+            // says what a node would *ask* for; here nobody is asking, and
+            // the split is disposing of space no child claimed. Scaling the
+            // capped claims instead would divide it more sensibly right up
+            // until every unfrozen child's claim is zero — a split whose
+            // children are all folded away is exactly that — and then there
+            // is nothing to scale, the pool goes nowhere, and the hole in the
+            // middle of the parent is permanent until something is unfolded.
+            // So the cap is on what a node claims, and this branch is what
+            // happens to what nobody claimed: only a `max` stops a child
+            // growing here, which is ADR-0157 unchanged.
             let pool = (avail - frozen_sum).max(0.0);
-            let scale = if fixed_sum > 0.0 {
-                pool / fixed_sum
-            } else {
-                0.0
-            };
+            let scale = if stored > 0.0 { pool / stored } else { 0.0 };
             for k in 0..n {
                 if s.frozen[k] {
                     continue;
                 }
-                s.sizes[k] = match a.nodes[a.child(split, k)].sizing {
+                let c = a.child(split, k);
+                let size = match a.nodes[c].sizing {
                     Sizing::Fixed(size) => size.max(0.0) * scale,
                     Sizing::Flex(_) => 0.0,
                 };
+                s.sizes[k] = size;
             }
         }
 
@@ -1248,7 +1384,12 @@ fn solve_split(a: &Arrangement, s: &mut Solved, split: usize) {
                 continue;
             }
             let c = a.child(split, k);
-            let min = a.nodes[c].min.max(0.0);
+            // The declared minimum, capped by what the child can use — the
+            // same sentence as the claim above. A node that says it needs 200
+            // is saying so while it has 200 worth of content; with only a
+            // 72-tall row left visible inside it, holding 200 is holding
+            // space it will leave empty.
+            let min = a.nodes[c].min.max(0.0).min(s.usable[c]);
             let max = a.nodes[c].max;
             if s.sizes[k] < min {
                 s.sizes[k] = min;
