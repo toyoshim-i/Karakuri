@@ -13,7 +13,27 @@ set -e
 files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs')
 [ -n "$files" ] || exit 0
 
+# **A hook's PATH is not the login shell's.** A GUI client, a scheduled build or
+# another machine's default shell can all leave `rustfmt` unreachable here while
+# `cargo fmt` works perfectly in a terminal. Said before anything is checked,
+# because the alternative is what this hook used to do: fold `rustfmt`'s stderr
+# in with its diff and report `not formatted:` against a file that is formatted
+# exactly right. That cost a operator on another machine real time, and the
+# message sent them looking at their code.
+if ! command -v rustfmt >/dev/null 2>&1; then
+    echo "rustfmt is not on this hook's PATH, so nothing was checked."
+    echo
+    echo "this is not a claim about your code. a hook runs with a shell that may"
+    echo "not have read your profile — try \`rustup component add rustfmt\`, and"
+    echo "if \`rustfmt --version\` works in a terminal but not here, the PATH is"
+    echo "what differs."
+    exit 1
+fi
+
 bad=""
+noise=""
+complained=$(mktemp)
+trap 'rm -f "$complained"' EXIT
 for f in $files; do
     # **Judged by output and not by exit code.** `rustfmt --check` reading stdin
     # prints the diff and still exits 0 — which is not what it does for a named
@@ -22,10 +42,27 @@ for f in $files; do
     #
     # `--edition` matters too: without it rustfmt assumes 2015 and misparses
     # `async` and `dyn`, so a clean file reads as an error.
-    if [ -n "$(git show ":$f" | rustfmt --edition 2021 --check 2>&1)" ]; then
+    #
+    # **stdout and stderr are kept apart**, because they answer different
+    # questions: the diff on stdout means the file is not formatted, and
+    # anything on stderr means `rustfmt` could not do the job. Merging them
+    # makes every failure read as the first one.
+    : > "$complained"
+    if [ -n "$(git show ":$f" | rustfmt --edition 2021 --check 2>"$complained")" ]; then
         bad="$bad $f"
     fi
+    if [ -s "$complained" ]; then
+        noise="$noise$f: $(head -c 400 "$complained")
+"
+    fi
 done
+
+if [ -n "$noise" ]; then
+    echo "rustfmt could not check some of what is staged, and said:"
+    printf '%s' "$noise"
+    echo "this is rustfmt's own complaint, not a formatting difference."
+    exit 1
+fi
 
 if [ -n "$bad" ]; then
     echo "not formatted:"
