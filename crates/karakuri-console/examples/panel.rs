@@ -230,12 +230,14 @@ struct Cost {
     /// **Uploading the tessellated geometry, out of [`Cost::paint`]** — and
     /// the number the caching decision turns on.
     ///
-    /// It is close to a memory copy where the GPU shares the CPU's memory and
-    /// crosses a bus where it does not, so **whether it is worth not
-    /// re-uploading the parts of the panel that did not change is a question
-    /// about this line and about no other.** Two of the machines this has run
-    /// on have unified memory; a discrete GPU is what the number is waiting
-    /// for.
+    /// **It is not the price of moving bytes**, which took three machines to
+    /// establish and is `docs/adr/0167-the-panel-keeps-re-uploading-what-did-not-change.md`.
+    /// The discrete GPU that has to cross a bus pays 0.022 ms; an APU that
+    /// crosses nothing pays 0.010; this machine, which also crosses nothing,
+    /// pays 0.166 — seven times the one with the bus. It is what a backend's
+    /// upload path costs, and the decision it was printed for is taken: **not
+    /// re-uploading the unchanged panel is worth at most 4% of a frame, and
+    /// the dirty-tracking it needs is not.**
     buffers: Duration,
     /// **Recording the panel's render pass, out of [`Cost::paint`]** — the
     /// view, the pass, and `egui`'s draw calls into it. Recording only; what
@@ -298,6 +300,18 @@ struct Costs {
     /// What has been drawn since `quiet_since` that nothing asked for.
     still: Still,
     said: bool,
+    /// **What ran it**, as the adapter reports it: the backend, the adapter's
+    /// own name, and whether it calls itself discrete.
+    ///
+    /// Printed because a readout that does not name its backend is how a
+    /// measurement gets written into a table as though it were another one's.
+    /// `WGPU_BACKEND` was honoured by nothing for months and the failure was
+    /// invisible precisely here — twenty-five runs were recorded as DX12 and
+    /// were Vulkan, and nothing on screen could have said otherwise
+    /// (`docs/adr/0168-a-backend-override-is-honoured-because-a-no-op-cannot-be-caught.md`).
+    /// The adapter is asked rather than the environment, so an override that
+    /// does not take reads as what it is.
+    taken_on: String,
     /// **Whether there is a live picture in the Program bay.** It decides
     /// which sentence the reading prints about the frames it counted, and
     /// nothing else: the frames are counted the same way either way, which is
@@ -314,6 +328,7 @@ impl Costs {
             owed: false,
             still: Still::default(),
             said: false,
+            taken_on: String::from("an adapter nobody asked"),
             live: false,
         }
     }
@@ -514,7 +529,8 @@ impl Costs {
             );
             println!(
                 "    of which buffer uploads   median {:.3} ms   p95 {:.3} ms   worst {:.3} ms — \
-                 the tessellated geometry, and close to a memory copy on unified memory",
+                 the tessellated geometry. Not the price of crossing a bus: it is seven times \
+                 larger here than on a discrete GPU that crosses one (ADR-0167)",
                 buffers[n / 2],
                 buffers[n * 95 / 100],
                 buffers[n - 1]
@@ -561,6 +577,7 @@ impl Costs {
                  is how many frames pay it — 0 with a still panel and nothing in the \
                  Program bay, and the rate above with a picture in it."
             );
+            println!("  taken on {}", self.taken_on);
             println!(
                 "  the panel half is taken on this window at {:.0}x{:.0} logical with every \
                  other bay empty, which is NOT the workspace's reference workload. The \
@@ -572,9 +589,11 @@ impl Costs {
             );
             println!(
                 "  and every figure above is taken on a core that spends the vsync wait \
-                 asleep, so it is measured at the clock a mostly-idle machine runs at: \
-                 the identical run with this machine's other cores loaded reports about a \
-                 sixth of these numbers, with the proportions between them unchanged."
+                 asleep. On THIS machine that matters a great deal — the identical run with \
+                 the other cores loaded reports about a sixth of these numbers, proportions \
+                 unchanged — and it is this machine's power management rather than a rule: \
+                 two Windows machines were asked the same way and got 1.3x and 1.6x WORSE \
+                 under load, which is ordinary contention. Compare ratios, not magnitudes."
             );
         }
         println!();
@@ -594,6 +613,27 @@ impl Costs {
         );
         println!();
     }
+}
+
+/// Say what failed, say whether an override is the likely reason, and stop.
+///
+/// Never returns, so it can stand where a `?` cannot: this is inside a `winit`
+/// callback, where a panic aborts rather than unwinds and takes the message
+/// with it.
+fn no_gpu(what: &str) -> ! {
+    eprintln!("{what}");
+    match std::env::var("WGPU_BACKEND") {
+        Ok(want) => eprintln!(
+            "WGPU_BACKEND is set to `{want}`, and this codebase honours it — so the most likely \
+             reason is that this machine has no {want}. Unset it to take whatever the machine \
+             offers."
+        ),
+        Err(_) => eprintln!(
+            "WGPU_BACKEND is not set, so this is the machine's own default backend failing \
+             rather than an override."
+        ),
+    }
+    std::process::exit(1)
 }
 
 fn ms(d: Duration) -> f64 {
@@ -1282,8 +1322,27 @@ impl ApplicationHandler for App {
         self.scale = window.scale_factor();
 
         let instance = Gpu::instance();
-        let surface = instance.create_surface(window.clone()).expect("surface");
-        let gpu = pollster::block_on(Gpu::from_instance(instance, Some(&surface))).expect("gpu");
+        // **Reported rather than panicked, and both of these can fail for one
+        // reason.** A panic here is reached from a `winit` callback and cannot
+        // unwind across the Objective-C frame on macOS, so it aborts — with
+        // `<unknown>` for every frame of the backtrace and no sentence
+        // anywhere saying what went wrong.
+        //
+        // The surface is the one that goes first when a backend was asked for
+        // and the machine has none of it: an instance with only that backend
+        // enabled has nothing that can make a surface, so the failure arrives
+        // as `FailedToCreateSurfaceForAnyBackend` before any adapter is
+        // requested. That is the exact path
+        // `docs/adr/0168-a-backend-override-is-honoured-because-a-no-op-cannot-be-caught.md`
+        // opened, so it names the variable first.
+        let surface = match instance.create_surface(window.clone()) {
+            Ok(surface) => surface,
+            Err(e) => no_gpu(&format!("no surface: {e}")),
+        };
+        let gpu = match pollster::block_on(Gpu::from_instance(instance, Some(&surface))) {
+            Ok(gpu) => gpu,
+            Err(e) => no_gpu(&format!("no adapter: {e}")),
+        };
 
         let caps = surface.get_capabilities(&gpu.adapter);
         // **A non-sRGB format, and that is the opposite of what the example
@@ -1337,7 +1396,11 @@ impl ApplicationHandler for App {
             .map(|rect| physical(rect, self.scale as f32))
             .unwrap_or((1, 1));
         let engine = Engine::new(&gpu, &mut renderer, first);
-        self.costs.live = true;
+        let info = gpu.adapter.get_info();
+        self.costs.taken_on = format!(
+            "{:?} — {} ({:?})",
+            info.backend, info.name, info.device_type
+        );
 
         self.readout.print_legend();
 
@@ -1802,7 +1865,18 @@ impl ApplicationHandler for App {
                 // is: a frame drawn on a window nobody touched. The reading
                 // then prints the rate rather than the zero, and the next
                 // decision gets made on a number.
-                gfx.window.request_redraw();
+                //
+                // **Asked for only while the picture is on screen.** It used to
+                // be unconditional, with `live` set once when the engine was
+                // built and never cleared — so folding the picture away left
+                // the loop drawing at full rate for nothing, and the reading
+                // went on calling it live. Another machine found that by
+                // following this file's own instructions and getting 270
+                // frames out of a window that was supposed to have gone quiet.
+                self.costs.live = self.readout.view.picture.is_some();
+                if self.costs.live {
+                    gfx.window.request_redraw();
+                }
             }
             _ => App::to_egui(gfx, &mut self.costs, &event),
         }
