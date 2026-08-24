@@ -12,7 +12,9 @@ use common::{id_of, near, rect_of, solved, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{Palette, Room};
-use karakuri_console::view::{picture_rect, plan_into, region, Kind, Placed, REGIONS};
+use karakuri_console::view::{
+    picture_rect, plan_into, preview_rects, region, Kind, Placed, DECKS, REGIONS,
+};
 use karakuri_layout::{NodeId, Point};
 
 /// The seven bays, read off the mock's `.bay-head`s — `console.html` heads
@@ -135,13 +137,21 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
             "{name} has no heading in the mock and is being given one"
         );
     }
-    for name in ["inspector-1", "inspector-2", "deck-previews"] {
+    for name in ["inspector-1", "inspector-2"] {
         assert_eq!(
             region(name).unwrap().kind,
             Kind::Pane,
             "{name} sits inside a bay and has no head of its own"
         );
     }
+    // The preview row sits inside a bay and has no head either, and it is a
+    // kind of its own for `Kind::Picture`'s reason: `View::draw` has to know
+    // which pane the cells go in.
+    assert_eq!(
+        region("deck-previews").unwrap().kind,
+        Kind::Previews,
+        "the row under the picture is where the four deck cells are drawn"
+    );
     // *"The picture carries no label of its own"* — so it is not a bay, and it
     // is the one region that draws a texture.
     assert_eq!(
@@ -269,6 +279,214 @@ fn a_folded_picture_has_no_rectangle() {
     layout.solo(id_of(&layout, "deck-previews"));
     layout.solve();
     assert_eq!(picture_rect(&layout), None);
+}
+
+/// **The four preview cells are the mock's own, at the width the mock draws
+/// them.**
+///
+/// Every figure here is `lib.rs`'s Program bay derivation read from the other
+/// end. At `SMALLEST` the centre track is 484, `.program-body`'s 9px padding
+/// either side leaves 466, and 466 less three 6px gaps over four tracks is
+/// **112** — which at 16:9 is **63**, which is exactly the 63 the arrangement
+/// gave `deck-previews` before its 9px of padding underneath. The sum the bay
+/// was built from and the rectangles it solves to are the same numbers or the
+/// bay is wrong.
+///
+/// The insets are three of the four on purpose: nothing at the top, because
+/// the 9 above the cells in the CSS is the split's 8px divider plus
+/// `program-view`'s own bottom and belongs to neither this region nor the
+/// picture.
+#[test]
+fn the_preview_cells_are_the_mocks_at_the_width_the_mock_draws() {
+    let layout = solved(SMALLEST);
+    let cells = preview_rects(&layout).expect("the previews are on screen");
+    let region = rect_of(&layout, "deck-previews");
+
+    for (deck, cell) in cells.iter().enumerate() {
+        assert!(
+            near(cell.width(), 112.0),
+            "cell {deck} is {} wide",
+            cell.width()
+        );
+        assert!(
+            near(cell.height(), 63.0),
+            "cell {deck} is {} tall",
+            cell.height()
+        );
+        // Nothing above the row, and `.program-body`'s padding under it.
+        assert!(
+            near(cell.min.y, region.y),
+            "cell {deck} starts at {} and the region at {}",
+            cell.min.y,
+            region.y
+        );
+        assert!(
+            near(cell.max.y, region.y + region.h - 9.0),
+            "cell {deck} ends at {} and the region's padding leaves {}",
+            cell.max.y,
+            region.y + region.h - 9.0
+        );
+    }
+
+    // `.previews`'s `gap: 6px`, between the tracks and nowhere else.
+    for deck in 1..DECKS {
+        let gap = cells[deck].min.x - cells[deck - 1].max.x;
+        assert!(
+            near(gap, 6.0),
+            "the gap before cell {deck} is {gap} and not 6"
+        );
+    }
+
+    // The row is the region less a pad either side, so the first cell's left
+    // edge and the last cell's right edge are that pad in from the region.
+    assert!(
+        near(cells[0].min.x, region.x + 9.0),
+        "the row starts at {} and the region's padding leaves {}",
+        cells[0].min.x,
+        region.x + 9.0
+    );
+    assert!(
+        near(cells[DECKS - 1].max.x, region.x + region.w - 9.0),
+        "the row ends at {} and the region's padding leaves {}",
+        cells[DECKS - 1].max.x,
+        region.x + region.w - 9.0
+    );
+}
+
+/// **The cells never overlap, never leave the region, and never stop being
+/// 16:9** — at any width, and especially at one much wider than the mock's.
+///
+/// This is the test the gap arithmetic is checked by, and the wrong version it
+/// exists for is a plausible one: divide the row by four and take a gap off
+/// each cell, which loses a gap's worth of width and leaves the last cell
+/// short of the region's padding — four tracks have **three** gaps between
+/// them and not four.
+///
+/// The wide end is the other half. `deck-previews` is pinned at 72 tall, so a
+/// wider window widens the track and not the row, and a cell that filled its
+/// track would stop being 16:9 the moment the window left `SMALLEST`. It is
+/// 16:9 and centred instead, which is what these assertions say.
+#[test]
+fn the_preview_cells_tile_their_region_and_stay_sixteen_by_nine() {
+    for width in [990.0, 1010.0, 1280.0, 1920.0, 3440.0] {
+        let layout = solved(karakuri_layout::Rect {
+            w: width,
+            ..SMALLEST
+        });
+        let cells = preview_rects(&layout).expect("the previews are on screen");
+        let region = rect_of(&layout, "deck-previews");
+        let row_left = region.x + 9.0;
+        let row_right = region.x + region.w - 9.0;
+
+        for (deck, cell) in cells.iter().enumerate() {
+            assert!(
+                (cell.width() / cell.height() - 16.0 / 9.0).abs() < 0.01,
+                "at {width} wide, cell {deck} is {}x{} and a preview is 16:9",
+                cell.width(),
+                cell.height()
+            );
+            assert!(
+                cell.min.x >= row_left - 1e-3 && cell.max.x <= row_right + 1e-3,
+                "at {width} wide, cell {deck} runs from {} to {} outside the row's {row_left}..{row_right}",
+                cell.min.x,
+                cell.max.x
+            );
+            assert!(
+                cell.min.y >= region.y - 1e-3 && cell.max.y <= region.y + region.h - 9.0 + 1e-3,
+                "at {width} wide, cell {deck} runs from {} to {} outside the region",
+                cell.min.y,
+                cell.max.y
+            );
+        }
+        for deck in 1..DECKS {
+            assert!(
+                cells[deck].min.x >= cells[deck - 1].max.x - 1e-3,
+                "at {width} wide, cell {deck} starts at {} and cell {} ends at {}",
+                cells[deck].min.x,
+                deck - 1,
+                cells[deck - 1].max.x
+            );
+        }
+
+        // Centred in its track: the ground either side of a cell is equal, and
+        // it is the same for every cell.
+        let track = (row_right - row_left - 6.0 * (DECKS - 1) as f32) / DECKS as f32;
+        for (deck, cell) in cells.iter().enumerate() {
+            let track_x = row_left + (track + 6.0) * deck as f32;
+            let before = cell.min.x - track_x;
+            let after = track_x + track - cell.max.x;
+            assert!(
+                near(before, after),
+                "at {width} wide, cell {deck} has {before} before it and {after} after it in its track"
+            );
+        }
+
+        // The row is pinned at 63 tall by the arrangement, so a wider window
+        // buys width and no height at all — which is the whole reason a cell
+        // cannot both fill its track and stay 16:9.
+        assert!(
+            near(cells[0].height(), 63.0),
+            "at {width} wide the row is {} tall",
+            cells[0].height()
+        );
+    }
+}
+
+/// **No rectangles where the row is folded away**, which is `picture_rect`'s
+/// rule stated once more on the other half of the bay: a caller that renders
+/// four auditions into these rectangles records no pass at all when there are
+/// none, and *"a priming deck draws only while something auditions it"*.
+///
+/// Both folds, because they are different operations on different nodes and
+/// the manual promises the previews survive one of them: `f` over the row
+/// folds the row, and `g` over the bay folds the picture with it.
+#[test]
+fn a_folded_preview_row_has_no_rectangles() {
+    let mut layout = solved(PLAUSIBLE);
+    assert!(preview_rects(&layout).is_some());
+
+    layout.collapse(id_of(&layout, "deck-previews"));
+    layout.solve();
+    assert_eq!(preview_rects(&layout), None);
+
+    // The picture is still there, so this is the row being folded and not the
+    // bay — *"The deck previews under it are auditions of their own, so they
+    // stay when it goes"*, read the other way round.
+    assert!(picture_rect(&layout).is_some());
+
+    layout.expand(id_of(&layout, "deck-previews"));
+    layout.solve();
+    assert!(preview_rects(&layout).is_some());
+
+    // **And the fold the other way round, which is the sentence the example's
+    // readout now prints**: *"fold the picture away (f over it) and deck A
+    // keeps the loop awake on its own"*. The manual's own words are the same
+    // claim — *"The deck previews under it are auditions of their own, so they
+    // stay when it goes"* — and a readout that says a thing the arrangement
+    // does not do is how this project has been wrong twice about what folding
+    // the picture costs.
+    let mut layout = solved(PLAUSIBLE);
+    layout.collapse(id_of(&layout, "program-view"));
+    layout.solve();
+    assert_eq!(picture_rect(&layout), None);
+    assert!(
+        preview_rects(&layout).is_some(),
+        "the picture is folded and the previews went with it, so an audition \
+         that should still be running has nowhere to go"
+    );
+
+    // The bay folded around it.
+    let mut layout = solved(PLAUSIBLE);
+    layout.collapse(id_of(&layout, "program"));
+    layout.solve();
+    assert_eq!(preview_rects(&layout), None);
+
+    // And a solo on the picture, which leaves the row out rather than folding
+    // it.
+    let mut layout = solved(PLAUSIBLE);
+    layout.solo(id_of(&layout, "program-view"));
+    layout.solve();
+    assert_eq!(preview_rects(&layout), None);
 }
 
 // ---------------------------------------------------------------------------
