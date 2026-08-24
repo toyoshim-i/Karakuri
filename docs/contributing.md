@@ -373,6 +373,10 @@ Before marking a task or pull request as complete, ensure the following checklis
 - [plugins.md](plugins.md): Out-of-process helper plugin specification
 - [roadmap.md](roadmap.md): What exists today, and where the project is going, milestone by milestone
 - [history/](history/): Milestones that closed, kept whole — history, never the present tense
+- [experiments/](experiments/): **A protocol, not a document.** One file per question this
+  machine cannot answer — something to run elsewhere, with what to run, what was measured here
+  to compare against, and the traps. When the numbers come back they go into a record and
+  **the file is deleted**, which is what keeps this directory from accumulating
 - [adr/](adr/): Every decision, with the alternatives that lost — append-only
 - [principles/](principles/): The rules in force, one per file — current only
 
