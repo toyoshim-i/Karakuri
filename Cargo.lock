@@ -1002,8 +1002,12 @@ dependencies = [
 name = "karakuri-console"
 version = "0.1.0"
 dependencies = [
+ "karakuri-engine",
  "karakuri-layout",
+ "pollster",
  "serde_json",
+ "wgpu",
+ "winit",
 ]
 
 [[package]]

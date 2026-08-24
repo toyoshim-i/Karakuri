@@ -576,11 +576,22 @@ Recorded here because they are decisions, and the manual states behaviour rather
 - **There are two focuses and they must not look alike.** The deck selection persists and is
   what a key press is addressed to; keyboard focus is transient. Drawing them the same erases
   which of the two a reader is looking at.
-- **A projector window is a second `Sink` and lives in this repository.** A composited frame
-  already goes to *n* sinks — `docs/plugins.md` — and Syphon, Spout and NDI are the plugin
-  ones. **Fullscreen is what an application on an operating system does**, not an output mode
-  of its own, which supersedes the "not built, deliberately" note in M2's output routing
-  bullet.
+- **A projector window is a second `Sink` and lives in this repository.** Syphon, Spout and NDI
+  are the plugin ones. **Fullscreen is what an application on an operating system does**, not an
+  output mode of its own, which supersedes the "not built, deliberately" note in M2's output
+  routing bullet.
+
+  *(One sentence here was wrong and is removed: it said a composited frame "already goes to *n*
+  sinks". `docs/plugins.md` designs that and the `Sink` trait exists, but `compose` takes exactly
+  one sink and all eight call sites pass one. What is built is the seam, not the fan-out.)*
+
+  **And the sink gates the whole frame today, which the outputs row will have to undo.**
+  `compose` returns `Skipped` before calling the closure that commits, so a frame with no target
+  reads no clock, writes no record and does not advance the deck. That is right for a lost
+  swapchain, which is momentary. It is wrong as a steady state: an operator who turns every
+  output off would stop the instrument rather than stop publishing it. Advancing a frame and
+  presenting it are one thing in this code and have to become two — which is the same change *n*
+  sinks needs, so it is owed once rather than twice.
 - **`gain` is a trim and `opacity` is the fader**, which `karakuri-engine/src/mix.rs` says
   outright and which the two behave as: opacity at zero silences under every blend mode, gain
   at zero does not silence `over`. Drawing them as two identical sliders throws that away.
