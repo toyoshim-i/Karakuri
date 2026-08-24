@@ -1,0 +1,454 @@
+//! The panel under a pointer: a drag, a fold, a solo, and every hostile thing
+//! a window can do to them.
+//!
+//! These drove `examples/layout.rs` when the model lived inside it. The model
+//! is [`karakuri_console::panel`] now, so they are ordinary tests of the crate
+//! and `cargo test -p karakuri-console` runs them — no event loop, no device,
+//! and nothing built that needs either.
+//!
+//! **They assert on what an operation returned**, which is the point of an
+//! operation returning a value rather than a line: a stop holding a drag is
+//! `Dragged::held`, and a boundary that had nothing to say is a `None` rather
+//! than a string that was not printed.
+
+mod common;
+
+use common::EPS;
+use karakuri_console::panel::{extent, far, near, Op, Outcome, Panel, Pressed};
+use karakuri_layout::{Axis, NodeId, Point, Rect};
+
+/// Every rectangle in the arrangement, in tree order — what "the same
+/// arrangement" is compared as.
+fn rects(p: &mut Panel) -> Vec<Rect> {
+    p.solve();
+    common::rects(p.layout())
+}
+
+fn offset(axis: Axis, p: Point, by: f32) -> Point {
+    match axis {
+        Axis::Row => Point::new(p.x + by, p.y),
+        Axis::Column => Point::new(p.x, p.y + by),
+    }
+}
+
+fn same(a: &[Rect], b: &[Rect]) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b).all(|(x, y)| {
+            (x.x - y.x).abs() <= EPS
+                && (x.y - y.y).abs() <= EPS
+                && (x.w - y.w).abs() <= EPS
+                && (x.h - y.h).abs() <= EPS
+        })
+}
+
+/// A name for a failure message. A split is often unnamed, and a failure that
+/// says which one is worth more than one that does not.
+fn label(p: &Panel, id: NodeId) -> String {
+    match p.layout().name(id) {
+        Some(name) => name.to_owned(),
+        None => "(unnamed split)".to_owned(),
+    }
+}
+
+/// Every divider in the arrangement, dragged and dragged back — including far
+/// past whatever stops it — leaves the arrangement exactly as it was, and at
+/// least one of them moves on the way.
+///
+/// The second half is the point: `set_divider` takes an absolute coordinate,
+/// so the frames spent past a stop contribute nothing to accumulate. A caller
+/// that fed it deltas would come back short.
+#[test]
+fn a_drag_out_and_back_leaves_the_arrangement_where_it_was() {
+    let mut probe = Panel::new(1600.0, 1000.0);
+    let dividers = probe.dividers();
+    assert!(!dividers.is_empty(), "the arrangement has no dividers");
+    let total = dividers.len();
+
+    let mut moved = 0;
+    let mut grabbed = 0;
+    for (split, index) in dividers {
+        let mut p = Panel::new(1600.0, 1000.0);
+        p.solve();
+        let before = rects(&mut p);
+        let axis = p.layout().axis(split).expect("a divider is on a split");
+        let start = p.boundary(split, index).expect("a boundary");
+        let point = p.grab_point(split, index).expect("a gap to aim at");
+
+        match p.press(point) {
+            // Reported rather than asserted: a divider a pointer cannot reach
+            // is a finding about `hit`, not about the drag.
+            Pressed::Grabbed {
+                split: s,
+                index: i,
+                axis: a,
+                at,
+                offset: o,
+            } => {
+                assert_eq!((s, i), (split, index));
+                assert_eq!(a, axis);
+                assert!(
+                    (at - start).abs() <= EPS,
+                    "the press reported {at}, not {start}"
+                );
+                // The grab point is the middle of the gap, so the pointer took
+                // hold half a divider past the boundary.
+                let divider = p.layout().divider(split).expect("a split has a divider");
+                assert!(
+                    (o - divider / 2.0).abs() <= EPS,
+                    "the press reported an offset of {o} into a {divider} gap"
+                );
+                grabbed += 1;
+            }
+            _ => continue,
+        }
+
+        let _ = p.moved(offset(axis, point, 40.0));
+        if (p.boundary(split, index).expect("a boundary") - start).abs() > EPS {
+            moved += 1;
+            assert!(
+                !same(&before, &rects(&mut p)),
+                "the boundary moved and no rectangle changed"
+            );
+        }
+
+        // Past every stop there is, in both directions, and back to the exact
+        // pointer position the drag began at.
+        let _ = p.moved(offset(axis, point, 9000.0));
+        let _ = p.moved(offset(axis, point, -9000.0));
+        let _ = p.moved(point);
+        p.released();
+
+        let after = rects(&mut p);
+        assert!(
+            same(&before, &after),
+            "divider {}#{index} did not come back: {:?} against {:?}",
+            label(&p, split),
+            before,
+            after
+        );
+    }
+    assert_eq!(
+        grabbed, total,
+        "a boundary the arrangement has that a pointer cannot grab"
+    );
+    // Two of the console's boundaries cannot move at all — a region whose
+    // minimum meets its maximum is pinned — so this is "at least one", not
+    // "all of them", and the restore above is what holds for every one.
+    assert!(moved > 0, "no divider moved under a 40px drag");
+}
+
+/// A drag that runs off the left edge of the window. winit reports negative
+/// pointer coordinates there, and the operator dragged into them.
+#[test]
+fn a_drag_past_the_left_edge_of_the_window() {
+    let mut probe = Panel::new(1920.0, 1080.0);
+    let dividers = probe.dividers();
+    for (split, index) in dividers {
+        let mut p = Panel::new(1920.0, 1080.0);
+        p.solve();
+        let axis = p.layout().axis(split).expect("a divider is on a split");
+        let point = p.grab_point(split, index).expect("a gap to aim at");
+        p.press(point);
+        for to in [-40.0, -200.0, -1000.0, -5000.0] {
+            let at = match axis {
+                Axis::Row => Point::new(to, point.y),
+                Axis::Column => Point::new(point.x, to),
+            };
+            let _ = p.moved(at);
+        }
+        p.released();
+    }
+}
+
+/// A pointer dragged on past a stop says so once.
+///
+/// This is the readout's own bug, and it is worst exactly where a person is
+/// looking hardest: at a stop the boundary does not move, and a report per
+/// pointer event is hundreds of identical lines a second into a terminal that
+/// has to keep up with them. So the first move past the stop comes back
+/// `held`, and the two hundred after it come back with nothing to say at all.
+#[test]
+fn a_drag_held_at_a_stop_says_so_once() {
+    let mut probe = Panel::new(1600.0, 1000.0);
+    let mut stops = 0;
+    for (split, index) in probe.dividers() {
+        let mut p = Panel::new(1600.0, 1000.0);
+        p.solve();
+        let axis = p.layout().axis(split).expect("a divider is on a split");
+        let point = p.grab_point(split, index).expect("a gap to aim at");
+        p.press(point);
+
+        // Well past whatever stops it, and then on, a pixel at a time, the way
+        // a hand held against the edge of the window does.
+        let held = p.moved(offset(axis, point, -9000.0));
+        assert!(
+            matches!(held, Some(d) if d.held.is_some()),
+            "a drag 9000px past every stop did not report one holding it: {held:?}"
+        );
+        let at = p.boundary(split, index).expect("a boundary");
+        let mut said = 0;
+        for step in 1..=200 {
+            if p.moved(offset(axis, point, -9000.0 - step as f32))
+                .is_some()
+            {
+                said += 1;
+            }
+        }
+        let still = p.boundary(split, index).expect("a boundary");
+        assert!(
+            (still - at).abs() <= EPS,
+            "the boundary was supposed to be against a stop and moved"
+        );
+        assert_eq!(
+            said, 0,
+            "a boundary that did not move said something 200 times over"
+        );
+        stops += 1;
+    }
+    assert!(stops > 0, "no divider was driven against a stop");
+}
+
+/// A sweep of everything a window can do to the panel, at viewports from
+/// comfortable down to below the arrangement's own minima, with the pointer
+/// walked well outside each of them.
+#[test]
+fn a_sweep_of_hostile_input() {
+    for (vw, vh) in [
+        (1920.0_f32, 1080.0_f32),
+        (1440.0, 900.0),
+        (990.0, 632.0),
+        (400.0, 300.0),
+        (1.0, 1.0),
+    ] {
+        let mut probe = Panel::new(vw, vh);
+        for (split, index) in probe.dividers() {
+            let mut p = Panel::new(vw, vh);
+            p.solve();
+            let Some(point) = p.grab_point(split, index) else {
+                continue;
+            };
+            p.press(point);
+            for to in [
+                Point::new(-1.0, -1.0),
+                Point::new(-4000.0, point.y),
+                Point::new(point.x, -4000.0),
+                Point::new(vw + 4000.0, vh + 4000.0),
+                Point::new(0.0, 0.0),
+                Point::new(f32::MAX, f32::MAX),
+                point,
+            ] {
+                let _ = p.moved(to);
+                for op in [
+                    Op::Fold,
+                    Op::FoldEnclosing,
+                    Op::Report,
+                    Op::Solo,
+                    Op::Report,
+                    Op::Unsolo,
+                    Op::UnfoldAll,
+                ] {
+                    p.op(op);
+                }
+                // A resize in the middle of a drag, which a window can do.
+                p.set_viewport(vw / 2.0, vh / 2.0);
+                let _ = p.moved(to);
+                p.set_viewport(0.0, 0.0);
+                let _ = p.moved(to);
+                p.set_viewport(vw, vh);
+            }
+            p.released();
+            // A release with nothing in hand, and a press outside.
+            assert_eq!(p.released(), None, "a release let go of something twice");
+            p.press(Point::new(-10.0, -10.0));
+            let _ = p.moved(Point::new(-10.0, -10.0));
+            p.op(Op::Reset);
+        }
+    }
+}
+
+/// Every operation, in a debug build, with a read after each one.
+///
+/// `rect()` and `hit()` both `debug_assert!` that the layout is not dirty, so
+/// this fails if any operation here leaves a solve owed — which is the mistake
+/// a real view will make first, and the reason the panel solves at the top of
+/// everything that reads.
+///
+/// It also asserts what each operation is *for*, and asserts it twice over:
+/// once on the rectangles, and once on what the operation said it did. A fold
+/// folds, an unfold puts the arrangement back exactly and names what it
+/// unfolded, a solo leaves one region visible, and an unsolo restores what it
+/// replaced.
+#[test]
+fn every_operation_leaves_the_layout_readable_and_undoes_exactly() {
+    let mut p = Panel::new(1600.0, 1000.0);
+    p.solve();
+    let before = rects(&mut p);
+
+    // Name-free: the pointer goes to the middle of the first leaf big enough
+    // to aim at.
+    let leaf = p
+        .nodes()
+        .iter()
+        .filter(|n| n.leaf)
+        .map(|n| (n.id, p.layout().rect(n.id)))
+        .find(|(_, r)| r.w > 20.0 && r.h > 20.0)
+        .expect("a leaf to point at");
+    p.set_cursor(Point::new(
+        leaf.1.x + leaf.1.w / 2.0,
+        leaf.1.y + leaf.1.h / 2.0,
+    ));
+
+    let folded = |p: &Panel| {
+        p.nodes()
+            .iter()
+            .filter(|n| p.layout().is_collapsed(n.id))
+            .count()
+    };
+
+    assert_eq!(
+        p.op(Op::Fold),
+        Outcome::Folded {
+            id: leaf.0,
+            folded: true,
+            root: false
+        },
+        "f folded something other than the region under the pointer"
+    );
+    assert_eq!(folded(&p), 1, "f folded something other than one region");
+    assert_eq!(
+        p.op(Op::UnfoldAll),
+        Outcome::Unfolded(vec![leaf.0]),
+        "z unfolded something other than what f folded"
+    );
+    assert_eq!(folded(&p), 0);
+    assert!(same(&before, &rects(&mut p)), "an unfold did not restore");
+
+    let enclosing = p.parent_of(leaf.0).expect("a leaf is inside a split");
+    // Whether that split is the root is the arrangement's business, not this
+    // test's — the first leaf big enough to aim at is the transport, and the
+    // transport's parent happens to be the root, which is exactly the case
+    // the outcome carries a `root` flag for.
+    let is_root = enclosing == p.layout().root();
+    assert_eq!(
+        p.op(Op::FoldEnclosing),
+        Outcome::Folded {
+            id: enclosing,
+            folded: true,
+            root: is_root
+        },
+        "g folded something other than the split enclosing the pointer"
+    );
+    assert!(folded(&p) > 0, "g folded nothing");
+    p.op(Op::UnfoldAll);
+    assert!(same(&before, &rects(&mut p)), "an unfold did not restore");
+
+    assert_eq!(p.op(Op::Solo), Outcome::Soloed(leaf.0));
+    assert!(p.layout().is_soloed());
+    assert!(
+        p.layout().visible(leaf.0),
+        "a solo folded the region it was aimed at"
+    );
+    // Straight into an operation that reads every rectangle, with nothing
+    // solving in between: this is the pair that catches a stale solve, and it
+    // fails on `rect() read a stale solve` if `op` stops solving.
+    let Outcome::Report(rows) = p.op(Op::Report) else {
+        panic!("p did not report");
+    };
+    assert_eq!(rows.len(), p.nodes().len(), "the report skipped a node");
+    assert_eq!(
+        p.op(Op::Unsolo),
+        Outcome::Unsoloed { was: true },
+        "an unsolo after a solo did not know there had been one"
+    );
+    assert!(!p.layout().is_soloed());
+    assert!(same(&before, &rects(&mut p)), "an unsolo did not restore");
+    assert_eq!(
+        p.op(Op::Unsolo),
+        Outcome::Unsoloed { was: false },
+        "a second unsolo claimed there was still a solo to undo"
+    );
+
+    // A drag, then a reset: the arrangement is fresh, at the same viewport.
+    let (split, index) = p.dividers()[0];
+    let point = p.grab_point(split, index).expect("a gap to aim at");
+    let axis = p.layout().axis(split).expect("a divider is on a split");
+    p.press(point);
+    let _ = p.moved(offset(axis, point, 60.0));
+    p.released();
+    assert_eq!(p.op(Op::Reset), Outcome::Reset);
+    assert!(same(&before, &rects(&mut p)), "a reset did not restore");
+}
+
+/// A drag lands where it is asked unless something stops it, and what it
+/// reports is what actually happened — the pair either side keeps its combined
+/// extent whatever was asked for, and a stop that held it is `held` rather
+/// than a difference the caller has to work out.
+#[test]
+fn a_drag_reports_where_it_landed_and_moves_only_the_pair() {
+    let mut probe = Panel::new(1600.0, 1000.0);
+    let dividers = probe.dividers();
+    let mut checked = 0;
+    for (split, index) in dividers {
+        let mut p = Panel::new(1600.0, 1000.0);
+        p.solve();
+        let axis = p.layout().axis(split).expect("a divider is on a split");
+        let (a, b) = p.pair(split, index).expect("a boundary has a pair");
+        let span = extent(axis, p.layout().rect(a)) + extent(axis, p.layout().rect(b));
+        let siblings: Vec<NodeId> = p
+            .visible_children(split)
+            .into_iter()
+            .filter(|c| *c != a && *c != b)
+            .collect();
+        let others: Vec<Rect> = siblings.iter().map(|c| p.layout().rect(*c)).collect();
+
+        let point = p.grab_point(split, index).expect("a gap to aim at");
+        if !matches!(p.press(point), Pressed::Grabbed { .. }) {
+            continue;
+        }
+        checked += 1;
+        let dragged = p
+            .moved(offset(axis, point, 9000.0))
+            .expect("a drag 9000px out has something to report");
+
+        // What the drag said, against what the layout did.
+        let landed = p.boundary(split, index).expect("a boundary");
+        assert!(
+            (dragged.landed - landed).abs() <= EPS,
+            "the drag reported landing at {} and the boundary is at {landed}",
+            dragged.landed
+        );
+        assert_eq!(
+            dragged.held,
+            Some(dragged.landed - dragged.asked),
+            "a drag 9000px out was not reported as held by a stop"
+        );
+        assert!(
+            dragged.landed < dragged.asked,
+            "a drag out landed past what it asked for"
+        );
+
+        let after: Vec<Rect> = siblings.iter().map(|c| p.layout().rect(*c)).collect();
+        assert!(
+            same(&others, &after),
+            "a drag moved a sibling that is not either side of it"
+        );
+        let now = extent(axis, p.layout().rect(a)) + extent(axis, p.layout().rect(b));
+        assert!(
+            (now - span).abs() <= EPS,
+            "the pair's combined extent changed: {span} to {now}"
+        );
+        let (min, max) = p.layout().bounds(a);
+        let took = landed - near(axis, p.layout().rect(a));
+        assert!(
+            took <= max + EPS && took >= min - EPS,
+            "a drag landed outside the bounds it was stopped by"
+        );
+        // The boundary is the far edge of the child before it, which is what
+        // every index in this file is counting on.
+        assert!(
+            (far(axis, p.layout().rect(a)) - landed).abs() <= EPS,
+            "the boundary is not the far edge of the child before it"
+        );
+    }
+    assert!(checked > 0, "no divider could be grabbed at all");
+}

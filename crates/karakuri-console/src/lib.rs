@@ -1,11 +1,28 @@
-//! The console's default arrangement: which regions the panel has, how they
-//! nest, and the sizes and constraints each of them starts with.
+//! The console panel: its default arrangement — which regions the panel has,
+//! how they nest, and the sizes and constraints each of them starts with — and
+//! in [`panel`], the model a view drives that arrangement with.
 //!
-//! It is one [`Spec`] value and nothing else. `karakuri-layout` knows how to
-//! solve an arrangement and knows nothing about *this* one; this crate knows
-//! this one and nothing about drawing. Later the code that reads the solved
-//! rectangles lives here too — it does not yet, and nothing here pulls in a
-//! toolkit, a device or a window ([ADR-0156](../../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)).
+//! The arrangement is one [`Spec`] value and nothing else. `karakuri-layout`
+//! knows how to solve an arrangement and knows nothing about *this* one; this
+//! crate knows this one and nothing about drawing.
+//!
+//! **The code that reads the solved rectangles now lives here too**, in
+//! [`panel`] — what a pointer at a coordinate is touching, what a drag does to
+//! a boundary, and what a fold or a solo did. That half of the sentence this
+//! module used to carry has stopped being true, and it stopped on purpose: an
+//! egui view that grew its own model would be a second answer to *how a
+//! pointer moves a divider*, and two answers disagree quietly because each has
+//! its own passing tests.
+//!
+//! **The other half stays true, and is the rule rather than the accident:
+//! nothing here pulls in a toolkit, a device or a window**
+//! ([ADR-0156](../../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)).
+//! [`panel`] holds a [`Layout`] and a pointer; it does not draw and it cannot.
+//! `wgpu`, `winit`, `karakuri-engine` and `pollster` are dev-dependencies for
+//! `examples/layout.rs` alone, and the crate's own dependency is
+//! `karakuri-layout`. That is what lets the panel's behaviour be a test on a
+//! machine with no adapter, and it is what a view is expected to be written
+//! *against* rather than inside.
 //!
 //! # Where the numbers come from
 //!
@@ -49,6 +66,8 @@
 //! only the picture is left, which is also how you capture this window"* — so
 //! an unbounded maximum on `program`, `centre` and the body row is load
 //! bearing rather than a default nobody got round to changing.
+
+pub mod panel;
 
 use karakuri_layout::{Layout, Spec};
 
