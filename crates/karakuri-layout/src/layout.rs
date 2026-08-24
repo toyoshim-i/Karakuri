@@ -109,10 +109,13 @@ mod unbounded {
 struct Arrangement {
     nodes: Vec<Node>,
     root: NodeId,
-    /// Whether [`Layout::solo`] is in force, and the collapsed flags it
-    /// replaced. Both are saved: an arrangement stored while soloed comes back
-    /// soloed, and [`Layout::unsolo`] still has something to restore.
-    soloed: bool,
+    /// What [`Layout::solo`] is holding, and the collapsed flags it replaced.
+    /// Both are saved: an arrangement stored while soloed comes back soloed,
+    /// and [`Layout::unsolo`] still has something to restore.
+    ///
+    /// The node rather than a flag, because the flags a solo leaves behind do
+    /// not identify it — see [`Layout::soloed`].
+    soloed: Option<NodeId>,
     saved: Vec<bool>,
 }
 
@@ -167,7 +170,7 @@ struct Wire {
     root: NodeId,
     viewport: Rect,
     #[serde(default)]
-    soloed: bool,
+    soloed: Option<NodeId>,
     #[serde(default)]
     saved: Vec<bool>,
 }
@@ -180,7 +183,7 @@ struct WireOut<'a> {
     nodes: &'a [Node],
     root: NodeId,
     viewport: Rect,
-    soloed: bool,
+    soloed: Option<NodeId>,
     saved: &'a [bool],
 }
 
@@ -204,7 +207,7 @@ impl TryFrom<Wire> for Layout {
         // Structure before names: everything below assumes an arena that is a
         // tree, including the solve this ends with, and a file that is not one
         // makes the name rule the least of what is wrong with it.
-        check_structure(&w.nodes, w.root)?;
+        check_structure(&w.nodes, w.root, w.soloed)?;
         if let Some(name) = duplicate_name(&w.nodes) {
             return Err(LoadError::DuplicateName {
                 name: name.to_owned(),
@@ -244,7 +247,7 @@ fn duplicate_name(nodes: &[Node]) -> Option<&str> {
 /// It is deliberately not public, and could not usefully be: `serde` turns it
 /// into the deserialiser's own error by way of `Display` before any caller of
 /// `from_str` sees it, so the sentence *is* the whole of what reaches anyone.
-/// It is a type rather than a `format!` at each site so that the eight
+/// It is a type rather than a `format!` at each site so that the nine
 /// sentences sit together where they can be read as one voice, and so that
 /// adding a rule to [`check_structure`] is adding a variant here rather than
 /// another string somewhere else.
@@ -306,6 +309,12 @@ enum LoadError {
          that is not a pointer reaches a region by its name"
     )]
     DuplicateName { name: String },
+    #[error(
+        "node {node} is recorded as soloed, and the arrangement has {len} nodes: every index in \
+         a saved arrangement addresses a node of the same file, and a solo names the region it \
+         is holding so that a surface can say which one"
+    )]
+    SoloOutOfRange { node: usize, len: usize },
 }
 
 /// What a node's `parent` field says, as the middle of a sentence. A missing
@@ -343,6 +352,10 @@ fn records(parent: Option<usize>) -> String {
 ///    or a solo above it, so it is a region that exists in the file and nowhere
 ///    else. A loader that accepted it would be accepting a file it has already
 ///    read as a tree plus some debris.
+/// 6. A recorded solo addresses a node. It is an index like any other, and
+///    [`Layout::soloed`] hands it to a caller that will ask for its rectangle
+///    or its name — so an out-of-range one indexes past the arena at whatever
+///    later moment a status line is drawn.
 ///
 /// **[`Layout::new`] needs none of this**, and does not pay for it: [`build`]
 /// pushes each node once, hands it the parent it was built under, and fills a
@@ -356,13 +369,18 @@ fn records(parent: Option<usize>) -> String {
 /// the code that writes it disagree about what an arrangement is. The solve is
 /// total over them: it clamps at zero, iterates a bounded number of passes and
 /// leaves the discrepancy as trailing space.
-fn check_structure(nodes: &[Node], root: NodeId) -> Result<(), LoadError> {
+fn check_structure(nodes: &[Node], root: NodeId, soloed: Option<NodeId>) -> Result<(), LoadError> {
     let len = nodes.len();
     if len == 0 {
         return Err(LoadError::NoNodes);
     }
     if root.0 >= len {
         return Err(LoadError::RootOutOfRange { root: root.0, len });
+    }
+    if let Some(NodeId(node)) = soloed {
+        if node >= len {
+            return Err(LoadError::SoloOutOfRange { node, len });
+        }
     }
     if let Some(NodeId(parent)) = nodes[root.0].parent {
         return Err(LoadError::RootHasParent {
@@ -466,7 +484,7 @@ impl Layout {
             arrangement: Arrangement {
                 nodes,
                 root,
-                soloed: false,
+                soloed: None,
                 saved,
             },
             viewport: Rect::new(0.0, 0.0, 0.0, 0.0),
@@ -514,9 +532,58 @@ impl Layout {
         }
     }
 
+    /// A split's **visible** children in order: the ones that are not folded,
+    /// which is what a divider index counts and what
+    /// [`set_divider`](Layout::set_divider) and [`Hit::Divider`] mean by one.
+    ///
+    /// **This is the distinction most easily got wrong**, and it was stated
+    /// only in prose on `set_divider` while every caller reconstructed the
+    /// filter for itself. Boundary 1 of a split whose second child is folded
+    /// is between its third and fourth children, and a caller counting
+    /// [`children`](Layout::children) would move the wrong pair.
+    ///
+    /// An iterator rather than a `Vec`, because this is on the frame path: a
+    /// view asking which children a split is showing does it per split per
+    /// frame, and it must not allocate to do it.
+    ///
+    /// Only the children's own flags are read. A visible child of a folded
+    /// split is still listed here — it is folded by its ancestor rather than
+    /// by itself, which is exactly the difference [`visible`](Layout::visible)
+    /// and [`is_collapsed`](Layout::is_collapsed) already carry — and
+    /// everything under a fold solves to zero extent, so what is derived from
+    /// it is empty rather than wrong.
+    pub fn visible_children(&self, id: NodeId) -> impl Iterator<Item = NodeId> + '_ {
+        self.children(id)
+            .iter()
+            .copied()
+            .filter(|c| !self.is_collapsed(*c))
+    }
+
+    /// The split `id` hangs from, or `None` for the root.
+    ///
+    /// **Upward, which nothing else here answers.** A [`hit`](Layout::hit)
+    /// only ever resolves to a leaf or to a divider, so *fold the split
+    /// enclosing what is under the pointer* has no route without this, and a
+    /// caller that keeps its own parent per node has a second copy of the
+    /// arena to keep in step — which the console did, and had to rebuild
+    /// whenever the layout was replaced.
+    pub fn parent(&self, id: NodeId) -> Option<NodeId> {
+        self.node(id.0).parent
+    }
+
     /// A split's axis, or `None` for a view.
     pub fn axis(&self, id: NodeId) -> Option<Axis> {
         self.arrangement.split_of(id.0).map(|(axis, _)| axis)
+    }
+
+    /// Whether `id` is a view — a leaf, the thing something paints. Everything
+    /// else is a split, whose gaps are what is visible between its children.
+    ///
+    /// The same answer as `axis(id).is_none()`, said as what it means: a
+    /// caller drawing regions is asking what kind of node this is, not which
+    /// way it lays its children out.
+    pub fn is_view(&self, id: NodeId) -> bool {
+        self.arrangement.split_of(id.0).is_none()
     }
 
     /// The divider thickness a split declares. What is actually drawn is this
@@ -535,6 +602,18 @@ impl Layout {
     /// stopped it.
     pub fn bounds(&self, id: NodeId) -> (f32, f32) {
         (self.node(id.0).min, self.node(id.0).max)
+    }
+
+    /// How `id` claims extent along its parent's axis: a size it keeps, or a
+    /// share of what is left.
+    ///
+    /// Exposed for the same reason [`bounds`](Layout::bounds) is, and it is
+    /// the other half of that answer. *Why does this region keep its size when
+    /// the window widens?* is half of what a person asks the panel, and
+    /// `bounds` cannot answer it — a [`Sizing::Fixed`] region with no maximum
+    /// still does not grow.
+    pub fn sizing(&self, id: NodeId) -> Sizing {
+        self.node(id.0).sizing
     }
 
     /// The viewport as it was last set.
@@ -581,9 +660,23 @@ impl Layout {
         self.node(id.0).collapsed
     }
 
-    /// Whether a [`solo`](Layout::solo) is in force.
-    pub fn is_soloed(&self) -> bool {
+    /// What a [`solo`](Layout::solo) is holding, or `None` where none is in
+    /// force.
+    ///
+    /// **Which, not whether.** A status line saying *soloed* and not what is
+    /// soloed is telling an operator the one thing they can already see, and
+    /// the collapsed flags a solo leaves behind do not say which node it was
+    /// aimed at — a split with a single child produces exactly the flags its
+    /// child does — so it is stored rather than recovered.
+    pub fn soloed(&self) -> Option<NodeId> {
         self.arrangement.soloed
+    }
+
+    /// Whether a [`solo`](Layout::solo) is in force. The yes-or-no of
+    /// [`soloed`](Layout::soloed), which is what an operation that undoes one
+    /// asks.
+    pub fn is_soloed(&self) -> bool {
+        self.arrangement.soloed.is_some()
     }
 
     // -- operations ------------------------------------------------------
@@ -626,12 +719,12 @@ impl Layout {
     /// is called, one `unsolo` returns to the arrangement before the first.
     pub fn solo(&mut self, id: NodeId) {
         let a = &mut self.arrangement;
-        if !a.soloed {
+        if a.soloed.is_none() {
             for i in 0..a.nodes.len() {
                 a.saved[i] = a.nodes[i].collapsed;
             }
-            a.soloed = true;
         }
+        a.soloed = Some(id);
         for i in 0..a.nodes.len() {
             a.nodes[i].collapsed = !a.on_solo_path(i, id);
         }
@@ -642,13 +735,13 @@ impl Layout {
     /// A no-op when nothing is soloed.
     pub fn unsolo(&mut self) {
         let a = &mut self.arrangement;
-        if !a.soloed {
+        if a.soloed.is_none() {
             return;
         }
         for i in 0..a.nodes.len() {
             a.nodes[i].collapsed = a.saved[i];
         }
-        a.soloed = false;
+        a.soloed = None;
         self.dirty = true;
     }
 
@@ -707,7 +800,7 @@ impl Layout {
         self.resize_pair(split.0, a, b, size_a, size_b, span);
         self.dirty = true;
         self.solve();
-        axis.origin(self.solved.rects[a]) + axis.extent(self.solved.rects[a])
+        axis.far(self.solved.rects[a])
     }
 
     /// Write a drag's two sizes into the model. This is an explicit operation,
@@ -839,6 +932,69 @@ impl Layout {
         *dirty = false;
     }
 
+    // -- boundaries ------------------------------------------------------
+
+    /// The gap between visible children `index` and `index + 1` of `split` —
+    /// the boundary a [`set_divider`](Layout::set_divider) with the same
+    /// `index` moves, and the one a [`Hit::Divider`] with the same `index`
+    /// names. `None` where `split` is a view, or where either of that pair is
+    /// not there.
+    ///
+    /// **A rectangle rather than a coordinate**, because both callers want it
+    /// that way. A view has to *draw* the divider, and what it draws is
+    /// exactly this rectangle — the space between two children, which is what
+    /// [`divider`](Layout::divider) is thick and spans the split across its
+    /// axis. A caller that wants the coordinate `set_divider` speaks in takes
+    /// [`Axis::origin`] of it, which is the far edge of the child before it.
+    ///
+    /// That is what a press needs and had no way to ask for: `set_divider`
+    /// says where a drag *landed* and nothing said where a boundary already
+    /// is, so a caller could not work out where along the boundary the pointer
+    /// took hold — and a divider that does not know that jumps to the pointer
+    /// the moment it is picked up.
+    ///
+    /// **Both sides of the pair are required, and that is the point.** The
+    /// console's own version of this checked only that child `index` existed
+    /// and returned that child's far edge, so folding the far side of a
+    /// boundary mid-drag handed back the split's own far edge — a position for
+    /// a boundary that is no longer there. Here the rectangle *is* the space
+    /// between the two, so there is nothing to return without both.
+    ///
+    /// Reads the solved rectangles: [`solve`](Layout::solve) first.
+    pub fn boundary(&self, split: NodeId, index: usize) -> Option<Rect> {
+        debug_assert!(
+            !self.dirty,
+            "boundary() read a stale solve; call solve() first"
+        );
+        let axis = self.axis(split)?;
+        let before = self.arrangement.visible_child(split.0, index)?;
+        let after = self.arrangement.visible_child(split.0, index + 1)?;
+        let start = axis.far(self.solved.rects[before]);
+        let size = (axis.origin(self.solved.rects[after]) - start).max(0.0);
+        Some(axis.slice(self.solved.rects[split.0], start, size))
+    }
+
+    /// Every boundary in the arrangement, as the `(split, index)` pair that
+    /// addresses it, splits in the order [`children`](Layout::children) walks
+    /// them.
+    ///
+    /// A window has a pointer to find a boundary with; **a view has this** —
+    /// it is what a frame iterates to draw the dividers, and what a caller
+    /// with no pointer at all iterates to reach them by name. It was a test
+    /// helper first, which is what it looks like when a question the crate
+    /// should answer is answered somewhere it cannot be reached from.
+    ///
+    /// An iterator rather than a `Vec`, because a frame that drew the dividers
+    /// would otherwise allocate to find them. Nothing here reads a rectangle,
+    /// so it does not need a solve; a boundary inside a folded split is listed
+    /// like any other and [`boundary`](Layout::boundary) gives it the zero
+    /// extent everything under a fold has.
+    pub fn boundaries(&self) -> impl Iterator<Item = (NodeId, usize)> + '_ {
+        (0..self.arrangement.nodes.len()).flat_map(move |i| {
+            (0..self.arrangement.visible_count(i).saturating_sub(1)).map(move |k| (NodeId(i), k))
+        })
+    }
+
     // -- hit testing -----------------------------------------------------
 
     /// What is under `p`, with a divider's grab area widened by `grab` on each
@@ -896,7 +1052,7 @@ impl Layout {
                 continue;
             }
             if let Some(a) = prev {
-                let near = axis.origin(self.solved.rects[a]) + axis.extent(self.solved.rects[a]);
+                let near = axis.far(self.solved.rects[a]);
                 let far = axis.origin(self.solved.rects[c]);
                 if along >= near - grab && along <= far + grab {
                     return Some(index);

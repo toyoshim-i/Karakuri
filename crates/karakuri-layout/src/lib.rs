@@ -42,6 +42,25 @@
 //! assert_eq!(layout.rect(program), Rect::new(244.0, 0.0, 1036.0, 720.0));
 //! ```
 //!
+//! # The tree answers upward and across, not only downward
+//!
+//! A caller can walk from [`Layout::root`] down and solve, and for a while
+//! that was all it could do: the parent of a node, the visible children of a
+//! split, where a boundary is, and where all of them are were each left to
+//! whoever was asking. What that produced is a caller with a model of its own
+//! — the console kept a parent per node, rebuilt it whenever the layout was
+//! replaced, and wrote its own copy of the [`Axis`] arithmetic — and a second
+//! model of one tree is two answers that drift.
+//!
+//! So the questions that go the other way are answered here:
+//! [`parent`](Layout::parent), [`visible_children`](Layout::visible_children)
+//! — the ones a divider index counts —
+//! [`boundary`](Layout::boundary) and [`boundaries`](Layout::boundaries),
+//! [`sizing`](Layout::sizing), [`soloed`](Layout::soloed) and
+//! [`is_view`](Layout::is_view). None of them takes `&mut self`, and the two
+//! that return a set of nodes return an iterator, because a view asks them
+//! every frame.
+//!
 //! # Solving never writes back into the model
 //!
 //! This is the one rule the crate is built around, and it is the thing a future
@@ -137,7 +156,15 @@ pub enum Axis {
 
 impl Axis {
     /// The extent of `r` along this axis.
-    pub(crate) fn extent(self, r: Rect) -> f32 {
+    ///
+    /// **These four are public because every caller of this crate needs
+    /// them.** A [`Layout`] answers in [`Rect`]s and takes coordinates *along
+    /// a split's axis* — [`Layout::set_divider`] is one — so a caller that has
+    /// an axis and a rectangle is doing this arithmetic whatever this crate
+    /// says. While they were `pub(crate)`, the console wrote its own copy of
+    /// all four, which is a copy of this crate's private code that every
+    /// future caller would have written again.
+    pub fn extent(self, r: Rect) -> f32 {
         match self {
             Axis::Row => r.w,
             Axis::Column => r.h,
@@ -145,15 +172,22 @@ impl Axis {
     }
 
     /// The near edge of `r` along this axis.
-    pub(crate) fn origin(self, r: Rect) -> f32 {
+    pub fn origin(self, r: Rect) -> f32 {
         match self {
             Axis::Row => r.x,
             Axis::Column => r.y,
         }
     }
 
+    /// The far edge of `r` along this axis, which is its origin plus its
+    /// extent. A boundary is one of these — the far edge of the child before
+    /// it — which is why it is a method rather than left as a sum.
+    pub fn far(self, r: Rect) -> f32 {
+        self.origin(r) + self.extent(r)
+    }
+
     /// The coordinate of `p` along this axis.
-    pub(crate) fn coord(self, p: Point) -> f32 {
+    pub fn coord(self, p: Point) -> f32 {
         match self {
             Axis::Row => p.x,
             Axis::Column => p.y,

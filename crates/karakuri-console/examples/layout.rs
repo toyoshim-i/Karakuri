@@ -83,7 +83,7 @@
 
 use std::sync::Arc;
 
-use karakuri_console::panel::{extent, Dragged, Op, Outcome, Panel, Pressed, Released, Visibility};
+use karakuri_console::panel::{Dragged, Op, Outcome, Panel, Pressed, Released, Visibility};
 use karakuri_engine::Gpu;
 use karakuri_layout::{Axis, NodeId, Point, Rect};
 use winit::application::ApplicationHandler;
@@ -128,14 +128,14 @@ impl Readout {
     /// Give every leaf a colour, in tree order, so neighbours differ and the
     /// legend reads top to bottom. Called again whenever the panel rebuilds.
     fn recolour(&mut self) {
-        let leaves = self.panel.nodes().iter().filter(|n| n.leaf).count().max(1);
+        let layout = self.panel.layout();
+        let nodes = self.panel.nodes();
+        let leaves = nodes.iter().filter(|n| layout.is_view(n.id)).count().max(1);
         let mut nth = 0;
-        self.colours = self
-            .panel
-            .nodes()
+        self.colours = nodes
             .iter()
             .map(|node| {
-                node.leaf.then(|| {
+                layout.is_view(node.id).then(|| {
                     let colour = hue(nth as f32 / leaves as f32);
                     nth += 1;
                     colour
@@ -217,9 +217,9 @@ impl Readout {
             Some((a, b)) => format!(
                 "{} {:.0} | {} {:.0}",
                 self.label(a),
-                extent(d.axis, self.panel.layout().rect(a)),
+                d.axis.extent(self.panel.layout().rect(a)),
                 self.label(b),
-                extent(d.axis, self.panel.layout().rect(b))
+                d.axis.extent(self.panel.layout().rect(b))
             ),
             None => "no pair".to_owned(),
         };
