@@ -15,7 +15,7 @@
 //!
 //! # What this is for
 //!
-//! Three things, and none of them is a bay.
+//! Four things, and none of them is a bay.
 //!
 //! 1. That `egui` renders through `wgpu` 30 into this window at all, which is
 //!    the bet
@@ -24,6 +24,8 @@
 //! 2. That the arrangement's numbers look right at real sizes against
 //!    `docs/manual/console.html`.
 //! 3. That dragging a boundary still works with a toolkit in the loop.
+//! 4. **What a still panel costs**, printed once the window has gone quiet —
+//!    the claim P-0072's first clause makes, measured rather than asserted.
 //!
 //! **It is deliberately not the start of a bay.** Every body is empty; see
 //! [`karakuri_console::view`].
@@ -45,6 +47,23 @@
 //! under identical ones, and a hand held against the edge of the window, which
 //! is where a drag ends up, produces hundreds a second into a terminal that
 //! has to keep up with them while the window waits.
+//!
+//! # The loop sleeps, and what wakes it is a decision made elsewhere
+//!
+//! [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)'s
+//! first clause: a panel with nothing changing on it does no per-frame work.
+//! **Whether a frame is owed is `karakuri_console::repaint`'s to answer**, not
+//! this file's — the same seam the model came out of the window loop through,
+//! and for the same reason: an event handler cannot be called from a test, and
+//! an under-repaint is a stale pixel rather than an error, so there is nothing
+//! to assert against in here. Every arm below reaches
+//! [`Change::repaint`](karakuri_console::repaint::Change::repaint) and none of
+//! them decides for itself.
+//!
+//! Three things wake the loop and they are the whole list: a window event,
+//! the deadline `egui` named for its own next frame, and the deadline the
+//! reading below is taken on. `App::about_to_wait` is the one place
+//! `ControlFlow` is set.
 //!
 //! # Every frame that could not be acquired gets a decision
 //!
@@ -69,12 +88,13 @@ use std::time::{Duration, Instant};
 
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Dragged, Op, Outcome, Panel, Pressed, Released, Visibility};
+use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
 use karakuri_console::view::{Kind, View};
 use karakuri_engine::Gpu;
 use karakuri_layout::{Axis, NodeId, Point};
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::{ElementState, MouseButton, StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
@@ -84,19 +104,34 @@ use winit::window::{Window, WindowId};
 const WINDOW: (f64, f64) = (1440.0, 900.0);
 
 // ---------------------------------------------------------------------------
-// What a panel frame costs
+// What a still panel costs
 // ---------------------------------------------------------------------------
 
-/// How many frames the cost of a panel frame is measured over before the
-/// summary is printed.
+/// How long the window has to go untouched before the reading is taken, and
+/// the stretch every number in it is measured over.
 ///
-/// **The window drives itself for exactly this many frames and then stops.**
-/// The loop is `ControlFlow::Wait`, so with nobody touching it a run would
-/// draw one frame and have nothing to average; asking for a redraw until the
-/// sample is full is the smallest thing that makes the measurement happen at
-/// all, and it stops afterwards rather than spinning for the life of the
-/// window.
-const MEASURE: usize = 180;
+/// **The measurement is the claim now, and it used to be its own opposite.**
+/// What was here drove the window for 180 frames and reported what one of them
+/// cost; the loop had to spin for the sample to fill, so the number described
+/// a program that no longer exists the moment the loop stops spinning.
+/// [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)'s
+/// first clause claims that nothing is drawn at all while nothing is
+/// happening, so that is what is counted: frames drawn in three seconds of an
+/// untouched window, and what they allocated.
+///
+/// **Three seconds** because a 60 Hz spin fills it with 180 frames — the old
+/// sample, to the frame, so the two readings are about the same stretch of
+/// wall clock — and because a twelve-second run has room for it several times
+/// over.
+const STILL: Duration = Duration::from_secs(3);
+
+/// How many frames the per-frame sample holds.
+///
+/// It is a cap and not a target: nothing drives the window to fill it, and a
+/// run where nobody touches anything leaves it nearly empty, which is the
+/// point. Allocated once, so measuring does not allocate on the path it is
+/// measuring.
+const SAMPLE: usize = 240;
 
 /// The allocator, counting. **Per thread, not per process** — `wgpu` allocates
 /// on threads of its own and a process-wide counter would attribute that to
@@ -161,76 +196,202 @@ struct Cost {
     bytes: u64,
 }
 
-/// The sample, and the summary it prints once.
+/// What was drawn while nobody was touching the window. **This is the number**
+/// P-0072's first clause is about, and the clause says every field of it is
+/// zero.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Still {
+    frames: usize,
+    allocs: u64,
+    bytes: u64,
+}
+
+/// The sample, the stillness, and the summary printed once.
 struct Costs {
+    /// What the frames that *were* asked for cost.
     frames: Vec<Cost>,
+    /// Every frame drawn, including any past the end of `frames`.
+    drawn: usize,
+    /// When the window was last touched by anything at all.
+    quiet_since: Instant,
+    /// **A frame is owed to something that happened**, and the next one drawn
+    /// is that frame rather than a frame drawn on a still panel.
+    ///
+    /// Without it the reading blames the panel for the frame it was asked for:
+    /// an event resets the stretch and the frame it asked for lands a
+    /// millisecond into the new one, so a window that did exactly the right
+    /// thing reports having drawn on an untouched panel.
+    owed: bool,
+    /// What has been drawn since `quiet_since` that nothing asked for.
+    still: Still,
     said: bool,
 }
 
 impl Costs {
     fn new() -> Costs {
         Costs {
-            // Allocated once, so measuring does not allocate on the path it
-            // is measuring.
-            frames: Vec::with_capacity(MEASURE),
+            frames: Vec::with_capacity(SAMPLE),
+            drawn: 0,
+            quiet_since: Instant::now(),
+            owed: false,
+            still: Still::default(),
             said: false,
         }
     }
 
-    fn wants_another(&self) -> bool {
-        self.frames.len() < MEASURE
+    /// **Something touched the window**, so the stillness starts again from
+    /// here and what was drawn during the last stretch is no longer about a
+    /// still panel.
+    ///
+    /// Every window event that is not a frame this loop asked for itself
+    /// counts, including the ones the operator did not cause — a move, a
+    /// focus, an occlusion. Resetting too eagerly only ever makes the reading
+    /// harder to reach, never easier to pass.
+    fn touched(&mut self) {
+        self.quiet_since = Instant::now();
+        self.still = Still::default();
+    }
+
+    /// **A frame was asked for by something that happened**, so the next one
+    /// drawn is not on the panel's account.
+    ///
+    /// Every `request_redraw` in this file goes through here except one, and
+    /// the exception is the point of the reading: **the frame `egui` asked for
+    /// after a delay it named.** The distinction is between `egui` saying *I
+    /// have not finished drawing what you just asked me to* — a `repaint_delay`
+    /// of zero, a second pass of a frame already owed, which is what it does
+    /// for a pass or two while the font atlas settles — and `egui` saying
+    /// *wake me in 250 ms*, which is an animation and is per-frame work on a
+    /// panel nobody is touching. The first goes through here and the second
+    /// does not, so a delay mishandled into a spin shows in the reading as the
+    /// frames it actually drew.
+    ///
+    /// The other way it can fail is loud rather than quiet: something asking
+    /// for frames without pause never lets the window be still for [`STILL`],
+    /// and then no reading is printed at all. **A run of this example that
+    /// prints no reading is that failure.**
+    fn owes(&mut self) {
+        self.owed = true;
+        self.touched();
     }
 
     fn push(&mut self, cost: Cost) {
-        if self.frames.len() < MEASURE {
+        self.drawn += 1;
+        if !self.owed {
+            self.still.frames += 1;
+            self.still.allocs += cost.allocs;
+            self.still.bytes += cost.bytes;
+        }
+        self.owed = false;
+        if self.frames.len() < SAMPLE {
             self.frames.push(cost);
         }
     }
 
-    /// The summary, once the sample is full. Median and worst rather than a
-    /// mean: a frame path is judged by its tail.
+    /// When the reading is due, and `None` once it has been taken. It is also
+    /// what keeps the loop on a deadline until then — see
+    /// [`App::about_to_wait`].
+    fn due(&self) -> Option<Instant> {
+        match self.said {
+            true => None,
+            false => Some(self.quiet_since + STILL),
+        }
+    }
+
+    /// The reading. Median and worst rather than a mean for the per-frame
+    /// figures: a frame path is judged by its tail.
     fn say(&mut self) {
-        if self.said || self.wants_another() {
+        if self.said {
             return;
         }
         self.said = true;
-        let mut ui: Vec<f64> = self.frames.iter().map(|c| ms(c.ui)).collect();
-        let mut paint: Vec<f64> = self.frames.iter().map(|c| ms(c.paint)).collect();
-        ui.sort_by(f64::total_cmp);
-        paint.sort_by(f64::total_cmp);
-        let allocs: u64 = self.frames.iter().map(|c| c.allocs).sum();
-        let bytes: u64 = self.frames.iter().map(|c| c.bytes).sum();
-        let n = self.frames.len();
 
         println!();
-        println!("what a panel frame costs, over {n} frames of this window:");
+        println!("what a still panel costs, measured on this window:");
         println!(
-            "  egui pass    median {:.3} ms   p95 {:.3} ms   worst {:.3} ms",
-            ui[n / 2],
-            ui[n * 95 / 100],
-            ui[n - 1]
+            "  over {:.1} s with nothing touching it: {} frames drawn, {} allocations, \
+             {} bytes",
+            STILL.as_secs_f64(),
+            self.still.frames,
+            self.still.allocs,
+            self.still.bytes
         );
         println!(
-            "  upload+pass  median {:.3} ms   p95 {:.3} ms   worst {:.3} ms",
-            paint[n / 2],
-            paint[n * 95 / 100],
-            paint[n - 1]
+            "  {}",
+            match self.still == Still::default() {
+                true =>
+                    "so P-0072's first clause holds here: no per-frame work is done to \
+                         redraw what nobody has touched and nothing has moved.",
+                false =>
+                    "so P-0072's first clause does NOT hold here — something is asking \
+                          for frames on an untouched window, and the likeliest something \
+                          is an `egui` repaint delay answered immediately instead of \
+                          waited out.",
+            }
         );
+
+        if !self.frames.is_empty() {
+            let mut ui: Vec<f64> = self.frames.iter().map(|c| ms(c.ui)).collect();
+            let mut paint: Vec<f64> = self.frames.iter().map(|c| ms(c.paint)).collect();
+            // **Median, where the figure this replaces was a mean.** The mean
+            // was over 180 frames and the first one was lost in it; the sample
+            // here is however many frames somebody asked for, which on a run
+            // nobody touches is three — and the first of those builds the font
+            // atlas and allocates ten times what a frame does. A mean of three
+            // is that one frame with two others attached.
+            let mut allocs: Vec<u64> = self.frames.iter().map(|c| c.allocs).collect();
+            let mut bytes: Vec<u64> = self.frames.iter().map(|c| c.bytes).collect();
+            ui.sort_by(f64::total_cmp);
+            paint.sort_by(f64::total_cmp);
+            allocs.sort_unstable();
+            bytes.sort_unstable();
+            let n = self.frames.len();
+
+            println!();
+            println!(
+                "what a frame costs when something asks for one, over the {} drawn so far \
+                 ({} sampled):",
+                self.drawn, n
+            );
+            println!(
+                "  egui pass    median {:.3} ms   p95 {:.3} ms   worst {:.3} ms",
+                ui[n / 2],
+                ui[n * 95 / 100],
+                ui[n - 1]
+            );
+            println!(
+                "  upload+pass  median {:.3} ms   p95 {:.3} ms   worst {:.3} ms",
+                paint[n / 2],
+                paint[n * 95 / 100],
+                paint[n - 1]
+            );
+            println!(
+                "  the egui pass allocates a median {} times a frame, {:.1} kB a frame \
+                 (worst {} and {:.1} kB, which is the first frame building the font atlas)",
+                allocs[n / 2],
+                bytes[n / 2] as f64 / 1024.0,
+                allocs[n - 1],
+                bytes[n - 1] as f64 / 1024.0
+            );
+            println!(
+                "  that per-frame price is not what changed, and immediate mode pays it by \
+                 construction: ADR-0164 measured 184 allocations and 226.2 kB a frame here \
+                 with every bay empty. What changed is how many frames pay it — the loop \
+                 this replaces drew 180 whether or not anything was happening, which at \
+                 60 Hz is the three seconds above."
+            );
+            println!(
+                "  taken here, on this window at {:.0}x{:.0} logical with every bay empty — \
+                 NOT at the workspace's reference workload (262144 elements at 1280x720, \
+                 docs/contributing.md §1), which this has nothing to do with. Host clock, \
+                 debug profile with dependencies at opt-level 3.",
+                WINDOW.0, WINDOW.1
+            );
+        }
+        println!();
         println!(
-            "  the egui pass allocates {:.0} times a frame, {:.1} kB a frame",
-            allocs as f64 / n as f64,
-            bytes as f64 / n as f64 / 1024.0
-        );
-        println!(
-            "  taken here, on this window at {:.0}x{:.0} logical with every bay empty — NOT at \
-             the workspace's reference workload (262144 elements at 1280x720, \
-             docs/contributing.md §1), which this has nothing to do with. Host clock, debug \
-             profile with dependencies at opt-level 3.",
-            WINDOW.0, WINDOW.1
-        );
-        println!(
-            "  immediate mode allocates every frame by construction, so the count above is a \
-             number rather than a defect. See the report."
+            "the loop is on `ControlFlow::Wait` from here: it does nothing at all until the \
+             window is touched or `egui` names a deadline of its own."
         );
         println!();
     }
@@ -358,9 +519,14 @@ impl Readout {
         }
     }
 
-    fn op(&mut self, op: Op) {
+    /// Act, say what happened, and hand the outcome back — **the repaint
+    /// decision is taken from what the operation did, not from the key that
+    /// asked for it.** `p` over an empty panel and `z` with nothing folded
+    /// both reach the model and move nothing.
+    fn op(&mut self, op: Op) -> Outcome {
         let outcome = self.panel.op(op);
         self.say_op(op, &outcome);
+        outcome
     }
 
     /// What an operation did, in words. The model returns the facts; which
@@ -627,6 +793,19 @@ struct App {
     /// Logical size, so the numbers printed are the arrangement's own units
     /// rather than the display's.
     scale: f64,
+    /// **When `egui` asked to be drawn again, kept as the deadline it is.**
+    ///
+    /// `egui` animates, blinks a text cursor and fades a tooltip in, and it
+    /// says so as a `repaint_delay` on the frame's `ViewportOutput`. Turning
+    /// that into an immediate `request_redraw` would turn a 250 ms animation
+    /// into a spin at whatever rate this loop can manage — which is the cost
+    /// P-0072's first clause is about, arrived at from the one direction that
+    /// looks like obeying it. So the delay is added to the clock here and
+    /// `about_to_wait` sleeps until it.
+    ///
+    /// `None` where `egui` asked for nothing, which is every frame on a panel
+    /// with nothing on it.
+    egui_due: Option<Instant>,
 }
 
 impl App {
@@ -637,17 +816,48 @@ impl App {
             readout: Readout::new(WINDOW.0 as f32, WINDOW.1 as f32),
             costs: Costs::new(),
             scale: 1.0,
+            egui_due: None,
         }
     }
 
     /// Hand an event to `egui`, and nowhere else.
     ///
     /// Every call site has already asked `claim` where a pointer event
-    /// belongs; this is the other branch.
-    fn to_egui(gfx: &mut Gfx, event: &WindowEvent) {
+    /// belongs; this is the other branch. `EventResponse::repaint` is `egui`'s
+    /// own answer for the event it was just given, and it is the reason
+    /// `Change::Pointer(Claim::Egui)` asks for nothing: one answer per event,
+    /// from whoever got it.
+    fn to_egui(gfx: &mut Gfx, costs: &mut Costs, event: &WindowEvent) {
         let response = gfx.egui.on_window_event(&gfx.window, event);
         if response.repaint {
+            costs.owes();
             gfx.window.request_redraw();
+        }
+    }
+
+    /// **Act on a repaint decision, and the only place a frame is asked for
+    /// outside `to_egui` and `missed`.**
+    ///
+    /// Three answers and three actions: ask for a frame, note a deadline, or
+    /// do nothing at all — and the third is the one P-0072's first clause is
+    /// made of.
+    ///
+    /// It takes the two fields rather than `&mut self` so that a caller
+    /// holding `self.gfx` can still reach `self.egui_due`.
+    fn wants(gfx: &Gfx, egui_due: &mut Option<Instant>, costs: &mut Costs, repaint: Repaint) {
+        match repaint {
+            Repaint::Never => {}
+            Repaint::Now => {
+                costs.owes();
+                gfx.window.request_redraw();
+            }
+            Repaint::After(delay) => {
+                let due = Instant::now() + delay;
+                *egui_due = Some(match *egui_due {
+                    Some(had) => had.min(due),
+                    None => due,
+                });
+            }
         }
     }
 }
@@ -712,6 +922,9 @@ impl ApplicationHandler for App {
         );
         self.readout.print_legend();
 
+        // The first frame is owed to the window appearing, not drawn on a
+        // still panel.
+        self.costs.owes();
         window.request_redraw();
         self.gfx = Some(Gfx {
             window,
@@ -723,15 +936,82 @@ impl ApplicationHandler for App {
         });
     }
 
+    /// **Where a deadline comes due**, which is the start of every iteration
+    /// the loop makes — including the one a `ControlFlow::WaitUntil` woke it
+    /// for.
+    ///
+    /// Both deadlines are checked whatever the [`StartCause`] rather than only
+    /// on `ResumeTimeReached`: a wait that is cancelled early by a real event
+    /// still has to leave a due deadline serviced, and checking two `Instant`s
+    /// costs nothing.
+    fn new_events(&mut self, _event_loop: &ActiveEventLoop, _cause: StartCause) {
+        let now = Instant::now();
+        if self.egui_due.is_some_and(|due| due <= now) {
+            self.egui_due = None;
+            if let Some(gfx) = self.gfx.as_ref() {
+                // One frame, now that the delay `egui` asked for has passed.
+                gfx.window.request_redraw();
+            }
+        }
+        if self.costs.due().is_some_and(|due| due <= now) {
+            self.costs.say();
+        }
+    }
+
+    /// **The one place the control flow is set, and it is a deadline or
+    /// nothing.**
+    ///
+    /// `Wait` is a window that costs the machine nothing at all until somebody
+    /// touches it, which is P-0072's first clause as the operating system sees
+    /// it. `WaitUntil` is the soonest of the two things that are owed at a
+    /// time rather than on an event: the frame `egui` asked for after a delay,
+    /// and the reading `Costs` takes once the window has been still long
+    /// enough. Neither is `Poll`, and nothing here asks for a frame in order
+    /// to have something to measure.
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let next = [self.egui_due, self.costs.due()]
+            .into_iter()
+            .flatten()
+            .min();
+        event_loop.set_control_flow(match next {
+            Some(at) => ControlFlow::WaitUntil(at),
+            None => ControlFlow::Wait,
+        });
+    }
+
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         let Some(gfx) = self.gfx.as_mut() else {
             return;
         };
+        // **The stillness clock, and it is reset by everything except a frame
+        // this loop asked for itself.** A frame drawn while this has not been
+        // reset is a frame drawn on an untouched window, which is the number
+        // the reading is about; anything arriving from the platform — a
+        // pointer, a key, a move, a focus, an occlusion — is the window being
+        // touched. Resetting too eagerly only makes the reading harder to
+        // reach, never easier to pass.
+        if !matches!(event, WindowEvent::RedrawRequested) {
+            self.costs.touched();
+        }
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 self.scale = scale_factor;
-                App::to_egui(gfx, &event);
+                App::to_egui(gfx, &mut self.costs, &event);
+                // **A resize that arrives without a redraw request of its
+                // own.** The arrangement is stated in logical pixels, so the
+                // same window is a different viewport at a different scale.
+                // macOS follows this event with a `Resized` and the viewport
+                // is set there — but *usually followed by* is a platform's
+                // habit rather than a guarantee, and what it would leave
+                // behind is a panel drawn at the wrong scale with nothing
+                // anywhere saying so. So the frame is asked for here too.
+                App::wants(
+                    gfx,
+                    &mut self.egui_due,
+                    &mut self.costs,
+                    Change::Viewport.repaint(),
+                );
             }
             WindowEvent::Resized(size) => {
                 gfx.config.width = size.width.max(1);
@@ -743,8 +1023,13 @@ impl ApplicationHandler for App {
                 );
                 self.readout.panel.set_viewport(w, h);
                 println!("viewport: {w:.0} x {h:.0}");
-                App::to_egui(gfx, &event);
-                gfx.window.request_redraw();
+                App::to_egui(gfx, &mut self.costs, &event);
+                App::wants(
+                    gfx,
+                    &mut self.egui_due,
+                    &mut self.costs,
+                    Change::Viewport.repaint(),
+                );
             }
 
             // -- the three events the rule is about -----------------------
@@ -755,10 +1040,16 @@ impl ApplicationHandler for App {
                     (position.x / self.scale) as f32,
                     (position.y / self.scale) as f32,
                 );
-                if self.readout.pointer(Pointer::Moved(p)) == Claim::Egui {
-                    App::to_egui(gfx, &event);
+                let claim = self.readout.pointer(Pointer::Moved(p));
+                if claim == Claim::Egui {
+                    App::to_egui(gfx, &mut self.costs, &event);
                 }
-                gfx.window.request_redraw();
+                App::wants(
+                    gfx,
+                    &mut self.egui_due,
+                    &mut self.costs,
+                    Change::Pointer(claim).repaint(),
+                );
             }
             WindowEvent::MouseInput {
                 state,
@@ -769,22 +1060,35 @@ impl ApplicationHandler for App {
                     ElementState::Pressed => Pointer::Down,
                     ElementState::Released => Pointer::Up,
                 };
-                if self.readout.pointer(which) == Claim::Egui {
-                    App::to_egui(gfx, &event);
+                let claim = self.readout.pointer(which);
+                if claim == Claim::Egui {
+                    App::to_egui(gfx, &mut self.costs, &event);
                 }
-                gfx.window.request_redraw();
+                App::wants(
+                    gfx,
+                    &mut self.egui_due,
+                    &mut self.costs,
+                    Change::Pointer(claim).repaint(),
+                );
             }
             WindowEvent::MouseWheel { .. } => {
-                if self.readout.pointer(Pointer::Wheel) == Claim::Egui {
-                    App::to_egui(gfx, &event);
+                let claim = self.readout.pointer(Pointer::Wheel);
+                if claim == Claim::Egui {
+                    App::to_egui(gfx, &mut self.costs, &event);
                 }
+                App::wants(
+                    gfx,
+                    &mut self.egui_due,
+                    &mut self.costs,
+                    Change::Wheeled(claim).repaint(),
+                );
             }
 
             WindowEvent::KeyboardInput { .. } => {
                 // `egui` sees every key: it has no focused widget in this pass
                 // and so consumes nothing, and its modifier state has to stay
                 // current for the frame it does.
-                App::to_egui(gfx, &event);
+                App::to_egui(gfx, &mut self.costs, &event);
                 let WindowEvent::KeyboardInput { event: key, .. } = &event else {
                     unreachable!("the arm this is in")
                 };
@@ -804,14 +1108,30 @@ impl ApplicationHandler for App {
                     Key::Character("r") => Op::Reset,
                     Key::Character("p") => Op::Report,
                     Key::Character("n") => {
+                        // **The key that changes the screen without touching
+                        // the pointer and without touching the model.** The
+                        // room is the view's: every colour on the panel
+                        // changes and nothing in the arrangement moves, so no
+                        // `Outcome` says so and `Change::Room` is the only
+                        // thing that does.
                         self.readout.room();
-                        gfx.window.request_redraw();
+                        App::wants(
+                            gfx,
+                            &mut self.egui_due,
+                            &mut self.costs,
+                            Change::Room.repaint(),
+                        );
                         return;
                     }
                     _ => return,
                 };
-                self.readout.op(op);
-                gfx.window.request_redraw();
+                let outcome = self.readout.op(op);
+                App::wants(
+                    gfx,
+                    &mut self.egui_due,
+                    &mut self.costs,
+                    Change::Operated(&outcome).repaint(),
+                );
             }
 
             WindowEvent::RedrawRequested => {
@@ -820,9 +1140,13 @@ impl ApplicationHandler for App {
                     match missed {
                         Missed::Remake => {
                             gfx.surface.configure(&gfx.gpu.device, &gfx.config);
+                            self.costs.owes();
                             gfx.window.request_redraw();
                         }
-                        Missed::Again => gfx.window.request_redraw(),
+                        Missed::Again => {
+                            self.costs.owes();
+                            gfx.window.request_redraw();
+                        }
                         Missed::Idle => {}
                         Missed::Fault => {
                             if !self.faulted {
@@ -861,6 +1185,19 @@ impl ApplicationHandler for App {
                 let (allocs2, bytes2) = counted();
                 cost.allocs = allocs2 - allocs;
                 cost.bytes = bytes2 - bytes;
+
+                // **What `egui` asked for, with the delay it asked for.** It
+                // is `Duration::MAX` on a pass that wants nothing, which is
+                // every pass on a panel with nothing on it, and that is
+                // `Repaint::Never` — the loop then has no reason of its own to
+                // draw again. Read off the root viewport's output, after the
+                // clock above so that a map lookup is not in the number.
+                let asked = Repaint::asked(
+                    output
+                        .viewport_output
+                        .get(&karakuri_console::egui::ViewportId::ROOT)
+                        .map_or(Duration::MAX, |v| v.repaint_delay),
+                );
 
                 gfx.egui
                     .handle_platform_output(&gfx.window, output.platform_output);
@@ -935,21 +1272,26 @@ impl ApplicationHandler for App {
                 gfx.gpu.queue.present(frame);
 
                 self.costs.push(cost);
-                if self.costs.wants_another() {
-                    gfx.window.request_redraw();
-                } else {
-                    self.costs.say();
-                }
+                // **Nothing here asks for another frame.** The loop this
+                // replaces did, until its sample was full, and that was the
+                // whole of what made the 180-frame measurement possible; it is
+                // also exactly the per-frame work P-0072's first clause
+                // forbids. What is left is `egui`'s own request, honoured with
+                // its delay.
+                App::wants(gfx, &mut self.egui_due, &mut self.costs, asked);
             }
-            _ => App::to_egui(gfx, &event),
+            _ => App::to_egui(gfx, &mut self.costs, &event),
         }
     }
 }
 
 fn main() {
     let event_loop = EventLoop::new().expect("event loop");
-    // Nothing animates: a frame is drawn when something happened, or while the
-    // frame-cost sample is still filling.
+    // **The loop sleeps.** A frame is drawn when something changed it or when
+    // `egui` asked for one after a delay it named, and on no other occasion —
+    // `App::about_to_wait` sets this again after every iteration and is where
+    // the rule actually lives. This is the state it starts in so that the
+    // window between here and the first `about_to_wait` is not a spin either.
     event_loop.set_control_flow(ControlFlow::Wait);
     event_loop.run_app(&mut App::new()).expect("run");
 }
@@ -982,6 +1324,52 @@ mod tests {
         assert_eq!(missed(&Acquired::Occluded), Some(Missed::Idle));
         // Not self-correcting, so it is said rather than retried.
         assert_eq!(missed(&Acquired::Validation), Some(Missed::Fault));
+    }
+
+    /// **A frame nobody asked for is the one the reading is about.**
+    ///
+    /// The measurement carries the claim now, so what it counts has to be
+    /// asserted rather than eyeballed on stdout. The failure it exists for is
+    /// the one that made the first run of this read `3 frames` on a window
+    /// that had behaved perfectly: an event resets the stretch, and the frame
+    /// that event asked for lands a millisecond into the new one and gets
+    /// blamed on the panel. The other direction is worse and is asserted too —
+    /// a `push` that never counts anything reads `0 frames` whatever the
+    /// window is doing, which is a measurement that cannot fail.
+    #[test]
+    fn a_frame_nobody_asked_for_is_the_one_counted_against_a_still_panel() {
+        let frame = Cost {
+            allocs: 7,
+            bytes: 70,
+            ..Default::default()
+        };
+        let mut costs = Costs::new();
+
+        // A frame something asked for is that something's.
+        costs.owes();
+        costs.push(frame);
+        assert_eq!(costs.still, Still::default(), "an owed frame was counted");
+
+        // A frame nobody asked for — `egui`'s own deadline, on an untouched
+        // window — is per-frame work on a still panel, which is the number.
+        costs.push(frame);
+        assert_eq!(
+            costs.still,
+            Still {
+                frames: 1,
+                allocs: 7,
+                bytes: 70
+            },
+            "a frame nobody asked for was not counted"
+        );
+
+        // Both frames happened, whoever they belonged to.
+        assert_eq!(costs.drawn, 2);
+
+        // And touching the window starts the stretch again, so what was drawn
+        // during the last one stops being about a still panel.
+        costs.touched();
+        assert_eq!(costs.still, Still::default());
     }
 
     /// **A whole drag, through the window loop's own routing.**
