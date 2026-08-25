@@ -655,6 +655,30 @@ nothing at all while running: parameter writes, binding changes, edge rewiring, 
 seeds, capacity, canvas size, un-merging a slot, restoring every renderer to the fold, a gain
 fade, and starting or stopping a session recording.
 
+**The vocabulary exists now**
+([ADR-0180](adr/0180-the-operation-vocabulary-is-a-crate-with-no-dependencies.md)):
+`crates/karakuri-operation/` is a leaf crate with **no dependencies at all**, holding all 46
+operations, and a test reads [every operation](manual/operations.html) and asserts that the page and
+the type enumerate the same ones both ways round. **Nothing is migrated** — `karakuri-midi`'s
+`Action`, the console's `panel::Op` and the CLI's match arms are untouched and move onto it one at a
+time, each of which is now a change that can be reasoned about because the target has stopped
+moving.
+
+Building it found the thing worth having built it for: **`Action` and `panel::Op` each claim to be
+the vocabulary idea and contradict each other head-on.** `Action` is engine-neutral by declaration
+and therefore full of toggles and cycles; `panel::Op` argues at length that a vocabulary must have
+none. The two rules are not jointly satisfiable — *a crate that refuses to name a value cannot say
+`set blend to over`, so the only gesture left to it is `step it`* — which is
+[P-0074](principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md), and the
+vocabulary owns the value lists because of it.
+
+Five things are named and left `Undecided`, each with the decision written at the variant rather
+than guessed: **moving a boundary** (most splits are unnamed and `set_divider` takes a viewport
+pixel a key press cannot mean), **choosing where the frame goes** (*no output has an identity
+anywhere in this workspace* — `Sink` has no name and no id, and the console reaches its one sink by
+folding a layout region), **walking the edit history**, **"edit the file instead"** (which names an
+event rather than an operation), and **the camera**.
+
 **So M5 opens with naming rather than drawing**, which is the shape M4 opened with — nothing
 could be edited there until nodes had names, and nothing can be routed here until operations
 do. [Every operation](manual/operations.html) is where that enumeration is written down, and a
