@@ -271,7 +271,8 @@ from.** The number is restated whenever the code under it changes shape, because
 a shape that no longer exists reads as current forever.
 
 **The rest of P-0072 is not built** — nothing declares a cost or a staleness and there is no
-scheduler, because nothing but the Program bay is live.
+scheduler. What it was waiting for was a second live region with a different character from the
+first, and the transport row is that; see below.
 
 **Half of *making the picture a sink in fact* is built, and it is the half that had to come
 first.** `frame::compose` no longer gates the frame on a sink: it takes a slice of them, asks each
@@ -321,6 +322,21 @@ the claim rule holds *only while the gaps stay empty*, and that the first contro
 bay's edge would sit under a boundary's grab. It clears by 1.75 pixels, measured rather than
 assumed, and that is now a test that fails if the control moves, the row shortens or `GRAB` widens
 ([ADR-0176](adr/0176-a-control-the-console-draws-is-the-panels.md)).
+
+**The transport row is drawn**, and it shows the four things the console can actually know: the
+BPM, the beat grid, the bar number, and the frame readout against the display's refresh interval
+([ADR-0177](adr/0177-the-transport-row-shows-what-the-console-can-know.md)). `audio-in`, `tap`,
+`learn`, `map`, `landed` and `● rec` are named in the source with what is missing behind each and
+drawn nowhere. The grid is **as many dots as a bar has beats** rather than four, because
+`karakuri-signal` marks its own `BEATS_PER_BAR` provisional until the format carries a time
+signature, and a transcribed 4 would go on saying four the day that changes.
+
+**That makes the second live region, and the two have opposite characters** — which is what the
+rest of P-0072 needs before it can mean anything. The picture is expensive and moves every frame;
+the beat grid is cheap, high priority, and moves two to four times a second. A third with the
+opposite character again is the mixer: expensive, repetitive, and rarely changing, which is the
+texture-cache case. **Nothing declares a cost or a staleness yet and there is no scheduler**, and
+the order that gets one built is: draw the mixer, then give all three a price and a tolerance.
 
 **Owed, and found by building this: `Layout::soloed()` can lie.** The solve never reads it and
 `check_structure` only checks that it addresses a node, so a solo's exclusivity lives entirely in

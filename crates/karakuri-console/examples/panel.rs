@@ -127,7 +127,9 @@ use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Dragged, Op, Outcome, Panel, Pressed, Released, Visibility};
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
-use karakuri_console::view::{outputs, picture_rect, preview_rects, Kind, Picture, View, DECKS};
+use karakuri_console::view::{
+    self, outputs, picture_rect, preview_rects, Kind, Picture, View, DECKS,
+};
 use karakuri_engine::{
     compose, Committed, Deck, Gpu, HotSwap, Look, Present, Set, Sink, Skip, TonemapOp,
 };
@@ -309,6 +311,21 @@ struct Cost {
     bytes: u64,
 }
 
+impl Cost {
+    /// **What the whole frame cost on the CPU**: the three fields the reading
+    /// below adds up under *"the whole frame is a median"*, for one frame
+    /// rather than for the median of each.
+    ///
+    /// The three tile the frame exactly and do not overlap — `engine` ends
+    /// where `paint` begins, by construction, and `ui` is the `egui` pass
+    /// before either — and [`Cost::wait`] is deliberately not in it: blocking
+    /// in `get_current_texture` is the display's pace and not a price, which
+    /// is the sentence that field carries.
+    fn whole(&self) -> Duration {
+        self.engine + self.ui + self.paint
+    }
+}
+
 /// What was drawn while nobody was touching the window. **This is the number**
 /// P-0072's first clause is about, and the clause says every field of it is
 /// zero.
@@ -337,6 +354,15 @@ struct Costs {
     owed: bool,
     /// What has been drawn since `quiet_since` that nothing asked for.
     still: Still,
+    /// **The frame just drawn**, kept so the transport row can print what it
+    /// cost.
+    ///
+    /// Not a second measurement and not a second sample: it is the last
+    /// [`Cost`] [`Costs::push`] was handed, which `frames` stops keeping after
+    /// [`SAMPLE`] of them because that vector is a sample rather than a
+    /// history. A readout wants the last frame and the reading wants the
+    /// sample; both are the same numbers.
+    last: Option<Cost>,
     said: bool,
     /// **What ran it**, as the adapter reports it: the backend, the adapter's
     /// own name, and whether it calls itself discrete.
@@ -369,6 +395,7 @@ impl Costs {
             quiet_since: Instant::now(),
             owed: false,
             still: Still::default(),
+            last: None,
             said: false,
             taken_on: String::from("an adapter nobody asked"),
             live: false,
@@ -413,6 +440,7 @@ impl Costs {
 
     fn push(&mut self, cost: Cost) {
         self.drawn += 1;
+        self.last = Some(cost);
         if !self.owed {
             self.still.frames += 1;
             self.still.allocs += cost.allocs;
@@ -422,6 +450,33 @@ impl Costs {
         if self.frames.len() < SAMPLE {
             self.frames.push(cost);
         }
+    }
+
+    /// **Frames a second**: what was drawn on the untouched window, over the
+    /// stretch it was drawn in.
+    ///
+    /// The stretch is the caller's because the two callers are at different
+    /// points in it and neither may guess the other's. [`Costs::say`] is taken
+    /// exactly [`STILL`] after `quiet_since` and says so in the sentence
+    /// above the number; the transport row is asked on every frame and its
+    /// stretch is however much of one has elapsed. One quotient, two stretches
+    /// — and a second expression of *frames over seconds* would be the readout
+    /// and the reading disagreeing about the rate of the same window.
+    fn rate_over(&self, stretch: f64) -> f64 {
+        self.still.frames as f64 / stretch
+    }
+
+    /// **The rate as it stands, for the transport row** — or `None` where
+    /// there is not yet a stretch with a frame in it to divide.
+    ///
+    /// `None` is the honest answer twice over. Just after something touched
+    /// the window there is no stretch, and a rate over no time is an infinity.
+    /// And a window with nothing live on it stops asking for frames entirely,
+    /// so the stretch goes on growing while the frames do not — which is a
+    /// rate falling towards zero and is exactly what the window is doing.
+    fn rate_now(&self) -> Option<f64> {
+        let stretch = self.quiet_since.elapsed().as_secs_f64();
+        (self.still.frames > 0 && stretch > 0.0).then(|| self.rate_over(stretch))
     }
 
     /// When the reading is due, and `None` once it has been taken. It is also
@@ -465,7 +520,7 @@ impl Costs {
             self.still.allocs,
             self.still.bytes
         );
-        let rate = self.still.frames as f64 / STILL.as_secs_f64();
+        let rate = self.rate_over(STILL.as_secs_f64());
         match (self.live, self.still == Still::default()) {
             // The reading this was written for, and it is now only reachable
             // with the picture off.
@@ -1019,7 +1074,7 @@ impl Readout {
 
     // -- the legend -----------------------------------------------------
 
-    fn print_legend(&mut self) {
+    fn print_legend(&mut self, budget_ms: Option<f32>) {
         self.panel.solve();
         let layout = self.panel.layout();
         let viewport = layout.viewport();
@@ -1036,6 +1091,33 @@ impl Readout {
              there is no second deck to audition, so three cells saying off are what this \
              program is rather than something left unfinished. each cell that is on costs \
              a present pass of its own."
+        );
+        println!(
+            "the transport row reads the session's own oscillator — the tempo, the beat \
+             inside the bar, and the bar counted from one — beside what the last frame \
+             cost{}. the four dots are `karakuri_signal`'s BEATS_PER_BAR, which that \
+             crate calls a provisional assumption of common time, so the console takes \
+             the number a frame rather than assuming four.",
+            match budget_ms {
+                Some(budget) => format!(
+                    ", against this display's refresh interval of {budget:.1} ms — which is \
+                     the budget a frame is held to on a Fifo surface, and not the 20 ms a \
+                     candidate Set is held to"
+                ),
+                // Said rather than passed over: a reading nobody can take is
+                // worth a sentence, because the alternative is a reader
+                // wondering where the mock's `/16.6` went.
+                None => String::from(
+                    " — with no budget beside it, because winit will not say what this \
+                     display's refresh rate is"
+                ),
+            }
+        );
+        println!(
+            "six things the mock draws in that row are NOT drawn, and each is a control \
+             over machinery that is in neither this crate nor this example: audio-in, tap, \
+             learn, map, landed and rec. `view::transport` names them one by one with what \
+             is missing behind each."
         );
         println!();
         for node in self.panel.nodes() {
@@ -1054,7 +1136,11 @@ impl Readout {
                 Some(region) => match region.kind {
                     Kind::Bay { grip: true, .. } => "bay, with a grip".to_owned(),
                     Kind::Bay { .. } => "bay".to_owned(),
-                    Kind::Row => "row, no heading".to_owned(),
+                    // The other row with something in it, and everything in
+                    // it is a readout: the six controls the mock draws here
+                    // are six things that do not exist behind this panel, and
+                    // `view::transport` names each of them.
+                    Kind::Transport => "row, no heading: bpm, beat, bar, frame".to_owned(),
                     // The one row with something in it: the console's first
                     // control, and the only thing on the panel a press acts
                     // on that is not a boundary.
@@ -1603,6 +1689,103 @@ fn live(view: &View) -> bool {
     view.picture.is_some() || view.previews.iter().any(Option::is_some)
 }
 
+/// **What the transport row reads this frame**, out of the two things in this
+/// file that know: the deck's oscillator, and what the last frame cost.
+///
+/// `Transport` here is `karakuri_console::view::Transport` — the console's row
+/// of readouts — and not `karakuri_engine::transport::Transport`, which is a
+/// slot's sync mode and is a different thing with the same word on it. This
+/// takes a `&Deck` because it is on the side of the seam that is allowed one;
+/// what crosses into the console is six numbers (ADR-0156).
+///
+/// # Where each number comes from, and that nothing is measured twice
+///
+/// - **The tempo, the position and the grid.** `Deck::signals` is the
+///   session's one oscillator — the same one every binding reads — and
+///   `Oscillator::bpm` and `Oscillator::beats` are its tempo and its musical
+///   position. `beats` is unbounded and monotone, so which dot is lit and
+///   which bar it is are arithmetic on it and the console does that
+///   arithmetic. The deck advances it inside `render`, one step a frame
+///   (`STEPS_A_FRAME`), so this reads the position as of the end of the last
+///   frame.
+/// - **The frame's cost.** `Cost::whole` — the same three fields the reading
+///   sums under *"the whole frame is a median"*, for the frame just drawn.
+///   Nothing is timed twice: `Costs::push` kept the last `Cost` and this
+///   divides nothing.
+/// - **The rate.** `Costs::rate_now`, which is the reading's own `rate`
+///   asked before its deadline rather than at it.
+/// - **How many beats a bar has.** `karakuri_signal::oscillator::BEATS_PER_BAR`, which is
+///   where the deck's own grid gets it, and which says of itself that it is
+///   provisional until the IR format carries a time signature. Asked rather
+///   than transcribed, so that the day it stops being 4 the beat grid stops
+///   being four dots.
+///
+/// `None` before the first frame has been drawn, which is one frame of a run:
+/// there is no frame cost yet, and a row that made one up would be inventing
+/// exactly the reading this whole seam exists to refuse.
+///
+/// **The rate is `None` unless something is live**, and that is not caution
+/// either. With nothing making texels this loop stops asking for frames, so
+/// the last rate it measured would sit in the row describing a window that has
+/// stopped drawing — the one number here that goes stale by standing still.
+/// The frame time beside it does not: the last frame did cost that, whenever
+/// it was.
+fn transport(
+    deck: &Deck,
+    costs: &Costs,
+    budget_ms: Option<f32>,
+    live: bool,
+) -> Option<view::Transport> {
+    let last = costs.last?;
+    let grid = deck.signals().oscillator();
+    Some(view::Transport {
+        bpm: grid.bpm(),
+        beats: grid.beats(),
+        beats_per_bar: karakuri_signal::oscillator::BEATS_PER_BAR,
+        fps: live
+            .then(|| costs.rate_now())
+            .flatten()
+            .map(|rate| rate as f32),
+        frame_ms: ms(last.whole()) as f32,
+        budget_ms,
+    })
+}
+
+/// **What a frame has to fit in on this window**: the display's refresh
+/// interval, in milliseconds — the `/16.6` in the mock's transport, at the
+/// 60 Hz it was drawn against.
+///
+/// **It is the refresh interval because that is what this window is held to.**
+/// The surface is `PresentMode::Fifo`, so a frame that takes longer than one
+/// interval to build is a frame that misses a vsync, and every millisecond
+/// under it is the headroom the mock's own tooltip is about. `Cost::wait` is
+/// the other side of the same number: at 60 Hz most of the frame is spent
+/// blocked in `get_current_texture` waiting for it.
+///
+/// **It is not `karakuri_engine`'s `DEFAULT_BUDGET_MS`**, which is 20 and is a
+/// different budget with the same word on it: that one is what a *candidate
+/// Set* has to hold to survive a hot swap, measured offscreen at a fixed size
+/// and judged on a median. The mock's tooltip runs the two together — *"12.4
+/// of 16.6 — there is headroom. A candidate that cannot hold this is rolled
+/// back on its own"* — and they are two numbers. This row draws the one the
+/// frame is actually against.
+///
+/// `None` where `winit` will not say, which is a monitor it cannot name or a
+/// mode with no refresh rate on it. The row then draws the frame time and no
+/// budget, rather than a plausible 16.6 nothing measured.
+///
+/// **Read once, when the window opens.** A window dragged onto a 120 Hz
+/// display keeps the interval it opened on, which is a real limitation and is
+/// the price of not asking the platform for a monitor handle sixty times a
+/// second.
+fn budget_ms(window: &Window) -> Option<f32> {
+    let millihertz = window.current_monitor()?.refresh_rate_millihertz()?;
+    match millihertz > 0 {
+        true => Some(1.0e6 / millihertz as f32),
+        false => None,
+    }
+}
+
 /// A `.kir` off disk, parsed and checked — the two stages `Set::build` wants a
 /// `Checked` from, and no more. `karakuri-cli`'s `compile::load` is the same
 /// two with a cost estimate and a source it keeps; neither is wanted here.
@@ -1690,6 +1873,9 @@ struct Gfx {
     /// device: that is the seam `karakuri-console` keeps, and this is the side
     /// of it that is allowed one.
     engine: Engine,
+    /// **What a frame has to fit in on this window**, read from the display
+    /// once when the window opened — see [`budget_ms`].
+    budget_ms: Option<f32>,
 }
 
 struct App {
@@ -1867,13 +2053,15 @@ impl ApplicationHandler for App {
             info.backend, info.name, info.device_type
         );
 
-        self.readout.print_legend();
+        let budget = budget_ms(&window);
+        self.readout.print_legend(budget);
 
         // The first frame is owed to the window appearing, not drawn on a
         // still panel.
         self.costs.owes();
         window.request_redraw();
         self.gfx = Some(Gfx {
+            budget_ms: budget,
             window,
             gpu,
             surface,
@@ -2168,6 +2356,21 @@ impl ApplicationHandler for App {
                 self.readout.view.picture = picture;
                 self.readout.view.previews = previews;
 
+                // **What the transport row reads, written beside the frame it
+                // is about**, exactly as the two lines above are: the picture
+                // is a texture id that belongs to this frame and this is a
+                // tempo and a cost that belong to the last one. See
+                // `transport`.
+                //
+                // **`live` is asked once and used twice.** It decides whether
+                // this frame is followed by another — the last statement in
+                // this handler — and the row's frame rate is a claim about
+                // that. Two calls would be two answers to *is anything making
+                // texels*, taken either side of the whole frame.
+                let live = live(&self.readout.view);
+                self.readout.view.transport =
+                    transport(&gfx.engine.deck, &self.costs, gfx.budget_ms, live);
+
                 // -- the egui pass -------------------------------------
                 let started = Instant::now();
                 let (allocs, bytes) = counted();
@@ -2415,8 +2618,8 @@ impl ApplicationHandler for App {
                 // is anything that makes texels, and the list is closed** —
                 // [`live`] is where it is written and where a test can reach
                 // it.
-                self.costs.live = live(&self.readout.view);
-                if self.costs.live {
+                self.costs.live = live;
+                if live {
                     gfx.window.request_redraw();
                 }
             }

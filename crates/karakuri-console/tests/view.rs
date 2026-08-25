@@ -134,15 +134,19 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
     }
     for name in ROWS {
         assert!(
-            matches!(region(name).unwrap().kind, Kind::Row | Kind::Outputs),
+            matches!(region(name).unwrap().kind, Kind::Transport | Kind::Outputs),
             "{name} has no heading in the mock and is being given one"
         );
     }
-    // And the difference between the two rows is what is *in* one of them,
-    // not a head on it: the outputs row draws the console's one control, which
-    // `View::draw` has to be told about by the table rather than by comparing
-    // a name on the frame path.
-    assert_eq!(region("transport").unwrap().kind, Kind::Row);
+    // And the difference between the two rows is what is *in* each of them,
+    // not a head on either: one draws four readouts and the other draws the
+    // console's one control, and `View::draw` has to be told which is which by
+    // the table rather than by comparing a name on the frame path.
+    assert_eq!(
+        region("transport").unwrap().kind,
+        Kind::Transport,
+        "the transport row is where the tempo, the beat and the frame readout are drawn"
+    );
     assert_eq!(
         region("outputs").unwrap().kind,
         Kind::Outputs,
