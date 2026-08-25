@@ -283,6 +283,50 @@ pub mod size {
     pub const PREVIEW_PAD_X: f32 = 5.0;
     pub const PREVIEW_PAD_Y: f32 = 3.0;
 
+    /// `.transport`'s `padding: 9px 12px`. The 9 is the same 9 the
+    /// arrangement's 48 was written from (`lib.rs`: 9 + 30 + 9), so the row's
+    /// height and the space around what is in it are one derivation or
+    /// neither.
+    pub const TRANSPORT_PAD_X: f32 = 12.0;
+    pub const TRANSPORT_PAD_Y: f32 = 9.0;
+
+    /// `.transport`'s `gap: 14px`: between the BPM and its label, the label
+    /// and the beat grid, and every other pair in the row.
+    pub const TRANSPORT_GAP: f32 = 14.0;
+
+    /// `.bpm`'s `font-size: 20px`, the one large number on the panel.
+    pub const BPM_SIZE: f32 = 20.0;
+
+    /// The BPM's box: [`BPM_SIZE`] at [`LINE`] — **30**, which is the 30 in
+    /// the arrangement's `9 + 30 + 9` for the transport row. The row is 48
+    /// because this number is this tall, so the two are read off each other
+    /// rather than measured twice.
+    pub const BPM_H: f32 = BPM_SIZE * LINE;
+
+    /// `.bpm`'s `letter-spacing: -0.01em` at [`BPM_SIZE`], in pixels.
+    /// **Negative**: the mock tightens this one number rather than spacing it,
+    /// which is the opposite of what [`HEAD_TRACKING`] does to a heading. Like
+    /// that one it applies after the last glyph as well, so the box is a fifth
+    /// of a pixel narrower than the glyphs need; left alone for the same
+    /// reason.
+    pub const BPM_TRACKING: f32 = BPM_SIZE * -0.01;
+
+    /// `.beat-grid i`'s `width: 15px; height: 6px`. Its
+    /// `border-radius: 999px` on a box this short is a capsule, drawn as half
+    /// the height.
+    pub const BEAT_W: f32 = 15.0;
+    pub const BEAT_H: f32 = 6.0;
+
+    /// `.beat-grid`'s `gap: 4px`, and it is **between** the dots and nowhere
+    /// else — the same reading as [`PREVIEW_GAP`]: *n* dots have *n - 1* gaps,
+    /// not one each.
+    pub const BEAT_GAP: f32 = 4.0;
+
+    /// `.beat-grid i.on`'s `box-shadow: 0 0 9px var(--c-glowp)`: the halo on
+    /// the lit dot, one pixel wider than the 8px the Outputs row's dot carries
+    /// and in the pink glow rather than the mint one.
+    pub const BEAT_GLOW: u8 = 9;
+
     /// `.outputs`'s `padding: 8px 11px`. The 8 is the same 8 the arrangement's
     /// 34 was written from (`lib.rs`: 8 + 18.5 + 8, rounded), so the row's
     /// height and the space around what is in it are one derivation or

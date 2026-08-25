@@ -45,6 +45,22 @@
 //! which is the card styling, and neither carries a `.bay-head`
 //! ([ADR-0159](../../../docs/adr/0159-the-consoles-words-are-the-manuals-and-the-middle-one-is-not-a-pane.md)).
 //!
+//! # The transport row is four readouts and no controls at all
+//!
+//! [`Kind::Transport`] draws the tempo, the beat grid, the bar and the frame
+//! readout — **the four things in the mock's row that are a value somebody
+//! measured rather than a control over something that does not exist.** The
+//! other six are named in [`transport`], one by one, with what is missing
+//! behind each; the paragraph above is the whole of the argument and this row
+//! is where it costs the most, because six of the mock's ten items go.
+//!
+//! What it draws with no engine behind it is **nothing at all** — not a row of
+//! zeroes and not a row of dashes, either of which is a reading invented for a
+//! console that has none. That is [`View::picture`]'s rule, and the values
+//! arrive the same way it does: a plain [`Transport`] written per frame by
+//! whoever owns the engine, because `src/` takes no device, no window and no
+//! clock (ADR-0156) and this row is made of a clock and an engine.
+//!
 //! # The Outputs row has one control in it, and it is the console's first
 //!
 //! [`Kind::Outputs`] draws the word OUTPUTS and **one** `.sink` — the picture,
@@ -139,11 +155,21 @@ pub enum Kind {
         /// and the mock is the reference.
         grip: bool,
     },
-    /// A strip with no heading: the transport (ADR-0159). Its body is empty
-    /// and looks it, like every other body in this pass.
-    Row,
-    /// **The Outputs row**, which is a [`Row`](Kind::Row) with the console's
-    /// one control in it.
+    /// **The transport row**: a strip with no heading (ADR-0159), holding the
+    /// tempo, the beat grid, the bar and the frame readout.
+    ///
+    /// A kind of its own for the reason [`Kind::Outputs`] is one, and it was
+    /// [`Row`](Kind::Outputs) — the abstract *headless strip* — while its body
+    /// was empty. Now that both rows have something in them, a `Row` would
+    /// mean *the transport* to [`View::draw`] and nothing in the table would
+    /// say so; the alternative is comparing a name on the frame path, which
+    /// puts a string where the table already says what a region is.
+    ///
+    /// See [`transport`] for what is drawn here, for where the values come
+    /// from, and for the six things in the mock's row that are **not** drawn.
+    Transport,
+    /// **The Outputs row**, which is a headless strip like
+    /// [`Kind::Transport`] with the console's one control in it.
     ///
     /// A row in every other respect — it carries `class="bay"` for the card
     /// and no `.bay-head`, which is ADR-0159 — and it is a kind of its own for
@@ -215,7 +241,7 @@ pub struct Region {
 pub const REGIONS: &[Region] = &[
     Region {
         name: "transport",
-        kind: Kind::Row,
+        kind: Kind::Transport,
     },
     Region {
         name: "library",
@@ -509,6 +535,571 @@ fn preview_cells(region: Rect) -> Option<[Rect; DECKS]> {
     }))
 }
 
+/// **What the transport row reads this frame**: the session's tempo and
+/// position, and what the frame before this one cost.
+///
+/// # The same seam as [`View::picture`], and it is not crossed
+///
+/// Every field is a number and none of them is a `Deck`, an `Instant` or a
+/// `Duration` that means *now*. This crate takes no device, no window and no
+/// clock (ADR-0156), and this row is made of a clock and an engine — so
+/// whoever owns those reads them and writes this per frame, exactly as
+/// whoever owns the device registers a texture and writes [`View::picture`].
+/// A `Deck` here would put the engine in this crate's dependencies; an
+/// `Instant` here would put a clock in it, and then the row would be reading
+/// wall time in a repository whose first principle is that nothing does
+/// ([P-0002](../../../docs/principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md)).
+///
+/// **It carries what cannot be derived and nothing that can.** The beat within
+/// the bar and the bar number are arithmetic on [`Transport::beats`] and are
+/// [`Transport::beat`] and [`Transport::bar`] rather than two more fields:
+/// three numbers for one position is three chances for the lit dot and the bar
+/// beside it to come from different arithmetic and disagree.
+///
+/// **No repaint arm.** [`crate::repaint::Change`] is one list of everything
+/// that can change what the console shows, and this is not on it: the values
+/// move when the engine draws a frame, and a caller that is drawing engine
+/// frames is already asking for frames for the picture beside this row. A
+/// panel with nothing live on it is a panel where the oscillator is not
+/// advancing either, so the row is right to be still — see
+/// [`Transport::fps`], which is the one field that would go stale there and
+/// is the one the example leaves `None`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Transport {
+    /// The tempo, drawn in `.bpm`'s treatment. `karakuri_signal`'s
+    /// `Oscillator::bpm` is an `f32` and so is this.
+    ///
+    /// **Not derivable from [`Transport::beats`]**, which is why it is its
+    /// own field: the oscillator's position is an accumulator precisely so
+    /// that a tempo correction changes the rate from now on without moving a
+    /// beat that has already happened, so the tempo is not the slope of the
+    /// position and cannot be read off it.
+    pub bpm: f32,
+    /// **Musical position, unbounded and monotone** — `Oscillator::beats`,
+    /// which counts from the start of the session and never wraps.
+    ///
+    /// `f64` because that is the type the oscillator accumulates it in, and
+    /// narrowing a number this crate does not own is a rounding taken for
+    /// nothing. What it would eventually cost is real but distant — an `f32`
+    /// stops separating consecutive beats somewhere past eight million of
+    /// them — so the reason to keep it is the first one and not the second.
+    ///
+    /// Which dot is lit and which bar it is are both read off this one number
+    /// — see [`Transport::beat`] and [`Transport::bar`].
+    pub beats: f64,
+    /// **How many beats there are in a bar**, which is how many dots the grid
+    /// has.
+    ///
+    /// **A field rather than a constant, and that is a conclusion rather than
+    /// caution.** The mock draws four and `karakuri_signal`'s
+    /// `oscillator::BEATS_PER_BAR` is 4, so the number is not in doubt
+    /// today — but that constant says of
+    /// itself that *"v0.2 of the IR spec has no time-signature concept
+    /// anywhere … a fixed assumption of common time rather than something
+    /// derived from the record stream. Treat it as provisional until a real
+    /// time signature shows up in the format."* A constant here would be this
+    /// crate transcribing a number the crate that owns it has written down as
+    /// provisional, and the day a time signature lands the console would draw
+    /// four dots against a grid of three with nothing saying so. So it is
+    /// asked of whoever owns the grid, once a frame, and the grid is that many
+    /// dots wide.
+    ///
+    /// Read through [`Transport::dots`], which is where a zero is dealt with.
+    pub beats_per_bar: u32,
+    /// **Frames a second**, or `None` where nobody can say yet.
+    ///
+    /// A rate is measured over a stretch, so a window that has not been left
+    /// alone for one has no rate — and `None` draws no `fps` at all rather
+    /// than a `0` or a stale number. **Not derived from
+    /// [`Transport::frame_ms`]**: `1000 / frame_ms` is the rate the loop
+    /// *could* manage, and what it *does* draw is decided by the display and
+    /// by whether anything asked for a frame. On a `Fifo` surface those two
+    /// differ by the whole vsync wait, which is most of the frame.
+    pub fps: Option<f32>,
+    /// **What one frame cost on the CPU**, in milliseconds — the `12.4` in the
+    /// mock's `12.4/16.6 ms`.
+    ///
+    /// It is a fact about a frame that has already been drawn, so it does not
+    /// go stale on a still window the way a rate does: the last frame did cost
+    /// this.
+    pub frame_ms: f32,
+    /// **What a frame has to fit in**, in milliseconds — the `16.6`, and
+    /// `None` where nothing can say what it is.
+    ///
+    /// Then the row draws the frame time with no budget beside it, which is
+    /// the rule the whole of this value follows: a reading nobody has is not
+    /// drawn as a plausible one.
+    pub budget_ms: Option<f32>,
+}
+
+impl Transport {
+    /// **How many dots the beat grid has**: [`Transport::beats_per_bar`], and
+    /// at least one.
+    ///
+    /// The clamp is here and in one place because a bar of no beats is two
+    /// failures at once — a grid with nothing in it, and a division by zero in
+    /// [`Transport::beat`] that comes out `NaN` and lights no dot in a row
+    /// that has none. One beat to the bar is the nearest thing to a grid that
+    /// can be drawn, and every reader of the field goes through here.
+    pub fn dots(&self) -> u32 {
+        self.beats_per_bar.max(1)
+    }
+
+    /// **Which dot is lit**: the beat within the current bar, from zero.
+    ///
+    /// `rem_euclid` rather than `%` because [`Transport::beats`] can be
+    /// negative — `Oscillator::behind` reads the same grid at an earlier time,
+    /// and a slot warming behind the session is exactly what that is for — and
+    /// `%` on a negative is negative, which is a dot index no grid has.
+    ///
+    /// **The clamp on the way out is not belt and braces.** `(-1e-18_f64)
+    /// .rem_euclid(4.0)` is `4.0` exactly: the true remainder is a hair under
+    /// the divisor and rounds up to it. That is one dot past the end of the
+    /// grid, which is a rectangle drawn beside it or a panic on an index, for
+    /// a value that is *just before* the downbeat.
+    pub fn beat(&self) -> u32 {
+        let dots = self.dots();
+        (self.beats.rem_euclid(dots as f64) as u32).min(dots - 1)
+    }
+
+    /// **Which bar it is, counting from one** — the `37` in the mock's
+    /// `bar 37`.
+    ///
+    /// One-based because that is how a bar is counted out loud, and there is
+    /// no bar 0 in anything an operator says. Signed for the reason
+    /// [`Transport::beat`] takes `rem_euclid`: a position before the session's
+    /// zero is a bar before the first one, and `as u32` on it would saturate
+    /// to zero and draw `bar 1` for every one of them.
+    pub fn bar(&self) -> i64 {
+        self.beats.div_euclid(self.dots() as f64) as i64 + 1
+    }
+}
+
+/// **The transport row, laid out**: where each of the four readouts goes, and
+/// which beat is lit.
+///
+/// # One derivation, for the reason [`Outputs`] is one
+///
+/// [`View::draw`] paints exactly these rectangles. Nothing hit-tests them
+/// **because nothing in this row is a control** — see below — so this has one
+/// call site today where [`outputs`] had two on the day it was written. It is
+/// a value rather than a paint-as-you-go pass all the same, because that is
+/// what makes the arithmetic something `tests/transport.rs` can ask about
+/// without a device, which is the whole of how this crate is checked.
+///
+/// # Nothing here is a control, and that is the answer rather than an omission
+///
+/// [`crate::input::claim`] asks [`outputs`] and nothing else, and it stays
+/// that way: a point in this row that is not inside a boundary's [`GRAB`] is
+/// `egui`'s. Every one of the mock's controls in this row is in the list below
+/// of things that are not drawn, so what is left — a tempo, a beat, a bar and
+/// a frame time — is four readouts, and a readout is not something a press
+/// acts on. `tests/transport.rs` asserts it over the row rather than leaving
+/// it to be inferred from the absence of a hit test.
+///
+/// # What is in the mock's row and is deliberately not here
+///
+/// The mock draws ten things and **four of them exist**. Each of the other six
+/// is a control over machinery that is in neither this crate nor the example,
+/// and drawing one is the scaffolding this module's documentation refuses — a
+/// pill that looks like a control and does nothing does not get replaced:
+///
+/// - `audio-in`, drawn `.armed`, is the session listening to the room. What
+///   would be behind it is a measured `AudioFrame` on the session's signals,
+///   and nothing here opens an input or installs one — a `Deck` with nobody
+///   calling `set_audio` runs on a synthesized bus, and an armed pill would
+///   say the room is being listened to while it is not.
+/// - `tap` is tap tempo: a performer's taps timed and turned into a tempo
+///   correction. Nothing times a tap here, and the pill would correct nothing.
+/// - `learn` is MIDI learn, and its own tooltip says what it would do —
+///   *"Click, then point at any control and move a knob on your surface, and
+///   the two are mapped."* There is no map, no learn mode, and exactly one
+///   control on the panel to point at.
+/// - `map · nanoKONTROL2 ▾` is the map in use, *and it is a file*. None is
+///   loaded, saved or recalled anywhere here, and a menu naming a device
+///   nobody has plugged in is worse than no menu.
+/// - `landed` is what the last write did — *landed, rolled back for cost, or
+///   failed to build*. That is a build watcher's verdict over a hot swap, and
+///   nothing writes a procedure while this panel runs, so the pill would be
+///   reporting on a write that never happens.
+/// - `● rec` is recording the session to the store as it happens. There is no
+///   session recorder behind this panel and no record stream is written from
+///   it.
+///
+/// The `.sep` between the bar and the frame readout **is** drawn, in the only
+/// way a `flex: 1` spacer can be: it is space, so what it does is push the
+/// frame readout to the right edge, and that is where [`transport_row`] puts
+/// it.
+///
+/// # No tooltips, for the reason the Outputs row has none
+///
+/// Four of the mock's ten items carry a `data-tip` and two of the four drawn
+/// ones do. A tooltip needs `egui` to own a widget, this console paints, and
+/// giving one readout a widget is a decision about who owns the pointer — see
+/// [`outputs`], where the same sentence is written about a control.
+///
+/// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
+/// one. `ctx` is asked for the type, because where each readout ends is where
+/// the next one starts.
+pub fn transport(
+    ctx: &egui::Context,
+    layout: &karakuri_layout::Layout,
+    values: Option<Transport>,
+) -> Option<TransportRow> {
+    // **No engine behind the console, so there is no row.** Every test in this
+    // crate is here, and so is the whole of `cargo test -p karakuri-console`.
+    // Drawing a row of zeroes would be inventing a tempo nothing is running
+    // at; this is `View::picture`'s rule, one row along.
+    let values = values?;
+    // Fonts are not valid until `egui` has run a pass, exactly as in
+    // `outputs`. Nothing routes a pointer here, so this is only the frame
+    // before the first one — and there is nothing to draw on it either.
+    if ctx.cumulative_pass_nr() == 0 {
+        return None;
+    }
+    let row = to_egui(layout.rect(layout.find("transport")?));
+    let width = |job: LayoutJob| ctx.fonts_mut(|f| f.layout_job(job).size().x);
+    let bpm = width(bpm_job(&values, Color32::PLACEHOLDER, Color32::PLACEHOLDER));
+    let label = width(span(BPM_LABEL, Color32::PLACEHOLDER));
+    let bar = width(span(&bar_text(&values), Color32::PLACEHOLDER));
+    let frame = width(frame_job(
+        &values,
+        Color32::PLACEHOLDER,
+        Color32::PLACEHOLDER,
+    ));
+    transport_row(row, &values, bpm, label, bar, frame)
+}
+
+/// **The faint word beside the number**, and the mock's own capitalisation
+/// this time: `.transport`'s `BPM` is upper-case in the markup rather than in
+/// CSS, so it is upper-case here.
+const BPM_LABEL: &str = "BPM";
+
+/// The transport row's furniture: a rectangle for each readout, and which beat
+/// is lit.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TransportRow {
+    /// The tempo, in `.bpm`'s 20px box.
+    pub bpm: Rect,
+    /// The faint `BPM` beside it.
+    pub label: Rect,
+    /// The whole `.beat-grid`: [`TransportRow::dots`] dots and the gaps
+    /// between them. One dot is [`TransportRow::dot`].
+    pub grid: Rect,
+    /// How many dots are in that grid — [`Transport::dots`], carried so the
+    /// painter and a test read the same number the width was built from.
+    pub dots: u32,
+    /// **Which of them is lit**: [`Transport::beat`], which is always a dot
+    /// this grid has.
+    pub on: u32,
+    /// `bar 37`.
+    pub bar: Rect,
+    /// The frame readout, pushed to the right edge by the `.sep`.
+    pub frame: Rect,
+    /// **The values these rectangles were measured from.**
+    ///
+    /// Carried rather than passed to the painter beside this, for
+    /// [`Picture`]'s own reason: whoever measured the type and whoever paints
+    /// it are then one statement, so a row laid out for one tempo and painted
+    /// with another cannot be written by accident. It is also what leaves
+    /// **one** place where *no engine means nothing at all* is decided — this
+    /// answering `None` — rather than that rule being asked once here and
+    /// again in [`View::draw`], which is two answers that agree until they do
+    /// not.
+    pub values: Transport,
+}
+
+impl TransportRow {
+    /// One dot of the beat grid, from the left. **The gaps are between the
+    /// dots and nowhere else**, which is what a flex row with a `gap` is —
+    /// the same reading [`preview_cells`] takes of a grid.
+    ///
+    /// Panics on a dot this grid has not got, which is a caller having
+    /// invented a beat: [`TransportRow::on`] is [`Transport::beat`] and that
+    /// is inside the grid by construction.
+    pub fn dot(&self, index: u32) -> Rect {
+        assert!(index < self.dots, "dot {index} of a grid of {}", self.dots);
+        Rect::from_min_size(
+            Pos2::new(
+                self.grid.min.x + (size::BEAT_W + size::BEAT_GAP) * index as f32,
+                self.grid.min.y,
+            ),
+            egui::vec2(size::BEAT_W, size::BEAT_H),
+        )
+    }
+}
+
+/// The arithmetic of the row, away from the type it measures and the layout it
+/// reads.
+///
+/// Term for term from `.transport` and what is in it, in `style.css`:
+///
+/// - `.transport { display: flex; align-items: center; gap: 14px;
+///   padding: 9px 12px }` — the readouts laid left to right from
+///   [`size::TRANSPORT_PAD_X`], one [`size::TRANSPORT_GAP`] between each pair,
+///   and every one of them **centred in the row** rather than sat on its
+///   padding. The four boxes are four different heights — 30 for the number,
+///   16.5 for a line of type, 6 for the beat grid — and `align-items: center`
+///   is what puts them on one line through the middle.
+/// - `.sep { flex: 1 }` — a spacer that takes everything left over, so what
+///   comes after it is against the row's right padding. The frame readout is
+///   laid out from the right edge backwards for that reason, and it is the one
+///   thing in the row whose position is not the position of the thing before
+///   it.
+///
+/// # The 48 comes back here
+///
+/// The row is 48 and the number in it is 30 (`.bpm`'s 20px at
+/// `line-height: 1.5`), so there is (48 - 30) / 2 = **9** of row above and
+/// below it — which is `.transport`'s own `padding: 9px`, arrived at from the
+/// other end. The arrangement's `9 + 30 + 9` and the centring agree exactly
+/// here, where the Outputs row's 8 + 18.5 + 8 had to give up a quarter pixel.
+///
+/// `None` where the row cannot hold what goes in it: folded away, soloed away,
+/// or too narrow to keep the frame readout clear of the bar. **The mock wraps
+/// and this does not**, which is the argument [`outputs_row`] makes about the
+/// second sink, in the one case where the mock's `flex-wrap: wrap` has
+/// something to wrap: a row too narrow draws nothing rather than a second line
+/// of transport in a bay 48 tall that has no room for one.
+fn transport_row(
+    row: Rect,
+    t: &Transport,
+    bpm_w: f32,
+    label_w: f32,
+    bar_w: f32,
+    frame_w: f32,
+) -> Option<TransportRow> {
+    let mid = row.center().y;
+    // An inline span at the console's own type: `font-size: 11px` at
+    // `line-height: 1.5`, which is the box every line of ordinary text in the
+    // mock sits in.
+    let span_h = size::BASE * size::LINE;
+    let bpm = Rect::from_min_size(
+        Pos2::new(row.min.x + size::TRANSPORT_PAD_X, mid - size::BPM_H * 0.5),
+        egui::vec2(bpm_w, size::BPM_H),
+    );
+    let label = Rect::from_min_size(
+        Pos2::new(bpm.max.x + size::TRANSPORT_GAP, mid - span_h * 0.5),
+        egui::vec2(label_w, span_h),
+    );
+    let dots = t.dots();
+    let grid = Rect::from_min_size(
+        Pos2::new(label.max.x + size::TRANSPORT_GAP, mid - size::BEAT_H * 0.5),
+        egui::vec2(
+            size::BEAT_W * dots as f32 + size::BEAT_GAP * (dots - 1) as f32,
+            size::BEAT_H,
+        ),
+    );
+    let bar = Rect::from_min_size(
+        Pos2::new(grid.max.x + size::TRANSPORT_GAP, mid - span_h * 0.5),
+        egui::vec2(bar_w, span_h),
+    );
+    // The `.sep`: everything after it is against the right padding.
+    let frame = Rect::from_min_size(
+        Pos2::new(
+            row.max.x - size::TRANSPORT_PAD_X - frame_w,
+            mid - span_h * 0.5,
+        ),
+        egui::vec2(frame_w, span_h),
+    );
+    // The same rule `picture_rect` states, on the two ends of the row: the
+    // number is the tallest thing in it and the frame readout is the furthest
+    // right, so a row that holds both holds everything between them — and the
+    // last clause is the wrap the mock does and this does not.
+    match row.contains_rect(bpm)
+        && row.contains_rect(frame)
+        && frame.min.x >= bar.max.x + size::TRANSPORT_GAP
+    {
+        true => Some(TransportRow {
+            bpm,
+            label,
+            grid,
+            dots,
+            on: t.beat(),
+            bar,
+            frame,
+            values: *t,
+        }),
+        false => None,
+    }
+}
+
+/// **The tempo as one laid-out run**, so that measuring it and painting it
+/// cannot be two different runs of type.
+///
+/// `.bpm`'s `128.0` is one decimal place, which is also as fine as a tempo is
+/// ever named — and the mock's own number, so a transcription that started
+/// printing `128` would be visible against it.
+///
+/// # The gradient is drawn per glyph, which is what the CSS comes to here
+///
+/// `.bpm` is `background: linear-gradient(94deg, var(--c-mint), var(--c-lav))`
+/// with `background-clip: text`: the two colours run left to right across the
+/// number, near enough — 94deg is four degrees off horizontal. `epaint` fills
+/// a galley with one colour, so the run is split into one format run per glyph
+/// and each takes its own point along the ramp. Five glyphs is a coarse ramp
+/// and it is the mock's two colours rather than one of them; the alternative
+/// is picking an end and losing the other, which is a transcription that drops
+/// half of what it read.
+fn bpm_job(t: &Transport, from: Color32, to: Color32) -> LayoutJob {
+    let text = bpm_text(t);
+    let mut job = LayoutJob::default();
+    let last = text.chars().count().saturating_sub(1).max(1) as f32;
+    for (n, (at, ch)) in text.char_indices().enumerate() {
+        job.append(
+            &text[at..at + ch.len_utf8()],
+            0.0,
+            TextFormat {
+                font_id: FontId::new(size::BPM_SIZE, FontFamily::Proportional),
+                extra_letter_spacing: size::BPM_TRACKING,
+                color: mix(from, to, n as f32 / last),
+                ..Default::default()
+            },
+        );
+    }
+    job
+}
+
+/// The tempo, as the mock writes it.
+fn bpm_text(t: &Transport) -> String {
+    format!("{:.1}", t.bpm)
+}
+
+/// The bar, as the mock writes it: `bar 37`.
+fn bar_text(t: &Transport) -> String {
+    format!("bar {}", t.bar())
+}
+
+/// **The frame readout as one laid-out run**: `58 fps · 12.4/16.6 ms`, with
+/// the numbers in `.val` and everything else faint.
+///
+/// One [`LayoutJob`] rather than four galleys laid end to end, because the
+/// mock is one run of text with two colours in it — `.val { color:
+/// var(--c-text); font-weight: 500 }` inside a span that is `--c-faint` — and
+/// laying it out as one is what keeps the spaces between the parts the type's
+/// own rather than a gap this file invented. The weight is not honoured:
+/// `egui`'s default proportional face has no bold, which `room` says once for
+/// the whole crate.
+///
+/// **Both absences drop their own words and nothing else.** No rate drops
+/// `58 fps · ` and leaves `12.4 ms`; no budget drops `/16.6` and leaves
+/// `12.4 ms`. Neither draws a `0`, a `—` or a plausible 16.6 that nothing
+/// measured.
+fn frame_job(t: &Transport, val: Color32, faint: Color32) -> LayoutJob {
+    let mut job = LayoutJob::default();
+    let mut push = |text: String, colour: Color32| {
+        job.append(
+            &text,
+            0.0,
+            TextFormat {
+                font_id: FontId::new(size::BASE, FontFamily::Proportional),
+                color: colour,
+                ..Default::default()
+            },
+        );
+    };
+    if let Some(fps) = t.fps {
+        push(format!("{fps:.0}"), val);
+        push(" fps · ".to_owned(), faint);
+    }
+    push(format!("{:.1}", t.frame_ms), val);
+    match t.budget_ms {
+        Some(budget) => push(format!("/{budget:.1} ms"), faint),
+        None => push(" ms".to_owned(), faint),
+    }
+    job
+}
+
+/// A plain span of the console's own type: `font-size: 11px`, one colour.
+fn span(text: &str, colour: Color32) -> LayoutJob {
+    LayoutJob::simple_singleline(
+        text.to_owned(),
+        FontId::new(size::BASE, FontFamily::Proportional),
+        colour,
+    )
+}
+
+/// Two colours mixed, `t` of the way from the first to the second.
+///
+/// In gamma space, component by component, because that is where a CSS
+/// `linear-gradient` in `srgb` interpolates and this is transcribing one.
+fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
+    let t = t.clamp(0.0, 1.0);
+    let at = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * t).round() as u8;
+    Color32::from_rgb(at(a.r(), b.r()), at(a.g(), b.g()), at(a.b(), b.b()))
+}
+
+/// **The transport row's contents**: the tempo, the beat grid, the bar and the
+/// frame readout.
+///
+/// Where everything goes is [`transport_row`]'s, so this paints and derives
+/// nothing. Term for term from `style.css`:
+///
+/// - `.bpm` — the gradient, which is [`bpm_job`]'s.
+/// - the label beside it — `style="color:var(--c-faint)"` in the markup, which
+///   is `pal.faint`.
+/// - `.beat-grid i` — `background: var(--c-line)`, and `.on` is
+///   `var(--c-pink)` with `box-shadow: 0 0 9px var(--c-glowp)`. The halo is an
+///   [`egui::epaint::Shadow`] at [`size::BEAT_GLOW`] with a corner radius of
+///   half the dot's height, which is the same mechanism the Outputs row's dot
+///   uses for its own glow.
+/// - `bar 37` — `style="color:var(--c-dim)"`, `pal.dim`, *a label beside a
+///   value*.
+/// - the frame readout — `.val` over `--c-faint`, which is [`frame_job`]'s.
+///
+/// Every galley is centred in the box [`transport_row`] gave it, which is
+/// `align-items: center` done where the type's real height is known: a
+/// 20px face is not 30 tall and an 11px one is not 16.5, so the CSS box and
+/// the galley are different heights and the box is what is centred on.
+fn transport_into(ui: &Ui, pal: &Palette, row: &TransportRow) {
+    let t = &row.values;
+    let painter = ui.painter();
+    let centred = |rect: Rect, galley: std::sync::Arc<egui::Galley>| {
+        painter.galley(
+            Pos2::new(rect.min.x, rect.center().y - galley.size().y * 0.5),
+            galley,
+            // Every run in these jobs carries its own colour, so the fallback
+            // `epaint` substitutes for a `Color32::PLACEHOLDER` is never
+            // reached — and where it were, ink is a better answer than none.
+            pal.text,
+        );
+    };
+
+    centred(row.bpm, painter.layout_job(bpm_job(t, pal.mint, pal.lav)));
+    centred(row.label, painter.layout_job(span(BPM_LABEL, pal.faint)));
+
+    let radius = CornerRadius::same((size::BEAT_H * 0.5) as u8);
+    for index in 0..row.dots {
+        let dot = row.dot(index);
+        let lit = index == row.on;
+        if lit {
+            painter.add(
+                egui::epaint::Shadow {
+                    offset: [0, 0],
+                    blur: size::BEAT_GLOW,
+                    spread: 0,
+                    color: pal.glow_pink,
+                }
+                .as_shape(dot, radius),
+            );
+        }
+        painter.rect_filled(
+            dot,
+            radius,
+            match lit {
+                true => pal.pink,
+                false => pal.line,
+            },
+        );
+    }
+
+    centred(row.bar, painter.layout_job(span(&bar_text(t), pal.dim)));
+    centred(
+        row.frame,
+        painter.layout_job(frame_job(t, pal.text, pal.faint)),
+    );
+}
+
 /// **The word at the head of the Outputs row**, in the source's own
 /// capitalisation for the reason [`Kind::Bay`]'s title is: the mock
 /// upper-cases in CSS, and that is done at paint time here so the word a
@@ -763,6 +1354,16 @@ pub struct View {
     /// module documentation, and [`preview_rects`] for where the rectangles
     /// come from.
     pub previews: [Option<Picture>; DECKS],
+    /// **What the transport row reads this frame**, or `None` for a console
+    /// with no engine behind it — which is every test in this crate, and what
+    /// the row draws then is nothing at all.
+    ///
+    /// **The same seam as [`View::picture`]**, one row up and without a
+    /// device: the tempo, the beat and the frame's cost are a clock and an
+    /// engine, and `src/` has neither (ADR-0156). So whoever owns them reads
+    /// them and writes this per frame, beside the frame that measured it.
+    /// See [`Transport`] and [`transport`].
+    pub transport: Option<Transport>,
     placed: Vec<Placed>,
 }
 
@@ -772,6 +1373,7 @@ impl View {
             room,
             picture: None,
             previews: [None; DECKS],
+            transport: None,
             // Every region the console has, so the frame path never grows it.
             placed: Vec::with_capacity(REGIONS.len()),
         }
@@ -786,6 +1388,7 @@ impl View {
 
         let picture = self.picture;
         let previews = self.previews;
+        let values = self.transport;
         let frame = egui::Frame::NONE.fill(pal.ground);
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
             for placed in &self.placed {
@@ -800,7 +1403,17 @@ impl View {
                         // inside a card, where the ground does not reach.
                         pane_dividers(ui, &pal, panel, placed.id, rect);
                     }
-                    Kind::Row => card(ui, &pal, rect),
+                    // The other row with something in it, and everything in it
+                    // is a readout: where each one goes is `transport`'s
+                    // answer, and with no engine behind the console there is
+                    // no answer and the card is as empty as every other body
+                    // in this pass.
+                    Kind::Transport => {
+                        card(ui, &pal, rect);
+                        if let Some(row) = transport(ui.ctx(), panel.layout(), values) {
+                            transport_into(ui, &pal, &row);
+                        }
+                    }
                     // The one row with something in it, and the something is
                     // one control. Where it goes is `outputs`'s answer and
                     // not this pass's: the same call `input::claim` makes, so
