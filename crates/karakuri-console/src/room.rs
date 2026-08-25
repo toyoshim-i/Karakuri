@@ -290,6 +290,23 @@ pub mod size {
     /// wide in both places or in neither.
     pub const PREVIEW_GAP: f32 = 6.0;
 
+    /// **How tall the row of deck preview cells is**, which is the 63 in the
+    /// arrangement's 72 for `deck-previews` — the row of cells, and
+    /// [`PROGRAM_BODY_PAD`] under them.
+    ///
+    /// **Derived rather than transcribed, because the mock states no height
+    /// for the row at all.** `.previews` is
+    /// `grid-template-columns: repeat(4, 1fr)` with [`PREVIEW_GAP`] between
+    /// the tracks, and a cell carries `.preview`'s `aspect-ratio: 16/9`, so
+    /// the row's height falls out of the width it has at the narrowest console
+    /// the mock will draw. That width is 466 — `.console`'s
+    /// `min-width: 1010px` less its own `padding: 10px` either side, less
+    /// `.body-grid`'s two fixed tracks and the two gaps between the three,
+    /// less `.program-body`'s padding either side — and `lib.rs` writes that
+    /// derivation out where the Program bay's 378 is built from it. A track is
+    /// (466 - three gaps) / 4 = 112, and 112 at that aspect is **63**.
+    pub const PREVIEW_ROW_H: f32 = (466.0 - PREVIEW_GAP * 3.0) / 4.0 * 9.0 / 16.0;
+
     /// `.preview`'s `border-radius: 7px`, one shade tighter than the bay's
     /// [`BAY_RADIUS`] because the cell is inside it.
     pub const PREVIEW_RADIUS: f32 = 7.0;
