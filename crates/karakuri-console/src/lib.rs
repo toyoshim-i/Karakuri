@@ -107,6 +107,10 @@ pub use {egui, egui_wgpu, egui_winit};
 
 use karakuri_layout::{Layout, Spec};
 
+// For the inspector's divider, which is `.divider-v`'s width and is stated
+// once, in `room::size`. See [`room::size::PANE_DIVIDER`].
+use crate::room::size;
+
 /// Between the transport, the body row and the outputs row: `.console`'s
 /// `gap: 10px`.
 const ROOT_DIVIDER: f32 = 10.0;
@@ -116,11 +120,6 @@ const COLUMN_DIVIDER: f32 = 10.0;
 
 /// Between the bays stacked inside one column: `.col`'s `gap: 10px`.
 const BAY_DIVIDER: f32 = 10.0;
-
-/// Between the inspector's two panes: `.insp-split`'s middle track,
-/// `grid-template-columns: 1fr 9px 1fr`. The one divider in the console that
-/// is not 10, and the mock draws it as a grabbable bar (`cursor: col-resize`).
-const INSPECTOR_DIVIDER: f32 = 9.0;
 
 /// Between the Program bay's two regions: `.program-body`'s `gap: 8px`, which
 /// is the gap the mock leaves between the picture and the row of deck
@@ -365,7 +364,7 @@ fn program() -> Spec {
 /// throw away every drag and fold in it. The default is the mock's two.
 fn inspector() -> Spec {
     Spec::row(
-        INSPECTOR_DIVIDER,
+        size::PANE_DIVIDER,
         vec![
             // Minimum: (340 - 9) / 2, rounded down — half of what the centre
             // says it will not go below, less the divider between them.

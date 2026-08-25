@@ -236,8 +236,16 @@ pub mod size {
     /// `.bay`'s `border-radius: 11px`.
     pub const BAY_RADIUS: f32 = 11.0;
 
-    /// `border-bottom: 1px solid var(--c-hair)` under a bay head, and every
-    /// other rule in the mock.
+    /// One pixel wherever the mock draws a rule, and the rule the console
+    /// actually draws is the one under a bay head:
+    /// `.bay-head`'s `border-bottom: 1px solid var(--c-hair)`.
+    ///
+    /// **The other rules in the mock are all one pixel too** — `.scopes`,
+    /// `.path`, `.node-group` and the rest — so the citation is one of many
+    /// and not an arbitrary pick: it is the one this constant is used for.
+    /// Cited rather than called the console's own, because a number nothing
+    /// checks is the thing the guard beside this module exists to end, and
+    /// this was the last of them.
     pub const HAIRLINE: f32 = 1.0;
 
     /// `.pill`'s `padding: 0 8px`, around text at [`BASE`].
@@ -246,12 +254,24 @@ pub mod size {
     /// A pill's box: [`BASE`] at [`LINE`], which is what an inline span is.
     pub const PILL_H: f32 = BASE * LINE;
 
-    /// The gap between the pills in a bay head: `.bay-head`'s inner
-    /// `gap: 5px`, as the program's and the inspector's heads set it.
+    /// The gap between the pills in a bay head, and the one number here the
+    /// stylesheet does not carry: `.bay-head`'s own `gap` is `0.8rem`, and
+    /// the two heads that hold pills — the program's and the inspector's —
+    /// set the pills' gap on the span that holds them. So this is
+    /// `docs/manual/console.html`'s `gap: 5px`, inline on that span.
     pub const PILL_GAP: f32 = 5.0;
 
-    /// `.divider-v`, the bar between the inspector's panes:
-    /// `.insp-split`'s middle track.
+    /// `.divider-v`, the bar between the inspector's panes. The stylesheet
+    /// gives it no width of its own, so its width is the middle track of
+    /// `.insp-split`'s `grid-template-columns: 1fr 9px 1fr`.
+    ///
+    /// **And it is the divider the arrangement leaves for that bar**, which
+    /// `lib.rs` declared separately as `INSPECTOR_DIVIDER` until the two were
+    /// found to be the same 9 read off the same track. It is the one divider
+    /// in the console that is not 10, because the mock draws this one as
+    /// something a hand takes hold of rather than leaving it as ground —
+    /// `.divider-v`'s `cursor: col-resize`. So the bar `view.rs` paints and
+    /// the gap `arrangement()` opens for it are one number or neither.
     pub const PANE_DIVIDER: f32 = 9.0;
 
     /// `.program-body`'s `padding: 9px`: the ring of ground the Program bay
