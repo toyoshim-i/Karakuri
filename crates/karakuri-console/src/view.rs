@@ -173,6 +173,32 @@ pub const DECKS: usize = 4;
 /// *which* deck. `A` through `D`, in slot order.
 const DECK_LETTERS: [&str; DECKS] = ["A", "B", "C", "D"];
 
+/// **How many cells go down one side when they are beside the picture**: half
+/// of [`DECKS`], which is two — A and B down the left, C and D down the right.
+///
+/// **Two columns of two rather than one column of four**, and the arithmetic
+/// is worth writing down because it does not point where a reader expects. A
+/// column of *n* cells stacked down a body *H* tall is about `H / n` per cell,
+/// so it is `(H / n) * 16 / 9` wide, and all four of them cost
+/// `(4 / n) * (H / n) * 16 / 9` — **one column of four is the cheapest
+/// arrangement and four columns of one is the dearest.** So this is not the
+/// choice that leaves the picture the most room; one side of four would leave
+/// more.
+///
+/// It is chosen for the two things that are not width. The picture stays
+/// **centred in the bay** with equal ground either side, which is what
+/// [`fitted`] gives every other box on this panel; and a cell stays
+/// `H / 2` rather than `H / 4` tall, which at the mock's own body is 163
+/// against 79 — a preview an operator can read a cut in against one that is a
+/// smaller thumbnail than the row it replaced.
+const PER_COLUMN: usize = DECKS / 2;
+
+/// Two columns divide [`DECKS`] exactly, and a `DECKS` that stopped being even
+/// would put a cell in neither column rather than fail. It is 4 and the
+/// engine's `deck::MAX_SLOTS` is why, so this is a compile-time reading of that
+/// number and not a runtime check.
+const _: () = assert!(DECKS % 2 == 0 && DECKS == PER_COLUMN * 2);
+
 /// What the console draws in a region — the third thing about a region, after
 /// its name and its rectangle, and the only one this module owns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -576,10 +602,25 @@ pub fn picture_rect(layout: &karakuri_layout::Layout, canvas: (u32, u32)) -> Opt
     // box, because the fitted one is what gets drawn — and a box under half a
     // pixel rounds to nothing, which is nothing to draw and nothing to render
     // into.
-    match rect.width() > 0.0 && rect.height() > 0.0 {
+    match positive(rect) {
         true => Some(rect),
         false => None,
     }
+}
+
+/// **Whether there is anything of this rectangle to draw**, which is the one
+/// rule [`picture_rect`], [`preview_cells`] and [`program_body`] each answer
+/// `None` from.
+///
+/// It is asked of the *fitted* rectangle rather than of the box it was fitted
+/// into, always: a box under half a pixel rounds to nothing, which is nothing
+/// to draw and nothing to render into, and a box the inset turned inside out
+/// gives a negative extent `egui` draws back-to-front rather than refuses. The
+/// three call sites had a copy of this comparison each before they had a
+/// function; the sentence is the same one in all three, and now so is the
+/// answer.
+fn positive(rect: Rect) -> bool {
+    rect.width() > 0.0 && rect.height() > 0.0
 }
 
 /// **The largest rectangle of `aspect` that fits inside `inside`, centred in
@@ -716,32 +757,349 @@ fn preview_cells(region: Rect) -> Option<[Rect; DECKS]> {
         Pos2::new(region.min.x + pad, region.min.y),
         Pos2::new(region.max.x - pad, region.max.y - pad),
     );
-    // The gaps are **between** the tracks and nowhere else, which is what
-    // `grid-template-columns: repeat(4, 1fr)` with a `gap` is: four tracks and
-    // three gaps, not four tracks each carrying one.
-    let gaps = size::PREVIEW_GAP * (DECKS - 1) as f32;
-    let track = (row.width() - gaps) / DECKS as f32;
+    let cells = preview_row(row);
+    // The same rule `picture_rect` states, and stated on the cell rather
+    // than on the region because the cell is what gets drawn. Every cell is
+    // the same size, so the first one answers for all four.
+    match positive(cells[0]) {
+        true => Some(cells),
+        false => None,
+    }
+}
+
+/// **[`DECKS`] cells side by side across `row`**, each [`PREVIEW_ASPECT`] and
+/// centred in its track.
+///
+/// The row of the mock, with nothing said about where the row is: that is
+/// [`preview_cells`]'s inset off the `deck-previews` region, and
+/// [`program_body`]'s strip along the bottom of the bay's body. **Two call
+/// sites for one row**, and they have to agree exactly — the second one is the
+/// same row in the same place, arrived at from the bay rather than from the
+/// region, and a second copy of this arithmetic is where the two would drift.
+fn preview_row(row: Rect) -> [Rect; DECKS] {
     // [`PREVIEW_ASPECT`], as large as the track and the row both allow, and
     // centred — which is `fitted`, the same call `picture_rect` makes. The
     // aspect passed is the mock's rather than the canvas's, and the constant
     // is where that difference is argued.
-    let cells: [Rect; DECKS] = std::array::from_fn(|deck| {
-        let track_x = row.min.x + (track + size::PREVIEW_GAP) * deck as f32;
+    std::array::from_fn(|deck| {
         fitted(
-            Rect::from_min_size(
-                Pos2::new(track_x, row.min.y),
-                egui::vec2(track, row.height()),
+            track(row, DECKS, deck, size::PREVIEW_GAP, Axis::Row),
+            PREVIEW_ASPECT,
+        )
+    })
+}
+
+/// **One of `count` equal tracks laid along `axis` inside `strip`**, with `gap`
+/// between them and nowhere else.
+///
+/// That last clause is the whole of it, and it is the reading the mock's grids
+/// and flex rows all take: `repeat(4, 1fr)` with a `gap` is four tracks and
+/// **three** gaps, not four tracks each carrying one. The same sentence is
+/// written on [`size::PREVIEW_GAP`], on [`size::BEAT_GAP`] and on
+/// [`size::STRIP_GAP`], and this is the arithmetic all three describe —
+/// [`TransportRow::dot`] is the fourth, and it steps a fixed dot width rather
+/// than dividing a strip, so it states the rule and does not call this.
+///
+/// **Three call sites, and the third is what made it worth a function.** The
+/// row of previews and the mixer's page of strips were the same six lines
+/// written twice with a different gap in them; a column beside the picture is
+/// the third, and it is those six lines read one axis along. A track spans
+/// `strip` across the axis, exactly as a node of the arrangement spans its
+/// parent across its own — which is why the axis is
+/// [`karakuri_layout::Axis`] rather than a `bool`.
+fn track(strip: Rect, count: usize, index: usize, gap: f32, axis: Axis) -> Rect {
+    let gaps = gap * (count.max(1) - 1) as f32;
+    let (along, across) = match axis {
+        Axis::Row => (strip.width(), strip.height()),
+        Axis::Column => (strip.height(), strip.width()),
+    };
+    let size = (along - gaps) / count.max(1) as f32;
+    let at = (size + gap) * index as f32;
+    match axis {
+        Axis::Row => Rect::from_min_size(
+            Pos2::new(strip.min.x + at, strip.min.y),
+            egui::vec2(size, across),
+        ),
+        Axis::Column => Rect::from_min_size(
+            Pos2::new(strip.min.x, strip.min.y + at),
+            egui::vec2(across, size),
+        ),
+    }
+}
+
+/// **Which way round the Program bay's body is arranged.**
+///
+/// Not a state and not a setting: [`program_body`] answers it from the
+/// rectangle it is given, every time it is asked, and nothing stores it. See
+/// that function for the decider and for why it is a decision rather than a
+/// preference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Placement {
+    /// **The mock's own**: the picture across the top, the four cells in a row
+    /// under it. The default, and what a tie gives.
+    Below,
+    /// The picture in the middle, two cells down the left and two down the
+    /// right. What a bay wider than it is tall gets.
+    Beside,
+}
+
+/// **Where everything in the Program bay's body goes**: the picture, and the
+/// four deck preview cells.
+///
+/// One value rather than two calls, for [`Picture`]'s own reason: whoever
+/// placed the picture and whoever placed the cells are then one statement, so
+/// a picture drawn for one arrangement and cells drawn for the other cannot be
+/// written by accident. That is not a hypothetical here — the two arrangements
+/// put the cells in different halves of the bay, so the failure would be four
+/// thumbnails over the top of the picture rather than a rectangle a few pixels
+/// out.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Body {
+    /// Which arrangement won, carried because the caller cannot derive it from
+    /// the rectangles without re-running the decider — and re-running it is
+    /// the second answer this value exists to prevent.
+    pub placement: Placement,
+    /// The picture: the canvas's shape, as large as the arrangement leaves
+    /// room for, centred in what is left ([`fitted`]).
+    pub picture: Rect,
+    /// The four cells, in [`DECK_LETTERS`] order — **always four, and always
+    /// in that order**. See [`program_body`] for why a cell does not move when
+    /// the deck behind it stops.
+    pub cells: [Rect; DECKS],
+}
+
+/// **How the Program bay's body arranges itself in the rectangle it has**: the
+/// picture and the four deck preview cells, either the mock's way or down the
+/// sides, whichever leaves the picture larger.
+///
+/// `body` is the bay **less its head and less `.program-body`'s padding** —
+/// what [`picture_rect`] insets out of the `program-view` region today, taken
+/// off the bay as a whole because the arrangement below spans both of the
+/// bay's regions and the divider between them. `canvas` is the picture's
+/// aspect and arrives as two numbers for the reason [`picture_rect`] gives at
+/// length.
+///
+/// `None` where neither arrangement can be drawn — [`positive`]'s rule, asked
+/// of the picture and of every cell.
+///
+/// # Why there is a second arrangement at all
+///
+/// [ADR-0181](../../../docs/adr/0181-the-picture-is-the-canvass-shape-and-the-leftover-is-the-consoles.md)
+/// gave the picture the canvas's shape, and the leftover became the console's
+/// ground. On a wide bay that leftover is **ground down each side**: at a
+/// 1920-wide window the body is 1396 x 333 and the picture is 466 x 262, so
+/// 930 pixels of the bay's width are empty and the four cells are 63 tall in a
+/// row under it. Putting the cells in that ground is what lets the picture take
+/// the height instead.
+///
+/// # The decider is the picture's size, and nothing else
+///
+/// **Whichever arrangement gives the larger picture wins, and a tie goes to
+/// [`Placement::Below`]**, which is the mock's. Both are computed and their
+/// pictures compared; nothing is stored, nothing is remembered between frames,
+/// and the same rectangle always gives the same answer — so
+/// [P-0071](../../../docs/principles/0071-solving-a-layout-never-mutates-it.md)
+/// is untouched, and so is the property it buys: a window dragged wide and
+/// back again comes back to exactly the arrangement it left.
+///
+/// The alternative is a stored mode — a preference, or a hysteresis band
+/// around the crossover — and each of those is a second piece of state about
+/// the same question, which is what this repository stops on. What a stateless
+/// decider costs is a flip at one width, and the numbers below are what say
+/// whether that width is anywhere an operator lives.
+///
+/// **Three worked cases, and the arithmetic is in `tests/program_body.rs`:**
+///
+/// - **The mock's narrowest**, 466 x 333. Below gives 466 x 262. Beside cannot
+///   be drawn at all: two columns and their gaps come to 597, which is more
+///   than the body is wide, so the picture's box is negative. Below wins
+///   because it is the only one there is.
+/// - **A 1920 window**, 1396 x 333. Below gives 466 x 262 — 122,092 texels.
+///   Beside gives **592 x 333**, which is 197,136, and the picture is **61%
+///   larger**. Beside wins.
+/// - **800 wide**, where below still wins: beside's picture would be 202 x 114.
+///   The flip is at **1064**, one pixel of body width, and there is exactly one
+///   of them — below's picture stops growing with the width at 466 and beside's
+///   never shrinks, so the two curves cross once and never again.
+///
+/// # A side column is as wide as two stacked cells, which makes it the
+/// height's answer and not the width's
+///
+/// A column holds [`PER_COLUMN`] cells stacked with one [`size::PREVIEW_GAP`]
+/// between them, so a cell is `(H - gap) / 2` tall and the column is that at
+/// [`PREVIEW_ASPECT`] — **a function of the body's height alone**. Reading it
+/// off the width instead is the mistake worth naming: the column would grow
+/// with the very width it is competing for, and beside would never win at any
+/// width — an arrangement that exists in the source and never on the screen.
+///
+/// Two things had to be checked about this rule and both hold:
+///
+/// - **It is not so greedy that beside never wins.** The column does not follow
+///   the width, so widening the bay adds the whole increment to the picture's
+///   box; below's picture is capped by the height it has *after* the row and
+///   the gap come off, and beside's by the whole height. Beside therefore wins
+///   at every width past the crossover and the crossover exists at every
+///   height — at the mock's 333 it is a body 1064 wide, which is a 1588-wide
+///   window, well inside an ordinary desktop.
+/// - **It is greedy in the other direction, and that is a real cost rather
+///   than a caveat.** The column follows the height, so a bay dragged taller
+///   widens both columns while the picture's box is what pays for them: at 1396
+///   wide the picture beside peaks at a body 391 tall and shrinks after it,
+///   below's grows with every pixel, and the two cross at **427** — a Program
+///   bay 472 tall, which an operator can drag to. So this arrangement is the
+///   answer for a bay that is **wide and short**, and the cells go back under
+///   the picture when it stops being short. It is one flip in each direction
+///   and not a flicker — beside's picture is single-peaked in the height and
+///   below's is monotone — and `tests/program_body.rs` sweeps both axes rather
+///   than taking that on trust. The corner that follows from the same rule:
+///   **a bay dragged to its own minimum of 200 goes beside at every width**,
+///   the mock's narrowest included, because a body 155 tall has only 84 left
+///   for the picture once the row and the divider come off.
+/// - **It is not so mean that the cells are unreadable.** A cell beside the
+///   picture is `(333 - 6) / 2 = 163` tall against the row's **63**, so the
+///   arrangement that takes the cells out of the row makes each of them larger
+///   rather than smaller. At the Program bay's own minimum height the body is
+///   155 and a cell is still 73, which is more than the mock's row gives at any
+///   width at all.
+///
+/// # Which cell goes where, and why none of them moves
+///
+/// **A and B down the left, C and D down the right**, each column read top to
+/// bottom — the row's own left-to-right order, folded in half, so an operator
+/// who knows where `C` was in the row finds it at the top of the other side
+/// rather than somewhere new.
+///
+/// **With fewer than four decks running nothing fills and nothing shifts.**
+/// The mock's head reads *previews 2 of 4* and
+/// [ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
+/// is the answer: a cell is drawn whether or not a deck is behind it, because
+/// *an empty cell is what off looks like, not a stand-in for a full one*. So
+/// the question *does the left column fill first, or do they alternate* has a
+/// third answer, and it is the one that keeps the letters meaning something:
+/// **a cell's place is its deck's, not its turn's.** `C · off` sits at the top
+/// of the right column whether or not C is running, and turning B off does not
+/// slide C into B's place — the letter is the only thing naming a deck, and a
+/// label that moves when a neighbour stops is a label an operator cannot point
+/// at. This function is handed no liveness at all, which is that rule as a
+/// signature.
+///
+/// # The gaps are the mock's, and there are two of them rather than three
+///
+/// - **Between the picture and a column**: `.program-body`'s `gap: 8px`, which
+///   is `PROGRAM_DIVIDER` in `lib.rs` and the divider the arrangement already
+///   leaves between the picture and the row. CSS's `gap` shorthand sets the row
+///   gap and the column gap alike, so the body's own declaration states this
+///   number for the across-the-bay direction too; nothing is invented for it.
+/// - **Between two stacked cells**: [`size::PREVIEW_GAP`], `.previews`'s
+///   `gap: 6px`, for exactly the same reading of the same shorthand — it is the
+///   gap between two `.preview` cells, and the mock states one number for both
+///   directions.
+///
+/// There is no third: the columns sit against the body's own edges, which are
+/// already `.program-body`'s padding in from the card, and the cells are
+/// centred in their tracks by [`fitted`] rather than pushed to an edge.
+pub fn program_body(body: Rect, canvas: (u32, u32)) -> Option<Body> {
+    // Both, every time, and then one comparison. Two fits and six divisions is
+    // not a cost worth a cached answer — and a cached answer is the state the
+    // paragraph above refuses.
+    match (below(body, canvas), beside(body, canvas)) {
+        (Some(below), Some(beside)) if area(beside.picture) > area(below.picture) => Some(beside),
+        // The tie, and every case where beside cannot be drawn.
+        (Some(below), _) => Some(below),
+        (None, beside) => beside,
+    }
+}
+
+/// How many texels a rectangle is, which is the whole of the decider.
+///
+/// **Area rather than width or height**, and that is the one of the three that
+/// answers the question being asked: the picture is a preview of what is being
+/// captured, so what an operator gets more of is pixels. Comparing widths would
+/// hand the bay to whichever arrangement is wider at a height where it is also
+/// shorter.
+fn area(rect: Rect) -> f32 {
+    rect.width() * rect.height()
+}
+
+/// **The mock's arrangement**: the picture across the top, the four cells in a
+/// row along the bottom.
+///
+/// The row is [`size::PREVIEW_ROW_H`] tall — the 63 the arrangement pins
+/// `deck-previews` at, less the padding under it — and it keeps that height at
+/// every width, exactly as the arrangement does. The picture takes what is left
+/// above it, less one `PROGRAM_DIVIDER`.
+fn below(body: Rect, canvas: (u32, u32)) -> Option<Body> {
+    let row = Rect::from_min_max(
+        Pos2::new(body.min.x, body.max.y - size::PREVIEW_ROW_H),
+        body.max,
+    );
+    let picture = fitted(
+        Rect::from_min_max(
+            body.min,
+            Pos2::new(body.max.x, row.min.y - crate::PROGRAM_DIVIDER),
+        ),
+        canvas,
+    );
+    drawable(Placement::Below, picture, preview_row(row))
+}
+
+/// **The other arrangement**: two cells down the left, two down the right, and
+/// the picture in the middle.
+///
+/// The column's width is the whole of the rule — see [`program_body`], where it
+/// is argued and checked — and everything else here is [`track`] and
+/// [`fitted`], the same two calls the row goes through.
+fn beside(body: Rect, canvas: (u32, u32)) -> Option<Body> {
+    let (aw, ah) = (
+        PREVIEW_ASPECT.0.max(1) as f32,
+        PREVIEW_ASPECT.1.max(1) as f32,
+    );
+    // **The body's height, and never its width.** Two cells stacked with one
+    // gap between them, and the column is one of them lying at its aspect.
+    let cell = (body.height() - size::PREVIEW_GAP * (PER_COLUMN - 1) as f32) / PER_COLUMN as f32;
+    let column = cell * aw / ah;
+    let picture = fitted(
+        Rect::from_min_max(
+            Pos2::new(body.min.x + column + crate::PROGRAM_DIVIDER, body.min.y),
+            Pos2::new(body.max.x - column - crate::PROGRAM_DIVIDER, body.max.y),
+        ),
+        canvas,
+    );
+    let cells = std::array::from_fn(|deck| {
+        // A and B down the left, C and D down the right: the deck's index
+        // decides which side and which of the two tracks, and nothing else
+        // does.
+        let side = match deck < PER_COLUMN {
+            true => Rect::from_min_max(body.min, Pos2::new(body.min.x + column, body.max.y)),
+            false => Rect::from_min_max(Pos2::new(body.max.x - column, body.min.y), body.max),
+        };
+        fitted(
+            track(
+                side,
+                PER_COLUMN,
+                deck % PER_COLUMN,
+                size::PREVIEW_GAP,
+                Axis::Column,
             ),
             PREVIEW_ASPECT,
         )
     });
-    // The same rule `picture_rect` states, and stated on the cell rather
-    // than on the region because the cell is what gets drawn: a row too short
-    // or too narrow to hold one is a rectangle `egui` draws inside out rather
-    // than refuses. Every cell is the same size, so the first one answers for
-    // all four.
-    match cells[0].width() > 0.0 && cells[0].height() > 0.0 {
-        true => Some(cells),
+    drawable(Placement::Beside, picture, cells)
+}
+
+/// One arrangement, or `None` where it cannot be drawn.
+///
+/// [`positive`]'s rule over the whole arrangement rather than over one
+/// rectangle, because the two halves are one answer: a body that holds the
+/// picture and has no room for a cell is not this arrangement with a cell
+/// missing, it is the other arrangement's turn.
+fn drawable(placement: Placement, picture: Rect, cells: [Rect; DECKS]) -> Option<Body> {
+    match positive(picture) && cells.iter().copied().all(positive) {
+        true => Some(Body {
+            placement,
+            picture,
+            cells,
+        }),
         false => None,
     }
 }
@@ -2012,7 +2370,12 @@ pub fn mixer<'a>(
     for (index, strip) in strips.iter().take(DECKS).enumerate() {
         let tally = width(tally_job(strip.tally, Color32::PLACEHOLDER));
         let blend = width(span_at(strip.blend, size::MINI_SIZE, Color32::PLACEHOLDER));
-        boxes[index] = strip_box(track(row, index), label, tally, blend);
+        boxes[index] = strip_box(
+            track(row, DECKS, index, size::STRIP_GAP, Axis::Row),
+            label,
+            tally,
+            blend,
+        );
     }
     Some(Mixer { strips, boxes })
 }
@@ -2044,20 +2407,6 @@ fn strips_row(region: Rect) -> Option<Rect> {
         true => Some(row),
         false => None,
     }
-}
-
-/// One of the page's [`DECKS`] tracks, from the left.
-///
-/// **The gaps are between the tracks and nowhere else**, which is what
-/// `repeat(4, 1fr)` with a `gap` is — the same reading [`preview_cells`] takes
-/// of the row of previews and [`TransportRow::dot`] takes of the beat grid.
-fn track(row: Rect, index: usize) -> Rect {
-    let gaps = size::STRIP_GAP * (DECKS - 1) as f32;
-    let w = (row.width() - gaps) / DECKS as f32;
-    Rect::from_min_size(
-        Pos2::new(row.min.x + (w + size::STRIP_GAP) * index as f32, row.min.y),
-        egui::vec2(w, row.height()),
-    )
 }
 
 /// The arithmetic of one strip, away from the type it measures and the layout

@@ -827,12 +827,19 @@ turned up four things, and the first is architectural.
 **A region cannot be added or removed while the panel is running.** The mock's `2 up` control says
 a wide window fits three or four inspector panes and that the operator chooses how many *live*; a
 `Spec` builds a `Layout` once and the arena has no insert and no remove. Rebuilding to change the
-count throws away every drag, every fold and the solo state in the whole panel — add a third
-inspector pane and the library's width, the program's height and the sequencer's fold all snap
-back. What is missing is a pair of arena operations that keep the rest of the tree and its ids,
-with `solo`'s saved flags resized alongside; it is not a change to the solver. **The same control
-appears four more times** — `+ lane` in the sequencer, `+ add` in the master chain, `+ add output`,
-and `+` on the scope list — so it is one gap, drawn five times.
+count throws away every drag, every fold and the solo state in the whole panel. What is missing is a
+pair of arena operations that keep the rest of the tree and its ids, with `solo`'s saved flags
+resized alongside.
+
+**Two claims in that paragraph were checked and are wrong.** The mock has **six** such controls, not
+five — the Sequencer head's `+` for a third sequence was not in the list — and **only one of the six
+(`2 up`) names a region of the arrangement**; the other five add something a bay draws inside its own
+body, which the arena has never held. So it is not one gap drawn five times: it is one arena gap and
+five body gaps. And *"it is not a change to the solver"* is true of **insert** — `measure` and the
+placement walk `children` and index the solved buffers, so an append plus a `children` insert plus
+resizing those buffers is the whole of it — and hides the harder half of **remove**: `NodeId` is a
+bare index into `nodes`, so a removal shifts every id anything is holding, which reaches
+`check_structure`, the wire format, and whatever the panel has in hand.
 
 **A node has one `[min, max]` pair, along its parent's axis.** The mixer wants a width floor (four
 strips side by side) *and* a height floor (a strip is never cut off), and both could be stated only
