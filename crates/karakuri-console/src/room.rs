@@ -353,4 +353,153 @@ pub mod size {
 
     /// `.dot`'s `width: 7px; height: 7px; border-radius: 50%`.
     pub const SINK_DOT: f32 = 7.0;
+
+    // -- the mixer's strips -------------------------------------------------
+
+    /// `.mixer-strips`'s `padding: 6px`: the ring of card the strips sit
+    /// inside, under the bay head. The mixer's 316 is written from the same 6
+    /// — see the right pane's derivation in `lib.rs`, where the strips are
+    /// `6 + 215.5 + 6` — so the padding a rectangle is inset by here and the
+    /// padding the bay's height was derived from are one number or neither.
+    pub const STRIPS_PAD: f32 = 6.0;
+
+    /// `.mixer-strips`'s `gap: 4px`: between two strips, and it is **between**
+    /// them and nowhere else — the same reading as [`PREVIEW_GAP`], because it
+    /// is the same shape of CSS: `repeat(4, 1fr)` with this between the tracks
+    /// and nothing outside them, where the outside is [`STRIPS_PAD`]. The
+    /// right pane's minimum of 172 is written from the same 4 (four 37-wide
+    /// strips and three of these, inside 6 + 6).
+    pub const STRIP_GAP: f32 = 4.0;
+
+    /// `.strip`'s `border-radius: 9px`, one shade tighter than the bay's
+    /// [`BAY_RADIUS`] because the strip is inside it — exactly as
+    /// [`PREVIEW_RADIUS`] is.
+    pub const STRIP_RADIUS: f32 = 9.0;
+
+    /// `.strip`'s `padding: 7px 4px`.
+    pub const STRIP_PAD_X: f32 = 4.0;
+    pub const STRIP_PAD_Y: f32 = 7.0;
+
+    /// `.strip`'s `gap: 5px`: between the six things stacked in a strip, so
+    /// there are **five** of these and not six — the same reading as
+    /// [`STRIP_GAP`], one axis along.
+    pub const STRIP_GAP_Y: f32 = 5.0;
+
+    /// `.strip-name`'s `font-size: 10px`: what the deck is playing.
+    pub const STRIP_NAME_SIZE: f32 = 10.0;
+
+    /// `.tally`'s `font-size: 9px`.
+    pub const TALLY_SIZE: f32 = 9.0;
+
+    /// `.tally`'s `letter-spacing: 0.1em` at [`TALLY_SIZE`], in pixels — the
+    /// same treatment [`HEAD_TRACKING`] gives a heading, and applied after the
+    /// last glyph for the same reason and left alone for it.
+    pub const TALLY_TRACKING: f32 = TALLY_SIZE * 0.1;
+
+    /// `.tally`'s `padding: 0 7px`, around text at [`TALLY_SIZE`].
+    pub const TALLY_PAD_X: f32 = 7.0;
+
+    /// A tally's box: [`TALLY_SIZE`] at [`LINE`] — **13.5**, which is the 13.5
+    /// in the mixer's own 215.5. Its `border-radius: 999px` on a box this
+    /// short is a capsule.
+    pub const TALLY_H: f32 = TALLY_SIZE * LINE;
+
+    /// `.tally.live`'s `box-shadow: 0 0 10px var(--c-glowp)`: the halo on a
+    /// slot that is on air, in the pink glow and one pixel wider than the 9px
+    /// the transport's lit beat carries.
+    pub const TALLY_GLOW: u8 = 10;
+
+    /// `.trim`'s `gap: 5px`, between the `g` and the mini fader beside it.
+    pub const TRIM_GAP: f32 = 5.0;
+
+    /// `.trim`'s `padding: 0 3px`, inside the strip's own.
+    pub const TRIM_PAD_X: f32 = 3.0;
+
+    /// `.trim .lbl`'s `font-size: 9px`: the `g`, and the only type in the row.
+    pub const TRIM_LABEL_SIZE: f32 = 9.0;
+
+    /// The trim row's box: the label is the tallest thing in it —
+    /// [`TRIM_LABEL_SIZE`] at [`LINE`] is 13.5 against the track's
+    /// [`FADER_H`], which is the 13.5 in the mixer's own 215.5.
+    pub const TRIM_H: f32 = TRIM_LABEL_SIZE * LINE;
+
+    /// `.fader`'s `height: 5px`. Its `border-radius: 999px` on a box this
+    /// short is a capsule, drawn as half the height.
+    pub const FADER_H: f32 = 5.0;
+
+    /// `.fader s`'s `width: 9px; height: 11px`: the trim's knob, taller than
+    /// the track it rides so that a 5px control has a mark a hand can see.
+    pub const FADER_KNOB_W: f32 = 9.0;
+    pub const FADER_KNOB_H: f32 = 11.0;
+
+    /// `.fader-col`'s `height: 104px` — **stated in the CSS rather than
+    /// derived from anything in it**, and the one number in a strip that is
+    /// not type. It is the 104 in the mixer's own 215.5, which is why the
+    /// manual can say four strips never scroll: nothing in the bay gets
+    /// smaller.
+    pub const FADER_COL_H: f32 = 104.0;
+
+    /// `.fader-col`'s `gap: 6px`, between the vertical fader and the meter.
+    pub const FADER_COL_GAP: f32 = 6.0;
+
+    /// `.vfader`'s `width: 17px`.
+    pub const VFADER_W: f32 = 17.0;
+
+    /// `.vfader b`'s `left: 3px; right: 3px; bottom: 3px`: the fill sits
+    /// inside the track rather than filling it edge to edge, which is what
+    /// makes the track read as a well with something in it.
+    pub const VFADER_INSET: f32 = 3.0;
+
+    /// `.vfader s`'s `height: 9px`, and its `left: -2px; right: -2px` — a knob
+    /// two pixels proud of the track either side, so [`VFADER_KNOB_W`] wide.
+    pub const VFADER_KNOB_H: f32 = 9.0;
+    pub const VFADER_KNOB_OUT: f32 = 2.0;
+    pub const VFADER_KNOB_W: f32 = VFADER_W + VFADER_KNOB_OUT * 2.0;
+
+    /// `.strip.live .vfader s`'s `box-shadow: 0 0 0 1px var(--c-pink),
+    /// 0 0 9px var(--c-glowp)`: the knob of a slot that is on air carries a
+    /// pink rim and a pink halo, and no other knob does.
+    pub const VFADER_KNOB_GLOW: u8 = 9;
+
+    /// `.vmeter`'s `width: 6px` — a third of the fader beside it, which is how
+    /// a reading is told from a control at a glance.
+    pub const VMETER_W: f32 = 6.0;
+
+    /// `.vmeter u`'s `height: 2px`: the peak mark.
+    pub const VMETER_PEAK_H: f32 = 2.0;
+
+    /// `.strip-num`'s `font-size: 10px`: the opacity, as a number.
+    pub const STRIP_NUM_SIZE: f32 = 10.0;
+
+    /// `.strip-mode`'s `gap: 3px`, between the blend mini and the mask mini.
+    pub const MODE_GAP: f32 = 3.0;
+
+    /// `.mini`'s `font-size: 9px`.
+    pub const MINI_SIZE: f32 = 9.0;
+
+    /// `.mini`'s `padding: 0 6px`, around text at [`MINI_SIZE`].
+    pub const MINI_PAD_X: f32 = 6.0;
+
+    /// A mini's box: [`MINI_SIZE`] at [`LINE`] inside its
+    /// `border: 1px solid var(--c-line)` — **15.5**, which is the 15.5 in the
+    /// mixer's own 215.5. The border is counted because the mock's box model
+    /// is the browser default (`content-box`) for everything except where a
+    /// `box-shadow: inset` draws it, and this one is a real border.
+    pub const MINI_H: f32 = MINI_SIZE * LINE + HAIRLINE * 2.0;
+
+    /// **The whole of a strip**, and it is the sum every other constant in
+    /// this section feeds: `.strip`'s [`STRIP_PAD_Y`] either side of six
+    /// children — the name at 15, the tally at 13.5, the trim at 13.5, the
+    /// fader column's 104, the number at 15 and the modes at 15.5 — with five
+    /// [`STRIP_GAP_Y`]s between them. **215.5**, which is the 215.5 the
+    /// mixer's 316 is written from in `lib.rs`, so a strip is this tall in
+    /// both places or in neither.
+    pub const STRIP_H: f32 = STRIP_PAD_Y * 2.0
+        + STRIP_NAME_SIZE * LINE
+        + TALLY_H
+        + TRIM_H
+        + FADER_COL_H
+        + STRIP_NUM_SIZE * LINE
+        + MINI_H
+        + STRIP_GAP_Y * 5.0;
 }

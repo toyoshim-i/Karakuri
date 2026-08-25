@@ -331,12 +331,24 @@ drawn nowhere. The grid is **as many dots as a bar has beats** rather than four,
 `karakuri-signal` marks its own `BEATS_PER_BAR` provisional until the format carries a time
 signature, and a transcribed 4 would go on saying four the day that changes.
 
-**That makes the second live region, and the two have opposite characters** — which is what the
-rest of P-0072 needs before it can mean anything. The picture is expensive and moves every frame;
-the beat grid is cheap, high priority, and moves two to four times a second. A third with the
-opposite character again is the mixer: expensive, repetitive, and rarely changing, which is the
-texture-cache case. **Nothing declares a cost or a staleness yet and there is no scheduler**, and
-the order that gets one built is: draw the mixer, then give all three a price and a tolerance.
+**The Mixer bay is drawn**, from the deck's own state — a strip per slot with its name, its
+residency, its gain trim, its opacity fader, its meter and its blend and mask marks
+([ADR-0178](adr/0178-the-mixer-draws-four-tracks-and-as-many-strips-as-the-deck-has.md)). **Four
+tracks and as many strips as the deck has**, settled from the arrangement rather than from taste:
+`right-pane`'s minimum is written as *four mixer strips still side by side*, so tracks that
+followed the strip count would re-derive that minimum on every install. A track nothing fills draws
+nothing — an empty strip is a reading, and inventing one is what the preview cells and the
+transport row both refuse.
+
+**Its controls are readouts.** Dragging a fader is a second kind of drag and the value belongs to
+the engine rather than to the layout, so it wants an operation and a decision about the claim
+model. That is the next pass, and it is what makes the mixer an instrument rather than a display.
+
+**Three live regions now, with three characters**, which is what the rest of P-0072 has been
+waiting for. The picture is expensive and moves every frame; the beat grid is cheap, high priority,
+and moves two to four times a second; the mixer is expensive, repetitive and **hardly moves at
+all** — six readouts that change when a hand changes them. **Nothing declares a cost or a staleness
+yet and there is no scheduler**, and the three of them are now what one would be scheduling.
 
 **Owed, and found by building this: `Layout::soloed()` can lie.** The solve never reads it and
 `check_structure` only checks that it addresses a node, so a solo's exclusivity lives entirely in

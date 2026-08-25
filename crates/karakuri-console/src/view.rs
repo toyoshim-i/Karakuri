@@ -76,11 +76,34 @@
 //! the rule [`crate::input`] was written for and the clearance
 //! `tests/outputs.rs` holds.
 //!
+//! # The Mixer bay is the first bay with something in its body
+//!
+//! [`Kind::Mixer`] draws the card and the head every other bay gets, and then
+//! **as many strips as the deck has** — not four. `Deck::slot_count` is what
+//! there is, and a page of this bay has [`DECKS`] tracks whatever that number
+//! is, so a track with no strip in it draws nothing at all rather than an
+//! empty strip. **That is not the deck previews' rule read backwards.** A
+//! preview cell is the region's own face and says `off`; a strip is six
+//! readings, and an empty one is six readings nobody took — the row of zeroes
+//! ADR-0177 refuses, with a different glyph. See [`mixer`] and [`Strip`], and
+//! [`Meter`] for why a meter is not a [`Fader`].
+//!
+//! **Everything in that bay is a readout**, and the source says so rather than
+//! leaving the next reader to discover it: the trim, the fader, the tally and
+//! the two minis are drawn from what the deck says, and a press on any of them
+//! reaches nothing. Dragging a fader is a second kind of drag — the value
+//! belongs to the engine rather than to the arrangement — and it needs an
+//! operation named once for the four surfaces and a decision about the claim
+//! model. That is its own pass.
+//!
 //! # The bay head is one component with seven call sites
 //!
-//! [`bay_head`] is written once and [`REGIONS`] calls it seven times, which is
-//! this repository's rule about an abstraction needing two call sites,
-//! satisfied on the day it is written rather than promised for later.
+//! [`bay_head`] is written once and seven bays call it: six through
+//! [`Kind::Bay`] in [`REGIONS`] and the mixer through [`Kind::Mixer`], which
+//! is a bay whose body is not empty. That is this repository's rule about an
+//! abstraction needing two call sites, satisfied on the day it is written
+//! rather than promised for later — and so is [`fader`], which is written once
+//! and drawn twice in every strip.
 //!
 //! # `.console`'s own 10px of padding is not drawn
 //!
@@ -181,6 +204,19 @@ pub enum Kind {
     /// See [`outputs`] for what is drawn here, for the state the dot is read
     /// from, and for the four things in the mock's row that are **not** drawn.
     Outputs,
+    /// **The Mixer bay**, which is a bay in every other respect: the same card
+    /// and the same [`bay_head`], carrying [`MIXER_TITLE`], no pill and no
+    /// grip — the mock gives the mixer none of the three.
+    ///
+    /// A kind of its own for the reason [`Kind::Picture`] is one, and it is
+    /// the first *bay* to need it: [`View::draw`] has to know **which** bay
+    /// the strips go in, and the alternative is comparing a name on the frame
+    /// path, which puts a string where the table already says what a region
+    /// is.
+    ///
+    /// See [`mixer`] for what is drawn here, for where the values come from,
+    /// and for the four things in the mock's bay that are **not** drawn.
+    Mixer,
     /// One subdivision of a bay, which has no head of its own because the bay
     /// around it has one. The inspector's two panes.
     Pane,
@@ -297,11 +333,7 @@ pub const REGIONS: &[Region] = &[
     },
     Region {
         name: "mixer",
-        kind: Kind::Bay {
-            title: "Mixer",
-            pills: &[],
-            grip: false,
-        },
+        kind: Kind::Mixer,
     },
     Region {
         name: "master",
@@ -1325,6 +1357,1106 @@ fn label_job(colour: Color32) -> LayoutJob {
     )
 }
 
+// ---------------------------------------------------------------------------
+// The Mixer bay
+// ---------------------------------------------------------------------------
+
+/// **The word at the head of the Mixer bay**, in the source's own
+/// capitalisation for [`Kind::Bay`]'s reason: the mock upper-cases in CSS, and
+/// that is done at paint time so the word a reader searches for is the word in
+/// the source.
+const MIXER_TITLE: &str = "Mixer";
+
+/// `.trim .lbl`: the `g`, which is the only word in this bay that is neither
+/// the deck's nor the engine's — it is the mock's.
+const TRIM_LABEL: &str = "g";
+
+/// **Where a slot sits between compiled and composited**, which is the mock's
+/// `.tally` and `karakuri_engine`'s `Residency` — three states and no fourth.
+///
+/// The words are the mock's abbreviations and the variants are the engine's
+/// names, because each document owns one end: `live`, `prim` and `alloc` are
+/// what fits in a strip 53 wide, and `Live`, `Priming` and `Allocated` are
+/// what `Deck::residency` answers.
+///
+/// **The mock draws a fourth and it is not a residency.** `.strip.empty` reads
+/// `empty` in `.tally.off`, and a `Deck` has no such slot: every one of its
+/// `slot_count` slots holds a `HotSwap`. An empty strip is a *track on the
+/// page nothing fills*, and this bay draws nothing at all in one rather than a
+/// strip full of dashes — see [`mixer`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tally {
+    /// `.tally.live` — stepped and composited. On air.
+    Live,
+    /// `.tally.priming` — stepped and warming its buffers, drawn only while
+    /// something auditions it.
+    Priming,
+    /// `.tally.alloc` — compiled, buffers held, not stepping, keeping its `t`.
+    Allocated,
+}
+
+impl Tally {
+    /// The mock's own word, lower-case here and upper-cased at paint time
+    /// because `.tally` is `text-transform: uppercase` — the rule
+    /// [`Kind::Bay`]'s title states.
+    pub fn word(self) -> &'static str {
+        match self {
+            Tally::Live => "live",
+            Tally::Priming => "prim",
+            Tally::Allocated => "alloc",
+        }
+    }
+}
+
+/// **What shape of the frame a layer reaches**: the second `.mini` in a strip,
+/// and `karakuri_engine`'s `MaskKind` — three kinds and no fourth.
+///
+/// # It is a mark rather than a word, and the mark is drawn rather than typed
+///
+/// The mock writes `&#9711;` and `&#9681;` — a circle, and a circle with one
+/// half filled — and it has to: a strip is 53 wide inside its padding, and
+/// `over` beside `linear` is 75 before either mini's border. So the mask says
+/// its state in a shape.
+///
+/// **Drawn rather than set as a glyph**, which is [`grip_dots`]'s argument one
+/// control along: whether `◯` and `◑` are in `egui`'s default face is a
+/// question with no good answer, and a circle is the same mark either way. It
+/// also settles the third one. The mock names `◯` in its own tooltip —
+/// *"Mask: none"* — and draws `◑` on the strip beside it without saying which
+/// kind that is, and it draws no third mark anywhere; a glyph for the third
+/// would be a character picked out of a font, where a **mark** is the shape
+/// the mask makes and can be argued from the mask.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mask {
+    /// No mask: the layer reaches the whole frame. The mock's `◯`.
+    None,
+    /// A straight edge across the frame — the mock's `◑`, which is what a hard
+    /// edge down the middle of a circle looks like.
+    Linear,
+    /// A circle. The same outline with a filled centre, which is the same
+    /// family as the mock's two and is the shape a radial mask makes.
+    Radial,
+}
+
+/// **What a slot's meter last read**, which is two of the four numbers
+/// `karakuri_engine::meter::Level` carries.
+///
+/// Plain numbers, for [`Transport`]'s reason: this crate takes no engine
+/// (ADR-0156), so whoever owns the deck reads a level and writes this.
+///
+/// # What is left out, and why each
+///
+/// - **`frames_behind`.** `Deck::level` reads back without ever waiting, so a
+///   reading is a few frames old and the engine says by how many. It is not
+///   carried, and not because it does not matter: the engine's own
+///   measurements are **1** frame behind under pacing, *"2 or 3"* on a vsync
+///   window, and *"tens: 13 to 101"* with nothing pacing the loop at all — and
+///   all three are normal. A staleness threshold picked in this crate would
+///   blank a healthy meter on one loop and pass a dead one on another, because
+///   the console does not know which loop it is on. What the meter draws is a
+///   fact about a frame that has already been drawn, exactly as
+///   [`Transport::frame_ms`] is, and it does not go stale by standing still
+///   the way a *rate* does — which is the whole of why `frame_ms` is a number
+///   and `fps` is an `Option`. So **handing over no reading at all is the
+///   caller's decision**, on the same terms `fps: None` is, and the caller is
+///   the one thing that knows its own loop.
+/// - **`bad_texels`.** It is the denominator the mean was taken over rather
+///   than a reading — *"`mean` and `peak` are computed over the texels this
+///   did not count"* — and the mock's 6px meter has nowhere to say it. A meter
+///   that drew it would be reporting on the measurement instead of on the
+///   image.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Level {
+    /// Mean luminance over the whole frame — *"the figure to match faders
+    /// on"*, and what the meter's column is as tall as.
+    pub mean: f32,
+    /// The brightest single texel. What the peak mark sits on.
+    pub peak: f32,
+}
+
+/// **What one mixer strip reads this frame**: what the deck is playing, where
+/// the slot sits, and the four numbers in front of it.
+///
+/// # The same seam as [`Transport`], and it is not crossed
+///
+/// Every field is a string, a number or a word, and none of them is a `Deck`.
+/// `src/` takes no device and no engine (ADR-0156), so whoever owns the deck
+/// reads `Deck::residency`, `gain`, `opacity`, `blend`, `mask` and `level` and
+/// writes one of these per slot per frame — exactly as whoever owns the device
+/// registers a texture and writes [`View::picture`].
+///
+/// **No repaint arm**, for [`Transport`]'s reason: [`crate::repaint::Change`]
+/// is one list of everything that can change what the console shows, and this
+/// is not on it. These values move when the engine draws a frame, and a caller
+/// drawing engine frames is already asking for frames for the picture two bays
+/// along.
+///
+/// # Nothing in this bay is a control yet, and the source says so rather than
+/// leaving it to be found
+///
+/// Every value below is a **readout**. The trim, the fader, the tally and the
+/// two minis are drawn from what the deck says, and a press on any of them
+/// reaches nothing: [`crate::input::claim`] asks [`outputs`] and nothing else,
+/// and `tests/mixer.rs` asserts that over the whole bay rather than leaving it
+/// to be inferred from the absence of a hit test. Making a fader move is a
+/// second kind of drag — the value belongs to the engine rather than to the
+/// arrangement — so it needs an operation named once for the four surfaces and
+/// a decision about the claim model, and it is its own pass.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Strip {
+    /// **What the deck is playing**, in `.strip-name`.
+    ///
+    /// A `String`, and **the harness's word rather than the engine's**:
+    /// nothing reachable from a `Deck` carries a name for the material in a
+    /// slot. `Deck::slot` hands out a `HotSwap`, `HotSwap::set` hands out a
+    /// `Set`, and a `Set` names its *nodes* (`Set::node_names`) and its
+    /// *published controls* (`Published::name`) and has no name of its own —
+    /// which is right, because a Set is built from a list of `.kir` files and
+    /// only whoever passed that list knows what to call the result. So the
+    /// caller names its own material, and a name invented in `src/` would be a
+    /// label the console made up about somebody else's Set.
+    ///
+    /// Elided rather than wrapped where it does not fit, which is
+    /// `.strip-name`'s own `overflow: hidden; text-overflow: ellipsis;
+    /// white-space: nowrap`: a strip is 53 wide inside its padding and most
+    /// real names are wider. An empty string draws no name at all, which is a
+    /// harness with nothing to say rather than a strip with nothing in it.
+    pub name: String,
+    /// Where the slot sits — `Deck::residency`, which is the **effective**
+    /// residency and not `requested_residency`. The governor moves a slot down
+    /// without anybody asking it to, and a tally that did not follow it would
+    /// be showing what was asked for over a slot doing something else.
+    pub tally: Tally,
+    /// **The trim** — `Deck::gain`: linear, floored at zero, and deliberately
+    /// open above 1.0 because the mix is HDR.
+    ///
+    /// Its own field and not the fader's twin. *"`gain` is a trim and
+    /// `opacity` is the fader"*: opacity at zero silences under every blend
+    /// mode and gain at zero does not silence `over`, which
+    /// `karakuri-engine/src/mix.rs` states outright — so these are two
+    /// controls, and the bay draws them as two rather than as two identical
+    /// sliders. A `g` and a mini fader lying down against the tall one in the
+    /// middle of the strip.
+    pub gain: f32,
+    /// **The fader** — `Deck::opacity`: a proportion in `[0, 1]`, and the one
+    /// control that silences a slot under every blend mode, which is what
+    /// makes it the way out of material that has gone NaN.
+    pub opacity: f32,
+    /// The blend in force, as the word the engine calls it — `Blend::name`.
+    ///
+    /// A `&'static str` because that is what the engine hands out and because
+    /// the console has nothing to do with it but draw it. **The mock's own
+    /// tooltip lists four** — *"add, over, screen, multiply"* — and
+    /// `Blend::ALL` is three: `add`, `over`, `max`. The engine is what is
+    /// running, so the word it gives is the word drawn, and the disagreement
+    /// is the mock's to settle.
+    pub blend: &'static str,
+    /// The mask in force — `Deck::mask(slot).kind()`. Its angle, position and
+    /// softness are not drawn: `.mini` is a chip that says *which shape*, and
+    /// three numbers about that shape are the inspector's row, not this one.
+    pub mask: Mask,
+    /// **What the slot's meter last read**, or `None` for no reading at all.
+    ///
+    /// `Deck::level` is already `None` for *no meter, no measurement yet, a
+    /// slot that is neither Live nor being auditioned, and a slot whose
+    /// material was just replaced by a resize or a swap* — every case where a
+    /// held reading would be about a different image. So `None` here draws the
+    /// meter's well and nothing in it, which is the mock's own `alloc` strip:
+    /// a `.vmeter` with no `b` and no `u` inside it.
+    pub level: Option<Level>,
+}
+
+/// **A fader, laid out**: the track, the length of it the value fills, and the
+/// knob sitting on the value.
+///
+/// One type and one derivation for both of a strip's faders — see [`fader`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Fader {
+    /// The well: `.fader`'s 5px capsule lying down, or `.vfader`'s 17px one
+    /// standing up.
+    pub track: Rect,
+    /// Which way it runs. [`Axis::Row`] fills from the left and
+    /// [`Axis::Column`] fills from the **bottom**, because a fader stands up.
+    pub axis: Axis,
+    /// What the value fills, from the track's own zero.
+    pub fill: Rect,
+    /// The knob, centred on the fill's moving edge.
+    pub knob: Rect,
+}
+
+/// **A meter, laid out**: the well, the column the mean fills, and the peak's
+/// mark.
+///
+/// # It is not a [`Fader`], and the difference is not the handle alone
+///
+/// They share exactly one thing and it is [`filled`] — a value turned into a
+/// length up a track — which is why that is a function of its own with three
+/// call sites rather than a shared type. What they do not share is what each
+/// **is**: a fader's knob is a grab target and the pass after this one makes
+/// it one, while a peak mark is a reading and never will be. A shared type
+/// would be a type half of whose fields are about a gesture the other half can
+/// never have.
+///
+/// They disagree about the track as well. `.vfader b` sits
+/// [`size::VFADER_INSET`] inside its well and `.vmeter b` fills its own edge
+/// to edge; `.vfader`'s fill is a capsule and `.vmeter` is `overflow: hidden`
+/// around a square column; and a knob is meant to stand proud of its track
+/// where nothing in a meter may leave the well.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Meter {
+    /// `.vmeter`'s 6px capsule.
+    pub well: Rect,
+    /// [`Level::mean`], up from the bottom.
+    pub fill: Rect,
+    /// [`Level::peak`], a [`size::VMETER_PEAK_H`] bar across the well.
+    pub peak: Rect,
+}
+
+/// **One strip's furniture**: a rectangle for each of the six things stacked
+/// in it, and the two tracks a value rides.
+///
+/// The fills and the knobs are **not** fields, because each is a function of a
+/// value this already knows where to put — see [`StripBox::trim_at`],
+/// [`StripBox::fader_at`] and [`StripBox::meter_at`]. A fill stored beside its
+/// track is two statements about one number.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StripBox {
+    /// `.strip` itself: the 9px well everything else is inside.
+    pub rect: Rect,
+    /// `.strip-name`, the full width of the strip's content box because the
+    /// CSS says `width: 100%`.
+    pub name: Rect,
+    /// `.tally`'s capsule, as wide as the word in it.
+    pub tally: Rect,
+    /// The `g` in `.trim`.
+    pub trim_label: Rect,
+    /// `.trim`'s `.fader`: the horizontal track, [`size::FADER_H`] tall.
+    pub trim: Rect,
+    /// `.vfader`: the tall track, [`size::FADER_COL_H`] high.
+    pub fader: Rect,
+    /// `.vmeter`, beside it.
+    pub meter: Rect,
+    /// `.strip-num`: the opacity as a number.
+    pub num: Rect,
+    /// The blend `.mini`.
+    pub blend: Rect,
+    /// The mask `.mini`.
+    pub mask: Rect,
+}
+
+impl StripBox {
+    /// **The trim at a gain**, which is [`fader`] on the horizontal track.
+    ///
+    /// The gain is shown over `[0, 1]`, and that range is read off
+    /// `karakuri-midi`'s `GAIN_RANGE` rather than chosen here: *"`[0, 1]` for
+    /// gain even though the mix is HDR and values above 1.0 are ordinary …
+    /// a fader whose top is unity is what a fader means."* So a gain pushed
+    /// past unity fills the track and stops, and this bay cannot yet show the
+    /// difference between 1.0 and 3.0 — a real gap, and it belongs with the
+    /// pass that lets a hand push the control past the top.
+    pub fn trim_at(&self, gain: f32) -> Fader {
+        fader(
+            self.trim,
+            Axis::Row,
+            gain,
+            0.0,
+            egui::vec2(size::FADER_KNOB_W, size::FADER_KNOB_H),
+        )
+    }
+
+    /// **The fader at an opacity**, which is [`fader`] on the vertical track.
+    pub fn fader_at(&self, opacity: f32) -> Fader {
+        fader(
+            self.fader,
+            Axis::Column,
+            opacity,
+            size::VFADER_INSET,
+            egui::vec2(size::VFADER_KNOB_W, size::VFADER_KNOB_H),
+        )
+    }
+
+    /// **The meter at a reading.**
+    pub fn meter_at(&self, level: Level) -> Meter {
+        // **The peak mark stays inside the well.** `.vmeter u` is placed by
+        // its own `bottom`, so a 2px bar at a peak of 1.0 would sit from the
+        // top of the well to two pixels above it — and `.vmeter` is
+        // `overflow: hidden`, which clips it away exactly at the reading that
+        // matters most. Its travel is the well's height less its own, which is
+        // the clamp `Transport::beat` makes on the far end of a grid.
+        let travel = (self.meter.height() - size::VMETER_PEAK_H).max(0.0);
+        let top = self.meter.max.y - size::VMETER_PEAK_H - travel * unit(level.peak);
+        Meter {
+            well: self.meter,
+            fill: filled(self.meter, Axis::Column, level.mean),
+            peak: Rect::from_min_size(
+                Pos2::new(self.meter.min.x, top),
+                egui::vec2(self.meter.width(), size::VMETER_PEAK_H),
+            ),
+        }
+    }
+}
+
+/// **The mixer's strips, laid out**: the values, and where each one goes.
+///
+/// # It borrows the values rather than carrying a copy
+///
+/// [`TransportRow`] carries the [`Transport`] it was measured from, for
+/// [`Picture`]'s reason: whoever measured the type and whoever paints it are
+/// then one statement, so a row laid out for one value and painted with
+/// another cannot be written by accident. A [`Strip`] carries a name, so it is
+/// not `Copy` and a copy per frame would be a `String` allocated per strip per
+/// frame. The borrow says the same thing for nothing — these boxes were
+/// measured from *these* strips — and the compiler holds it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Mixer<'a> {
+    /// **The values these rectangles were measured from**, in slot order.
+    pub strips: &'a [Strip],
+    /// Where each of them is. `None` past the last strip: a track on the page
+    /// no deck fills, which is drawn as nothing at all.
+    boxes: [Option<StripBox>; DECKS],
+}
+
+impl<'a> Mixer<'a> {
+    /// How many strips there are — the deck's slot count, as far as one page
+    /// of this bay reaches.
+    pub fn count(&self) -> usize {
+        self.boxes.iter().filter(|at| at.is_some()).count()
+    }
+
+    /// One strip's furniture. Panics on a strip this bay has not got, which is
+    /// a caller having invented a slot — the rule [`TransportRow::dot`] states
+    /// about a dot of a grid.
+    pub fn strip(&self, index: usize) -> StripBox {
+        let count = self.count();
+        self.boxes
+            .get(index)
+            .copied()
+            .flatten()
+            .unwrap_or_else(|| panic!("strip {index} of a mixer of {count}"))
+    }
+
+    /// Every strip and its box, in slot order.
+    pub fn placed(&self) -> impl Iterator<Item = (&'a Strip, StripBox)> {
+        let boxes = self.boxes;
+        self.strips
+            .iter()
+            .zip(boxes)
+            .filter_map(|(strip, at)| at.map(|at| (strip, at)))
+    }
+}
+
+/// **The Mixer bay's strips, derived**: one per slot the deck has, and none at
+/// all where there is no deck.
+///
+/// # The page has [`DECKS`] tracks whatever the deck holds
+///
+/// `.mixer-strips` is `grid-template-columns: repeat(4, 1fr)`, and that four
+/// is the same four [`DECKS`] is — `MAX_SLOTS` is 4, so no deck can fill a
+/// fifth. **A strip is one of four tracks wide even where there is one
+/// strip**, and that is read off the arrangement rather than chosen here: the
+/// right pane's minimum width is written as *"four mixer strips still side by
+/// side … four of them with three 4px gaps inside `.mixer-strips`' 6 + 6 is
+/// 172"*. Tracks that followed the strip *count* would make a one-slot deck's
+/// strip 244 wide in a pane sized for four 61-wide ones, and would re-derive
+/// that minimum every time a slot was installed.
+///
+/// So a track with no strip in it **draws nothing at all** — not an empty
+/// strip. That is the opposite of what [`Kind::Previews`] does with a cell
+/// that is off, and the two are not in tension: a preview cell is the region's
+/// own face and says `off`, where a strip is six readings and an empty one is
+/// six readings nobody took. The mock draws such a strip — `.strip.empty`,
+/// with `—` for a name, `empty` for a tally and both tracks bare — and
+/// inventing one is ADR-0177's row of zeroes with a different glyph.
+///
+/// **The example's deck has one slot, so it draws one strip**, and that is the
+/// example rather than a gap in it — exactly as three of its preview cells
+/// read `off`.
+///
+/// # What is in the mock's bay and is deliberately not here
+///
+/// - **The head's `4 of 4 · page 1`.** *"The strip is a paged list whose
+///   length is a number, and the header says which page you are on"* — so both
+///   halves of that pill are about paging, and there is none. Every strip the
+///   deck has is drawn, on the one page, so the pill could only ever read
+///   `n of n · page 1`: two numbers that are always equal and a third that is
+///   always 1. That is [`Kind::Bay`]'s own rule about a pill stating a value
+///   the console does not have, and the number that *is* known — how many
+///   strips there are — is on the face of the bay already. It arrives with
+///   paging.
+/// - **`.xfade`, the whole crossfade row under the strips**: an A/B track with
+///   a handle on it, and `wipe`, `iris`, `next bar`, `8 beats` and `go`. That
+///   is a transition being armed and then fired, and every one of them is a
+///   control over machinery the console cannot reach — nothing here holds what
+///   is armed, and `go` would fire nothing. It is 61 of the bay's 316 and it
+///   stays empty, exactly as six of the transport row's ten items do.
+/// - **`.strip.focus` and `.wfocus`, which are the two focuses**: the deck
+///   selection, which persists and is what a key press is addressed to, and
+///   keyboard focus, which is transient. The mock draws them differently on
+///   purpose — a solid lavender ring and a dashed sun outline — because
+///   *"drawing them the same erases which of the two a reader is looking at"*.
+///   **Neither exists in this console**: nothing here selects a deck and
+///   nothing takes keyboard focus, so a ring would be drawn around a state
+///   that is not kept.
+/// - **Every tooltip.** Four of this bay's controls carry one, and a tooltip
+///   needs `egui` to own a widget — the sentence [`outputs`] writes about a
+///   control, one bay along.
+///
+/// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
+/// one. `ctx` is asked for the type, because the tally's capsule and the
+/// blend's mini are as wide as the words in them.
+pub fn mixer<'a>(
+    ctx: &egui::Context,
+    layout: &karakuri_layout::Layout,
+    strips: &'a [Strip],
+) -> Option<Mixer<'a>> {
+    // **No deck behind the console, so there are no strips.** Every test in
+    // this crate is here, and so is the whole of `cargo test -p
+    // karakuri-console`. Drawing four empty strips would be inventing six
+    // readings a slot; this is `View::picture`'s rule, one bay along.
+    if strips.is_empty() {
+        return None;
+    }
+    // Fonts are not valid until `egui` has run a pass, exactly as in
+    // `outputs` and `transport`.
+    if ctx.cumulative_pass_nr() == 0 {
+        return None;
+    }
+    let region = to_egui(layout.rect(layout.find("mixer")?));
+    let row = strips_row(region)?;
+    let width = |job: LayoutJob| ctx.fonts_mut(|f| f.layout_job(job).size().x);
+    let label = width(span_at(
+        TRIM_LABEL,
+        size::TRIM_LABEL_SIZE,
+        Color32::PLACEHOLDER,
+    ));
+    let mut boxes = [None; DECKS];
+    for (index, strip) in strips.iter().take(DECKS).enumerate() {
+        let tally = width(tally_job(strip.tally, Color32::PLACEHOLDER));
+        let blend = width(span_at(strip.blend, size::MINI_SIZE, Color32::PLACEHOLDER));
+        boxes[index] = strip_box(track(row, index), label, tally, blend);
+    }
+    Some(Mixer { strips, boxes })
+}
+
+/// **Where the strips go**: the `.mixer-strips` grid inside a mixer region.
+///
+/// The region less [`size::HEAD_H`] for the bay head painted over the top of
+/// it, inset by [`size::STRIPS_PAD`] left, right and top, and **exactly
+/// [`size::STRIP_H`] tall** rather than whatever is left over. The bay is
+/// taller than its strips by design — `.xfade` is the other 61 of it — and a
+/// mixer with room to grow (it is the only visible child of a soloed right
+/// pane, and a fixed child with room takes it, ADR-0157) grows the bay and not
+/// the strips: a `.strip` is a column of fixed type around a `.fader-col`
+/// whose 104 is stated in the CSS, so there is nothing in it that gets bigger
+/// any more than there is anything that gets smaller.
+///
+/// `None` where the region cannot hold it — folded away, soloed away, or a
+/// window too small — which is [`picture_rect`]'s rule stated on a row of
+/// strips.
+fn strips_row(region: Rect) -> Option<Rect> {
+    let row = Rect::from_min_size(
+        Pos2::new(
+            region.min.x + size::STRIPS_PAD,
+            region.min.y + size::HEAD_H + size::STRIPS_PAD,
+        ),
+        egui::vec2(region.width() - size::STRIPS_PAD * 2.0, size::STRIP_H),
+    );
+    match row.width() > 0.0 && region.contains_rect(row) {
+        true => Some(row),
+        false => None,
+    }
+}
+
+/// One of the page's [`DECKS`] tracks, from the left.
+///
+/// **The gaps are between the tracks and nowhere else**, which is what
+/// `repeat(4, 1fr)` with a `gap` is — the same reading [`preview_cells`] takes
+/// of the row of previews and [`TransportRow::dot`] takes of the beat grid.
+fn track(row: Rect, index: usize) -> Rect {
+    let gaps = size::STRIP_GAP * (DECKS - 1) as f32;
+    let w = (row.width() - gaps) / DECKS as f32;
+    Rect::from_min_size(
+        Pos2::new(row.min.x + (w + size::STRIP_GAP) * index as f32, row.min.y),
+        egui::vec2(w, row.height()),
+    )
+}
+
+/// The arithmetic of one strip, away from the type it measures and the layout
+/// it reads.
+///
+/// Term for term from `.strip` and what is in it, in `style.css`:
+///
+/// - `.strip { display: flex; flex-direction: column; align-items: center;
+///   gap: 5px; padding: 7px 4px }` — six things stacked from the top of the
+///   strip's content box, one [`size::STRIP_GAP_Y`] between each pair, each
+///   **centred across the strip** rather than filling it. Two are the
+///   exception, and the CSS states both: `.strip-name` and `.trim` are
+///   `width: 100%`.
+/// - `.trim { gap: 5px; padding: 0 3px }` with `.trim .fader { flex: 1 }` —
+///   the `g`, then the track, which takes what is left and is centred in the
+///   row because the label is the taller of the two.
+/// - `.fader-col { display: flex; gap: 6px; height: 104px }` around a
+///   `.vfader` of 17 and a `.vmeter` of 6, both `height: 100%` — so the column
+///   is 29 wide, centred, and its `align-items: flex-end` has nothing left to
+///   align.
+/// - `.strip-mode { gap: 3px }` — two minis, centred.
+///
+/// `None` where the track is too narrow to hold what is in it, which is
+/// [`picture_rect`]'s rule stated on a strip: the fader column is the widest
+/// fixed thing in it, and a strip that cannot hold that has no readings to
+/// show. At the right pane's own minimum of 172 a track is exactly 37 and the
+/// column is exactly 29 inside 4 + 4 of padding, so the arrangement's minimum
+/// and this are one number or neither.
+fn strip_box(track: Rect, label_w: f32, tally_w: f32, blend_w: f32) -> Option<StripBox> {
+    let inner = Rect::from_min_max(
+        Pos2::new(
+            track.min.x + size::STRIP_PAD_X,
+            track.min.y + size::STRIP_PAD_Y,
+        ),
+        Pos2::new(
+            track.max.x - size::STRIP_PAD_X,
+            track.max.y - size::STRIP_PAD_Y,
+        ),
+    );
+    let column_w = size::VFADER_W + size::FADER_COL_GAP + size::VMETER_W;
+    if inner.width() < column_w {
+        return None;
+    }
+    // Each row starts one gap after the one before it ended, and is as tall as
+    // its own type — which is what a flex column is.
+    let mut y = inner.min.y;
+    let mut row = |h: f32| {
+        let at = Rect::from_min_size(Pos2::new(inner.min.x, y), egui::vec2(inner.width(), h));
+        y = at.max.y + size::STRIP_GAP_Y;
+        at
+    };
+    let name = row(size::STRIP_NAME_SIZE * size::LINE);
+    let tally = centred_in(row(size::TALLY_H), tally_w + size::TALLY_PAD_X * 2.0);
+    let trim = row(size::TRIM_H);
+    let column = centred_in(row(size::FADER_COL_H), column_w);
+    let num = row(size::STRIP_NUM_SIZE * size::LINE);
+    let blend_w = blend_w + size::MINI_PAD_X * 2.0 + size::HAIRLINE * 2.0;
+    // The mask's mini holds a mark rather than a word, and the mark is drawn
+    // at the size the glyph it stands in for would have been — see `Mask`.
+    let mask_w = size::MINI_SIZE + size::MINI_PAD_X * 2.0 + size::HAIRLINE * 2.0;
+    let mode = centred_in(row(size::MINI_H), blend_w + size::MODE_GAP + mask_w);
+
+    let trim_label = Rect::from_min_size(
+        Pos2::new(trim.min.x + size::TRIM_PAD_X, trim.min.y),
+        egui::vec2(label_w, trim.height()),
+    );
+    let trim_track = Rect::from_min_size(
+        Pos2::new(
+            trim_label.max.x + size::TRIM_GAP,
+            trim.center().y - size::FADER_H * 0.5,
+        ),
+        egui::vec2(
+            trim.max.x - size::TRIM_PAD_X - trim_label.max.x - size::TRIM_GAP,
+            size::FADER_H,
+        ),
+    );
+    match trim_track.width() > 0.0 {
+        true => Some(StripBox {
+            rect: track,
+            name,
+            tally,
+            trim_label,
+            trim: trim_track,
+            fader: Rect::from_min_size(column.min, egui::vec2(size::VFADER_W, column.height())),
+            meter: Rect::from_min_size(
+                Pos2::new(column.max.x - size::VMETER_W, column.min.y),
+                egui::vec2(size::VMETER_W, column.height()),
+            ),
+            num,
+            blend: Rect::from_min_size(mode.min, egui::vec2(blend_w, mode.height())),
+            mask: Rect::from_min_size(
+                Pos2::new(mode.max.x - mask_w, mode.min.y),
+                egui::vec2(mask_w, mode.height()),
+            ),
+        }),
+        false => None,
+    }
+}
+
+/// A box `w` wide centred across `row`, which is `align-items: center` on one
+/// child of a flex column.
+fn centred_in(row: Rect, w: f32) -> Rect {
+    Rect::from_min_size(
+        Pos2::new(row.center().x - w * 0.5, row.min.y),
+        egui::vec2(w, row.height()),
+    )
+}
+
+/// **A value on `[0, 1]`, and a NaN is zero.**
+///
+/// `f32::clamp` passes a NaN straight through, which would be a `NaN`-wide
+/// fill on a track. The engine takes the same reading one level down — *"a
+/// fader whose value is not a number is a broken control, and of the two
+/// available readings … only one of them is a fader"* — and a console handed
+/// one by a caller that did not go through `Deck::set_opacity` takes it here.
+fn unit(at: f32) -> f32 {
+    match at.is_nan() {
+        true => 0.0,
+        false => at.clamp(0.0, 1.0),
+    }
+}
+
+/// **How much of a track a value fills**, from the track's own zero — the left
+/// end of a row, and the **bottom** of a column, because a fader stands up and
+/// a meter fills from the floor.
+///
+/// **The whole of what a [`Fader`] and a [`Meter`] share**, and it is a
+/// function rather than a shared type for the reason [`Meter`] gives. Three
+/// call sites the day it is written: the trim's fill, the opacity fader's
+/// fill, and the meter's column.
+fn filled(track: Rect, axis: Axis, at: f32) -> Rect {
+    let at = unit(at);
+    match axis {
+        Axis::Row => Rect::from_min_max(
+            track.min,
+            Pos2::new(track.min.x + track.width() * at, track.max.y),
+        ),
+        Axis::Column => Rect::from_min_max(
+            Pos2::new(track.min.x, track.max.y - track.height() * at),
+            track.max,
+        ),
+    }
+}
+
+/// **The fader, and it is one component with two call sites on the day it is
+/// written**: the horizontal trim and the vertical opacity. That is this
+/// repository's rule about an abstraction satisfied when it lands rather than
+/// promised for later, which [`bay_head`] is the other instance of.
+///
+/// What the two disagree about is an argument each — the axis, the inset the
+/// fill sits inside its track by (`.fader b` fills its 5px track edge to edge
+/// where `.vfader b` is `left: 3px; right: 3px; bottom: 3px` inside its 17px
+/// one), and the knob's size. Everything else is this.
+///
+/// **One number drives the fill and the knob**, which is what stops the two
+/// disagreeing: the knob is centred on the fill's moving edge. The mock sets
+/// them by hand and a few percent apart — `width: 72%` with `left: 66%`,
+/// `height: 97%` with `bottom: 94%` — which is an author centring a 9px knob
+/// on a fill's end in percentages, and this is the same mark with the
+/// arithmetic done once.
+///
+/// So the knob overhangs its track by half its length at either end, and the
+/// mock's own boxes have the room: [`size::STRIP_GAP_Y`] above and below the
+/// fader column, and [`size::TRIM_PAD_X`] plus [`size::STRIP_PAD_X`] either
+/// side of the trim.
+fn fader(track: Rect, axis: Axis, at: f32, inset: f32, knob: egui::Vec2) -> Fader {
+    let fill = filled(track.shrink(inset), axis, at);
+    let edge = match axis {
+        Axis::Row => Pos2::new(fill.max.x, track.center().y),
+        Axis::Column => Pos2::new(track.center().x, fill.min.y),
+    };
+    Fader {
+        track,
+        axis,
+        fill,
+        knob: Rect::from_center_size(edge, knob),
+    }
+}
+
+/// The tally's word as one laid-out run, so that measuring it and painting it
+/// cannot be two different runs of type.
+fn tally_job(tally: Tally, colour: Color32) -> LayoutJob {
+    spaced(
+        &tally.word().to_uppercase(),
+        size::TALLY_SIZE,
+        colour,
+        size::TALLY_TRACKING,
+    )
+}
+
+/// A plain span at a size that is not the console's [`size::BASE`] — this bay
+/// has four of them, which is why it takes one.
+fn span_at(text: &str, size: f32, colour: Color32) -> LayoutJob {
+    LayoutJob::simple_singleline(
+        text.to_owned(),
+        FontId::new(size, FontFamily::Proportional),
+        colour,
+    )
+}
+
+/// `.strip-name` as one laid-out run: `overflow: hidden; text-overflow:
+/// ellipsis; white-space: nowrap` is exactly one row, broken anywhere, with an
+/// ellipsis standing for what did not fit.
+fn name_job(name: &str, width: f32, colour: Color32) -> LayoutJob {
+    let mut job = span_at(name, size::STRIP_NAME_SIZE, colour);
+    job.wrap = egui::epaint::text::TextWrapping {
+        max_width: width,
+        max_rows: 1,
+        break_anywhere: true,
+        overflow_character: Some('…'),
+    };
+    job
+}
+
+/// **The Mixer bay's strips, painted.**
+///
+/// Where everything goes is [`mixer`]'s, so this paints and derives nothing.
+fn mixer_into(ui: &Ui, pal: &Palette, mixer: &Mixer) {
+    for (strip, at) in mixer.placed() {
+        strip_into(ui, pal, strip, at);
+    }
+}
+
+/// **One strip**, term for term from `style.css`:
+///
+/// - `.strip` — `background: var(--c-well)`, `border-radius: 9px`.
+/// - `.strip-name` — `font-size: 10px`, `var(--c-dim)`, centred, elided.
+/// - `.tally` — three washes and three inks, which is [`tally_into`]'s.
+/// - `.trim .lbl` — `font-size: 9px`, `var(--c-faint)`.
+/// - `.fader` and `.vfader` — [`fader_into`]'s.
+/// - `.vmeter` — [`meter_into`]'s.
+/// - `.strip-num` — `var(--c-text)`, *a value*, and `font-weight: 500` is not
+///   honoured because `egui`'s default proportional face has no bold.
+/// - `.strip-mode` — two [`mini_into`]s.
+fn strip_into(ui: &Ui, pal: &Palette, strip: &Strip, at: StripBox) {
+    // Clipped to the strip and half the gap around it: a fader's knob is
+    // meant to stand proud of its track, and `.mixer-strips`' 4px gap is where
+    // that goes — but nothing in one strip may reach the strip beside it.
+    let painter = ui
+        .painter()
+        .with_clip_rect(at.rect.expand(size::STRIP_GAP * 0.5));
+    painter.rect_filled(
+        at.rect,
+        CornerRadius::same(size::STRIP_RADIUS as u8),
+        pal.well,
+    );
+
+    if !strip.name.is_empty() {
+        let galley = painter.layout_job(name_job(&strip.name, at.name.width(), pal.dim));
+        centre_galley(&painter, at.name, galley, pal.dim);
+    }
+
+    tally_into(&painter, pal, at.tally, strip.tally);
+
+    let galley = painter.layout_job(span_at(TRIM_LABEL, size::TRIM_LABEL_SIZE, pal.faint));
+    painter.galley(
+        Pos2::new(
+            at.trim_label.min.x,
+            at.trim_label.center().y - galley.size().y * 0.5,
+        ),
+        galley,
+        pal.faint,
+    );
+    fader_into(&painter, pal, at.trim_at(strip.gain), false);
+    fader_into(
+        &painter,
+        pal,
+        at.fader_at(strip.opacity),
+        strip.tally == Tally::Live,
+    );
+    meter_into(&painter, pal, at.meter, strip.level.map(|l| at.meter_at(l)));
+
+    // `.strip-num`: the opacity to two places, which is what the mock writes.
+    // The value itself and not the fader's clamped one — the fader clamps
+    // because a track has ends and a number does not.
+    let galley = painter.layout_job(span_at(
+        &format!("{:.2}", strip.opacity),
+        size::STRIP_NUM_SIZE,
+        pal.text,
+    ));
+    centre_galley(&painter, at.num, galley, pal.text);
+
+    mini_into(&painter, pal, at.blend, true, |painter, colour| {
+        let galley = painter.layout_job(span_at(strip.blend, size::MINI_SIZE, colour));
+        centre_galley(painter, at.blend, galley, colour);
+    });
+    mini_into(&painter, pal, at.mask, false, |painter, colour| {
+        mask_mark(painter, at.mask.center(), colour, strip.mask);
+    });
+}
+
+/// A galley centred in a box, both ways — which is `align-items: center` on a
+/// flex column done where the type's real height is known.
+fn centre_galley(
+    painter: &egui::Painter,
+    rect: Rect,
+    galley: std::sync::Arc<egui::Galley>,
+    colour: Color32,
+) {
+    painter.galley(
+        Pos2::new(
+            rect.center().x - galley.size().x * 0.5,
+            rect.center().y - galley.size().y * 0.5,
+        ),
+        galley,
+        colour,
+    );
+}
+
+/// `.tally`: a capsule with the residency's word in it, in the residency's own
+/// colours.
+///
+/// - `.tally.live` — `color-mix(in srgb, var(--c-pink) 18%, transparent)`
+///   behind `var(--c-pink)`, with `box-shadow: 0 0 10px var(--c-glowp)`. The
+///   halo is an [`egui::epaint::Shadow`], the mechanism the transport's lit
+///   beat and the Outputs row's dot both use.
+/// - `.tally.priming` — a 20% wash of `var(--c-sun)` behind `var(--c-sun)`,
+///   and **no halo**: priming is warming out of sight, not on air.
+/// - `.tally.alloc` — `var(--c-tint)` behind `var(--c-dim)`, which is the
+///   palette's own *"the wash behind a node head, and the allocated tally"* —
+///   the first use of `--c-tint` in this crate, and it was transcribed against
+///   this day.
+fn tally_into(painter: &egui::Painter, pal: &Palette, rect: Rect, tally: Tally) {
+    let radius = CornerRadius::same((size::TALLY_H * 0.5) as u8);
+    let (fill, ink) = match tally {
+        Tally::Live => (tint(pal.pink, 18), pal.pink),
+        Tally::Priming => (tint(pal.sun, 20), pal.sun),
+        Tally::Allocated => (pal.tint, pal.dim),
+    };
+    if tally == Tally::Live {
+        painter.add(
+            egui::epaint::Shadow {
+                offset: [0, 0],
+                blur: size::TALLY_GLOW,
+                spread: 0,
+                color: pal.glow_pink,
+            }
+            .as_shape(rect, radius),
+        );
+    }
+    painter.rect_filled(rect, radius, fill);
+    let galley = painter.layout_job(tally_job(tally, ink));
+    painter.galley(
+        Pos2::new(
+            rect.min.x + size::TALLY_PAD_X,
+            rect.center().y - galley.size().y * 0.5,
+        ),
+        galley,
+        ink,
+    );
+}
+
+/// A fader: the well, the fill and the knob.
+///
+/// - `.fader` / `.vfader` — `background: var(--c-well)` with
+///   `box-shadow: inset 0 0 0 1px var(--c-hair)`, which is a 1px stroke on the
+///   inside, exactly as a preview cell's is.
+/// - `.fader b` / `.vfader b` — `linear-gradient(90deg, var(--c-mint),
+///   var(--c-lav))` lying down and `linear-gradient(0deg, …)` standing up,
+///   which is the same colour ramp the tempo carries and is drawn the same way
+///   — see [`gradient`].
+/// - `.fader s` / `.vfader s` — `background: var(--c-panel)` with
+///   `box-shadow: 0 0 0 1px var(--c-line)`, which is a 1px stroke on the
+///   **outside** because a `0 0 0 1px` shadow sits around the box rather than
+///   inside it. Its `0 1px 4px rgba(0,0,0,0.18)` drop shadow is dropped for
+///   the reason `room` collapses the day palette's pair: `epaint` draws one
+///   shadow and the rim is the one that says where the knob is.
+///
+/// `live` is the one thing about a fader that is not the fader's:
+/// `.strip.live .vfader s` is `box-shadow: 0 0 0 1px var(--c-pink),
+/// 0 0 9px var(--c-glowp)`, so the knob of a slot that is on air takes a pink
+/// rim and a pink halo and no other knob does. It is the mock saying *the
+/// fader you are about to move is the one the audience is watching*.
+fn fader_into(painter: &egui::Painter, pal: &Palette, fader: Fader, live: bool) {
+    let track_r = CornerRadius::same((fader.track.width().min(fader.track.height()) * 0.5) as u8);
+    painter.rect_filled(fader.track, track_r, pal.well);
+    painter.rect_stroke(
+        fader.track,
+        track_r,
+        Stroke::new(size::HAIRLINE, pal.hair),
+        StrokeKind::Inside,
+    );
+    gradient(painter, fader.fill, fader.axis, pal.mint, pal.lav, true);
+
+    let knob_r = CornerRadius::same((fader.knob.width().min(fader.knob.height()) * 0.5) as u8);
+    if live {
+        painter.add(
+            egui::epaint::Shadow {
+                offset: [0, 0],
+                blur: size::VFADER_KNOB_GLOW,
+                spread: 0,
+                color: pal.glow_pink,
+            }
+            .as_shape(fader.knob, knob_r),
+        );
+    }
+    painter.rect_filled(fader.knob, knob_r, pal.panel);
+    painter.rect_stroke(
+        fader.knob,
+        knob_r,
+        Stroke::new(
+            size::HAIRLINE,
+            match live {
+                true => pal.pink,
+                false => pal.line,
+            },
+        ),
+        StrokeKind::Outside,
+    );
+}
+
+/// The meter: the well, the mean's column and the peak's mark — and **nothing
+/// in the well where there is no reading**, which is the mock's own `alloc`
+/// strip.
+///
+/// - `.vmeter` — the fader's well, at 6 wide.
+/// - `.vmeter b` — `linear-gradient(0deg, var(--c-mint), var(--c-sun))`, and
+///   square rather than a capsule: `.vmeter` is `overflow: hidden` and the
+///   column is clipped by the well rather than rounded itself.
+/// - `.vmeter u` — `background: var(--c-pink)`, *on air*, which is the colour
+///   the peak shares with the live tally and the lit beat.
+fn meter_into(painter: &egui::Painter, pal: &Palette, well: Rect, meter: Option<Meter>) {
+    let radius = CornerRadius::same((well.width() * 0.5) as u8);
+    painter.rect_filled(well, radius, pal.well);
+    painter.rect_stroke(
+        well,
+        radius,
+        Stroke::new(size::HAIRLINE, pal.hair),
+        StrokeKind::Inside,
+    );
+    let Some(meter) = meter else {
+        return;
+    };
+    let painter = painter.with_clip_rect(meter.well);
+    gradient(&painter, meter.fill, Axis::Column, pal.mint, pal.sun, false);
+    painter.rect_filled(meter.peak, CornerRadius::ZERO, pal.pink);
+}
+
+/// One `.mini`: a capsule with a 1px border and whatever goes in it.
+///
+/// `sel` is `.mini.sel` — `color: var(--c-lav)`, `border-color: transparent`,
+/// and a 15% wash of the same behind it. **The blend's mini is always `.sel`
+/// and the mask's never is**, which is the mock's and reads: the blend names
+/// which of `Blend::ALL` is in force, where the mask is a picker showing the
+/// shape it is set to.
+fn mini_into(
+    painter: &egui::Painter,
+    pal: &Palette,
+    rect: Rect,
+    sel: bool,
+    contents: impl FnOnce(&egui::Painter, Color32),
+) {
+    let radius = CornerRadius::same((size::MINI_H * 0.5) as u8);
+    match sel {
+        true => {
+            painter.rect_filled(rect, radius, tint(pal.lav, 15));
+        }
+        false => {
+            painter.rect_stroke(
+                rect,
+                radius,
+                Stroke::new(size::HAIRLINE, pal.line),
+                StrokeKind::Inside,
+            );
+        }
+    }
+    contents(
+        painter,
+        match sel {
+            true => pal.lav,
+            false => pal.faint,
+        },
+    );
+}
+
+/// The mask's mark, drawn rather than typed — see [`Mask`].
+///
+/// A circle [`size::MINI_SIZE`] across, which is the size the glyph it stands
+/// in for would have been, and then what the mask does to it: nothing, one
+/// half filled, or a filled centre.
+fn mask_mark(painter: &egui::Painter, centre: Pos2, colour: Color32, mask: Mask) {
+    let r = size::MINI_SIZE * 0.5;
+    match mask {
+        Mask::None => {}
+        // A half-disc is a circle with half of it not painted, so it is a clip
+        // rather than a path: `epaint` has no arc and a polygon of one would
+        // be a curve this file approximated by hand.
+        Mask::Linear => {
+            painter
+                .with_clip_rect(Rect::from_min_max(
+                    Pos2::new(centre.x, centre.y - r),
+                    Pos2::new(centre.x + r, centre.y + r),
+                ))
+                .circle_filled(centre, r, colour);
+        }
+        Mask::Radial => {
+            painter.circle_filled(centre, r * 0.5, colour);
+        }
+    }
+    painter.circle_stroke(centre, r, Stroke::new(size::HAIRLINE, colour));
+}
+
+/// **A two-colour ramp along `axis`**, which is `linear-gradient` and a
+/// painter that has none.
+///
+/// The same problem [`bpm_job`] answers for a line of type, and a different
+/// answer because this is a shape rather than a run of glyphs: a `Mesh` of two
+/// triangles with a colour at each corner, which `epaint` interpolates across
+/// exactly. One shape, and no stepping.
+///
+/// `capsule` is `border-radius: 999px` on the fill: a fader's fill is a
+/// capsule and its two ends are circles at the ramp's own ends, where a
+/// meter's column is square and is clipped by the well around it instead.
+/// Everything is clipped to `rect`, so an end cap on a fill shorter than it is
+/// wide is a sliver rather than a bulge.
+fn gradient(
+    painter: &egui::Painter,
+    rect: Rect,
+    axis: Axis,
+    from: Color32,
+    to: Color32,
+    capsule: bool,
+) {
+    if !(rect.width() > 0.0 && rect.height() > 0.0) {
+        return;
+    }
+    let painter = painter.with_clip_rect(rect);
+    // `90deg` runs left to right and `0deg` runs **up**, so a column's `from`
+    // is at the bottom — which is also where its zero is.
+    let colour_at = |p: Pos2| match axis {
+        Axis::Row => match p.x <= rect.center().x {
+            true => from,
+            false => to,
+        },
+        Axis::Column => match p.y >= rect.center().y {
+            true => from,
+            false => to,
+        },
+    };
+    let mut mesh = egui::epaint::Mesh::default();
+    for corner in [
+        rect.left_top(),
+        rect.right_top(),
+        rect.right_bottom(),
+        rect.left_bottom(),
+    ] {
+        mesh.colored_vertex(corner, colour_at(corner));
+    }
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    painter.add(egui::Shape::mesh(mesh));
+
+    if capsule {
+        let r = rect.width().min(rect.height()) * 0.5;
+        let (start, end) = match axis {
+            Axis::Row => (
+                Pos2::new(rect.min.x + r, rect.center().y),
+                Pos2::new(rect.max.x - r, rect.center().y),
+            ),
+            Axis::Column => (
+                Pos2::new(rect.center().x, rect.max.y - r),
+                Pos2::new(rect.center().x, rect.min.y + r),
+            ),
+        };
+        painter.circle_filled(start, r, from);
+        painter.circle_filled(end, r, to);
+    }
+}
+
+/// `color-mix(in srgb, X n%, transparent)`, as the alpha it is: `n`% of 255,
+/// rounded. The mock's own wash behind an armed control, a live tally and a
+/// selected mini, and `room`'s documentation is where the equivalence is
+/// argued.
+fn tint(colour: Color32, percent: u8) -> Color32 {
+    let alpha = ((percent as u32 * 255 + 50) / 100) as u8;
+    Color32::from_rgba_unmultiplied(colour.r(), colour.g(), colour.b(), alpha)
+}
+
 /// The console's view: which room it is in, and the frame's plan, kept so a
 /// frame does not allocate one.
 pub struct View {
@@ -1364,6 +2496,24 @@ pub struct View {
     /// them and writes this per frame, beside the frame that measured it.
     /// See [`Transport`] and [`transport`].
     pub transport: Option<Transport>,
+    /// **What each mixer strip reads this frame**, one per slot the deck has,
+    /// in slot order — and **empty** for a console with no deck behind it,
+    /// which is every test in this crate and what the bay draws then is
+    /// nothing at all.
+    ///
+    /// **The same seam as [`View::transport`]**, and empty rather than
+    /// `Option<Vec<_>>` because an empty list of strips is already the whole
+    /// of *no deck*: a deck has one to four slots (`MAX_SLOTS`, asserted in
+    /// `Deck::new`), so there is no deck that has none and no second way to
+    /// say it.
+    ///
+    /// A `Vec` a caller keeps and rewrites, rather than a fixed array of
+    /// `Option`s like [`View::previews`]: a preview cell is off or on and the
+    /// row is always four, where the strips are *as many as the deck has* and
+    /// a `None` in the middle of them would be a slot no `Deck` can have.
+    /// [`View::new`] gives it room for [`DECKS`] so the frame path never grows
+    /// it. See [`Strip`] and [`mixer`].
+    pub mixer: Vec<Strip>,
     placed: Vec<Placed>,
 }
 
@@ -1374,6 +2524,9 @@ impl View {
             picture: None,
             previews: [None; DECKS],
             transport: None,
+            // As many strips as a deck can ever have, so the frame path never
+            // grows it — the same reason `placed` is built with a capacity.
+            mixer: Vec::with_capacity(DECKS),
             // Every region the console has, so the frame path never grows it.
             placed: Vec::with_capacity(REGIONS.len()),
         }
@@ -1389,6 +2542,7 @@ impl View {
         let picture = self.picture;
         let previews = self.previews;
         let values = self.transport;
+        let strips = self.mixer.as_slice();
         let frame = egui::Frame::NONE.fill(pal.ground);
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
             for placed in &self.placed {
@@ -1422,6 +2576,20 @@ impl View {
                         card(ui, &pal, rect);
                         if let Some(row) = outputs(ui.ctx(), panel.layout()) {
                             outputs_into(ui, &pal, &row);
+                        }
+                    }
+                    // The one bay with something in its body, and it is a bay
+                    // in every other respect: the same card and the same head
+                    // the other six get, and then as many strips as the deck
+                    // has. With no deck behind the console there are none and
+                    // the body is as empty as every other one in this pass —
+                    // `mixer`'s answer, not this pass's, so that *no deck
+                    // means nothing at all* is decided in one place.
+                    Kind::Mixer => {
+                        card(ui, &pal, rect);
+                        bay_head(ui, &pal, rect, MIXER_TITLE, &[], false);
+                        if let Some(bay) = mixer(ui.ctx(), panel.layout(), strips) {
+                            mixer_into(ui, &pal, &bay);
                         }
                     }
                     // A pane draws nothing of its own. It has no card — it is
@@ -1589,11 +2757,7 @@ fn outputs_into(ui: &Ui, pal: &Palette, row: &Outputs) {
     painter.galley(row.label.min, galley, pal.faint);
 
     let (ink, fill, dot) = match row.on {
-        true => (
-            pal.text,
-            Color32::from_rgba_unmultiplied(pal.mint.r(), pal.mint.g(), pal.mint.b(), TINT_14),
-            pal.mint,
-        ),
+        true => (pal.text, tint(pal.mint, 14), pal.mint),
         false => (pal.dim, pal.well, pal.faint),
     };
     painter.rect_filled(
@@ -1628,11 +2792,6 @@ fn outputs_into(ui: &Ui, pal: &Palette, row: &Outputs) {
         ink,
     );
 }
-
-/// `color-mix(in srgb, X 14%, transparent)`, as the alpha it is: 14% of 255,
-/// rounded. The mock's own wash behind an armed control, and `room`'s
-/// documentation is where the equivalence is argued.
-const TINT_14: u8 = 36;
 
 /// A bay's card: `.bay`'s panel fill, 11px radius and drop shadow.
 fn card(ui: &Ui, pal: &Palette, rect: Rect) {
