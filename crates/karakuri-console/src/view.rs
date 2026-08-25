@@ -124,9 +124,29 @@ use crate::panel::{Op, Panel, GRAB};
 use crate::room::{size, Palette, Room};
 
 /// The whole of a texture, in `egui`'s texture coordinates. The picture fills
-/// its rectangle: the fitting happened when the engine drew into it, and doing
-/// it again here would be two answers to *how does a 16:9 canvas sit in this
-/// box*.
+/// its rectangle, and that is now one answer rather than two.
+///
+/// # What changed, and why the argument is not deleted
+///
+/// This used to read *"the fitting happened when the engine drew into it, and
+/// doing it again here would be two answers to how does a 16:9 canvas sit in
+/// this box"*. That was true while [`picture_rect`] handed the engine the
+/// whole `program-view` region: the region was not the canvas's shape, so
+/// `Present::draw` had to choose where the canvas sat inside it, and a second
+/// fit here would have chosen differently.
+///
+/// **The console decides the box now.** [`picture_rect`] gives the picture the
+/// canvas's own aspect, so the engine is handed a target it already agrees
+/// with and its fit has nothing left to do. The two answers did not become
+/// one by one of them being dropped — one of them became the identity.
+///
+/// # The engine's letterbox stays, and it is not redundant
+///
+/// [`fitted`] rounds to whole pixels and the caller's own `physical` rounds
+/// again to whole texels, so the target is **never exactly the canvas's
+/// ratio**: the mock's 466 x 262 is 16:9 to a quarter of a pixel and no
+/// closer. `letterbox` is what absorbs that, and after this rule the bars it
+/// draws are sub-texel where they used to be the black half of a region.
 const WHOLE_TEXTURE: Rect = Rect {
     min: Pos2::new(0.0, 0.0),
     max: Pos2::new(1.0, 1.0),
@@ -234,6 +254,38 @@ pub enum Kind {
     /// region somebody may be capturing: a capture that is neither the canvas
     /// nor a clean crop of it is worse than useless, and a word burnt into the
     /// corner is exactly that."*
+    ///
+    /// **A clean crop is what the picture now is.** [`picture_rect`] gives it
+    /// the canvas's own aspect rather than the whole region, so the rectangle
+    /// somebody captures is the canvas's shape and the sentence above is
+    /// satisfied rather than merely quoted — before that rule the region was
+    /// neither the canvas nor a crop of it, and the manual asked for one of
+    /// the two.
+    ///
+    /// # What is beside it is the bay's card, and nothing is drawn there
+    ///
+    /// The region is wider than the picture at every window above the mock's
+    /// narrowest, and the leftover is the console's ground rather than the
+    /// engine's black inside the texture. **Nothing is painted in it**: the
+    /// bay's card shows through exactly as it does in every other empty body,
+    /// which is the rule this module opens with and is also the mock's own
+    /// answer — `.program-view` *is* the picture, and what surrounds it is
+    /// `.program-body`, which sets no background of its own.
+    ///
+    /// **What that costs a capture, said here rather than found later.** The
+    /// `solo` pill's tooltip is *"Solo the program view: the panel folds away
+    /// and only the picture is left, which is also how you capture this
+    /// window"* — so after a solo the window **is** this region, and an
+    /// operator whose window is not the canvas's shape captures `--c-panel`
+    /// bars where black would read as an ordinary letterbox. That is a real
+    /// cost and it is new: before this rule the bars were the engine's clear
+    /// inside the texture, and they were black.
+    ///
+    /// `karakuri-cli`'s `a` — `Live::snap_to_canvas` — is the answer to
+    /// exactly this one window along, and its own documentation says why:
+    /// *"an OBS window capture of it would otherwise pick up the bars and a
+    /// scale."* **The console's window has no `a` yet, and this rule is what
+    /// creates that gap.**
     Picture,
     /// **The row of deck previews** under the picture, which is [`DECKS`]
     /// cells side by side.
@@ -426,9 +478,22 @@ pub struct Picture {
     pub rect: Rect,
 }
 
-/// **Where the picture goes**: inside the `program-view` region, below the bay
-/// head that is painted over the top of it and inside `.program-body`'s
-/// padding.
+/// **Where the picture goes**: the canvas's own shape, as large as the
+/// `program-view` region allows, centred in it — below the bay head that is
+/// painted over the top of that region and inside `.program-body`'s padding.
+///
+/// `canvas` is what the Set renders at and what the deck is sized to: `--canvas`
+/// in the product, which reaches a replay through `Record::Canvas` so a session
+/// renders at the size the performance ran at. **Two dimensions rather than a
+/// ratio**, and that is a conclusion rather than a habit. It is the shape
+/// `karakuri_engine::present::letterbox(canvas, target)` and `Present::size`
+/// already speak, so a caller hands over the number it built its `Present`
+/// from rather than deriving a float on the way in — and a ratio derived at a
+/// call site is exactly where `9.0 / 16.0` gets written for `16.0 / 9.0`,
+/// which is a bug nothing on screen shows. It also carries its own
+/// provenance: `(1280, 720)` reads as a canvas and `1.7777778` reads as a
+/// number somebody typed. `src/` still takes no engine (ADR-0156) — this is a
+/// pair of `u32`s, arriving the way every other value does.
 ///
 /// `None` where there is no picture to draw, which is the manual's *"it is on
 /// screen exactly when that sink is on — so there is no state where it is
@@ -440,30 +505,66 @@ pub struct Picture {
 /// # The insets are the bay's own derivation, read backwards
 ///
 /// The arrangement gives `program-view` 27 + 9 + 262 at the mock's width — bay
-/// head, `.program-body`'s padding above the picture, and the 16:9 picture
-/// itself. So the picture is that region less [`size::HEAD_H`] and one
-/// [`size::PROGRAM_BODY_PAD`] at the top, less a pad either side, and **less
-/// nothing at the bottom**: what the CSS puts under the picture is
+/// head, `.program-body`'s padding above the picture, and the picture itself.
+/// So the box the canvas is fitted into is that region less [`size::HEAD_H`]
+/// and one [`size::PROGRAM_BODY_PAD`] at the top, less a pad either side, and
+/// **less nothing at the bottom**: what the CSS puts under the picture is
 /// `.program-body`'s `gap: 8px`, which is the split's divider and belongs to
 /// neither child, and the 9 further down is that body's bottom padding, which
 /// belongs to `deck-previews`. So the only 9s in this region are the one above
 /// the picture and the one either side of it.
 ///
-/// At the narrowest console the mock will draw this is exactly 466 x 262,
-/// which is 16:9. At any wider window it is wider than 16:9 and the picture
-/// letterboxes into it, which is the engine's job and not this crate's.
+/// At the narrowest console the mock will draw, that box is exactly
+/// **466 x 262** — and 466 x 262 is 16:9 *to a quarter of a pixel* rather than
+/// exactly. `.program-view` carries `aspect-ratio: 16/9`, so 466 wide is
+/// **262.125** tall, and the arrangement transcribed the whole pixel the mock
+/// rasterises it at. The box is therefore 1.778626 where the canvas is
+/// 1.7777778, which is the whole of why the paragraph below exists.
+///
+/// # The rectangle is a whole number of pixels, and that is about resampling
+///
+/// A strict fit into that box gives 465.7778 x 262. **A caller's `physical`
+/// rounds to whole texels, so the texture it then allocates is 466 wide** —
+/// and the picture would be a 466-texel texture drawn into a 465.7778-wide
+/// box, where every texel on screen is a fractional sample of its neighbours
+/// instead of a blit. Of every region on this panel that is worst here: the
+/// picture is a *preview of what is being captured*, and softening it is the
+/// one thing it may not do. It also buys nothing — the texture's own ratio is
+/// 466:262 either way, because `physical` rounded. **The fractional quarter
+/// pixel is not more faithful to 16:9; it is the same texture, softened.**
+///
+/// Two smaller reasons, and they are second. Every number in this console is a
+/// whole logical pixel because the mock is authored in whole ones —
+/// [`preview_cells`] comes out 112 x 63 with no rounding at all because 466
+/// happens to divide, not because a cell is exempt from this. And a box whose
+/// extent is whole is a box the picture's edge lands on the pixel grid in,
+/// which is what `.program-view`'s own hard-edged well is drawn as.
+///
+/// **What it costs, plainly:** the picture's ratio is then the mock's 1.778626
+/// rather than exactly the canvas's. `Present::draw` is what absorbs the
+/// difference and that is why it stays — see [`WHOLE_TEXTURE`]. Snapping does
+/// not make the engine's letterbox redundant; it makes it sub-texel.
+///
+/// # The leftover is the console's ground, and a capture pays for it
+///
+/// Above the mock's narrowest the region is wider than the picture, and what
+/// is beside the picture is the Program bay's card with nothing drawn on it.
+/// [`Kind::Picture`] is where that is argued and where the cost to an operator
+/// capturing a soloed window is written out, along with the `a` this console's
+/// window has not got yet.
 ///
 /// `layout` must be solved: `Layout::rect` refuses to answer from a dirty one.
-pub fn picture_rect(layout: &karakuri_layout::Layout) -> Option<Rect> {
+pub fn picture_rect(layout: &karakuri_layout::Layout, canvas: (u32, u32)) -> Option<Rect> {
     let id = layout.find("program-view")?;
     let region = to_egui(layout.rect(id));
-    let rect = Rect::from_min_max(
+    let body = Rect::from_min_max(
         Pos2::new(
             region.min.x + size::PROGRAM_BODY_PAD,
             region.min.y + size::HEAD_H + size::PROGRAM_BODY_PAD,
         ),
         Pos2::new(region.max.x - size::PROGRAM_BODY_PAD, region.max.y),
     );
+    let rect = fitted(body, canvas);
     // **One rule, and it is the size rather than the visibility.** A folded
     // region keeps its rectangle and loses its extent along its parent's axis,
     // and so does one inside a fold and one a solo left out — so `visible`
@@ -471,12 +572,85 @@ pub fn picture_rect(layout: &karakuri_layout::Layout) -> Option<Rect> {
     // would agree until somebody found the case where they did not. What is
     // left over is the case `visible` never covered anyway: the inset is
     // bigger than the region, which is a rectangle `egui` draws inside out
-    // rather than refuses.
+    // rather than refuses. Asked of the fitted rectangle rather than of the
+    // box, because the fitted one is what gets drawn — and a box under half a
+    // pixel rounds to nothing, which is nothing to draw and nothing to render
+    // into.
     match rect.width() > 0.0 && rect.height() > 0.0 {
         true => Some(rect),
         false => None,
     }
 }
+
+/// **The largest rectangle of `aspect` that fits inside `inside`, centred in
+/// it, and a whole number of pixels in each direction.**
+///
+/// # One derivation with two call sites, and they were one rule before they
+/// were one function
+///
+/// [`picture_rect`] fits the canvas into the `program-view` region and
+/// [`preview_cells`] fits a cell into its track, and
+/// [ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
+/// states the second in words the first now takes unchanged: *"as large as the
+/// track's width and the row's height both allow, centred"*. Two copies of it
+/// is two chances for a picture and the thumbnails under it to disagree about
+/// what *centred* means.
+///
+/// **`aspect` is two numbers and not a ratio**, for the reason
+/// [`picture_rect`] gives at length, and it is deliberately **not** called
+/// `canvas`: the picture's two numbers are the canvas's and a cell's are
+/// [`PREVIEW_ASPECT`]'s, which is the mock's. One argument, two provenances,
+/// each stated where it is passed.
+///
+/// # What is rounded and what is not
+///
+/// **The extent is rounded and the position is not.** The extent is what a
+/// caller's `physical` turns into texels, so it is the half that decides
+/// whether the picture is blitted or resampled — [`picture_rect`] is where
+/// that argument is written out. The offset is left as the true centre,
+/// because rounding it is a cell no longer centred in its track, and *centred*
+/// is the other half of the rule ADR-0170 took. A region whose own origin is
+/// fractional still samples fractionally, and that is the arrangement's
+/// coordinate rather than this rule's to fix.
+///
+/// The clamp is `floor` rather than the box's own extent so that the answer
+/// stays whole: rounding up can exceed the box by up to half a pixel, and
+/// clamping to a fractional edge would hand back the fractional extent this
+/// exists to avoid.
+fn fitted(inside: Rect, aspect: (u32, u32)) -> Rect {
+    let (aw, ah) = (aspect.0.max(1) as f32, aspect.1.max(1) as f32);
+    let scale = (inside.width() / aw).min(inside.height() / ah);
+    let w = (aw * scale).round().min(inside.width().floor());
+    let h = (ah * scale).round().min(inside.height().floor());
+    Rect::from_min_size(
+        Pos2::new(
+            inside.min.x + (inside.width() - w) * 0.5,
+            inside.min.y + (inside.height() - h) * 0.5,
+        ),
+        egui::vec2(w, h),
+    )
+}
+
+/// **The shape of one deck preview cell**, and it is the mock's number rather
+/// than the canvas's: `.preview` carries `aspect-ratio: 16/9` in `style.css`,
+/// in a `.previews` grid of `repeat(4, 1fr)` with a 6px gap.
+///
+/// Two numbers rather than a ratio for [`picture_rect`]'s reason, and passed
+/// to the same [`fitted`] the picture goes through.
+///
+/// # It agrees with the canvas today by coincidence, and that is a pass rather
+/// than a rename
+///
+/// An audition is the **same canvas** the picture shows, so a canvas that is
+/// not 16:9 would letterbox inside a cell — a second fit inside a rectangle
+/// `Present::draw` has already fitted, which is precisely what ADR-0170
+/// rejected one level up. The honest number here is therefore the canvas's,
+/// and it is not the canvas's yet for a reason that is structural rather than
+/// lazy: [`View::draw`] derives these rectangles itself, where it is *handed*
+/// the picture's in [`View::picture`], so making a cell canvas-aware means
+/// putting a canvas on [`View`] and writing it per frame. **That is its own
+/// pass and this is not it.**
+const PREVIEW_ASPECT: (u32, u32) = (16, 9);
 
 /// **Where the four deck previews go**: a row of [`DECKS`] cells inside the
 /// `deck-previews` region, under the picture.
@@ -515,6 +689,8 @@ pub fn picture_rect(layout: &karakuri_layout::Layout) -> Option<Rect> {
 ///   is exactly 112 x 63 and fills the track; wider, it stays 63 tall with
 ///   ground either side. The texture then fills the cell exactly, so nothing
 ///   letterboxes twice and the cell is always the shape of what it shows.
+///   **[`picture_rect`] now takes that same rule for the picture**, and the
+///   two share [`fitted`] rather than stating it twice.
 /// - **Rejected:** fill the track and letterbox the texels inside it. That
 ///   keeps the row looking like a grid at every width, and pays for it by
 ///   stretching the cell away from the shape of its picture — a 16:9 audition
@@ -545,26 +721,29 @@ fn preview_cells(region: Rect) -> Option<[Rect; DECKS]> {
     // three gaps, not four tracks each carrying one.
     let gaps = size::PREVIEW_GAP * (DECKS - 1) as f32;
     let track = (row.width() - gaps) / DECKS as f32;
-    // 16:9, as large as the track and the row both allow.
-    let h = row.height().min(track * 9.0 / 16.0);
-    let w = h * 16.0 / 9.0;
+    // [`PREVIEW_ASPECT`], as large as the track and the row both allow, and
+    // centred — which is `fitted`, the same call `picture_rect` makes. The
+    // aspect passed is the mock's rather than the canvas's, and the constant
+    // is where that difference is argued.
+    let cells: [Rect; DECKS] = std::array::from_fn(|deck| {
+        let track_x = row.min.x + (track + size::PREVIEW_GAP) * deck as f32;
+        fitted(
+            Rect::from_min_size(
+                Pos2::new(track_x, row.min.y),
+                egui::vec2(track, row.height()),
+            ),
+            PREVIEW_ASPECT,
+        )
+    });
     // The same rule `picture_rect` states, and stated on the cell rather
     // than on the region because the cell is what gets drawn: a row too short
     // or too narrow to hold one is a rectangle `egui` draws inside out rather
-    // than refuses.
-    if !(w > 0.0 && h > 0.0) {
-        return None;
+    // than refuses. Every cell is the same size, so the first one answers for
+    // all four.
+    match cells[0].width() > 0.0 && cells[0].height() > 0.0 {
+        true => Some(cells),
+        false => None,
     }
-    Some(std::array::from_fn(|deck| {
-        let track_x = row.min.x + (track + size::PREVIEW_GAP) * deck as f32;
-        Rect::from_min_size(
-            Pos2::new(
-                track_x + (track - w) * 0.5,
-                row.min.y + (row.height() - h) * 0.5,
-            ),
-            egui::vec2(w, h),
-        )
-    }))
 }
 
 /// **What the transport row reads this frame**: the session's tempo and

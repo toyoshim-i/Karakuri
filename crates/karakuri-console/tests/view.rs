@@ -29,6 +29,18 @@ const BAYS: &[&str] = &[
     "sequencer",
 ];
 
+/// **The canvas the picture is fitted to**, and it is the workspace's
+/// reference workload — 1280x720, which `examples/panel.rs` names `CANVAS` and
+/// builds its `Present` at. It is a value the caller hands in rather than
+/// anything `src/` knows (ADR-0156), so a test hands one in too.
+const CANVAS: (u32, u32) = (1280, 720);
+
+/// **A canvas that is not the mock's shape**, so that a picture fitted to a
+/// hard-coded 16:9 and one fitted to *the canvas* can be told apart. 4:3 is
+/// the obvious other shape a performance runs at, and `--canvas` takes any
+/// pair of numbers.
+const SQUARISH: (u32, u32) = (1024, 768);
+
 /// The transport and the outputs, which carry `class="bay"` for the card
 /// styling and no `.bay-head` at all (ADR-0159). Two kinds and one rule: the
 /// outputs row is a [`Kind::Outputs`] because it has a control in it, and it
@@ -201,8 +213,8 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
     );
 }
 
-/// **The picture's rectangle comes off its own region, and it is 16:9 at the
-/// width the mock draws.**
+/// **The picture's rectangle comes off its own region, and at the width the
+/// mock draws it is the mock's own picture.**
 ///
 /// This is the rectangle a caller sizes a texture from, so getting it from
 /// anything but `program-view` is a texture the wrong size — and the wrong
@@ -211,13 +223,26 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
 /// says exactly what it should be: the centre track is 484, `.program-body`'s
 /// 9px padding leaves 466, and 466 at 16:9 is 262. Those are the two numbers
 /// the arrangement's 378 was built from, arrived at from the other end.
+///
+/// **The region and the canvas agree here to a quarter of a pixel and not
+/// exactly**, which is the whole reason `picture_rect` rounds: `.program-view`
+/// at 466 wide is 262.125 tall and the arrangement transcribed 262, so the box
+/// is 1.778626 where the canvas is 1.777778. A strict fit would hand back
+/// 465.7778 and a caller's `physical` would round it back to a 466-texel
+/// texture — the same texture, drawn softened into a box a quarter of a pixel
+/// narrower than itself.
 #[test]
 fn the_pictures_rectangle_is_its_region_less_the_head_and_the_padding() {
     let layout = solved(SMALLEST);
-    let rect = picture_rect(&layout).expect("the picture is on screen");
+    let rect = picture_rect(&layout, CANVAS).expect("the picture is on screen");
 
     assert!(near(rect.width(), 466.0), "{} wide", rect.width());
     assert!(near(rect.height(), 262.0), "{} tall", rect.height());
+    // **The tolerance is 0.01 and every other assertion in this file uses
+    // `near` at 1e-3, and that is not a slack anybody forgot to tighten**: 466
+    // x 262 is 1.778626 and 16:9 is 1.777778, so this is the one comparison in
+    // the file that cannot be exact. It is the mock's rounding, and the
+    // paragraph above is where it comes from.
     assert!(
         (rect.width() / rect.height() - 16.0 / 9.0).abs() < 0.01,
         "the mock's own picture is 16:9 and this is {}:{}",
@@ -226,7 +251,9 @@ fn the_pictures_rectangle_is_its_region_less_the_head_and_the_padding() {
     );
 
     // And it is that region's, term for term: the bay head is painted over the
-    // top of it and `.program-body`'s padding is inside it.
+    // top of it and `.program-body`'s padding is inside it. At this width the
+    // fit takes nothing off — the box is the picture — so every edge is the
+    // region's own inset and the leftover is zero.
     let region = rect_of(&layout, "program-view");
     assert!(near(rect.min.x, region.x + 9.0));
     assert!(near(rect.min.y, region.y + 27.0 + 9.0));
@@ -237,33 +264,185 @@ fn the_pictures_rectangle_is_its_region_less_the_head_and_the_padding() {
     assert!(near(rect.max.y, region.y + region.h));
 }
 
-/// **It follows the region and not the window**, which is the failure a
-/// texture sized once from the window looks exactly like until somebody drags
-/// something.
+/// **The picture is the canvas's shape at every window, centred in whatever
+/// the region has, and a whole number of pixels.**
+///
+/// The rule ADR-0170 took for a deck preview cell, applied where it was first
+/// refused. Before it, the picture was the whole region and `Present::draw`
+/// letterboxed into it — so at any window above the mock's narrowest a texture
+/// was allocated at the region's full size and the bars inside it were
+/// rendered and uploaded every frame. At 1920 wide that is 1396 x 262 where
+/// 466 x 262 is the picture: **two texels in three are black nobody looks
+/// at.**
+///
+/// The wide end and the tall end both matter and they fail differently. Wide
+/// is the ordinary case and the region is wider than the canvas, so the height
+/// is what limits and the leftover is ground either side. Tall only happens
+/// when an operator drags the program's height past what the width can carry,
+/// and then the width limits and the leftover is above and below — a case a
+/// rule written for wide windows alone gets wrong in silence.
 #[test]
-fn the_pictures_rectangle_follows_its_region_rather_than_the_window() {
-    let narrow = picture_rect(&solved(SMALLEST)).expect("on screen");
-    let wide = picture_rect(&solved(PLAUSIBLE)).expect("on screen");
+fn the_picture_is_the_canvass_shape_at_every_window() {
+    for width in [990.0, 1010.0, 1280.0, 1920.0, 3440.0] {
+        let layout = solved(karakuri_layout::Rect {
+            w: width,
+            ..SMALLEST
+        });
+        let rect = picture_rect(&layout, CANVAS).expect("the picture is on screen");
+        let region = rect_of(&layout, "program-view");
 
-    // A window nearly twice as wide gives the picture the width and none of
-    // the height — the manual's "sized by height", seen in the rectangle a
-    // texture is made from.
-    assert!(wide.width() > narrow.width() + 900.0);
-    assert!(near(wide.height(), narrow.height()));
+        assert!(
+            (rect.width() / rect.height() - 16.0 / 9.0).abs() < 0.01,
+            "at {width} wide the picture is {}x{} and the canvas is 16:9",
+            rect.width(),
+            rect.height()
+        );
+        // **Whole pixels**, which is what makes the texture a blit rather than
+        // a resample: `physical` rounds, so a fractional rectangle is a
+        // texture of one size drawn into a box of another.
+        assert!(
+            near(rect.width(), rect.width().round()) && near(rect.height(), rect.height().round()),
+            "at {width} wide the picture is {}x{}, which is not a whole number of pixels",
+            rect.width(),
+            rect.height()
+        );
+        // **Centred in the box the region leaves**, so the ground either side
+        // is equal — the same claim ADR-0170 makes about a cell in its track.
+        let before = rect.min.x - (region.x + 9.0);
+        let after = (region.x + region.w - 9.0) - rect.max.x;
+        assert!(
+            near(before, after),
+            "at {width} wide the picture has {before} before it and {after} after it"
+        );
+        assert!(
+            before >= -1e-3,
+            "at {width} wide the picture starts {before} inside the region's padding"
+        );
+        // Inside the region, always: the leftover is the console's ground and
+        // never a picture hanging over the bay.
+        assert!(
+            rect.min.y >= region.y + 27.0 + 9.0 - 1e-3 && rect.max.y <= region.y + region.h + 1e-3,
+            "at {width} wide the picture runs from {} to {} outside its region",
+            rect.min.y,
+            rect.max.y
+        );
+    }
+
+    // **The width stops following the window**, which is the pass the change
+    // removes: the region grows and the picture does not.
+    let narrow = picture_rect(&solved(SMALLEST), CANVAS).expect("on screen");
+    let wide = picture_rect(&solved(PLAUSIBLE), CANVAS).expect("on screen");
     assert!(
-        wide.width() < PLAUSIBLE.w && wide.height() < PLAUSIBLE.h,
-        "the picture is the window's size, so it was taken from the window"
+        near(wide.width(), narrow.width()) && near(wide.height(), narrow.height()),
+        "a window nearly twice as wide changed the picture: {:?} against {:?}",
+        wide.size(),
+        narrow.size()
     );
+    // And the region did grow, so the assertion above is about the rule and
+    // not about a window that never widened.
+    let region = rect_of(&solved(PLAUSIBLE), "program-view");
+    assert!(region.w - wide.width() > 900.0);
 
-    // Dragging the program's bottom edge is the operator changing the
-    // picture's height, and the rectangle says so.
+    // **A height drag is what does still grow it**, which is the half of the
+    // manual's "sized by height" that survives: the region is much wider than
+    // the canvas at this window, so the height is what limits and the picture
+    // follows it.
     let mut layout = solved(PLAUSIBLE);
     let centre = id_of(&layout, "centre");
-    layout.set_divider(centre, 0, rect_of(&layout, "program").y + 600.0);
+    layout.set_divider(centre, 0, 4000.0);
     layout.solve();
-    let dragged = picture_rect(&layout).expect("on screen");
-    assert!(near(dragged.height(), wide.height() + 222.0));
-    assert!(near(dragged.width(), wide.width()));
+    let dragged = picture_rect(&layout, CANVAS).expect("on screen");
+    assert!(
+        dragged.height() > wide.height() + 400.0,
+        "dragging the program taller left the picture at {} tall",
+        dragged.height()
+    );
+    assert!(
+        (dragged.width() / dragged.height() - 16.0 / 9.0).abs() < 0.01,
+        "a picture dragged taller is {}x{}",
+        dragged.width(),
+        dragged.height()
+    );
+
+    // **And past a point the width is what answers instead** — a narrow window
+    // dragged tall, where the leftover is above and below rather than either
+    // side. A rule written for wide windows alone gets this one wrong in
+    // silence, because on screen it is still a picture in a bay.
+    let mut layout = solved(karakuri_layout::Rect {
+        w: 990.0,
+        h: 1400.0,
+        ..SMALLEST
+    });
+    let centre = id_of(&layout, "centre");
+    layout.set_divider(centre, 0, 4000.0);
+    layout.solve();
+    let tall = picture_rect(&layout, CANVAS).expect("on screen");
+    let region = rect_of(&layout, "program-view");
+    let box_h = region.h - 27.0 - 9.0;
+    assert!(
+        box_h > tall.height() + 100.0,
+        "the region is {box_h} tall inside its head and the picture is {}, so nothing was \
+         left over and this is not the width-limited case",
+        tall.height()
+    );
+    assert!(
+        (tall.width() / tall.height() - 16.0 / 9.0).abs() < 0.01,
+        "a picture taller than its width can carry is {}x{}",
+        tall.width(),
+        tall.height()
+    );
+    // The width is the box's, so the picture is exactly the mock's again — and
+    // it is centred in what is left, top and bottom.
+    assert!(near(tall.width(), 466.0), "{} wide", tall.width());
+    let above = tall.min.y - (region.y + 27.0 + 9.0);
+    let below = (region.y + region.h) - tall.max.y;
+    assert!(
+        near(above, below),
+        "the picture has {above} above it and {below} below it"
+    );
+    assert!(
+        above > 100.0,
+        "there is only {above} of leftover above the picture"
+    );
+}
+
+/// **The shape is the canvas's and not a 16:9 written into this crate.**
+///
+/// The failure is silent and it lasts until somebody runs a performance at a
+/// canvas the mock's designer never drew: a hard-coded 16:9 gives a picture of
+/// the wrong shape, `Present::draw` letterboxes the real canvas inside it, and
+/// what comes back is bars in a rectangle that was supposed to have none —
+/// which is exactly the state this whole rule exists to leave behind, with
+/// nothing on screen saying it came back.
+///
+/// `--canvas` takes any pair of numbers and reaches a replay through
+/// `Record::Canvas`, so the shape is a value and not a constant.
+#[test]
+fn the_shape_is_the_canvass_and_not_a_sixteen_by_nine_in_this_crate() {
+    let layout = solved(PLAUSIBLE);
+    let wide = picture_rect(&layout, CANVAS).expect("on screen");
+    let squarish = picture_rect(&layout, SQUARISH).expect("on screen");
+
+    assert!(
+        (squarish.width() / squarish.height() - 4.0 / 3.0).abs() < 0.01,
+        "a 4:3 canvas got a {}x{} picture, so the shape came from somewhere other than \
+         the canvas",
+        squarish.width(),
+        squarish.height()
+    );
+    // Same box, same height, and a narrower picture — the region is wider than
+    // either, so the height is what limits both.
+    assert!(near(squarish.height(), wide.height()));
+    assert!(squarish.width() < wide.width());
+
+    // And a canvas taller than it is wide is not a special case either.
+    let portrait = picture_rect(&layout, (720, 1280)).expect("on screen");
+    assert!(
+        (portrait.width() / portrait.height() - 9.0 / 16.0).abs() < 0.01,
+        "a portrait canvas got a {}x{} picture",
+        portrait.width(),
+        portrait.height()
+    );
 }
 
 /// **No rectangle where the picture is folded away**, which is the manual's
@@ -280,11 +459,11 @@ fn the_pictures_rectangle_follows_its_region_rather_than_the_window() {
 #[test]
 fn a_folded_picture_has_no_rectangle() {
     let mut layout = solved(PLAUSIBLE);
-    assert!(picture_rect(&layout).is_some());
+    assert!(picture_rect(&layout, CANVAS).is_some());
 
     layout.collapse(id_of(&layout, "program-view"));
     layout.solve();
-    assert_eq!(picture_rect(&layout), None);
+    assert_eq!(picture_rect(&layout, CANVAS), None);
 
     // The previews are still there, so this is the picture being folded and
     // not the bay.
@@ -292,20 +471,20 @@ fn a_folded_picture_has_no_rectangle() {
 
     layout.expand(id_of(&layout, "program-view"));
     layout.solve();
-    assert!(picture_rect(&layout).is_some());
+    assert!(picture_rect(&layout, CANVAS).is_some());
 
     // The bay folded around it, which is `g` over the picture rather than `f`.
     let mut layout = solved(PLAUSIBLE);
     layout.collapse(id_of(&layout, "program"));
     layout.solve();
-    assert_eq!(picture_rect(&layout), None);
+    assert_eq!(picture_rect(&layout, CANVAS), None);
 
     // And a solo on the previews, which leaves the picture out rather than
     // folding anything above it.
     let mut layout = solved(PLAUSIBLE);
     layout.solo(id_of(&layout, "deck-previews"));
     layout.solve();
-    assert_eq!(picture_rect(&layout), None);
+    assert_eq!(picture_rect(&layout, CANVAS), None);
 }
 
 /// **The four preview cells are the mock's own, at the width the mock draws
@@ -479,7 +658,7 @@ fn a_folded_preview_row_has_no_rectangles() {
     // The picture is still there, so this is the row being folded and not the
     // bay — *"The deck previews under it are auditions of their own, so they
     // stay when it goes"*, read the other way round.
-    assert!(picture_rect(&layout).is_some());
+    assert!(picture_rect(&layout, CANVAS).is_some());
 
     layout.expand(id_of(&layout, "deck-previews"));
     layout.solve();
@@ -495,7 +674,7 @@ fn a_folded_preview_row_has_no_rectangles() {
     let mut layout = solved(PLAUSIBLE);
     layout.collapse(id_of(&layout, "program-view"));
     layout.solve();
-    assert_eq!(picture_rect(&layout), None);
+    assert_eq!(picture_rect(&layout, CANVAS), None);
     assert!(
         preview_rects(&layout).is_some(),
         "the picture is folded and the previews went with it, so an audition \
