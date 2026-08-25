@@ -204,6 +204,7 @@ number; new records continue from the end.
 | [ADR-0176](0176-a-control-the-console-draws-is-the-panels.md) | A control the console draws is the panel's, and it clears the grab | 2026-08-25 | accepted |
 | [ADR-0177](0177-the-transport-row-shows-what-the-console-can-know.md) | The transport row shows what the console can know, and the budget is the display's | 2026-08-25 | accepted |
 | [ADR-0178](0178-the-mixer-draws-four-tracks-and-as-many-strips-as-the-deck-has.md) | The mixer draws four tracks and as many strips as the deck has | 2026-08-25 | accepted |
+| [ADR-0179](0179-a-transcribed-number-cites-the-rule-it-was-copied-from.md) | A transcribed number cites the rule it was copied from, and the citation is checked | 2026-08-25 | accepted |
 
 ## Retired numbers
 
