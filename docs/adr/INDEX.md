@@ -205,6 +205,7 @@ number; new records continue from the end.
 | [ADR-0177](0177-the-transport-row-shows-what-the-console-can-know.md) | The transport row shows what the console can know, and the budget is the display's | 2026-08-25 | accepted |
 | [ADR-0178](0178-the-mixer-draws-four-tracks-and-as-many-strips-as-the-deck-has.md) | The mixer draws four tracks and as many strips as the deck has | 2026-08-25 | accepted |
 | [ADR-0179](0179-a-transcribed-number-cites-the-rule-it-was-copied-from.md) | A transcribed number cites the rule it was copied from, and the citation is checked | 2026-08-25 | accepted |
+| [ADR-0180](0180-the-operation-vocabulary-is-a-crate-with-no-dependencies.md) | The operation vocabulary is a crate with no dependencies, and the manual is its specification | 2026-08-25 | accepted |
 
 ## Retired numbers
 
@@ -224,6 +225,7 @@ Re-pointing the records that cited a retired principle is permitted, and why, is
 
 A principle with no ADR is one whose reasoning is still only in the code and the specification.
 
+- [P-0074](../principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md) — An operation says what it wants, never which way to move. [ADR-0180](0180-the-operation-vocabulary-is-a-crate-with-no-dependencies.md)
 - [P-0073](../principles/0073-a-node-claims-only-what-its-visible-content-can-use.md) — A node claims only what its visible content can use. [ADR-0174](0174-a-node-claims-only-what-its-visible-content-can-use.md)
 - [P-0005](../principles/0005-a-swap-happens-on-a-frame-boundary-and-an-over-budget-set-rolls-back-on-its-own.md) — A swap happens on a frame boundary, and an over-budget Set rolls back on its own
 - [P-0067](../principles/0067-the-language-is-bounded-so-a-procedure-can-be-priced-before-it-runs.md) — The language is bounded, so a procedure can be priced before it runs. It predates the recovered history; the reasoning is in `ir-spec.md` and the check pass
