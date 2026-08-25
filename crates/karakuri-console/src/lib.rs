@@ -287,7 +287,11 @@ fn centre() -> Spec {
 /// console the mock will draw: `.console`'s `min-width: 1010px` less its 10px
 /// padding either side is 990, so the centre track is
 /// 990 - 218 - 268 - two 10px gaps = 484. `.program-body`'s 9px padding leaves
-/// 466 for the picture, which at 16:9 is 262 tall; the four `.preview` cells
+/// 466 for the picture, which at 16:9 is 262.125 tall and is transcribed as
+/// the whole pixel the mock rasterises it at, **262** — so the picture's
+/// region is 16:9 to a quarter of a pixel rather than exactly, which is a
+/// difference `view::picture_rect` is the one place that has to care about;
+/// the four `.preview` cells
 /// are (466 - three 6px gaps) / 4 = 112 wide and so 63 tall. **Bay head 27,
 /// padding 9 + 9, picture 262, gap 8, previews 63 = 378** — and that sum is
 /// the split, term for term, with the 8 as the divider:

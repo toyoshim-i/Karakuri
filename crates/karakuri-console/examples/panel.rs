@@ -685,8 +685,9 @@ impl Costs {
                 "  the panel half is taken on this window at {:.0}x{:.0} logical with every \
                  other bay empty, which is NOT the workspace's reference workload. The \
                  engine half IS: one Set of {} elements at {}x{}, one step a frame, and \
-                 that one canvas presented twice — letterboxed into the picture's region, \
-                 and again into deck A's preview cell \
+                 that one canvas presented twice — into the picture's rectangle, \
+                 and again into deck A's preview cell, both of which are the \
+                 canvas's own shape \
                  (docs/contributing.md §1). Host clock, debug profile with dependencies \
                  at opt-level 3.",
                 WINDOW.0, WINDOW.1, CAPACITY, CANVAS.0, CANVAS.1
@@ -1254,6 +1255,14 @@ fn folding(folded: bool) -> &'static str {
 /// [`Present::draw`], which letterboxes this into whatever it is drawn into
 /// and is handed two rectangles of different sizes a frame, and which is what
 /// the manual means by *"it letterboxes into the width it has"*.
+///
+/// **It is also the shape the picture is now given**, through
+/// [`aims`] and `picture_rect`: the console sizes the picture's rectangle to
+/// this rather than to whatever the region happens to be, so the two targets
+/// `Present::draw` is handed are both the canvas's shape and its fit into each
+/// is sub-texel. The number reaches `picture_rect` from `Present::size` rather
+/// than from this constant, so the shape the console draws and the canvas the
+/// engine renders cannot come from two places — see [`aims`].
 const CANVAS: (u32, u32) = (1280, 720);
 
 /// `drift_shell.kir`'s own `capacity [4096, 1048576] = 262144`, written here
@@ -1619,12 +1628,18 @@ struct Engine {
     /// serves.
     ///
     /// [`Present::draw`] letterboxes the canvas into whatever target size it
-    /// is handed — it takes the size as an argument and fits to it, which is
-    /// what makes the picture letterbox into its region in the first place —
-    /// so a second target of a different size costs one extra pass and no
-    /// extra state: no second `Present`, no second canvas, no second deck
-    /// render. That is the manual's *"each preview is an audition and costs a
-    /// pass"*, made literally true.
+    /// is handed — it takes the size as an argument and fits to it — so a
+    /// second target of a different size costs one extra pass and no extra
+    /// state: no second `Present`, no second canvas, no second deck render.
+    /// That is the manual's *"each preview is an audition and costs a pass"*,
+    /// made literally true.
+    ///
+    /// **Both targets are the canvas's shape now**, the picture's through
+    /// `picture_rect` and this one through the mock's own 16:9 cell, so
+    /// neither of the two fits has real work to do and neither texture carries
+    /// a bar wider than a texel. What the fit still earns is the rounding: see
+    /// `karakuri_console::view::picture_rect`, and
+    /// `the_picture_is_the_canvass_shape_and_carries_no_bars` under `mod gpu`.
     preview: Presented,
     /// How many registrations have been freed, **over both textures**. The
     /// atlas leak this exists to prevent is invisible from outside: a resize
@@ -1664,7 +1679,7 @@ impl Engine {
         // above is on; there is one slot, so it is one of each.
         deck.enable_meters(&gpu.device);
         let present = Present::new(&gpu.device, PICTURE_FORMAT, CANVAS.0, CANVAS.1);
-        let [picture, preview] = aims(layout);
+        let [picture, preview] = aims(layout, present.size());
         Engine {
             deck,
             present,
@@ -1698,7 +1713,7 @@ impl Engine {
         layout: &karakuri_layout::Layout,
         scale: f32,
     ) -> (Option<Picture>, [Option<Picture>; DECKS]) {
-        let [picture_at, preview_at] = aims(layout);
+        let [picture_at, preview_at] = aims(layout, self.present.size());
         let picture = self
             .picture
             .aim(gpu, renderer, picture_at, scale, &mut self.freed);
@@ -1723,9 +1738,17 @@ impl Engine {
 /// A function rather than two lines in [`Engine::aim`] for the reason
 /// [`live`] is a function: it is the statement that has actually been got
 /// wrong, and it is worth being somewhere a test can hold it on its own.
-fn aims(layout: &karakuri_layout::Layout) -> [Option<egui::Rect>; 2] {
+///
+/// **`canvas` is asked of the `Present` rather than read off [`CANVAS`]**, and
+/// that is the pairing rather than a preference: the picture's rectangle is
+/// now the canvas's shape, and the canvas it has to be the shape *of* is the
+/// one `Present::draw` is fitting **from**. Reading the constant here would be
+/// a second copy of that number, and the frame it is wrong on is one where the
+/// picture is the shape of a canvas nothing is rendering at — which is a
+/// letterbox nobody asked for and nothing on screen names.
+fn aims(layout: &karakuri_layout::Layout, canvas: (u32, u32)) -> [Option<egui::Rect>; 2] {
     [
-        picture_rect(layout),
+        picture_rect(layout, canvas),
         // The **cell**, not the row it is in and not the region the row is
         // in. The row holds four of these side by side with ground between
         // them, so a texture sized from anything but the cell is out by a
@@ -3120,6 +3143,12 @@ mod gpu {
     //! The console, through `egui`, through `wgpu` 30, onto a real device.
 
     use super::*;
+    /// **The engine's own fitting, asked rather than re-derived.** It is what
+    /// `Present::draw` sets its viewport from, so what it leaves over at the
+    /// edges of a target is exactly the bar that gets cleared to black — and a
+    /// copy of the arithmetic here would be a test agreeing with itself about
+    /// the one thing it is checking.
+    use karakuri_engine::letterbox;
 
     /// **ADR-0155's other half, as an assertion: the engine's texels reach the
     /// panel.**
@@ -3174,7 +3203,7 @@ mod gpu {
 
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let rect = picture_rect(panel.layout()).expect("the picture is on screen");
+        let rect = picture_rect(panel.layout(), CANVAS).expect("the picture is on screen");
         let cells = preview_rects(panel.layout()).expect("the preview row is on screen");
         let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
 
@@ -3453,18 +3482,31 @@ mod gpu {
         );
     }
 
-    /// **The picture's texture is the size of its region, and a resize frees
-    /// the registration it replaces.**
+    /// **The picture's texture is the size of the picture, the picture is the
+    /// canvas's shape, and the texture therefore carries no bars.**
     ///
-    /// Two claims that fail the same silent way. A texture sized from the
-    /// window looks perfectly correct — the picture fills whatever rectangle
-    /// it is given — and is wrong by however much the panel is not the
-    /// picture, which here is most of it. And a `register_native_texture` with
-    /// no `free_texture` beside it leaks a bind group and a sampler per remade
-    /// frame: every frame of a drag on the program's height is one, and
-    /// nothing on screen or in a log says a word about it.
+    /// Three claims and every one of them fails without a mark on the screen.
+    /// A texture sized from the window looks perfectly correct — the picture
+    /// fills whatever rectangle it is given — and is wrong by however much the
+    /// panel is not the picture, which here is most of it. A texture sized
+    /// from the whole **region** looks perfectly correct too, and that is the
+    /// one this change is about: it is the shape of the region rather than of
+    /// the canvas, so `Present::draw` fills the middle of it and clears the
+    /// rest, and the bars are allocated, cleared and sampled sixty times a
+    /// second for nobody. At this window that is **225 texels down each side**
+    /// of a 916-wide texture.
+    ///
+    /// **The bars are asked of the engine's own `letterbox`** rather than
+    /// re-derived here, because that is the function that draws them: it
+    /// answers where the canvas sits inside the texture, so a bar is what it
+    /// leaves over. What is asserted is that the bar is **under one texel** —
+    /// not zero, and the difference is the whole of why `Present::draw` stays.
+    /// `picture_rect` rounds to whole pixels, so the picture is the mock's
+    /// 466 x 262 rather than exactly 16:9, and the fit still has a quarter of
+    /// a pixel to absorb. Sub-texel is what this change makes it; redundant is
+    /// what it does not.
     #[test]
-    fn the_pictures_texture_is_its_regions_size_and_a_resize_frees_the_old_one() {
+    fn the_picture_is_the_canvass_shape_and_carries_no_bars() {
         const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
         const W: u32 = 1440;
         const H: u32 = 900;
@@ -3475,11 +3517,11 @@ mod gpu {
 
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let rect = picture_rect(panel.layout()).expect("on screen");
+        let rect = picture_rect(panel.layout(), CANVAS).expect("on screen");
         let want = physical(rect, 1.0);
-        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
+        let engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
 
-        // The region's, in both axes, and **neither of them is the window's**
+        // The picture's, in both axes, and **neither of them is the window's**
         // — the picture is narrower than the window by both panes and taller
         // by nothing like the window's height.
         assert_eq!(
@@ -3493,43 +3535,159 @@ mod gpu {
         assert!(engine.picture.size.0 < W && engine.picture.size.1 < H / 2);
         assert!(renderer.texture(&engine.picture.id).is_some());
 
-        // A wider window is a wider picture and the same height, which is the
-        // arrangement's "sized by height" arriving at the texture.
-        let was = engine.picture.id;
+        // **And it is not the region's either**, which is the texture this
+        // change removes: the region is the same height and hundreds of pixels
+        // wider, all of it bars.
+        let region = panel
+            .layout()
+            .rect(panel.layout().find("program-view").expect("program-view"));
+        assert!(
+            (region.w - rect.width()) > 400.0,
+            "the picture is the width of its region, so it is the region that was sized \
+             from and the bars are still inside the texture: {} against {}",
+            rect.width(),
+            region.w
+        );
+
+        // **No bars, asked of the pass that would draw them.** `letterbox` is
+        // what `Present::draw` sets its viewport from, so what it leaves over
+        // at the edges is exactly what gets cleared to black.
+        let (x, y, w, h) = letterbox(CANVAS, engine.picture.size);
+        let (tw, th) = (engine.picture.size.0 as f32, engine.picture.size.1 as f32);
+        assert!(
+            x < 1.0 && y < 1.0,
+            "the canvas sits {x} x {y} into its own texture, which is {} and {} texels of \
+             bar down each side — the picture is not the canvas's shape",
+            x.round(),
+            y.round()
+        );
+        assert!(
+            w > tw - 2.0 && h > th - 2.0,
+            "the canvas covers {w} x {h} of a {tw} x {th} texture, so the rest is cleared \
+             to black every frame"
+        );
+
+        // The control on all of it: a region-sized texture is what the
+        // assertions above would pass over, and it does not — this is the
+        // number in the doc, computed rather than quoted.
+        let (bar, _, _, _) = letterbox(CANVAS, (region.w.round() as u32, want.1));
+        assert!(
+            bar > 200.0,
+            "a texture sized from the region would carry {bar} texels of bar, and the \
+             thresholds above are not measuring anything"
+        );
+    }
+
+    /// **A wider window remakes no texture at all, and a drag on the program's
+    /// height remakes one and frees the registration it replaces.**
+    ///
+    /// The first half is new and is the saving this change is for. The
+    /// picture's rectangle used to follow the window's width, so every frame
+    /// of a horizontal drag was a texture destroyed and rebuilt and a
+    /// registration freed and re-registered — on the render thread. It is the
+    /// canvas's shape now and the arrangement pins its height, so a widening
+    /// moves nothing and there is nothing to remake. **That is asserted rather
+    /// than described**, because a rule that quietly went back to remaking
+    /// costs exactly what it used to and says nothing.
+    ///
+    /// The second half is the claim the first one must not be allowed to
+    /// weaken: a `register_native_texture` with no `free_texture` beside it
+    /// leaks a bind group and a sampler per remade frame, and the height is
+    /// still something an operator drags. So the free is asserted on the
+    /// resize that still happens.
+    #[test]
+    fn a_wider_window_remakes_nothing_and_a_taller_picture_frees_the_old_texture() {
+        const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+        const W: u32 = 1440;
+        const H: u32 = 900;
+
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer =
+            egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
+
+        let mut panel = Panel::new(W as f32, H as f32);
+        panel.solve();
+        let want = physical(
+            picture_rect(panel.layout(), CANVAS).expect("on screen"),
+            1.0,
+        );
+        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
+        let first = engine.picture.id;
+        assert_eq!(engine.picture.size, want);
+
+        // **A window 400 wider, and nothing moves.** The region widens and the
+        // picture does not, so `aim` — the call the frame makes — finds the
+        // size it already had and remakes nothing.
         panel.set_viewport(W as f32 + 400.0, H as f32);
         panel.solve();
-        let grown = physical(picture_rect(panel.layout()).expect("on screen"), 1.0);
-        assert_eq!(grown.1, want.1, "the height followed the window");
-        assert_ne!(grown.0, want.0);
-
-        assert!(
-            engine
-                .picture
-                .fit(&gpu, &mut renderer, grown, &mut engine.freed),
-            "a region that changed size did not remake the texture"
+        let wider = physical(
+            picture_rect(panel.layout(), CANVAS).expect("on screen"),
+            1.0,
         );
-        assert_eq!(engine.picture.size, grown);
+        assert_eq!(
+            wider, want,
+            "a wider window changed the picture's texture, so the picture is still the \
+             width of its region and every frame of a horizontal drag reallocates"
+        );
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
+        assert_eq!(
+            engine.freed, 0,
+            "a wider window freed a registration, so it remade the texture"
+        );
+        assert_eq!(engine.picture.id, first);
+        assert_eq!(engine.picture.size, want);
+
+        // **A drag on the program's bottom edge is what does change it** —
+        // through the panel's own pointer, which is the gesture the leak is
+        // about rather than a size written by hand.
+        let program = panel
+            .layout()
+            .rect(panel.layout().find("program").expect("program"));
+        let edge = Point {
+            x: program.x + program.w * 0.5,
+            y: program.y + program.h + 2.0,
+        };
+        assert!(
+            matches!(panel.press(edge), Pressed::Grabbed { .. }),
+            "the boundary under the program is not where the drag starts"
+        );
+        panel.moved(Point {
+            x: edge.x,
+            y: edge.y + 300.0,
+        });
+        panel.released();
+        panel.solve();
+        let taller = physical(
+            picture_rect(panel.layout(), CANVAS).expect("on screen"),
+            1.0,
+        );
+        assert!(
+            taller.1 > want.1 && taller.0 > want.0,
+            "dragging the program taller did not grow the picture: {taller:?} against \
+             {want:?}"
+        );
+
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
+        assert_eq!(engine.picture.size, taller);
         assert_eq!(
             (
                 engine.picture.texture.width(),
                 engine.picture.texture.height()
             ),
-            grown
+            taller
         );
-        assert_ne!(engine.picture.id, was);
+        assert_ne!(engine.picture.id, first);
         assert!(renderer.texture(&engine.picture.id).is_some());
         assert!(
-            renderer.texture(&was).is_none(),
+            renderer.texture(&first).is_none(),
             "the registration the resize replaced is still in the atlas, so the atlas \
              grows once per dragged frame"
         );
         assert_eq!(engine.freed, 1);
 
-        // And a frame where nothing moved remakes nothing, which is what keeps
-        // all of the above on the resize path instead of on every frame.
-        assert!(!engine
-            .picture
-            .fit(&gpu, &mut renderer, grown, &mut engine.freed));
+        // And a second aim with nothing moved remakes nothing, which is what
+        // keeps all of the above on the resize path instead of on every frame.
+        engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
         assert_eq!(engine.freed, 1);
         assert!(renderer.texture(&engine.picture.id).is_some());
     }
@@ -3565,7 +3723,10 @@ mod gpu {
 
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let picture = physical(picture_rect(panel.layout()).expect("on screen"), 1.0);
+        let picture = physical(
+            picture_rect(panel.layout(), CANVAS).expect("on screen"),
+            1.0,
+        );
         let cells = preview_rects(panel.layout()).expect("the preview row is on screen");
         let want = physical(cells[0], 1.0);
         let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
@@ -3695,7 +3856,7 @@ mod gpu {
         // can be what construction happened to leave in place.
         panel.set_viewport(W as f32 + 320.0, H as f32 - 120.0);
         panel.solve();
-        let rect = picture_rect(panel.layout()).expect("the picture is on screen");
+        let rect = picture_rect(panel.layout(), CANVAS).expect("the picture is on screen");
         let cell = preview_rects(panel.layout()).expect("the preview row is on screen")[0];
         let (picture, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), SCALE);
 
@@ -3764,7 +3925,7 @@ mod gpu {
             "the picture did not fold"
         );
         panel.solve();
-        assert!(picture_rect(panel.layout()).is_none());
+        assert!(picture_rect(panel.layout(), CANVAS).is_none());
         let (picture, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), SCALE);
         assert!(
             picture.is_none(),

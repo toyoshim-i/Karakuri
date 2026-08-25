@@ -206,6 +206,7 @@ number; new records continue from the end.
 | [ADR-0178](0178-the-mixer-draws-four-tracks-and-as-many-strips-as-the-deck-has.md) | The mixer draws four tracks and as many strips as the deck has | 2026-08-25 | accepted |
 | [ADR-0179](0179-a-transcribed-number-cites-the-rule-it-was-copied-from.md) | A transcribed number cites the rule it was copied from, and the citation is checked | 2026-08-25 | accepted |
 | [ADR-0180](0180-the-operation-vocabulary-is-a-crate-with-no-dependencies.md) | The operation vocabulary is a crate with no dependencies, and the manual is its specification | 2026-08-25 | accepted |
+| [ADR-0181](0181-the-picture-is-the-canvass-shape-and-the-leftover-is-the-consoles.md) | The picture is the canvas's shape, and the leftover is the console's | 2026-08-25 | accepted |
 
 ## Retired numbers
 

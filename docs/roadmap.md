@@ -302,6 +302,21 @@ together and neither reachable from a test. There is one `aims(layout)` now. The
 line used to record — size deck A's texture from the picture's rectangle — was caught by **nothing**
 before and fails **three** tests now.
 
+**The picture is the canvas's shape now**
+([ADR-0181](adr/0181-the-picture-is-the-canvass-shape-and-the-leftover-is-the-consoles.md)), which
+is [ADR-0170](adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)'s rule
+applied where it was first refused: a deck preview cell had been forbidden to fill its box and
+letterbox inside it, and the picture was one level up doing exactly that. It filled its region and
+the bars were **inside the texture** — at a 1920-wide window **66.6% of the picture's texels were
+black**, cleared, drawn into, uploaded and sampled sixty times a second; 84% at 3440. They are the
+console's ground now, and a widening window remakes no texture where every frame of a horizontal
+drag used to rebuild and re-register one on the render thread.
+
+Building it found that **the Program bay's height was a rounded 16:9 from the day it was derived**:
+`.program-view` at 466 wide is 262.125 tall and the arrangement transcribed 262, so two sentences
+claiming *"exactly 466 x 262, which is 16:9"* were never true — and the test below one of them
+already knew, checking that ratio 200 times looser than every other assertion in its file.
+
 **The Outputs row is built, and it is the console's first clickable control.** One sink —
 `program view` — and nothing else, because the projector window, the plugin sinks and `+ add
 output` do not exist and a row of dead names is scaffolding that looks finished. The dot is lit
