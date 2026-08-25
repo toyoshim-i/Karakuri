@@ -129,6 +129,12 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
                 *name,
                 "the bay head says {title} and the arrangement calls it {name}"
             ),
+            // The mixer is a bay and takes the same head, and it is a kind of
+            // its own because `View::draw` has to know which bay the strips
+            // go in — the title is `view::MIXER_TITLE` and is asserted
+            // against the arrangement's name in `tests/mixer.rs`, where the
+            // rest of that bay is.
+            Kind::Mixer => assert_eq!(*name, "mixer"),
             other => panic!("{name} is a bay in the mock and a {other:?} here"),
         }
     }
@@ -182,10 +188,16 @@ fn a_bay_gets_a_head_and_a_row_does_not() {
     assert_eq!(
         REGIONS
             .iter()
-            .filter(|r| matches!(r.kind, Kind::Bay { .. }))
+            .filter(|r| matches!(r.kind, Kind::Bay { .. } | Kind::Mixer))
             .count(),
         BAYS.len(),
         "the bay head has seven call sites, which is the whole of why it is a component"
+    );
+    // And exactly one of the seven is the bay with something in its body.
+    assert_eq!(
+        REGIONS.iter().filter(|r| r.kind == Kind::Mixer).count(),
+        1,
+        "a second mixer region: `View::draw` has one list of strips to give"
     );
 }
 

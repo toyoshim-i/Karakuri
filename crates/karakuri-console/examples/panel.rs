@@ -131,7 +131,8 @@ use karakuri_console::view::{
     self, outputs, picture_rect, preview_rects, Kind, Picture, View, DECKS,
 };
 use karakuri_engine::{
-    compose, Committed, Deck, Gpu, HotSwap, Look, Present, Set, Sink, Skip, TonemapOp,
+    compose, Committed, Deck, Gpu, HotSwap, Look, MaskKind, Present, Residency, Set, Sink, Skip,
+    TonemapOp,
 };
 use karakuri_layout::{Axis, Hit, NodeId, Point};
 use winit::application::ApplicationHandler;
@@ -1119,6 +1120,26 @@ impl Readout {
              learn, map, landed and rec. `view::transport` names them one by one with what \
              is missing behind each."
         );
+        println!(
+            "the mixer draws {} strip{}, because a strip is a deck SLOT and this deck has \
+             {} — the mock's four is the most a deck can hold, and the page keeps its four \
+             tracks either way, so a track with nothing behind it is empty rather than a \
+             strip full of dashes. every strip is a READOUT: the residency, the trim, the \
+             fader, the meter, the opacity and the two modes are what the deck says, and a \
+             press on any of them reaches nothing yet.",
+            self.view.mixer.len(),
+            match self.view.mixer.len() {
+                1 => "",
+                _ => "s",
+            },
+            self.view.mixer.len()
+        );
+        println!(
+            "the crossfade row under the strips is NOT drawn — an A/B track, wipe, iris, \
+             next bar, 8 beats and go are a transition being armed and fired, and nothing \
+             here holds what is armed. nor are the two focuses: the deck selection and \
+             keyboard focus must not look alike, and this console keeps neither."
+        );
         println!();
         for node in self.panel.nodes() {
             let (min, max) = layout.bounds(node.id);
@@ -1150,6 +1171,16 @@ impl Readout {
                     // Four cells, and this file knows which of them are on:
                     // one slot in the deck, so deck A and no other.
                     Kind::Previews => "four previews, A live".to_owned(),
+                    // A bay like the other six, and then one strip: this
+                    // deck has one slot, so there is one thing to mix.
+                    Kind::Mixer => format!(
+                        "bay, {} strip{}",
+                        self.view.mixer.len(),
+                        match self.view.mixer.len() {
+                            1 => "",
+                            _ => "s",
+                        }
+                    ),
                 },
                 None => match layout.axis(node.id) {
                     Some(Axis::Row) => "split, left to right".to_owned(),
@@ -1235,6 +1266,31 @@ const CAPACITY: u32 = 262144;
 /// picture; 7 is the one `karakuri-cli`'s own tests use, so this looks like
 /// what they look like.
 const SEED_SALT: u32 = 7;
+
+/// **The two `.kir` files the one Set is built from**, named once so that what
+/// is loaded and what the mixer strip is called cannot drift apart. See
+/// [`MATERIAL`].
+const L1_KIR: &str = "examples/drift_shell.kir";
+const L4_KIR: &str = "examples/soft_points.kir";
+
+/// **What the mixer strip calls what this deck is playing**, and it is this
+/// file's word rather than the engine's.
+///
+/// `view::Strip::name` says why there is no other answer: nothing reachable
+/// from a `Deck` carries a name for the material in a slot. A `Set` names its
+/// *nodes* and its *published controls* and has no name of its own, which is
+/// right — a Set is built from a list of `.kir` files, and only whoever passed
+/// that list knows what to call the result. **This is that list**, derived
+/// from the two paths above rather than typed again, so a strip cannot go on
+/// saying `drift_shell` after somebody loads something else.
+fn material() -> String {
+    let stem = |path: &str| {
+        std::path::Path::new(path)
+            .file_stem()
+            .map_or_else(String::new, |stem| stem.to_string_lossy().into_owned())
+    };
+    format!("{} + {}", stem(L1_KIR), stem(L4_KIR))
+}
 
 /// **One simulation step per frame drawn, and no clock anywhere.**
 ///
@@ -1592,11 +1648,21 @@ impl Engine {
         scale: f32,
     ) -> Engine {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let l1 = checked(&root.join("examples/drift_shell.kir"));
-        let l4 = checked(&root.join("examples/soft_points.kir"));
+        let l1 = checked(&root.join(L1_KIR));
+        let l4 = checked(&root.join(L4_KIR));
         let set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, SEED_SALT)
             .expect("the example pair builds a Set");
-        let deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], CANVAS.0, CANVAS.1);
+        let mut deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], CANVAS.0, CANVAS.1);
+        // **The meters are on, and that is a decision rather than a default.**
+        // Five of the six things a mixer strip shows are settings the deck was
+        // told; the meter is the only one that is a *measurement*, so with it
+        // off this bay would draw five readouts that never move beside a well
+        // that is always empty — which is the scaffolding-that-looks-finished
+        // this panel refuses, read from the other side. It costs a pipeline,
+        // two buffers and a ring of staging buffers per slot, allocated here
+        // and never on the render thread, which is the same terms `Deck::new`
+        // above is on; there is one slot, so it is one of each.
+        deck.enable_meters(&gpu.device);
         let present = Present::new(&gpu.device, PICTURE_FORMAT, CANVAS.0, CANVAS.1);
         let [picture, preview] = aims(layout);
         Engine {
@@ -1751,6 +1817,85 @@ fn transport(
     })
 }
 
+/// **What the mixer strips read this frame**: one per slot the deck has, out
+/// of the six things a `Deck` will say about a slot.
+///
+/// Everything here is reachable from a `Deck` and nothing reaches around one:
+/// `slot_count`, `residency`, `gain`, `opacity`, `blend`, `mask` and `level`
+/// are its own, and this takes a `&Deck` because it is on the side of the seam
+/// that is allowed one — what crosses into the console is a name, a word and
+/// four numbers (ADR-0156).
+///
+/// # Where each one comes from, and the two that are not the deck's
+///
+/// - **The tally** is `Deck::residency`, which is the **effective** residency
+///   the frame loop reads and not `requested_residency`. The governor moves a
+///   slot down without anybody asking, and a tally showing the request would
+///   be describing a slot that is doing something else.
+/// - **The trim and the fader** are `gain` and `opacity`, which are two
+///   controls and not one — *"opacity at zero silences under every blend mode,
+///   gain at zero does not silence `over`"* — and the bay draws them as two.
+/// - **The blend** is `Blend::name`, asked rather than transcribed for the
+///   reason the beat grid asks for `BEATS_PER_BAR`: the mock's own tooltip
+///   lists four blends and `Blend::ALL` is three, so a word written here would
+///   be this file's opinion about the engine's list.
+/// - **The mask** is `Deck::mask(slot).kind()`, and its angle, position and
+///   softness are left behind: the strip's `.mini` says *which shape*, and
+///   three numbers about that shape are an inspector row.
+/// - **The level** is `Deck::level`, which is already `None` for every case
+///   where a held reading would be about a different image. Its
+///   `frames_behind` is not passed on — `view::Level` is where that argument
+///   is written out, and the short of it is that the number means different
+///   things on different loops and this loop is a `Fifo` one that never stops
+///   asking for frames while anything is live.
+/// - **The name** is [`material`], and it is this file's because a `Set` has
+///   none. See `view::Strip::name`.
+///
+/// # Written into the `Vec` the view already holds
+///
+/// `out` is grown to the deck's slot count and then every field of every strip
+/// is written, so nothing a `push` left behind is ever read. The name is the
+/// one field that owns anything, and it is rewritten only when it differs —
+/// which keeps this off the frame's allocation budget (ADR-0164) rather than
+/// putting a `String` per strip on it every frame.
+fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
+    out.truncate(deck.slot_count());
+    while out.len() < deck.slot_count() {
+        out.push(view::Strip {
+            name: name.to_owned(),
+            tally: view::Tally::Allocated,
+            gain: 0.0,
+            opacity: 0.0,
+            blend: "",
+            mask: view::Mask::None,
+            level: None,
+        });
+    }
+    for (slot, strip) in out.iter_mut().enumerate() {
+        if strip.name != name {
+            strip.name.clear();
+            strip.name.push_str(name);
+        }
+        strip.tally = match deck.residency(slot) {
+            Residency::Live => view::Tally::Live,
+            Residency::Priming => view::Tally::Priming,
+            Residency::Allocated => view::Tally::Allocated,
+        };
+        strip.gain = deck.gain(slot);
+        strip.opacity = deck.opacity(slot);
+        strip.blend = deck.blend(slot).name();
+        strip.mask = match deck.mask(slot).kind() {
+            MaskKind::None => view::Mask::None,
+            MaskKind::Linear => view::Mask::Linear,
+            MaskKind::Radial => view::Mask::Radial,
+        };
+        strip.level = deck.level(slot).map(|level| view::Level {
+            mean: level.mean,
+            peak: level.peak,
+        });
+    }
+}
+
 /// **What a frame has to fit in on this window**: the display's refresh
 /// interval, in milliseconds — the `/16.6` in the mock's transport, at the
 /// 60 Hz it was drawn against.
@@ -1876,6 +2021,10 @@ struct Gfx {
     /// **What a frame has to fit in on this window**, read from the display
     /// once when the window opened — see [`budget_ms`].
     budget_ms: Option<f32>,
+    /// **What the mixer strip calls what this deck is playing**, worked out
+    /// once from the two `.kir` paths — see [`material`]. Kept rather than
+    /// recomputed because a name is a string and the frame path is budgeted.
+    material: String,
 }
 
 struct App {
@@ -2054,6 +2203,11 @@ impl ApplicationHandler for App {
         );
 
         let budget = budget_ms(&window);
+        // **The strips before the legend**, because the legend says how many
+        // there are and the answer is the deck's rather than a guess. It is
+        // written again on every frame; this is the first one.
+        let material = material();
+        mixer(&engine.deck, &material, &mut self.readout.view.mixer);
         self.readout.print_legend(budget);
 
         // The first frame is owed to the window appearing, not drawn on a
@@ -2062,6 +2216,7 @@ impl ApplicationHandler for App {
         window.request_redraw();
         self.gfx = Some(Gfx {
             budget_ms: budget,
+            material,
             window,
             gpu,
             surface,
@@ -2370,6 +2525,14 @@ impl ApplicationHandler for App {
                 let live = live(&self.readout.view);
                 self.readout.view.transport =
                     transport(&gfx.engine.deck, &self.costs, gfx.budget_ms, live);
+                // **And what the mixer strips read**, beside the frame they
+                // are about for the same reason. One strip, because this
+                // deck has one slot — see `mixer`.
+                mixer(
+                    &gfx.engine.deck,
+                    &gfx.material,
+                    &mut self.readout.view.mixer,
+                );
 
                 // -- the egui pass -------------------------------------
                 let started = Instant::now();
