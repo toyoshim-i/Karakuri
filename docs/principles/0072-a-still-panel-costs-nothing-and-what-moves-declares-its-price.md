@@ -57,20 +57,54 @@ remove the cost, it clumps it, and a periodic hitch is more visible than a const
 
 ## Where it holds
 
-**The first clause holds and is measured.** `crates/karakuri-console/examples/panel.rs` reports
-what a still panel costs on the window it opens: over three seconds with nothing touching it, **0
-frames drawn, 0 allocations, 0 bytes**. A twelve-second run draws three frames in total. The
-decision is [`repaint.rs`](../../crates/karakuri-console/src/repaint.rs), one closed list of
-everything that can change what the console shows —
+**The first clause is no longer reachable on the example that measures it**, and that is a fact
+about what the panel now holds rather than about this rule.
+`crates/karakuri-console/examples/panel.rs` opens a window with a live picture in the Program bay,
+deck A auditioning in the preview row under it, a mixer bay, a transport, an outputs row, and deck
+B parked by the governor with its tally rolling once a second. Nothing on it is still. Over three
+seconds with nothing touching that window it draws **58.3 to 59.3 frames a second and spends 18.1
+to 22.2% of a second drawing** — nine runs on 2026-08-26, an Apple M4 Pro at 1440x900 logical,
+host clock, debug profile with dependencies at opt-level 3. Read that as an order of magnitude: a
+reading taken an hour earlier, at the commit before the parked deck landed, put the same window at
+37.1% on this machine in another power state, which is the swing the example's own last paragraph
+warns about.
+
+**Folding does not get back to zero, and that was measured rather than reasoned** — the folds
+applied at startup through the same `Op::Fold` the `f` key sends, on a temporary build, because a
+synthesised keystroke needs an Accessibility grant this process has not got. Fold the picture away
+and deck A goes on auditioning underneath at 47.0 frames a second (one run). Fold the preview row
+as well and nothing in the Program bay is making texels, and the window still draws **28.7 to 29.0
+a second** (two runs) — the roll's declared 30 Hz, arriving as the window's deadline. Fold the whole
+mixer bay on top of that and the rate does not move at all, 28.7 to 29.0 again (two runs); only the
+price per frame does, 432 allocations to 260, because the fold hides the chip while the governor's
+parked slot stays parked and
+[`View::animating`](../../crates/karakuri-console/src/view.rs) answers off the deck rather than off
+what is on screen. **Zero needs a console with nothing pending**, which this example never is after
+`Engine::ask_to_prime`, and which
+[`tests/parked.rs`](../../crates/karakuri-console/tests/parked.rs) asserts headlessly instead:
+nothing pending, `animating` answers `None`, and the window is told `Never`. The decision that stops
+a frame being drawn at all is [`repaint.rs`](../../crates/karakuri-console/src/repaint.rs), one
+closed list of everything that can change what the console shows —
 [ADR-0165](../adr/0165-the-repaint-decision-is-one-closed-list.md).
 
-**Nothing else holds yet.** No region declares a cost or a staleness, there is no scheduler, and
-neither condition is checked anywhere, because nothing on the panel is live: the bays are empty.
-The rest of this is what those bays are being built to.
+**One region declares, and there is still no scheduler.** The mixer strip's residency chip is the
+only client: `View::animating` returns `view::ROLL_STALENESS` — `ROLL_TRAVEL` in `ROLL_STEPS`
+steps, 33.33 ms, about thirty a second — while any strip carries a request the engine has not
+granted, and `repaint::Change::Animating` turns that into the deadline the window waits on
+([ADR-0190](../adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md),
+[P-0075](0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)).
+That is the *declaring* half of this file, with one caller. **Everything downstream of the
+declaration is still absent**: no region declares a **cost** — ADR-0190 measured what the roll costs
+rather than the region announcing it — nothing arbitrates between two regions, and neither
+schedulability condition above is checked anywhere. They arrive with the second declaring region,
+which [P-0077](0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md) wants to be the
+beat.
 
-The per-frame price on the frames that *are* drawn is unchanged and was never the target — a
-median of 179 allocations and 202.1 kB, against the 184 and 226.2 kB
-[ADR-0164](../adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md) measured. The
-two are taken differently and say so: that one was a mean over 180 frames of a loop that always
-drew, and this is a median over the three a still window draws, where a mean would be dominated by
-the first frame building the font atlas at 1907 allocations.
+**What a drawn frame costs.** A median of **525 allocations and 694.3 kB** in the middle of those
+nine runs, the nine spread 524 to 538 and 671.4 to 695.3 kB — with everything above on the panel.
+[ADR-0164](../adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s **184 and
+226.2 kB** is not that number's predecessor in any comparable sense: it was a mean over 180 frames
+of an empty panel driven by a loop that always drew, it is still true of the panel it measured, and
+the example that quotes it now holds the quoted figure against the run it has just taken rather
+than repeating it. The per-frame price has never been what this rule is about — how many frames pay
+it is.
