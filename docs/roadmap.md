@@ -405,6 +405,54 @@ collapsed flags any later `expand` may contradict — and the next `unsolo` rest
 throws the expand away with nothing said. Nothing in the console reaches that state today. What
 `expand` under a solo should do is a decision nobody has taken.
 
+### Where this goes next, and the decisions it is waiting on
+
+**Three controls in the console answer a pointer**: the Outputs dot, and the mixer's two faders.
+Everything else in the mixer is a readout, the other bays are empty, and the keyboard, a MIDI map
+and MCP reach none of it — the panel routes in `manual/operations.html` are still `plan`, because
+the console is an example rather than the program.
+
+**The order that makes each next thing cheaper than it would be alone:**
+
+1. **The rest of the mixer strip** — the tally, the blend mini, the mask mini. They are the same
+   seam the faders opened, and none needs new machinery; each needs a **decision** first, below.
+2. **The rest of P-0072.** Three live regions with three characters now exist — the picture
+   expensive and every frame, the beat grid cheap and twice a second, the mixer expensive and
+   hardly moving — which is what a scheduler was waiting for. Nothing is over budget yet (10.9% of
+   a second, with headroom), so this is worth doing when the mixer's controls make it move rather
+   than before.
+3. **The other surfaces onto [`karakuri-operation`](../crates/karakuri-operation).** The faders
+   proved its shape; `karakuri-midi`'s `Action`, the console's `panel::Op` and the CLI's key handler
+   have not moved, and each is a change of its own. `Action`'s toggles are the interesting one —
+   [P-0074](principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md).
+4. **The remaining bays**: library, staging, inspector, master, sequencer.
+
+**Decisions nobody has taken, each blocking something named above.** These are questions rather
+than work, and every one of them was found by building the thing next to it.
+
+- **Where `Operation` becomes `Record`.** It needs `karakuri-operation` and `karakuri-store`,
+  neither of which depends on the other, and it is the centre of P-0028 rather than a detail. Until
+  it lands, `examples/panel.rs` builds two records by hand and says so; the day it lands, that
+  function is deleted rather than moved
+  ([ADR-0185](adr/0185-a-fader-translates-a-drag-into-an-operation-and-applies-nothing.md)).
+- **The blend mini's affordance**, where **the mock and a principle disagree**: the tooltip says
+  *click to cycle* and P-0074 forbids a cycle, so the control must *name* one of three. `egui` owns
+  no widget on this panel, which makes it a question about who owns the pointer.
+- **What the tally shows while the two disagree.** Two operations for three states, and the console
+  draws the *effective* residency while `SetOnAir`/`SetPriming` set the *requested* one — the
+  governor may not honour it.
+- **`SetMask` does not exist**, so the mask mini is a readout of state no operation can set. The row
+  has to be settled on [the operations page](manual/operations.html) before it can be a control.
+- **What `expand` under a solo should do.** `Layout::soloed()` can lie: the solve never reads it and
+  `check_structure` only checks that it addresses a node, so a solo's exclusivity lives in flags any
+  later `expand` may contradict. Nothing reaches that state today.
+- **Five operations are named and left `Undecided`**, each with its question written at the variant:
+  moving a boundary, choosing where the frame goes (**no output has an identity anywhere in this
+  workspace**), walking the edit history, *edit the file instead* (which names an event rather than
+  an operation), and the camera.
+- **The console's window has no `a`.** `karakuri-cli`'s snaps the window to the canvas so a capture
+  is one texel to one texel; ADR-0181 made the picture the canvas's shape and created that gap.
+
 The table below is what exists, part by part. What is still absent, and why, is in the
 milestones further down rather than listed here: agents, the library, the node editor.
 
