@@ -14,7 +14,7 @@
 mod common;
 
 use common::EPS;
-use karakuri_console::panel::{Op, Outcome, Panel, Pressed};
+use karakuri_console::panel::{Dragged, Op, Outcome, Panel, Pressed};
 use karakuri_layout::{Axis, Hit, NodeId, Point, Rect};
 
 /// Every rectangle in the arrangement, in tree order — what "the same
@@ -205,7 +205,7 @@ fn a_drag_held_at_a_stop_says_so_once() {
         // a hand held against the edge of the window does.
         let held = p.moved(offset(axis, point, -9000.0));
         assert!(
-            matches!(held, Some(d) if d.held.is_some()),
+            matches!(&held, Some(Dragged::Boundary { held, .. }) if held.is_some()),
             "a drag 9000px past every stop did not report one holding it: {held:?}"
         );
         let at = boundary(&p, split, index).expect("a boundary");
@@ -453,23 +453,28 @@ fn a_drag_reports_where_it_landed_and_moves_only_the_pair() {
         let dragged = p
             .moved(offset(axis, point, 9000.0))
             .expect("a drag 9000px out has something to report");
+        let Dragged::Boundary {
+            asked,
+            landed: said,
+            held,
+            ..
+        } = dragged
+        else {
+            panic!("a drag on a boundary reported something else: {dragged:?}")
+        };
 
         // What the drag said, against what the layout did.
         let landed = boundary(&p, split, index).expect("a boundary");
         assert!(
-            (dragged.landed - landed).abs() <= EPS,
-            "the drag reported landing at {} and the boundary is at {landed}",
-            dragged.landed
+            (said - landed).abs() <= EPS,
+            "the drag reported landing at {said} and the boundary is at {landed}"
         );
         assert_eq!(
-            dragged.held,
-            Some(dragged.landed - dragged.asked),
+            held,
+            Some(said - asked),
             "a drag 9000px out was not reported as held by a stop"
         );
-        assert!(
-            dragged.landed < dragged.asked,
-            "a drag out landed past what it asked for"
-        );
+        assert!(said < asked, "a drag out landed past what it asked for");
 
         let after: Vec<Rect> = siblings.iter().map(|c| p.layout().rect(*c)).collect();
         assert!(

@@ -18,8 +18,10 @@
 //! 4. **That the faders and the meter follow their values**, at zero, at one
 //!    and in between, and that the peak mark never leaves the well.
 //! 5. That the tally, the blend and the mask show the state they were given.
-//! 6. **That nothing in this bay is a control**, stated rather than inferred
-//!    from the absence of a hit test.
+//! 6. **Which of these are controls and which are readouts** — the two fader
+//!    knobs and nothing else, both directions stated rather than inferred from
+//!    the presence or absence of a hit test. What a drag on one *does* is
+//!    `tests/fader.rs`.
 //!
 //! None of it needs a window or a device. It does need `egui`'s fonts, because
 //! the tally's capsule and the blend's mini are as wide as the words in them.
@@ -1017,35 +1019,54 @@ fn a_name_too_long_for_a_strip_is_elided_on_one_line() {
 }
 
 // ---------------------------------------------------------------------------
-// Nothing here is a control
+// Two controls, and the rest are readouts
 // ---------------------------------------------------------------------------
 
-/// **Every point in this bay is `egui`'s, unless a boundary has it.**
+/// **The two knobs are the panel's and everything else in the bay is
+/// `egui`'s.**
 ///
 /// The console's rule has three claims before `egui`'s: a drag in hand, a
-/// boundary within `GRAB`, and a control the console draws (ADR-0176). Nothing
-/// in this bay is a control — the trim, the fader, the tally and the two minis
-/// are readouts, which is what `view::Strip` says outright — so the third
-/// claim never applies and `claim` is unchanged.
+/// boundary within `GRAB`, and a control the console draws (ADR-0176). This
+/// bay now has two of the third kind — the trim's knob and the fader's knob —
+/// and nothing else in it: the tally, the minis, the meter and the number are
+/// readouts, and so is a fader's **track** off the knob, because a press there
+/// would be a jump nobody asked for.
 ///
-/// **Stated rather than inferred**, because the absence of a hit test is not
-/// an answer anybody can read: a fader made draggable without a decision about
-/// the pointer would pass no test at all otherwise, and this one fails.
+/// **Stated rather than inferred in both directions.** A knob that stopped
+/// being claimed would be a control drawn where it cannot be grabbed, and a
+/// bay that claimed everything would take presses it does nothing with.
 #[test]
-fn nothing_in_the_mixer_bay_is_a_control() {
+fn the_two_knobs_are_controls_and_the_rest_of_the_bay_is_not() {
     let (mut panel, ctx) = console(PLAUSIBLE);
     let strips = mock_strips();
     let bay = bay(&panel, &ctx, &strips);
     let at = bay.strip(0);
+    let trim = at.trim_at(mock().gain);
+    let fader = at.fader_at(mock().opacity);
 
+    // The two that are.
+    for (probe, what) in [
+        (trim.knob.center(), "the trim's knob"),
+        (fader.knob.center(), "the fader's knob"),
+    ] {
+        assert_eq!(
+            claim(&mut panel, &ctx, &strips, point(probe)),
+            Claim::Panel,
+            "{what} is not being claimed, so it is drawn where it cannot be grabbed"
+        );
+    }
+
+    // And everything else, including both tracks away from their knobs. The
+    // mock's trim is at 0.72 and its fader at 1.00, so the far end of the trim
+    // and the floor of the fader are both track and neither is knob.
+    let track_end = egui::pos2(at.trim.max.x - 1.0, at.trim.center().y);
+    let track_floor = egui::pos2(at.fader.center().x, at.fader.max.y - 1.0);
     let probes = [
         (at.rect.center(), "the strip"),
         (at.name.center(), "the name"),
         (at.tally.center(), "the tally"),
-        (at.trim.center(), "the trim"),
-        (at.trim_at(0.72).knob.center(), "the trim's knob"),
-        (at.fader.center(), "the fader"),
-        (at.fader_at(1.0).knob.center(), "the fader's knob"),
+        (track_end, "the trim's track, past the knob"),
+        (track_floor, "the fader's track, below the knob"),
         (at.meter.center(), "the meter"),
         (at.num.center(), "the number"),
         (at.blend.center(), "the blend"),
@@ -1053,19 +1074,24 @@ fn nothing_in_the_mixer_bay_is_a_control() {
     ];
     for (probe, what) in probes {
         assert_eq!(
-            claim(&mut panel, &ctx, point(probe)),
+            claim(&mut panel, &ctx, &strips, point(probe)),
             Claim::Egui,
             "{what} is being claimed as a control the panel acts on"
         );
     }
 
+    // The two points that are track rather than knob have to actually be off
+    // the knob, or the paragraph above is asserting nothing.
+    assert!(!trim.knob.contains(track_end));
+    assert!(!fader.knob.contains(track_floor));
+
     // The boundary **under** the bay still has its grab, which is what says
-    // the answer above is *not a control* rather than the rule having gone
-    // missing.
+    // the answers above are about the controls rather than the rule having
+    // gone missing.
     let region = rect_of(panel.layout(), "mixer");
     let below = Point::new(region.x + region.w * 0.5, region.y + region.h);
     assert_eq!(
-        claim(&mut panel, &ctx, below),
+        claim(&mut panel, &ctx, &strips, below),
         Claim::Panel,
         "the bottom edge of the mixer is not in the grab of the boundary under it, so \
          this test is no longer measuring what it was written for"

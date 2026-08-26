@@ -210,6 +210,7 @@ number; new records continue from the end.
 | [ADR-0182](0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md) | The Program bay's body arranges itself for the larger picture | 2026-08-25 | accepted |
 | [ADR-0183](0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md) | A node is out of the layout for two reasons, and they are two bits | 2026-08-26 | accepted |
 | [ADR-0184](0184-the-program-bay-rearranges-itself-and-a-still-frame-does-not.md) | The Program bay rearranges itself, and a still frame does not | 2026-08-26 | accepted |
+| [ADR-0185](0185-a-fader-translates-a-drag-into-an-operation-and-applies-nothing.md) | A fader translates a drag into an operation and applies nothing | 2026-08-26 | accepted |
 
 ## Retired numbers
 

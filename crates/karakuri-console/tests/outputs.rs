@@ -182,7 +182,7 @@ fn the_control_clears_every_boundarys_grab() {
                 "a boundary grabs {probe:?}, which is on the control"
             );
             assert_eq!(
-                claim(&mut panel, &ctx, at(probe)),
+                claim(&mut panel, &ctx, &[], at(probe)),
                 Claim::Panel,
                 "the panel does not get a press at {probe:?}, which is on its own control"
             );
@@ -217,12 +217,12 @@ fn only_the_control_is_claimed_out_of_the_outputs_row() {
     let row = rect_of(panel.layout(), "outputs");
 
     assert_eq!(
-        claim(&mut panel, &ctx, at(sink.sink.center())),
+        claim(&mut panel, &ctx, &[], at(sink.sink.center())),
         Claim::Panel
     );
     // The word is not a control: the mock's `.sink` is what carries the click.
     assert_eq!(
-        claim(&mut panel, &ctx, at(sink.label.center())),
+        claim(&mut panel, &ctx, &[], at(sink.label.center())),
         Claim::Egui,
         "the word OUTPUTS is a heading and is being treated as a control"
     );
@@ -232,6 +232,7 @@ fn only_the_control_is_claimed_out_of_the_outputs_row() {
         claim(
             &mut panel,
             &ctx,
+            &[],
             Point::new(sink.sink.max.x + 20.0, sink.sink.center().y)
         ),
         Claim::Egui,
@@ -242,6 +243,7 @@ fn only_the_control_is_claimed_out_of_the_outputs_row() {
         claim(
             &mut panel,
             &ctx,
+            &[],
             Point::new(row.x + row.w * 0.5, row.y + row.h - 1.0)
         ),
         Claim::Egui
@@ -264,7 +266,7 @@ fn a_control_that_has_not_been_drawn_is_not_there() {
     // outputs row, which without a control on it is `egui`'s.
     let row = rect_of(panel.layout(), "outputs");
     let middle = Point::new(row.x + row.w * 0.5, row.y + row.h * 0.5);
-    assert_eq!(claim(&mut panel, &fresh, middle), Claim::Egui);
+    assert_eq!(claim(&mut panel, &fresh, &[], middle), Claim::Egui);
 }
 
 // ---------------------------------------------------------------------------
@@ -474,7 +476,7 @@ fn the_boundary_above_the_row_is_still_the_panels() {
     let (mut panel, ctx) = console(PLAUSIBLE);
     let row = rect_of(panel.layout(), "outputs");
     let above = Point::new(row.x + row.w * 0.5, row.y - 2.0);
-    assert_eq!(claim(&mut panel, &ctx, above), Claim::Panel);
+    assert_eq!(claim(&mut panel, &ctx, &[], above), Claim::Panel);
 
     let root = panel.layout().root();
     let last = panel

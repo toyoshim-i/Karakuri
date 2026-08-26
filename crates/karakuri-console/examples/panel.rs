@@ -124,17 +124,22 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use karakuri_console::input::{claim, Claim};
-use karakuri_console::panel::{Dragged, Op, Outcome, Panel, Pressed, Released, Visibility};
+use karakuri_console::panel::{
+    Dragged, InHand, Knob, Op, Outcome, Panel, Pressed, Released, Visibility,
+};
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
 use karakuri_console::view::{
-    self, outputs, picture_rect, preview_rects, Kind, Picture, View, DECKS,
+    self, mixer as mixer_bay, outputs, picture_rect, preview_rects, Kind, Picture, View, DECKS,
+    DECK_LETTERS,
 };
 use karakuri_engine::{
     compose, Committed, Deck, Gpu, HotSwap, Look, MaskKind, Present, Residency, Set, Sink, Skip,
     TonemapOp,
 };
 use karakuri_layout::{Axis, Hit, NodeId, Point};
+use karakuri_operation::Operation;
+use karakuri_store::record::Record;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -829,34 +834,50 @@ impl Readout {
         }
     }
 
-    fn moved(&mut self, p: Point) {
-        let Some(dragged) = self.panel.moved(p) else {
-            return;
-        };
-        println!("{}", self.say_drag(dragged));
+    /// A move with something in hand. A boundary drag says what it did here;
+    /// **a fader drag hands its operation back**, because acting on one takes
+    /// the deck and the deck is not the readout's.
+    fn moved(&mut self, p: Point) -> Option<Operation> {
+        match self.panel.moved(p)? {
+            boundary @ Dragged::Boundary { .. } => {
+                println!("{}", self.say_drag(boundary));
+                None
+            }
+            Dragged::Fader(operation) => Some(operation),
+        }
     }
 
     /// A drag, in words: what was asked, where it landed, what held it, and
     /// what the pair either side is now.
     fn say_drag(&self, d: Dragged) -> String {
-        let sizes = match self.panel.pair(d.split, d.index) {
+        let Dragged::Boundary {
+            split,
+            index,
+            axis,
+            asked,
+            landed,
+            held,
+        } = d
+        else {
+            // A fader's words are the window loop's, because they are about
+            // what happened to the *deck* after the operation left here.
+            unreachable!("a fader drag says its own line")
+        };
+        let sizes = match self.panel.pair(split, index) {
             Some((a, b)) => format!(
                 "{} {:.0} | {} {:.0}",
                 self.label(a),
-                d.axis.extent(self.panel.layout().rect(a)),
+                axis.extent(self.panel.layout().rect(a)),
                 self.label(b),
-                d.axis.extent(self.panel.layout().rect(b))
+                axis.extent(self.panel.layout().rect(b))
             ),
             None => "no pair".to_owned(),
         };
-        let stop = match d.held {
+        let stop = match held {
             Some(by) => format!(" — held {by:+.1} by a stop, and it stays there until it moves"),
             None => String::new(),
         };
-        format!(
-            "  drag: asked {:.1}, landed {:.1}{stop} [{sizes}]",
-            d.asked, d.landed
-        )
+        format!("  drag: asked {asked:.1}, landed {landed:.1}{stop} [{sizes}]")
     }
 
     fn released(&mut self) {
@@ -867,6 +888,14 @@ impl Readout {
             Some(Released::Gone { split, index }) => {
                 println!("release: {} is gone", self.pair(split, index))
             }
+            // **No value in the line, because there is none to print.** Where
+            // a fader came to rest is the deck's, and the last thing the drag
+            // asked for was printed when it was asked for.
+            Some(Released::Let { deck, knob }) => println!(
+                "release: deck {} lets go of the {}",
+                deck_letter(deck),
+                knob_word(knob)
+            ),
             None => {}
         }
     }
@@ -972,7 +1001,7 @@ impl Readout {
     /// gesture can be driven without a window: `winit` cannot be asked for an
     /// `ActiveEventLoop` outside its own loop, so an event handler is not
     /// something a test can call, and the part worth testing is this.
-    fn pointer(&mut self, ctx: &egui::Context, event: Pointer) -> (Claim, Option<Outcome>) {
+    fn pointer(&mut self, ctx: &egui::Context, event: Pointer) -> (Claim, Acted) {
         let at = match event {
             Pointer::Moved(p) => p,
             _ => self.panel.cursor(),
@@ -981,23 +1010,59 @@ impl Readout {
         // hand, so a claim asked after it would see no drag, route the release
         // to `egui`, and hand `egui` a button-up it never saw the button-down
         // for.
-        let claim = claim(&mut self.panel, ctx, at);
-        let mut did = None;
+        let claim = claim(&mut self.panel, ctx, &self.view.mixer, at);
+        let mut did = Acted::Nothing;
         match (event, claim) {
             // The panel learns where the pointer is either way — every
-            // keyboard operation is addressed to it — and drags if a boundary
+            // keyboard operation is addressed to it — and drags if something
             // is in hand. Whether `egui` is also told is the claim.
-            (Pointer::Moved(p), _) => self.moved(p),
-            // **A press the panel claimed is either on a control or on the
-            // panel itself**, and the control is asked first for the reason
-            // `claim` asked it last: rule 2 has already had its refusal, so a
-            // press that got here and is on the chip is the chip's. It is the
-            // same `outputs` call `claim` made — asked again, not copied.
+            //
+            // **A move is what a fader emits on**, so this is the one arm that
+            // can act without a button, and it acts whoever the claim went to:
+            // rule 1 has already given the panel any drag in hand.
+            //
+            // **Asked before the move, and only with a fader in hand.** An
+            // `Emitted(None)` is *a fader that did not change*, which is owed
+            // no frame; a plain pointer move with nothing in hand is
+            // `Change::Pointer`'s business and is owed one whenever the panel
+            // claimed it, because that is the resize cursor going on and off.
+            // Answering `Emitted(None)` for both would take the cursor with it.
+            (Pointer::Moved(p), _) => {
+                let fading = matches!(self.panel.in_hand(), Some(InHand::Fader));
+                let operation = self.moved(p);
+                if fading {
+                    did = Acted::Emitted(operation);
+                }
+            }
+            // **A press the panel claimed is on one of the two controls or on
+            // the panel itself**, and the controls are asked first for the
+            // reason `claim` asked them last: rule 2 has already had its
+            // refusal, so a press that got here and is on a control is that
+            // control's. Both are the same calls `claim` made — asked again,
+            // not copied.
             (Pointer::Down, Claim::Panel) => {
                 self.panel.solve();
-                match outputs(ctx, self.panel.layout()).filter(|row| row.hit(at)) {
-                    Some(row) => did = Some(self.sink(row.op())),
-                    None => self.press(at),
+                let sink = outputs(ctx, self.panel.layout()).filter(|row| row.hit(at));
+                let knob = mixer_bay(ctx, self.panel.layout(), &self.view.mixer)
+                    .and_then(|bay| bay.grab(at));
+                match (sink, knob) {
+                    (Some(row), _) => did = Acted::Operated(self.sink(row.op())),
+                    // **The value does not move on the press.** The grab keeps
+                    // the offset it took hold at, so the first move continues
+                    // from where the knob already was — and a press that was
+                    // on the *track* never gets here, because `Mixer::grab`
+                    // answers `None` for it rather than jumping the mix.
+                    (None, Some(grab)) => {
+                        println!(
+                            "press ({:.0}, {:.0}): deck {} — the {} is in hand",
+                            at.x,
+                            at.y,
+                            deck_letter(grab.deck()),
+                            knob_word(grab.knob())
+                        );
+                        self.panel.grab(at, grab);
+                    }
+                    (None, None) => self.press(at),
                 }
             }
             (Pointer::Up, Claim::Panel) => self.released(),
@@ -1125,9 +1190,12 @@ impl Readout {
             "the mixer draws {} strip{}, because a strip is a deck SLOT and this deck has \
              {} — the mock's four is the most a deck can hold, and the page keeps its four \
              tracks either way, so a track with nothing behind it is empty rather than a \
-             strip full of dashes. every strip is a READOUT: the residency, the trim, the \
-             fader, the meter, the opacity and the two modes are what the deck says, and a \
-             press on any of them reaches nothing yet.",
+             strip full of dashes. the two FADERS are played: drag the knob on the trim or \
+             on the tall fader and the panel emits SetGain or SetOpacity, which this file \
+             turns into a Record and applies to the deck — the strip then follows because \
+             the DECK changed, not because anything here remembered. a press on the track \
+             off the knob does nothing, deliberately: a fader at 0.3 whose top is clicked \
+             must not jump to 1.0 on stage. everything else in the strip is a READOUT.",
             self.view.mixer.len(),
             match self.view.mixer.len() {
                 1 => "",
@@ -1164,8 +1232,9 @@ impl Readout {
                     // `view::transport` names each of them.
                     Kind::Transport => "row, no heading: bpm, beat, bar, frame".to_owned(),
                     // The one row with something in it: the console's first
-                    // control, and the only thing on the panel a press acts
-                    // on that is not a boundary.
+                    // control. The mixer's two faders are the other two, and
+                    // between them they are everything a press acts on that is
+                    // not a boundary.
                     Kind::Outputs => "row, one sink: program view".to_owned(),
                     Kind::Pane => "pane, inside a bay".to_owned(),
                     Kind::Picture => "the picture, a sink".to_owned(),
@@ -1200,14 +1269,18 @@ impl Readout {
         }
         println!();
         println!(
-            "the outputs row's dot is the one control on the panel: it folds the picture by \n\
-             name, so clicking it and pressing f over the picture are the same operation \n\
-             reached from two surfaces. it is lit while the picture is on screen."
+            "the outputs row's dot folds the picture by name, so clicking it and pressing f \n\
+             over the picture are the same operation reached from two surfaces. it is lit \n\
+             while the picture is on screen. the mixer's two faders are the panel's other \n\
+             controls, and they are a different kind: the dot names an operation on the \n\
+             ARRANGEMENT, which this crate performs, and a fader names one on the MIX, \n\
+             which it cannot — so the operation comes out and this file applies it."
         );
         println!();
         println!("keys — the pointer's position decides what each one acts on:");
         println!("  click    the outputs dot: turn the program view sink off, and on again");
         println!("  drag     press the left button in a gap and move: the boundary follows");
+        println!("  fader    press a mixer knob and move: the deck's gain or opacity follows");
         println!("  f        fold the region under the pointer");
         println!("  g        fold the split enclosing the region under the pointer");
         println!("  z        unfold everything folded (a folded region has no rectangle, so");
@@ -1233,10 +1306,53 @@ enum Pointer {
     Wheel,
 }
 
+/// **What routing a pointer event did**, beyond deciding whose it was.
+///
+/// Three answers rather than an `Option<Outcome>`, because there are now two
+/// kinds of control on the panel and they end in two different places: the
+/// Outputs dot asks for an operation on the *arrangement*, which this crate
+/// performs and reports as an [`Outcome`], and a fader asks for an operation
+/// on the *mix*, which nothing in `karakuri-console` can perform at all. The
+/// repaint decision is taken from which of the three it is — see
+/// `Change::Operated` and `Change::Emitted`.
+#[derive(Debug, Clone, PartialEq)]
+enum Acted {
+    /// Nothing acted: a press on a boundary, a move, a wheel, a release.
+    Nothing,
+    /// The Outputs dot, and what the operation it named did.
+    Operated(Outcome),
+    /// **A fader translated a drag into the vocabulary**, or the drag moved
+    /// the pointer over a value that did not change and asked for nothing.
+    Emitted(Option<Operation>),
+}
+
 fn folding(folded: bool) -> &'static str {
     match folded {
         true => "folded",
         false => "unfolded",
+    }
+}
+
+/// **Which deck, in the letter the preview cells are drawn with** — asked of
+/// the view rather than written out again here.
+///
+/// The vocabulary counts decks from zero (`Operation::SetGain { deck: u8 }`)
+/// and the console draws them `A` through `D`, so this is the one place the
+/// two meet. A deck outside the four cannot be built by anything in this file
+/// — a `Deck` holds `MAX_SLOTS` slots and `DECKS` is that number — so an index
+/// past the end is a bug and reads as one rather than wrapping quietly.
+fn deck_letter(deck: u8) -> &'static str {
+    DECK_LETTERS
+        .get(usize::from(deck))
+        .copied()
+        .unwrap_or("(no such deck)")
+}
+
+/// Which of a strip's two faders, in the mixer bay's own words.
+fn knob_word(knob: Knob) -> &'static str {
+    match knob {
+        Knob::Trim => "trim",
+        Knob::Fader => "fader",
     }
 }
 
@@ -1923,6 +2039,96 @@ fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
     }
 }
 
+/// **A fader's operation, as the record it has to end in — and this is a
+/// shortcut, it is this example's, and it is not where the answer belongs.**
+///
+/// [P-0028](../../../docs/principles/0028-every-control-ends-in-the-same-record.md)
+/// is *every control ends in the same record*: what makes a console fader the
+/// same thing as a key press and a MIDI knob is that all three write the same
+/// `Record` and the deck is moved by the decode. So the operation the panel
+/// emitted has to become one before it reaches [`Deck`].
+///
+/// **Where `Operation` becomes `Record` is not decided, and this does not
+/// decide it.** The conversion needs `karakuri-operation` and
+/// `karakuri-store`, neither of which depends on the other, and choosing which
+/// crate owns it is the centre of the record design rather than a side effect
+/// of a fader. The existing half is `karakuri-cli`'s `mix::gain_record` and
+/// `mix::opacity_record` — two functions that already say exactly what the two
+/// lines below say — and they are **unreachable from here**, because
+/// `karakuri-cli` has no library target.
+///
+/// So this example writes them again, and says so rather than leaving a reader
+/// to find out: the day the conversion lands, this function is **deleted**
+/// rather than moved, and `karakuri-store` leaves this crate's
+/// dev-dependencies with it.
+///
+/// `None` for every other operation in the vocabulary, which is not a refusal:
+/// this example has two controls and 46 operations exist.
+fn record(operation: &Operation) -> Option<Record> {
+    match *operation {
+        // `mix::gain_record`, and the cast with it: the vocabulary counts
+        // decks in `u8` and `Record` counts slots in `u8`, so the two agree
+        // here and it is the *console* that counts in `usize`.
+        Operation::SetGain { deck, gain } => Some(Record::Gain {
+            slot: deck,
+            value: gain,
+        }),
+        // `mix::opacity_record`.
+        Operation::SetOpacity { deck, opacity } => Some(Record::Opacity {
+            slot: deck,
+            value: opacity,
+        }),
+        _ => None,
+    }
+}
+
+/// **The record, applied to the deck**, and what to say about it.
+///
+/// `karakuri-cli`'s `mix::change` is the real decoder and it does two things
+/// this does not: it refuses a slot the deck has not got, with the same
+/// sentence every other surface refuses one with, and it turns a record into a
+/// `Change` that a caller applies. This is the shortest path from the two
+/// records above to the two setters, and it is the other half of the shortcut
+/// [`record`] is.
+///
+/// The line it returns is the loop closing, printed so that it can be read
+/// rather than inferred: the operation, the record, and **what the deck says
+/// afterwards** — which is where the next frame's strip comes from.
+fn apply(record: &Record, deck: &mut Deck) -> Option<String> {
+    // **A slot the deck has not got is refused rather than indexed.**
+    // `Deck::set_gain` indexes its slots, a panic reachable from an event
+    // handler aborts this process rather than unwinding (see the module
+    // documentation), and `mix::change`'s whole reason for taking a
+    // `slot_count` is that a stream may name a slot that is not there. Nothing
+    // in this file can produce one — the strips are the deck's own count — so
+    // this is the guard rather than the message, and the real sentence is
+    // `karakuri-cli`'s `no_such_slot`.
+    let held = |slot: u8| (usize::from(slot) < deck.slot_count()).then_some(usize::from(slot));
+    match *record {
+        Record::Gain { slot, value } => {
+            let slot = held(slot)?;
+            deck.set_gain(slot, value);
+            Some(format!(
+                "  fader: deck {} trim -> SetGain {{ deck: {slot}, gain: {value:.3} }} \
+                 -> Record::Gain -> deck.gain({slot}) = {:.3}",
+                deck_letter(slot as u8),
+                deck.gain(slot)
+            ))
+        }
+        Record::Opacity { slot, value } => {
+            let slot = held(slot)?;
+            deck.set_opacity(slot, value);
+            Some(format!(
+                "  fader: deck {} fader -> SetOpacity {{ deck: {slot}, opacity: {value:.3} }} \
+                 -> Record::Opacity -> deck.opacity({slot}) = {:.3}",
+                deck_letter(slot as u8),
+                deck.opacity(slot)
+            ))
+        }
+        _ => None,
+    }
+}
+
 /// **What a frame has to fit in on this window**: the display's refresh
 /// interval, in milliseconds — the `/16.6` in the mock's transport, at the
 /// 60 Hz it was drawn against.
@@ -2102,6 +2308,40 @@ impl App {
         if response.repaint {
             costs.owes();
             gfx.window.request_redraw();
+        }
+    }
+
+    /// **Perform what a pointer event asked for, and say what frame it is
+    /// owed.** `otherwise` is the answer for an event that acted on nothing —
+    /// the claim's, which is the answer this loop had before there were
+    /// controls.
+    ///
+    /// The two kinds of control end in two different places, which is what
+    /// [`Acted`] is for:
+    ///
+    /// - The Outputs dot's operation was already performed by the panel, and
+    ///   what is owed is what the [`Outcome`] says happened.
+    /// - **A fader's operation is performed here**, because it is the *deck*
+    ///   that moves and the panel has no deck (ADR-0156). It becomes a record
+    ///   and the record moves the deck — P-0028, which is what makes this
+    ///   fader the same control as a key press and a MIDI knob rather than a
+    ///   third way of writing a gain. The next frame's strips are read back off
+    ///   the deck by [`mixer`], so what the fader shows is what the deck says
+    ///   and never what this loop remembered.
+    fn performed(gfx: &mut Gfx, acted: &Acted, otherwise: Repaint) -> Repaint {
+        match acted {
+            Acted::Nothing => otherwise,
+            Acted::Operated(outcome) => Change::Operated(outcome).repaint(),
+            Acted::Emitted(operation) => {
+                if let Some(line) = operation
+                    .as_ref()
+                    .and_then(record)
+                    .and_then(|record| apply(&record, &mut gfx.engine.deck))
+                {
+                    println!("{line}");
+                }
+                Change::Emitted(operation.as_ref()).repaint()
+            }
         }
     }
 
@@ -2359,16 +2599,19 @@ impl ApplicationHandler for App {
                     (position.y / self.scale) as f32,
                 );
                 let ctx = gfx.egui.egui_ctx().clone();
-                let (claim, _) = self.readout.pointer(&ctx, Pointer::Moved(p));
+                let (claim, acted) = self.readout.pointer(&ctx, Pointer::Moved(p));
                 if claim == Claim::Egui {
                     App::to_egui(gfx, &mut self.costs, &event);
                 }
-                App::wants(
-                    gfx,
-                    &mut self.egui_due,
-                    &mut self.costs,
-                    Change::Pointer(claim).repaint(),
-                );
+                // **A move can now change the mix**, which no pointer event
+                // could before: a fader in hand turns this move into one
+                // operation of the vocabulary. What is owed for it is what the
+                // drag asked for and not the claim — a fader held against the
+                // top of its track asks for 1.0 sixty times a second and
+                // changes nothing, and `Change::Pointer(Panel)` would draw a
+                // frame for every one of them.
+                let repaint = App::performed(gfx, &acted, Change::Pointer(claim).repaint());
+                App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
             }
             WindowEvent::MouseInput {
                 state,
@@ -2380,7 +2623,7 @@ impl ApplicationHandler for App {
                     ElementState::Released => Pointer::Up,
                 };
                 let ctx = gfx.egui.egui_ctx().clone();
-                let (claim, did) = self.readout.pointer(&ctx, which);
+                let (claim, acted) = self.readout.pointer(&ctx, which);
                 if claim == Claim::Egui {
                     App::to_egui(gfx, &mut self.costs, &event);
                 }
@@ -2389,15 +2632,12 @@ impl ApplicationHandler for App {
                 // already a frame, but the operation the dot asked for is the
                 // thing that moved every region in the Program bay, and it is
                 // the outcome that says so.
-                let repaint = match &did {
-                    Some(outcome) => Change::Operated(outcome).repaint(),
-                    None => Change::Pointer(claim).repaint(),
-                };
+                let repaint = App::performed(gfx, &acted, Change::Pointer(claim).repaint());
                 App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
             }
             WindowEvent::MouseWheel { .. } => {
                 let ctx = gfx.egui.egui_ctx().clone();
-                let (claim, _) = self.readout.pointer(&ctx, Pointer::Wheel);
+                let (claim, _acted) = self.readout.pointer(&ctx, Pointer::Wheel);
                 if claim == Claim::Egui {
                     App::to_egui(gfx, &mut self.costs, &event);
                 }
@@ -3021,7 +3261,10 @@ mod tests {
     /// The texture delta is cleared because `epaint` panics if one is dropped
     /// unapplied — there is no renderer here to apply it to, which is the
     /// whole of what makes this a test and not a window.
-    fn drawn_once() -> egui::Context {
+    ///
+    /// `mod gpu` uses it too: a strip is laid out with the type in it, and a
+    /// device does not make fonts valid.
+    pub(super) fn drawn_once() -> egui::Context {
         let ctx = egui::Context::default();
         let mut out = ctx.run_ui(egui::RawInput::default(), |_| {});
         out.textures_delta.clear();
@@ -3064,7 +3307,7 @@ mod tests {
         assert_eq!(claim, Claim::Panel);
         assert_eq!(
             did,
-            Some(Outcome::Folded {
+            Acted::Operated(Outcome::Folded {
                 id: picture,
                 folded: true,
                 root: false
@@ -3084,7 +3327,7 @@ mod tests {
         assert_eq!(readout.pointer(&ctx, Pointer::Moved(at)).0, Claim::Panel);
         assert_eq!(
             readout.pointer(&ctx, Pointer::Down).1,
-            Some(Outcome::Folded {
+            Acted::Operated(Outcome::Folded {
                 id: picture,
                 folded: false,
                 root: false
@@ -3095,6 +3338,49 @@ mod tests {
             dot(&mut readout).1,
             "the picture is back and the dot is dark"
         );
+    }
+
+    /// **A fader's operation becomes the record every other surface's control
+    /// ends in**, and this is the half of that which needs no device.
+    ///
+    /// [`record`] is a shortcut and says so at length; what it must not be is
+    /// a *different* answer from the one `karakuri-cli` already gives. So this
+    /// asserts it against `mix::gain_record` and `mix::opacity_record` term
+    /// for term — the slot is the operation's deck and the value is the
+    /// operation's value, unchanged — which is the whole of what those two
+    /// functions do.
+    ///
+    /// And the other direction: an operation this example has no control for
+    /// produces no record at all, rather than a plausible one.
+    #[test]
+    fn a_faders_operation_becomes_the_record_the_cli_would_have_written() {
+        assert_eq!(
+            record(&Operation::SetGain {
+                deck: 2,
+                gain: 0.75
+            }),
+            // `mix::gain_record(2, 0.75)`.
+            Some(Record::Gain {
+                slot: 2,
+                value: 0.75
+            })
+        );
+        assert_eq!(
+            record(&Operation::SetOpacity {
+                deck: 0,
+                opacity: 0.25
+            }),
+            // `mix::opacity_record(0, 0.25)`.
+            Some(Record::Opacity {
+                slot: 0,
+                value: 0.25
+            })
+        );
+        // The vocabulary is 46 operations and this example has two controls.
+        // A record invented for the other 44 would be this file deciding what
+        // they mean.
+        assert_eq!(record(&Operation::Solo { region: None }), None);
+        assert_eq!(record(&Operation::SelectDeck { deck: 1 }), None);
     }
 
     /// **Anything that makes texels this frame keeps the loop awake, and the
@@ -3933,6 +4219,94 @@ mod gpu {
             engine.freed, 3,
             "the freed tally did not count both textures"
         );
+    }
+
+    /// **The whole loop, closed on a real deck: a hand moves a knob and the
+    /// strip follows because the *deck* changed.**
+    ///
+    /// `tests/fader.rs` asserts everything up to the operation and one thing
+    /// past it — that the console keeps no value of its own — and it does all
+    /// of that with no deck anywhere, which is the point of that file. This is
+    /// the other end, and it needs a device because a `Deck` does: the
+    /// operation becomes a `Record`, the record moves the deck, and the strips
+    /// are read back off the deck by [`mixer`] exactly as the frame reads
+    /// them.
+    ///
+    /// **The middle step is the one worth the device.** Between the drag and
+    /// the record the strip must *not* have moved — if it had, the console
+    /// would be showing a number it kept rather than one the deck holds, and
+    /// every assertion after it would pass over a second copy of the deck's
+    /// state.
+    #[test]
+    fn a_drag_moves_the_deck_and_the_strip_follows_the_deck() {
+        const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+        const W: u32 = 1440;
+        const H: u32 = 900;
+
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer =
+            egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
+        let mut panel = Panel::new(W as f32, H as f32);
+        panel.solve();
+        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
+
+        // The strips, written the way the frame writes them.
+        let material = material();
+        let mut strips = Vec::new();
+        mixer(&engine.deck, &material, &mut strips);
+        assert_eq!(strips.len(), engine.deck.slot_count());
+        let was = engine.deck.gain(0);
+
+        // A knob, taken hold of and dragged to the bottom of its track. The
+        // context has to have drawn once, because a strip is laid out with the
+        // type in it.
+        let ctx = super::tests::drawn_once();
+        let bay = mixer_bay(&ctx, panel.layout(), &strips).expect("the bay draws its strip");
+        let at = bay.strip(0);
+        let knob = at.trim_at(strips[0].gain).knob.center();
+        let grab = bay
+            .grab(Point::new(knob.x, knob.y))
+            .expect("the trim's knob");
+        panel.grab(Point::new(knob.x, knob.y), grab);
+        let floor = Point::new(at.trim.min.x, knob.y);
+        let Some(Dragged::Fader(operation)) = panel.moved(floor) else {
+            panic!("a drag to the floor of the trim emitted nothing")
+        };
+        assert_eq!(operation, Operation::SetGain { deck: 0, gain: 0.0 });
+
+        // **Nothing has been told anything yet**, so the deck is where it was
+        // and so is the strip the frame would draw.
+        assert_eq!(engine.deck.gain(0), was);
+        let mut after = Vec::new();
+        mixer(&engine.deck, &material, &mut after);
+        assert_eq!(
+            after, strips,
+            "the strip moved before the deck did, so the console is keeping a value"
+        );
+
+        // The record, and the deck.
+        let record = record(&operation).expect("a gain operation has a record");
+        assert!(apply(&record, &mut engine.deck).is_some());
+        assert_eq!(
+            engine.deck.gain(0),
+            0.0,
+            "the record was built and the deck did not move, so the control ends nowhere"
+        );
+
+        // And now the strip follows, because it is read off the deck.
+        mixer(&engine.deck, &material, &mut after);
+        assert_eq!(after[0].gain, 0.0);
+        assert_ne!(
+            after, strips,
+            "the deck moved and the strip did not follow it"
+        );
+
+        // The other direction, so that *follows the deck* is not *always
+        // zero*: something else writes the deck and the strip says so without
+        // a pointer anywhere near it.
+        engine.deck.set_gain(0, 0.5);
+        mixer(&engine.deck, &material, &mut after);
+        assert_eq!(after[0].gain, 0.5);
     }
 
     /// **Which rectangle each sink's texture is sized from, and where the

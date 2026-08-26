@@ -54,6 +54,8 @@
 
 use std::time::Duration;
 
+use karakuri_operation::Operation;
+
 use crate::input::Claim;
 use crate::panel::Outcome;
 
@@ -175,6 +177,45 @@ pub enum Change<'a> {
         /// answer.
         moved: bool,
     },
+    /// **A control the panel draws translated a gesture into an operation**,
+    /// with `Some(op)` for one asked for and `None` for a gesture that asked
+    /// for nothing.
+    ///
+    /// The mixer's two faders are what raise it: a drag on one emits
+    /// [`karakuri_operation::Operation::SetGain`] or `SetOpacity`, the caller
+    /// turns it into a record and applies it to the deck (P-0028), and the
+    /// strip is drawn from what the deck says on the next frame.
+    ///
+    /// # Why it is not [`Change::Pointer`], which already covers the event
+    ///
+    /// Because that arm cannot say *nothing changed*, and here that case is
+    /// real and common. A fader held against the top of its track while the
+    /// pointer runs on asks for 1.0 sixty times a second; the value is already
+    /// 1.0, nothing on the panel is different, and `Change::Pointer(Panel)` is
+    /// [`Repaint::Now`] for every one of them.
+    ///
+    /// # Why it *may* be decided from what the drag returned, where the
+    /// boundary's may not
+    ///
+    /// The pointer arm says outright that it is deliberately not decided from
+    /// `Panel::moved`'s `Option`, because that one is `None` for a boundary
+    /// that moved less than half a pixel — a threshold for what is worth
+    /// *printing*, and half a logical pixel is a whole physical one on a 2x
+    /// display, so a repaint decided from it leaves a boundary drawn where it
+    /// no longer is.
+    ///
+    /// **A fader's `None` is an exact comparison of the value that would be
+    /// sent**, not a threshold on a position: there is no distance below which
+    /// the panel would look the same, because the same value *is* the same
+    /// picture. So this arm is the [`Change::Rearranged`] shape — what the
+    /// model returned, and a frame owed only where something happened — rather
+    /// than the pointer's.
+    ///
+    /// The `Some` arm errs towards drawing, which is this module's stated
+    /// direction: the caller is the one that applies the operation, and this
+    /// cannot know that it did. It is a frame on a gesture an operator is
+    /// making, which P-0072 does not budget.
+    Emitted(Option<&'a Operation>),
     /// The window resized, or the display's scale factor changed: the
     /// arrangement is re-solved into a different viewport, so every rectangle
     /// on the panel is a new one.
@@ -275,6 +316,13 @@ impl Change<'_> {
             Change::Rearranged { moved } => match moved {
                 true => Repaint::Now,
                 false => Repaint::Never,
+            },
+
+            // See the variant: `None` is a drag that asked for nothing,
+            // which is a pointer that moved over a value that did not.
+            Change::Emitted(operation) => match operation {
+                Some(_) => Repaint::Now,
+                None => Repaint::Never,
             },
 
             Change::Room | Change::Viewport => Repaint::Now,

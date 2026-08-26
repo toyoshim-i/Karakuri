@@ -240,7 +240,7 @@ fn everything_that_changes_the_console_asks_for_a_frame() {
     // the resize cursor from the hit.
     let mut panel = self::panel();
     let gap = on_a_boundary(&mut panel);
-    assert_eq!(claim(&mut panel, &drawn_once(), gap), Claim::Panel);
+    assert_eq!(claim(&mut panel, &drawn_once(), &[], gap), Claim::Panel);
     assert_eq!(
         Change::Pointer(Claim::Panel).repaint(),
         Repaint::Now,
@@ -249,7 +249,7 @@ fn everything_that_changes_the_console_asks_for_a_frame() {
     panel.press(gap);
     let away = Point::new(gap.x + 200.0, gap.y);
     assert_eq!(
-        claim(&mut panel, &drawn_once(), away),
+        claim(&mut panel, &drawn_once(), &[], away),
         Claim::Panel,
         "a drag keeps its claim wherever the pointer has gone"
     );
@@ -341,7 +341,7 @@ fn a_drag_too_small_to_report_still_asks_for_a_frame() {
 
     // And the frame is owed all the same.
     assert_eq!(
-        claim(&mut panel, &drawn_once(), creep),
+        claim(&mut panel, &drawn_once(), &[], creep),
         Claim::Panel,
         "a drag in hand keeps its claim"
     );

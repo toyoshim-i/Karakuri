@@ -373,9 +373,25 @@ followed the strip count would re-derive that minimum on every install. A track 
 nothing — an empty strip is a reading, and inventing one is what the preview cells and the
 transport row both refuse.
 
-**Its controls are readouts.** Dragging a fader is a second kind of drag and the value belongs to
-the engine rather than to the layout, so it wants an operation and a decision about the claim
-model. That is the next pass, and it is what makes the mixer an instrument rather than a display.
+**Its two faders are played with a pointer**
+([ADR-0185](adr/0185-a-fader-translates-a-drag-into-an-operation-and-applies-nothing.md)), and they
+are **`karakuri-operation`'s first customer** — nothing had aimed at the vocabulary until now. A
+fader turns a drag into an `Operation` and applies nothing, because `src/` has no engine; the
+harness turns it into a `Record` and the record moves the deck, which is P-0028 and is what makes a
+console fader the same thing as a key press and a MIDI knob. **The strip draws what the deck says**,
+asserted mid-gesture, so nothing keeps a second copy of the mix.
+
+The vocabulary survived contact and four things about it are now known rather than assumed:
+`Operation` is not `Copy`, so its cheapest variants pay for its heaviest; `deck: u8` costs a cast
+per gesture; **there is no `SetMask`**, so the mask mini is a readout of state no operation can set;
+and the trim reaches only the bottom half of what `SetGain` expresses, because it is drawn over
+`[0, 1]` while the mix is HDR.
+
+**The rest of the strip is still a readout**, and each has a decision left rather than work: the
+blend mini needs an affordance that *names* one of three, since P-0074 forbids a cycle and the
+mock's tooltip says *click to cycle* — **the mock and the principle disagree**; and the tally is two
+operations for three states, drawing the *effective* residency while the operations set the
+*requested* one.
 
 **Three live regions now, with three characters**, which is what the rest of P-0072 has been
 waiting for. The picture is expensive and moves every frame; the beat grid is cheap, high priority,
