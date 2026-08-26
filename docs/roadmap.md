@@ -430,11 +430,17 @@ because the console is an example rather than the program.
    ([ADR-0187](adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)) and
    proved these are the same seam the faders opened; neither of the other two needs new machinery,
    and each needs a **decision** first, below.
-2. **The rest of P-0072.** Three live regions with three characters now exist — the picture
-   expensive and every frame, the beat grid cheap and twice a second, the mixer expensive and
-   hardly moving — which is what a scheduler was waiting for. Nothing is over budget yet (10.9% of
-   a second, with headroom), so this is worth doing when the mixer's controls make it move rather
-   than before.
+2. **The rest of P-0072, and it is nearer than this item used to say.** Three live regions with
+   three characters now exist — the picture expensive and every frame, the beat grid cheap and
+   twice a second, the mixer expensive and hardly moving — which is what a scheduler was waiting
+   for. Nothing is over budget yet (10.9% of a second, with headroom), and the trigger this item
+   named — *when the mixer's controls make it move* — is now a decision rather than a guess:
+   [ADR-0188](adr/0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md)
+   puts a **fourth** rate on the panel, a pending transition that animates for as long as a request
+   is outstanding and can therefore run for the length of a set. `egui` is immediate mode, so what
+   repaints is the panel rather than the chip. The argument is not the bytes — it is that a beat
+   indicator the maintainer wants analogue and a pending animation at another rate **cannot both be
+   special cases**, and each rate written by hand is the first half of the scheduler written badly.
 3. **The other surfaces onto [`karakuri-operation`](../crates/karakuri-operation).** The faders
    proved its shape; `karakuri-midi`'s `Action`, the console's `panel::Op` and the CLI's key handler
    have not moved, and each is a change of its own. `Action`'s toggles are the interesting one —
@@ -457,14 +463,25 @@ than work, and every one of them was found by building the thing next to it.
   three values, never a *next*** — a pad that could only step is the shape P-0074 warns about, since
   two surfaces stepping one control disagree about where they are. **Nothing MIDI is implemented**:
   `karakuri_midi::map::Action` still has `CycleBlend`, and moving it is item 3 above.
-- **What the tally shows while the two disagree.** One operation naming one of three states now
-  ([ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md)), and the console draws the
-  *effective* residency while `SetResidency` sets the *requested* one — the governor holds a slot
-  below what was asked for and never above, so Live lands and Priming may not. The disagreement
-  already has a name rather than one the console has to invent: a slot whose request is Priming and
-  whose effective residency is Allocated is **parked** — `Deck::is_parked`, drawn by
-  `karakuri-cli`'s status line as `park` and spelled out as *parked (asked to prime, waiting for
-  room)*. What is undecided is what the chip does with it, not what to call it.
+- **What the tally shows while the two disagree — decided in part.** One operation naming one of
+  three states ([ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md)), and the
+  console draws the *effective* residency while `SetResidency` sets the *requested* one — the
+  governor holds a slot below what was asked for and never above, so Live lands and Priming may not.
+  The disagreement already has a name rather than one the console has to invent: a slot whose
+  request is Priming and whose effective residency is Allocated is **parked** — `Deck::is_parked`,
+  drawn by `karakuri-cli`'s status line as `park` and spelled out as *parked (asked to prime,
+  waiting for room)*. **What the chip has to *say* is now settled and is a GUI rule rather than a
+  note about this chip**
+  ([ADR-0188](adr/0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md),
+  [P-0075](principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)):
+  where it is, where it is going, and that it has not arrived — derived every frame from the two
+  values the deck already holds, never stored. **What is still open is which presentation**, and
+  ADR-0188 leaves two on the table with their costs — a blinking second indicator where there is
+  room for two, and a chip that rolls half a turn toward the requested value and falls back where
+  there is room for one. With them: the animation phase's units and its carrier on `View`, which
+  residency a press on the chip asks for, and — since a pending control may refuse nothing
+  ([P-0076](principles/0076-a-surface-owns-the-affordance-never-the-authority.md)) — nothing about
+  locking the panel.
 - **`SetMask` does not exist**, so the mask mini is a readout of state no operation can set. The row
   has to be settled on [the operations page](manual/operations.html) before it can be a control.
 - **What `expand` under a solo should do.** `Layout::soloed()` can lie: the solve never reads it and
