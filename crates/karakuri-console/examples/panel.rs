@@ -1989,6 +1989,14 @@ fn transport(
 ///   the frame loop reads and not `requested_residency`. The governor moves a
 ///   slot down without anybody asking, and a tally showing the request would
 ///   be describing a slot that is doing something else.
+/// - **And the request beside it** — `Deck::requested_residency`, which is the
+///   other half of the same pair. Both are handed over and **neither side
+///   computes `Deck::is_parked`**: the engine has the predicate and the
+///   console derives its own from the two values (`view::Strip::pending`), so
+///   what crosses the seam stays a residency and a residency rather than
+///   becoming a bit whose meaning is written down in only one of the two
+///   crates. It is the same reading as the four numbers below — the deck says
+///   what it is doing, and the surface decides what that looks like.
 /// - **The trim and the fader** are `gain` and `opacity`, which are two
 ///   controls and not one — *"opacity at zero silences under every blend mode,
 ///   gain at zero does not silence `over`"* — and the bay draws them as two.
@@ -2023,6 +2031,7 @@ fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
         out.push(view::Strip {
             name: name.to_owned(),
             tally: view::Tally::Allocated,
+            requested: view::Tally::Allocated,
             gain: 0.0,
             opacity: 0.0,
             blend: BlendMode::Add,
@@ -2035,11 +2044,8 @@ fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
             strip.name.clear();
             strip.name.push_str(name);
         }
-        strip.tally = match deck.residency(slot) {
-            Residency::Live => view::Tally::Live,
-            Residency::Priming => view::Tally::Priming,
-            Residency::Allocated => view::Tally::Allocated,
-        };
+        strip.tally = tally(deck.residency(slot));
+        strip.requested = tally(deck.requested_residency(slot));
         strip.gain = deck.gain(slot);
         strip.opacity = deck.opacity(slot);
         strip.blend = blend_mode(deck.blend(slot));
@@ -2052,6 +2058,22 @@ fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
             mean: level.mean,
             peak: level.peak,
         });
+    }
+}
+
+/// **The engine's residency, as the console's word for it** — and, like
+/// [`blend_mode`], a `match` so that a fourth `Residency` stops the build here
+/// rather than drawing a chip nothing can read.
+///
+/// One function for both halves of the pair. It was written inline for the
+/// effective residency alone; the request needs exactly the same three arms,
+/// and a second copy of them is a translation that can start disagreeing with
+/// itself about what `Priming` is called.
+fn tally(residency: Residency) -> view::Tally {
+    match residency {
+        Residency::Live => view::Tally::Live,
+        Residency::Priming => view::Tally::Priming,
+        Residency::Allocated => view::Tally::Allocated,
     }
 }
 
@@ -2354,6 +2376,20 @@ struct App {
     /// `None` where `egui` asked for nothing, which is every frame on a panel
     /// with nothing on it.
     egui_due: Option<Instant>,
+    /// **The origin every animation on the panel is measured from**, and the
+    /// only clock behind `view::Phase`.
+    ///
+    /// It is here because this file owns the window and the clock and `src/`
+    /// owns neither — every `Instant::now` in this crate is in this file, and
+    /// `view::Phase` is a `Duration` for exactly that reason (P-0002). What
+    /// crosses the seam is `now - this`, which is a number.
+    ///
+    /// **Where the origin is does not matter**, which is why it is taken at
+    /// construction rather than when something first starts moving: every
+    /// presentation is periodic in the phase, so an origin the operator did
+    /// not choose is an origin nobody can see. What would matter is having
+    /// *two*, and there is one.
+    started: Instant,
 }
 
 impl App {
@@ -2365,6 +2401,7 @@ impl App {
             costs: Costs::new(),
             scale: 1.0,
             egui_due: None,
+            started: Instant::now(),
         }
     }
 
@@ -2895,6 +2932,31 @@ impl ApplicationHandler for App {
                     &gfx.engine.deck,
                     &gfx.material,
                     &mut self.readout.view.mixer,
+                );
+
+                // **The one clock behind everything that moves on the panel,
+                // written as the number it becomes.** Beside the strips it
+                // animates, and beside them for the same reason the picture
+                // and the transport are written here: it belongs to this
+                // frame.
+                self.readout.view.phase = view::Phase::since(self.started.elapsed());
+                // **And what that costs, asked of the view rather than
+                // decided here.** `View::animating` is the panel's own
+                // declaration — a staleness while something is pending, and
+                // `None` while nothing is — and `Change::Animating` turns it
+                // into a deadline. It is asked every frame because nothing an
+                // operator does can raise it: a slot is parked by the
+                // governor, between frames, through no window event at all.
+                //
+                // **`Costs::owes` is deliberately not called**, exactly as it
+                // is not for the picture below: a frame the roll asks for is a
+                // frame drawn on a window nobody touched, and the still-panel
+                // reading should print the rate rather than hide it.
+                App::wants(
+                    gfx,
+                    &mut self.egui_due,
+                    &mut self.costs,
+                    Change::Animating(self.readout.view.animating()).repaint(),
                 );
 
                 // -- the egui pass -------------------------------------

@@ -215,6 +215,7 @@ number; new records continue from the end.
 | [ADR-0187](0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md) | The blend mini cycles, and a map learns the three it cycles through | 2026-08-26 | accepted |
 | [ADR-0188](0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md) | A pending transition says it is pending, and no surface holds the rule | 2026-08-26 | accepted |
 | [ADR-0189](0189-motion-may-carry-the-meaning-and-a-stopped-animation-is-a-fault-to-report.md) | Motion may carry the meaning, and a stopped animation is a fault to report | 2026-08-26 | accepted |
+| [ADR-0190](0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md) | The parked tally rolls, because two lamps do not fit in fifty-three pixels | 2026-08-26 | accepted |
 
 ## Retired numbers
 

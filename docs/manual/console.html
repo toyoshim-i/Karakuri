@@ -277,7 +277,7 @@
               <div class="mixer-strips">
                 <div class="strip live focus">
                   <span class="strip-name">drift_night</span>
-                  <span class="tally live" data-tip="Deck A is live: stepping and composited into the program. Click to cycle residency &mdash; live, priming, allocated. &#8853; MIDI: note 32.">live</span>
+                  <span class="tally live" data-tip="Deck A is live: stepping and composited into the program. One of three residencies &mdash; live, priming, allocated &mdash; and this is the one the slot is actually in. Had it been asked for something else and not got there, the word would be rolling toward it, as deck C's is. &#8853; MIDI: note 32.">live</span>
                   <span class="trim"><span class="lbl">g</span><span class="fader"><b style="width:72%"></b><s style="left:66%"></s></span></span>
                   <div class="fader-col">
                     <span class="vfader"><b style="height:97%"></b><s style="bottom:94%"></s></span>
@@ -292,7 +292,7 @@
 
                 <div class="strip priming">
                   <span class="strip-name">lattice_veil</span>
-                  <span class="tally priming" data-tip="Deck B is priming: stepping and warming its buffers, drawn only while something auditions it. Click to cycle residency. &#8853; MIDI: unassigned.">prim</span>
+                  <span class="tally priming" data-tip="Deck B is priming: stepping and warming its buffers, drawn only while something auditions it. It was asked to prime and it is priming, so the chip is still. &#8853; MIDI: unassigned.">prim</span>
                   <span class="trim"><span class="lbl">g</span><span class="fader"><b style="width:44%"></b><s style="left:38%"></s></span></span>
                   <div class="fader-col">
                     <span class="vfader wfocus" data-tip="Deck B opacity, the channel fader. Keyboard focus is here &mdash; the dashed ring &mdash; which is not the same as the deck selection, the solid ring on deck A. &#8853; MIDI: cc 2."><b style="height:30%"></b><s style="bottom:27%"></s></span>
@@ -304,7 +304,7 @@
 
                 <div class="strip">
                   <span class="strip-name">glass_shell</span>
-                  <span class="tally alloc" data-tip="Deck C is allocated: compiled and holding its buffers, not stepping, keeping its t. Click to cycle residency.">alloc</span>
+                  <span class="tally alloc parked" data-tip="Deck C is allocated: compiled and holding its buffers, not stepping, keeping its t &mdash; and it has been asked to prime. The budget has not found room, so the request is parked rather than discarded: it stands, and the deck primes on the first pass after there is room. The word rolling up behind is where it is going; it falls back because it has not got there."><i>alloc</i><i class="to-prim">prim</i></span>
                   <span class="trim"><span class="lbl">g</span><span class="fader"><b style="width:0%"></b><s style="left:0%"></s></span></span>
                   <div class="fader-col">
                     <span class="vfader"><b style="height:0%"></b><s style="bottom:0%"></s></span>
@@ -479,6 +479,30 @@
           transition. Four today because the compositing shader declares four
           inputs &mdash; the strip is a <strong>paged list whose length is a
           number</strong>, and the header says which page you are on.
+        </p>
+        <p>
+          <strong>The residency chip is the one readout that can be showing two
+          things at once.</strong> What a deck is doing and what it was asked to
+          do are separate facts: the budget may hold a slot below the request
+          and never above it, so a deck asked to prime with no room sits
+          <em>parked</em> &mdash; the request standing, reconsidered every pass,
+          primed the moment there is room. Drawn as <em>allocated</em> and
+          nothing else, that is indistinguishable from a deck nobody asked for
+          anything, and the only way to tell would be to ask again. So the chip
+          <strong>rolls part of the way toward the residency it was asked for
+          and falls back, about once a second, and never lands</strong>: the
+          settled word is where the deck is, the word coming up behind it is
+          where it is going, and that it keeps falling back is how it says it
+          has not arrived. Deck C is drawn that way above. It is the only thing
+          on this page that moves, and it moves only while something is
+          pending &mdash; a console with nothing outstanding is completely
+          still.
+        </p>
+        <p>
+          <strong>The chip is a readout and not yet a control.</strong> A press
+          on it does nothing today; what a press will ask for is a decision
+          still open, and it is deliberately the change after this one, because
+          a control that could not yet say it is pending would look dead.
         </p>
       </div>
 

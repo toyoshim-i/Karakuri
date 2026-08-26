@@ -60,12 +60,25 @@ the forced part today.
 
 ## Where it holds
 
-**Nowhere yet.** There is no scheduler to refuse the economy, no region declares a cost or a
-staleness ([P-0072](0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)), and the
-beat grid moves because the panel redraws rather than because anything decided it must. This is
-written **before** the scheduler rather than after it: the rest of P-0072 is the next item in
-[roadmap.md](../roadmap.md)'s order of work, and the first thing a budget under pressure offers is
-this saving.
+**Nowhere yet, and one of the three reasons has gone.** There is still no scheduler to refuse the
+economy, and the beat grid still moves because the panel redraws rather than because anything
+decided it must. What has changed is the third: **one region now declares a cost and a staleness**
+([P-0072](0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)) — the mixer
+strip's residency chip, which rolls at a rate it names while a request of the operator's has not
+landed
+([ADR-0190](../adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)).
+
+**That region is not this rule's motion**, and the distinction is the whole of why this file is
+still waiting. The roll runs **only while something is pending**: a console with nothing parked is a
+console with nothing moving on it, which is exactly what P-0072's first clause asks for and exactly
+what this rule says is not enough. What proves the panel is alive has to move whether or not
+anything is happening, and the only thing on this panel that does that is the beat — a discrete
+flip, which satisfies the forced part and is not the continuous carrier this file prefers.
+
+So the first candidate for the forced clause is still the beat indicator, and the roll is the first
+evidence that the *declaration* half of P-0072 works. This is written **before** the scheduler
+rather than after it: the rest of P-0072 is the next item in [roadmap.md](../roadmap.md)'s order of
+work, and the first thing a budget under pressure offers is this saving.
 
 Decided in
 [ADR-0189](../adr/0189-motion-may-carry-the-meaning-and-a-stopped-animation-is-a-fault-to-report.md),

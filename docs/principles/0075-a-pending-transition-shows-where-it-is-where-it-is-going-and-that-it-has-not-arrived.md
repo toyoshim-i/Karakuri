@@ -156,18 +156,28 @@ assertion to write against a stale pixel.
 
 ## Where it holds
 
-**Nowhere yet.** Nothing on the panel moves for this reason, and nothing declares a cost or a
-staleness under P-0072 either. The first user is the mixer strip's residency chip, where a deck
-asked to prime with no room sits **parked** — the request stands and the engine has not granted it —
-and the rule is written for the relation rather than for that chip, because the console is about to
-have other things that move.
+**The mixer strip's residency chip**, and it is the only user so far. A deck asked to prime with no
+room sits **parked** — the request stands and the engine has not granted it — and the chip's word
+rolls part of the way toward the residency that was asked for and falls back, about once a second,
+and never lands. `view::Strip` carries both residencies, `Strip::pending` derives the third clause
+from them every frame, `View::phase` is the one panel-wide phase and it arrives as a value, and
+`View::animating` declares the staleness that `repaint::Change::Animating` turns into a deadline.
+`crates/karakuri-console/tests/parked.rs` is where each of those is asserted.
+
+**Which presentation it is was decided on space**, and the number is worth carrying here because the
+first thing anyone proposes is the pair of lamps this file opens with: `PRIM` beside `ALLOC` is
+**85.125** wide against a **53** row, and **57.125** as bare glyphs with every pixel of padding
+taken out. It does not fit, in any form. The rule is written for the relation rather than for that
+chip, and the pair of lamps stays admissible on any surface with the room.
 
 Decided in
 [ADR-0188](../adr/0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md), which carries
 the alternatives, the number, and the fact that the published mock has no animation of any kind yet;
 the clause about the still frame came out in
 [ADR-0189](../adr/0189-motion-may-carry-the-meaning-and-a-stopped-animation-is-a-fault-to-report.md),
-which carries that argument and the half-measure it was nearly replaced with.
+which carries that argument and the half-measure it was nearly replaced with. The presentation, the
+measurements it was chosen on and what a parked deck costs the panel are
+[ADR-0190](../adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md).
 
 **What this file deliberately does not settle** is what a control with a pending transition may
 *forbid* — the answer is nothing, and it is

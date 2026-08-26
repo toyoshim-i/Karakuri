@@ -104,13 +104,25 @@
 //! ADR-0177 refuses, with a different glyph. See [`mixer`] and [`Strip`], and
 //! [`Meter`] for why a meter is not a [`Fader`].
 //!
-//! **Everything in that bay is a readout**, and the source says so rather than
-//! leaving the next reader to discover it: the trim, the fader, the tally and
-//! the two minis are drawn from what the deck says, and a press on any of them
-//! reaches nothing. Dragging a fader is a second kind of drag — the value
-//! belongs to the engine rather than to the arrangement — and it needs an
-//! operation named once for the four surfaces and a decision about the claim
-//! model. That is its own pass.
+//! **Three things in that bay answer a pointer and the rest are readouts**,
+//! and the source says which rather than leaving the next reader to discover
+//! it. The two fader knobs are played and the blend mini cycles
+//! ([ADR-0185](../../../docs/adr/0185-a-fader-translates-a-drag-into-an-operation-and-applies-nothing.md),
+//! [ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)):
+//! each emits an [`Operation`] and applies nothing, because the value belongs
+//! to the engine rather than to the arrangement. The tally, the mask mini, the
+//! meter and the number are drawn from what the deck says and a press on any
+//! of them reaches nothing — and so does a press on a fader's *track*, off the
+//! knob.
+//!
+//! **The tally is the one readout that reads two values.** `Deck::residency`
+//! is what a slot is doing and `Deck::requested_residency` is what it was asked
+//! to do, and while they disagree the chip's word rolls part of the way toward
+//! the request and falls back, once a second, and never lands — see
+//! [`Strip::pending`], [`roll_at`] and [`tally_into`], and
+//! [P-0075](../../../docs/principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)
+//! for what that has to say. It is the panel's first live region and the first
+//! to declare a price ([`View::animating`]).
 //!
 //! # The bay head is one component with seven call sites
 //!
@@ -131,6 +143,8 @@
 //! on every pointer coordinate on the way in — a second coordinate space, for
 //! ten pixels of margin. The window's edge is the panel's edge here, and the
 //! ground shows in the dividers alone.
+
+use std::time::Duration;
 
 use egui::epaint::text::{LayoutJob, TextFormat};
 use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, StrokeKind, Ui};
@@ -2196,6 +2210,147 @@ const MIXER_TITLE: &str = "Mixer";
 /// the deck's nor the engine's — it is the mock's.
 const TRIM_LABEL: &str = "g";
 
+/// **How long the panel has been animating**, and the one value everything
+/// that moves on it derives its own rate from.
+///
+/// # One phase, panel-wide, because two clocks drift and one does not
+///
+/// [P-0075](../../../docs/principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)
+/// asks for exactly this: *"Everything pending moves together. Two controls
+/// moving out of step looks broken rather than informative, and it is not a
+/// smaller cost either: N independent animations are N deadlines for a
+/// scheduler to service where one phase is one."* Two strips parked at once
+/// are two rolls, and they are the same roll because they are read off the
+/// same number.
+///
+/// # It is elapsed time and not a wrapped fraction
+///
+/// A phase already reduced to *where we are in the cycle* fixes the cycle, and
+/// then a second presentation at another rate cannot be derived from it at all
+/// — it would need a phase of its own, which is the drift this exists to
+/// prevent. So the value is the whole elapsed interval and each presentation
+/// takes its own [`Phase::cycle`] out of it. The console has one moving thing
+/// today; it is about to have the beat and the rest of the mixer, and *this is
+/// where the second one is either free or a second clock*.
+///
+/// # It is a `Duration` and not an `Instant`, which is the whole seam
+///
+/// `src/` reads no clock. [`Transport`]'s own doc says why in the general
+/// case — *"an `Instant` here would put a clock in it, and then the row would
+/// be reading wall time in a repository whose first principle is that nothing
+/// does"*
+/// ([P-0002](../../../docs/principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md))
+/// — and every `Instant::now` in this crate is in `examples/panel.rs`, which
+/// owns the window. An `Instant` is a *reading*; a `Duration` is a number, and
+/// a number is what a caller writes and a test chooses. So this arrives per
+/// frame the way [`Transport`] and [`View::mixer`] arrive
+/// ([ADR-0156](../../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)),
+/// and a test asserting an animation writes the phase it wants rather than
+/// catching one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct Phase(Duration);
+
+impl Phase {
+    /// The origin, and what a console with no clock behind it is at — every
+    /// test in this crate, and the first frame of a window.
+    pub const ZERO: Phase = Phase(Duration::ZERO);
+
+    /// A phase from the interval that has elapsed since whoever owns the clock
+    /// started counting. Where the origin is does not matter and is not
+    /// asked: every presentation is periodic in it.
+    pub const fn since(elapsed: Duration) -> Phase {
+        Phase(elapsed)
+    }
+
+    /// **Where this phase sits inside one `period`**, as a fraction in
+    /// `[0, 1)`.
+    ///
+    /// The one operation a presentation performs on a phase, and the reason
+    /// the carrier is an interval: a rate is chosen here, by the thing that
+    /// moves, rather than baked into the value the harness writes.
+    ///
+    /// In `f64` and returned as `f32`. A session runs for hours and a phase is
+    /// seconds from an origin — at 3600 s an `f32` step is already coarser
+    /// than a millisecond, and the fractional part is what survives the
+    /// division, so the division is the one place the extra bits are worth
+    /// having.
+    pub fn cycle(self, period: Duration) -> f32 {
+        let period = period.as_secs_f64();
+        match period > 0.0 {
+            true => (self.0.as_secs_f64() / period).fract() as f32,
+            false => 0.0,
+        }
+    }
+}
+
+/// **How often the tally's word rolls at the residency it was asked for**, and
+/// the period every other number in this presentation is a fraction of.
+///
+/// One second, which is P-0075's own *"once a second"* and is the rate that
+/// reads as *waiting* rather than as a fault. See
+/// [ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md).
+pub const ROLL_PERIOD: Duration = Duration::from_millis(1000);
+
+/// **How much of the period the word is moving for**: 400 ms out and back,
+/// and 600 ms at rest.
+///
+/// The rest is not slack. It is what makes the roll read as *an attempt that
+/// keeps being made* rather than as a chip that wobbles — and it is what makes
+/// most of a parked strip's frames the strip's settled appearance, so the
+/// operator reads the effective residency off a still chip nearly two thirds
+/// of the time (P-0075's first clause).
+pub const ROLL_TRAVEL: Duration = Duration::from_millis(400);
+
+/// **How far up the destination the word gets**, as a fraction of the pitch
+/// between the two words.
+///
+/// Less than one, and that is the presentation: *"a slot machine that never
+/// quite lands"*. Landing is what arrival looks like, so a roll that reached
+/// 1.0 would state the opposite of the truth once a second. At 0.4 the current
+/// word keeps most of its rows and the destination shows enough of its own to
+/// be read.
+pub const ROLL_REACH: f32 = 0.4;
+
+/// **How many steps the travel is drawn in**, which is the only reason
+/// [`ROLL_STALENESS`] is a number at all.
+const ROLL_STEPS: u32 = 12;
+
+/// **How stale the roll may get**, which is what a presentation declares under
+/// [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)
+/// and what the harness turns into a deadline.
+///
+/// [`ROLL_TRAVEL`] in [`ROLL_STEPS`] steps — 33.33 ms, about thirty a second.
+/// It is **one number for the whole period** rather than a fine one while the
+/// word moves and a coarse one while it rests: two numbers is two live regions
+/// wearing one name, and choosing between them frame by frame is a scheduler's
+/// job (P-0072's second half) rather than a presentation's. A presentation
+/// declares what it needs; what the panel can afford is decided somewhere
+/// else.
+pub const ROLL_STALENESS: Duration =
+    Duration::from_micros(ROLL_TRAVEL.as_millis() as u64 * 1000 / ROLL_STEPS as u64);
+
+/// **How far the tally's word has rolled**, as a fraction of the pitch between
+/// it and the word it is rolling toward: `0.0` at rest, [`ROLL_REACH`] at the
+/// top of the travel, and never `1.0`.
+///
+/// A raised cosine over [`ROLL_TRAVEL`], flat for the rest of
+/// [`ROLL_PERIOD`]. It is that curve rather than a triangle for one reason
+/// worth having: it leaves and arrives at zero *with zero velocity*, so the
+/// word does not snap into the rest it holds for the next 600 ms, and the
+/// frame the travel begins on is not a jump.
+///
+/// **A pure function of the phase, which is the point of the phase being a
+/// value.** A test asserts it at a phase it chose; nothing samples a clock to
+/// find out what the panel is doing.
+pub fn roll_at(phase: Phase) -> f32 {
+    let travel = ROLL_TRAVEL.as_secs_f32() / ROLL_PERIOD.as_secs_f32();
+    let t = phase.cycle(ROLL_PERIOD);
+    match t < travel {
+        true => ROLL_REACH * 0.5 * (1.0 - (t / travel * std::f32::consts::TAU).cos()),
+        false => 0.0,
+    }
+}
+
 /// **Where a slot sits between compiled and composited**, which is the mock's
 /// `.tally` and `karakuri_engine`'s `Residency` — three states and no fourth.
 ///
@@ -2221,6 +2376,18 @@ pub enum Tally {
 }
 
 impl Tally {
+    /// **Every residency there is**, so that anything which has to hold all
+    /// three cannot be given two.
+    ///
+    /// One customer today and it is [`mixer`], which measures the chip against
+    /// the widest word rather than the current one. A `match` cannot express
+    /// *the widest of them*, and a list written at the call site would be a
+    /// second list of the residencies — the exact drift a fourth variant would
+    /// walk straight past. Here it is one line under the enum, and a fourth
+    /// variant that is not added to it is a `[Tally; 3]` that no longer
+    /// compiles.
+    pub const ALL: [Tally; 3] = [Tally::Live, Tally::Priming, Tally::Allocated];
+
     /// The mock's own word, lower-case here and upper-cased at paint time
     /// because `.tally` is `text-transform: uppercase` — the rule
     /// [`Kind::Bay`]'s title states.
@@ -2369,6 +2536,32 @@ pub struct Strip {
     /// without anybody asking it to, and a tally that did not follow it would
     /// be showing what was asked for over a slot doing something else.
     pub tally: Tally,
+    /// **What was asked for** — `Deck::requested_residency`, the other half of
+    /// the pair [`Strip::tally`] is one of.
+    ///
+    /// # Why the strip carries both and derives nothing else
+    ///
+    /// [P-0075](../../../docs/principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)
+    /// asks a pending control to say three things — where it is, where it is
+    /// going, and that it has not arrived — and the first two *are* these two
+    /// values. The third is [`Strip::pending`], which is a comparison of them.
+    ///
+    /// **There is deliberately no `parked: bool` beside them.** A third field
+    /// would be the same fact stored twice, and the copy is the one that goes
+    /// stale: the harness could write a `tally` and a `requested` that
+    /// disagree and a `parked` that says they do not, and nothing in this
+    /// crate could tell. One derivation with several readers is this crate's
+    /// habit — [`StripBox::fader_at`] is the same shape — and it is P-0075's
+    /// *derived every frame, never stored* read one level down, in the surface
+    /// rather than in the engine.
+    ///
+    /// **Two fields rather than one `Tally` grown into a pair.** `Tally` is
+    /// the mock's `.tally` and the engine's `Residency`, and both of those
+    /// name *one* place a slot can sit; a variant meaning "allocated, and
+    /// asked to prime" would be a fourth residency in a type whose own
+    /// documentation says there are three and no fourth. The relation between
+    /// two residencies is not a residency.
+    pub requested: Tally,
     /// **The trim** — `Deck::gain`: linear, floored at zero, and deliberately
     /// open above 1.0 because the mix is HDR.
     ///
@@ -2427,6 +2620,47 @@ pub struct Strip {
     /// meter's well and nothing in it, which is the mock's own `alloc` strip:
     /// a `.vmeter` with no `b` and no `u` inside it.
     pub level: Option<Level>,
+}
+
+impl Strip {
+    /// **Where this slot has been asked to go and has not got to**, or `None`
+    /// for a slot that is where it was asked to be.
+    ///
+    /// The one derivation the pending presentation reads, and it answers a
+    /// *word* rather than a `bool` because that is what the surface has to
+    /// draw: P-0075's second clause is that the destination is identifiable
+    /// from the surface itself, so the thing worth deriving is the destination
+    /// and not the fact that there is one.
+    ///
+    /// # Why it is an inequality and not the engine's pair
+    ///
+    /// `Deck::is_parked` is exactly `requested == Residency::Priming &&
+    /// effective == Residency::Allocated`, and today this answers `Some` on
+    /// precisely those slots — `deck.rs`'s module doc closes the other cases
+    /// itself: *"the governor may hold a slot below what was asked for, and
+    /// may never put one above it"*, and *"effective Live and requested Live
+    /// are the same set of slots"*. So the two forms agree slot for slot, and
+    /// there is no frame on which they differ.
+    ///
+    /// They differ in what a **second** kind of disagreement would do to them.
+    /// Written as the engine's pair, a surface matching `Priming` over
+    /// `Allocated` draws a settled chip over any other outstanding request —
+    /// an under-draw, silent, and exactly the failure P-0075 exists to name.
+    /// Written as an inequality it draws the new one without being taught,
+    /// because the presentation was never about *parked*: it is about a
+    /// request that has not landed, which is
+    /// [P-0060](../../../docs/principles/0060-name-the-property-not-the-shape.md)
+    /// — the property rather than the one shape it currently takes.
+    ///
+    /// **`park` is still the word**, and it is the status line's: `karakuri-cli`
+    /// spells it out for an operator in prose, which is the same clause met by
+    /// a different means (ADR-0188).
+    pub fn pending(&self) -> Option<Tally> {
+        match self.requested == self.tally {
+            true => None,
+            false => Some(self.requested),
+        }
+    }
 }
 
 /// **A fader, laid out**: the track, the length of it the value fills, and the
@@ -2501,7 +2735,14 @@ pub struct StripBox {
     /// `.strip-name`, the full width of the strip's content box because the
     /// CSS says `width: 100%`.
     pub name: Rect,
-    /// `.tally`'s capsule, as wide as the word in it.
+    /// `.tally`'s capsule, as wide as **the widest** of the three residency
+    /// words inside its padding — the same box whichever one it is showing,
+    /// so the chip does not resize when the deck moves and does not resize
+    /// under a word rolling through it. See [`mixer`], where it is measured.
+    ///
+    /// The word is centred in it ([`tally_into`]), and the capsule is centred
+    /// in the strip, so widening the box does not move the word: it grows
+    /// symmetrically around type that was already on the strip's centre line.
     pub tally: Rect,
     /// The `g` in `.trim`.
     pub trim_label: Rect,
@@ -2808,9 +3049,25 @@ pub fn mixer<'a>(
         size::TRIM_LABEL_SIZE,
         Color32::PLACEHOLDER,
     ));
+    // **The chip is as wide as the widest residency, not as the one it is
+    // showing.** Measured once for the bay rather than per strip: it is the
+    // same three words in every strip, so a per-strip measurement would be
+    // three galley layouts a strip for one answer.
+    //
+    // It read `strip.tally` alone until the tally learned to say that a
+    // request had not landed, and that was a defect rather than a
+    // simplification: a chip sized to the current word is a capsule that
+    // changes width when the deck moves under it, and one that changes width
+    // *while a word is rolling through it* would be a control resizing on its
+    // own animation. What the mock does not have is the reason it survived —
+    // a still page draws each chip once, so shrink-to-fit and this are the
+    // same picture there and only one of them is the same picture over time.
+    let tally = Tally::ALL
+        .into_iter()
+        .map(|tally| width(tally_job(tally, Color32::PLACEHOLDER)))
+        .fold(0.0f32, f32::max);
     let mut boxes = [None; DECKS];
     for (index, strip) in strips.iter().take(DECKS).enumerate() {
-        let tally = width(tally_job(strip.tally, Color32::PLACEHOLDER));
         let blend = width(span_at(
             strip.blend.name(),
             size::MINI_SIZE,
@@ -3104,9 +3361,9 @@ fn name_job(name: &str, width: f32, colour: Color32) -> LayoutJob {
 /// **The Mixer bay's strips, painted.**
 ///
 /// Where everything goes is [`mixer`]'s, so this paints and derives nothing.
-fn mixer_into(ui: &Ui, pal: &Palette, mixer: &Mixer) {
+fn mixer_into(ui: &Ui, pal: &Palette, mixer: &Mixer, phase: Phase) {
     for (strip, at) in mixer.placed() {
-        strip_into(ui, pal, strip, at);
+        strip_into(ui, pal, strip, at, phase);
     }
 }
 
@@ -3121,7 +3378,7 @@ fn mixer_into(ui: &Ui, pal: &Palette, mixer: &Mixer) {
 /// - `.strip-num` — `var(--c-text)`, *a value*, and `font-weight: 500` is not
 ///   honoured because `egui`'s default proportional face has no bold.
 /// - `.strip-mode` — two [`mini_into`]s.
-fn strip_into(ui: &Ui, pal: &Palette, strip: &Strip, at: StripBox) {
+fn strip_into(ui: &Ui, pal: &Palette, strip: &Strip, at: StripBox, phase: Phase) {
     // Clipped to the strip and half the gap around it: a fader's knob is
     // meant to stand proud of its track, and `.mixer-strips`' 4px gap is where
     // that goes — but nothing in one strip may reach the strip beside it.
@@ -3139,7 +3396,7 @@ fn strip_into(ui: &Ui, pal: &Palette, strip: &Strip, at: StripBox) {
         centre_galley(&painter, at.name, galley, pal.dim);
     }
 
-    tally_into(&painter, pal, at.tally, strip.tally);
+    tally_into(&painter, pal, at.tally, strip.tally, strip.pending(), phase);
 
     let galley = painter.layout_job(span_at(TRIM_LABEL, size::TRIM_LABEL_SIZE, pal.faint));
     painter.galley(
@@ -3209,13 +3466,40 @@ fn centre_galley(
 ///   palette's own *"the wash behind a node head, and the allocated tally"* —
 ///   the first use of `--c-tint` in this crate, and it was transcribed against
 ///   this day.
-fn tally_into(painter: &egui::Painter, pal: &Palette, rect: Rect, tally: Tally) {
+///
+/// # And the roll, where the request has not landed
+///
+/// `pending` is [`Strip::pending`] — the residency this slot was asked for and
+/// has not reached. While it is `Some`, the word rolls part of the way toward
+/// it and falls back, once a second, and never arrives: [`roll_at`] is the
+/// displacement and [ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)
+/// is why it is a roll and not two lamps side by side — 53 pixels, and the
+/// pair the rule exists for is 85.125 of them.
+///
+/// # The clip is new, not narrowed
+///
+/// Nothing called `with_clip_rect` on a tally before this: the chip painted a
+/// filled rect and a galley that fitted inside it, so there was nothing to
+/// clip and no clip to get wrong. A second word travelling through the box is
+/// the first thing here that is drawn to be cut off, and the cut is what makes
+/// the roll a roll rather than two words overlapping the trim row underneath.
+/// It is introduced deliberately and it is on the type alone — see the note at
+/// the clip itself, because the halo has to go on spilling.
+fn tally_into(
+    painter: &egui::Painter,
+    pal: &Palette,
+    rect: Rect,
+    tally: Tally,
+    pending: Option<Tally>,
+    phase: Phase,
+) {
     let radius = CornerRadius::same((size::TALLY_H * 0.5) as u8);
-    let (fill, ink) = match tally {
+    let ink = |tally| match tally {
         Tally::Live => (tint(pal.pink, 18), pal.pink),
         Tally::Priming => (tint(pal.sun, 20), pal.sun),
         Tally::Allocated => (pal.tint, pal.dim),
     };
+    let (fill, ink_now) = ink(tally);
     if tally == Tally::Live {
         painter.add(
             egui::epaint::Shadow {
@@ -3228,15 +3512,49 @@ fn tally_into(painter: &egui::Painter, pal: &Palette, rect: Rect, tally: Tally) 
         );
     }
     painter.rect_filled(rect, radius, fill);
-    let galley = painter.layout_job(tally_job(tally, ink));
-    painter.galley(
-        Pos2::new(
-            rect.min.x + size::TALLY_PAD_X,
-            rect.center().y - galley.size().y * 0.5,
-        ),
-        galley,
-        ink,
-    );
+
+    // **The clip is the capsule, and it is on the words alone.** The halo is
+    // drawn to spill — `.tally.live`'s `box-shadow: 0 0 10px` is 10px of it
+    // outside the box — so a clip taken before the shadow would trim the one
+    // shape in this chip that is meant to leave it. Everything after this
+    // line is type that may be halfway out of the box on purpose.
+    let painter = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
+
+    let galley = painter.layout_job(tally_job(tally, ink_now));
+    // **The pitch is the travel's, not the geometry's**, and it is at least
+    // the box: at the natural row pitch the two words would both be partly
+    // visible with nothing between them, which at 9px is mud. One box height
+    // apart leaves a blank band of exactly the slack the chip already has —
+    // 13.5 less a 10.0 ink row is 3.5 — for every displacement, because the
+    // band is the difference of two constants and not a function of how far
+    // the roll has got. It costs the chip nothing: the second word is
+    // outside the capsule at rest and clipped away.
+    let pitch = size::TALLY_H.max(galley.size().y);
+    let rolled = match pending {
+        Some(_) => roll_at(phase) * pitch,
+        None => 0.0,
+    };
+    let word_into = |painter: &egui::Painter, galley: std::sync::Arc<egui::Galley>, colour, dy| {
+        painter.galley(
+            Pos2::new(
+                rect.center().x - galley.size().x * 0.5,
+                rect.center().y - galley.size().y * 0.5 + dy,
+            ),
+            galley,
+            colour,
+        );
+    };
+    word_into(&painter, galley, ink_now, -rolled);
+    // **The destination in its own ink**, which is the second half of what is
+    // being said: the word names where the slot is going and the colour is the
+    // one that slot will be drawn in when it gets there. It comes up from
+    // below — one pitch under the settled word — so a still frame of a chip
+    // that is not rolling is the chip as it was.
+    if let Some(to) = pending {
+        let (_, ink_to) = ink(to);
+        let galley = painter.layout_job(tally_job(to, ink_to));
+        word_into(&painter, galley, ink_to, pitch - rolled);
+    }
 }
 
 /// A fader: the well, the fill and the knob.
@@ -3538,6 +3856,16 @@ pub struct View {
     /// this crate and is a console with no engine behind it: there is no
     /// picture to draw, and the four cells still have to go somewhere.
     pub canvas: (u32, u32),
+    /// **How long the panel has been animating**, written per frame by
+    /// whoever has the clock — see [`Phase`], which carries the whole
+    /// argument for why this is a value and not an `Instant`.
+    ///
+    /// **The same seam as [`View::transport`]**, and the one this crate is
+    /// least able to cross: a clock in `src/` is P-0002 broken in the file
+    /// whose own doc says so. [`Phase::ZERO`] until somebody says otherwise,
+    /// which is every test in this crate and is a console with no clock behind
+    /// it — a panel drawn at the origin of every animation on it.
+    pub phase: Phase,
     placed: Vec<Placed>,
 }
 
@@ -3552,9 +3880,44 @@ impl View {
             // grows it — the same reason `placed` is built with a capacity.
             mixer: Vec::with_capacity(DECKS),
             canvas: MOCK_CANVAS,
+            phase: Phase::ZERO,
             // Every region the console has, so the frame path never grows it.
             placed: Vec::with_capacity(REGIONS.len()),
         }
+    }
+
+    /// **What the panel's live regions declare**, as the soonest staleness any
+    /// of them will tolerate — and `None` when nothing on the panel is moving.
+    ///
+    /// # The view is what knows the rate, so the harness is told rather than
+    /// guessing
+    ///
+    /// [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)
+    /// has every live region declare a cost and a staleness; this is the
+    /// declaring end of it, and `crate::repaint::Change::Animating` is where
+    /// the number becomes a deadline. A rate written into the harness instead
+    /// would be a presentation's number kept where the presentation is not —
+    /// change the roll and the window goes on servicing the old one, with
+    /// nothing failing to compile and nothing to assert against.
+    ///
+    /// # Nothing pending means nothing moving, and that is the whole of
+    /// P-0072's first clause
+    ///
+    /// `None` is not an absence of information: it is the panel saying it is
+    /// still, and the window then sleeps. **A console with no parked slot
+    /// costs exactly what it cost before this existed**, which is a claim
+    /// `tests/parked.rs` makes rather than a hope.
+    ///
+    /// One region today. It is a `min` over one thing because a second is
+    /// coming — the beat is the panel's other candidate, and P-0077 wants it
+    /// moving continuously — and the shape of the answer is what decides
+    /// whether that one is free.
+    pub fn animating(&self) -> Option<Duration> {
+        self.mixer
+            .iter()
+            .filter(|strip| strip.pending().is_some())
+            .map(|_| ROLL_STALENESS)
+            .min()
     }
 
     /// Draw the whole console. The `ui` is the root one
@@ -3579,6 +3942,7 @@ impl View {
         let previews = self.previews;
         let values = self.transport;
         let strips = self.mixer.as_slice();
+        let phase = self.phase;
         let frame = egui::Frame::NONE.fill(pal.ground);
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
             for placed in &self.placed {
@@ -3625,7 +3989,7 @@ impl View {
                         card(ui, &pal, rect);
                         bay_head(ui, &pal, rect, MIXER_TITLE, &[], false);
                         if let Some(bay) = mixer(ui.ctx(), panel.layout(), strips) {
-                            mixer_into(ui, &pal, &bay);
+                            mixer_into(ui, &pal, &bay, phase);
                         }
                     }
                     // A pane draws nothing of its own. It has no card — it is

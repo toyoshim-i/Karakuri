@@ -18,6 +18,9 @@
 //! 4. **That the faders and the meter follow their values**, at zero, at one
 //!    and in between, and that the peak mark never leaves the well.
 //! 5. That the tally, the blend and the mask show the state they were given.
+//!    **What the tally does when the residency it was given and the one that
+//!    was asked for disagree is `parked.rs`**, not here: the strips in this
+//!    file are all settled, so nothing in it moves.
 //! 6. **Which of these are controls and which are readouts** — the two fader
 //!    knobs and nothing else, both directions stated rather than inferred from
 //!    the presence or absence of a hit test. What a drag on one *does* is
@@ -46,6 +49,10 @@ fn mock() -> Strip {
     Strip {
         name: "drift_night".to_owned(),
         tally: Tally::Live,
+        // Settled: the request and the effective residency agree, so nothing
+        // in these strips is pending and nothing rolls. What a strip whose
+        // two halves disagree draws is `parked.rs`.
+        requested: Tally::Live,
         gain: 0.72,
         opacity: 1.0,
         blend: BlendMode::Add,
@@ -65,6 +72,7 @@ fn mock_strips() -> Vec<Strip> {
         Strip {
             name: "lattice_veil".to_owned(),
             tally: Tally::Priming,
+            requested: Tally::Priming,
             gain: 0.44,
             opacity: 0.3,
             blend: BlendMode::Over,
@@ -77,6 +85,7 @@ fn mock_strips() -> Vec<Strip> {
         Strip {
             name: "glass_shell".to_owned(),
             tally: Tally::Allocated,
+            requested: Tally::Allocated,
             gain: 0.0,
             opacity: 0.0,
             blend: BlendMode::Add,
