@@ -65,7 +65,21 @@ struct Node {
     /// a number — see [`unbounded`].
     #[serde(with = "unbounded")]
     max: f32,
+    /// Folded by the operator: what [`Layout::collapse`] writes, what a
+    /// [`Spec`] can start a node with, and what a saved arrangement carries.
     collapsed: bool,
+    /// Set aside by whoever is drawing, because it has put that region
+    /// somewhere else or has nowhere to put it.
+    ///
+    /// **Never saved**, which is the whole of what `skip` says here and the
+    /// reason the wire format did not have to grow a field. It is a function
+    /// of the geometry the caller has in front of it, so the value that holds
+    /// after a load is derived on the next solve rather than remembered — and
+    /// a file that carried one could only disagree with the frame that read
+    /// it, which is a disagreement no loader could adjudicate because the file
+    /// does not know the size of the window it is opening into.
+    #[serde(skip)]
+    aside: bool,
     parent: Option<NodeId>,
 }
 
@@ -152,6 +166,13 @@ struct Solved {
 /// arrangement: the stored sizes, the collapsed flags and the viewport are all
 /// here, and the solved rectangles are not — they are derived, and a derived
 /// value on disk is a second answer waiting to disagree with the first.
+///
+/// **[`set_aside`](Layout::set_aside) is on the derived side of that line and
+/// is not written either**, which is why the wire format is the same one it
+/// was: a saved arrangement is what the operator arranged, and a node the
+/// caller has taken out of the layout is a fact about the geometry it was
+/// drawing at the time. A load leaves every node laid out, and the first
+/// caller to draw the loaded arrangement says otherwise where it still holds.
 ///
 /// **A file that deserialises without error is one that can be solved, hit
 /// tested and operated.** Loading it is where that is established, and it is
@@ -369,6 +390,14 @@ fn records(parent: Option<usize>) -> String {
 ///    or its name — so an out-of-range one indexes past the arena at whatever
 ///    later moment a status line is drawn.
 ///
+/// **What [`Layout::set_aside`] carries is not checked, because it is not
+/// here.** It is not on the wire at all, so a file cannot disagree with itself
+/// about it and there is no rule for this to enforce: every node of a loaded
+/// arrangement is laid out until the caller says otherwise, whatever the file
+/// says and whatever the arena it was assembled into had been carrying. A
+/// check would need a second copy of the bit to compare against, and putting
+/// one in the file to check it is precisely what not saving it avoids.
+///
 /// **[`Layout::new`] needs none of this**, and does not pay for it: [`build`]
 /// pushes each node once, hands it the parent it was built under, and fills a
 /// split's children with the ids it just created, so 1 to 5 hold of anything a
@@ -535,9 +564,10 @@ impl Layout {
         self.node(id.0).name()
     }
 
-    /// A split's children in order, or an empty slice for a view. Collapsed
-    /// children are still here — they have a zero-extent rectangle, not no
-    /// rectangle.
+    /// A split's children in order, or an empty slice for a view. A child
+    /// that is out of the layout — folded, or
+    /// [`set_aside`](Layout::set_aside) — is still here: it has a zero-extent
+    /// rectangle, not no rectangle.
     pub fn children(&self, id: NodeId) -> &[NodeId] {
         match &self.node(id.0).kind {
             Kind::Split { children, .. } => children,
@@ -545,7 +575,7 @@ impl Layout {
         }
     }
 
-    /// A split's **visible** children in order: the ones that are not folded,
+    /// A split's **visible** children in order: the ones that are laid out,
     /// which is what a divider index counts and what
     /// [`set_divider`](Layout::set_divider) and [`Hit::Divider`] mean by one.
     ///
@@ -559,17 +589,21 @@ impl Layout {
     /// view asking which children a split is showing does it per split per
     /// frame, and it must not allocate to do it.
     ///
-    /// Only the children's own flags are read. A visible child of a folded
-    /// split is still listed here — it is folded by its ancestor rather than
-    /// by itself, which is exactly the difference [`visible`](Layout::visible)
-    /// and [`is_collapsed`](Layout::is_collapsed) already carry — and
-    /// everything under a fold solves to zero extent, so what is derived from
-    /// it is empty rather than wrong.
+    /// Only the children's own flags are read, and **both of them are read**:
+    /// a child the operator folded and one whoever is drawing
+    /// [`set_aside`](Layout::set_aside) are equally not here, because a
+    /// divider is drawn between the children a split is showing and neither of
+    /// those is one. A visible child of a folded split is still listed here —
+    /// it is out by its ancestor rather than by itself, which is exactly the
+    /// difference [`visible`](Layout::visible) and
+    /// [`is_collapsed`](Layout::is_collapsed) already carry — and everything
+    /// under a fold solves to zero extent, so what is derived from it is empty
+    /// rather than wrong.
     pub fn visible_children(&self, id: NodeId) -> impl Iterator<Item = NodeId> + '_ {
         self.children(id)
             .iter()
             .copied()
-            .filter(|c| !self.is_collapsed(*c))
+            .filter(|c| !self.arrangement.out_of_layout(c.0))
     }
 
     /// The split `id` hangs from, or `None` for the root.
@@ -656,11 +690,21 @@ impl Layout {
         self.solved.rects[id.0]
     }
 
-    /// Whether `id` is drawn: false if it or any ancestor is collapsed.
+    /// Whether `id` is drawn: false if it or any ancestor is out of the
+    /// layout, either folded by the operator or
+    /// [`set_aside`](Layout::set_aside) by whoever is drawing.
+    ///
+    /// **This is the question every reader that lays something out asks**, and
+    /// it is the disjunction rather than either bit. A node is out of the
+    /// layout for two independent reasons that arrive from two different
+    /// places and are cleared by two different callers, and code that asks
+    /// only one of them is correct right up until the other one happens —
+    /// which is a defect that appears as an empty strip where a region used to
+    /// be, at a moment nobody was editing the arrangement.
     pub fn visible(&self, id: NodeId) -> bool {
         let mut cur = Some(id);
         while let Some(NodeId(i)) = cur {
-            if self.node(i).collapsed {
+            if self.arrangement.out_of_layout(i) {
                 return false;
             }
             cur = self.node(i).parent;
@@ -668,9 +712,28 @@ impl Layout {
         true
     }
 
-    /// Whether `id` itself is collapsed, regardless of its ancestors.
+    /// Whether `id` itself is collapsed — **folded by the operator**,
+    /// regardless of its ancestors.
+    ///
+    /// This is [`collapse`](Layout::collapse)'s bit and only it: the answer to
+    /// *did someone fold this*, which is what an operation that unfolds asks
+    /// and what is written down when the arrangement is saved. It is **not**
+    /// the answer to *is this laid out* — a node nobody folded may still have
+    /// been [`set_aside`](Layout::set_aside) — and
+    /// [`visible`](Layout::visible) is what answers that.
     pub fn is_collapsed(&self, id: NodeId) -> bool {
         self.node(id.0).collapsed
+    }
+
+    /// Whether `id` itself has been [`set_aside`](Layout::set_aside),
+    /// regardless of its ancestors and of whether it is also folded.
+    ///
+    /// The mirror of [`is_collapsed`](Layout::is_collapsed), and read for the
+    /// same narrow purpose: to report the bit, or to decide whether to clear
+    /// the one you set. A caller working out what to draw wants
+    /// [`visible`](Layout::visible).
+    pub fn is_set_aside(&self, id: NodeId) -> bool {
+        self.node(id.0).aside
     }
 
     /// What a [`solo`](Layout::solo) is holding, or `None` where none is in
@@ -723,6 +786,45 @@ impl Layout {
         }
     }
 
+    /// Take `id` out of the layout, or put it back, for a reason that is not
+    /// the operator's: whoever is drawing has put that region somewhere else,
+    /// or has nowhere to put it.
+    ///
+    /// The effect on the solve is exactly a fold's — zero extent, no divider
+    /// beside it, nothing under it [`visible`](Layout::visible), and no stored
+    /// size touched. **What differs is whose bit it is**, and that is why it
+    /// is a second bit rather than the same one:
+    ///
+    /// - A fold is the operator's. It is written by
+    ///   [`collapse`](Layout::collapse), it is saved with the arrangement, and
+    ///   a load brings it back.
+    /// - This is a function of the geometry, and of nothing the operator did.
+    ///   It is **never saved**, because the next caller to draw the
+    ///   arrangement re-derives it from the space it actually has.
+    ///
+    /// One bit for both makes the two indistinguishable, and both directions
+    /// of that cost something an operator sees: unfolding while a region is
+    /// set aside would put an empty strip back where the caller had already
+    /// drawn that region elsewhere, and a fold the operator never made would
+    /// be written into their saved arrangement.
+    ///
+    /// So the two are independent in both directions.
+    /// [`expand`](Layout::expand) does not lay out a node that is set aside,
+    /// this does not unfold one the operator folded, and a node that is both
+    /// needs both cleared. Each bit is cleared by whoever set it.
+    ///
+    /// **Writing the value a node already carries marks nothing dirty**, which
+    /// is what makes this safe to call every frame for every node: a caller
+    /// re-stating the arrangement it stated last frame costs a comparison per
+    /// node and no solve at all. A layout that went dirty on every frame would
+    /// cost a still panel the price of a moving one.
+    pub fn set_aside(&mut self, id: NodeId, aside: bool) {
+        if self.node(id.0).aside != aside {
+            self.node_mut(id.0).aside = aside;
+            self.dirty = true;
+        }
+    }
+
     /// Collapse everything that is neither `id`, nor on the path from the root
     /// to it, nor inside it — so `id` is left holding the whole viewport.
     ///
@@ -730,6 +832,16 @@ impl Layout {
     /// collapsed included, and [`unsolo`](Layout::unsolo) puts it back. A solo
     /// while already soloed re-aims without saving again: however many times it
     /// is called, one `unsolo` returns to the arrangement before the first.
+    ///
+    /// **It saves and writes the operator's fold, and only that.** A solo is
+    /// an operation on the arrangement, and what
+    /// [`set_aside`](Layout::set_aside) carries is not part of the
+    /// arrangement: saving it would mean restoring, at the unsolo, a bit the
+    /// caller has since rewritten from a geometry that changed *because* of
+    /// the solo. So a node that was set aside is still set aside through a
+    /// solo and after the unsolo — including the soloed node itself, which is
+    /// left holding the viewport and still not laid out until whoever set it
+    /// aside decides otherwise. This crate does not guess that for it.
     pub fn solo(&mut self, id: NodeId) {
         let a = &mut self.arrangement;
         if a.soloed.is_none() {
@@ -880,7 +992,7 @@ impl Layout {
         let mut others = 0.0;
         for k in 0..self.arrangement.child_count(split) {
             let child = self.arrangement.child(split, k);
-            if self.node(child).collapsed {
+            if self.arrangement.out_of_layout(child) {
                 continue;
             }
             match self.node(child).sizing {
@@ -1065,7 +1177,7 @@ impl Layout {
             let mut next = None;
             for k in 0..self.arrangement.child_count(cur) {
                 let c = self.arrangement.child(cur, k);
-                if !self.node(c).collapsed && self.solved.rects[c].contains(p) {
+                if !self.arrangement.out_of_layout(c) && self.solved.rects[c].contains(p) {
                     next = Some(c);
                     break;
                 }
@@ -1089,7 +1201,7 @@ impl Layout {
         let mut prev: Option<usize> = None;
         for k in 0..self.arrangement.child_count(split) {
             let c = self.arrangement.child(split, k);
-            if self.node(c).collapsed {
+            if self.arrangement.out_of_layout(c) {
                 continue;
             }
             if let Some(a) = prev {
@@ -1143,9 +1255,21 @@ impl Arrangement {
         }
     }
 
+    /// Whether node `i` is out of the layout on its own account: folded by
+    /// the operator, or set aside by whoever is drawing.
+    ///
+    /// **The one place the disjunction is written**, so that *should this be
+    /// laid out* is one question with one answer rather than a condition every
+    /// reader assembles for itself — which is how the two would come apart,
+    /// one reader at a time, the first time a third reason was added or a bit
+    /// was renamed. Nothing below reads either flag directly.
+    fn out_of_layout(&self, i: usize) -> bool {
+        self.nodes[i].collapsed || self.nodes[i].aside
+    }
+
     fn visible_count(&self, i: usize) -> usize {
         (0..self.child_count(i))
-            .filter(|k| !self.nodes[self.child(i, *k)].collapsed)
+            .filter(|k| !self.out_of_layout(self.child(i, *k)))
             .count()
     }
 
@@ -1154,7 +1278,7 @@ impl Arrangement {
     fn visible_child(&self, i: usize, nth: usize) -> Option<usize> {
         (0..self.child_count(i))
             .map(|k| self.child(i, k))
-            .filter(|c| !self.nodes[*c].collapsed)
+            .filter(|c| !self.out_of_layout(*c))
             .nth(nth)
     }
 
@@ -1245,7 +1369,7 @@ fn measure(a: &Arrangement, s: &mut Solved, i: usize, parent: Option<Axis>) -> f
             for k in 0..a.child_count(i) {
                 let c = a.child(i, k);
                 let child = measure(a, s, c, Some(axis));
-                if a.nodes[c].collapsed {
+                if a.out_of_layout(c) {
                     continue;
                 }
                 sum += child;
@@ -1307,7 +1431,7 @@ fn solve_split(a: &Arrangement, s: &mut Solved, split: usize) {
     for k in 0..n {
         let c = a.child(split, k);
         s.sizes[k] = 0.0;
-        s.frozen[k] = a.nodes[c].collapsed;
+        s.frozen[k] = a.out_of_layout(c);
     }
 
     // Step 4. One pass per child is enough, since every pass but the last
@@ -1425,7 +1549,7 @@ fn solve_split(a: &Arrangement, s: &mut Solved, split: usize) {
         let c = a.child(split, k);
         s.rects[c] = axis.slice(rect, cursor, s.sizes[k].max(0.0));
         cursor += s.sizes[k].max(0.0);
-        if !a.nodes[c].collapsed {
+        if !a.out_of_layout(c) {
             placed += 1;
             if placed < visible {
                 cursor += divider;
@@ -1477,6 +1601,9 @@ fn build(nodes: &mut Vec<Node>, spec: Spec, parent: Option<NodeId>) -> NodeId {
         min,
         max,
         collapsed,
+        // Nothing a `Spec` can say sets this: it is not the arrangement's, it
+        // is the caller's, and it is stated per frame rather than declared.
+        aside: false,
         parent,
     });
     let built: Vec<NodeId> = children
