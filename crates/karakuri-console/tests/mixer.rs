@@ -1039,21 +1039,22 @@ fn a_name_too_long_for_a_strip_is_elided_on_one_line() {
 // Two controls, and the rest are readouts
 // ---------------------------------------------------------------------------
 
-/// **The two knobs and the blend chip are the panel's, and everything else in
+/// **The two knobs and the two chips are the panel's, and everything else in
 /// the bay is `egui`'s.**
 ///
 /// The console's rule has three claims before `egui`'s: a drag in hand, a
 /// boundary within `GRAB`, and a control the console draws (ADR-0176). This
-/// bay now has three of the third kind — the trim's knob, the fader's knob and
-/// the blend chip (ADR-0187) — and nothing else in it: the tally, the mask
-/// mini, the meter and the number are readouts, and so is a fader's **track**
-/// off the knob, because a press there would be a jump nobody asked for.
+/// bay now has four of the third kind — the trim's knob, the fader's knob, the
+/// blend chip (ADR-0187) and the tally chip (ADR-0195) — and nothing else in
+/// it: the mask mini, the meter and the number are readouts, and so is a
+/// fader's **track** off the knob, because a press there would be a jump
+/// nobody asked for.
 ///
 /// **Stated rather than inferred in both directions.** A knob that stopped
 /// being claimed would be a control drawn where it cannot be grabbed, and a
 /// bay that claimed everything would take presses it does nothing with.
 #[test]
-fn the_three_controls_are_claimed_and_the_rest_of_the_bay_is_not() {
+fn the_four_controls_are_claimed_and_the_rest_of_the_bay_is_not() {
     let (mut panel, ctx) = console(PLAUSIBLE);
     let strips = mock_strips();
     let bay = bay(&panel, &ctx, &strips);
@@ -1061,11 +1062,12 @@ fn the_three_controls_are_claimed_and_the_rest_of_the_bay_is_not() {
     let trim = at.trim_at(mock().gain);
     let fader = at.fader_at(mock().opacity);
 
-    // The three that are.
+    // The four that are.
     for (probe, what) in [
         (trim.knob.center(), "the trim's knob"),
         (fader.knob.center(), "the fader's knob"),
         (at.blend.center(), "the blend chip"),
+        (at.tally.center(), "the tally chip"),
     ] {
         assert_eq!(
             claim(&mut panel, &ctx, &strips, point(probe)),
@@ -1082,7 +1084,6 @@ fn the_three_controls_are_claimed_and_the_rest_of_the_bay_is_not() {
     let probes = [
         (at.rect.center(), "the strip"),
         (at.name.center(), "the name"),
-        (at.tally.center(), "the tally"),
         (track_end, "the trim's track, past the knob"),
         (track_floor, "the fader's track, below the knob"),
         (at.meter.center(), "the meter"),

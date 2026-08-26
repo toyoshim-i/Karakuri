@@ -220,6 +220,7 @@ number; new records continue from the end.
 | [ADR-0192](0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md) | An operation asks for what a surface can say, and the record stays whole | 2026-08-26 | accepted |
 | [ADR-0193](0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md) | A region that is not laid out declares nothing, rather than being dropped later | 2026-08-26 | accepted |
 | [ADR-0194](0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md) | Where an operation becomes a record is a crate that depends on both, and the reading is a value handed in | 2026-08-27 | accepted |
+| [ADR-0195](0195-the-tally-chip-cycles-from-the-request-so-the-parked-case-needs-no-case.md) | The tally chip cycles from the request, so the parked case needs no case | 2026-08-27 | accepted |
 
 ## Retired numbers
 
