@@ -131,11 +131,12 @@ fn the_manual_and_the_vocabulary_name_the_same_operations() {
 
     // A floor, not a count: the point is that the scan cannot come back empty
     // because the page moved or its markup changed, which would make this test
-    // pass by finding nothing to check. It read 46 when this landed and reads
-    // 45 since two residency rows became one (ADR-0186); it is meant to move
+    // pass by finding nothing to check. It read 46 when this landed, 45 once
+    // two residency rows became one (ADR-0186), and 46 again since the look
+    // split into a tone map and an exposure (ADR-0192); it is meant to move
     // with the page, never to be lowered to fit a smaller scan.
     assert!(
-        rows.len() >= 45,
+        rows.len() >= 46,
         "only {} operations found in {PAGE} — is a row still `{ROW}` followed by an `<h3>`?",
         rows.len()
     );

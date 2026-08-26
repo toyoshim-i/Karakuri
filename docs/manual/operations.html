@@ -46,7 +46,7 @@
       <span><i class="gap"></i> nothing &mdash; this surface cannot reach it at all</span>
     </div>
     <p>
-      <strong>45 operations, and 48 of the 195 ways in exist.</strong> Five of them
+      <strong>46 operations, and 50 of the 200 ways in exist.</strong> Five of them
       arrived with the console's own shape &mdash; moving a boundary, folding a bay
       or a pane, bringing one back, and solo &mdash; and every one of their twenty
       routes is empty except the pointer. Every
@@ -287,14 +287,25 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Tone map and exposure</h3><span class="op-when ">immediate</span></div>
-        <p>The transfer from unbounded linear HDR to something displayable, and the level going into it.</p>
+        <div class="op-head"><h3>Tone map</h3><span class="op-when ">immediate</span></div>
+        <p>The transfer from unbounded linear HDR to something displayable &mdash; clamp, Reinhard, ACES or AgX. The key cycles the four; a map or a model would name the one it wants.</p>
         <div class="rts">
           <span class="rt plan">panel <b>transport</b></span>
-          <span class="rt has">key <b>t - = `</b></span>
+          <span class="rt has">key <b>t</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+          <span class="rt has">CLI <b>--tonemap</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Exposure</h3><span class="op-when ">immediate</span></div>
+        <p>The level going into that transfer. A key steps it in stops and returns it to 1.0; a MIDI control sets it outright. The record it lands in names the operator beside it, and whoever writes that record fills the operator in from the look that is running &mdash; a control turning exposure alone does not have to know one.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>transport</b></span>
+          <span class="rt has">key <b>- = `</b></span>
           <span class="rt has">MIDI <b>cc &rarr; exposure</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
-          <span class="rt has">CLI <b>--tonemap, --exposure</b></span>
+          <span class="rt has">CLI <b>--exposure</b></span>
         </div>
       </div>
     </div>

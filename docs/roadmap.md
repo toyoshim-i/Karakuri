@@ -863,12 +863,16 @@ fade, and starting or stopping a session recording.
 
 **The vocabulary exists now**
 ([ADR-0180](adr/0180-the-operation-vocabulary-is-a-crate-with-no-dependencies.md)):
-`crates/karakuri-operation/` is a leaf crate with **no dependencies at all**, holding all 45
+`crates/karakuri-operation/` is a leaf crate with **no dependencies at all**, holding all 46
 operations, and a test reads [every operation](manual/operations.html) and asserts that the page and
-the type enumerate the same ones both ways round. It held 46 when it landed: `SetOnAir` and
-`SetPriming` were two booleans for three states with both `false` destinations unnamed, and they
-are one `SetResidency { deck, residency }` now
-([ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md)). **Nothing is migrated** —
+the type enumerate the same ones both ways round. It held 46 when it landed and has been 45 in
+between: `SetOnAir` and `SetPriming` were two booleans for three states with both `false`
+destinations unnamed, and they are one `SetResidency { deck, residency }` now
+([ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md)); `SetLook` demanded a tone
+map beside every exposure, so `cc -> exposure` could not become an operation at all, and it is
+`SetTonemap` and `SetExposure` now
+([ADR-0192](adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)) —
+which is what unblocks the MIDI map's migration. **Nothing is migrated** —
 `karakuri-midi`'s `Action`, the console's `panel::Op` and the CLI's match arms are untouched and
 move onto it one at a time, each of which is now a change that can be reasoned about because the target has stopped
 moving.
@@ -892,7 +896,7 @@ event rather than an operation), and **the camera**.
 could be edited there until nodes had names, and nothing can be routed here until operations
 do. [Every operation](manual/operations.html) is where that enumeration is written down, and a
 surface missing from an operation's row is a line of this milestone's work. **It is written**:
-45 operations, and 48 of the 195 ways in exist. **Five of those arrived from
+46 operations, and 50 of the 200 ways in exist. **Five of those arrived from
 the console's own shape** — moving a boundary, folding a bay or a pane, bringing one back, and
 solo — and all twenty of their routes are empty except the pointer, which is the first rule broken
 by the surface the first rule is about.
