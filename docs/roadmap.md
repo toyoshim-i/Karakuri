@@ -243,8 +243,9 @@ component. Its tests still run without a device.
 **Every bay is empty except the Program bay's two regions**, on purpose — a bay that looks
 finished does not get replaced. The picture is a live engine frame, and under it the **row of four
 deck previews** is built: four cells, with **deck A auditioning in the first** and B, C and D
-reading `off` because the example's engine is a deck of one slot and there is no second deck to
-put in a cell. A cell is painted whether or not a deck is behind it, which is the one place this
+reading `off`. The example's engine is a deck of two slots and only deck A is making texels: deck B
+is **parked**, which is neither stepping nor drawn, and C and D have nothing behind them at all. A
+cell is painted whether or not a deck is behind it, which is the one place this
 crate draws something with nothing handed in, and
 [ADR-0170](adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md) is why:
 *off* is a state the operator chooses and *not built* is not a state at all, so drawing nothing
@@ -404,6 +405,13 @@ things.** `Deck::residency` is what the slot is doing and `Deck::requested_resid
 asked to do, and the chip draws the effective one and **rolls it part of the way toward the request
 and back, once a second, while the two disagree**
 ([ADR-0190](adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)).
+**And it can be seen by running the window, which it could not when that record landed**: the
+example had one slot and no governor, so a `Deck` there granted every residency it was asked for and
+the two halves of the pair could never disagree. It builds a second slot now, asks for it to be
+primed against a compute budget computed from what the probe measured, and `Deck::govern` parks it
+([ADR-0191](adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md))
+— the parked chip on that panel is the governor's verdict read back off the deck rather than a state
+the harness wrote.
 It is still a readout: nothing on it is clickable, and `SetResidency` — one operation naming one of
 three since [ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md) — is what a press
 will eventually send. The mask mini is the one with a decision left rather than work: it is state no

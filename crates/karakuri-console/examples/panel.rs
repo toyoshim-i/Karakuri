@@ -22,7 +22,8 @@
 //!    [ADR-0155](../../../docs/adr/0155-egui-draws-the-panel-and-the-price-is-wgpu-30.md)
 //!    made.
 //! 2. **That the engine's rendered texture reaches the panel**, which is the
-//!    other half of that bet: a `Deck` of one Set on the same `Device`, drawn
+//!    other half of that bet: a `Deck` on the same `Device`, with one Set of
+//!    its two on air, drawn
 //!    through `Present` into the picture's rectangle **and again into deck A's
 //!    preview cell**, sampled by `egui` in the same submission. One `Present`
 //!    and two targets of different sizes, because `Present::draw` letterboxes
@@ -55,17 +56,29 @@
 //!
 //! # The engine here is scaffolding and looks it
 //!
-//! One slot, built from two of the repository's own `examples/*.kir` the way
+//! Two slots, built from two of the repository's own `examples/*.kir` the way
 //! `karakuri-cli` builds them, and **no more than that**: no audio, no MIDI,
-//! no store, no argument parsing, no governor, no records. What
-//! `karakuri-cli` puts around a deck is a program; this is the shortest path
-//! from two files to texels, because the question being answered is whether
-//! the texels arrive.
+//! no store, no argument parsing, no records. What `karakuri-cli` puts around
+//! a deck is a program; this is the shortest path from two files to texels,
+//! because the question being answered is whether the texels arrive.
 //!
-//! **One slot is why three of the four preview cells are off.** There is no
-//! second deck here to audition, so deck A gets a live cell and B, C and D
-//! read `off` — which is a state an operator chooses rather than a thing not
-//! built yet, and is the truth about this example rather than a gap in it.
+//! **There is a governor, and it is the one thing here that is not the
+//! shortest path.** It runs once, at startup, and it is [`Engine::ask_to_prime`]:
+//! deck A is Live and deck B is asked to prime against a budget that has no
+//! room for it, so the governor parks it. That is the only way a slot on this
+//! panel can read one residency and have been asked for another —
+//! `Deck::set_residency` writes the request *and* grants it, and only a
+//! [`Deck::govern`] pass can hold a slot below what was asked for. Without it
+//! the two residencies agree on every slot and every frame, and the roll
+//! [ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)
+//! drew could not be seen by running this window.
+//!
+//! **Two slots, and three of the four preview cells are still off.** Deck A
+//! gets a live cell; deck B is parked, which is not stepping and not drawn, so
+//! there is nothing to audition in its cell; and C and D have nothing behind
+//! them at all. `off` is a state an operator chooses rather than a thing not
+//! built yet, and all three are the truth about this example rather than a gap
+//! in it.
 //!
 //! # This file owns none of the model, and none of the view
 //!
@@ -133,6 +146,7 @@ use karakuri_console::view::{
     self, mixer as mixer_bay, outputs, picture_rect, preview_rects, Kind, Picture, View, DECKS,
     DECK_LETTERS,
 };
+use karakuri_engine::governor::{Report, SLOWEST_PRIME_ONE_IN};
 use karakuri_engine::{
     compose, Blend, Committed, Deck, Gpu, HotSwap, Look, MaskKind, Present, Residency, Set, Sink,
     Skip, TonemapOp,
@@ -689,7 +703,9 @@ impl Costs {
             println!(
                 "  the panel half is taken on this window at {:.0}x{:.0} logical with every \
                  other bay empty, which is NOT the workspace's reference workload. The \
-                 engine half IS: one Set of {} elements at {}x{}, one step a frame, and \
+                 engine half IS: one Set of {} elements at {}x{}, one step a frame — the \
+                 deck's second slot is parked, and a parked slot neither steps nor draws, \
+                 so it is in none of these numbers — and \
                  that one canvas presented twice — into the picture's rectangle, \
                  and again into deck A's preview cell, both of which are the \
                  canvas's own shape \
@@ -1155,7 +1171,7 @@ impl Readout {
 
     // -- the legend -----------------------------------------------------
 
-    fn print_legend(&mut self, budget_ms: Option<f32>) {
+    fn print_legend(&mut self, budget_ms: Option<f32>, governed: &Report) {
         self.panel.solve();
         let layout = self.panel.layout();
         let viewport = layout.viewport();
@@ -1168,10 +1184,12 @@ impl Readout {
             viewport.w, viewport.h
         );
         println!(
-            "B, C and D read `off` because this example's engine is a deck of ONE slot — \
-             there is no second deck to audition, so three cells saying off are what this \
-             program is rather than something left unfinished. each cell that is on costs \
-             a present pass of its own."
+            "B, C and D read `off`, and for two different reasons. C and D have nothing \
+             behind them: this example's engine is a deck of TWO slots. B has a deck behind \
+             it and no audition — it is PARKED, which is not stepping and not drawn, so \
+             there is nothing for a cell to show. three cells saying off are what this \
+             program is rather than something left unfinished, and each cell that is on \
+             costs a present pass of its own."
         );
         println!(
             "the transport row reads the session's own oscillator — the tempo, the beat \
@@ -1217,6 +1235,41 @@ impl Readout {
             },
             self.view.mixer.len()
         );
+        // **The park, said in this file's voice and then in the engine's.**
+        // The sentence is the example's, because the words on this window are;
+        // the numbers under it are `Report`'s own `Display` and the same three
+        // fields `karakuri-cli`'s `report_governing` prints, so an operator
+        // reading a park here and a park there is reading one thing.
+        println!(
+            "deck B's strip is the one that MOVES: its chip reads ALLOC and rolls part of \
+             the way toward PRIM once a second and falls back, never landing, because what \
+             the slot was asked for and what it is doing disagree. this example asks for B \
+             to be primed at startup and the budget has no room, so `Deck::govern` holds it \
+             at allocated with the request intact — that is a PARK, which is `not now` and \
+             not `no`: nothing has to be asked twice, and the next pass over a deck with \
+             room admits it. nothing in this file writes a residency or draws a park; the \
+             strip carries both of the deck's own words for that slot and the view derives \
+             the rest. what the governor decided, in its own words:"
+        );
+        println!("  {governed}");
+        for decision in governed.parked() {
+            println!(
+                "  slot {} (deck {}) parked, request held: {:?} — {}, against {}, and one \
+                 step in {SLOWEST_PRIME_ONE_IN} is the slowest rate the governor will call \
+                 priming",
+                decision.slot,
+                deck_letter(decision.slot as u8),
+                decision.reason,
+                match decision.cost_ms {
+                    Some(ms) => format!("warming it was measured at {ms:.3} ms"),
+                    None => String::from("nothing has measured it"),
+                },
+                match governed.headroom_ms() {
+                    Some(ms) => format!("{ms:.3} ms of headroom"),
+                    None => String::from("a committed cost nobody can know"),
+                },
+            );
+        }
         println!(
             "the crossfade row under the strips is NOT drawn — an A/B track, wipe, iris, \
              next bar, 8 beats and go are a transition being armed and fired, and nothing \
@@ -1253,10 +1306,11 @@ impl Readout {
                     Kind::Pane => "pane, inside a bay".to_owned(),
                     Kind::Picture => "the picture, a sink".to_owned(),
                     // Four cells, and this file knows which of them are on:
-                    // one slot in the deck, so deck A and no other.
+                    // one slot of the deck's two is making texels, so deck A
+                    // and no other.
                     Kind::Previews => "four previews, A live".to_owned(),
-                    // A bay like the other six, and then one strip: this
-                    // deck has one slot, so there is one thing to mix.
+                    // A bay like the other six, and then a strip per slot:
+                    // a strip is a deck slot, and this deck has two.
                     Kind::Mixer => format!(
                         "bay, {} strip{}",
                         self.view.mixer.len(),
@@ -1406,7 +1460,24 @@ const CAPACITY: u32 = 262144;
 /// what they look like.
 const SEED_SALT: u32 = 7;
 
-/// **The two `.kir` files the one Set is built from**, named once so that what
+/// **Deck B's salt**, so that the slot the budget parks is a different
+/// simulation of the same procedure rather than a second copy of the same one.
+/// Nothing can see the difference while it is parked — a parked slot neither
+/// steps nor draws — and the frame it matters on is the one where somebody
+/// gives the deck room and both are on screen.
+const WARM_SEED_SALT: u32 = 8;
+
+/// **The two slots this deck has, and what each is for.**
+///
+/// Deck A is Live and is the whole of what the Program bay draws. Deck B is
+/// asked to prime and is parked by the budget — see
+/// [`Engine::ask_to_prime`] — which is the one state on this panel where a
+/// slot's two residencies disagree, and until this deck had a second slot it
+/// could not be reached by running the window at all.
+const ON_AIR: usize = 0;
+const ASKED_TO_PRIME: usize = 1;
+
+/// **The two `.kir` files each Set is built from**, named once so that what
 /// is loaded and what the mixer strip is called cannot drift apart. See
 /// [`MATERIAL`].
 const L1_KIR: &str = "examples/drift_shell.kir";
@@ -1737,17 +1808,24 @@ impl Sink for Presented {
     }
 }
 
-/// **The engine behind the Program bay: a deck of one Set, the present pass,
+/// **The engine behind the Program bay: a deck of two Sets, the present pass,
 /// and the two textures it lands in.**
 ///
-/// Scaffolding, and it looks it: one slot, no audio, no MIDI, no store, no
+/// Scaffolding, and it looks it: two slots, no audio, no MIDI, no store, no
 /// arguments. What `karakuri-cli` does around this is a program; what is here
 /// is the shortest path from two `.kir` files to texels, which is the whole of
 /// what the Program bay needs to be shown to be reachable.
 ///
-/// **One slot is also why three of the four preview cells are off.** A deck
-/// holds up to four and this one holds one, so deck A is the only audition
-/// there is to show: B, C and D have nothing behind them, and three cells
+/// **The second slot is not a picture, it is a residency.** [`ON_AIR`] is Live
+/// and is everything on screen; [`ASKED_TO_PRIME`] is asked to warm up and is
+/// parked by the budget in [`Engine::ask_to_prime`], which is what puts a
+/// pending request on this panel for the mixer's tally to draw. A parked slot
+/// neither steps nor draws, so it costs this window nothing per frame — the
+/// reading [`Costs::say`] prints is still one Set stepping.
+///
+/// **Three of the four preview cells are still off, and now for two reasons.**
+/// Deck A is the only audition there is to show: deck B is parked and so is
+/// making no texels, and C and D have nothing behind them at all. Three cells
 /// reading `off` are the truth about this example rather than a gap in it.
 struct Engine {
     deck: Deck,
@@ -1795,9 +1873,25 @@ impl Engine {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let l1 = checked(&root.join(L1_KIR));
         let l4 = checked(&root.join(L4_KIR));
-        let set = Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, SEED_SALT)
-            .expect("the example pair builds a Set");
-        let mut deck = Deck::new(&gpu.device, vec![HotSwap::fixed(set)], CANVAS.0, CANVAS.1);
+        // **The same pair twice, and the salt is the only difference.** The
+        // second slot exists to be asked for and refused, so what is in it
+        // matters less than that it is a Set the governor can measure and
+        // budget for like any other — building it from a second `.kir` pair
+        // would be this example loading material to make a point about a
+        // residency.
+        let built = |salt| {
+            Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, salt)
+                .expect("the example pair builds a Set")
+        };
+        let mut deck = Deck::new(
+            &gpu.device,
+            vec![
+                HotSwap::fixed(built(SEED_SALT)),
+                HotSwap::fixed(built(WARM_SEED_SALT)),
+            ],
+            CANVAS.0,
+            CANVAS.1,
+        );
         // **The meters are on, and that is a decision rather than a default.**
         // Five of the six things a mixer strip shows are settings the deck was
         // told; the meter is the only one that is a *measurement*, so with it
@@ -1806,7 +1900,10 @@ impl Engine {
         // this panel refuses, read from the other side. It costs a pipeline,
         // two buffers and a ring of staging buffers per slot, allocated here
         // and never on the render thread, which is the same terms `Deck::new`
-        // above is on; there is one slot, so it is one of each.
+        // above is on; there are two slots, so it is two of each. The parked
+        // one reports no level — `Deck::level` is `None` for a slot that is
+        // not being drawn — which is the meter saying what it measured rather
+        // than a strip with a gap in it.
         deck.enable_meters(&gpu.device);
         let present = Present::new(&gpu.device, PICTURE_FORMAT, CANVAS.0, CANVAS.1);
         let [picture, preview] = aims(layout, present.size());
@@ -1822,6 +1919,74 @@ impl Engine {
         }
     }
 
+    /// **Ask deck B to warm up, and let the budget answer.** The one governor
+    /// pass this example makes, taken at startup where the stall it costs is
+    /// free, and the whole of why a strip on this panel can read one residency
+    /// and have been asked for another.
+    ///
+    /// **It is `karakuri-cli`'s order rather than a second one**: measure every
+    /// slot before anything is decided about any of them, ask through
+    /// [`Deck::set_residency`], and call [`Deck::govern`], which is the only
+    /// thing in the engine that writes an *effective* residency. `set_residency`
+    /// writes the request **and grants it**, so a harness that never governs
+    /// has a deck whose two residencies agree on every slot and every frame —
+    /// which is what this file was, and is why the roll ADR-0190 drew was
+    /// tested and unreachable. The report comes back whole for the same reason
+    /// `karakuri-cli`'s `report_governing` prints one: nothing is printed in
+    /// the engine, so what an operator reads and what a test asserts are the
+    /// same values.
+    ///
+    /// # The budget is what moves, and it is moved from what was measured
+    ///
+    /// A deck starts on `governor::DEFAULT_COMPUTE_BUDGET_MS` — one 60 Hz
+    /// frame of measured per-Set cost — and what one of these Sets measures at
+    /// is this machine's business rather than anything this file can know. So
+    /// the budget is set **from the measurement that was just taken**: what
+    /// deck A is already committed to, plus half of the least the slowest
+    /// priming rate could ask for. [`SLOWEST_PRIME_ONE_IN`] is the slowest the
+    /// governor is willing to call priming and a slowed slot costs
+    /// `cost / n` amortised, so a headroom under `cost / SLOWEST_PRIME_ONE_IN`
+    /// cannot take this Set at **any** rate — the refusal is arithmetic on
+    /// every machine rather than on the ones where the numbers happen to come
+    /// out.
+    ///
+    /// **A number computed from the measurement rather than a constant**,
+    /// because a constant is the fixture the product cannot produce
+    /// ([P-0047](../../../docs/principles/0047-a-fixture-the-product-can-rewrite-is-not-a-fixture.md)
+    /// read from the other side): a budget typed in here parks the request on
+    /// this machine and admits it on a faster one, and a *measurement* typed in
+    /// — `HotSwap::set_measured_cost` is public and would take one — is this
+    /// file writing down the number the probe exists to take.
+    ///
+    /// **Nothing here writes a residency, a strip or a park.** The deck is
+    /// asked and the governor answers; [`mixer`] reads both residencies back
+    /// off the deck the way it reads the gain, and `view::Strip::pending`
+    /// derives the disagreement. `Deck::is_parked` is not called in this file
+    /// at all outside `mod gpu`.
+    ///
+    /// Where a measurement is missing the budget is left where it was, and the
+    /// governor parks the request anyway for a different and more serious
+    /// reason — an unmeasured Live slot means the committed cost is unknown,
+    /// which suspends priming wholesale. The caller prints the reason it got
+    /// rather than the one this comment expects.
+    fn ask_to_prime(&mut self, gpu: &Gpu) -> Report {
+        // **Before the first frame, and this is the only place it can be.**
+        // Measuring means stepping and ends in a rewind, so `measure_slots`
+        // skips any slot whose Set has already run — a deck measured late
+        // stays unbudgetable rather than losing what it has simulated.
+        self.deck.measure_slots(&gpu.device, &gpu.queue);
+        self.deck.set_residency(ASKED_TO_PRIME, Residency::Priming);
+        if let (Some(committed), Some(warming)) = (
+            self.deck.slot(ON_AIR).measured_cost(),
+            self.deck.slot(ASKED_TO_PRIME).measured_cost(),
+        ) {
+            self.deck.set_compute_budget_ms(
+                committed.ms + warming.ms / (2.0 * SLOWEST_PRIME_ONE_IN as f32),
+            );
+        }
+        self.deck.govern()
+    }
+
     /// **Aim every sink at its own rectangle, and hand back what the console
     /// should draw in each** — the picture, and one entry per preview cell.
     ///
@@ -1833,9 +1998,10 @@ impl Engine {
     /// every test still passed**. `mod gpu` calls this the way the frame does.
     ///
     /// **B, C and D stay `None`, and that is this example rather than a gap in
-    /// it**: the deck above has one slot, so deck A is the only audition there
-    /// is and there is no second one to put in a cell. An empty cell is what
-    /// off looks like, and the console draws it saying `off`.
+    /// it**: deck A is the only slot making texels, so it is the only audition
+    /// there is to put in a cell. Deck B is parked and therefore neither
+    /// stepping nor drawn, and C and D have nothing behind them. An empty cell
+    /// is what off looks like, and the console draws it saying `off`.
     fn aim(
         &mut self,
         gpu: &Gpu,
@@ -2566,12 +2732,16 @@ impl ApplicationHandler for App {
         // disagree about which rectangle a texture is sized from.
         let mut renderer = renderer;
         self.readout.panel.solve();
-        let engine = Engine::new(
+        let mut engine = Engine::new(
             &gpu,
             &mut renderer,
             self.readout.panel.layout(),
             self.scale as f32,
         );
+        // **Before the first frame and before the first strip is written**, so
+        // that the panel's first frame draws the deck as it actually is rather
+        // than a settled version of it that the second frame corrects.
+        let governed = engine.ask_to_prime(&gpu);
         let info = gpu.adapter.get_info();
         self.costs.taken_on = format!(
             "{:?} — {} ({:?})",
@@ -2584,7 +2754,7 @@ impl ApplicationHandler for App {
         // written again on every frame; this is the first one.
         let material = material();
         mixer(&engine.deck, &material, &mut self.readout.view.mixer);
-        self.readout.print_legend(budget);
+        self.readout.print_legend(budget, &governed);
 
         // The first frame is owed to the window appearing, not drawn on a
         // still panel.
@@ -2926,8 +3096,8 @@ impl ApplicationHandler for App {
                 self.readout.view.transport =
                     transport(&gfx.engine.deck, &self.costs, gfx.budget_ms, live);
                 // **And what the mixer strips read**, beside the frame they
-                // are about for the same reason. One strip, because this
-                // deck has one slot — see `mixer`.
+                // are about for the same reason. One strip per slot, so two —
+                // see `mixer`.
                 mixer(
                     &gfx.engine.deck,
                     &gfx.material,
@@ -3698,7 +3868,8 @@ mod gpu {
         // answered** rather than three lines this test writes by hand: an id
         // or a rectangle assembled here is a test agreeing with itself about
         // the one thing `Engine::aim` exists to decide. Deck A auditions and
-        // B, C and D are off, which is the whole of what one slot can show.
+        // B, C and D are off, which is the whole of what one *live* slot can
+        // show — the second slot is parked and makes no texels to audition.
         let mut view = View::new(ROOM);
         (view.picture, view.previews) = engine.aim(&gpu, &mut renderer, panel.layout(), 1.0);
         assert_eq!(
@@ -4480,6 +4651,107 @@ mod gpu {
         engine.deck.set_gain(0, 0.5);
         mixer(&engine.deck, &material, &mut after);
         assert_eq!(after[0].gain, 0.5);
+    }
+
+    /// **A parked deck is reachable by running this window, and both of its
+    /// residencies reach the strips.**
+    ///
+    /// [ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)
+    /// drew a chip that rolls while a request is outstanding and
+    /// `tests/parked.rs` asserts every pixel of it — from strips written by
+    /// hand. This is the other question, and it was the one answered `no`:
+    /// **whether the engine can put this panel in that state at all.** A
+    /// `Deck` grants every residency it is asked for until something governs,
+    /// so before [`Engine::ask_to_prime`] the two halves of the pair could not
+    /// disagree here however long anybody ran the example, and the animation
+    /// that is fully tested was unreachable in the one place a person would
+    /// look at it.
+    ///
+    /// Every step is the product's: two Sets are built, `Deck::measure_slots`
+    /// measures them with a real probe, the budget is set from what it
+    /// measured, [`Deck::govern`] refuses, and [`mixer`] reads the two
+    /// residencies back off the deck the way the frame does. **The reason is
+    /// asserted and not only the park**, because three of the four reasons
+    /// that satisfy `Deck::is_parked` mean this example forgot to do something
+    /// — `Unmeasured` and `CommittedUnknown` are a probe that never ran, and
+    /// `NoPrimingNeeded` is a closed-form Set that never needed warming. Only
+    /// `NoHeadroom` is the budget refusing.
+    #[test]
+    fn the_budget_parks_a_deck_and_the_strip_carries_both_residencies() {
+        use karakuri_engine::governor::Reason;
+
+        const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+        const W: u32 = 1440;
+        const H: u32 = 900;
+
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer =
+            egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
+        let mut panel = Panel::new(W as f32, H as f32);
+        panel.solve();
+        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
+        let material = material();
+
+        // **Before the pass**, which is the state this file was in for its
+        // whole life: a deck out of `Deck::new` is Live on every slot, the two
+        // residencies agree, and nothing is pending.
+        let mut before = Vec::new();
+        mixer(&engine.deck, &material, &mut before);
+        assert_eq!(before.len(), 2, "the deck is not two slots");
+        assert!(
+            before.iter().all(|strip| strip.pending().is_none()),
+            "a strip was pending before anything had asked for anything"
+        );
+
+        let governed = engine.ask_to_prime(&gpu);
+
+        // The engine's predicate first, since the console's is derived from
+        // the same two values.
+        assert!(
+            engine.deck.is_parked(ASKED_TO_PRIME),
+            "the request was granted rather than parked — {governed}"
+        );
+        let parked: Vec<_> = governed.parked().collect();
+        assert_eq!(parked.len(), 1, "{governed}");
+        assert_eq!(parked[0].slot, ASKED_TO_PRIME);
+        assert_eq!(
+            parked[0].reason,
+            Reason::NoHeadroom,
+            "deck B is parked for a reason that is not the budget — {governed}"
+        );
+        assert_eq!(
+            engine.deck.residency(ON_AIR),
+            Residency::Live,
+            "the governor took the picture off air"
+        );
+
+        // And both residencies cross the seam, which is what the roll is drawn
+        // from: the strip carries the pair and the view derives the rest.
+        let mut strips = Vec::new();
+        mixer(&engine.deck, &material, &mut strips);
+        assert_eq!(strips[ON_AIR].tally, view::Tally::Live);
+        assert_eq!(
+            strips[ON_AIR].pending(),
+            None,
+            "the live strip is pending something"
+        );
+        assert_eq!(strips[ASKED_TO_PRIME].tally, view::Tally::Allocated);
+        assert_eq!(strips[ASKED_TO_PRIME].requested, view::Tally::Priming);
+        assert_eq!(
+            strips[ASKED_TO_PRIME].pending(),
+            Some(view::Tally::Priming),
+            "the strip's two residencies agree, so the chip has nothing to roll toward"
+        );
+
+        // And the panel is live for as long as they disagree, which is the
+        // declaration `tests/parked.rs` asserts against strips of its own.
+        let mut view = View::new(Room::Day);
+        view.mixer = strips;
+        assert_eq!(
+            view.animating(),
+            Some(view::ROLL_STALENESS),
+            "a parked deck declared no staleness, so the roll never gets a frame"
+        );
     }
 
     /// **Which rectangle each sink's texture is sized from, and where the
