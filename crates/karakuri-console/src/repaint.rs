@@ -7,10 +7,14 @@
 //! measured 184 allocations and 226.2 kB on every frame nobody is touching;
 //! this is the decision that stops those frames being drawn at all.
 //!
-//! **The declarations, the scheduler and the two schedulability conditions are
-//! not here.** Nothing is live on the panel yet to declare a cost or a
-//! staleness, and a scheduler with no clients is an abstraction with no call
-//! sites. They arrive with the first bay that needs them.
+//! **One region declares a staleness now, and the scheduler still does not
+//! exist.** [`Change::Animating`] carries what
+//! [`crate::view::View::animating`] answers — the mixer's tally, while a
+//! residency request has not landed — and turns it into a deadline. That is
+//! P-0072's *declares its price* with one client; the two schedulability
+//! conditions and the arithmetic over several regions are still absent,
+//! because a scheduler that arbitrates between one region and nothing is an
+//! abstraction with one call site. They arrive with the second one.
 //!
 //! # Why this is a module and not a line beside each handler
 //!
@@ -216,6 +220,40 @@ pub enum Change<'a> {
     /// cannot know that it did. It is a frame on a gesture an operator is
     /// making, which P-0072 does not budget.
     Emitted(Option<&'a Operation>),
+    /// **Something on the panel is moving**, with the soonest staleness any
+    /// live region on it declares — and `None` for a panel where nothing is.
+    ///
+    /// [`crate::view::View::animating`] is the answer, and it is the whole
+    /// content of this arm: **the view is what knows the rate**, so the
+    /// deadline is a number it hands over rather than one this module keeps.
+    /// A rate written here would be a presentation's constant living where the
+    /// presentation is not, and a roll redrawn at the wrong rate is a silent
+    /// failure of exactly the kind this module's own opening describes.
+    ///
+    /// # Why it is a deadline and not a frame
+    ///
+    /// [`Repaint::After`] names *draw then, and not before*. A once-a-second
+    /// animation asking for a frame instead is an animation that becomes a
+    /// spin at whatever rate the loop can manage — which is what
+    /// [`Repaint::asked`] already refuses to do to `egui`'s own delays, for
+    /// the same reason.
+    ///
+    /// # Why it is raised every frame rather than on a gesture
+    ///
+    /// It is [`Change::Rearranged`]'s shape: a bit re-derived from the model
+    /// every frame, and `None` has to be [`Repaint::Never`] or the still panel
+    /// is gone. Nothing an operator does raises it — a slot is parked because
+    /// the *governor* has not found room, which happens between frames and
+    /// reaches this console through no event at all. So the frame that draws
+    /// the panel is the only place that can notice, and the arm that answers
+    /// for a panel with nothing pending is the one carrying P-0072's first
+    /// clause.
+    ///
+    /// **A parked slot ends the still panel for as long as it is parked**, and
+    /// that is the honest cost rather than an accident: `egui` is immediate
+    /// mode, so what repaints is the panel and not the chip
+    /// ([ADR-0188](../../../docs/adr/0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md)).
+    Animating(Option<Duration>),
     /// The window resized, or the display's scale factor changed: the
     /// arrangement is re-solved into a different viewport, so every rectangle
     /// on the panel is a new one.
@@ -322,6 +360,15 @@ impl Change<'_> {
             // which is a pointer that moved over a value that did not.
             Change::Emitted(operation) => match operation {
                 Some(_) => Repaint::Now,
+                None => Repaint::Never,
+            },
+
+            // See the variant. The rate is the view's and arrives with the
+            // change; `None` is a panel with nothing moving on it, and it is
+            // `Never` rather than a long deadline because a panel that is
+            // still is not a panel that is slow.
+            Change::Animating(staleness) => match staleness {
+                Some(staleness) => Repaint::After(*staleness),
                 None => Repaint::Never,
             },
 

@@ -47,6 +47,10 @@ fn strips() -> Vec<Strip> {
         .map(|(slot, name)| Strip {
             name: name.to_owned(),
             tally: Tally::Live,
+            // Settled: the request and the effective residency agree, so
+            // nothing in these strips is pending and nothing rolls. What a
+            // strip whose two halves disagree draws is `parked.rs`.
+            requested: Tally::Live,
             gain: 0.2 + 0.15 * slot as f32,
             opacity: 0.8 - 0.15 * slot as f32,
             blend: BlendMode::ALL[slot % BlendMode::ALL.len()],

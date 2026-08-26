@@ -399,17 +399,23 @@ pointer is shown a cycle, and a map is offered the three values rather than a *n
 became a `BlendMode` to carry it, so a fourth engine mode with no operation variant fails at the
 harness rather than drawing a word no control can reach.
 
-**The rest of the strip is still a readout**, and each has a decision left rather than work: the
-mask mini is state no operation can set, and the tally draws the *effective* residency while
-`SetResidency` sets the *requested* one — one operation naming one of three since
-[ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md), so what is left there is what
-the chip does when the two disagree rather than what to send.
+**The rest of the strip is still a readout, and the tally now says when it is a readout of two
+things.** `Deck::residency` is what the slot is doing and `Deck::requested_residency` is what it was
+asked to do, and the chip draws the effective one and **rolls it part of the way toward the request
+and back, once a second, while the two disagree**
+([ADR-0190](adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)).
+It is still a readout: nothing on it is clickable, and `SetResidency` — one operation naming one of
+three since [ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md) — is what a press
+will eventually send. The mask mini is the one with a decision left rather than work: it is state no
+operation can set.
 
-**Three live regions now, with three characters**, which is what the rest of P-0072 has been
-waiting for. The picture is expensive and moves every frame; the beat grid is cheap, high priority,
-and moves two to four times a second; the mixer is expensive, repetitive and **hardly moves at
-all** — six readouts that change when a hand changes them. **Nothing declares a cost or a staleness
-yet and there is no scheduler**, and the three of them are now what one would be scheduling.
+**Four live regions now, and one of them declares a price.** The picture is expensive and moves
+every frame; the beat grid is cheap, high priority, and moves two to four times a second; the mixer
+is expensive, repetitive and **hardly moves at all** — six readouts that change when a hand changes
+them; and the tally's roll is expensive, runs at 30 Hz and runs **only while a request is
+outstanding**, which can be the length of a set. The roll is the first region to declare a staleness
+(`View::animating`, and `repaint::Change::Animating` turns it into a deadline). **There is still no
+scheduler**, and the four of them are what one would be scheduling.
 
 **Owed, and found by building this: `Layout::soloed()` can lie.** The solve never reads it and
 `check_structure` only checks that it addresses a node, so a solo's exclusivity lives entirely in
@@ -426,18 +432,27 @@ because the console is an example rather than the program.
 
 **The order that makes each next thing cheaper than it would be alone:**
 
-1. **The rest of the mixer strip** — the tally and the mask mini. The blend mini is done
-   ([ADR-0187](adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)) and
-   proved these are the same seam the faders opened; neither of the other two needs new machinery,
-   and each needs a **decision** first, below.
+1. **The rest of the mixer strip** — the tally becoming a control, and the mask mini. The blend mini
+   is done ([ADR-0187](adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md))
+   and proved these are the same seam the faders opened. **The tally's presentation landed first, on
+   purpose**: it says a request is pending
+   ([ADR-0190](adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md))
+   and answers no pointer, because a control that could not yet say it is pending would look dead
+   for exactly as long as one commit. Making it a control needs no new machinery — a claim rule and
+   an `Operation`, which is the blend chip's shape — and the decision it is waiting on is below. The
+   mask mini needs one too.
 2. **The rest of P-0072, and it is nearer than this item used to say.** Three live regions with
    three characters now exist — the picture expensive and every frame, the beat grid cheap and
    twice a second, the mixer expensive and hardly moving — which is what a scheduler was waiting
    for. Nothing is over budget yet (10.9% of a second, with headroom), and the trigger this item
-   named — *when the mixer's controls make it move* — is now a decision rather than a guess:
+   named — *when the mixer's controls make it move* — **has happened**:
    [ADR-0188](adr/0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md)
-   puts a **fourth** rate on the panel, a pending transition that animates for as long as a request
-   is outstanding and can therefore run for the length of a set. `egui` is immediate mode, so what
+   decided there would be a **fourth** rate on the panel and
+   [ADR-0190](adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)
+   drew it — a pending transition that animates for as long as a request is outstanding and can
+   therefore run for the length of a set, at about 30 panel frames a second. It is also the first
+   region to **declare** a staleness, which is the half of P-0072 that can exist without a
+   scheduler; what is still missing is anything that arbitrates between two of them. `egui` is immediate mode, so what
    repaints is the panel rather than the chip. The argument is not the bytes — it is that a beat
    indicator the maintainer wants analogue and a pending animation at another rate **cannot both be
    special cases**, and each rate written by hand is the first half of the scheduler written badly.
@@ -487,19 +502,24 @@ than work, and every one of them was found by building the thing next to it.
   ([ADR-0188](adr/0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md),
   [P-0075](principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)):
   where it is, where it is going, and that it has not arrived — derived every frame from the two
-  values the deck already holds, never stored. **What is still open is which presentation**, and
-  ADR-0188 leaves two on the table with their costs — a blinking second indicator where there is
-  room for two, and a chip that rolls half a turn toward the requested value and falls back where
-  there is room for one. **The two are closer than that record left them**: P-0075's still-frame
-  clause was deleted the same day
-  ([ADR-0189](adr/0189-motion-may-carry-the-meaning-and-a-stopped-animation-is-a-fault-to-report.md)),
-  a presentation may carry its meaning in motion, and the roll's advantage on it is gone — so what
-  decides is space, legibility, the design language the mock has not got yet, and the one clause
-  that still separates them, which is that the roll names the destination on the surface rather
-  than on a hover the console does not draw. With them: the animation phase's units and its carrier
-  on `View`, which residency a press on the chip asks for, and — since a pending control may refuse
-  nothing ([P-0076](principles/0076-a-surface-owns-the-affordance-never-the-authority.md)) —
-  nothing about locking the panel.
+  values the deck already holds, never stored. **Which presentation it uses is now decided too, and
+  it is the roll**
+  ([ADR-0190](adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)):
+  the word rolls part of the way toward the residency that was asked for and falls back, about once
+  a second, and never lands. It was decided on space and the decision is arithmetic rather than
+  taste — `PRIM` beside `ALLOC` is 85.125 wide against a 53 row, and 57.125 with every pixel of
+  padding taken out of both, so the pair of lamps P-0075 opens with is **impossible on this row
+  rather than rejected**. A second tally row would cost a flat 18.5 through `STRIP_H`, the mixer
+  bay's 316, the right pane's 530 and the window's minimum 632, which are one sum. That record also
+  settles the phase — one value, panel-wide, a `Duration` on `View` written per frame by the harness
+  — and what a parked deck costs: about 30 panel frames a second for as long as it is parked, and
+  `Repaint::Never` the moment nothing is pending.
+
+  **What is still open is the chip becoming a control**: which residency a press asks for, and the
+  claim rule and `Operation` that go with it — the blend chip's shape, one control along. Nothing on
+  the tally answers a pointer today. Since a pending control may refuse nothing
+  ([P-0076](principles/0076-a-surface-owns-the-affordance-never-the-authority.md)), there is nothing
+  to decide about locking the panel.
 - **`SetMask` does not exist**, so the mask mini is a readout of state no operation can set. The row
   has to be settled on [the operations page](manual/operations.html) before it can be a control.
 - **What `expand` under a solo should do.** `Layout::soloed()` can lie: the solve never reads it and

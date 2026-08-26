@@ -362,6 +362,43 @@
   .tally.alloc { background: var(--c-tint); color: var(--c-dim); }
   .tally.off { color: var(--c-faint); }
 
+  /* ── The one animation in this document, and it is the first ──────────────
+     A residency request that has been made and not granted. The chip shows
+     the residency the slot is actually *in* and rolls part of the way toward
+     the one it was asked for, once a second, and falls back — it never lands,
+     because landing is what arrival looks like. What has to be said is
+     P-0075; that it is a roll rather than two indicators is ADR-0190, and the
+     reason is arithmetic: `prim` beside `alloc` is 85.125 wide against a
+     strip 53 wide inside its padding, and 57.125 with every pixel of padding
+     taken out of both. There is no version of two lamps on this row.
+
+     Nothing else in this stylesheet moves, which was deliberate rather than
+     an oversight (ADR-0188) — no `@keyframes`, no `animation`, no
+     `transition` in 570 lines. This is the design language gaining one. */
+  .tally.parked { display: block; height: 13.5px; overflow: hidden; }
+  /* Both words in flow and block-level, one line-box each, so the capsule is
+     as wide as the wider of them and the second sits exactly one box below
+     the first. That leaves a blank band of the chip's own slack — 13.5 less a
+     9px row — between them at every displacement, because it is the
+     difference of two constants rather than a function of how far the roll
+     has got. A tighter pitch is two words with nothing between them, which at
+     9px is mud. */
+  .tally.parked i { display: block; font-style: normal; line-height: 13.5px; text-align: center; animation: tally-roll 1s infinite; }
+  /* The destination in the ink of the residency it names, so the word says
+     where the slot is going and the colour says what it will look like there.
+     Same three inks as the three chips above. */
+  .tally .to-live { color: var(--c-pink); }
+  .tally .to-prim { color: var(--c-sun); }
+  .tally .to-alloc { color: var(--c-dim); }
+  /* 0.4 of the pitch out over 200ms, back by 400ms, still for the remaining
+     600ms — and the rest is not slack: it is what makes this read as an
+     attempt that keeps being made rather than as a chip that wobbles. */
+  @keyframes tally-roll {
+    0%        { transform: translateY(0); }
+    20%       { transform: translateY(-5.4px); }
+    40%, 100% { transform: translateY(0); }
+  }
+
   .trim { display: flex; align-items: center; gap: 5px; width: 100%; padding: 0 3px; }
   .trim .lbl { font-size: 9px; color: var(--c-faint); }
   .trim .fader { flex: 1; }
