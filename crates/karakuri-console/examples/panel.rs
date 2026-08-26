@@ -134,11 +134,11 @@ use karakuri_console::view::{
     DECK_LETTERS,
 };
 use karakuri_engine::{
-    compose, Committed, Deck, Gpu, HotSwap, Look, MaskKind, Present, Residency, Set, Sink, Skip,
-    TonemapOp,
+    compose, Blend, Committed, Deck, Gpu, HotSwap, Look, MaskKind, Present, Residency, Set, Sink,
+    Skip, TonemapOp,
 };
 use karakuri_layout::{Axis, Hit, NodeId, Point};
-use karakuri_operation::Operation;
+use karakuri_operation::{BlendMode, Operation};
 use karakuri_store::record::Record;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, StartCause, WindowEvent};
@@ -1034,25 +1034,30 @@ impl Readout {
                     did = Acted::Emitted(operation);
                 }
             }
-            // **A press the panel claimed is on one of the two controls or on
-            // the panel itself**, and the controls are asked first for the
+            // **A press the panel claimed is on one of the three controls or
+            // on the panel itself**, and the controls are asked first for the
             // reason `claim` asked them last: rule 2 has already had its
             // refusal, so a press that got here and is on a control is that
-            // control's. Both are the same calls `claim` made — asked again,
-            // not copied.
+            // control's. All three are the same calls `claim` made — asked
+            // again, not copied.
+            //
+            // **The bay is derived once and asked twice**, exactly as `claim`
+            // does it: a knob and a chip are two questions about one laid-out
+            // strip, and two derivations would be two answers.
             (Pointer::Down, Claim::Panel) => {
                 self.panel.solve();
                 let sink = outputs(ctx, self.panel.layout()).filter(|row| row.hit(at));
-                let knob = mixer_bay(ctx, self.panel.layout(), &self.view.mixer)
-                    .and_then(|bay| bay.grab(at));
-                match (sink, knob) {
-                    (Some(row), _) => did = Acted::Operated(self.sink(row.op())),
+                let bay = mixer_bay(ctx, self.panel.layout(), &self.view.mixer);
+                let knob = bay.as_ref().and_then(|bay| bay.grab(at));
+                let chip = bay.as_ref().and_then(|bay| bay.blend(at));
+                match (sink, knob, chip) {
+                    (Some(row), _, _) => did = Acted::Operated(self.sink(row.op())),
                     // **The value does not move on the press.** The grab keeps
                     // the offset it took hold at, so the first move continues
                     // from where the knob already was — and a press that was
                     // on the *track* never gets here, because `Mixer::grab`
                     // answers `None` for it rather than jumping the mix.
-                    (None, Some(grab)) => {
+                    (None, Some(grab), _) => {
                         println!(
                             "press ({:.0}, {:.0}): deck {} — the {} is in hand",
                             at.x,
@@ -1062,7 +1067,16 @@ impl Readout {
                         );
                         self.panel.grab(at, grab);
                     }
-                    (None, None) => self.press(at),
+                    // **The blend chip acts on the press itself**, where a
+                    // fader acts on the moves after it: there is no gesture
+                    // here, only one operation naming where the cycle
+                    // arrived. It goes down the same path a fader's does —
+                    // `Acted::Emitted`, then a record, then the deck — because
+                    // P-0028 is that every control ends in the same record,
+                    // and a chip that reached the deck another way would be a
+                    // second route for the same change.
+                    (None, None, Some(operation)) => did = Acted::Emitted(Some(operation)),
+                    (None, None, None) => self.press(at),
                 }
             }
             (Pointer::Up, Claim::Panel) => self.released(),
@@ -1978,10 +1992,12 @@ fn transport(
 /// - **The trim and the fader** are `gain` and `opacity`, which are two
 ///   controls and not one — *"opacity at zero silences under every blend mode,
 ///   gain at zero does not silence `over`"* — and the bay draws them as two.
-/// - **The blend** is `Blend::name`, asked rather than transcribed for the
-///   reason the beat grid asks for `BEATS_PER_BAR`: the mock's own tooltip
-///   lists four blends and `Blend::ALL` is three, so a word written here would
-///   be this file's opinion about the engine's list.
+/// - **The blend** is [`blend_mode`]: the engine's `Blend` turned into the
+///   vocabulary's `BlendMode`, because the chip is a control now and a control
+///   has to know which of the three it is on to say what the next one is
+///   (ADR-0187). **This is where a fourth engine mode with no operation
+///   variant stops the build**, which is the failure worth having — the
+///   alternative is a word drawn on a chip no map can ask for.
 /// - **The mask** is `Deck::mask(slot).kind()`, and its angle, position and
 ///   softness are left behind: the strip's `.mini` says *which shape*, and
 ///   three numbers about that shape are an inspector row.
@@ -2009,7 +2025,7 @@ fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
             tally: view::Tally::Allocated,
             gain: 0.0,
             opacity: 0.0,
-            blend: "",
+            blend: BlendMode::Add,
             mask: view::Mask::None,
             level: None,
         });
@@ -2026,7 +2042,7 @@ fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
         };
         strip.gain = deck.gain(slot);
         strip.opacity = deck.opacity(slot);
-        strip.blend = deck.blend(slot).name();
+        strip.blend = blend_mode(deck.blend(slot));
         strip.mask = match deck.mask(slot).kind() {
             MaskKind::None => view::Mask::None,
             MaskKind::Linear => view::Mask::Linear,
@@ -2036,6 +2052,35 @@ fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
             mean: level.mean,
             peak: level.peak,
         });
+    }
+}
+
+/// **The engine's blend mode, as the vocabulary's** — and the one place the
+/// two lists are made to agree.
+///
+/// `karakuri-operation` owns its own copy of every list a destination is drawn
+/// from, which is the cost P-0074 says the vocabulary pays: *"The two rules —
+/// be engine-neutral, and have no toggles — are not jointly satisfiable unless
+/// the vocabulary owns the lists."* A copy needs somewhere the two meet, and
+/// this is that place for this list, on the harness side of the seam — the
+/// same side [`mixer`] reads a `Deck` from (ADR-0156).
+///
+/// **A match, so the day a fourth mode lands in `karakuri_engine::deck::Blend`
+/// this stops compiling.** That is the whole reason `view::Strip::blend` is a
+/// `BlendMode` and not the engine's word: a `&str` handed through would draw
+/// the new mode's name on a chip, and the chip would cycle three ways past a
+/// state no operation can name and no MIDI map can reach, with nothing saying
+/// so. Failing here is the loud failure P-0027 asks for.
+///
+/// It is this example's for the reason [`record`] is: the console cannot
+/// depend on the engine, and where the conversion finally lives is part of the
+/// same undecided question — one `From` impl per list, in the one place every
+/// control already ends (P-0028).
+fn blend_mode(blend: Blend) -> BlendMode {
+    match blend {
+        Blend::Add => BlendMode::Add,
+        Blend::Over => BlendMode::Over,
+        Blend::Max => BlendMode::Max,
     }
 }
 
@@ -2052,10 +2097,10 @@ fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
 /// decide it.** The conversion needs `karakuri-operation` and
 /// `karakuri-store`, neither of which depends on the other, and choosing which
 /// crate owns it is the centre of the record design rather than a side effect
-/// of a fader. The existing half is `karakuri-cli`'s `mix::gain_record` and
-/// `mix::opacity_record` — two functions that already say exactly what the two
-/// lines below say — and they are **unreachable from here**, because
-/// `karakuri-cli` has no library target.
+/// of a fader. The existing half is `karakuri-cli`'s `mix::gain_record`,
+/// `mix::opacity_record` and `mix::blend_record` — three functions that
+/// already say exactly what the three arms below say — and they are
+/// **unreachable from here**, because `karakuri-cli` has no library target.
 ///
 /// So this example writes them again, and says so rather than leaving a reader
 /// to find out: the day the conversion lands, this function is **deleted**
@@ -2063,7 +2108,7 @@ fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
 /// dev-dependencies with it.
 ///
 /// `None` for every other operation in the vocabulary, which is not a refusal:
-/// this example has two controls and 46 operations exist.
+/// this example has three controls and 46 operations exist.
 fn record(operation: &Operation) -> Option<Record> {
     match *operation {
         // `mix::gain_record`, and the cast with it: the vocabulary counts
@@ -2077,6 +2122,14 @@ fn record(operation: &Operation) -> Option<Record> {
         Operation::SetOpacity { deck, opacity } => Some(Record::Opacity {
             slot: deck,
             value: opacity,
+        }),
+        // `mix::blend_record`. `Record::Blend` carries the mode as a `String`
+        // on purpose — *"what a mode is allowed to be is the engine's to
+        // say"* — so this is where a named destination becomes a wire name,
+        // and `BlendMode::name` is the same three words `Blend::name` writes.
+        Operation::SetBlendMode { deck, blend } => Some(Record::Blend {
+            slot: deck,
+            mode: blend.name().to_owned(),
         }),
         _ => None,
     }
@@ -2123,6 +2176,25 @@ fn apply(record: &Record, deck: &mut Deck) -> Option<String> {
                  -> Record::Opacity -> deck.opacity({slot}) = {:.3}",
                 deck_letter(slot as u8),
                 deck.opacity(slot)
+            ))
+        }
+        // **The mode comes back off the wire name, and an unknown one is
+        // refused rather than defaulted.** `Record::Blend` carries a `String`
+        // because what a mode is allowed to be is the engine's to say, so this
+        // is the engine saying it — `mix::change` refuses the same way, with
+        // the sentence `karakuri-cli`'s `no_such_blend` writes. Nothing in
+        // this file can produce a name the engine has not got, since the chip
+        // only ever emits one of `BlendMode::ALL`, so this is the guard rather
+        // than the message.
+        Record::Blend { slot, ref mode } => {
+            let slot = held(slot)?;
+            let blend = Blend::from_name(mode)?;
+            deck.set_blend(slot, blend);
+            Some(format!(
+                "  blend: deck {} -> SetBlendMode {{ deck: {slot}, blend: {mode} }} \
+                 -> Record::Blend -> deck.blend({slot}) = {}",
+                deck_letter(slot as u8),
+                deck.blend(slot).name()
             ))
         }
         _ => None,
@@ -3340,8 +3412,8 @@ mod tests {
         );
     }
 
-    /// **A fader's operation becomes the record every other surface's control
-    /// ends in**, and this is the half of that which needs no device.
+    /// **A control's operation becomes the record every other surface's
+    /// control ends in**, and this is the half of that which needs no device.
     ///
     /// [`record`] is a shortcut and says so at length; what it must not be is
     /// a *different* answer from the one `karakuri-cli` already gives. So this
@@ -3353,7 +3425,7 @@ mod tests {
     /// And the other direction: an operation this example has no control for
     /// produces no record at all, rather than a plausible one.
     #[test]
-    fn a_faders_operation_becomes_the_record_the_cli_would_have_written() {
+    fn a_controls_operation_becomes_the_record_the_cli_would_have_written() {
         assert_eq!(
             record(&Operation::SetGain {
                 deck: 2,
@@ -3376,11 +3448,50 @@ mod tests {
                 value: 0.25
             })
         );
-        // The vocabulary is 46 operations and this example has two controls.
-        // A record invented for the other 44 would be this file deciding what
+        // **Every mode of the cycle, because a chip that emits three
+        // operations has three records to write** — and the mode is a wire
+        // name, so a mode that reached `Record::Blend` misspelled would be
+        // refused by the engine on the way back rather than here.
+        for (deck, blend) in BlendMode::ALL.into_iter().enumerate() {
+            let deck = deck as u8;
+            assert_eq!(
+                record(&Operation::SetBlendMode { deck, blend }),
+                // `mix::blend_record(deck, blend)`.
+                Some(Record::Blend {
+                    slot: deck,
+                    mode: blend.name().to_owned(),
+                }),
+                "`{}` did not become the record `mix::blend_record` writes",
+                blend.name()
+            );
+            // And the engine reads its own name back, which is what says the
+            // two lists are the same three words rather than two spellings of
+            // them.
+            assert_eq!(
+                Blend::from_name(blend.name()),
+                Some(blend_mode_back(blend)),
+                "the engine does not know the vocabulary's `{}`",
+                blend.name()
+            );
+        }
+
+        // The vocabulary is 46 operations and this example has three controls.
+        // A record invented for the other 43 would be this file deciding what
         // they mean.
         assert_eq!(record(&Operation::Solo { region: None }), None);
         assert_eq!(record(&Operation::SelectDeck { deck: 1 }), None);
+    }
+
+    /// [`blend_mode`] the other way round, for the assertion above alone —
+    /// which is why it is here and not beside it: nothing the example *runs*
+    /// needs to go this direction, and a conversion in `src` with one test as
+    /// its only caller would be an abstraction with no second call site.
+    fn blend_mode_back(blend: BlendMode) -> Blend {
+        match blend {
+            BlendMode::Add => Blend::Add,
+            BlendMode::Over => Blend::Over,
+            BlendMode::Max => Blend::Max,
+        }
     }
 
     /// **Anything that makes texels this frame keeps the loop awake, and the

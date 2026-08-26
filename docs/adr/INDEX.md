@@ -212,6 +212,7 @@ number; new records continue from the end.
 | [ADR-0184](0184-the-program-bay-rearranges-itself-and-a-still-frame-does-not.md) | The Program bay rearranges itself, and a still frame does not | 2026-08-26 | accepted |
 | [ADR-0185](0185-a-fader-translates-a-drag-into-an-operation-and-applies-nothing.md) | A fader translates a drag into an operation and applies nothing | 2026-08-26 | accepted |
 | [ADR-0186](0186-one-operation-names-one-of-three-residencies.md) | One operation names one of three residencies | 2026-08-26 | accepted |
+| [ADR-0187](0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md) | The blend mini cycles, and a map learns the three it cycles through | 2026-08-26 | accepted |
 
 ## Retired numbers
 

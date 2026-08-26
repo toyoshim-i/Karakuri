@@ -31,7 +31,7 @@ use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{mixer, Level, Mask, Mixer, Strip, StripBox, Tally, View};
 use karakuri_layout::Point;
-use karakuri_operation::Operation;
+use karakuri_operation::{BlendMode, Operation};
 
 /// Four strips, so that *which deck a drag named* is a question with four
 /// wrong answers rather than one. The values are apart from each other and
@@ -46,7 +46,7 @@ fn strips() -> Vec<Strip> {
             tally: Tally::Live,
             gain: 0.2 + 0.15 * slot as f32,
             opacity: 0.8 - 0.15 * slot as f32,
-            blend: "over",
+            blend: BlendMode::Over,
             mask: Mask::None,
             level: Some(Level {
                 mean: 0.5,

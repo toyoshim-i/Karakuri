@@ -241,6 +241,44 @@ pub enum BlendMode {
     Max,
 }
 
+impl BlendMode {
+    /// Every mode there is, in the engine's own order —
+    /// `karakuri_engine::deck::Blend::ALL`, which states it as *"in cycle
+    /// order. `Add` first, because it is the default and a cycle should start
+    /// where a slot starts."*
+    ///
+    /// **A list is not a cycle, and this crate does not own the cycle.** A
+    /// control that steps through these is an affordance built over the three
+    /// operations they name, and it belongs to whoever draws the control
+    /// (`docs/principles/0074-…`). What this is for is the two things a
+    /// surface genuinely needs from the vocabulary: *which values exist*, and
+    /// *in what order they are conventionally shown*. The mixer strip's blend
+    /// chip does its own arithmetic over this
+    /// ([ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)),
+    /// and a MIDI map is offered the three values rather than a step.
+    pub const ALL: [BlendMode; 3] = [BlendMode::Add, BlendMode::Over, BlendMode::Max];
+
+    /// **The lower-case word for this mode**, which is the one every surface
+    /// spells it with: `Record::Blend`'s wire `mode`, `karakuri-cli`'s status
+    /// line, a map file's value, and the word a mixer strip's chip draws.
+    ///
+    /// A match rather than a table, exactly as `karakuri_engine::deck::Blend::name`
+    /// is one, and for its reason: **a mode added to the enum does not compile
+    /// until it has a name.** A table indexed by discriminant would take a new
+    /// variant silently and hand out the wrong word or panic.
+    ///
+    /// The three words are the engine's, because a record carries a name and
+    /// the engine is what reads it back. This is a copy of that list, which is
+    /// the cost this crate pays on purpose — see the module documentation.
+    pub fn name(self) -> &'static str {
+        match self {
+            BlendMode::Add => "add",
+            BlendMode::Over => "over",
+            BlendMode::Max => "max",
+        }
+    }
+}
+
 /// The transfer from unbounded linear HDR to something displayable.
 /// `karakuri_engine::present::TonemapOp`'s four.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

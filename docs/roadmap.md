@@ -387,11 +387,23 @@ per gesture; **there is no `SetMask`**, so the mask mini is a readout of state n
 and the trim reaches only the bottom half of what `SetGain` expresses, because it is drawn over
 `[0, 1]` while the mix is HDR.
 
+**The blend mini is the third control and it cycles**
+([ADR-0187](adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)). A
+press moves the deck to the next of three and emits `SetBlendMode` naming the **destination** it
+arrived at, down the same path a fader's operation takes. There was never a conflict to resolve
+here: the line above used to say the mock and P-0074 disagree — *click to cycle* against a
+vocabulary with no cycles — and **the premise was false**. P-0074 forbids a cycle *operation* and
+names *"a mini that cycles the blend"* as one control emitting three. What the affordance does force
+is a decision about MIDI, and ADR-0187 is that decision: the component owns three operations, the
+pointer is shown a cycle, and a map is offered the three values rather than a *next*. `Strip::blend`
+became a `BlendMode` to carry it, so a fourth engine mode with no operation variant fails at the
+harness rather than drawing a word no control can reach.
+
 **The rest of the strip is still a readout**, and each has a decision left rather than work: the
-blend mini needs an affordance that *names* one of three, since P-0074 forbids a cycle and the
-mock's tooltip says *click to cycle* — **the mock and the principle disagree**; and the tally is two
-operations for three states, drawing the *effective* residency while the operations set the
-*requested* one.
+mask mini is state no operation can set, and the tally draws the *effective* residency while
+`SetResidency` sets the *requested* one — one operation naming one of three since
+[ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md), so what is left there is what
+the chip does when the two disagree rather than what to send.
 
 **Three live regions now, with three characters**, which is what the rest of P-0072 has been
 waiting for. The picture is expensive and moves every frame; the beat grid is cheap, high priority,
@@ -407,15 +419,17 @@ throws the expand away with nothing said. Nothing in the console reaches that st
 
 ### Where this goes next, and the decisions it is waiting on
 
-**Three controls in the console answer a pointer**: the Outputs dot, and the mixer's two faders.
-Everything else in the mixer is a readout, the other bays are empty, and the keyboard, a MIDI map
-and MCP reach none of it — the panel routes in `manual/operations.html` are still `plan`, because
-the console is an example rather than the program.
+**Four controls in the console answer a pointer**: the Outputs dot, the mixer's two faders and its
+blend chip. Everything else in the mixer is a readout, the other bays are empty, and the keyboard, a
+MIDI map and MCP reach none of it — the panel routes in `manual/operations.html` are still `plan`,
+because the console is an example rather than the program.
 
 **The order that makes each next thing cheaper than it would be alone:**
 
-1. **The rest of the mixer strip** — the tally, the blend mini, the mask mini. They are the same
-   seam the faders opened, and none needs new machinery; each needs a **decision** first, below.
+1. **The rest of the mixer strip** — the tally and the mask mini. The blend mini is done
+   ([ADR-0187](adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)) and
+   proved these are the same seam the faders opened; neither of the other two needs new machinery,
+   and each needs a **decision** first, below.
 2. **The rest of P-0072.** Three live regions with three characters now exist — the picture
    expensive and every frame, the beat grid cheap and twice a second, the mixer expensive and
    hardly moving — which is what a scheduler was waiting for. Nothing is over budget yet (10.9% of
@@ -432,12 +446,17 @@ than work, and every one of them was found by building the thing next to it.
 
 - **Where `Operation` becomes `Record`.** It needs `karakuri-operation` and `karakuri-store`,
   neither of which depends on the other, and it is the centre of P-0028 rather than a detail. Until
-  it lands, `examples/panel.rs` builds two records by hand and says so; the day it lands, that
+  it lands, `examples/panel.rs` builds three records by hand and says so; the day it lands, that
   function is deleted rather than moved
   ([ADR-0185](adr/0185-a-fader-translates-a-drag-into-an-operation-and-applies-nothing.md)).
-- **The blend mini's affordance**, where **the mock and a principle disagree**: the tooltip says
-  *click to cycle* and P-0074 forbids a cycle, so the control must *name* one of three. `egui` owns
-  no widget on this panel, which makes it a question about who owns the pointer.
+- **What a MIDI map learns from a control whose affordance is a cycle** — the half of the blend
+  mini that is still open. The affordance is taken: the chip cycles, which is what P-0074 permits by
+  name, and the earlier claim that the mock and the principle disagree was a misreading
+  ([ADR-0187](adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)). The
+  decision recorded there is that **the component owns three operations and a map is offered the
+  three values, never a *next*** — a pad that could only step is the shape P-0074 warns about, since
+  two surfaces stepping one control disagree about where they are. **Nothing MIDI is implemented**:
+  `karakuri_midi::map::Action` still has `CycleBlend`, and moving it is item 3 above.
 - **What the tally shows while the two disagree.** One operation naming one of three states now
   ([ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md)), and the console draws the
   *effective* residency while `SetResidency` sets the *requested* one — the governor holds a slot

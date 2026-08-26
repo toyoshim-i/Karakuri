@@ -103,11 +103,16 @@ having:
 
 ## Consequences
 
-- **The mock and P-0074 disagree about the blend mini.** The mock draws a chip whose tooltip says
-  *click to cycle*, and `SetBlendMode` names a destination because a vocabulary has no cycles. So
-  the mini needs an affordance that **names** one of three — a menu, or three targets — and `egui`
-  owns no widget on this panel, which makes it a decision about who owns the pointer rather than a
-  hit test.
+- **The blend mini needs an affordance, and this bullet stated the reason wrongly.** It said the
+  mock and P-0074 disagree — the mock's tooltip says *click to cycle*, and a vocabulary has no
+  cycles — and concluded that the mini must **name** one of three, by a menu or three targets, which
+  made it a question about who owns the pointer. **The premise was never true** (corrected
+  2026-08-26): P-0074 forbids a cycle *operation*, and its second paragraph names *"a mini that
+  cycles the blend"* as one control emitting three, an affordance built over operations by whoever
+  draws the control. `SetBlendMode` naming a destination is right and is the half this bullet got
+  right; the conflict was read into it. What is actually open is what a MIDI map learns from that
+  chip, and the answer to the affordance is
+  [ADR-0187](0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md).
 - **The tally is two operations for three states**, and the console draws the *effective* residency
   while the operations set the *requested* one. Unlike a fader, whose readback is exact, a tally
   press writes a request the governor may not honour — so it needs a decision about what the control
