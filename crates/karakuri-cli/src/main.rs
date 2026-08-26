@@ -46,6 +46,8 @@ use karakuri_engine::{
     Signals, TonemapOp, DEFAULT_BUDGET_MS,
 };
 use karakuri_midi::Action;
+use karakuri_operation::Operation;
+use karakuri_operation_record::{Current, Written};
 use karakuri_signal::NoiseConfig;
 use karakuri_store::record::{BindNoise, Layer, Record};
 use winit::application::ApplicationHandler;
@@ -5954,14 +5956,20 @@ impl Live {
         let t = self.deck.slot(slot).set().time();
         match self.deck.residency(slot) {
             Residency::Live => {
-                self.record(mix::residency_record(slot, Residency::Allocated));
+                self.operate(&Operation::SetResidency {
+                    deck: slot as u8,
+                    residency: mix::residency(Residency::Allocated),
+                });
                 eprintln!("slot {slot} off air — allocated, holding t {t:.2}s");
             }
             // Priming is warming out of sight and is still off air, so space
             // does the same thing to it: puts it on, at whatever `t` it has
             // warmed to.
             Residency::Allocated | Residency::Priming => {
-                self.record(mix::residency_record(slot, Residency::Live));
+                self.operate(&Operation::SetResidency {
+                    deck: slot as u8,
+                    residency: mix::residency(Residency::Live),
+                });
                 eprintln!("slot {slot} on air — resuming at t {t:.2}s");
             }
         }
@@ -6000,7 +6008,10 @@ impl Live {
                 "prime request withdrawn"
             }
         );
-        self.record(mix::residency_record(slot, want));
+        self.operate(&Operation::SetResidency {
+            deck: slot as u8,
+            residency: mix::residency(want),
+        });
     }
 
     /// **Take up what a slot is now playing**, and say so in the stream if a
@@ -6402,9 +6413,10 @@ impl Live {
             );
             return;
         }
-        let mut moved = *transport;
-        moved.scrub(beats);
-        self.record(mix::transport_record(slot, &moved));
+        self.operate(&Operation::ScrubDeck {
+            deck: slot as u8,
+            beats,
+        });
         eprintln!(
             "slot {slot} scrub {:+.2} beats",
             self.deck.transport(slot).offset_beats()
@@ -6497,7 +6509,10 @@ impl Live {
     }
 
     fn set_gain(&mut self, slot: usize, gain: f32) {
-        self.record(mix::gain_record(slot, clamp_gain(gain)));
+        self.operate(&Operation::SetGain {
+            deck: slot as u8,
+            gain: clamp_gain(gain),
+        });
         eprintln!("slot {slot} gain {:.2}", self.deck.gain(slot));
     }
 
@@ -6515,7 +6530,10 @@ impl Live {
 
     fn set_opacity(&mut self, slot: usize, value: f32) {
         let opacity = value.clamp(0.0, 1.0);
-        self.record(mix::opacity_record(slot, opacity));
+        self.operate(&Operation::SetOpacity {
+            deck: slot as u8,
+            opacity,
+        });
         eprintln!(
             "slot {slot} opacity {:.2} ({})",
             self.deck.opacity(slot),
@@ -6831,7 +6849,9 @@ impl Live {
     /// through three presses is a keyboard's compromise rather than a
     /// surface's.
     fn show(&mut self, slot: Option<usize>) {
-        self.record(mix::preview_record(slot));
+        self.operate(&Operation::SetPreview {
+            showing: slot.map(|slot| slot as u8),
+        });
         match self.deck.preview() {
             Some(slot) => eprintln!(
                 "preview slot {slot} — {}, gain {:.2}, t {:.2}s (the mix is not being shown)",
@@ -6853,7 +6873,10 @@ impl Live {
         let current = self.deck.blend(slot);
         let at = Blend::ALL.iter().position(|b| *b == current).unwrap_or(0);
         let next = Blend::ALL[(at + 1) % Blend::ALL.len()];
-        self.record(mix::blend_record(slot, next));
+        self.operate(&Operation::SetBlendMode {
+            deck: slot as u8,
+            blend: mix::blend_mode(next),
+        });
         eprintln!(
             "slot {slot} blend {} — gain {:.2}, opacity {:.2}",
             self.deck.blend(slot).name(),
@@ -6863,11 +6886,9 @@ impl Live {
     }
 
     fn cycle_tonemap(&mut self) {
-        let look = Look {
-            op: next_tonemap(self.look.op),
-            ..self.look
-        };
-        self.record(mix::look_record(&look));
+        self.operate(&Operation::SetTonemap {
+            tonemap: mix::tonemap(next_tonemap(self.look.op)),
+        });
         eprintln!(
             "tonemap {} (exposure {:.2})",
             op_name(self.look.op),
@@ -6876,11 +6897,9 @@ impl Live {
     }
 
     fn set_exposure(&mut self, exposure: f32) {
-        let look = Look {
+        self.operate(&Operation::SetExposure {
             exposure: clamp_exposure(exposure),
-            ..self.look
-        };
-        self.record(mix::look_record(&look));
+        });
         eprintln!(
             "exposure {:.3} ({})",
             self.look.exposure,
@@ -6913,6 +6932,53 @@ impl Live {
     fn push_tempo(&mut self, record: karakuri_store::record::Record) {
         if let Some(recorder) = &mut self.recorder {
             recorder.push(record);
+        }
+    }
+
+    /// **A surface's operation, as the records it writes — and then written.**
+    ///
+    /// [P-0028](../../../docs/principles/0028-every-control-ends-in-the-same-record.md)
+    /// is *every control ends in the same record*, and this is where a key
+    /// press ends: the operation is named, `karakuri-operation-record` says
+    /// what it writes, and [`Live::record`] writes it and reads it back the way
+    /// every other record here is read back. A console fader and a mapped MIDI
+    /// control are the same thing exactly because they arrive at this function
+    /// carrying the same name.
+    ///
+    /// **The reading is taken here and nowhere else.** The conversion is not
+    /// pure — `SetExposure` becomes a `look` record carrying the operator and
+    /// the white point too — so what is running has to be read back and handed
+    /// over, and this is the only place in this program that knows both what
+    /// was asked for and what is on screen.
+    ///
+    /// The two answers that are not records are **printed rather than
+    /// swallowed**. Nothing routed through here produces one today, which is
+    /// exactly why silence would be the wrong response: reaching one means an
+    /// operation was routed here that this build cannot write, and an operator
+    /// pressing a key that does nothing deserves the sentence.
+    fn operate(&mut self, operation: &Operation) {
+        let transport = match operation {
+            Operation::ScrubDeck { deck, .. } => {
+                let slot = usize::from(*deck);
+                slot_in_range(slot, self.deck.slot_count())
+                    .then(|| mix::current_transport(self.deck.transport(slot)))
+            }
+            _ => None,
+        };
+        let current = Current {
+            look: Some(mix::current_look(&self.look)),
+            transport,
+        };
+        match karakuri_operation_record::written(operation, &current) {
+            Written::Records(records) => {
+                for record in records {
+                    self.record(record);
+                }
+            }
+            Written::Silent(silent) => {
+                eprintln!("{}: no record — {}", operation.title(), silent.why())
+            }
+            Written::Owed(owed) => eprintln!("{}: {}", operation.title(), owed.why()),
         }
     }
 

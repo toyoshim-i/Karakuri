@@ -510,11 +510,40 @@ because the console is an example rather than the program.
 **Decisions nobody has taken, each blocking something named above.** These are questions rather
 than work, and every one of them was found by building the thing next to it.
 
-- **Where `Operation` becomes `Record`.** It needs `karakuri-operation` and `karakuri-store`,
-  neither of which depends on the other, and it is the centre of P-0028 rather than a detail. Until
-  it lands, `examples/panel.rs` builds three records by hand and says so; the day it lands, that
-  function is deleted rather than moved
-  ([ADR-0185](adr/0185-a-fader-translates-a-drag-into-an-operation-and-applies-nothing.md)).
+- **~~Where `Operation` becomes `Record`~~ — taken.** It is
+  [`karakuri-operation-record`](../crates/karakuri-operation-record), a crate depending on the two
+  leaves that may not depend on each other, and the reading it needs is a **value handed in**
+  rather than a trait — because part of what a record needs (the quantum, the length of a fade, the
+  wipe shape) is `SetTransition`'s, and that operation writes no record at all
+  ([ADR-0194](adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)).
+  **Nine of the 46 conversions are built** — six that need no reading, and the look pair and
+  `ScrubDeck`, whose readings are settled. `karakuri-cli` is wired to it and is the second customer;
+  no key arm moved, so the key handler's migration is still item 3 above.
+
+  **What the survey found, and each of these is a question rather than work.**
+  - **Seven operations owe a record nobody can write yet**, and they divide three ways: scheduling
+    one (`FadeDeck`, `Crossfade`, `Wipe`, `SelectRenderer`) needs the grid quantised onto a musical
+    instant **and the transition settings, which are `SetTransition`'s and which no record carries**
+    — that is the largest single question left, and four conversions are blocked on it; moving the
+    grid (`TapBeat`, `ScaleGrid`) needs the beat tracker rather than a value, and may be refused by
+    it; and `SetSync` needs the engine's anchor clamp, so whether the record carries the anchor that
+    was asked for or the one that was clamped is a decision about the bytes on disk.
+  - **Five operations name a deck and their record has no slot.** `WriteParam`, `AttachSignal`,
+    `WireInput` and `SetProperty` map onto `Record::Param`, `Record::Bind`, `Record::Edge`,
+    `Record::Capacity`, `Record::Seed` and `Record::Camera` — every one a **Set file's**, with
+    nowhere to put the deck — and `SetCompositing` is the same shape against `Record::Merge`. A
+    model can rewrite a procedure and cannot turn a knob *into the session stream*, and that is a
+    gap in the session vocabulary rather than a conversion waiting to be written.
+  - **One control is not one record.** `Crossfade` is four and `Wipe` is five, which is what
+    `karakuri-cli` already does for them.
+  - **ADR-0180's "one `From` impl per list in `karakuri-cli`" cannot be written** — the orphan rule
+    refuses it, since neither `Blend` nor `BlendMode` is that package's. They are plain functions.
+  - **`--bpm` has a record now.** `SetFreeRunTempo` writes the `tempo` record `Record::Tempo`'s own
+    documentation describes — no shift, no confidence — which closes the gap P-0028 names. Nothing
+    routes through it yet.
+  - **`examples/panel.rs` still builds three records by hand.** ADR-0185 promised that function is
+    deleted the day this lands; it is a follow-up commit, deliberately left because another session
+    is working in that crate.
 - **What a MIDI map learns from a control whose affordance is a cycle** — the half of the blend
   mini that is still open. The affordance is taken: the chip cycles, which is what P-0074 permits by
   name, and the earlier claim that the mock and the principle disagree was a misreading

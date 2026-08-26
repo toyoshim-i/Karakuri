@@ -10,6 +10,12 @@ karakuri-audio = { version = "0.1.0", path = "../karakuri-audio" }
 karakuri-engine = { version = "0.1.0", path = "../karakuri-engine" }
 karakuri-ir = { version = "0.1.0", path = "../karakuri-ir" }
 karakuri-midi = { version = "0.1.0", path = "../karakuri-midi" }
+karakuri-operation = { version = "0.1.0", path = "../karakuri-operation" }
+# **Where an operation becomes a record** — the one place a key press, a panel
+# fader and an MCP call meet (P-0028). It is a crate rather than a module here
+# because `karakuri-console`'s example has to be able to reach it and this
+# package has no library target; see ADR-0194.
+karakuri-operation-record = { version = "0.1.0", path = "../karakuri-operation-record" }
 karakuri-signal = { version = "0.1.0", path = "../karakuri-signal" }
 karakuri-store = { version = "0.1.0", path = "../karakuri-store" }
 png = "0.18.1"

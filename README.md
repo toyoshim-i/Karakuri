@@ -61,8 +61,10 @@ not about design, and it had no home until the manual had one.
   --example panel`, and `karakuri-cli` is still what you play a set with
 - **Every operation is named once and every surface routes into that name** — the manual's first
   rule. [`karakuri-operation`](crates/karakuri-operation) is those 46 names, checked against
-  [the manual's own page](docs/manual/operations.html) by a test. The keyboard, the MIDI map and MCP
-  have not moved onto it yet
+  [the manual's own page](docs/manual/operations.html) by a test, and
+  [`karakuri-operation-record`](crates/karakuri-operation-record) is where one becomes a record —
+  the step that makes a fader, a key and a MIDI knob the same thing. The CLI's mix controls route
+  through both; its key handler, the MIDI map and MCP have not moved onto them yet
 - Audio input exists — spectrum, energy, onset, and a beat grid that corrects the local
   oscillator. External sync exists out of process: `--tempo-source` runs a separate program
   that reports where the beat is, and the first one is Ableton Link. See [docs/plugins.md](docs/plugins.md)

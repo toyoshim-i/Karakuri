@@ -187,6 +187,7 @@ cargo test -p karakuri-signal      # oscillator, synthesized bus, noise
 cargo test -p karakuri-store       # records, ndjson, content addressing
 cargo test -p karakuri-midi        # wire parsing and the map
 cargo test -p karakuri-operation   # the operation vocabulary, against the manual
+cargo test -p karakuri-operation-record  # an operation as the records it writes
 cargo test -p karakuri-layout      # the arrangement, solved to rectangles
 cargo test -p karakuri-console     # the console: arrangement, panel model, view (its example needs a GPU)
 cargo test -p karakuri-cli         # flags, replay, MCP, live save (needs a GPU)

@@ -33,11 +33,14 @@
 //! That is this crate's charter, moved out of `karakuri-midi`, which held it
 //! only because MIDI needed it first.
 //!
-//! **Nothing has moved onto it yet.** `karakuri_midi::map::Action`,
-//! `karakuri_console::panel::Op` and `karakuri-cli`'s key handler keep working
-//! exactly as they did; this is the target they move to one at a time, and
-//! until they have, the count of surfaces routing through this type is zero.
-//! Said here because an invariant that is not yet true says so
+//! **Two surfaces route through it and three do not.** `karakuri-console`'s
+//! mixer faders were the first customer, and `karakuri-cli`'s mix controls are
+//! the second — gain, opacity, blend, residency, preview, the tone map, the
+//! exposure and the scrub each name an operation and hand it to
+//! `karakuri-operation-record`. `karakuri_midi::map::Action`,
+//! `karakuri_console::panel::Op` and the rest of `karakuri-cli`'s key handler
+//! keep working exactly as they did; this is the target they move to one at a
+//! time. Said here because an invariant that is not yet true says so
 //! (`docs/principles/0036-…`).
 //!
 //! # What a variant carries, and what it does not
@@ -98,9 +101,15 @@
 //! looking. `karakuri_midi::map::Map::parse` already refuses an unknown target
 //! at parse time; this is what lets it go on doing that for a value.
 //!
-//! The conversion is one `From` impl per list in `karakuri-cli`, in the one
-//! place every control already ends
-//! (`docs/principles/0028-every-control-ends-in-the-same-record.md`).
+//! The conversion is one function per list in `karakuri-cli` — `mix::blend_mode`
+//! and its three neighbours — in the one place every control already ends
+//! (`docs/principles/0028-every-control-ends-in-the-same-record.md`), and that
+//! package's `mix.rs` is where the two copies of each list are checked against
+//! each other, because it is the only crate in the workspace that depends on
+//! the engine and on this one at once. **Functions rather than the `From` impls
+//! ADR-0180 named**, and it is the orphan rule rather than a preference: both
+//! types are foreign to `karakuri-cli`, so the impl is not allowed there at all
+//! (`docs/adr/0194-…`).
 //!
 //! # Where a payload is not decided
 //!
@@ -205,6 +214,24 @@ pub enum Sync {
     Beat,
 }
 
+impl Sync {
+    /// **The lower-case word for this mode**, which is the one every surface
+    /// spells it with: `Record::Transport`'s wire `sync`, `karakuri-cli`'s
+    /// status line, and a map file's value.
+    ///
+    /// A match rather than a table, exactly as [`BlendMode::name`] is one and
+    /// for its reason: a mode added to the enum does not compile until it has
+    /// a name. The three words are `karakuri_engine::transport::Sync::name`'s,
+    /// because a record carries a name and the engine is what reads it back.
+    pub fn name(self) -> &'static str {
+        match self {
+            Sync::Free => "free",
+            Sync::Tempo => "tempo",
+            Sync::Beat => "beat",
+        }
+    }
+}
+
 /// What a deck slot is *for*. `karakuri_engine::deck::Residency`'s three, in
 /// the order they cost.
 ///
@@ -225,6 +252,23 @@ pub enum Residency {
     /// Compiled, buffers held, not stepping. Keeps its `t`, so a slot taken
     /// here and brought back resumes where it stopped.
     Allocated,
+}
+
+impl Residency {
+    /// **The lower-case word for this level**, which is what
+    /// `Record::Residency` carries and what `karakuri-cli`'s
+    /// `mix::residency_wire_name` writes. The status line's `LIVE`/`prim`/
+    /// `park` is a different vocabulary for a different reader and is
+    /// deliberately not this one.
+    ///
+    /// A match rather than a table, for [`BlendMode::name`]'s reason.
+    pub fn name(self) -> &'static str {
+        match self {
+            Residency::Live => "live",
+            Residency::Priming => "priming",
+            Residency::Allocated => "allocated",
+        }
+    }
 }
 
 /// How a deck meets the ones under it in the fold.
@@ -287,6 +331,25 @@ pub enum Tonemap {
     Reinhard,
     Aces,
     AgX,
+}
+
+impl Tonemap {
+    /// **The lower-case word for this operator**, which is what
+    /// `Record::Look`'s `op` carries and what `--tonemap` takes.
+    ///
+    /// The wire spelling and never the reader's: `karakuri-cli`'s `spellings`
+    /// keeps two per operator — `("aces", "ACES")` — because one of them is
+    /// parsed and the other is only read. This is the parsed one, for
+    /// [`BlendMode::name`]'s reason: an operator added to the enum does not
+    /// compile until it has a name.
+    pub fn name(self) -> &'static str {
+        match self {
+            Tonemap::Clamp => "clamp",
+            Tonemap::Reinhard => "reinhard",
+            Tonemap::Aces => "aces",
+            Tonemap::AgX => "agx",
+        }
+    }
 }
 
 /// How a signal is shaped on its way to a parameter.

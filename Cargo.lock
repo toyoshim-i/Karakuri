@@ -1392,6 +1392,8 @@ dependencies = [
  "karakuri-engine",
  "karakuri-ir",
  "karakuri-midi",
+ "karakuri-operation",
+ "karakuri-operation-record",
  "karakuri-signal",
  "karakuri-store",
  "png",
@@ -1471,6 +1473,14 @@ dependencies = [
 [[package]]
 name = "karakuri-operation"
 version = "0.1.0"
+
+[[package]]
+name = "karakuri-operation-record"
+version = "0.1.0"
+dependencies = [
+ "karakuri-operation",
+ "karakuri-store",
+]
 
 [[package]]
 name = "karakuri-signal"

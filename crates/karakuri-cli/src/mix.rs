@@ -29,6 +29,26 @@
 //! *is* on the frame path; this one does not need to be, and pretending it did
 //! would be complexity bought with nothing.
 //!
+//! ## What of this moved to the vocabulary, and what did not
+//!
+//! **`gain_record` and `preview_record` are gone**, and they are gone rather
+//! than deprecated: their whole content was `Record::Gain { slot, value }` and
+//! `Record::Preview { slot }`, which is now what
+//! `karakuri_operation_record::written` answers for `Operation::SetGain` and
+//! `Operation::SetPreview`. Two derivations of one record is the drift this
+//! module was written to end, in miniature, so the second one went.
+//!
+//! **The rest are still here and each has a reason.** `opacity_record`,
+//! `blend_record`, `residency_record`, `mask_record` and `transition_record`
+//! are called by `crossfade` and `wipe`, which are **one operation each and
+//! four or five records each** — and those two conversions are the ones the
+//! new crate cannot make, because they need the grid quantised onto a musical
+//! instant and the quantum and the length that `Operation::SetTransition` sets
+//! and no record carries. `look_record` builds the launch look, which is a
+//! complete look rather than an ask. `transport_record` is `cycle_sync`'s, for
+//! the anchor clamp the vocabulary has no way to apply. Each of them goes the
+//! day its operation's conversion is settled — see ADR-0194.
+//!
 //! ## Opacity, which used to be deliberately not here
 //!
 //! `Deck::set_opacity` existed with no key, no flag and no record, and this
@@ -43,6 +63,7 @@
 
 use karakuri_engine::binding::Curve;
 use karakuri_engine::deck::{Blend, Mask, MaskKind, Residency};
+use karakuri_engine::present::TonemapOp;
 use karakuri_engine::transition::Control;
 use karakuri_engine::transport::{Sync, Transport};
 use karakuri_engine::Look;
@@ -124,11 +145,87 @@ pub enum Change {
     },
 }
 
-/// A slot's gain, as the record that carries it.
-pub fn gain_record(slot: usize, value: f32) -> Record {
-    Record::Gain {
-        slot: slot as u8,
-        value,
+/// **The engine's list, as the vocabulary's** — one function per list, and
+/// the one place the two copies of each are made to agree.
+///
+/// `karakuri-operation` owns a copy of every list a destination is drawn from,
+/// which is the cost P-0074 says the vocabulary pays: *"The two rules — be
+/// engine-neutral, and have no toggles — are not jointly satisfiable unless
+/// the vocabulary owns the lists."* A copy needs somewhere the two meet, and
+/// this is that place: `karakuri-cli` is the only crate in the workspace that
+/// sees both, because it is the only one that depends on the engine and on the
+/// vocabulary at once.
+///
+/// **`From` impls, which is what ADR-0180 said, are not available here.** Both
+/// types are foreign to this package — `Blend` is `karakuri-engine`'s and
+/// `BlendMode` is `karakuri-operation`'s — so the orphan rule refuses the impl
+/// and there is nothing to be done about it short of one of those two crates
+/// depending on the other, which is the thing neither of them may do. Plain
+/// functions, then, exactly as `karakuri-console/examples/panel.rs`'s
+/// `blend_mode` already is. See ADR-0194.
+///
+/// **A match apiece, so a value added to the engine stops the build here**
+/// rather than reaching a surface that draws a chip nothing can read. That is
+/// `Blend::name`'s argument and `residency_wire_name`'s, applied to a list
+/// instead of to a spelling.
+pub fn blend_mode(blend: Blend) -> karakuri_operation::BlendMode {
+    match blend {
+        Blend::Add => karakuri_operation::BlendMode::Add,
+        Blend::Over => karakuri_operation::BlendMode::Over,
+        Blend::Max => karakuri_operation::BlendMode::Max,
+    }
+}
+
+/// The engine's residency level, as the vocabulary's. See [`blend_mode`].
+pub fn residency(level: Residency) -> karakuri_operation::Residency {
+    match level {
+        Residency::Live => karakuri_operation::Residency::Live,
+        Residency::Priming => karakuri_operation::Residency::Priming,
+        Residency::Allocated => karakuri_operation::Residency::Allocated,
+    }
+}
+
+/// The engine's sync mode, as the vocabulary's. See [`blend_mode`].
+pub fn sync(mode: Sync) -> karakuri_operation::Sync {
+    match mode {
+        Sync::Free => karakuri_operation::Sync::Free,
+        Sync::Tempo => karakuri_operation::Sync::Tempo,
+        Sync::Beat => karakuri_operation::Sync::Beat,
+    }
+}
+
+/// The engine's tone map operator, as the vocabulary's. See [`blend_mode`].
+pub fn tonemap(op: TonemapOp) -> karakuri_operation::Tonemap {
+    match op {
+        TonemapOp::Clamp => karakuri_operation::Tonemap::Clamp,
+        TonemapOp::Reinhard => karakuri_operation::Tonemap::Reinhard,
+        TonemapOp::Aces => karakuri_operation::Tonemap::Aces,
+        TonemapOp::AgX => karakuri_operation::Tonemap::AgX,
+    }
+}
+
+/// **The look that is running, as the reading the conversion needs.**
+///
+/// `Operation::SetExposure` carries an exposure and nothing else, because that
+/// is what a control change can say; `Record::Look` carries all three because
+/// that is what a replay can reconstruct a session from. This is what closes
+/// the gap between them, and it is the argument of ADR-0192 in one function.
+pub fn current_look(look: &Look) -> karakuri_operation_record::Look {
+    karakuri_operation_record::Look {
+        tonemap: tonemap(look.op),
+        exposure: look.exposure,
+        white_point: look.white_point,
+    }
+}
+
+/// **What one slot's clock is doing, as the reading the conversion needs.**
+/// `Operation::ScrubDeck` moves an offset by an amount and `Record::Transport`
+/// is absolute, so the conversion reads where the slot is.
+pub fn current_transport(transport: &Transport) -> karakuri_operation_record::Transport {
+    karakuri_operation_record::Transport {
+        sync: sync(transport.sync()),
+        anchor_bpm: transport.anchor_bpm(),
+        offset_beats: transport.offset_beats(),
     }
 }
 
@@ -189,13 +286,6 @@ pub fn select_record(slot: usize, renderer: usize, start: f64) -> Record {
         slot: slot as u8,
         renderer: renderer as u32,
         start,
-    }
-}
-
-/// Which slot is being auditioned, as the record that carries it.
-pub fn preview_record(slot: Option<usize>) -> Record {
-    Record::Preview {
-        slot: slot.map(|s| s as u8),
     }
 }
 
@@ -517,6 +607,108 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **The two copies of every list, checked against each other — and this
+    /// is the only place in the workspace where that can happen.**
+    ///
+    /// `karakuri-operation` owns its own `BlendMode`, `Residency`, `Sync` and
+    /// `Tonemap` because a vocabulary that refuses to name a value cannot say
+    /// *set blend to over*, and the cost is stated rather than hidden: they
+    /// are third spellings of lists the engine and the store already hold
+    /// (P-0074, ADR-0180). A record carries the **name**, so a level spelled
+    /// `prime` here and `priming` there is a record that decodes to a refusal
+    /// on replay and moves nothing in the mix — a failure that would show up
+    /// as a session replaying differently and nowhere earlier.
+    ///
+    /// `karakuri-operation` cannot check this (it has no engine, by charter)
+    /// and neither can `karakuri-operation-record` (it has no engine either,
+    /// deliberately). This package depends on both, so this is where the two
+    /// lists meet and where they are made to agree.
+    ///
+    /// **Both directions per value, over the engine's own lists**, so a value
+    /// added to the engine arrives here as a missing match arm in
+    /// [`blend_mode`] and its neighbours rather than as a silent extra.
+    #[test]
+    fn the_vocabularys_copy_of_a_list_spells_it_the_way_the_store_reads_it() {
+        for mode in Blend::ALL {
+            assert_eq!(
+                blend_mode(mode).name(),
+                mode.name(),
+                "the vocabulary and the engine spell one blend mode two ways, and \
+                 `Record::Blend` carries the name"
+            );
+        }
+        for level in LEVELS {
+            assert_eq!(
+                residency(level).name(),
+                residency_wire_name(level),
+                "the vocabulary and the record spell one residency level two ways, and \
+                 `Record::Residency` carries the name"
+            );
+        }
+        for mode in Sync::ALL {
+            assert_eq!(
+                sync(mode).name(),
+                mode.name(),
+                "the vocabulary and the engine spell one sync mode two ways, and \
+                 `Record::Transport` carries the name"
+            );
+        }
+        for op in crate::TONEMAPS {
+            assert_eq!(
+                tonemap(op).name(),
+                op_wire_name(op),
+                "the vocabulary and the flag spell one tone map operator two ways, and \
+                 `Record::Look` carries the name"
+            );
+        }
+    }
+
+    /// **The conversion and this module answer with the same record**, for the
+    /// operations both of them can still write.
+    ///
+    /// `crossfade` and `wipe` build their parts through the builders here
+    /// because their own conversions are not settled, so `Record::Opacity`,
+    /// `Record::Blend` and `Record::Residency` are still made two ways in this
+    /// program. That is an interim and it is stated as one: the conversion is
+    /// the canonical derivation, and these builders go as each operation lands.
+    /// Until then this is what stops the two drifting.
+    #[test]
+    fn the_builders_left_here_agree_with_the_conversion() {
+        use karakuri_operation::Operation;
+        use karakuri_operation_record::{Current, Written};
+
+        let same = |operation: Operation, record: Record| {
+            assert_eq!(
+                karakuri_operation_record::written(&operation, &Current::default()),
+                Written::Records(vec![record]),
+                "`{}` is built two ways in this program and the two have drifted",
+                operation.title()
+            );
+        };
+        same(
+            Operation::SetOpacity {
+                deck: 2,
+                opacity: 0.25,
+            },
+            opacity_record(2, 0.25),
+        );
+        same(
+            Operation::SetBlendMode {
+                deck: 1,
+                blend: blend_mode(Blend::Over),
+            },
+            blend_record(1, Blend::Over),
+        );
+        same(
+            Operation::SetResidency {
+                deck: 3,
+                residency: residency(Residency::Priming),
+            },
+            residency_record(3, Residency::Priming),
+        );
+    }
+
     use karakuri_engine::TonemapOp;
 
     /// The round trip, which is the whole claim: what the live path builds is
@@ -525,7 +717,10 @@ mod tests {
     fn every_mix_record_survives_the_json_between() {
         let cases = [
             (
-                gain_record(2, 0.75),
+                Record::Gain {
+                    slot: 2,
+                    value: 0.75,
+                },
                 Change::Gain {
                     slot: 2,
                     value: 0.75,
@@ -564,8 +759,14 @@ mod tests {
                     start: 64.0,
                 },
             ),
-            (preview_record(Some(2)), Change::Preview { slot: Some(2) }),
-            (preview_record(None), Change::Preview { slot: None }),
+            (
+                Record::Preview { slot: Some(2) },
+                Change::Preview { slot: Some(2) },
+            ),
+            (
+                Record::Preview { slot: None },
+                Change::Preview { slot: None },
+            ),
             (
                 blend_record(3, Blend::Over),
                 Change::Blend {
@@ -838,11 +1039,12 @@ mod tests {
     #[test]
     fn a_preview_of_the_mix_is_not_a_slot_out_of_range() {
         assert_eq!(
-            change(&preview_record(None), 1).expect("the mix is always available"),
+            change(&Record::Preview { slot: None }, 1).expect("the mix is always available"),
             Some(Change::Preview { slot: None })
         );
         // And a real slot past the deck still is, in the one sentence.
-        let message = change(&preview_record(Some(4)), 4).expect_err("slot 4 of a deck of 4");
+        let message =
+            change(&Record::Preview { slot: Some(4) }, 4).expect_err("slot 4 of a deck of 4");
         assert_eq!(message, crate::no_such_slot(4, 4));
     }
 
@@ -856,13 +1058,41 @@ mod tests {
     /// [`crate::no_such_slot`].
     #[test]
     fn a_slot_past_the_deck_is_refused_with_the_range_it_missed() {
-        let message = change(&gain_record(4, 1.0), 4).expect_err("slot 4 of a deck of 4");
+        let message = change(
+            &Record::Gain {
+                slot: 4,
+                value: 1.0,
+            },
+            4,
+        )
+        .expect_err("slot 4 of a deck of 4");
         assert_eq!(message, crate::no_such_slot(4, 4));
         // And the boundary either side of it, which is where the off-by-one
         // this shares with the digit keys would live.
-        assert!(change(&gain_record(3, 1.0), 4).is_ok());
-        assert!(change(&gain_record(0, 1.0), 1).is_ok());
-        assert!(change(&gain_record(1, 1.0), 1).is_err());
+        assert!(change(
+            &Record::Gain {
+                slot: 3,
+                value: 1.0
+            },
+            4
+        )
+        .is_ok());
+        assert!(change(
+            &Record::Gain {
+                slot: 0,
+                value: 1.0
+            },
+            1
+        )
+        .is_ok());
+        assert!(change(
+            &Record::Gain {
+                slot: 1,
+                value: 1.0
+            },
+            1
+        )
+        .is_err());
     }
 
     /// A record that is not the mix's is not an error. `audio.rs` decodes
