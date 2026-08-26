@@ -1424,6 +1424,7 @@ dependencies = [
  "karakuri-ir",
  "karakuri-layout",
  "karakuri-operation",
+ "karakuri-operation-record",
  "karakuri-signal",
  "karakuri-store",
  "pollster",
@@ -1467,6 +1468,7 @@ dependencies = [
 name = "karakuri-midi"
 version = "0.1.0"
 dependencies = [
+ "karakuri-operation",
  "midir",
 ]
 

@@ -70,12 +70,22 @@ karakuri-signal.workspace = true
 # `Checked` and inventing one would be a second answer to *what does this
 # procedure compile to*.
 karakuri-ir.workspace = true
-# **For `Record`, and for one pass of the example alone**: a fader's operation
-# has to become a record before it reaches the deck (P-0028), and *where*
-# `Operation` becomes `Record` is not decided — it needs `karakuri-operation`
-# and `karakuri-store`, neither of which depends on the other. The example
-# builds the two records itself and says so at the top of `record`; this
-# dependency is that shortcut's, and it leaves with it.
+# **Where an operation becomes a record**, which is a crate now
+# ([ADR-0194](../../docs/adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)).
+# A control on this panel emits an `Operation` and the deck is moved by the
+# record it writes (P-0028), so the example asks this crate what a press wrote
+# rather than answering for itself — which is ADR-0185's promise kept: the
+# `record` function that used to sit beside `apply` is **deleted**, not moved.
+# It is a dev-dependency because it is the *example's*: `src/` emits operations
+# and applies nothing, and nothing in it may reach a record (ADR-0156).
+karakuri-operation-record = { version = "0.1.0", path = "../karakuri-operation-record" }
+# **For `Record`, and for one pass of the example alone.** ADR-0185 expected
+# this dependency to leave with the hand-written conversion; it does not, and
+# the reason is the other half of the seam: `apply` takes a `&Record` and turns
+# it into a deck movement, which is the half ADR-0185 never promised to delete.
+# `karakuri-operation-record` answers *what was written* and names `Record` in
+# its answer without re-exporting it, so the example still has to be able to
+# say the word.
 karakuri-store.workspace = true
 
 # **The example carries tests, so it is a test target.** Cargo builds an example
