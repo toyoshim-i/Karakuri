@@ -462,9 +462,11 @@ struct Costs {
     /// With nothing in the Program bay making texels the reading used to blame
     /// the only other thing it knew about — an `egui` repaint delay answered
     /// immediately — and on this example that is never the answer: folding the
-    /// picture and the preview row away leaves the window drawing 28.7 to 29.0
-    /// frames a second over four runs, which is the roll's declared 30 Hz and
-    /// not a mishandled delay.
+    /// picture and the preview row away leaves the window drawing 28.0 to 28.3
+    /// frames a second over two runs on 2026-08-26, which is the roll's
+    /// declared 30 Hz and not a mishandled delay. Folding the mixer bay away
+    /// as well takes it to 0 frames, because the chip that declares the 30 Hz
+    /// is then not laid out (ADR-0193).
     /// A reading that names the wrong cause is worse than one that names none.
     declared: Option<Duration>,
 }
@@ -605,8 +607,10 @@ impl Costs {
         );
         let rate = self.rate_over(STILL.as_secs_f64());
         match (self.live, self.still == Still::default()) {
-            // The reading this was written for, and it is now only reachable
-            // with the picture off.
+            // The reading this was written for. It is reachable with the
+            // picture, the preview row and the mixer bay folded away — the
+            // first two stop the texels and the third stops the declaration
+            // (ADR-0193) — and with any one of the three on screen it is not.
             (false, true) => println!(
                 "  so P-0072's first clause holds here: no per-frame work is done to \
                  redraw what nobody has touched and nothing has moved."
@@ -616,18 +620,25 @@ impl Costs {
                 // second clause working rather than its first failing: the
                 // parked deck's tally declares a staleness and the window
                 // serves it. Measured on 2026-08-26 with the picture and the
-                // preview row folded away: 29.0 frames a second, at 432
-                // allocations a frame with the mixer bay drawn and 260 with it
-                // folded too — the fold hides the chip, and a slot the
-                // governor parked stays parked, so the declaration stands
-                // either way.
+                // preview row folded away and the mixer bay on screen: 28.0
+                // and 28.3 frames a second over two runs, at 427 and 425
+                // allocations a frame.
+                //
+                // **Folding the mixer bay away takes this arm out of reach**,
+                // and that is ADR-0193: the slot stays parked, the chip is not
+                // drawn, and a region that is not laid out declares nothing —
+                // the same two runs read 0 frames with the bay folded, which
+                // is the arm above. It read 28.7 to 29.0 a second at 260
+                // allocations before that change, which is the defect that
+                // record closes.
                 Some(staleness) => println!(
                     "  so P-0072's first clause does NOT hold here, and the reason is a \
                      declaration rather than a fault: something on this panel is parked, \
                      the mixer's tally is rolling toward a residency nobody granted, and \
                      it declares a staleness of {:.1} ms — about {:.0} frames a second \
-                     (ADR-0190). Nothing about folding it away stops that: the slot is \
-                     parked whether or not the chip is on screen.",
+                     (ADR-0190). Folding the mixer bay away ends it: the slot stays \
+                     parked, and a region that is not laid out declares nothing \
+                     (ADR-0193).",
                     staleness.as_secs_f64() * 1000.0,
                     1.0 / staleness.as_secs_f64()
                 ),
@@ -3246,7 +3257,8 @@ impl ApplicationHandler for App {
                     gfx,
                     &mut self.egui_due,
                     &mut self.costs,
-                    Change::Animating(self.readout.view.animating()).repaint(),
+                    Change::Animating(self.readout.view.animating(self.readout.panel.layout()))
+                        .repaint(),
                 );
 
                 // -- the egui pass -------------------------------------
@@ -3501,7 +3513,7 @@ impl ApplicationHandler for App {
                 // is the other half of why frames are being drawn on an
                 // untouched window. Asked of the view here for the same reason
                 // `live` is: one answer per frame, kept for the reading.
-                self.costs.declared = self.readout.view.animating();
+                self.costs.declared = self.readout.view.animating(self.readout.panel.layout());
                 if live {
                     gfx.window.request_redraw();
                 }
@@ -4915,12 +4927,15 @@ mod gpu {
             "the strip's two residencies agree, so the chip has nothing to roll toward"
         );
 
-        // And the panel is live for as long as they disagree, which is the
-        // declaration `tests/parked.rs` asserts against strips of its own.
-        let mut view = View::new(Room::Day);
-        view.mixer = strips;
+        // And the panel is live for as long as they disagree **and the bay
+        // the chip is in is laid out**, which is the declaration
+        // `tests/parked.rs` asserts against strips and folds of its own. The
+        // panel here is the example's own, unfolded, which is the arrangement
+        // this window opens on.
+        let mut readout = Readout::new(1440.0, 900.0);
+        readout.view.mixer = strips;
         assert_eq!(
-            view.animating(),
+            readout.view.animating(readout.panel.layout()),
             Some(view::ROLL_STALENESS),
             "a parked deck declared no staleness, so the roll never gets a frame"
         );

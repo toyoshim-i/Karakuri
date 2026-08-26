@@ -12,7 +12,7 @@
 //! the word rolls part of the way toward the one that was asked for, once a
 //! second, and never lands.
 //!
-//! Six claims, and each one is a thing that could quietly not be true:
+//! Seven claims, and each one is a thing that could quietly not be true:
 //!
 //! 1. **The chip is as wide as the widest residency word**, whichever it is
 //!    showing — a capsule sized to the current word resizes when the deck
@@ -32,6 +32,10 @@
 //! 6. **The panel asks for a deadline while a slot is parked and for `Never`
 //!    when none is** — the declaration end of P-0072, from the view, which is
 //!    what knows the rate.
+//! 7. **And for `Never` while the bay the chip is in is out of the layout**,
+//!    however parked the slot behind it is. A declaration answered off the
+//!    deck alone bought a 30 Hz deadline for a chip nobody could see, which is
+//!    P-0072's *what must be live* read as *what is pending*.
 //!
 //! None of it needs a window, a device or a clock.
 
@@ -40,13 +44,14 @@ mod common;
 use std::time::Duration;
 
 use common::{drawn_once, near, PLAUSIBLE};
-use karakuri_console::panel::Panel;
+use karakuri_console::panel::{Op, Panel};
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{
     mixer, roll_at, Level, Mask, Phase, Strip, StripBox, Tally, View, ROLL_PERIOD, ROLL_REACH,
     ROLL_STALENESS, ROLL_TRAVEL,
 };
+use karakuri_layout::NodeId;
 use karakuri_operation::BlendMode;
 
 /// A strip that is where it was asked to be — the ordinary case, and what
@@ -79,10 +84,26 @@ fn parked() -> Strip {
     }
 }
 
-/// One strip's box, off a panel at a plausible window.
-fn box_of(strips: &[Strip]) -> StripBox {
+/// **The console's arrangement at a plausible window, solved** — every region
+/// laid out, which is the state `View::animating` is asked in everywhere below
+/// except where a fold is the thing under test.
+fn arrangement() -> Panel {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
     panel.solve();
+    panel
+}
+
+/// The node the arrangement knows by `name`.
+fn node(panel: &Panel, name: &str) -> NodeId {
+    panel
+        .layout()
+        .find(name)
+        .unwrap_or_else(|| panic!("the arrangement names `{name}`"))
+}
+
+/// One strip's box, off a panel at a plausible window.
+fn box_of(strips: &[Strip]) -> StripBox {
+    let panel = arrangement();
     let ctx = drawn_once();
     mixer(&ctx, panel.layout(), strips)
         .expect("the mixer bay draws its strips")
@@ -231,17 +252,28 @@ fn a_settled_strip_is_still_and_asks_for_nothing() {
             );
         }
 
+        let mut panel = arrangement();
         let mut view = View::new(Room::Day);
         view.mixer = vec![settled(tally)];
+        // **Whether the bay is drawn or folded**, because a slot that is not
+        // parked has nothing to declare either way — the fold is what stops a
+        // *pending* thing being paid for, and it is not a second reason to be
+        // still.
         assert_eq!(
-            view.animating(),
+            view.animating(panel.layout()),
             None,
-            "a settled {tally:?} strip declared a staleness"
+            "a settled {tally:?} strip declared a staleness with the bay drawn"
         );
         assert_eq!(
-            Change::Animating(view.animating()).repaint(),
+            Change::Animating(view.animating(panel.layout())).repaint(),
             Repaint::Never,
             "a console with nothing pending asked for a frame"
+        );
+        panel.op(Op::Fold(node(&panel, "mixer")));
+        assert_eq!(
+            view.animating(panel.layout()),
+            None,
+            "a settled {tally:?} strip declared a staleness with the bay folded"
         );
     }
 }
@@ -438,12 +470,13 @@ fn the_two_words_never_meet() {
 /// likely thing to take that away by accident.
 #[test]
 fn the_panel_asks_for_a_deadline_only_while_something_is_parked() {
+    let panel = arrangement();
     let mut view = View::new(Room::Day);
 
     // No deck at all: the bay draws nothing and nothing moves.
-    assert_eq!(view.animating(), None);
+    assert_eq!(view.animating(panel.layout()), None);
     assert_eq!(
-        Change::Animating(view.animating()).repaint(),
+        Change::Animating(view.animating(panel.layout())).repaint(),
         Repaint::Never
     );
 
@@ -454,12 +487,12 @@ fn the_panel_asks_for_a_deadline_only_while_something_is_parked() {
         .map(settled)
         .collect();
     assert_eq!(
-        view.animating(),
+        view.animating(panel.layout()),
         None,
         "a deck with nothing parked declared a staleness"
     );
     assert_eq!(
-        Change::Animating(view.animating()).repaint(),
+        Change::Animating(view.animating(panel.layout())).repaint(),
         Repaint::Never,
         "a still panel asked for a frame"
     );
@@ -467,26 +500,106 @@ fn the_panel_asks_for_a_deadline_only_while_something_is_parked() {
     // One of them parked, and the panel is live for as long as it is.
     view.mixer[2] = parked();
     assert_eq!(
-        view.animating(),
+        view.animating(panel.layout()),
         Some(ROLL_STALENESS),
         "a parked slot did not declare the roll's staleness"
     );
     assert_eq!(
-        Change::Animating(view.animating()).repaint(),
+        Change::Animating(view.animating(panel.layout())).repaint(),
         Repaint::After(ROLL_STALENESS),
         "a parked slot did not ask for a deadline"
     );
 
     // Two parked is one panel-wide phase and one deadline, not two.
     view.mixer[0] = parked();
-    assert_eq!(view.animating(), Some(ROLL_STALENESS));
+    assert_eq!(view.animating(panel.layout()), Some(ROLL_STALENESS));
 
     // And the request landing puts the panel back to sleep.
     view.mixer[0] = settled(Tally::Priming);
     view.mixer[2] = settled(Tally::Priming);
     assert_eq!(
-        view.animating(),
+        view.animating(panel.layout()),
         None,
         "the request landed and the panel is still asking for frames"
     );
+}
+
+/// **A parked slot in a bay that is folded away declares nothing**, and
+/// unfolding it declares again.
+///
+/// The strips are rewritten every frame from the `Deck`, so *is anything
+/// pending* is a fact about the deck and not about the panel. Answering off
+/// that alone bought a 30 Hz deadline forever for a chip nobody could see:
+/// measured with the picture and the preview row folded, the window sat at
+/// 28.7 to 29.0 frames a second, and folding the mixer bay on top of that
+/// moved the price of a frame — 432 allocations to 260 — and not the rate at
+/// all. That is P-0072 read backwards: the rule is *what **must be live**
+/// declares a cost and a staleness*, and a bay the operator has folded away is
+/// not live.
+///
+/// **Both folds, because they are one question with two ways in.** `f` over
+/// the bay folds the mixer itself; `g` over it folds the split that encloses
+/// it, and the whole right pane goes with it. `Layout::visible` walks the
+/// ancestors and answers both — asking `is_collapsed` on the bay alone would
+/// pass the first of these and fail the second, silently, at the moment an
+/// operator folded a pane rather than a bay.
+///
+/// **The fold is not a latch**, which is the half that a `bool` written once
+/// would get wrong: the declaration is re-derived every frame from the
+/// arrangement as it now is, so putting the bay back puts the deadline back
+/// while the slot is still parked.
+#[test]
+fn a_folded_mixer_bay_declares_nothing_and_unfolding_declares_again() {
+    for enclosing in [false, true] {
+        let mut panel = arrangement();
+        let bay = node(&panel, "mixer");
+        let folds = match enclosing {
+            true => node(&panel, "right-pane"),
+            false => bay,
+        };
+
+        let mut view = View::new(Room::Day);
+        view.mixer = vec![settled(Tally::Live), parked()];
+
+        // Drawn, and the chip is rolling on screen: the panel declares.
+        assert_eq!(
+            view.animating(panel.layout()),
+            Some(ROLL_STALENESS),
+            "a parked slot in a drawn mixer bay declared nothing"
+        );
+
+        // Folded away, with the same slot still parked behind it.
+        panel.op(Op::Fold(folds));
+        assert!(
+            !panel.layout().visible(bay),
+            "folding {} left the mixer bay laid out",
+            match enclosing {
+                true => "the right pane",
+                false => "the mixer bay",
+            }
+        );
+        assert_eq!(
+            view.animating(panel.layout()),
+            None,
+            "a parked slot declared a staleness with its bay folded away (enclosing: {enclosing})"
+        );
+        assert_eq!(
+            Change::Animating(view.animating(panel.layout())).repaint(),
+            Repaint::Never,
+            "a folded bay's parked slot still asked the window for a frame"
+        );
+
+        // And back: the fold is not a latch.
+        panel.op(Op::Unfold(folds));
+        assert_eq!(
+            view.animating(panel.layout()),
+            Some(ROLL_STALENESS),
+            "unfolding the bay left the roll declared dead while the slot is still parked"
+        );
+        assert_eq!(
+            Change::Animating(view.animating(panel.layout())).repaint(),
+            Repaint::After(ROLL_STALENESS),
+            "unfolding the bay did not get the deadline back"
+        );
+    }
 }

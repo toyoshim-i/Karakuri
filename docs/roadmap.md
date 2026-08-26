@@ -443,9 +443,12 @@ operation can set.
 every frame; the beat grid is cheap, high priority, and moves two to four times a second; the mixer
 is expensive, repetitive and **hardly moves at all** — six readouts that change when a hand changes
 them; and the tally's roll is expensive, runs at 30 Hz and runs **only while a request is
-outstanding**, which can be the length of a set. The roll is the first region to declare a staleness
-(`View::animating`, and `repaint::Change::Animating` turns it into a deadline). **There is still no
-scheduler**, and the four of them are what one would be scheduling.
+outstanding and the bay that draws it is laid out**, which can be the length of a set. The roll is
+the first region to declare a staleness (`View::animating`, and `repaint::Change::Animating` turns
+it into a deadline), and it declares nothing while it is folded away — a region that is not laid out
+declares nothing rather than declaring and being dropped by a scheduler that does not exist
+([ADR-0193](adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md)).
+**There is still no scheduler**, and the four of them are what one would be scheduling.
 
 **Owed, and found by building this: `Layout::soloed()` can lie.** The solve never reads it and
 `check_structure` only checks that it addresses a node, so a solo's exclusivity lives entirely in
