@@ -194,6 +194,55 @@ const STILL: Duration = Duration::from_secs(3);
 /// measuring.
 const SAMPLE: usize = 240;
 
+/// **What the `egui` pass on this panel last read**, and the day it was read
+/// — the figure the reading below quotes, and the figure it holds the run it
+/// has just taken against.
+///
+/// It is a constant rather than a sentence because a number written into prose
+/// reads as current forever, and this one did. The line that quotes it cited
+/// [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
+/// 184 allocations and 226.2 kB and said the `egui` pass "is still that",
+/// which stopped being true when the mixer bay landed — 456 there, and 525
+/// once deck B was parked
+/// ([ADR-0191](../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)).
+/// Nobody re-checked it for two commits, because nothing was checking it.
+///
+/// **Taken on 2026-08-26**, over nine runs of this example on an Apple M4 Pro
+/// with nothing touching the window: per-frame medians of 524 to 538
+/// allocations and 671.4 to 695.3 kB, of which the two below are the middle.
+/// What the panel had in it while they were taken is the last paragraph the
+/// reading prints. Re-take all three together, several runs at a time — one run
+/// is not a number here — and re-date them.
+const WRITTEN_ALLOCS: u64 = 525;
+const WRITTEN_KB: f64 = 694.3;
+const WRITTEN_ON: &str = "2026-08-26";
+
+/// How far a run may sit from [`WRITTEN_ALLOCS`] before the reading says the
+/// sentence quoting it has gone stale.
+///
+/// **A factor, and a generous one, because an allocation count is not a
+/// constant**: a hard equality here would be a guard nobody could keep
+/// passing, and this file's own nine runs disagree by 14 allocations. Two is
+/// the smallest factor that still catches what actually happened — 184 to the
+/// mixer bay's 456 is 2.5x, so a band of two would have said so on the first
+/// run after that bay landed, and a band of ten would not have.
+///
+/// Only the allocation count is held: the bytes move with it, and two verdicts
+/// about one pass is one more thing to keep passing for nothing.
+const DRIFT: f64 = 2.0;
+
+/// **Has the reading moved away from the sentence that quotes it?** `Some` is
+/// the factor between them, where that factor is past [`DRIFT`] in either
+/// direction.
+///
+/// Either direction on purpose: a pass that got cheaper makes the sentence
+/// exactly as untrue as one that got dearer, and only one of those two is ever
+/// noticed by accident.
+fn drifted(measured: u64, written: u64) -> Option<f64> {
+    let factor = measured.max(written) as f64 / measured.min(written).max(1) as f64;
+    (factor > DRIFT).then_some(factor)
+}
+
 /// The allocator, counting. **Per thread, not per process** — `wgpu` allocates
 /// on threads of its own and a process-wide counter would attribute that to
 /// the `egui` pass, which is the one number this exists to get right.
@@ -405,6 +454,19 @@ struct Costs {
     /// way, which is the point — the number is not adjusted for knowing the
     /// answer.
     live: bool,
+    /// **What the panel declared it needed**, as `View::animating` answered it
+    /// on the last frame: a staleness while a slot is parked and the tally is
+    /// rolling, `None` while nothing on the panel is moving.
+    ///
+    /// It is here for one sentence, and the sentence was wrong without it.
+    /// With nothing in the Program bay making texels the reading used to blame
+    /// the only other thing it knew about — an `egui` repaint delay answered
+    /// immediately — and on this example that is never the answer: folding the
+    /// picture and the preview row away leaves the window drawing 28.7 to 29.0
+    /// frames a second over four runs, which is the roll's declared 30 Hz and
+    /// not a mishandled delay.
+    /// A reading that names the wrong cause is worse than one that names none.
+    declared: Option<Duration>,
 }
 
 impl Costs {
@@ -419,6 +481,7 @@ impl Costs {
             said: false,
             taken_on: String::from("an adapter nobody asked"),
             live: false,
+            declared: None,
         }
     }
 
@@ -548,12 +611,35 @@ impl Costs {
                 "  so P-0072's first clause holds here: no per-frame work is done to \
                  redraw what nobody has touched and nothing has moved."
             ),
-            (false, false) => println!(
-                "  so P-0072's first clause does NOT hold here — something is asking \
-                 for frames on an untouched window, and with nothing on the panel \
-                 making texels the likeliest something is an `egui` repaint delay \
-                 answered immediately instead of waited out."
-            ),
+            (false, false) => match self.declared {
+                // **The panel said it needed them**, and that is P-0072's
+                // second clause working rather than its first failing: the
+                // parked deck's tally declares a staleness and the window
+                // serves it. Measured on 2026-08-26 with the picture and the
+                // preview row folded away: 29.0 frames a second, at 432
+                // allocations a frame with the mixer bay drawn and 260 with it
+                // folded too — the fold hides the chip, and a slot the
+                // governor parked stays parked, so the declaration stands
+                // either way.
+                Some(staleness) => println!(
+                    "  so P-0072's first clause does NOT hold here, and the reason is a \
+                     declaration rather than a fault: something on this panel is parked, \
+                     the mixer's tally is rolling toward a residency nobody granted, and \
+                     it declares a staleness of {:.1} ms — about {:.0} frames a second \
+                     (ADR-0190). Nothing about folding it away stops that: the slot is \
+                     parked whether or not the chip is on screen.",
+                    staleness.as_secs_f64() * 1000.0,
+                    1.0 / staleness.as_secs_f64()
+                ),
+                // Nothing live, nothing declared, and frames drawn anyway.
+                None => println!(
+                    "  so P-0072's first clause does NOT hold here — something is asking \
+                     for frames on an untouched window, nothing on the panel is making \
+                     texels and nothing has declared a staleness, so the likeliest \
+                     something is an `egui` repaint delay answered immediately instead of \
+                     waited out."
+                ),
+            },
             // **The expected reading now**, and the whole of what this run is
             // for. It is stated as a price rather than as a failure, because
             // that is what it is: the clause is about a panel with nothing
@@ -693,16 +779,50 @@ impl Costs {
                 (engine[n / 2] + ui[n / 2] + paint[n / 2]) * rate / 10.0
             );
             println!(
-                "  that per-frame price is not what changed, and immediate mode pays it by \
-                 construction: ADR-0164 measured 184 allocations and 226.2 kB a frame here \
-                 with every bay empty, and the egui pass above is still that. What changed \
-                 is how many frames pay it — 0 with a still panel and nothing in the \
-                 Program bay, and the rate above with anything live in it."
+                "  that per-frame price is what immediate mode pays by construction, and it \
+                 is no longer ADR-0164's: that record measured 184 allocations and 226.2 kB \
+                 a frame here with every bay empty, which this panel has not been since the \
+                 mixer bay landed — 456 allocations there, and 525 once deck B was parked \
+                 (ADR-0191). Taken again on {WRITTEN_ON} over nine runs of this example \
+                 with nothing touching the window: {WRITTEN_ALLOCS} allocations and \
+                 {WRITTEN_KB:.1} kB a frame in the middle of the nine, which spread 524 to \
+                 538 and 671.4 to 695.3 kB. What the panel had in it while they were taken \
+                 is the last paragraph below. What ADR-0164 is still right about is that \
+                 the price is paid on every frame drawn; what changed is how many frames pay \
+                 it — 0 with a still panel and nothing in the Program bay, and the rate above \
+                 with anything live in it."
             );
+            // **The sentence above is checked against the run that has just
+            // been taken**, which is the only place either can be: the number
+            // needs a window, three seconds of nobody touching it and a
+            // device, and none of those is reachable from `cargo test`. So the
+            // claim and its check are printed together, and the figure in the
+            // prose is the figure being checked rather than a second copy of
+            // it.
+            match drifted(allocs[n / 2], WRITTEN_ALLOCS) {
+                Some(factor) => println!(
+                    "  and THIS run read {}, which is {factor:.1}x that — past the {DRIFT:.0}x \
+                     this file will quote a figure across. **The sentence above is stale.** \
+                     Re-take it over several runs of this example, write what the panel had in \
+                     it, and re-date `WRITTEN_ALLOCS`, `WRITTEN_KB` and `WRITTEN_ON` in \
+                     `examples/panel.rs` — which is what nobody did for the two commits before \
+                     this line existed.",
+                    allocs[n / 2]
+                ),
+                None => println!(
+                    "  and THIS run read {}, within {DRIFT:.0}x of that, so the sentence above \
+                     is still one this window produces.",
+                    allocs[n / 2]
+                ),
+            }
             println!("  taken on {}", self.taken_on);
             println!(
-                "  the panel half is taken on this window at {:.0}x{:.0} logical with every \
-                 other bay empty, which is NOT the workspace's reference workload. The \
+                "  the panel half is taken on this window at {:.0}x{:.0} logical, drawing a \
+                 live picture, four preview cells with deck A auditioning in one and three \
+                 off, the mixer bay, the transport, the outputs row and deck B's parked \
+                 tally rolling once a second — over Library, Staging, Inspector, Master and \
+                 Sequencer, which are a head and nothing else. That is NOT the workspace's \
+                 reference workload. The \
                  engine half IS: one Set of {} elements at {}x{}, one step a frame — the \
                  deck's second slot is parked, and a parked slot neither steps nor draws, \
                  so it is in none of these numbers — and \
@@ -3377,6 +3497,11 @@ impl ApplicationHandler for App {
                 // [`live`] is where it is written and where a test can reach
                 // it.
                 self.costs.live = live;
+                // **And what the panel asked for on its own account**, which
+                // is the other half of why frames are being drawn on an
+                // untouched window. Asked of the view here for the same reason
+                // `live` is: one answer per frame, kept for the reading.
+                self.costs.declared = self.readout.view.animating();
                 if live {
                     gfx.window.request_redraw();
                 }
@@ -3425,6 +3550,53 @@ mod tests {
         assert_eq!(missed(&Acquired::Occluded), Some(Missed::Idle));
         // Not self-correcting, so it is said rather than retried.
         assert_eq!(missed(&Acquired::Validation), Some(Missed::Fault));
+    }
+
+    /// **A figure quoted in prose is held against the run that was just
+    /// taken**, so a panel that grows says so instead of leaving a sentence
+    /// that was true of a smaller one.
+    ///
+    /// This is the failure the guard exists for, and it is not hypothetical:
+    /// the line above the reading cited ADR-0164's 184 allocations and said
+    /// the `egui` pass "is still that" through the mixer bay landing at 456
+    /// and the parked deck at 525 — two commits of a present-tense claim
+    /// nobody re-checked, because nothing re-checked it.
+    ///
+    /// **What can be asserted here is the verdict, not the reading.** A
+    /// reading needs a device, a window and three seconds of nobody touching
+    /// it, so it cannot be taken from `cargo test`; what this file can do is
+    /// make the figure in the sentence and the figure under the verdict one
+    /// constant, and hold [`drifted`] to catching what actually went wrong.
+    #[test]
+    fn a_reading_that_has_moved_says_the_sentence_quoting_it_is_stale() {
+        // The band a run has to stay inside to say nothing. Nine runs on
+        // 2026-08-26 read between 524 and 538, and a guard that fired on that
+        // spread is one nobody could keep passing.
+        assert_eq!(drifted(WRITTEN_ALLOCS, WRITTEN_ALLOCS), None);
+        assert_eq!(
+            drifted(538, WRITTEN_ALLOCS),
+            None,
+            "the run-to-run spread of the reading this quotes must not read as staleness"
+        );
+
+        // And what it is for: ADR-0164's 184 against the mixer bay's 456 is
+        // 2.5x, so the first run after that bay landed would have said the
+        // sentence had stopped being true. It is the same answer whichever of
+        // the two is the one written down, because a pass that got cheaper
+        // makes the sentence just as untrue.
+        assert!(
+            drifted(456, 184).is_some(),
+            "the mixer bay's landing is the drift this exists to have caught"
+        );
+        assert!(
+            drifted(184, 456).is_some(),
+            "drift is not caught one way round only"
+        );
+
+        // A band of two is still a band: an order of magnitude is well out of
+        // it, from either end.
+        assert!(drifted(WRITTEN_ALLOCS * 10, WRITTEN_ALLOCS).is_some());
+        assert!(drifted(WRITTEN_ALLOCS / 10, WRITTEN_ALLOCS).is_some());
     }
 
     /// **A frame nobody asked for is the one the reading is about.**

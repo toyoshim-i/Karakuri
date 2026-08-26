@@ -62,10 +62,11 @@ the forced part today.
 
 **Nowhere yet, and one of the three reasons has gone.** There is still no scheduler to refuse the
 economy, and the beat grid still moves because the panel redraws rather than because anything
-decided it must. What has changed is the third: **one region now declares a cost and a staleness**
-([P-0072](0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)) — the mixer
-strip's residency chip, which rolls at a rate it names while a request of the operator's has not
-landed
+decided it must. What has changed is the third: **one region now declares a staleness** — a
+staleness and not yet a cost, which is the half of
+[P-0072](0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md) that has a customer
+— the mixer strip's residency chip, which rolls at a rate it names while a request of the
+operator's has not landed
 ([ADR-0190](../adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)).
 
 **That region is not this rule's motion**, and the distinction is the whole of why this file is

@@ -2,10 +2,16 @@
 //!
 //! [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)'s
 //! first clause and nothing else: *a panel with nothing changing on it is paid
-//! for once and not again.* A window loop that drives itself pays
-//! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s
-//! measured 184 allocations and 226.2 kB on every frame nobody is touching;
-//! this is the decision that stops those frames being drawn at all.
+//! for once and not again.* A window loop that drives itself pays that price on
+//! every frame nobody is touching, and the price is the panel's rather than a
+//! fixed one:
+//! [ADR-0164](../../../docs/adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)
+//! measured 184 allocations and 226.2 kB a frame with every bay empty, and the
+//! panel as it now stands — a live picture, the preview row, the mixer bay, the
+//! transport and the outputs row — reads 525 and 694.3 kB in the middle of
+//! nine runs on 2026-08-26, which spread 524 to 538 (`examples/panel.rs` takes
+//! it, and holds its own quoted figure against every run of it). This is the
+//! decision that stops those frames being drawn at all.
 //!
 //! **One region declares a staleness now, and the scheduler still does not
 //! exist.** [`Change::Animating`] carries what

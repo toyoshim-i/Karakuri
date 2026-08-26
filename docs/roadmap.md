@@ -255,21 +255,43 @@ grows taller with the window and the arrangement's is pinned at 72.
 
 **Each preview is an audition and costs a pass**, which is now literally what the code does: one
 `Present`, one canvas, presented twice — into the picture's region and again into deck A's cell.
-What a panel frame costs is measured and printed by the example rather than estimated: still, it
-is **0 frames and 0 allocations**
+What a panel frame costs is measured and printed by the example rather than estimated. The still
+reading — **0 frames and 0 allocations**
 ([P-0072](principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)'s
-first clause); with the picture and deck A live it is 59.7 fps and **10.9%** of a second on an M4
-Pro at 1440x900, which is the price the rest of P-0072 is for.
+first clause) — **is no longer reachable on this example at all**, and folding does not get back
+to it: measured on 2026-08-26, the picture folded away leaves deck A auditioning at 47.0 fps, the
+preview row folded as well leaves the parked tally's declared 30 Hz at 28.7–29.0 fps, and folding
+the whole mixer bay on top of that changes the price per frame and not the rate, because the fold
+hides the chip while the governor's parked slot stays parked. Zero needs a console with nothing
+pending, which `crates/karakuri-console/tests/parked.rs` asserts headlessly. With the picture
+live, deck A auditioning in the preview row under it, and the mixer bay, the transport, the
+outputs row and deck B's parked tally rolling beside them, it is
+**58.3–59.3 fps and 18.1–22.2% of a second**, over nine runs on 2026-08-26 on an M4 Pro at
+1440x900 with nothing touching the window — a whole-frame median of 3.09 to 3.74 ms across the
+nine, and 524 to 538 allocations a frame. The nine were taken over about an hour and drift upward
+through it, which is the machine rather than the panel: the allocation count barely moves while
+the milliseconds climb by a fifth. That is the price the rest of P-0072 is for.
 
-**Three figures have stood on this line and the spread is the machine, not the work.** It has read
-10.7%, then 8.2%, then this, across a preview row being added and the console adopting
-`frame::compose`; on the run that gave 8.2% the three passes were *each* about two thirds of what
-they are here, which is a clock moving under all of them rather than work leaving one. The readout
-says it in its own last paragraph — this machine reports about a sixth of these numbers with its
-other cores loaded, proportions unchanged — so **compare ratios, and take a figure here as the
-order of magnitude a decision gets made on rather than as a quantity two of them can be subtracted
-from.** The number is restated whenever the code under it changes shape, because a figure taken on
-a shape that no longer exists reads as current forever.
+**This line read 10.9% for two commits after it stopped being true**, which is the failure worth
+recording beside the number: 10.9% was the picture and the preview row alone, and what moved it
+was the mixer bay arriving rather than the parked deck. Nobody re-took it, because a figure in
+prose goes stale in silence. The example now holds its own quoted figure against the run it has
+just taken and says so when the two part company — `WRITTEN_ALLOCS` in
+`crates/karakuri-console/examples/panel.rs`.
+
+**Four figures have stood on this line, and only the last of the steps between them is the
+work.** It read 10.7%, then 8.2%, then 10.9% across a preview row being added and the console
+adopting `frame::compose`; on the run that gave 8.2% the three passes were *each* about two thirds
+of what they are here, which is a clock moving under all of them rather than work leaving one. The
+machine is worth a factor of two on its own, and the clearest evidence of it is that the figures
+go the wrong way: a reading taken at the commit *before* the parked deck landed put the panel at
+**37.1%**, against 18.1–22.2% over nine runs taken within the hour after it, on a panel doing
+strictly more, with the whole-frame median at roughly twice what those nine read. The readout says
+it in its own last paragraph — this machine reports about a sixth of these numbers with its other
+cores loaded, proportions unchanged — so **compare ratios, and take a figure here as the order of
+magnitude a decision gets made on rather than as a quantity two of them can be subtracted from.**
+The number is restated whenever the code under it changes shape, because a figure taken on a shape
+that no longer exists reads as current forever.
 
 **The rest of P-0072 is not built** — nothing declares a cost or a staleness and there is no
 scheduler. What it was waiting for was a second live region with a different character from the
@@ -452,8 +474,8 @@ because the console is an example rather than the program.
 2. **The rest of P-0072, and it is nearer than this item used to say.** Three live regions with
    three characters now exist — the picture expensive and every frame, the beat grid cheap and
    twice a second, the mixer expensive and hardly moving — which is what a scheduler was waiting
-   for. Nothing is over budget yet (10.9% of a second, with headroom), and the trigger this item
-   named — *when the mixer's controls make it move* — **has happened**:
+   for. Nothing is over budget yet (18.1–22.2% of a second on 2026-08-26, with headroom), and the
+   trigger this item named — *when the mixer's controls make it move* — **has happened**:
    [ADR-0188](adr/0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md)
    decided there would be a **fourth** rate on the panel and
    [ADR-0190](adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)
