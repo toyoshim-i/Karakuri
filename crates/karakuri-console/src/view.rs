@@ -122,7 +122,10 @@
 //! [`Strip::pending`], [`roll_at`] and [`tally_into`], and
 //! [P-0075](../../../docs/principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)
 //! for what that has to say. It is the panel's first live region and the first
-//! to declare a price ([`View::animating`]).
+//! to declare a price ([`View::animating`]) — and it declares it only while
+//! the bay it rolls in is laid out, because a fold takes the chip off the
+//! screen and a price paid for what nobody can see is P-0072 broken rather
+//! than served.
 //!
 //! # The bay head is one component with seven call sites
 //!
@@ -3908,16 +3911,47 @@ impl View {
     /// costs exactly what it cost before this existed**, which is a claim
     /// `tests/parked.rs` makes rather than a hope.
     ///
-    /// One region today. It is a `min` over one thing because a second is
-    /// coming — the beat is the panel's other candidate, and P-0077 wants it
-    /// moving continuously — and the shape of the answer is what decides
-    /// whether that one is free.
-    pub fn animating(&self) -> Option<Duration> {
-        self.mixer
-            .iter()
-            .filter(|strip| strip.pending().is_some())
-            .map(|_| ROLL_STALENESS)
-            .min()
+    /// # Pending is not enough: the region that shows it has to be laid out
+    ///
+    /// **A region that is not on screen declares nothing**, however much is
+    /// pending behind it. The strips are rewritten every frame from the deck,
+    /// so *is anything pending* is a fact about the deck; P-0072 is about what
+    /// **must be live**, and a bay the operator has folded away is not live.
+    /// A staleness declared for it buys a repaint of something nobody can
+    /// see — measured, before this asked: with the picture and the preview row
+    /// folded the window sat at 28.7 to 29.0 frames a second, and folding the
+    /// mixer bay on top of that moved the price of a frame and not the rate.
+    /// It draws nothing at all now. The alternative — declare it anyway and
+    /// let a scheduler drop it — is
+    /// [ADR-0193](../../../docs/adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md),
+    /// which is where it lost.
+    ///
+    /// This is
+    /// [P-0073](../../../docs/principles/0073-a-node-claims-only-what-its-visible-content-can-use.md)
+    /// in time rather than in space — *a node claims only what its visible
+    /// content can use*, where what is claimed is a share of the frame budget
+    /// rather than a share of the viewport.
+    ///
+    /// **The question is asked of the layout, which already answers it.**
+    /// [`Layout::visible`](karakuri_layout::Layout::visible) is ADR-0183's
+    /// disjunction — the operator's fold and the drawing's `set_aside`, read
+    /// as one — walked up the ancestors, so a folded right pane takes the
+    /// mixer with it and no second derivation of *is this laid out* is written
+    /// here. It is **not** [`mixer`]'s `None`, which is a different question
+    /// and a stricter one: that answers *can the strips be laid out in this
+    /// rectangle this pass*, and says no for a window merely too small and for
+    /// the frame before `egui` has fonts. Neither is a reason to stop the
+    /// roll — only being out of the layout is — and the layout answers this
+    /// one without a solve, which matters because the fold is applied and this
+    /// is asked before the next one.
+    ///
+    /// One region today. A second declares beside this one and carries its own
+    /// node the same way, and the answer is the soonest of them — the beat is
+    /// the panel's other candidate, and P-0077 wants it moving continuously.
+    pub fn animating(&self, layout: &karakuri_layout::Layout) -> Option<Duration> {
+        let bay = layout.find("mixer").is_some_and(|id| layout.visible(id));
+        let rolling = bay && self.mixer.iter().any(|strip| strip.pending().is_some());
+        rolling.then_some(ROLL_STALENESS)
     }
 
     /// Draw the whole console. The `ui` is the root one
