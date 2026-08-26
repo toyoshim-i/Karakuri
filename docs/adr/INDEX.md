@@ -217,6 +217,7 @@ number; new records continue from the end.
 | [ADR-0189](0189-motion-may-carry-the-meaning-and-a-stopped-animation-is-a-fault-to-report.md) | Motion may carry the meaning, and a stopped animation is a fault to report | 2026-08-26 | accepted |
 | [ADR-0190](0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md) | The parked tally rolls, because two lamps do not fit in fifty-three pixels | 2026-08-26 | accepted |
 | [ADR-0191](0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md) | The panel's parked deck is parked by the governor, or it is a drawing of one | 2026-08-26 | accepted |
+| [ADR-0192](0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md) | An operation asks for what a surface can say, and the record stays whole | 2026-08-26 | accepted |
 
 ## Retired numbers
 

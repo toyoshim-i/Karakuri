@@ -640,16 +640,34 @@ operations! {
     /// keyboard's compromise, not a surface's."*
     SetPreview { showing: Option<u8> } => "Choose what the output shows",
 
-    /// The transfer from unbounded linear HDR to something displayable, and
-    /// the level going into it.
+    /// The transfer from unbounded linear HDR to something displayable.
     ///
-    /// One variant for two things because `karakuri_store::record::Record::Look`
-    /// is one record for two things, and for its stated reason: a stream that
-    /// set the exposure without saying which operator it applies to would be
-    /// describing a look nobody can reconstruct. **`white_point` is in that
-    /// record, has no control on any surface and no row on the page**, so it
-    /// is not here — see the report.
-    SetLook { tonemap: Tonemap, exposure: f32 } => "Tone map and exposure",
+    /// Names the operator; it does not carry the level going into it, which is
+    /// [`Operation::SetExposure`].
+    SetTonemap { tonemap: Tonemap } => "Tone map",
+
+    /// The level going into that transfer, set outright.
+    ///
+    /// **Two operations where `karakuri_store::record::Record::Look` is one
+    /// record**, and the record is right to be one: a stream that set the
+    /// exposure without saying which operator it applies to would be
+    /// describing a look nobody can reconstruct. That reason is a reason about
+    /// **a record**. A record is what a replay reconstructs a session from, so
+    /// it must be complete on its own; an operation is what a surface *asks
+    /// for*, and the place that turns one into the other already knows the
+    /// look that is running — `karakuri-cli`'s `set_exposure` builds the
+    /// record from `Look { exposure, ..self.look }`, filling the operator in
+    /// from the current one, and has since before this crate existed.
+    ///
+    /// **What forced the split**: a control change turns exposure alone.
+    /// `karakuri-midi` has no engine, no state and no readback by charter
+    /// (`docs/adr/0180-…`), so `cc → exposure` — a route the manual marks as
+    /// existing — could not become an operation at all while the only variant
+    /// demanded an operator beside it. See `docs/adr/0192-…`.
+    ///
+    /// **`white_point` is in that record, has no control on any surface and no
+    /// row on the page**, so it is not here — see the report.
+    SetExposure { exposure: f32 } => "Exposure",
 
     // ----- Inside a Set -------------------------------------------------
 
@@ -884,13 +902,14 @@ mod tests {
 
     /// A floor, not a count: the point is that the list cannot come back
     /// empty. The exact number is the manual's to state and is asserted
-    /// against the page itself in `tests/`. It read 46 when this landed and
-    /// reads 45 since two residency rows became one (ADR-0186); it moves with
+    /// against the page itself in `tests/`. It read 46 when this landed, 45
+    /// once two residency rows became one (ADR-0186), and 46 again since the
+    /// look split into a tone map and an exposure (ADR-0192); it moves with
     /// the page and is never lowered to make a shorter list pass.
     #[test]
     fn the_vocabulary_is_not_empty() {
         assert!(
-            Operation::TITLES.len() >= 45,
+            Operation::TITLES.len() >= 46,
             "only {} operations named — the vocabulary has shrunk below what the manual \
              specifies",
             Operation::TITLES.len()
