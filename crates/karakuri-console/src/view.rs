@@ -135,6 +135,7 @@
 use egui::epaint::text::{LayoutJob, TextFormat};
 use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, StrokeKind, Ui};
 use karakuri_layout::{Axis, Hit, NodeId};
+use karakuri_operation::{BlendMode, Operation};
 
 use crate::panel::{unit, Grab, InHand, Knob, Op, Panel, GRAB};
 use crate::room::{size, Palette, Room};
@@ -2320,18 +2321,24 @@ pub struct Level {
 /// everything that can change what the console shows and a fader that reached
 /// no repaint would leave the strip drawn at the value before the drag.
 ///
-/// # Two of these are controls and the rest are readouts, and the source says
-/// which
+/// # Three of these are controls and the rest are readouts, and the source
+/// says which
 ///
 /// **The two faders are played.** A press on the trim's knob or the fader's
 /// knob takes it in hand ([`Mixer::grab`]), and dragging it emits
-/// [`karakuri_operation::Operation::SetGain`] or `SetOpacity` for the caller
-/// to turn into a record. Nothing here applies it, and nothing here keeps the
-/// value: the fields below are still written by whoever owns the deck, every
-/// frame, so a fader that has just been dragged shows the new number **because
-/// the deck changed**.
+/// [`Operation::SetGain`] or `SetOpacity` for the caller to turn into a
+/// record. Nothing here applies it, and nothing here keeps the value: the
+/// fields below are still written by whoever owns the deck, every frame, so a
+/// fader that has just been dragged shows the new number **because the deck
+/// changed**.
 ///
-/// **Everything else in the bay is a readout.** The tally, the two minis, the
+/// **The blend chip is the third, and it cycles.** A press on it emits
+/// [`Operation::SetBlendMode`] naming the mode after this one ([`Mixer::blend`]),
+/// and nothing here applies that either. It is one control emitting three
+/// operations, which is P-0074's own worked example of an affordance — see
+/// [ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md).
+///
+/// **Everything else in the bay is a readout.** The tally, the mask mini, the
 /// meter and the number are drawn from what the deck says and a press on any
 /// of them reaches nothing — and so does a press on a fader's *track*, off the
 /// knob, which would otherwise be a jump nobody asked for. `tests/mixer.rs`
@@ -2377,15 +2384,36 @@ pub struct Strip {
     /// control that silences a slot under every blend mode, which is what
     /// makes it the way out of material that has gone NaN.
     pub opacity: f32,
-    /// The blend in force, as the word the engine calls it — `Blend::name`.
+    /// **The blend in force**, as one of the vocabulary's three — and the word
+    /// drawn on the chip is [`BlendMode::name`].
     ///
-    /// A `&'static str` because that is what the engine hands out and because
-    /// the console has nothing to do with it but draw it. **The mock's own
-    /// tooltip lists four** — *"add, over, screen, multiply"* — and
-    /// `Blend::ALL` is three: `add`, `over`, `max`. The engine is what is
-    /// running, so the word it gives is the word drawn, and the disagreement
-    /// is the mock's to settle.
-    pub blend: &'static str,
+    /// # Why this is not the engine's word
+    ///
+    /// It was a `&'static str` — `Blend::name`, handed straight through, on
+    /// the argument that the console has nothing to do with the blend but draw
+    /// the engine's word. **That stopped being true when the chip became a
+    /// control** ([ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)):
+    /// to say what the *next* mode is, [`Mixer::blend`] has to know which of
+    /// the three this one is, and a string it cannot exhaustively match is the
+    /// wrong carrier for that. A `&str` would make the chip's arithmetic a
+    /// comparison against three literals with a fourth case that has no
+    /// answer.
+    ///
+    /// **So the type is the vocabulary's, and the harness converts.**
+    /// `karakuri-console` already depends on `karakuri-operation`, and
+    /// `examples/panel.rs` turns `Deck::blend`'s `karakuri_engine::deck::Blend`
+    /// into one of these with a `match`. The failure that buys is worth
+    /// stating: a fourth engine blend mode with no operation variant stops
+    /// compiling **at the harness**, rather than drawing a word on a chip no
+    /// control can reach and no map can ask for. That is the vocabulary doing
+    /// its job — P-0074's *"the two rules … are not jointly satisfiable unless
+    /// the vocabulary owns the lists."*
+    ///
+    /// The mock's own tooltip lists four — *"add, over, screen, multiply"* —
+    /// and there are three. The disagreement was the mock's to settle and
+    /// [ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)
+    /// settled it: `docs/manual/console.html` now lists the three that exist.
+    pub blend: BlendMode,
     /// The mask in force — `Deck::mask(slot).kind()`. Its angle, position and
     /// softness are not drawn: `.mini` is a chip that says *which shape*, and
     /// three numbers about that shape are the inspector's row, not this one.
@@ -2485,7 +2513,10 @@ pub struct StripBox {
     pub meter: Rect,
     /// `.strip-num`: the opacity as a number.
     pub num: Rect,
-    /// The blend `.mini`.
+    /// The blend `.mini`, which is **the chip a press acts on** and not only
+    /// the box a word is painted into — [`Mixer::blend`] hit-tests exactly
+    /// this rectangle. As wide as the word in it, inside `.mini`'s padding and
+    /// border.
     pub blend: Rect,
     /// The mask `.mini`.
     pub mask: Rect,
@@ -2628,6 +2659,61 @@ impl<'a> Mixer<'a> {
             })
     }
 
+    /// **What a press at `p` asks the blend to become**, or `None` where
+    /// there is no blend chip under it.
+    ///
+    /// # The chip cycles, and the operation names where it arrived
+    ///
+    /// Click it and the deck's blend moves to the next of
+    /// [`BlendMode::ALL`], wrapping from the last back to the first. What
+    /// comes out is [`Operation::SetBlendMode`] naming the **destination** —
+    /// never a step, because there is no step in the vocabulary to name.
+    ///
+    /// That is P-0074's own worked example rather than an exception to it:
+    /// *"A toggle is an affordance, built over operations by whoever draws the
+    /// control, and it belongs there … a mini that cycles the blend is one
+    /// control emitting three. The operator sees a toggle; the vocabulary
+    /// never does."* The cycle is [`after`], which is four lines in this file
+    /// and nothing at all in `karakuri-operation`.
+    ///
+    /// **What a MIDI map is offered is the three values, not the cycle** —
+    /// [ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md),
+    /// which is the decision this affordance forces and the reason it is
+    /// recorded at all.
+    ///
+    /// # One derivation, asked twice, and the whole chip is the target
+    ///
+    /// [`crate::input::claim`]'s rule 3 asks this and so does the caller that
+    /// acts on the press — the arrangement [`Outputs::op`] and [`Mixer::grab`]
+    /// both have, where the derivation that claims a press is asked again
+    /// rather than copied. [`StripBox::blend`] is the chip's own rectangle,
+    /// the one the word is painted into, so a chip a hand sees and a chip it
+    /// clicks are the same one.
+    ///
+    /// **The whole chip is the target and not the glyphs in it**, which is
+    /// [`Outputs::sink`]'s rule one bay along: a 15px word is not something a
+    /// hand finds, and `.mini`'s padding is what makes it one.
+    ///
+    /// # It names the strip's own deck
+    ///
+    /// The slot index, cast the way [`Mixer::grab`] casts it — the manual's
+    /// *deck* is the code's *slot* (ADR-0180), and a deck holds `MAX_SLOTS` of
+    /// them, so the index is a `u8` with room to spare.
+    pub fn blend(&self, p: karakuri_layout::Point) -> Option<Operation> {
+        let p = Pos2::new(p.x, p.y);
+        self.strips
+            .iter()
+            .zip(self.boxes)
+            .enumerate()
+            .find_map(|(index, (strip, at))| {
+                at.filter(|at| at.blend.contains(p))
+                    .map(|_| Operation::SetBlendMode {
+                        deck: index as u8,
+                        blend: after(strip.blend),
+                    })
+            })
+    }
+
     /// Every strip and its box, in slot order.
     pub fn placed(&self) -> impl Iterator<Item = (&'a Strip, StripBox)> {
         let boxes = self.boxes;
@@ -2725,7 +2811,11 @@ pub fn mixer<'a>(
     let mut boxes = [None; DECKS];
     for (index, strip) in strips.iter().take(DECKS).enumerate() {
         let tally = width(tally_job(strip.tally, Color32::PLACEHOLDER));
-        let blend = width(span_at(strip.blend, size::MINI_SIZE, Color32::PLACEHOLDER));
+        let blend = width(span_at(
+            strip.blend.name(),
+            size::MINI_SIZE,
+            Color32::PLACEHOLDER,
+        ));
         boxes[index] = strip_box(
             track(row, DECKS, index, size::STRIP_GAP, Axis::Row),
             label,
@@ -2954,6 +3044,28 @@ fn grabbed(fader: Fader, deck: u8, knob: Knob, p: Pos2) -> Option<Grab> {
     Grab::new(deck, knob, fader.axis, zero, fader.travel, coord - edge)
 }
 
+/// **The next blend mode round the cycle**, wrapping from the last back to the
+/// first — and the whole of the affordance the blend chip is.
+///
+/// It is four lines here and nothing at all in `karakuri-operation`, which is
+/// P-0074's division: *"A toggle is an affordance, built over operations by
+/// whoever draws the control, and it belongs there."* The vocabulary owns the
+/// three values; this owns the order a pointer walks them in.
+///
+/// **A match rather than an index into [`BlendMode::ALL`]**, for the reason
+/// [`BlendMode::name`] is one: a fourth mode does not compile until somebody
+/// says what follows it. The cost is that the order is written twice — here
+/// and in `ALL` — so `tests/blend.rs` walks `ALL` through this and asserts
+/// they are the same cycle, which is the measurement that keeps the two from
+/// drifting rather than a comment promising they will not.
+fn after(blend: BlendMode) -> BlendMode {
+    match blend {
+        BlendMode::Add => BlendMode::Over,
+        BlendMode::Over => BlendMode::Max,
+        BlendMode::Max => BlendMode::Add,
+    }
+}
+
 /// The tally's word as one laid-out run, so that measuring it and painting it
 /// cannot be two different runs of type.
 fn tally_job(tally: Tally, colour: Color32) -> LayoutJob {
@@ -3058,7 +3170,7 @@ fn strip_into(ui: &Ui, pal: &Palette, strip: &Strip, at: StripBox) {
     centre_galley(&painter, at.num, galley, pal.text);
 
     mini_into(&painter, pal, at.blend, true, |painter, colour| {
-        let galley = painter.layout_job(span_at(strip.blend, size::MINI_SIZE, colour));
+        let galley = painter.layout_job(span_at(strip.blend.name(), size::MINI_SIZE, colour));
         centre_galley(painter, at.blend, galley, colour);
     });
     mini_into(&painter, pal, at.mask, false, |painter, colour| {

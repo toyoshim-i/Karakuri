@@ -34,6 +34,7 @@ use karakuri_console::panel::Panel;
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{mixer, Level, Mask, Mixer, Strip, StripBox, Tally, View, DECKS};
 use karakuri_layout::{Point, Rect};
+use karakuri_operation::BlendMode;
 
 /// **The mock's own first strip, as values**: `drift_night` live, a trim at
 /// 0.72, the fader at 1.00, `add` over no mask, and a meter reading.
@@ -47,7 +48,7 @@ fn mock() -> Strip {
         tally: Tally::Live,
         gain: 0.72,
         opacity: 1.0,
-        blend: "add",
+        blend: BlendMode::Add,
         mask: Mask::None,
         level: Some(Level {
             mean: 0.74,
@@ -66,7 +67,7 @@ fn mock_strips() -> Vec<Strip> {
             tally: Tally::Priming,
             gain: 0.44,
             opacity: 0.3,
-            blend: "over",
+            blend: BlendMode::Over,
             mask: Mask::Linear,
             level: Some(Level {
                 mean: 0.12,
@@ -78,7 +79,7 @@ fn mock_strips() -> Vec<Strip> {
             tally: Tally::Allocated,
             gain: 0.0,
             opacity: 0.0,
-            blend: "add",
+            blend: BlendMode::Add,
             mask: Mask::Radial,
             level: None,
         },
@@ -817,42 +818,49 @@ fn the_tally_shows_the_residency_it_is_given() {
     }
 }
 
-/// **The blend mini says the word it was given**, whatever the word is — the
-/// engine names its own blends and the console has nothing to do with the list
-/// but draw what it is handed.
+/// **The blend mini says the mode it was given**, in the vocabulary's own
+/// lower-case word.
+///
+/// **The list is now closed and that is the change**: this used to be handed
+/// arbitrary strings — `screen` and `multiply` among them — because the field
+/// was the engine's `&'static str` and the console had nothing to do with the
+/// list but draw it. The chip is a control now (ADR-0187), so it carries a
+/// `BlendMode` and the three this walks are every mode there is. A fourth
+/// would fail to compile in `BlendMode::name` before it reached here.
 #[test]
-fn the_blend_mini_shows_the_word_it_is_given() {
-    for blend in ["add", "over", "max", "screen"] {
+fn the_blend_mini_shows_the_mode_it_is_given() {
+    for blend in BlendMode::ALL {
         let strips = vec![Strip { blend, ..mock() }];
         let (at, shapes) = strip_shapes(strips, 0);
         assert_eq!(
             words(&shapes, at.blend),
-            vec![blend.to_owned()],
-            "the blend mini does not read {blend}"
+            vec![blend.name().to_owned()],
+            "the blend mini does not read {}",
+            blend.name()
         );
         // And the mini is as wide as the word in it, inside `.mini`'s padding
         // and border — so a longer word is a wider chip and not a clipped one.
         assert!(at.blend.width() > size::MINI_PAD_X * 2.0 + size::HAIRLINE * 2.0);
     }
     // A wider word is a wider mini, which is what says the chip was measured
-    // rather than fixed.
+    // rather than fixed. `over` is four glyphs and `add` is three.
     let (narrow, _) = strip_shapes(
         vec![Strip {
-            blend: "add",
+            blend: BlendMode::Add,
             ..mock()
         }],
         0,
     );
     let (wide, _) = strip_shapes(
         vec![Strip {
-            blend: "multiply",
+            blend: BlendMode::Over,
             ..mock()
         }],
         0,
     );
     assert!(
         wide.blend.width() > narrow.blend.width(),
-        "`add` and `multiply` measured to the same mini"
+        "`add` and `over` measured to the same mini"
     );
 }
 
@@ -1022,21 +1030,21 @@ fn a_name_too_long_for_a_strip_is_elided_on_one_line() {
 // Two controls, and the rest are readouts
 // ---------------------------------------------------------------------------
 
-/// **The two knobs are the panel's and everything else in the bay is
-/// `egui`'s.**
+/// **The two knobs and the blend chip are the panel's, and everything else in
+/// the bay is `egui`'s.**
 ///
 /// The console's rule has three claims before `egui`'s: a drag in hand, a
 /// boundary within `GRAB`, and a control the console draws (ADR-0176). This
-/// bay now has two of the third kind — the trim's knob and the fader's knob —
-/// and nothing else in it: the tally, the minis, the meter and the number are
-/// readouts, and so is a fader's **track** off the knob, because a press there
-/// would be a jump nobody asked for.
+/// bay now has three of the third kind — the trim's knob, the fader's knob and
+/// the blend chip (ADR-0187) — and nothing else in it: the tally, the mask
+/// mini, the meter and the number are readouts, and so is a fader's **track**
+/// off the knob, because a press there would be a jump nobody asked for.
 ///
 /// **Stated rather than inferred in both directions.** A knob that stopped
 /// being claimed would be a control drawn where it cannot be grabbed, and a
 /// bay that claimed everything would take presses it does nothing with.
 #[test]
-fn the_two_knobs_are_controls_and_the_rest_of_the_bay_is_not() {
+fn the_three_controls_are_claimed_and_the_rest_of_the_bay_is_not() {
     let (mut panel, ctx) = console(PLAUSIBLE);
     let strips = mock_strips();
     let bay = bay(&panel, &ctx, &strips);
@@ -1044,10 +1052,11 @@ fn the_two_knobs_are_controls_and_the_rest_of_the_bay_is_not() {
     let trim = at.trim_at(mock().gain);
     let fader = at.fader_at(mock().opacity);
 
-    // The two that are.
+    // The three that are.
     for (probe, what) in [
         (trim.knob.center(), "the trim's knob"),
         (fader.knob.center(), "the fader's knob"),
+        (at.blend.center(), "the blend chip"),
     ] {
         assert_eq!(
             claim(&mut panel, &ctx, &strips, point(probe)),
@@ -1069,7 +1078,6 @@ fn the_two_knobs_are_controls_and_the_rest_of_the_bay_is_not() {
         (track_floor, "the fader's track, below the knob"),
         (at.meter.center(), "the meter"),
         (at.num.center(), "the number"),
-        (at.blend.center(), "the blend"),
         (at.mask.center(), "the mask"),
     ];
     for (probe, what) in probes {
@@ -1084,6 +1092,9 @@ fn the_two_knobs_are_controls_and_the_rest_of_the_bay_is_not() {
     // the knob, or the paragraph above is asserting nothing.
     assert!(!trim.knob.contains(track_end));
     assert!(!fader.knob.contains(track_floor));
+    // And the mask mini has to actually be off the blend chip, or the list
+    // above would be asserting that a control is not one.
+    assert!(!at.blend.contains(at.mask.center()));
 
     // The boundary **under** the bay still has its grab, which is what says
     // the answers above are about the controls rather than the rule having

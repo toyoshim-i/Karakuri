@@ -44,10 +44,13 @@
 //!    all. The panel's controls are painted shapes, and the only thing that
 //!    knows a press landed on one is this rule.
 //!
-//!    **There are two of them now**: the Outputs row's sink
-//!    ([`crate::view::outputs`]) and a mixer strip's fader knob
-//!    ([`crate::view::Mixer::grab`]). The rule did not change to hold the
-//!    second, which is what it was written for.
+//!    **There are three of them now**: the Outputs row's sink
+//!    ([`crate::view::outputs`]), a mixer strip's fader knob
+//!    ([`crate::view::Mixer::grab`]) and its blend chip
+//!    ([`crate::view::Mixer::blend`]). The rule did not change to hold the
+//!    second or the third, which is what it was written for — and the third
+//!    is asked exactly the way the other two are: the derivation that draws
+//!    it, asked whether the point is on it, with nothing stored.
 //!
 //!    **A control claims what it acts on and no more.** A fader's *track* is
 //!    drawn by the console and is not claimed, because a press on it does
@@ -64,7 +67,10 @@
 //! order from ever mattering. **The mixer's knobs are measured the same way**
 //! and in the same file's spirit — `tests/fader.rs` asserts that no knob in
 //! the bay is within [`GRAB`] of any boundary, and carries the same guard on
-//! itself, so the ordering goes on costing nothing there too.
+//! itself, so the ordering goes on costing nothing there too. **The blend
+//! chip is measured a third time** in `tests/blend.rs`, with its own guard:
+//! whether a control clears every boundary's band is two constants and a
+//! rectangle, and it is never inherited from the control above it.
 //!
 //! # A caller acts on the control, and it asks the same question again
 //!
@@ -75,7 +81,10 @@
 //! the chip that claims a press and the chip that acts on it cannot come
 //! apart. A fader is the same arrangement: [`crate::view::Mixer::grab`]
 //! answers *is this a control* here and *which control, and where along it*
-//! to the caller, off one derivation and one set of values.
+//! to the caller, off one derivation and one set of values. So is the blend
+//! chip: [`crate::view::Mixer::blend`] answers *is this a control* and *what
+//! does a press on it ask for* — `SetBlendMode` naming the mode after the one
+//! the deck reports — off the same laid-out strip this rule hit-tests.
 //!
 //! # One exception, and it is not a hole in the rule
 //!
@@ -133,7 +142,9 @@ pub enum Claim {
 /// the tally's word and the blend's, because those are what a strip's boxes
 /// are laid out around. It is paid on a pointer event and not on a frame, and
 /// a console with no deck behind it pays nothing at all — [`mixer`] answers
-/// `None` to an empty slice before it asks for any type.
+/// `None` to an empty slice before it asks for any type. **The blend chip
+/// costs none of that twice**: the bay is derived once and both of the
+/// mixer's controls are asked of it.
 ///
 /// **And it takes the strips, for the same reason one level further out.** A
 /// fader's knob sits on the fill's moving edge, so *where the control is*
@@ -155,14 +166,18 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, strips: &[Strip], p: Point)
     // anything. See the module documentation and `tests/outputs.rs`.
     match panel.layout().hit(p, GRAB) {
         Hit::Divider { .. } => Claim::Panel,
-        // Rule 3, over both of the console's controls. Each is asked the same
-        // way — the derivation that draws it, asked whether the point is on
-        // it — and neither answer is stored.
+        // Rule 3, over all three of the console's controls. Each is asked the
+        // same way — the derivation that draws it, asked whether the point is
+        // on it — and no answer is stored.
         Hit::View(_) | Hit::Nothing => {
             let on_sink = outputs(ctx, panel.layout()).is_some_and(|row| row.hit(p));
-            let on_knob =
-                || mixer(ctx, panel.layout(), strips).is_some_and(|bay| bay.grab(p).is_some());
-            match on_sink || on_knob() {
+            // **The bay is derived once for both of its controls**, since a
+            // knob and a chip are two questions about one laid-out strip.
+            let on_strip = || {
+                mixer(ctx, panel.layout(), strips)
+                    .is_some_and(|bay| bay.grab(p).is_some() || bay.blend(p).is_some())
+            };
+            match on_sink || on_strip() {
                 true => Claim::Panel,
                 false => Claim::Egui,
             }
