@@ -254,9 +254,9 @@ fn assert_tiles(l: &Layout, id: NodeId, axis: Axis) {
             "child {c:?} does not span its parent across the axis: {r:?} in {parent:?}"
         );
 
-        if l.is_collapsed(*c) {
-            // A collapsed child takes no space at all.
-            assert!(near(e, 0.0), "collapsed child {c:?} took {e} of extent");
+        if !laid_out(l, *c) {
+            // A child that is out of the layout takes no space at all.
+            assert!(near(e, 0.0), "child {c:?} is out and took {e} of extent");
             continue;
         }
         visible += 1;
@@ -281,7 +281,8 @@ fn assert_tiles(l: &Layout, id: NodeId, axis: Axis) {
 
     // Every gap is the same, none is wider than the declared divider, and where
     // the split can afford them they are exactly it. No divider is drawn beside
-    // a collapsed child, which is what makes this count `visible - 1`.
+    // a child that is out of the layout, which is what makes this count
+    // `visible - 1`.
     assert_eq!(
         gaps.len(),
         visible - 1,
@@ -313,7 +314,7 @@ fn assert_tiles(l: &Layout, id: NodeId, axis: Axis) {
             origin + extent
         );
         for c in l.children(id) {
-            if l.is_collapsed(*c) {
+            if !laid_out(l, *c) {
                 continue;
             }
             let (_, max) = l.bounds(*c);
@@ -326,6 +327,15 @@ fn assert_tiles(l: &Layout, id: NodeId, axis: Axis) {
             );
         }
     }
+}
+
+/// Whether a child takes extent and a divider of its own, which is the
+/// question every geometric assertion below is about: **not** whether the
+/// operator folded it. A node the caller has set aside is out of the layout by
+/// the other bit and is out of it just as completely, so asking `is_collapsed`
+/// here would assert the tiling of one of the two ways a region leaves.
+pub fn laid_out(l: &Layout, id: NodeId) -> bool {
+    !l.is_collapsed(id) && !l.is_set_aside(id)
 }
 
 fn along(axis: Axis, r: Rect) -> (f32, f32) {

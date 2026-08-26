@@ -11,7 +11,8 @@
 //! A [`Layout`] is an arena of nodes with one root. A node is either a **view**
 //! (a leaf) or a **split** (an axis, a divider thickness, and children). Every
 //! node carries, *along its parent's axis*, a [`Sizing`], a `min`, a `max` and
-//! a `collapsed` flag; its extent across that axis is always its parent's.
+//! the two flags that take it out of the layout; its extent across that axis
+//! is always its parent's.
 //! Nothing in this crate knows the console's arrangement: the arrangement is
 //! one [`Spec`] value built with the same pieces any other arrangement is.
 //!
@@ -42,6 +43,33 @@
 //! assert_eq!(layout.rect(program), Rect::new(244.0, 0.0, 1036.0, 720.0));
 //! ```
 //!
+//! # A region is out of the layout for two reasons, and they are two bits
+//!
+//! **The operator folds a region away** — [`Layout::collapse`],
+//! [`Layout::expand`], [`Layout::toggle`] — and that is part of the
+//! arrangement: it is saved with it, and a load brings it back exactly.
+//!
+//! **Whoever is drawing takes a region out** — [`Layout::set_aside`] — because
+//! it has put that region somewhere else, or has nowhere to put it. That is
+//! not part of the arrangement. It is a function of the geometry the caller
+//! has in front of it, so it is **never saved**: a load lays every node out,
+//! and the first caller to draw the loaded arrangement re-derives it.
+//!
+//! The solve treats them identically — zero extent, no divider, and nothing
+//! inside them drawn — and everything else treats them as two.
+//! [`Layout::visible`] is the disjunction and is what every reader deciding
+//! what to lay out asks; [`Layout::is_collapsed`] and
+//! [`Layout::is_set_aside`] each answer for their own bit and are for
+//! reporting it or clearing it. **One bit for both would be cheaper and is
+//! wrong in both directions**: unfolding while a region is set aside would put
+//! an empty strip back where the caller had already drawn that region, and a
+//! fold the operator never made would be written into their saved
+//! arrangement.
+//!
+//! Writing the bit a node already carries marks nothing dirty, because a
+//! caller re-derives it every frame and a layout that went dirty every frame
+//! would cost a still panel the price of a moving one.
+//!
 //! # The tree answers upward and across, not only downward
 //!
 //! A caller can walk from [`Layout::root`] down and solve, and for a while
@@ -56,8 +84,8 @@
 //! [`parent`](Layout::parent), [`visible_children`](Layout::visible_children)
 //! — the ones a divider index counts —
 //! [`boundary`](Layout::boundary) and [`boundaries`](Layout::boundaries),
-//! [`sizing`](Layout::sizing), [`soloed`](Layout::soloed) and
-//! [`is_view`](Layout::is_view). None of them takes `&mut self`, and the two
+//! [`sizing`](Layout::sizing), [`soloed`](Layout::soloed),
+//! [`is_set_aside`](Layout::is_set_aside) and [`is_view`](Layout::is_view). None of them takes `&mut self`, and the two
 //! that return a set of nodes return an iterator, because a view asks them
 //! every frame.
 //!
@@ -70,7 +98,12 @@
 //! A solve reads the stored sizes and the viewport and produces rectangles. It
 //! never stores a rectangle back as a size. Only an explicit operation — a drag
 //! ([`Layout::set_divider`]), a [`collapse`](Layout::collapse), an
-//! [`expand`](Layout::expand) — changes what a node stores.
+//! [`expand`](Layout::expand), a [`set_aside`](Layout::set_aside) — changes
+//! what a node stores. **Taking a region out of the layout is an operation
+//! like a fold and not a step of the solve**, however derived the value being
+//! written is: the caller works it out from the geometry and then *tells* the
+//! layout, so the solve still holds the arrangement by shared reference and
+//! still cannot write a node.
 //!
 //! **The compiler enforces it, so it is not a rule anyone has to remember.**
 //! A `Layout` is two halves: the arrangement — the nodes, the root, and what a
