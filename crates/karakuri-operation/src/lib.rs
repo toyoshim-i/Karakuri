@@ -70,9 +70,12 @@
 //! affordance built **over** two operations by whoever draws it … a MIDI map
 //! with a button per direction, an MCP call that says which one it wants, and
 //! a keyboard, all have to be able to say* fold this *and mean it."* So
-//! [`Operation::SetOnAir`] takes a `bool` and [`Operation::SetBlendMode`]
-//! takes a mode. `Action::ToggleOnAir`, `Action::TogglePriming` and
-//! `Action::CycleBlend` are the shape this replaces.
+//! [`Operation::SetResidency`] names one of three residencies and
+//! [`Operation::SetBlendMode`] takes a mode. `Action::ToggleOnAir`,
+//! `Action::TogglePriming` and `Action::CycleBlend` are the shape this
+//! replaces, and the first two are the sharpest case in the list: two toggles
+//! over **three** states, where each one's `false` had no destination the
+//! vocabulary could name. One operation naming one of three has no such hole.
 //!
 //! **A continuous control is set, not nudged.** A control change carries a
 //! position and can only set; a rule that says every operation is addressable
@@ -85,9 +88,10 @@
 //! # The cost this crate pays, stated plainly
 //!
 //! Naming a value means owning the list of values. [`BlendMode`], [`Sync`],
-//! [`Tonemap`], [`Curve`], [`Layer`] and [`WipeKind`] are this crate's copies
-//! of lists `karakuri-engine` and `karakuri-store` already hold. That is
-//! duplication and it is deliberate: the alternative is `karakuri_store`'s,
+//! [`Residency`], [`Tonemap`], [`Curve`], [`Layer`] and [`WipeKind`] are this
+//! crate's copies of lists `karakuri-engine` and `karakuri-store` already
+//! hold. That is duplication and it is deliberate: the alternative is
+//! `karakuri_store`'s,
 //! which carries these as `String` because *"what a name is allowed to be is
 //! the engine's to say"* — and a map file whose typo is refused on the render
 //! thread instead of at parse time is a surface that fails where nobody is
@@ -199,6 +203,28 @@ pub enum Sync {
     Free,
     Tempo,
     Beat,
+}
+
+/// What a deck slot is *for*. `karakuri_engine::deck::Residency`'s three, in
+/// the order they cost.
+///
+/// **This is the request, and the engine keeps two.** The operator writes one
+/// through `Deck::set_residency`; the governor derives the other from it and
+/// the budget, holding a slot below what was asked for and never above. Only
+/// the request is an operation, so this enum names three destinations and says
+/// nothing about which of them the deck arrived at — a surface reads that back
+/// rather than assuming.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Residency {
+    /// Stepped and composited. Honoured: nothing demotes a live slot.
+    Live,
+    /// Stepped out of sight, warming its buffers, contributing nothing to the
+    /// mix. A request the governor reconsiders every pass, and parks rather
+    /// than refuses when there is no room.
+    Priming,
+    /// Compiled, buffers held, not stepping. Keeps its `t`, so a slot taken
+    /// here and brought back resumes where it stopped.
+    Allocated,
 }
 
 /// How a deck meets the ones under it in the fold.
@@ -469,13 +495,31 @@ operations! {
     /// other variant names its deck instead of meaning *the selected one*.
     SelectDeck { deck: u8 } => "Select a deck",
 
-    /// **Two operations in one variant and the caller says which**, which is
-    /// what a `bool` buys over a toggle. Off air holds the deck's `t`.
-    SetOnAir { deck: u8, on_air: bool } => "Put a deck on air, or take it off",
-
-    /// A request, not a command: the governor grants it on a later pass and
-    /// reconsiders it every pass. `false` withdraws the request.
-    SetPriming { deck: u8, warming: bool } => "Ask a deck to warm off air",
+    /// **Three states, and one operation naming one of them.** A slot is
+    /// [`Residency::Live`] — stepped and composited — or
+    /// [`Residency::Priming`], stepped out of sight and contributing nothing
+    /// to the mix, or [`Residency::Allocated`], compiled and held with its `t`
+    /// where it stopped.
+    ///
+    /// This was two `bool`s, and two `bool`s are four combinations for three
+    /// states with **both `false` destinations undefined**: nothing in the
+    /// vocabulary said where a deck taken off air or a prime request withdrawn
+    /// landed. The answer existed, in `karakuri-cli`'s key handler and nowhere
+    /// else, which is exactly the knowledge a vocabulary exists to take out of
+    /// the surfaces. The engine's own setter had the shape all along —
+    /// `Deck::set_residency(slot, Residency)`, one call naming one of three.
+    ///
+    /// **Live is honoured and Priming is a request**, which is the distinction
+    /// the two rows carried between them and this one carries in its prose.
+    /// The governor may hold a slot below what was asked for and never above,
+    /// so Live lands and nothing demotes it, while a slot asked to prime with
+    /// no room is *parked*: the request stands, is reconsidered on every pass,
+    /// and takes effect the moment there is room, with nothing withdrawn and
+    /// nothing remembered. A surface therefore draws the residency the deck
+    /// reports rather than the one it asked for, and `park` is the existing
+    /// name for the two disagreeing.
+    SetResidency { deck: u8, residency: Residency }
+        => "Put a deck on air, prime it, or take it off",
 
     /// **The single largest gap in the manual's table**: nothing loads a Set
     /// into a running deck.
@@ -802,13 +846,15 @@ mod tests {
 
     /// A floor, not a count: the point is that the list cannot come back
     /// empty. The exact number is the manual's to state and is asserted
-    /// against the page itself in `tests/`.
+    /// against the page itself in `tests/`. It read 46 when this landed and
+    /// reads 45 since two residency rows became one (ADR-0186); it moves with
+    /// the page and is never lowered to make a shorter list pass.
     #[test]
     fn the_vocabulary_is_not_empty() {
         assert!(
-            Operation::TITLES.len() >= 46,
+            Operation::TITLES.len() >= 45,
             "only {} operations named — the vocabulary has shrunk below what the manual \
-             specified when it landed",
+             specifies",
             Operation::TITLES.len()
         );
     }

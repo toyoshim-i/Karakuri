@@ -1,6 +1,6 @@
 # An operation says what it wants, never which way to move
 
-Every operation in the vocabulary names a **destination**: `SetOnAir { deck, on_air: bool }`,
+Every operation in the vocabulary names a **destination**: `SetResidency { deck, residency }`,
 `SetBlendMode { deck, blend }`, `Fold { region }` and `Unfold { region }`. None of them says
 *toggle*, *cycle* or *step*.
 
@@ -16,10 +16,13 @@ same control disagree about where they are.
 
 **The rule has a cost and it is the crate's shape.** A vocabulary that names a destination must
 name the *value* — so `karakuri-operation` owns the enumerations a destination is drawn from
-(blend modes, sync modes, tone map operators, curves, wipe shapes) rather than passing strings.
-Refusing to name them is what forces a vocabulary back into toggles, and `karakuri-midi`'s `Action`
-is the worked example: it declared itself engine-neutral, could therefore not say *set blend to
-over*, and was left with `CycleBlend`. **The two rules — be engine-neutral, and have no toggles —
-are not jointly satisfiable unless the vocabulary owns the lists.**
+(blend modes, sync modes, residencies, tone map operators, curves, wipe shapes) rather than passing
+strings. Refusing to name them is what forces a vocabulary back into toggles, and
+`karakuri-midi`'s `Action` is the worked example: it declared itself engine-neutral, could
+therefore not say *set blend to over*, and was left with `CycleBlend`. **The two rules — be
+engine-neutral, and have no toggles — are not jointly satisfiable unless the vocabulary owns the
+lists.**
 
-See [ADR-0180](../adr/0180-the-operation-vocabulary-is-a-crate-with-no-dependencies.md).
+See [ADR-0180](../adr/0180-the-operation-vocabulary-is-a-crate-with-no-dependencies.md), and
+[ADR-0186](../adr/0186-one-operation-names-one-of-three-residencies.md) for why the example above
+is `SetResidency` and not the pair of booleans it replaced.

@@ -438,9 +438,14 @@ than work, and every one of them was found by building the thing next to it.
 - **The blend mini's affordance**, where **the mock and a principle disagree**: the tooltip says
   *click to cycle* and P-0074 forbids a cycle, so the control must *name* one of three. `egui` owns
   no widget on this panel, which makes it a question about who owns the pointer.
-- **What the tally shows while the two disagree.** Two operations for three states, and the console
-  draws the *effective* residency while `SetOnAir`/`SetPriming` set the *requested* one — the
-  governor may not honour it.
+- **What the tally shows while the two disagree.** One operation naming one of three states now
+  ([ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md)), and the console draws the
+  *effective* residency while `SetResidency` sets the *requested* one — the governor holds a slot
+  below what was asked for and never above, so Live lands and Priming may not. The disagreement
+  already has a name rather than one the console has to invent: a slot whose request is Priming and
+  whose effective residency is Allocated is **parked** — `Deck::is_parked`, drawn by
+  `karakuri-cli`'s status line as `park` and spelled out as *parked (asked to prime, waiting for
+  room)*. What is undecided is what the chip does with it, not what to call it.
 - **`SetMask` does not exist**, so the mask mini is a readout of state no operation can set. The row
   has to be settled on [the operations page](manual/operations.html) before it can be a control.
 - **What `expand` under a solo should do.** `Layout::soloed()` can lie: the solve never reads it and
@@ -754,11 +759,14 @@ fade, and starting or stopping a session recording.
 
 **The vocabulary exists now**
 ([ADR-0180](adr/0180-the-operation-vocabulary-is-a-crate-with-no-dependencies.md)):
-`crates/karakuri-operation/` is a leaf crate with **no dependencies at all**, holding all 46
+`crates/karakuri-operation/` is a leaf crate with **no dependencies at all**, holding all 45
 operations, and a test reads [every operation](manual/operations.html) and asserts that the page and
-the type enumerate the same ones both ways round. **Nothing is migrated** — `karakuri-midi`'s
-`Action`, the console's `panel::Op` and the CLI's match arms are untouched and move onto it one at a
-time, each of which is now a change that can be reasoned about because the target has stopped
+the type enumerate the same ones both ways round. It held 46 when it landed: `SetOnAir` and
+`SetPriming` were two booleans for three states with both `false` destinations unnamed, and they
+are one `SetResidency { deck, residency }` now
+([ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md)). **Nothing is migrated** —
+`karakuri-midi`'s `Action`, the console's `panel::Op` and the CLI's match arms are untouched and
+move onto it one at a time, each of which is now a change that can be reasoned about because the target has stopped
 moving.
 
 Building it found the thing worth having built it for: **`Action` and `panel::Op` each claim to be
@@ -780,7 +788,7 @@ event rather than an operation), and **the camera**.
 could be edited there until nodes had names, and nothing can be routed here until operations
 do. [Every operation](manual/operations.html) is where that enumeration is written down, and a
 surface missing from an operation's row is a line of this milestone's work. **It is written**:
-46 operations, and 50 of the 199 ways in exist. **Five of those arrived from
+45 operations, and 48 of the 195 ways in exist. **Five of those arrived from
 the console's own shape** — moving a boundary, folding a bay or a pane, bringing one back, and
 solo — and all twenty of their routes are empty except the pointer, which is the first rule broken
 by the surface the first rule is about.

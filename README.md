@@ -60,7 +60,7 @@ not about design, and it had no home until the manual had one.
   the outputs. **It is an example rather than a program yet**: `cargo run -p karakuri-console
   --example panel`, and `karakuri-cli` is still what you play a set with
 - **Every operation is named once and every surface routes into that name** — the manual's first
-  rule. [`karakuri-operation`](crates/karakuri-operation) is those 46 names, checked against
+  rule. [`karakuri-operation`](crates/karakuri-operation) is those 45 names, checked against
   [the manual's own page](docs/manual/operations.html) by a test. The keyboard, the MIDI map and MCP
   have not moved onto it yet
 - Audio input exists — spectrum, energy, onset, and a beat grid that corrects the local
