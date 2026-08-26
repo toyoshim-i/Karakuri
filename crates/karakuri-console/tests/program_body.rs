@@ -543,7 +543,7 @@ fn below_is_what_the_console_draws_today() {
     );
     assert_eq!(
         arranged.cells,
-        preview_rects(&layout).expect("the preview row is on screen")
+        preview_rects(&layout, CANVAS).expect("the preview row is on screen")
     );
 
     // The `deck-previews` region is where the row is, arrived at from the

@@ -142,6 +142,39 @@ pub enum Change<'a> {
     /// palette until something else happened to move. This is the key that
     /// changes what is drawn without touching the pointer.
     Room,
+    /// **The Program bay rearranged itself**, with `moved` saying whether it
+    /// actually did.
+    ///
+    /// The four deck previews go under the picture on a narrow bay and down
+    /// the sides of a wide one, whichever leaves the picture larger
+    /// ([ADR-0182](../../../docs/adr/0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md)),
+    /// and `crate::view::rearrange` is what decides it and writes the one bit
+    /// that follows — the row is set aside beside the picture and put back
+    /// under it.
+    ///
+    /// **Its own variant because nothing else on this list is it.** It is not
+    /// an [`Outcome`]: no operator asked for it, nothing is saved, and the
+    /// model was not operated on. It is not [`Change::Viewport`] either, even
+    /// though a resize is what usually causes one — the bay rearranges itself
+    /// off *its own* rectangle, so a drag on a boundary, a fold that gives it
+    /// the height, a solo, and a canvas of a different shape all reach it
+    /// without the window changing size at all. The window is the wrong thing
+    /// to name it after, and naming a change after its usual cause is how a
+    /// path with an unusual cause reaches no repaint.
+    ///
+    /// **`moved` is what the model returned and not what the caller asked**,
+    /// which is exactly the operation arm's rule — `z` with nothing folded
+    /// earns no frame. It matters more here than there: this is the one
+    /// [`Change`] a caller raises **every frame** rather than on a gesture,
+    /// because the bit is re-derived from the geometry every frame, so an arm
+    /// that answered [`Repaint::Now`] regardless would ask for a frame on
+    /// every frame and would cost the still panel the whole of P-0072's first
+    /// clause.
+    Rearranged {
+        /// Whether the bit actually changed — `crate::view::rearrange`'s
+        /// answer.
+        moved: bool,
+    },
     /// The window resized, or the display's scale factor changed: the
     /// arrangement is re-solved into a different viewport, so every rectangle
     /// on the panel is a new one.
@@ -224,6 +257,24 @@ impl Change<'_> {
                 // is emitted, so those two keys now reach no `Change` at all
                 // and are stiller than they were.
                 Outcome::Report(_) | Outcome::Nothing => Repaint::Never,
+            },
+
+            // **A rearrangement that happened is every rectangle in the
+            // Program bay being a new one** — the picture's and all four
+            // cells' — which is `Change::Viewport`'s argument one bay down,
+            // and the layout is dirty besides, so anything holding a rectangle
+            // from before it is holding a stale one. It is drawn on the frame
+            // that discovered it, and this arm is what covers the frames that
+            // did not: a rearrangement decided anywhere but inside a pass is
+            // otherwise a panel drawn in the arrangement it left.
+            //
+            // **A rearrangement that did not happen is the still panel**, and
+            // this is the only arm on the list asked on every frame rather
+            // than on a gesture — see the variant, where that argument is
+            // written out.
+            Change::Rearranged { moved } => match moved {
+                true => Repaint::Now,
+                false => Repaint::Never,
             },
 
             Change::Room | Change::Viewport => Repaint::Now,

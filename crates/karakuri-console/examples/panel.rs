@@ -1752,8 +1752,12 @@ fn aims(layout: &karakuri_layout::Layout, canvas: (u32, u32)) -> [Option<egui::R
         // The **cell**, not the row it is in and not the region the row is
         // in. The row holds four of these side by side with ground between
         // them, so a texture sized from anything but the cell is out by a
-        // factor of four in one axis before it is out by the scale.
-        preview_rects(layout).map(|cells| cells[0]),
+        // factor of four in one axis before it is out by the scale — and
+        // beside the picture the row is not a row at all, which is why this
+        // takes the canvas too: the cells' arrangement is decided by which one
+        // leaves the *picture* larger, so the cell's own size is a function of
+        // the picture's shape.
+        preview_rects(layout, canvas).map(|cells| cells[0]),
     ]
 }
 
@@ -2524,6 +2528,30 @@ impl ApplicationHandler for App {
                 // ask the question this handler used to answer where nothing
                 // could reach it.
                 self.readout.panel.solve();
+
+                // -- the Program bay arranges itself -------------------
+                // **Before `aims`, because the four cells are in one of two
+                // places and this is what decides which.** The canvas is
+                // written in the same breath, off the `Present` that is about
+                // to render it, for the reason `aims` reads it there too: the
+                // shape the bay arranges itself for and the shape the texture
+                // is sized to are one number or they are a picture drawn for
+                // the other arrangement.
+                //
+                // `Change::Rearranged` is raised on **every** frame and says
+                // whether anything moved, which is the arm's own argument:
+                // this is the one change that is re-derived rather than
+                // reported, and one that answered *draw* regardless would ask
+                // for a frame on every frame.
+                self.readout.view.canvas = gfx.engine.present.size();
+                let moved = view::rearrange(&mut self.readout.panel, self.readout.view.canvas);
+                App::wants(
+                    gfx,
+                    &mut self.egui_due,
+                    &mut self.costs,
+                    Change::Rearranged { moved }.repaint(),
+                );
+
                 let scale = self.scale as f32;
                 let (picture, previews) = gfx.engine.aim(
                     &gfx.gpu,
@@ -3204,7 +3232,7 @@ mod gpu {
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
         let rect = picture_rect(panel.layout(), CANVAS).expect("the picture is on screen");
-        let cells = preview_rects(panel.layout()).expect("the preview row is on screen");
+        let cells = preview_rects(panel.layout(), CANVAS).expect("the preview row is on screen");
         let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
 
         // **Aimed by the call the window makes, and the view is what that
@@ -3606,7 +3634,7 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
 
         let mut panel = Panel::new(W as f32, H as f32);
-        panel.solve();
+        view::rearrange(&mut panel, CANVAS);
         let want = physical(
             picture_rect(panel.layout(), CANVAS).expect("on screen"),
             1.0,
@@ -3615,11 +3643,26 @@ mod gpu {
         let first = engine.picture.id;
         assert_eq!(engine.picture.size, want);
 
-        // **A window 400 wider, and nothing moves.** The region widens and the
+        // **A window 100 wider, and nothing moves.** The region widens and the
         // picture does not, so `aim` — the call the frame makes — finds the
         // size it already had and remakes nothing.
-        panel.set_viewport(W as f32 + 400.0, H as f32);
-        panel.solve();
+        //
+        // **It was 400 wider until the bay started arranging itself**, and 400
+        // is no longer a wider window of the same panel: 1840 is past the
+        // 1588 where the four cells go down the sides, and there the picture
+        // is 592 x 333 rather than the mock's 466 x 262. That is a texture
+        // remade **once**, which is the subject of
+        // `deck_a_preview_texture_is_its_cells_size_and_a_resize_frees_the_old_one`
+        // below and not of this one; this test is about a width that changes
+        // nothing, so it stays inside one arrangement and says so.
+        panel.set_viewport(W as f32 + 100.0, H as f32);
+        view::rearrange(&mut panel, CANVAS);
+        assert!(
+            !panel
+                .layout()
+                .is_set_aside(panel.layout().find("deck-previews").expect("the row")),
+            "1540 is past the crossover, so this is two arrangements and not one width"
+        );
         let wider = physical(
             picture_rect(panel.layout(), CANVAS).expect("on screen"),
             1.0,
@@ -3656,7 +3699,7 @@ mod gpu {
             y: edge.y + 300.0,
         });
         panel.released();
-        panel.solve();
+        view::rearrange(&mut panel, CANVAS);
         let taller = physical(
             picture_rect(panel.layout(), CANVAS).expect("on screen"),
             1.0,
@@ -3704,13 +3747,35 @@ mod gpu {
     /// `register_native_texture` with no `free_texture` beside it leaks a bind
     /// group and a sampler per remade frame.
     ///
-    /// **The size a cell is remade at is the scale rather than the window**,
-    /// which is the difference between this and the picture's test and is the
-    /// arrangement's doing: `deck-previews` is pinned at 72 tall, so a cell is
-    /// 16:9 inside a fixed height and stays exactly as big at any wider
-    /// window. What does change it is the display it is dragged onto, which is
-    /// `ScaleFactorChanged` and is `physical(cell, scale)` — so that is what
-    /// is asked here.
+    /// # What this test is for now, and the sentence it used to carry
+    ///
+    /// It used to say: *"the size a cell is remade at is the scale rather than
+    /// the window ... `deck-previews` is pinned at 72 tall, so a cell is 16:9
+    /// inside a fixed height and stays exactly as big at any wider window"* —
+    /// and it widened the window by 400 to prove it. **That is false since the
+    /// bay started arranging itself**, and it was false at exactly the two
+    /// widths this test already used: 1440 is below the crossover and 1840 is
+    /// past it, so the 400 the test widens by is the one resize that makes a
+    /// cell **eleven times** the texels it was.
+    ///
+    /// So the widths stay and the claim is the other one, which is the claim
+    /// worth having: **a cell's texture is the size of a cell in whichever
+    /// arrangement the bay is in, and a resize that changes that frees the
+    /// registration it replaces.** Three sizes, and each is a different way of
+    /// getting it wrong:
+    ///
+    /// - **112 x 63 in the row**, which is the cell and not the row, the
+    ///   region, the picture or the window.
+    /// - **290 x 163 beside the picture**, which is the same rule read off a
+    ///   column instead of a track — 47,270 texels against 7,056, which is
+    ///   **6.7x**, **remade once** at the crossover and not once per frame of
+    ///   the drag that crossed it.
+    /// - **and the scale**, which is the display it is dragged onto rather
+    ///   than the window it is in: `ScaleFactorChanged`, and
+    ///   `physical(cell, scale)`.
+    ///
+    /// Between them they hold the cell's size against every one of the four
+    /// things that can change it, and the freed tally counts every remake.
     #[test]
     fn deck_a_preview_texture_is_its_cells_size_and_a_resize_frees_the_old_one() {
         const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -3722,13 +3787,24 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
 
         let mut panel = Panel::new(W as f32, H as f32);
-        panel.solve();
+        view::rearrange(&mut panel, CANVAS);
+        let row = panel.layout().find("deck-previews").expect("the row");
+        assert!(
+            !panel.layout().is_set_aside(row),
+            "1440 is past the crossover, so the cells start beside the picture and the \
+             row's own arithmetic is not what is asserted below"
+        );
         let picture = physical(
             picture_rect(panel.layout(), CANVAS).expect("on screen"),
             1.0,
         );
-        let cells = preview_rects(panel.layout()).expect("the preview row is on screen");
+        let cells = preview_rects(panel.layout(), CANVAS).expect("the preview row is on screen");
         let want = physical(cells[0], 1.0);
+        assert_eq!(
+            want,
+            (112, 63),
+            "the mock's own cell, at the mock's own width"
+        );
         let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
 
         // **The cell's, in both axes** — not the row's, not the picture's and
@@ -3758,23 +3834,69 @@ mod gpu {
         );
         assert!(renderer.texture(&engine.preview.id).is_some());
 
-        // The row is pinned at 72 tall, so a wider window widens the track and
-        // leaves the cell exactly as it was — and a frame where nothing moved
-        // remakes nothing, which is what keeps the free on the resize path
-        // instead of on every frame.
+        // **A window 400 wider is the crossover**, and it is the one resize a
+        // cell's texture is remade by. 1840 puts the body past 1064, the four
+        // cells go down the sides two to a column, and a cell stops being a
+        // track of the row and becomes half of a column: 290 x 163, which is
+        // 6.7 times the texels — **once**, on the frame the arrangement
+        // changed, with the registration it replaces freed.
         panel.set_viewport(W as f32 + 400.0, H as f32);
-        panel.solve();
-        let wider = physical(preview_rects(panel.layout()).expect("on screen")[0], 1.0);
-        assert_eq!(wider, want, "a wider window changed the size of a cell");
+        view::rearrange(&mut panel, CANVAS);
+        assert!(
+            panel.layout().is_set_aside(row),
+            "1840 is not past the crossover, so this resize is not the one being asserted"
+        );
+        let beside = physical(
+            preview_rects(panel.layout(), CANVAS).expect("on screen")[0],
+            1.0,
+        );
+        assert_eq!(
+            beside,
+            (290, 163),
+            "a cell beside the picture is not half a column"
+        );
+        let was = engine.preview.id;
+        assert!(
+            engine
+                .preview
+                .fit(&gpu, &mut renderer, beside, &mut engine.freed),
+            "the cells moved beside the picture and deck A's texture was not remade, so \
+             the audition is 112 x 63 texels stretched over a 290 x 163 cell"
+        );
+        assert_eq!(engine.preview.size, beside);
+        assert_eq!(engine.freed, 1);
+        assert!(
+            renderer.texture(&was).is_none(),
+            "the registration the crossover replaced is still in the atlas"
+        );
+        assert!(renderer.texture(&engine.preview.id).is_some());
+
+        // **And a wider window inside *that* arrangement remakes nothing
+        // either**, which is the sentence this test used to make about the row
+        // and is true of a column for a better reason: a column is
+        // `(H - 6) / 2` at 16:9, a function of the bay's **height** alone, so
+        // every pixel of width past the crossover goes to the picture. A frame
+        // where nothing moved remakes nothing, which is what keeps the free on
+        // the resize path instead of on every frame.
+        panel.set_viewport(W as f32 + 800.0, H as f32);
+        view::rearrange(&mut panel, CANVAS);
+        let wider = physical(
+            preview_rects(panel.layout(), CANVAS).expect("on screen")[0],
+            1.0,
+        );
+        assert_eq!(wider, beside, "a wider window changed the size of a cell");
         assert!(!engine
             .preview
             .fit(&gpu, &mut renderer, wider, &mut engine.freed));
-        assert_eq!(engine.freed, 0);
+        assert_eq!(engine.freed, 1);
 
-        // A display of a different scale is what does change it.
+        // A display of a different scale is what changes it next.
         let was = engine.preview.id;
-        let retina = physical(preview_rects(panel.layout()).expect("on screen")[0], 2.0);
-        assert_eq!(retina, (want.0 * 2, want.1 * 2));
+        let retina = physical(
+            preview_rects(panel.layout(), CANVAS).expect("on screen")[0],
+            2.0,
+        );
+        assert_eq!(retina, (beside.0 * 2, beside.1 * 2));
         assert!(
             engine
                 .preview
@@ -3796,11 +3918,11 @@ mod gpu {
             "the registration the resize replaced is still in the atlas, so the atlas \
              grows once per remade frame"
         );
-        assert_eq!(engine.freed, 1);
+        assert_eq!(engine.freed, 2);
 
         // **The tally is the whole engine's, over both textures.** Fitting the
-        // picture as well takes it to two: a count kept per texture would read
-        // one here, and `mod gpu` would be asserting on half the leak.
+        // picture as well takes it to three: a count kept per texture would
+        // read two here, and `mod gpu` would be asserting on half the leak.
         assert!(engine.picture.fit(
             &gpu,
             &mut renderer,
@@ -3808,7 +3930,7 @@ mod gpu {
             &mut engine.freed
         ));
         assert_eq!(
-            engine.freed, 2,
+            engine.freed, 3,
             "the freed tally did not count both textures"
         );
     }
@@ -3853,11 +3975,21 @@ mod gpu {
         let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
 
         // A different window on a different display, so nothing asserted below
-        // can be what construction happened to leave in place.
+        // can be what construction happened to leave in place — and at 1760
+        // wide it is a window past the crossover, so what is asserted below is
+        // the arrangement with the four cells **beside** the picture. The
+        // rearrangement is the frame's own first act and this test makes it in
+        // the same order.
         panel.set_viewport(W as f32 + 320.0, H as f32 - 120.0);
-        panel.solve();
+        view::rearrange(&mut panel, CANVAS);
+        assert!(
+            panel
+                .layout()
+                .is_set_aside(panel.layout().find("deck-previews").expect("the row")),
+            "1760 is not past the crossover, so the cells are still in the row"
+        );
         let rect = picture_rect(panel.layout(), CANVAS).expect("the picture is on screen");
-        let cell = preview_rects(panel.layout()).expect("the preview row is on screen")[0];
+        let cell = preview_rects(panel.layout(), CANVAS).expect("the preview row is on screen")[0];
         let (picture, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), SCALE);
 
         // **Each texture is the size of its own rectangle, at this scale.**
@@ -3876,8 +4008,17 @@ mod gpu {
             engine.preview.size, engine.picture.size,
             "deck A's texture is the picture's size"
         );
+        // **Half the picture in each direction, and it is half rather than the
+        // quarter this used to ask for.** A quarter of the width was the row's
+        // arithmetic — four tracks across the bay — and beside the picture a
+        // cell is half a column, so it is about half the picture each way and
+        // a quarter of its texels. The claim being made is the one that
+        // catches the defect either way: a cell sized from the picture's
+        // rectangle, or from the window, is *larger* than this and not
+        // smaller.
         assert!(
-            engine.preview.size.0 * 4 < engine.picture.size.0,
+            engine.preview.size.0 * 2 <= engine.picture.size.0
+                && engine.preview.size.1 * 2 <= engine.picture.size.1,
             "a preview cell is not much smaller than the picture: {:?} against {:?}",
             engine.preview.size,
             engine.picture.size
@@ -3924,8 +4065,22 @@ mod gpu {
             ),
             "the picture did not fold"
         );
-        panel.solve();
+        // **The bay rearranges around the fold, and this is the guard rule
+        // reached through the frame's own call.** The cells were beside the
+        // picture; with the picture gone the row comes back under it, because
+        // a bay whose only laid-out child is set aside can use nothing at all
+        // and would claim no height. Reading a rectangle without this is
+        // reading one from before the fold — the same contract `Layout::rect`
+        // has about a stale solve.
+        view::rearrange(&mut panel, CANVAS);
         assert!(picture_rect(panel.layout(), CANVAS).is_none());
+        assert!(
+            !panel
+                .layout()
+                .is_set_aside(panel.layout().find("deck-previews").expect("the row")),
+            "the picture is folded and the row is still set aside, so the Program bay \
+             claims nothing and has gone from the panel"
+        );
         let (picture, previews) = engine.aim(&gpu, &mut renderer, panel.layout(), SCALE);
         assert!(
             picture.is_none(),

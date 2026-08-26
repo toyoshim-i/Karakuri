@@ -422,6 +422,28 @@ impl Panel {
         self.layout.solve();
     }
 
+    /// **Take a region out of the layout, or put it back, for a reason that is
+    /// not the operator's** — [`Layout::set_aside`], and returning **whether
+    /// the bit changed**.
+    ///
+    /// The bit is the drawer's and never the operator's
+    /// ([ADR-0183](../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md)),
+    /// so this is not an [`Op`]: nothing an operator presses reaches it, it is
+    /// not what a saved arrangement carries, and [`Outcome`] has no word for
+    /// it. What is here rather than in `crate::view` is the `&mut Layout` this
+    /// panel keeps to itself.
+    ///
+    /// **The answer is what the write did and not what the caller asked**,
+    /// which is [`crate::repaint`]'s rule about an operation arm: the value is
+    /// re-derived and re-written every frame, and a frame that wrote the value
+    /// the node already carried changed nothing and is owed nothing. See
+    /// [`crate::view::rearrange`], which is the one caller.
+    pub fn set_aside(&mut self, id: NodeId, aside: bool) -> bool {
+        let moved = self.layout.is_set_aside(id) != aside;
+        self.layout.set_aside(id, aside);
+        moved
+    }
+
     /// The two regions a boundary is between. A split is often unnamed — the
     /// console's body row is, deliberately — so a split and an index alone do
     /// not say which boundary a pointer has hold of, and the pair does.
