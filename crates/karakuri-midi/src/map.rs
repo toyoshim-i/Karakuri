@@ -13,24 +13,50 @@
 //!   cc 20     -> exposure
 //!
 //!   # pads
-//!   note 36 -> on-air 0
-//!   note 40 -> prime 1
-//!   note 44 -> blend 0
+//!   note 36 -> residency 0 live
+//!   note 40 -> residency 1 priming
+//!   note 44 -> blend 0 over
 //!   note 48 -> preview 0
 //!   note 52 -> preview mix
 //!   note 56 -> tap
 //! ```
 //!
+//! ## A line names a state, never a step
+//!
+//! **The value word is the grammar**, and it is what
+//! [P-0074](../../../docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md)
+//! costs on this surface: a pad says `residency 2 live`, not *flip slot 2*. A
+//! surface that could only step has no way to *arrive*, and two surfaces
+//! stepping one control disagree about where they are — so a pad that means
+//! *over* is one pad, and a mini that cycles the three is an affordance
+//! whoever draws it builds over three lines of this file.
+//!
+//! `preview N | mix` had the shape already. `on-air N`, `prime N` and a bare
+//! `blend N` were the three that did not, and **a file still holding one is
+//! refused on that line with the line to write instead** — never loaded and
+//! silently re-read, because `on-air 0` means *flip it* in a file written last
+//! month and would mean *put it live* today
+//! ([ADR-0196](../../../docs/adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)).
+//!
 //! ## What this deliberately does not do
 //!
-//! **It produces an [`Action`], never a record and never a call.** The engine is
-//! driven through the record stream and `karakuri-cli` is where a record is
-//! built; a second place building them would be two spellings of one rule, and
-//! the rule is the invariant that a surface can do nothing a key cannot. What
-//! reaches the engine from a fader is the same `gain` record a keypress writes,
-//! so **a session recorded from a controller replays with no controller
-//! attached** — and the map is not in the stream, because which knob was turned
-//! is a property of the room's hardware rather than of the performance.
+//! **It produces a [`karakuri_operation::Operation`], never a record and never
+//! a call.** The engine is driven through the record stream and
+//! `karakuri-operation-record` is where a record is built; a second place
+//! building them would be two spellings of one rule, and the rule is the
+//! invariant that a surface can do nothing a key cannot. What reaches the
+//! engine from a fader is the same `gain` record a keypress writes, so **a
+//! session recorded from a controller replays with no controller attached** —
+//! and the map is not in the stream, because which knob was turned is a
+//! property of the room's hardware rather than of the performance.
+//!
+//! **It reads nothing back.** [`Map::operation`] is a pure function of one
+//! message, which is this module's whole test story: `parse`, then
+//! `operation`, with no world to set up and nothing to mock. It is also why
+//! `cc -> exposure` names [`karakuri_operation::Operation::SetExposure`] and
+//! not a whole look — a map has no way to know the tone map operator a record
+//! carries beside it, and the place that writes the record fills it in
+//! ([ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)).
 //!
 //! **It is 7-bit.** A control change carries 128 positions and this reads them
 //! as 128 positions; the 14-bit MSB/LSB convention is not implemented. That is
@@ -40,45 +66,7 @@
 
 use std::collections::HashMap;
 
-/// What the operator asked for, in terms of the deck rather than of the wire.
-///
-/// **Engine-neutral on purpose.** No `Residency`, no `Blend`, no `Record`: this
-/// crate names the gesture and `karakuri-cli` decides what it is worth, which
-/// is what keeps every control reachable from a surface reachable from a key by
-/// construction rather than by two lists agreeing.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Action {
-    Gain {
-        slot: u8,
-        value: f32,
-    },
-    Opacity {
-        slot: u8,
-        value: f32,
-    },
-    Exposure {
-        value: f32,
-    },
-    /// On air, or off it. A press, and the deck decides which way — the same
-    /// thing the space bar does.
-    ToggleOnAir {
-        slot: u8,
-    },
-    /// Ask a slot to warm off air, or withdraw the request.
-    TogglePriming {
-        slot: u8,
-    },
-    CycleBlend {
-        slot: u8,
-    },
-    /// Audition a slot, or `None` for the mix. Direct rather than a cycle: a
-    /// surface has a pad per slot and reaching slot 3 through three presses is
-    /// a keyboard's compromise, not a surface's.
-    Preview {
-        slot: Option<u8>,
-    },
-    Tap,
-}
+use karakuri_operation::{BlendMode, Operation, Residency};
 
 /// A continuous control's shape, which is a property of what it moves rather
 /// than of the mapping that reaches it.
@@ -94,14 +82,18 @@ enum Shape {
 }
 
 /// What a message is mapped to, before its value is known.
+///
+/// **A press carries its destination and a fader carries its range**, which is
+/// the whole difference between the two halves of this list: a note's line said
+/// everything it had to say at parse time, so `Target::Residency` holds the
+/// state it names and `Target::Blend` holds the mode. Nothing here is a step.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Target {
     Gain { slot: u8, range: [f32; 2] },
     Opacity { slot: u8, range: [f32; 2] },
     Exposure { range: [f32; 2] },
-    ToggleOnAir { slot: u8 },
-    TogglePriming { slot: u8 },
-    CycleBlend { slot: u8 },
+    Residency { slot: u8, residency: Residency },
+    Blend { slot: u8, blend: BlendMode },
     Preview { slot: Option<u8> },
     Tap,
 }
@@ -115,8 +107,8 @@ impl Target {
     }
 
     /// Whether this is moved by a fader or hit by a pad. A mapping that puts a
-    /// pad on a fader's target is refused at parse time rather than producing
-    /// an `on-air` toggle every time a knob passes a threshold.
+    /// pad on a fader's target is refused at parse time rather than putting a
+    /// deck on air every time a knob passes a threshold.
     fn continuous(self) -> bool {
         matches!(
             self,
@@ -197,11 +189,16 @@ impl Map {
 
     /// What this message asks for, or `None` if nothing is mapped to it.
     ///
-    /// A release is deliberately nothing. Every pad here is a press that
-    /// toggles or selects, so acting on the release too would undo the press —
+    /// **A pure function of one message.** No readback, no state, no engine —
+    /// which is what lets every test here be `parse` then this, and is the
+    /// reason `cc -> exposure` names an exposure rather than a look
+    /// (ADR-0192).
+    ///
+    /// A release is deliberately nothing. Every pad here is a press naming a
+    /// state or a selection, so acting on the release too would undo it —
     /// and a momentary control that wants both ends is a different target from
     /// these, not the same one read twice.
-    pub fn action(&self, message: crate::Message) -> Option<Action> {
+    pub fn operation(&self, message: crate::Message) -> Option<Operation> {
         use crate::Message;
         let (key, value) = match message {
             Message::ControlChange {
@@ -240,28 +237,36 @@ impl Map {
         // A fader mapped to a pad's target, or the reverse, cannot happen:
         // `parse_line` refuses it. This is the same fact stated where the value
         // is used, so a target added to one list and not the other is a `None`
-        // rather than a wrong action.
+        // rather than a wrong operation.
         // `key.shape()` rather than the shape spelled out per arm: the same
         // function decides which validation a range gets at parse time, so a
         // target that is validated as a ratio cannot be scaled as a line.
+        //
+        // **Nothing below allocates.** Every operation a map line can name
+        // carries scalars only, which is what lets `karakuri-cli` route a fader
+        // sweep inside `Live::frame` without a heap touch per message.
         let shape = key.shape();
         match (key, value) {
-            (Target::Gain { slot, range }, Some(v)) => Some(Action::Gain {
-                slot,
-                value: scale(v, range, shape),
+            (Target::Gain { slot, range }, Some(v)) => Some(Operation::SetGain {
+                deck: slot,
+                gain: scale(v, range, shape),
             }),
-            (Target::Opacity { slot, range }, Some(v)) => Some(Action::Opacity {
-                slot,
-                value: scale(v, range, shape),
+            (Target::Opacity { slot, range }, Some(v)) => Some(Operation::SetOpacity {
+                deck: slot,
+                opacity: scale(v, range, shape),
             }),
-            (Target::Exposure { range }, Some(v)) => Some(Action::Exposure {
-                value: scale(v, range, shape),
+            (Target::Exposure { range }, Some(v)) => Some(Operation::SetExposure {
+                exposure: scale(v, range, shape),
             }),
-            (Target::ToggleOnAir { slot }, None) => Some(Action::ToggleOnAir { slot }),
-            (Target::TogglePriming { slot }, None) => Some(Action::TogglePriming { slot }),
-            (Target::CycleBlend { slot }, None) => Some(Action::CycleBlend { slot }),
-            (Target::Preview { slot }, None) => Some(Action::Preview { slot }),
-            (Target::Tap, None) => Some(Action::Tap),
+            (Target::Residency { slot, residency }, None) => Some(Operation::SetResidency {
+                deck: slot,
+                residency,
+            }),
+            (Target::Blend { slot, blend }, None) => {
+                Some(Operation::SetBlendMode { deck: slot, blend })
+            }
+            (Target::Preview { slot }, None) => Some(Operation::SetPreview { showing: slot }),
+            (Target::Tap, None) => Some(Operation::TapBeat),
             _ => None,
         }
     }
@@ -393,15 +398,32 @@ fn parse_target(to: &str) -> Result<Target, String> {
         "exposure" => Target::Exposure {
             range: range.unwrap_or(EXPOSURE_RANGE),
         },
-        "on-air" => Target::ToggleOnAir {
-            slot: slot(&mut words)?,
-        },
-        "prime" => Target::TogglePriming {
-            slot: slot(&mut words)?,
-        },
-        "blend" => Target::CycleBlend {
-            slot: slot(&mut words)?,
-        },
+        "residency" => {
+            let slot = slot(&mut words)?;
+            Target::Residency {
+                slot,
+                residency: value_word(
+                    words.next(),
+                    Residency::ALL,
+                    Residency::name,
+                    &format!("residency {slot}"),
+                    "a state",
+                )?,
+            }
+        }
+        "blend" => {
+            let slot = slot(&mut words)?;
+            Target::Blend {
+                slot,
+                blend: value_word(
+                    words.next(),
+                    BlendMode::ALL,
+                    BlendMode::name,
+                    &format!("blend {slot}"),
+                    "a mode",
+                )?,
+            }
+        }
         "preview" => match words.next() {
             Some("mix") => Target::Preview { slot: None },
             Some(n) => Target::Preview {
@@ -413,10 +435,29 @@ fn parse_target(to: &str) -> Result<Target, String> {
             None => return Err("`preview` needs a slot number or `mix`".to_string()),
         },
         "tap" => Target::Tap,
+        // **The two words that were affordances, refused by name.** A file
+        // holding one is a file written against the old grammar, where
+        // `on-air 0` meant *flip slot 0*; loading it and reading it as *put
+        // slot 0 live* is the same line doing something else mid-set, which
+        // is the one outcome this format must not have. The complaint carries
+        // the line to write instead, because a complaint with a line number is
+        // a line an operator can fix — see the module documentation.
+        "on-air" | "prime" => {
+            let n = words.next().unwrap_or("N");
+            let (flipped, asked) = if name == "on-air" {
+                ("a deck on and off", "live")
+            } else {
+                ("a request on and off", "priming")
+            };
+            return Err(format!(
+                "`{name} {n}` flipped {flipped} rather than naming where it goes; write \
+                 `residency {n} {asked}` or `residency {n} allocated`"
+            ));
+        }
         other => {
             return Err(format!(
-                "`{other}` is not a control — expected gain, opacity, exposure, on-air, \
-                 prime, blend, preview or tap"
+                "`{other}` is not a control — expected gain, opacity, exposure, residency, \
+                 blend, preview or tap"
             ))
         }
     };
@@ -440,6 +481,43 @@ fn parse_target(to: &str) -> Result<Target, String> {
         }
     }
     Ok(target)
+}
+
+/// **One of a value list the vocabulary owns**, or a complaint naming all of
+/// them.
+///
+/// The list is `karakuri_operation`'s — [`Residency::ALL`], [`BlendMode::ALL`]
+/// — rather than a second list here, which is what
+/// [P-0074](../../../docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md)
+/// buys: a vocabulary that names destinations has to own the values a
+/// destination is drawn from, and a map file is then offered them without a
+/// parser's copy to keep in step. The words are the same ones the record
+/// carries and the status line prints, so what an operator writes is what they
+/// read back.
+///
+/// `missing` describes the whole line and `what` names the kind of word, so a
+/// bare `blend 0` — which is the old spelling — is answered with the three
+/// lines that replace it rather than with a bare *expected a mode*.
+fn value_word<T: Copy, const N: usize>(
+    word: Option<&str>,
+    all: [T; N],
+    name: fn(T) -> &'static str,
+    line: &str,
+    what: &str,
+) -> Result<T, String> {
+    let listed = || {
+        all.iter()
+            .map(|v| format!("`{line} {}`", name(*v)))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let Some(word) = word else {
+        return Err(format!("`{line}` needs {what} — write one of {}", listed()));
+    };
+    all.iter()
+        .copied()
+        .find(|v| name(*v) == word)
+        .ok_or_else(|| format!("`{line} {word}` is not {what} — write one of {}", listed()))
 }
 
 /// Split a trailing `[lo, hi]` off a control, if there is one.
@@ -504,35 +582,23 @@ mod tests {
     fn a_fader_reaches_both_ends_of_its_range_exactly() {
         let m = map("cc 1 -> gain 0");
         assert_eq!(
-            m.action(cc(1, 0)),
-            Some(Action::Gain {
-                slot: 0,
-                value: 0.0
-            })
+            m.operation(cc(1, 0)),
+            Some(Operation::SetGain { deck: 0, gain: 0.0 })
         );
         assert_eq!(
-            m.action(cc(1, 127)),
-            Some(Action::Gain {
-                slot: 0,
-                value: 1.0
-            })
+            m.operation(cc(1, 127)),
+            Some(Operation::SetGain { deck: 0, gain: 1.0 })
         );
         // And an explicit range, both ends, so the default is not the only one
         // that lands.
         let m = map("cc 1 -> gain 0 [0.5, 2.5]");
         assert_eq!(
-            m.action(cc(1, 0)),
-            Some(Action::Gain {
-                slot: 0,
-                value: 0.5
-            })
+            m.operation(cc(1, 0)),
+            Some(Operation::SetGain { deck: 0, gain: 0.5 })
         );
         assert_eq!(
-            m.action(cc(1, 127)),
-            Some(Action::Gain {
-                slot: 0,
-                value: 2.5
-            })
+            m.operation(cc(1, 127)),
+            Some(Operation::SetGain { deck: 0, gain: 2.5 })
         );
     }
 
@@ -542,8 +608,8 @@ mod tests {
     #[test]
     fn exposure_moves_in_stops_rather_than_in_equal_steps() {
         let m = map("cc 20 -> exposure");
-        let at = |v: u8| match m.action(cc(20, v)) {
-            Some(Action::Exposure { value }) => value,
+        let at = |v: u8| match m.operation(cc(20, v)) {
+            Some(Operation::SetExposure { exposure }) => exposure,
             other => panic!("{other:?}"),
         };
         assert_eq!(at(0), 0.25);
@@ -561,7 +627,7 @@ mod tests {
     /// is sixty times a second while it is moving.
     #[test]
     fn a_control_that_takes_a_press_refuses_a_fader_and_the_reverse() {
-        let (m, notes) = Map::parse("cc 1 -> on-air 0\nnote 36 -> gain 0");
+        let (m, notes) = Map::parse("cc 1 -> residency 0 live\nnote 36 -> gain 0");
         assert!(m.is_empty(), "a mismatched mapping loaded");
         assert_eq!(notes.len(), 2, "{notes:?}");
         assert!(notes[0].contains("map a `note`"), "{}", notes[0]);
@@ -575,7 +641,7 @@ mod tests {
     fn a_stated_channel_matches_only_that_channel_and_no_channel_matches_all() {
         let m = map("cc 1 ch 3 -> gain 0");
         let on = |channel| {
-            m.action(Message::ControlChange {
+            m.operation(Message::ControlChange {
                 channel,
                 controller: 1,
                 value: 127,
@@ -588,8 +654,8 @@ mod tests {
         assert!(on_any(&m, 0).is_some() && on_any(&m, 9).is_some());
     }
 
-    fn on_any(m: &Map, channel: u8) -> Option<Action> {
-        m.action(Message::ControlChange {
+    fn on_any(m: &Map, channel: u8) -> Option<Operation> {
+        m.operation(Message::ControlChange {
             channel,
             controller: 1,
             value: 64,
@@ -603,26 +669,20 @@ mod tests {
     fn a_mapping_with_a_channel_wins_over_one_without() {
         let m = map("cc 1 -> gain 0\ncc 1 ch 1 -> gain 3");
         assert_eq!(
-            m.action(Message::ControlChange {
+            m.operation(Message::ControlChange {
                 channel: 0,
                 controller: 1,
                 value: 127
             }),
-            Some(Action::Gain {
-                slot: 3,
-                value: 1.0
-            })
+            Some(Operation::SetGain { deck: 3, gain: 1.0 })
         );
         assert_eq!(
-            m.action(Message::ControlChange {
+            m.operation(Message::ControlChange {
                 channel: 5,
                 controller: 1,
                 value: 127
             }),
-            Some(Action::Gain {
-                slot: 0,
-                value: 1.0
-            })
+            Some(Operation::SetGain { deck: 0, gain: 1.0 })
         );
     }
 
@@ -631,10 +691,16 @@ mod tests {
     /// slot on and off again before the operator's finger came up.
     #[test]
     fn a_release_is_not_a_second_press() {
-        let m = map("note 36 -> on-air 0");
-        assert_eq!(m.action(note(36)), Some(Action::ToggleOnAir { slot: 0 }));
+        let m = map("note 36 -> residency 0 live");
         assert_eq!(
-            m.action(Message::NoteOff {
+            m.operation(note(36)),
+            Some(Operation::SetResidency {
+                deck: 0,
+                residency: Residency::Live
+            })
+        );
+        assert_eq!(
+            m.operation(Message::NoteOff {
                 channel: 0,
                 note: 36
             }),
@@ -642,7 +708,7 @@ mod tests {
         );
         // Including the spelling that arrives as a note-on at velocity 0.
         assert_eq!(
-            m.action(Message::parse(&[0x90, 36, 0]).expect("a note-on")),
+            m.operation(Message::parse(&[0x90, 36, 0]).expect("a note-on")),
             None
         );
     }
@@ -655,28 +721,137 @@ mod tests {
         let m = map("cc 1 -> gain 2\n\
              cc 2 -> opacity 3\n\
              cc 3 -> exposure\n\
-             note 36 -> on-air 1\n\
-             note 37 -> prime 2\n\
-             note 38 -> blend 3\n\
+             note 36 -> residency 1 live\n\
+             note 37 -> blend 3 over\n\
              note 39 -> preview 1\n\
              note 40 -> preview mix\n\
              note 41 -> tap");
-        assert_eq!(m.len(), 9);
+        assert_eq!(m.len(), 8);
         assert!(matches!(
-            m.action(cc(1, 127)),
-            Some(Action::Gain { slot: 2, .. })
+            m.operation(cc(1, 127)),
+            Some(Operation::SetGain { deck: 2, .. })
         ));
         assert!(matches!(
-            m.action(cc(2, 127)),
-            Some(Action::Opacity { slot: 3, .. })
+            m.operation(cc(2, 127)),
+            Some(Operation::SetOpacity { deck: 3, .. })
         ));
-        assert!(matches!(m.action(cc(3, 64)), Some(Action::Exposure { .. })));
-        assert_eq!(m.action(note(36)), Some(Action::ToggleOnAir { slot: 1 }));
-        assert_eq!(m.action(note(37)), Some(Action::TogglePriming { slot: 2 }));
-        assert_eq!(m.action(note(38)), Some(Action::CycleBlend { slot: 3 }));
-        assert_eq!(m.action(note(39)), Some(Action::Preview { slot: Some(1) }));
-        assert_eq!(m.action(note(40)), Some(Action::Preview { slot: None }));
-        assert_eq!(m.action(note(41)), Some(Action::Tap));
+        assert!(matches!(
+            m.operation(cc(3, 64)),
+            Some(Operation::SetExposure { .. })
+        ));
+        assert_eq!(
+            m.operation(note(36)),
+            Some(Operation::SetResidency {
+                deck: 1,
+                residency: Residency::Live
+            })
+        );
+        assert_eq!(
+            m.operation(note(37)),
+            Some(Operation::SetBlendMode {
+                deck: 3,
+                blend: BlendMode::Over
+            })
+        );
+        assert_eq!(
+            m.operation(note(39)),
+            Some(Operation::SetPreview { showing: Some(1) })
+        );
+        assert_eq!(
+            m.operation(note(40)),
+            Some(Operation::SetPreview { showing: None })
+        );
+        assert_eq!(m.operation(note(41)), Some(Operation::TapBeat));
+    }
+
+    /// **A pad names a state, and every state the vocabulary holds is
+    /// writable.** The defect this is against is the one P-0074 describes: a
+    /// map that could only say *step it* leaves `allocated` and `max`
+    /// unreachable from a surface, and two surfaces stepping one control
+    /// disagree about where they are. The words are read off
+    /// `Residency::ALL` and `BlendMode::ALL` rather than spelled here twice,
+    /// so a value added to the vocabulary is checked by this test on the day
+    /// it lands.
+    #[test]
+    fn a_pad_names_one_of_the_values_the_vocabulary_holds() {
+        for (i, residency) in Residency::ALL.iter().enumerate() {
+            let line = format!("note {} -> residency 2 {}", 36 + i, residency.name());
+            assert_eq!(
+                map(&line).operation(note(36 + i as u8)),
+                Some(Operation::SetResidency {
+                    deck: 2,
+                    residency: *residency
+                }),
+                "`{line}` did not name {}",
+                residency.name()
+            );
+        }
+        for (i, blend) in BlendMode::ALL.iter().enumerate() {
+            let line = format!("note {} -> blend 1 {}", 48 + i, blend.name());
+            assert_eq!(
+                map(&line).operation(note(48 + i as u8)),
+                Some(Operation::SetBlendMode {
+                    deck: 1,
+                    blend: *blend
+                }),
+                "`{line}` did not name {}",
+                blend.name()
+            );
+        }
+    }
+
+    /// **A file written against the old grammar is refused, line by line, with
+    /// the line to write instead.**
+    ///
+    /// `on-air 0` meant *flip slot 0*; as a destination it would mean *put
+    /// slot 0 live*, and a checked-in map would go on loading and do something
+    /// else mid-set. That is the one outcome this format must not have, so the
+    /// three old spellings are refused where an operator can read them — and a
+    /// refusal that only said *not a control* would leave them guessing at the
+    /// grammar that replaced it (ADR-0196).
+    #[test]
+    fn a_line_in_the_old_grammar_is_refused_with_the_line_to_write_instead() {
+        let (m, notes) = Map::parse(
+            "note 32 -> on-air 0\n\
+             note 36 -> prime 1\n\
+             note 40 -> blend 2",
+        );
+        assert!(m.is_empty(), "a line in the old grammar loaded");
+        assert_eq!(notes.len(), 3, "{notes:?}");
+        for (i, wanted) in ["residency 0 live", "residency 1 priming", "blend 2 over"]
+            .iter()
+            .enumerate()
+        {
+            assert!(
+                notes[i].starts_with(&format!("line {}:", i + 1)),
+                "{}",
+                notes[i]
+            );
+            assert!(
+                notes[i].contains(wanted),
+                "the complaint did not name `{wanted}`: {}",
+                notes[i]
+            );
+        }
+        // And the other half of each: taking a deck off air, and withdrawing a
+        // prime request, are the destinations the old `false` had no name for.
+        assert!(notes[0].contains("residency 0 allocated"), "{}", notes[0]);
+        assert!(notes[1].contains("residency 1 allocated"), "{}", notes[1]);
+    }
+
+    /// A value word that is not one of the list is refused naming all of them,
+    /// which is the same complaint a missing one gets — one bad line, on its
+    /// own line, with somewhere to go.
+    #[test]
+    fn a_value_word_that_is_not_one_of_the_list_is_refused_naming_them() {
+        let (m, notes) = Map::parse("note 36 -> residency 0 warming");
+        assert!(m.is_empty());
+        assert!(notes[0].contains("`residency 0 live`"), "{}", notes[0]);
+        assert!(notes[0].contains("`residency 0 priming`"), "{}", notes[0]);
+        assert!(notes[0].contains("`residency 0 allocated`"), "{}", notes[0]);
+        let (m, notes) = Map::parse("note 36 -> blend 0 screen");
+        assert!(m.is_empty());
+        assert!(notes[0].contains("`blend 0 max`"), "{}", notes[0]);
     }
 
     /// **One bad line is a line, not a file.** A typo in a map mid-set must not
@@ -702,7 +877,7 @@ mod tests {
              \n\
              cc 1 -> gain 0   # channel strip 1\n");
         assert_eq!(m.len(), 1);
-        assert!(m.action(cc(1, 127)).is_some());
+        assert!(m.operation(cc(1, 127)).is_some());
     }
 
     /// A ratio control cannot have a range that reaches zero — the map is
@@ -768,11 +943,8 @@ mod tests {
         let (m, notes) = Map::parse("cc 1 -> gain 0\ncc 1 -> gain 3");
         assert_eq!(m.len(), 1);
         assert_eq!(
-            m.action(cc(1, 127)),
-            Some(Action::Gain {
-                slot: 3,
-                value: 1.0
-            }),
+            m.operation(cc(1, 127)),
+            Some(Operation::SetGain { deck: 3, gain: 1.0 }),
             "the earlier line won"
         );
         assert_eq!(notes.len(), 1, "{notes:?}");

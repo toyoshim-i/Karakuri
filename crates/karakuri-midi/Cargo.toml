@@ -5,5 +5,12 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+# **Two, and the second one costs nothing.** `midir` is the port; the other is
+# the operation vocabulary, which has no dependencies at all by charter
+# (ADR-0180) — *"a map file's parser must not pull serde and sha2"* is that
+# record's worked example, and this crate is the example. What a map line names
+# is a value out of `karakuri-operation`'s own lists, so the parser refuses an
+# unknown blend mode where the operator can read the line (ADR-0196).
 [dependencies]
+karakuri-operation = { version = "0.1.0", path = "../karakuri-operation" }
 midir = "0.11.0"

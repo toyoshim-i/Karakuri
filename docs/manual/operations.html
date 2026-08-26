@@ -159,11 +159,11 @@
       </div>
       <div class="op">
         <div class="op-head"><h3>Put a deck on air, prime it, or take it off</h3><span class="op-when ">immediate; priming is a request</span></div>
-        <p>Three states, not two switches: <b>live</b> is stepped and composited, <b>priming</b> is stepped out of sight and adds nothing to the mix, <b>allocated</b> is held &mdash; compiled, buffers kept, its <i>t</i> where it stopped, so a deck taken off and brought back resumes rather than restarts. Live is honoured: nothing demotes a deck that is on air. Priming is a request the governor reconsiders every pass, and a deck asked to prime with no room is <b>parked</b> &mdash; the request stands and takes effect when there is room, so what the console shows is the residency the deck reports, not the one it was asked for. MIDI names the deck, so it needs no selection; a key acts on the selected one.</p>
+        <p>Three states, not two switches: <b>live</b> is stepped and composited, <b>priming</b> is stepped out of sight and adds nothing to the mix, <b>allocated</b> is held &mdash; compiled, buffers kept, its <i>t</i> where it stopped, so a deck taken off and brought back resumes rather than restarts. Live is honoured: nothing demotes a deck that is on air. Priming is a request the governor reconsiders every pass, and a deck asked to prime with no room is <b>parked</b> &mdash; the request stands and takes effect when there is room, so what the console shows is the residency the deck reports, not the one it was asked for. MIDI names the deck <em>and the state</em>, so it needs no selection and no notion of which way to flip &mdash; a pad per state, and a key acts on the selected deck.</p>
         <div class="rts">
           <span class="rt plan">panel <b>tally chip</b></span>
           <span class="rt has">key <b>space, w</b></span>
-          <span class="rt has">MIDI <b>note &rarr; on-air N, prime N</b></span>
+          <span class="rt has">MIDI <b>note &rarr; residency N live|priming|allocated</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
       </div>
@@ -218,11 +218,11 @@
       </div>
       <div class="op">
         <div class="op-head"><h3>Blend mode</h3><span class="op-when ">immediate</span></div>
-        <p>How a deck meets the ones under it in the fold.</p>
+        <p>How a deck meets the ones under it in the fold. The key cycles the three; a map names the one it wants, which is why a pad is per mode rather than per deck.</p>
         <div class="rts">
           <span class="rt plan">panel <b>strip button</b></span>
           <span class="rt has">key <b>m</b></span>
-          <span class="rt has">MIDI <b>note &rarr; blend N</b></span>
+          <span class="rt has">MIDI <b>note &rarr; blend N add|over|max</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
       </div>
@@ -599,12 +599,15 @@
   <section class="cap">
     <h2>What the gaps say</h2>
     <p>
-      <strong>MIDI is the narrowest by a wide margin.</strong> Its whole
-      vocabulary is eight actions, and it cannot express a node address, a
-      parameter name or an id. It also has no idea of a selected deck &mdash; it
-      names the deck in the message &mdash; where the keys have nothing but the
-      selected deck. The same operation is addressed two different ways on two
-      surfaces.
+      <strong>MIDI is the narrowest by a wide margin.</strong> It reaches
+      seven of these forty-six operations, and it cannot express a node
+      address, a parameter name or an id. It no longer has a vocabulary of its
+      own, though: a map line names one of the operations on this page, and it
+      names it outright &mdash; which state, which mode &mdash; rather than
+      saying <em>step it</em>. It also has no idea of a selected deck &mdash;
+      it names the deck in the message &mdash; where the keys have nothing but
+      the selected deck. The same operation is addressed two different ways on
+      two surfaces.
     </p>
     <p>
       <strong>A model can rewrite a whole procedure and cannot turn one knob.</strong>

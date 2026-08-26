@@ -1,15 +1,24 @@
 //! The surface, on the way to the record stream.
 //!
 //! `karakuri-midi` says what the operator asked for; this says what that is
-//! worth. The whole of the connection is one match in [`crate::Live`], and it
-//! is one match on purpose: **every arm ends in the same call a key press ends
-//! in**, so a control surface can do nothing a keyboard cannot and a session
-//! recorded from one replays with neither attached.
+//! worth. What arrives is a [`karakuri_operation::Operation`] — the same name
+//! a key press and a console fader carry — so a control surface can do nothing
+//! a keyboard cannot and a session recorded from one replays with neither
+//! attached.
 //!
 //! ```text
-//!   a knob ─→ Message ─→ Router ─→ Action ─→ the same Live method a key calls
-//!                                               └→ Record ─→ Deck
+//!   a knob ─→ Message ─→ Router ─→ Operation ─→ Live::operate
+//!                                                  └→ written() ─→ Record ─→ Deck
 //! ```
+//!
+//! **The exhaustiveness moved and did not go.** This used to be one match over
+//! eight `Action`s in [`crate::Live`], and *a control added to one and not the
+//! other does not compile* was its whole claim. Against a 46-variant
+//! vocabulary that claim would be false, and the guarantee lives where it is
+//! now true: `karakuri_operation_record::written` is one exhaustive match over
+//! all 46, so an operation nobody has said what to do with stops the build
+//! there rather than reaching a router arm nobody wrote
+//! (`docs/adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md`).
 //!
 //! ## The map is a file and is not in the stream
 //!
@@ -45,7 +54,8 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use karakuri_midi::{Action, Map, Message, Port};
+use karakuri_midi::{Map, Message, Port};
+use karakuri_operation::Operation;
 
 /// The map, the slot check, and what has already been said. No port.
 pub struct Router {
@@ -82,19 +92,19 @@ impl Router {
 
     /// Route `messages` into `out`, saying whatever needs saying.
     ///
-    /// `out` is cleared first: an action left from the previous frame would be
-    /// applied again on this one, which for a toggle is the operator's press
-    /// undone by a frame nobody touched.
+    /// `out` is cleared first: an operation left from the previous frame would
+    /// be applied again on this one — harmless for a fader that has not moved,
+    /// and not for a press.
     ///
     /// A message naming a slot this deck does not have is dropped here rather
     /// than in an index — `Deck::gain` and friends index directly and would
     /// panic on the render thread — and said once. A map is written by hand
     /// against a deck the operator remembers.
-    pub fn route(&mut self, messages: &[Message], slot_count: usize, out: &mut Vec<Action>) {
+    pub fn route(&mut self, messages: &[Message], slot_count: usize, out: &mut Vec<Operation>) {
         out.clear();
         self.notices.clear();
         for message in messages {
-            let Some(action) = self.map.action(*message) else {
+            let Some(operation) = self.map.operation(*message) else {
                 // A release is unmapped by construction — every pad acts on
                 // the press — so reporting one would call the other half of
                 // every hit a discovery.
@@ -103,9 +113,9 @@ impl Router {
                 }
                 continue;
             };
-            match slot_of(action) {
+            match deck_of(&operation) {
                 Some(slot) if slot >= slot_count => self.report_no_slot(slot, slot_count),
-                _ => out.push(action),
+                _ => out.push(operation),
             }
         }
     }
@@ -149,18 +159,29 @@ impl Router {
     }
 }
 
-/// The slot an action names, if it names one. One place, so an action added to
-/// the vocabulary and not to this is a compile error rather than a mapping that
-/// skips the range check.
-fn slot_of(action: Action) -> Option<usize> {
-    match action {
-        Action::Gain { slot, .. }
-        | Action::Opacity { slot, .. }
-        | Action::ToggleOnAir { slot }
-        | Action::TogglePriming { slot }
-        | Action::CycleBlend { slot }
-        | Action::Preview { slot: Some(slot) } => Some(usize::from(slot)),
-        Action::Exposure { .. } | Action::Preview { slot: None } | Action::Tap => None,
+/// The deck an operation names, if it names one.
+///
+/// **The five arms are every operation a map line can produce**, and
+/// `karakuri_midi::map`'s `parse_target` is that list — `cc -> exposure` and
+/// `note -> tap` name no deck, and the other forty-one operations have no
+/// spelling in the grammar at all. The wildcard is what the vocabulary being
+/// forty-six wide costs here, and it is safe rather than merely convenient:
+/// **the record path is the backstop.** A slot this deck does not hold is
+/// refused by `mix::change` with [`crate::no_such_slot`] — this very sentence —
+/// and nothing moves, where the old `Action` path indexed a `Vec` directly and
+/// panicked on the render thread.
+///
+/// So what this buys is not safety but silence: the refusal is said **once per
+/// slot per run** rather than once per message, and `cc 1 -> gain 4` on a deck
+/// of four is the likeliest typo a map has.
+fn deck_of(operation: &Operation) -> Option<usize> {
+    match operation {
+        Operation::SetGain { deck, .. }
+        | Operation::SetOpacity { deck, .. }
+        | Operation::SetResidency { deck, .. }
+        | Operation::SetBlendMode { deck, .. } => Some(usize::from(*deck)),
+        Operation::SetPreview { showing } => showing.map(usize::from),
+        _ => None,
     }
 }
 
@@ -222,9 +243,9 @@ impl Surface {
         })
     }
 
-    /// Everything that arrived since the last frame, as actions this deck can
-    /// answer.
-    pub fn take(&mut self, slot_count: usize, out: &mut Vec<Action>) {
+    /// Everything that arrived since the last frame, as operations this deck
+    /// can answer.
+    pub fn take(&mut self, slot_count: usize, out: &mut Vec<Operation>) {
         self.port.drain(&mut self.inbox);
         // Split rather than borrowed together: `route` writes to the router and
         // reads the inbox, and both are fields of `self`. `mem::take` would
@@ -263,34 +284,34 @@ mod tests {
         }
     }
 
-    fn routed(r: &mut Router, messages: &[Message], slots: usize) -> Vec<Action> {
+    fn routed(r: &mut Router, messages: &[Message], slots: usize) -> Vec<Operation> {
         let mut out = Vec::new();
         r.route(messages, slots, &mut out);
         out
     }
 
-    /// **A message naming a slot the deck does not have never reaches the
-    /// engine.** `Deck::gain` and every one of its neighbours index a `Vec`
-    /// directly, so an unchecked action is a panic on the render thread — and
-    /// `cc 1 -> gain 4` on a deck of four is the likeliest typo a map has,
-    /// because the `ch` on the same line *is* one-based.
+    /// **A message naming a slot the deck does not have is dropped here**, so
+    /// the refusal is said once per slot rather than once per message — a
+    /// fader sweep into `gain 4` on a deck of four is several hundred of them,
+    /// and `cc 1 -> gain 4` is the likeliest typo a map has because the `ch`
+    /// on the same line *is* one-based.
     #[test]
-    fn an_action_past_the_end_of_the_deck_is_dropped_rather_than_indexed() {
+    fn an_operation_past_the_end_of_the_deck_is_dropped_rather_than_routed() {
         let mut r = router("cc 1 -> gain 3\ncc 2 -> gain 0");
         let out = routed(&mut r, &[cc(1, 127), cc(2, 64)], 2);
         assert_eq!(out.len(), 1, "{out:?}");
-        assert!(matches!(out[0], Action::Gain { slot: 0, .. }));
+        assert!(matches!(out[0], Operation::SetGain { deck: 0, .. }));
         // The boundary either side of it, which is where an off-by-one lives.
         assert_eq!(routed(&mut r, &[cc(1, 127)], 4).len(), 1);
         assert_eq!(routed(&mut r, &[cc(1, 127)], 3).len(), 0);
     }
 
-    /// **Previous frame's actions do not arrive again.** `out` is a buffer the
-    /// caller keeps, and one left unclear would apply every toggle on it a
+    /// **Previous frame's operations do not arrive again.** `out` is a buffer
+    /// the caller keeps, and one left unclear would apply every press on it a
     /// second time on a frame nobody touched the surface.
     #[test]
-    fn a_frame_with_no_messages_produces_no_actions() {
-        let mut r = router("note 36 -> on-air 0");
+    fn a_frame_with_no_messages_produces_no_operations() {
+        let mut r = router("note 36 -> residency 0 live");
         let mut out = Vec::new();
         r.route(&[note(36)], 4, &mut out);
         assert_eq!(out.len(), 1);
@@ -298,10 +319,10 @@ mod tests {
         assert!(out.is_empty(), "{out:?}");
     }
 
-    /// Every message routes to the action its line names, and only mapped ones
-    /// route at all. The seam this file exists for, end to end.
+    /// Every message routes to the operation its line names, and only mapped
+    /// ones route at all. The seam this file exists for, end to end.
     #[test]
-    fn a_mapped_message_becomes_its_action_and_an_unmapped_one_becomes_nothing() {
+    fn a_mapped_message_becomes_its_operation_and_an_unmapped_one_becomes_nothing() {
         let mut r = router("cc 1 -> gain 2\nnote 36 -> preview 1\nnote 37 -> tap");
         let out = routed(
             &mut r,
@@ -311,12 +332,9 @@ mod tests {
         assert_eq!(
             out,
             vec![
-                Action::Gain {
-                    slot: 2,
-                    value: 1.0
-                },
-                Action::Preview { slot: Some(1) },
-                Action::Tap,
+                Operation::SetGain { deck: 2, gain: 1.0 },
+                Operation::SetPreview { showing: Some(1) },
+                Operation::TapBeat,
             ]
         );
     }
@@ -386,7 +404,7 @@ mod tests {
     /// operator had not mapped.
     #[test]
     fn a_release_is_not_reported_as_unmapped() {
-        let mut r = router("note 36 -> on-air 0");
+        let mut r = router("note 36 -> residency 0 live");
         routed(
             &mut r,
             &[

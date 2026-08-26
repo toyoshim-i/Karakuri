@@ -45,9 +45,9 @@ out-of-process program is the one that most needs them.
 ## The other input side already exists
 
 `karakuri-midi` plus the CLI's `Router` and `Surface` are the shape, working, in tree:
-every MIDI action ends in the method a key press ends in, so a controller can do nothing a
-key cannot and a session recorded from one replays with neither controller nor map
-attached. **A Link plugin is another `Surface`.** The input half of the interface is
+every mapped MIDI message is an `Operation` and ends in the record a key press ends in, so a
+controller can do nothing a key cannot and a session recorded from one replays with neither
+controller nor map attached. **A Link plugin is another `Surface`.** The input half of the interface is
 therefore extracted from something that runs rather than invented, which is the only reason
 to specify it before a second instance exists.
 
