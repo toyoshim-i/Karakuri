@@ -809,7 +809,7 @@ fn nothing_in_the_transport_row_is_a_control() {
     ];
     for (probe, what) in probes {
         assert_eq!(
-            claim(&mut panel, &ctx, at(probe)),
+            claim(&mut panel, &ctx, &[], at(probe)),
             Claim::Egui,
             "{what} is being claimed as a control the panel acts on"
         );
@@ -820,7 +820,7 @@ fn nothing_in_the_transport_row_is_a_control() {
     // missing: this row's own bottom edge is inside it.
     let below = Point::new(strip.x + strip.w * 0.5, strip.y + strip.h);
     assert_eq!(
-        claim(&mut panel, &ctx, below),
+        claim(&mut panel, &ctx, &[], below),
         Claim::Panel,
         "the bottom edge of the transport row is not in the grab of the boundary under \
          it, so this test is no longer measuring what it was written for"

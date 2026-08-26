@@ -11,6 +11,16 @@ license.workspace = true
 # ADR-0156 — the panel is a client of this tree, not its owner.
 karakuri-layout = { version = "0.1.0", path = "../karakuri-layout" }
 
+# **The vocabulary, because a control on this panel emits one of its
+# operations.** ADR-0180: a leaf crate with no dependencies at all, so this
+# costs the panel nothing it was refusing — `karakuri-operation` brings no
+# toolkit, no device and no engine, and `panel` goes on being testable on a
+# machine with no adapter. The mixer's two faders are its first customer: a
+# drag becomes `Operation::SetGain` or `Operation::SetOpacity` and the panel
+# does not apply it, because a GUI component is a translator and this crate has
+# nothing to translate *into* (ADR-0156).
+karakuri-operation = { version = "0.1.0", path = "../karakuri-operation" }
+
 # **The view lives in this crate, so the toolkit is a dependency of it.**
 # ADR-0155 chose `egui` and paid a `wgpu` major version for it; this is where
 # that lands. The three move together and are re-exported from `lib.rs` for the
@@ -60,6 +70,13 @@ karakuri-signal.workspace = true
 # `Checked` and inventing one would be a second answer to *what does this
 # procedure compile to*.
 karakuri-ir.workspace = true
+# **For `Record`, and for one pass of the example alone**: a fader's operation
+# has to become a record before it reaches the deck (P-0028), and *where*
+# `Operation` becomes `Record` is not decided — it needs `karakuri-operation`
+# and `karakuri-store`, neither of which depends on the other. The example
+# builds the two records itself and says so at the top of `record`; this
+# dependency is that shortcut's, and it leaves with it.
+karakuri-store.workspace = true
 
 # **The example carries tests, so it is a test target.** Cargo builds an example
 # under `cargo test` but does not run the tests inside one unless it is asked,

@@ -136,7 +136,7 @@ use egui::epaint::text::{LayoutJob, TextFormat};
 use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, StrokeKind, Ui};
 use karakuri_layout::{Axis, Hit, NodeId};
 
-use crate::panel::{Op, Panel, GRAB};
+use crate::panel::{unit, Grab, InHand, Knob, Op, Panel, GRAB};
 use crate::room::{size, Palette, Room};
 
 /// The whole of a texture, in `egui`'s texture coordinates. The picture fills
@@ -187,7 +187,13 @@ pub const DECKS: usize = 4;
 
 /// The letters the mock puts in the four cells, which is how an operator says
 /// *which* deck. `A` through `D`, in slot order.
-const DECK_LETTERS: [&str; DECKS] = ["A", "B", "C", "D"];
+///
+/// Public because a harness saying *which deck a fader moved* has to say it in
+/// the letters the cells are drawn with, and a second list written out there
+/// would be a copy that goes on saying `A B C D` the day this one does not —
+/// [ADR-0179](../../../docs/adr/0179-a-transcribed-number-cites-the-rule-it-was-copied-from.md)
+/// on a word instead of on a number.
+pub const DECK_LETTERS: [&str; DECKS] = ["A", "B", "C", "D"];
 
 /// **How many cells go down one side when they are beside the picture**: half
 /// of [`DECKS`], which is two — A and B down the left, C and D down the right.
@@ -2303,23 +2309,34 @@ pub struct Level {
 /// writes one of these per slot per frame — exactly as whoever owns the device
 /// registers a texture and writes [`View::picture`].
 ///
-/// **No repaint arm**, for [`Transport`]'s reason: [`crate::repaint::Change`]
-/// is one list of everything that can change what the console shows, and this
-/// is not on it. These values move when the engine draws a frame, and a caller
-/// drawing engine frames is already asking for frames for the picture two bays
-/// along.
+/// **No repaint arm for the values arriving**, which is [`Transport`]'s
+/// reason: these move when the engine draws a frame, and a caller drawing
+/// engine frames is already asking for frames for the picture two bays along.
 ///
-/// # Nothing in this bay is a control yet, and the source says so rather than
-/// leaving it to be found
+/// **A drag on one of the two faders is a different thing and does have an
+/// arm** — [`crate::repaint::Change::Emitted`]. That is not the value
+/// arriving; it is an operation leaving, on a gesture an operator is making,
+/// and it is on the list because [`crate::repaint::Change`] is one list of
+/// everything that can change what the console shows and a fader that reached
+/// no repaint would leave the strip drawn at the value before the drag.
 ///
-/// Every value below is a **readout**. The trim, the fader, the tally and the
-/// two minis are drawn from what the deck says, and a press on any of them
-/// reaches nothing: [`crate::input::claim`] asks [`outputs`] and nothing else,
-/// and `tests/mixer.rs` asserts that over the whole bay rather than leaving it
-/// to be inferred from the absence of a hit test. Making a fader move is a
-/// second kind of drag — the value belongs to the engine rather than to the
-/// arrangement — so it needs an operation named once for the four surfaces and
-/// a decision about the claim model, and it is its own pass.
+/// # Two of these are controls and the rest are readouts, and the source says
+/// which
+///
+/// **The two faders are played.** A press on the trim's knob or the fader's
+/// knob takes it in hand ([`Mixer::grab`]), and dragging it emits
+/// [`karakuri_operation::Operation::SetGain`] or `SetOpacity` for the caller
+/// to turn into a record. Nothing here applies it, and nothing here keeps the
+/// value: the fields below are still written by whoever owns the deck, every
+/// frame, so a fader that has just been dragged shows the new number **because
+/// the deck changed**.
+///
+/// **Everything else in the bay is a readout.** The tally, the two minis, the
+/// meter and the number are drawn from what the deck says and a press on any
+/// of them reaches nothing — and so does a press on a fader's *track*, off the
+/// knob, which would otherwise be a jump nobody asked for. `tests/mixer.rs`
+/// asserts both directions rather than leaving either to be inferred from the
+/// absence of a hit test.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Strip {
     /// **What the deck is playing**, in `.strip-name`.
@@ -2400,6 +2417,17 @@ pub struct Fader {
     pub fill: Rect,
     /// The knob, centred on the fill's moving edge.
     pub knob: Rect,
+    /// **How far the knob's centre moves between the two ends**: the track
+    /// less the inset the fill sits inside it by, along the axis.
+    ///
+    /// A field, and not a fill stored beside its track — the thing
+    /// [`StripBox`] refuses. The fill says where the value *is* and says
+    /// nothing about how far it could go; the zero end is recoverable from the
+    /// fill (a row's `fill.min.x`, a column's `fill.max.y`, neither of which
+    /// moves) and the length is not recoverable from anything here. It is what
+    /// turns a pointer back into a value — see [`Mixer::grab`] — so the
+    /// derivation that draws the fader and the one that grabs it are one.
+    pub travel: f32,
 }
 
 /// **A meter, laid out**: the well, the column the mean fills, and the peak's
@@ -2410,10 +2438,11 @@ pub struct Fader {
 /// They share exactly one thing and it is [`filled`] — a value turned into a
 /// length up a track — which is why that is a function of its own with three
 /// call sites rather than a shared type. What they do not share is what each
-/// **is**: a fader's knob is a grab target and the pass after this one makes
+/// **is**: a fader's knob is a grab target and [`Mixer::grab`] is what makes
 /// it one, while a peak mark is a reading and never will be. A shared type
 /// would be a type half of whose fields are about a gesture the other half can
-/// never have.
+/// never have — and [`Fader::travel`], which is the length a *hand* moves the
+/// value along, is the field that says so.
 ///
 /// They disagree about the track as well. `.vfader b` sits
 /// [`size::VFADER_INSET`] inside its well and `.vmeter b` fills its own edge
@@ -2551,6 +2580,52 @@ impl<'a> Mixer<'a> {
             .copied()
             .flatten()
             .unwrap_or_else(|| panic!("strip {index} of a mixer of {count}"))
+    }
+
+    /// **What a press at `p` takes hold of**, or `None` where there is nothing
+    /// under it that a hand can move.
+    ///
+    /// # It is the knob, and the track is deliberately not a target
+    ///
+    /// **A press on the track, off the knob, does nothing.** A fader at 0.3
+    /// whose top is clicked would jump to 1.0 — a change to the mix nobody
+    /// asked for, made on stage — and this bay's controls are played during a
+    /// performance. So the answer is `None` there, and it is a decision rather
+    /// than a hit test that stops at the knob by accident.
+    ///
+    /// It also decides who the *event* belongs to, since
+    /// [`crate::input::claim`]'s rule 3 asks this: **the panel claims what it
+    /// acts on**, so a press on a track goes to `egui`, which owns no widget
+    /// there and does nothing with it — which is the same nothing, arrived at
+    /// without the panel claiming a press it would throw away.
+    ///
+    /// # One derivation, asked twice
+    ///
+    /// [`crate::input::claim`] asks this and so does the caller that acts on
+    /// the press, exactly as [`Outputs::op`] is asked after [`Outputs::hit`]
+    /// (ADR-0176). Two copies of *where the knob is* is a control drawn where
+    /// it cannot be grabbed, with nothing on screen saying so.
+    ///
+    /// **The value is part of the geometry here**, which the Outputs chip does
+    /// not have to deal with: the knob sits on the fill's moving edge, so
+    /// where it is depends on what the deck said this frame. That is the same
+    /// [`Strip`] the bay was laid out from, so the knob a hand sees and the
+    /// knob it grabs are the same one.
+    pub fn grab(&self, p: karakuri_layout::Point) -> Option<Grab> {
+        let p = Pos2::new(p.x, p.y);
+        self.strips
+            .iter()
+            .zip(self.boxes)
+            .enumerate()
+            .find_map(|(index, (strip, at))| {
+                let at = at?;
+                // The manual's *deck* is the code's *slot*, and a deck holds
+                // `MAX_SLOTS` of them — `DECKS`, which is 4 — so the index is
+                // a `u8` with room to spare. See `Knob::operation`.
+                let deck = index as u8;
+                grabbed(at.trim_at(strip.gain), deck, Knob::Trim, p)
+                    .or_else(|| grabbed(at.fader_at(strip.opacity), deck, Knob::Fader, p))
+            })
     }
 
     /// Every strip and its box, in slot order.
@@ -2796,20 +2871,6 @@ fn centred_in(row: Rect, w: f32) -> Rect {
     )
 }
 
-/// **A value on `[0, 1]`, and a NaN is zero.**
-///
-/// `f32::clamp` passes a NaN straight through, which would be a `NaN`-wide
-/// fill on a track. The engine takes the same reading one level down — *"a
-/// fader whose value is not a number is a broken control, and of the two
-/// available readings … only one of them is a fader"* — and a console handed
-/// one by a caller that did not go through `Deck::set_opacity` takes it here.
-fn unit(at: f32) -> f32 {
-    match at.is_nan() {
-        true => 0.0,
-        false => at.clamp(0.0, 1.0),
-    }
-}
-
 /// **How much of a track a value fills**, from the track's own zero — the left
 /// end of a row, and the **bottom** of a column, because a fader stands up and
 /// a meter fills from the floor.
@@ -2854,7 +2915,8 @@ fn filled(track: Rect, axis: Axis, at: f32) -> Rect {
 /// fader column, and [`size::TRIM_PAD_X`] plus [`size::STRIP_PAD_X`] either
 /// side of the trim.
 fn fader(track: Rect, axis: Axis, at: f32, inset: f32, knob: egui::Vec2) -> Fader {
-    let fill = filled(track.shrink(inset), axis, at);
+    let inside = track.shrink(inset);
+    let fill = filled(inside, axis, at);
     let edge = match axis {
         Axis::Row => Pos2::new(fill.max.x, track.center().y),
         Axis::Column => Pos2::new(track.center().x, fill.min.y),
@@ -2864,7 +2926,32 @@ fn fader(track: Rect, axis: Axis, at: f32, inset: f32, knob: egui::Vec2) -> Fade
         axis,
         fill,
         knob: Rect::from_center_size(edge, knob),
+        travel: match axis {
+            Axis::Row => inside.width(),
+            Axis::Column => inside.height(),
+        },
     }
+}
+
+/// **One laid-out fader, taken hold of at `p`** — or `None` where `p` is not
+/// on its knob.
+///
+/// The inverse of [`fader`], off the same three numbers it laid out: the
+/// track's zero end, which is the fill's fixed edge; the travel, which is the
+/// length the value rides; and where the knob's centre is now, which is the
+/// fill's moving edge. **The offset is the pointer less that centre**, so a
+/// press keeps whatever it grabbed at and the value does not jump.
+fn grabbed(fader: Fader, deck: u8, knob: Knob, p: Pos2) -> Option<Grab> {
+    if !fader.knob.contains(p) {
+        return None;
+    }
+    // Which end is zero is [`filled`]'s rule, read backwards: a row fills from
+    // the left and a column from the **bottom**, because a fader stands up.
+    let (zero, edge, coord) = match fader.axis {
+        Axis::Row => (fader.fill.min.x, fader.fill.max.x, p.x),
+        Axis::Column => (fader.fill.max.y, fader.fill.min.y, p.y),
+    };
+    Grab::new(deck, knob, fader.axis, zero, fader.travel, coord - edge)
 }
 
 /// The tally's word as one laid-out run, so that measuring it and painting it
@@ -3491,8 +3578,20 @@ impl View {
         // A boundary in hand keeps the resize cursor even where the pointer
         // has run off it, for the reason `input`'s rule 1 keeps the events:
         // the gesture is what is happening, not the position.
-        let axis = match panel.drag_axis() {
-            Some(axis) => Some(axis),
+        //
+        // **And a gesture that is not a boundary drag suppresses it**, for the
+        // same reason and in the other direction. Falling through to the hit
+        // test with a fader in hand would flick a resize cursor on the moment
+        // a fader held against its top let the pointer wander across a
+        // boundary, which is a cursor for a gesture that is not happening.
+        //
+        // There is no cursor of its own for a fader: the console's whole
+        // cursor vocabulary is *arrow, or resize over a boundary*, and
+        // inventing a third mark here would be one control saying something no
+        // other one on the panel says.
+        let axis = match panel.in_hand() {
+            Some(InHand::Boundary(axis)) => Some(axis),
+            Some(InHand::Fader) => None,
             None => match panel.layout().hit(panel.cursor(), GRAB) {
                 Hit::Divider { split, .. } => panel.layout().axis(split),
                 _ => None,

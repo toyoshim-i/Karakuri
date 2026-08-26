@@ -916,7 +916,7 @@ fn on_the_solo_pill(panel: &mut Panel) -> Point {
 fn a_pointer_on_a_boundary_is_the_panels() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
     let p = on_a_boundary(&mut panel);
-    assert_eq!(claim(&mut panel, &drawn_once(), p), Claim::Panel);
+    assert_eq!(claim(&mut panel, &drawn_once(), &[], p), Claim::Panel);
 }
 
 /// **A pointer anywhere else is `egui`'s** — including on the one thing the
@@ -929,18 +929,18 @@ fn a_pointer_off_a_boundary_is_eguis() {
 
     let library = rect_of(panel.layout(), "library");
     let middle = Point::new(library.x + library.w * 0.5, library.y + library.h * 0.5);
-    assert_eq!(claim(&mut panel, &ctx, middle), Claim::Egui);
+    assert_eq!(claim(&mut panel, &ctx, &[], middle), Claim::Egui);
 
     let pill = on_the_solo_pill(&mut panel);
     assert_eq!(
-        claim(&mut panel, &ctx, pill),
+        claim(&mut panel, &ctx, &[], pill),
         Claim::Egui,
         "the solo pill is not on a boundary, so it is egui's"
     );
 
     // Outside the window entirely: nothing to grab, so egui's.
     assert_eq!(
-        claim(&mut panel, &ctx, Point::new(-40.0, -40.0)),
+        claim(&mut panel, &ctx, &[], Point::new(-40.0, -40.0)),
         Claim::Egui
     );
 }
@@ -965,15 +965,15 @@ fn a_drag_in_hand_keeps_its_claim_wherever_the_pointer_goes() {
     let middle = Point::new(library.x + library.w * 0.5, library.y + library.h * 0.5);
 
     // Before the press, the two elsewhere-points are egui's.
-    assert_eq!(claim(&mut panel, &ctx, pill), Claim::Egui);
-    assert_eq!(claim(&mut panel, &ctx, middle), Claim::Egui);
+    assert_eq!(claim(&mut panel, &ctx, &[], pill), Claim::Egui);
+    assert_eq!(claim(&mut panel, &ctx, &[], middle), Claim::Egui);
 
     panel.press(start);
     assert!(panel.dragging());
 
     for wandered in [pill, middle, Point::new(-500.0, 4000.0), start] {
         assert_eq!(
-            claim(&mut panel, &ctx, wandered),
+            claim(&mut panel, &ctx, &[], wandered),
             Claim::Panel,
             "a boundary is in hand and the claim was given away at {wandered:?}"
         );
@@ -982,13 +982,13 @@ fn a_drag_in_hand_keeps_its_claim_wherever_the_pointer_goes() {
 
     // The release is still the panel's, and it has to be asked before
     // `released` takes the drag out of hand.
-    assert_eq!(claim(&mut panel, &ctx, middle), Claim::Panel);
+    assert_eq!(claim(&mut panel, &ctx, &[], middle), Claim::Panel);
     panel.released();
     assert!(!panel.dragging());
 
     // And afterwards the claim is back where it was.
-    assert_eq!(claim(&mut panel, &ctx, pill), Claim::Egui);
-    assert_eq!(claim(&mut panel, &ctx, middle), Claim::Egui);
+    assert_eq!(claim(&mut panel, &ctx, &[], pill), Claim::Egui);
+    assert_eq!(claim(&mut panel, &ctx, &[], middle), Claim::Egui);
     let boundary = on_a_boundary(&mut panel);
-    assert_eq!(claim(&mut panel, &ctx, boundary), Claim::Panel);
+    assert_eq!(claim(&mut panel, &ctx, &[], boundary), Claim::Panel);
 }

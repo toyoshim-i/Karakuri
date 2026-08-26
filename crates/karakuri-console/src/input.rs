@@ -43,13 +43,28 @@
 //!    anywhere in it, so a press routed to `egui` there reaches nothing at
 //!    all. The panel's controls are painted shapes, and the only thing that
 //!    knows a press landed on one is this rule.
+//!
+//!    **There are two of them now**: the Outputs row's sink
+//!    ([`crate::view::outputs`]) and a mixer strip's fader knob
+//!    ([`crate::view::Mixer::grab`]). The rule did not change to hold the
+//!    second, which is what it was written for.
+//!
+//!    **A control claims what it acts on and no more.** A fader's *track* is
+//!    drawn by the console and is not claimed, because a press on it does
+//!    nothing — see [`crate::view::Mixer::grab`] for why a press off the knob
+//!    must not move the value. Claiming a press in order to throw it away
+//!    would put the rule and the act out of step, and `egui` owns nothing
+//!    there either, so the two answers are the same nothing.
 //! 4. Otherwise it goes to
 //!    [`egui_winit::State::on_window_event`](https://docs.rs/egui-winit) and
 //!    `egui` decides.
 //!
 //! Rule 2 before rule 3 is *first refusal* meant literally: a control under a
 //! boundary's grab would be dead, and it is the test above that keeps the
-//! order from ever mattering.
+//! order from ever mattering. **The mixer's knobs are measured the same way**
+//! and in the same file's spirit — `tests/fader.rs` asserts that no knob in
+//! the bay is within [`GRAB`] of any boundary, and carries the same guard on
+//! itself, so the ordering goes on costing nothing there too.
 //!
 //! # A caller acts on the control, and it asks the same question again
 //!
@@ -58,7 +73,9 @@
 //! and the caller asks [`crate::view::outputs`] for it. That is the same one
 //! derivation this rule hit-tests, asked a second time rather than copied, so
 //! the chip that claims a press and the chip that acts on it cannot come
-//! apart.
+//! apart. A fader is the same arrangement: [`crate::view::Mixer::grab`]
+//! answers *is this a control* here and *which control, and where along it*
+//! to the caller, off one derivation and one set of values.
 //!
 //! # One exception, and it is not a hole in the rule
 //!
@@ -85,7 +102,7 @@
 use karakuri_layout::{Hit, Point};
 
 use crate::panel::{Panel, GRAB};
-use crate::view::outputs;
+use crate::view::{mixer, outputs, Strip};
 
 /// Who a pointer event belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,7 +128,22 @@ pub enum Claim {
 /// cached galley lookup per event, and before the first frame there are no
 /// fonts and no drawn control at all, which
 /// [`crate::view::outputs`] answers `None` to.
-pub fn claim(panel: &mut Panel, ctx: &egui::Context, p: Point) -> Claim {
+///
+/// **What the mixer adds to that is two more galley lookups per strip**, for
+/// the tally's word and the blend's, because those are what a strip's boxes
+/// are laid out around. It is paid on a pointer event and not on a frame, and
+/// a console with no deck behind it pays nothing at all — [`mixer`] answers
+/// `None` to an empty slice before it asks for any type.
+///
+/// **And it takes the strips, for the same reason one level further out.** A
+/// fader's knob sits on the fill's moving edge, so *where the control is*
+/// depends on what the deck said this frame — and this crate has no deck
+/// (ADR-0156), so the values arrive the way they arrive everywhere else here:
+/// handed in by whoever owns it, as [`crate::view::View::mixer`] is. An empty
+/// slice is a console with no deck behind it, which has no strips and so no
+/// knobs, and it is what every test in this crate that is not about the mixer
+/// passes.
+pub fn claim(panel: &mut Panel, ctx: &egui::Context, strips: &[Strip], p: Point) -> Claim {
     // Rule 1, and it comes first: a gesture in progress is not re-decided from
     // where the pointer happens to be now.
     if panel.dragging() {
@@ -123,9 +155,17 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, p: Point) -> Claim {
     // anything. See the module documentation and `tests/outputs.rs`.
     match panel.layout().hit(p, GRAB) {
         Hit::Divider { .. } => Claim::Panel,
-        Hit::View(_) | Hit::Nothing => match outputs(ctx, panel.layout()) {
-            Some(row) if row.hit(p) => Claim::Panel,
-            _ => Claim::Egui,
-        },
+        // Rule 3, over both of the console's controls. Each is asked the same
+        // way — the derivation that draws it, asked whether the point is on
+        // it — and neither answer is stored.
+        Hit::View(_) | Hit::Nothing => {
+            let on_sink = outputs(ctx, panel.layout()).is_some_and(|row| row.hit(p));
+            let on_knob =
+                || mixer(ctx, panel.layout(), strips).is_some_and(|bay| bay.grab(p).is_some());
+            match on_sink || on_knob() {
+                true => Claim::Panel,
+                false => Claim::Egui,
+            }
+        }
     }
 }
