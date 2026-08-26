@@ -27,7 +27,7 @@ Why each is the way it is — and what was rejected to get there — is in
 
 ## 2. Workspace & Crate Architecture
 
-Karakuri is structured as a Cargo workspace with 10 dedicated crates under [crates/](../crates):
+Karakuri is structured as a Cargo workspace with 11 dedicated crates under [crates/](../crates):
 
 ```mermaid
 graph TD
@@ -39,6 +39,7 @@ graph TD
     CLI --> SIGNAL[karakuri-signal]
 
     CONSOLE[karakuri-console] --> LAYOUT[karakuri-layout]
+    CONSOLE --> OPERATION[karakuri-operation]
     CONSOLE -.->|example only| ENGINE
 
     ENGINE --> CODEGEN[karakuri-codegen]
@@ -61,6 +62,7 @@ graph TD
 | [karakuri-audio](../crates/karakuri-audio) | `crates/karakuri-audio` | Real-time audio capture (`cpal`), FFT band analysis, beat tracking, latency offset management |
 | [karakuri-midi](../crates/karakuri-midi) | `crates/karakuri-midi` | MIDI input event parsing and signal/parameter binding |
 | [karakuri-store](../crates/karakuri-store) | `crates/karakuri-store` | Content-addressed artifact storage (keyed by `.kir` hash), `.set` files, `.ndjson` session logs |
+| [karakuri-operation](../crates/karakuri-operation) | `crates/karakuri-operation` | **The operation vocabulary**: the 46 named operations `docs/manual/operations.html` specifies, which every surface is to route into (ADR-0180). A leaf crate with **no dependencies at all** — `std` only — because the surfaces that must reach it share nothing. **`karakuri-console` is its only dependent so far** and the mixer's faders are its first customer; `karakuri-midi`'s `Action`, the console's `panel::Op` and the CLI's key handler have not moved onto it, and each of those is a change of its own |
 | [karakuri-layout](../crates/karakuri-layout) | `crates/karakuri-layout` | The console's arrangement as arithmetic: views and splits with a size, a minimum and a maximum each, solved to rectangles. No toolkit, no device, no window (ADR-0156) |
 | [karakuri-console](../crates/karakuri-console) | `crates/karakuri-console` | The console: its arrangement, the panel model a pointer and a keyboard act on, and the `egui` view. **The destination the CLI is scaffolding for** — `src/` still takes no device, and the window is `examples/panel.rs`'s |
 | [karakuri-cli](../crates/karakuri-cli) | `crates/karakuri-cli` | V1 entry point, and **scaffolding rather than the destination** (`README.md`): flag parsing, the `winit` event loop, the clock, session recording and replay, the PNG writer, the hot-reloading watcher, MCP server integration |
@@ -78,6 +80,7 @@ crates/
   karakuri-audio/     input device, analysis, tempo tracking, the beat lock
   karakuri-midi/      wire messages, and the operator's map of them
   karakuri-store/     content-addressed artifact store, ndjson I/O
+  karakuri-operation/ the 46 named operations every surface routes into
   karakuri-layout/    the console's arrangement, solved to rectangles
   karakuri-console/   the console: arrangement, panel model, and the egui view
   karakuri-cli/       V1 entry point, and scaffolding rather than the destination
