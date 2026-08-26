@@ -33,14 +33,37 @@ belongs to whoever draws the surface.
 - **The destination is identifiable from the surface itself.** Not from a tooltip alone, and not
   from a log. The request is half of what is being said, and half of it delivered only on hover is a
   compact control that has to be interrogated to be read.
-- **It reads as unsettled in a single frame.** A screenshot, a test, or a compositor that has
-  stopped servicing the window catches the surface at one instant. Every instant of it must say
-  *not yet*; a presentation with a phase indistinguishable from the settled appearance is a
-  presentation that lies half the time, and it lies exactly where it is most likely to be captured.
 - **It declares a price and a staleness**, in milliseconds, and is scheduled like anything else that
   moves — [P-0072](0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md). The rule
   is that the number is declared, not what the number is: presentations differ, and a roll once a
   second is a different deadline from a blink twice a second.
+
+**Three clauses, and no clause about the still frame.** A presentation may carry what it is saying
+in *change* rather than in state, and most of the useful ones do — a great deal of what an operator
+reads off a panel is read because it moves, and many designs mean nothing at all until they do. So
+no frame of an animation is required to carry the whole message on its own. Where a still genuinely
+has to stand for the motion — a sample image in a manual — the still is **chosen**: an unambiguous
+frame picked on purpose, or several of them in sequence, which is the ordinary way to document
+something that moves.
+
+**An earlier form of this file required the opposite**, and it was wrong. It asked that a
+presentation *read as unsettled in a single frame*, on the grounds that a screenshot, a test or a
+compositor that has stopped servicing a window catches the surface at one instant. A screenshot is
+chosen; a test here is *handed* the phase it asserts at rather than catching one (below); and a
+window nobody is servicing is a window nobody is looking at. The rule it produced ruled out every
+presentation whose meaning is carried by change — which is [P-0060](0060-name-the-property-not-the-shape.md)'s
+failure exactly, in the file that opens by citing it. And an animation stopped long enough for
+anyone to read it is a **dead application**: a fault the instrument reports
+([P-0030](0030-an-instrument-says-what-it-did.md),
+[P-0027](0027-a-silently-wrong-image-loses-to-a-loud-failure.md)), never an appearance to design
+for — and one that reports *itself*, because nobody reads a display that has stopped as current,
+which is [P-0077](0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md) and is the
+reason no clause here has to cover the frozen case. Removed in
+[ADR-0189](../adr/0189-motion-may-carry-the-meaning-and-a-stopped-animation-is-a-fault-to-report.md).
+
+**This file keeps its number and its heading.** The rule it states is unchanged — what changed is
+one of the checks it is read against — and §4's *delete the file and re-record it under a new
+number* is for a rule that has stopped being true, not for a clause that stopped being right.
 
 ## Two worked examples, with what each buys and costs
 
@@ -50,11 +73,10 @@ Old lit, new blinking, swap on arrival — the sentence above. It satisfies the 
 directly and cheaply: both states are drawn, one of them is the truth and steady, the other is the
 request and moving.
 
-**Its weak clause is the third**, and that is a real constraint rather than a caveat. A blink caught
-at its bright phase looks like a lamp that is simply on, so the blink must swing between **two
-appearances that are both distinct from the settled one** — otherwise half the still frames of it
-are a picture of a transition that has not happened. That is a condition on the animation, and it
-has to be stated because the obvious way to write a blink violates it.
+**How the blink is drawn is a design question and not a clause.** Whether its bright phase is the
+settled lamp's own appearance or a distinct one is a matter of legibility and of the design
+language: what tells the operator *not yet* is that the lamp is changing, and a blink is read
+moving. Its price is two phase changes a second, declared like anything else that moves.
 
 ### A roll, where there is one indicator and no room for a second
 
@@ -71,15 +93,19 @@ the numbers and the alternatives that were tried against them; the tally's own w
 shorter).
 
 **What it buys over a blinking mark is the second clause**: the destination is named on the surface,
-in the same 53 pixels, rather than deferred to a hover the panel does not currently have. **And it
-satisfies the third clause better than a blink does** — a half-rolled word cannot be mistaken for a
-settled one, so *every* frame of the animation reads as unsettled, where a blink relies on a
-condition being honoured to make *most* of them do.
+in the same 53 pixels, rather than deferred to a hover the panel does not currently have. That is
+the whole of its advantage, and it is one clause rather than two — a half-rolled word being
+unmistakable in any single frame was an argument for it while a still-frame clause existed, and it
+is not one now.
 
 **What it costs**: a taller clip region than a static chip needs, a second galley for a word the box
 was not measured against, and a rate of its own to declare.
 
-Neither example is the rule. A third presentation that meets the four clauses is admissible without
+**The two examples are closer than they look**, and both satisfy all three clauses. What decides
+between them is space — a strip 53 wide takes one chip and not three — legibility, and the design
+language the console is being built to, rather than any clause here.
+
+Neither example is the rule. A third presentation that meets the three clauses is admissible without
 amending this file, which is the point of writing the clauses rather than the pictures.
 
 ## One phase for the panel, and it arrives as a value
@@ -138,7 +164,10 @@ have other things that move.
 
 Decided in
 [ADR-0188](../adr/0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md), which carries
-the alternatives, the number, and the fact that the published mock has no animation of any kind yet.
+the alternatives, the number, and the fact that the published mock has no animation of any kind yet;
+the clause about the still frame came out in
+[ADR-0189](../adr/0189-motion-may-carry-the-meaning-and-a-stopped-animation-is-a-fault-to-report.md),
+which carries that argument and the half-measure it was nearly replaced with.
 
 **What this file deliberately does not settle** is what a control with a pending transition may
 *forbid* — the answer is nothing, and it is

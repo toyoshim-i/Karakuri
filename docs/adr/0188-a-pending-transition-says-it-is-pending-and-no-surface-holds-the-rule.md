@@ -4,7 +4,7 @@ title: A pending transition says it is pending, and no surface holds the rule
 status: accepted
 date: 2026-08-26
 supersedes: []
-superseded_by: []
+superseded_by: [0189]
 principles: [0075, 0076]
 tags: [ui, vocabulary, decks]
 ---

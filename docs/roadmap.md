@@ -441,6 +441,18 @@ because the console is an example rather than the program.
    repaints is the panel rather than the chip. The argument is not the bytes — it is that a beat
    indicator the maintainer wants analogue and a pending animation at another rate **cannot both be
    special cases**, and each rate written by hand is the first half of the scheduler written badly.
+
+   **One region is not the scheduler's to stop, and it is the beat.** A budget under pressure offers
+   the panel's continuous motion first — it is a real saving that degrades nothing being read at
+   that instant — and taking it sells the signal that says the frame is in trouble at the moment the
+   trouble starts. A person does not read a stopped display as current: the panel visibly stopping
+   is how the operator is told not to trust it, and that only works while something is known to be
+   moving. Written before the scheduler rather than after it, which is the cheap moment —
+   [P-0077](principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md) and
+   [ADR-0189](adr/0189-motion-may-carry-the-meaning-and-a-stopped-animation-is-a-fault-to-report.md),
+   which also record that continuous movement proves liveness at every instant where the grid's
+   one-lit-dot flip proves it only across an interval — a **preference**, and not a decision to
+   change the beat.
 3. **The other surfaces onto [`karakuri-operation`](../crates/karakuri-operation).** The faders
    proved its shape; `karakuri-midi`'s `Action`, the console's `panel::Op` and the CLI's key handler
    have not moved, and each is a change of its own. `Action`'s toggles are the interesting one —
@@ -478,10 +490,16 @@ than work, and every one of them was found by building the thing next to it.
   values the deck already holds, never stored. **What is still open is which presentation**, and
   ADR-0188 leaves two on the table with their costs — a blinking second indicator where there is
   room for two, and a chip that rolls half a turn toward the requested value and falls back where
-  there is room for one. With them: the animation phase's units and its carrier on `View`, which
-  residency a press on the chip asks for, and — since a pending control may refuse nothing
-  ([P-0076](principles/0076-a-surface-owns-the-affordance-never-the-authority.md)) — nothing about
-  locking the panel.
+  there is room for one. **The two are closer than that record left them**: P-0075's still-frame
+  clause was deleted the same day
+  ([ADR-0189](adr/0189-motion-may-carry-the-meaning-and-a-stopped-animation-is-a-fault-to-report.md)),
+  a presentation may carry its meaning in motion, and the roll's advantage on it is gone — so what
+  decides is space, legibility, the design language the mock has not got yet, and the one clause
+  that still separates them, which is that the roll names the destination on the surface rather
+  than on a hover the console does not draw. With them: the animation phase's units and its carrier
+  on `View`, which residency a press on the chip asks for, and — since a pending control may refuse
+  nothing ([P-0076](principles/0076-a-surface-owns-the-affordance-never-the-authority.md)) —
+  nothing about locking the panel.
 - **`SetMask` does not exist**, so the mask mini is a readout of state no operation can set. The row
   has to be settled on [the operations page](manual/operations.html) before it can be a control.
 - **What `expand` under a solo should do.** `Layout::soloed()` can lie: the solve never reads it and
