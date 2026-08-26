@@ -46,7 +46,7 @@
       <span><i class="gap"></i> nothing &mdash; this surface cannot reach it at all</span>
     </div>
     <p>
-      <strong>46 operations, and 50 of the 199 ways in exist.</strong> Five of them
+      <strong>45 operations, and 48 of the 195 ways in exist.</strong> Five of them
       arrived with the console's own shape &mdash; moving a boundary, folding a bay
       or a pane, bringing one back, and solo &mdash; and every one of their twenty
       routes is empty except the pointer. Every
@@ -158,22 +158,12 @@
         </div>
       </div>
       <div class="op">
-        <div class="op-head"><h3>Put a deck on air, or take it off</h3><span class="op-when ">immediate</span></div>
-        <p>MIDI names the deck, so it needs no selection; a key acts on the selected one.</p>
+        <div class="op-head"><h3>Put a deck on air, prime it, or take it off</h3><span class="op-when ">immediate; priming is a request</span></div>
+        <p>Three states, not two switches: <b>live</b> is stepped and composited, <b>priming</b> is stepped out of sight and adds nothing to the mix, <b>allocated</b> is held &mdash; compiled, buffers kept, its <i>t</i> where it stopped, so a deck taken off and brought back resumes rather than restarts. Live is honoured: nothing demotes a deck that is on air. Priming is a request the governor reconsiders every pass, and a deck asked to prime with no room is <b>parked</b> &mdash; the request stands and takes effect when there is room, so what the console shows is the residency the deck reports, not the one it was asked for. MIDI names the deck, so it needs no selection; a key acts on the selected one.</p>
         <div class="rts">
           <span class="rt plan">panel <b>tally chip</b></span>
-          <span class="rt has">key <b>space</b></span>
-          <span class="rt has">MIDI <b>note &rarr; on-air N</b></span>
-          <span class="rt gap">MCP <b>&mdash;</b></span>
-        </div>
-      </div>
-      <div class="op">
-        <div class="op-head"><h3>Ask a deck to warm off air</h3><span class="op-when ">request</span></div>
-        <p>A request, not a command: the governor grants it on a later pass and reconsiders it every pass.</p>
-        <div class="rts">
-          <span class="rt plan">panel <b>tally chip</b></span>
-          <span class="rt has">key <b>w</b></span>
-          <span class="rt has">MIDI <b>note &rarr; prime N</b></span>
+          <span class="rt has">key <b>space, w</b></span>
+          <span class="rt has">MIDI <b>note &rarr; on-air N, prime N</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
       </div>
