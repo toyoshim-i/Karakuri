@@ -1181,30 +1181,32 @@ impl Readout {
                     did = Acted::Emitted(operation);
                 }
             }
-            // **A press the panel claimed is on one of the three controls or
+            // **A press the panel claimed is on one of the four controls or
             // on the panel itself**, and the controls are asked first for the
             // reason `claim` asked them last: rule 2 has already had its
             // refusal, so a press that got here and is on a control is that
-            // control's. All three are the same calls `claim` made — asked
+            // control's. All four are the same calls `claim` made — asked
             // again, not copied.
             //
-            // **The bay is derived once and asked twice**, exactly as `claim`
-            // does it: a knob and a chip are two questions about one laid-out
-            // strip, and two derivations would be two answers.
+            // **The bay is derived once and asked three times**, exactly as
+            // `claim` does it: a knob, a blend chip and a tally chip are three
+            // questions about one laid-out strip, and three derivations would
+            // be three answers.
             (Pointer::Down, Claim::Panel) => {
                 self.panel.solve();
                 let sink = outputs(ctx, self.panel.layout()).filter(|row| row.hit(at));
                 let bay = mixer_bay(ctx, self.panel.layout(), &self.view.mixer);
                 let knob = bay.as_ref().and_then(|bay| bay.grab(at));
                 let chip = bay.as_ref().and_then(|bay| bay.blend(at));
-                match (sink, knob, chip) {
-                    (Some(row), _, _) => did = Acted::Operated(self.sink(row.op())),
+                let tally = bay.as_ref().and_then(|bay| bay.tally(at));
+                match (sink, knob, chip, tally) {
+                    (Some(row), ..) => did = Acted::Operated(self.sink(row.op())),
                     // **The value does not move on the press.** The grab keeps
                     // the offset it took hold at, so the first move continues
                     // from where the knob already was — and a press that was
                     // on the *track* never gets here, because `Mixer::grab`
                     // answers `None` for it rather than jumping the mix.
-                    (None, Some(grab), _) => {
+                    (None, Some(grab), ..) => {
                         println!(
                             "press ({:.0}, {:.0}): deck {} — the {} is in hand",
                             at.x,
@@ -1214,16 +1216,23 @@ impl Readout {
                         );
                         self.panel.grab(at, grab);
                     }
-                    // **The blend chip acts on the press itself**, where a
-                    // fader acts on the moves after it: there is no gesture
-                    // here, only one operation naming where the cycle
-                    // arrived. It goes down the same path a fader's does —
-                    // `Acted::Emitted`, then a record, then the deck — because
-                    // P-0028 is that every control ends in the same record,
-                    // and a chip that reached the deck another way would be a
-                    // second route for the same change.
-                    (None, None, Some(operation)) => did = Acted::Emitted(Some(operation)),
-                    (None, None, None) => self.press(at),
+                    // **A chip acts on the press itself**, where a fader acts
+                    // on the moves after it: there is no gesture here, only
+                    // one operation naming where the cycle arrived. Both go
+                    // down the same path a fader's does — `Acted::Emitted`,
+                    // then a record, then the deck — because P-0028 is that
+                    // every control ends in the same record, and a chip that
+                    // reached the deck another way would be a second route for
+                    // the same change.
+                    //
+                    // **One arm for the two chips**, because what this file
+                    // does with either is the same three steps; which chip it
+                    // was is in the operation, and the line `apply` prints
+                    // says so.
+                    (None, None, Some(operation), _) | (None, None, None, Some(operation)) => {
+                        did = Acted::Emitted(Some(operation))
+                    }
+                    (None, None, None, None) => self.press(at),
                 }
             }
             (Pointer::Up, Claim::Panel) => self.released(),
@@ -2417,9 +2426,10 @@ fn blend_mode(blend: Blend) -> BlendMode {
 /// `karakuri-store`, neither of which depends on the other, and choosing which
 /// crate owns it is the centre of the record design rather than a side effect
 /// of a fader. The existing half is `karakuri-cli`'s `mix::gain_record`,
-/// `mix::opacity_record` and `mix::blend_record` — three functions that
-/// already say exactly what the three arms below say — and they are
-/// **unreachable from here**, because `karakuri-cli` has no library target.
+/// `mix::opacity_record`, `mix::blend_record` and `mix::residency_record` —
+/// four functions that already say exactly what the four arms below say — and
+/// they are **unreachable from here**, because `karakuri-cli` has no library
+/// target.
 ///
 /// So this example writes them again, and says so rather than leaving a reader
 /// to find out: the day the conversion lands, this function is **deleted**
@@ -2427,7 +2437,7 @@ fn blend_mode(blend: Blend) -> BlendMode {
 /// dev-dependencies with it.
 ///
 /// `None` for every other operation in the vocabulary, which is not a refusal:
-/// this example has three controls and 46 operations exist.
+/// this example has four controls and 46 operations exist.
 fn record(operation: &Operation) -> Option<Record> {
     match *operation {
         // `mix::gain_record`, and the cast with it: the vocabulary counts
@@ -2450,6 +2460,42 @@ fn record(operation: &Operation) -> Option<Record> {
             slot: deck,
             mode: blend.name().to_owned(),
         }),
+        // `mix::residency_record`. `Record::Residency` carries the level as a
+        // `String` for `Record::Blend`'s reason and one of its own: it is
+        // **the request and never the effective level**, because the governor
+        // recomputes the second every pass from the budget of the machine that
+        // is running. So the record a tally chip writes is the same record
+        // `w` writes, and a replay re-derives what the governor decides. The
+        // spelling is the vocabulary's own — `Residency::name` — rather than a
+        // fourth copy of the same three words.
+        Operation::SetResidency { deck, residency } => Some(Record::Residency {
+            slot: deck,
+            level: residency.name().to_owned(),
+        }),
+        _ => None,
+    }
+}
+
+/// **A wire spelling back to the engine's residency**, which is
+/// `mix::parse_residency`'s job and is written here for [`record`]'s reason:
+/// `karakuri-cli` has no library target, so the same three words cannot be
+/// reached from this file.
+///
+/// **Only this direction is written here.** The other one is
+/// `karakuri_operation::Residency::name`, which is the vocabulary's own
+/// spelling of its own values and is what [`record`] writes — the wire words,
+/// deliberately not the status line's `LIVE`/`prim`/`park` and not the chip's
+/// `live`/`prim`/`alloc`.
+///
+/// `None` for a name the engine has not got, refused rather than defaulted —
+/// the shape [`apply`]'s blend arm has, and `Blend::from_name`'s. Nothing in
+/// this file can produce one, since the chip only ever emits one of the
+/// vocabulary's three and `Residency::name` spells all three.
+fn residency_level(name: &str) -> Option<Residency> {
+    match name {
+        "live" => Some(Residency::Live),
+        "priming" => Some(Residency::Priming),
+        "allocated" => Some(Residency::Allocated),
         _ => None,
     }
 }
@@ -2514,6 +2560,31 @@ fn apply(record: &Record, deck: &mut Deck) -> Option<String> {
                  -> Record::Blend -> deck.blend({slot}) = {}",
                 deck_letter(slot as u8),
                 deck.blend(slot).name()
+            ))
+        }
+        // **The one record here that is followed by a governor pass**, and it
+        // is not a flourish: `Deck::set_residency` writes the request *and
+        // grants it*, so a harness that stopped there would put a slot the
+        // budget has no room for into `Priming` and draw a primed deck the
+        // governor never admitted. That is
+        // [ADR-0191](../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)
+        // exactly — the panel's parked deck is the governor's verdict or it is
+        // a drawing of one — and it is `karakuri-cli`'s own order, where
+        // `mix::Change::Residency` sets the level and calls `govern` beside
+        // it. The report is dropped here rather than printed: the line below
+        // says what the deck ended up at, which is the half this window shows.
+        Record::Residency { slot, ref level } => {
+            let slot = held(slot)?;
+            let residency = residency_level(level)?;
+            deck.set_residency(slot, residency);
+            deck.govern();
+            Some(format!(
+                "  tally: deck {} -> SetResidency {{ deck: {slot}, residency: {level} }} \
+                 -> Record::Residency -> deck.requested_residency({slot}) = {:?}, \
+                 deck.residency({slot}) = {:?}",
+                deck_letter(slot as u8),
+                deck.requested_residency(slot),
+                deck.residency(slot)
             ))
         }
         _ => None,
@@ -3891,11 +3962,55 @@ mod tests {
             );
         }
 
-        // The vocabulary is 46 operations and this example has three controls.
-        // A record invented for the other 43 would be this file deciding what
-        // they mean.
+        // **Every residency of the cycle**, for the same reason as the blend:
+        // one chip emitting three operations has three records to write. The
+        // spelling is the wire's — `mix::residency_wire_name`'s three words,
+        // which are deliberately not the status line's `LIVE`/`prim`/`park`
+        // and not the chip's `live`/`prim`/`alloc` either, so a record written
+        // in the chip's vocabulary would decode as nothing at all.
+        for (deck, (residency, level)) in [
+            (karakuri_operation::Residency::Live, "live"),
+            (karakuri_operation::Residency::Priming, "priming"),
+            (karakuri_operation::Residency::Allocated, "allocated"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let deck = deck as u8;
+            assert_eq!(
+                record(&Operation::SetResidency { deck, residency }),
+                // `mix::residency_record(deck, residency)`.
+                Some(Record::Residency {
+                    slot: deck,
+                    level: level.to_owned(),
+                }),
+                "{residency:?} did not become the record `mix::residency_record` writes"
+            );
+            // And it reads back as the level it named, which is what says the
+            // two spellings are one list rather than two.
+            assert_eq!(
+                residency_level(level),
+                Some(residency_back(residency)),
+                "the wire spelling `{level}` does not come back as {residency:?}"
+            );
+        }
+
+        // The vocabulary is 46 operations and this example has four controls
+        // writing four records. A record invented for the other 42 would be
+        // this file deciding what they mean.
         assert_eq!(record(&Operation::Solo { region: None }), None);
         assert_eq!(record(&Operation::SelectDeck { deck: 1 }), None);
+    }
+
+    /// [`tally`] the other way round, for the assertion above alone — the
+    /// vocabulary's residency as the engine's, so that the round trip through
+    /// the wire name can be compared against something.
+    fn residency_back(residency: karakuri_operation::Residency) -> Residency {
+        match residency {
+            karakuri_operation::Residency::Live => Residency::Live,
+            karakuri_operation::Residency::Priming => Residency::Priming,
+            karakuri_operation::Residency::Allocated => Residency::Allocated,
+        }
     }
 
     /// [`blend_mode`] the other way round, for the assertion above alone —
@@ -4938,6 +5053,180 @@ mod gpu {
             readout.view.animating(readout.panel.layout()),
             Some(view::ROLL_STALENESS),
             "a parked deck declared no staleness, so the roll never gets a frame"
+        );
+    }
+
+    /// **The whole loop, closed on a parked deck: a press on the tally chip
+    /// withdraws the prime request the governor could not grant, and the strip
+    /// stops rolling because the *deck* changed.**
+    ///
+    /// `tests/tally.rs` asserts everything up to the operation with no deck
+    /// anywhere, which is the point of that file. This is the other end, and
+    /// it needs a device because a `Deck` does — and because the state under
+    /// test is one only a governor pass can produce
+    /// ([ADR-0191](../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)):
+    /// the request is asked for through the product's own path, refused by a
+    /// budget computed from what the probe measured, and read back off the deck
+    /// by [`mixer`] exactly as the frame reads it.
+    ///
+    /// **What separates this from a plausible wrong answer is which residency
+    /// the press names.** The parked strip *shows* `alloc` and was *asked for*
+    /// `prim`. A chip cycling from what it shows would ask for `live` and put
+    /// deck B on air; cycling from the request asks for `allocated`, which is
+    /// the withdrawal — and both are asserted here, on the operation and again
+    /// on the deck, because the two are the same mistake at two removes
+    /// (ADR-0195).
+    ///
+    /// **The middle step is the one worth the device**, as in the fader's
+    /// test: between the press and the record the deck must not have moved,
+    /// or the console would be applying what it is only supposed to ask for.
+    #[test]
+    fn a_press_on_a_parked_tally_withdraws_the_request_and_the_strip_follows_the_deck() {
+        const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+        const W: u32 = 1440;
+        const H: u32 = 900;
+
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer =
+            egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
+        let mut panel = Panel::new(W as f32, H as f32);
+        panel.solve();
+        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
+        let material = material();
+
+        // The state, produced by the governor and not written here.
+        let governed = engine.ask_to_prime(&gpu);
+        assert!(
+            engine.deck.is_parked(ASKED_TO_PRIME),
+            "the request was granted rather than parked — {governed}"
+        );
+        let mut strips = Vec::new();
+        mixer(&engine.deck, &material, &mut strips);
+        assert_eq!(
+            strips[ASKED_TO_PRIME].pending(),
+            Some(view::Tally::Priming),
+            "the strip is not pending, so this test cannot tell the request from the readout"
+        );
+
+        // The press, at the centre of that strip's chip.
+        let ctx = super::tests::drawn_once();
+        let bay = mixer_bay(&ctx, panel.layout(), &strips).expect("the bay draws its strips");
+        let chip = bay.strip(ASKED_TO_PRIME).tally.center();
+        let operation = bay
+            .tally(Point::new(chip.x, chip.y))
+            .expect("the tally chip of the parked strip");
+        assert_eq!(
+            operation,
+            Operation::SetResidency {
+                deck: ASKED_TO_PRIME as u8,
+                residency: karakuri_operation::Residency::Allocated,
+            },
+            "a press on the parked chip did not ask for the prime request to be withdrawn"
+        );
+        assert_ne!(
+            operation,
+            Operation::SetResidency {
+                deck: ASKED_TO_PRIME as u8,
+                residency: karakuri_operation::Residency::Live,
+            },
+            "the chip cycled from the residency it is showing, so a press meant to withdraw a \
+             request would have put deck B on air"
+        );
+
+        // **Nothing has been told anything yet**, so the deck is where the
+        // governor left it and so is the strip the frame would draw.
+        assert!(engine.deck.is_parked(ASKED_TO_PRIME));
+        let mut after = Vec::new();
+        mixer(&engine.deck, &material, &mut after);
+        assert_eq!(
+            after, strips,
+            "the strip moved before the deck did, so the console is keeping a value"
+        );
+
+        // The record, and the deck. `apply` governs after it, which is what
+        // stops this from being a residency the budget never granted.
+        let record = record(&operation).expect("a residency operation has a record");
+        assert_eq!(
+            record,
+            Record::Residency {
+                slot: ASKED_TO_PRIME as u8,
+                level: "allocated".to_owned(),
+            }
+        );
+        assert!(apply(&record, &mut engine.deck).is_some());
+        assert_eq!(
+            engine.deck.requested_residency(ASKED_TO_PRIME),
+            Residency::Allocated,
+            "the record was built and the request did not move, so the control ends nowhere"
+        );
+        assert_eq!(
+            engine.deck.residency(ASKED_TO_PRIME),
+            Residency::Allocated,
+            "the withdrawal left the slot somewhere other than where it was being held"
+        );
+        assert!(
+            !engine.deck.is_parked(ASKED_TO_PRIME),
+            "the slot is still parked, so the request was not withdrawn"
+        );
+        assert_eq!(
+            engine.deck.residency(ON_AIR),
+            Residency::Live,
+            "withdrawing deck B's request took deck A off air"
+        );
+
+        // And now the strip follows, because it is read off the deck: nothing
+        // is pending, so nothing rolls and the panel is still again.
+        mixer(&engine.deck, &material, &mut after);
+        assert_eq!(
+            after[ASKED_TO_PRIME].pending(),
+            None,
+            "the deck stopped being parked and the strip went on rolling"
+        );
+        assert_ne!(
+            after, strips,
+            "the deck moved and the strip did not follow it"
+        );
+        let mut readout = Readout::new(W as f32, H as f32);
+        readout.view.mixer = after.clone();
+        assert_eq!(
+            readout.view.animating(readout.panel.layout()),
+            None,
+            "the request is withdrawn and the panel is still asking for frames to roll a chip"
+        );
+
+        // And the cycle goes on from what the deck now holds rather than from
+        // anything the console remembered: the next press asks for `live`.
+        let bay = mixer_bay(&ctx, panel.layout(), &after).expect("the bay draws its strips");
+        assert_eq!(
+            bay.tally(Point::new(chip.x, chip.y)),
+            Some(Operation::SetResidency {
+                deck: ASKED_TO_PRIME as u8,
+                residency: karakuri_operation::Residency::Live,
+            }),
+            "the second press did not carry on round the cycle from the deck's own request"
+        );
+
+        // **And the governor pass in `apply` is what makes a request a
+        // request.** Asked to prime again — the record the chip writes when
+        // the cycle comes round to it — the budget is still the budget, so the
+        // slot is parked again rather than granted. Without the pass
+        // `Deck::set_residency` would grant it on the spot and this panel
+        // would draw a primed deck the governor never admitted, which is
+        // ADR-0191 read forwards.
+        let again = Record::Residency {
+            slot: ASKED_TO_PRIME as u8,
+            level: "priming".to_owned(),
+        };
+        assert!(apply(&again, &mut engine.deck).is_some());
+        assert_eq!(
+            engine.deck.requested_residency(ASKED_TO_PRIME),
+            Residency::Priming,
+            "the request was not written"
+        );
+        assert!(
+            engine.deck.is_parked(ASKED_TO_PRIME),
+            "the prime request was granted rather than parked, so nothing governed the record \
+             and the panel is drawing a residency the budget never allowed"
         );
     }
 

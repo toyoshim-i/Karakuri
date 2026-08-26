@@ -104,24 +104,28 @@
 //! ADR-0177 refuses, with a different glyph. See [`mixer`] and [`Strip`], and
 //! [`Meter`] for why a meter is not a [`Fader`].
 //!
-//! **Three things in that bay answer a pointer and the rest are readouts**,
+//! **Four things in that bay answer a pointer and the rest are readouts**,
 //! and the source says which rather than leaving the next reader to discover
-//! it. The two fader knobs are played and the blend mini cycles
+//! it. The two fader knobs are played, the blend mini cycles and the tally
+//! chip cycles
 //! ([ADR-0185](../../../docs/adr/0185-a-fader-translates-a-drag-into-an-operation-and-applies-nothing.md),
-//! [ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)):
+//! [ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md),
+//! [ADR-0195](../../../docs/adr/0195-the-tally-chip-cycles-from-the-request-so-the-parked-case-needs-no-case.md)):
 //! each emits an [`Operation`] and applies nothing, because the value belongs
-//! to the engine rather than to the arrangement. The tally, the mask mini, the
-//! meter and the number are drawn from what the deck says and a press on any
-//! of them reaches nothing — and so does a press on a fader's *track*, off the
-//! knob.
+//! to the engine rather than to the arrangement. The mask mini, the meter and
+//! the number are drawn from what the deck says and a press on any of them
+//! reaches nothing — and so does a press on a fader's *track*, off the knob.
 //!
-//! **The tally is the one readout that reads two values.** `Deck::residency`
+//! **The tally is the one control that reads two values.** `Deck::residency`
 //! is what a slot is doing and `Deck::requested_residency` is what it was asked
 //! to do, and while they disagree the chip's word rolls part of the way toward
 //! the request and falls back, once a second, and never lands — see
 //! [`Strip::pending`], [`roll_at`] and [`tally_into`], and
 //! [P-0075](../../../docs/principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)
-//! for what that has to say. It is the panel's first live region and the first
+//! for what that has to say. **A press on it cycles from the residency that
+//! was *requested*** ([`Mixer::tally`]), which is what makes a parked chip's
+//! press the withdrawal of its own prime request with no case in the code for
+//! it. It is the panel's first live region and the first
 //! to declare a price ([`View::animating`]) — and it declares it only while
 //! the bay it rolls in is laid out, because a fold takes the chip off the
 //! screen and a price paid for what nobody can see is P-0072 broken rather
@@ -152,7 +156,7 @@ use std::time::Duration;
 use egui::epaint::text::{LayoutJob, TextFormat};
 use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, StrokeKind, Ui};
 use karakuri_layout::{Axis, Hit, NodeId};
-use karakuri_operation::{BlendMode, Operation};
+use karakuri_operation::{BlendMode, Operation, Residency};
 
 use crate::panel::{unit, Grab, InHand, Knob, Op, Panel, GRAB};
 use crate::room::{size, Palette, Room};
@@ -2491,7 +2495,7 @@ pub struct Level {
 /// everything that can change what the console shows and a fader that reached
 /// no repaint would leave the strip drawn at the value before the drag.
 ///
-/// # Three of these are controls and the rest are readouts, and the source
+/// # Four of these are controls and the rest are readouts, and the source
 /// says which
 ///
 /// **The two faders are played.** A press on the trim's knob or the fader's
@@ -2508,12 +2512,19 @@ pub struct Level {
 /// operations, which is P-0074's own worked example of an affordance — see
 /// [ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md).
 ///
-/// **Everything else in the bay is a readout.** The tally, the mask mini, the
-/// meter and the number are drawn from what the deck says and a press on any
-/// of them reaches nothing — and so does a press on a fader's *track*, off the
-/// knob, which would otherwise be a jump nobody asked for. `tests/mixer.rs`
-/// asserts both directions rather than leaving either to be inferred from the
-/// absence of a hit test.
+/// **The tally chip is the fourth, and it cycles too.** A press on it emits
+/// [`Operation::SetResidency`] naming the next of the three ([`Mixer::tally`])
+/// — counted from [`Strip::requested`] rather than from [`Strip::tally`],
+/// which is what makes a press on a parked chip the withdrawal of its own
+/// prime request without a case in the code for it
+/// ([ADR-0195](../../../docs/adr/0195-the-tally-chip-cycles-from-the-request-so-the-parked-case-needs-no-case.md)).
+///
+/// **Everything else in the bay is a readout.** The mask mini, the meter and
+/// the number are drawn from what the deck says and a press on any of them
+/// reaches nothing — and so does a press on a fader's *track*, off the knob,
+/// which would otherwise be a jump nobody asked for. `tests/mixer.rs` asserts
+/// both directions rather than leaving either to be inferred from the absence
+/// of a hit test.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Strip {
     /// **What the deck is playing**, in `.strip-name`.
@@ -2538,9 +2549,17 @@ pub struct Strip {
     /// residency and not `requested_residency`. The governor moves a slot down
     /// without anybody asking it to, and a tally that did not follow it would
     /// be showing what was asked for over a slot doing something else.
+    ///
+    /// **What the chip draws, and not what a press on it counts from.**
+    /// [`Mixer::tally`] steps from [`Strip::requested`]: the word says where
+    /// the deck *is*, and the cycle is about what was last asked for. The two
+    /// are the same value on every settled slot and they part exactly where it
+    /// matters — see [`Mixer::tally`] for the parked case, which is the whole
+    /// argument.
     pub tally: Tally,
     /// **What was asked for** — `Deck::requested_residency`, the other half of
-    /// the pair [`Strip::tally`] is one of.
+    /// the pair [`Strip::tally`] is one of, and **what a press on the chip
+    /// counts from** ([`Mixer::tally`]).
     ///
     /// # Why the strip carries both and derives nothing else
     ///
@@ -2746,6 +2765,13 @@ pub struct StripBox {
     /// The word is centred in it ([`tally_into`]), and the capsule is centred
     /// in the strip, so widening the box does not move the word: it grows
     /// symmetrically around type that was already on the strip's centre line.
+    ///
+    /// **It is the chip a press acts on** and not only the box a word is
+    /// painted into — [`Mixer::tally`] hit-tests exactly this rectangle, the
+    /// way [`StripBox::blend`] is hit-tested. Being the widest word's width
+    /// rather than the shown word's is what the blend chip cannot say: this
+    /// target stands still while the deck moves under it and while a word
+    /// rolls through it.
     pub tally: Rect,
     /// The `g` in `.trim`.
     pub trim_label: Rect,
@@ -2954,6 +2980,74 @@ impl<'a> Mixer<'a> {
                     .map(|_| Operation::SetBlendMode {
                         deck: index as u8,
                         blend: after(strip.blend),
+                    })
+            })
+    }
+
+    /// **What a press at `p` asks the residency to become**, or `None` where
+    /// there is no tally chip under it.
+    ///
+    /// # The chip cycles, and it cycles from what was *requested*
+    ///
+    /// Click it and the deck is asked for the next of [`Tally::ALL`] —
+    /// `live`, `prim`, `alloc`, wrapping — and what comes out is
+    /// [`Operation::SetResidency`] naming that **destination**. The
+    /// affordance is the blend chip's ([`Mixer::blend`], ADR-0187) and so is
+    /// the division it rests on: the cycle is [`next`] here and nothing at all
+    /// in `karakuri-operation`, which is P-0074's *"a toggle is an affordance,
+    /// built over operations by whoever draws the control"*.
+    ///
+    /// **The step is taken from [`Strip::requested`] and not from
+    /// [`Strip::tally`]**, and that is the decision rather than a detail. The
+    /// two disagree exactly while a request has not landed, and cycling from
+    /// the request is what makes that case come out right **with no case in
+    /// the code for it**: a parked slot's request is `Priming`, so the next is
+    /// `Allocated` — which *is* the withdrawal of the prime request, said by
+    /// the ordinary arithmetic. Cycling from the effective residency would
+    /// answer `Live` there, and a press meant to take a request back would put
+    /// the deck on air.
+    ///
+    /// That is what
+    /// [P-0076](../../../docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md)
+    /// permits a surface: *"a press on a control whose transition is pending
+    /// may ask for the withdrawal"* — a control choosing which destination a
+    /// press names, arrived at out of one rule rather than a branch, and
+    /// **not** a lock. The chip refuses nothing; every request is handed over
+    /// and the engine decides.
+    ///
+    /// It is also what `karakuri-cli`'s `w` already does: `toggle_priming`
+    /// reads `Deck::requested_residency` to choose its direction, so a parked
+    /// slot's `w` withdraws rather than re-asking. Two surfaces reading
+    /// different halves of the pair would disagree about what a press means
+    /// on exactly the slots where it matters.
+    ///
+    /// # One derivation, asked twice, and the whole chip is the target
+    ///
+    /// [`crate::input::claim`]'s rule 3 asks this and so does the caller that
+    /// acts on the press — [`Outputs::op`], [`Mixer::grab`] and
+    /// [`Mixer::blend`] are the same arrangement. [`StripBox::tally`] is the
+    /// capsule the word is painted into, and it is **the widest of the three
+    /// words whatever it is showing** ([`mixer`]), so this target does not
+    /// move when the deck moves under it and does not move while a word is
+    /// rolling through it — which the blend chip, sized to the word it shows,
+    /// cannot say.
+    ///
+    /// # It names the strip's own deck
+    ///
+    /// The slot index, cast the way [`Mixer::grab`] and [`Mixer::blend`] cast
+    /// it — the manual's *deck* is the code's *slot* (ADR-0180), and a deck
+    /// holds `MAX_SLOTS` of them, so the index is a `u8` with room to spare.
+    pub fn tally(&self, p: karakuri_layout::Point) -> Option<Operation> {
+        let p = Pos2::new(p.x, p.y);
+        self.strips
+            .iter()
+            .zip(self.boxes)
+            .enumerate()
+            .find_map(|(index, (strip, at))| {
+                at.filter(|at| at.tally.contains(p))
+                    .map(|_| Operation::SetResidency {
+                        deck: index as u8,
+                        residency: residency(next(strip.requested)),
                     })
             })
     }
@@ -3323,6 +3417,53 @@ fn after(blend: BlendMode) -> BlendMode {
         BlendMode::Add => BlendMode::Over,
         BlendMode::Over => BlendMode::Max,
         BlendMode::Max => BlendMode::Add,
+    }
+}
+
+/// **The next residency round the cycle**, wrapping from the last back to the
+/// first — the whole of the affordance the tally chip is, and the order the
+/// mock's own tooltip lists: *"one of three residencies — live, priming,
+/// allocated"*.
+///
+/// [`after`]'s division, one control along: the cycle is three lines here and
+/// nothing in `karakuri-operation`, which owns the three values and not the
+/// order a pointer walks them in (P-0074).
+///
+/// **A match rather than an index into [`Tally::ALL`]**, for [`after`]'s
+/// reason: a fourth residency does not compile until somebody says what
+/// follows it. The price is that the order is written twice — here and in
+/// `ALL` — so `tests/tally.rs` walks `ALL` through this and asserts they are
+/// the same cycle.
+///
+/// **What it is asked about is [`Strip::requested`]**, and why is
+/// [`Mixer::tally`].
+fn next(tally: Tally) -> Tally {
+    match tally {
+        Tally::Live => Tally::Priming,
+        Tally::Priming => Tally::Allocated,
+        Tally::Allocated => Tally::Live,
+    }
+}
+
+/// **The console's word for a residency, as the vocabulary's** — and it is the
+/// whole of what the console has to know about the difference.
+///
+/// [`Tally`] is the mock's `.tally` and the engine's `Residency` seen from the
+/// surface; [`karakuri_operation::Residency`] is what an operation may name.
+/// They are the same three states and two crates' words for them, so the
+/// translation is a match — and a match rather than a cast so that a fourth
+/// state on either side stops the build here, where the two lists meet, rather
+/// than at a chip drawing a word no operation can carry.
+///
+/// The mirror image of it is `examples/panel.rs`'s `tally`, which turns the
+/// *engine's* `Residency` into a [`Tally`] on the way in. Three names for
+/// three states is the cost `karakuri-operation` pays for depending on nothing
+/// (P-0074), and this is one of the two places it is paid.
+fn residency(tally: Tally) -> Residency {
+    match tally {
+        Tally::Live => Residency::Live,
+        Tally::Priming => Residency::Priming,
+        Tally::Allocated => Residency::Allocated,
     }
 }
 

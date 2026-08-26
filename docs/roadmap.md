@@ -422,9 +422,9 @@ pointer is shown a cycle, and a map is offered the three values rather than a *n
 became a `BlendMode` to carry it, so a fourth engine mode with no operation variant fails at the
 harness rather than drawing a word no control can reach.
 
-**The rest of the strip is still a readout, and the tally now says when it is a readout of two
-things.** `Deck::residency` is what the slot is doing and `Deck::requested_residency` is what it was
-asked to do, and the chip draws the effective one and **rolls it part of the way toward the request
+**The tally reads two values, and says so.** `Deck::residency` is what the slot is doing and
+`Deck::requested_residency` is what it was asked to do, and the chip draws the effective one and
+**rolls it part of the way toward the request
 and back, once a second, while the two disagree**
 ([ADR-0190](adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)).
 **And it can be seen by running the window, which it could not when that record landed**: the
@@ -434,10 +434,14 @@ primed against a compute budget computed from what the probe measured, and `Deck
 ([ADR-0191](adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md))
 — the parked chip on that panel is the governor's verdict read back off the deck rather than a state
 the harness wrote.
-It is still a readout: nothing on it is clickable, and `SetResidency` — one operation naming one of
-three since [ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md) — is what a press
-will eventually send. The mask mini is the one with a decision left rather than work: it is state no
-operation can set.
+**And it is the fourth control** — a press on it emits `SetResidency`, one operation naming one of
+three since [ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md), taken from the
+residency that was **requested** rather than from the one the chip shows
+([ADR-0195](adr/0195-the-tally-chip-cycles-from-the-request-so-the-parked-case-needs-no-case.md)).
+That is what makes a press on a *parked* chip the withdrawal of its own prime request with no case
+in the code for it — the affordance P-0076 permits a surface, where cycling from the readout would
+put the deck on air. The mask mini is the last readout in the strip, and it is the one with a
+decision left rather than work: it is state no operation can set.
 
 **Four live regions now, and one of them declares a price.** The picture is expensive and moves
 every frame; the beat grid is cheap, high priority, and moves two to four times a second; the mixer
@@ -458,22 +462,24 @@ throws the expand away with nothing said. Nothing in the console reaches that st
 
 ### Where this goes next, and the decisions it is waiting on
 
-**Four controls in the console answer a pointer**: the Outputs dot, the mixer's two faders and its
-blend chip. Everything else in the mixer is a readout, the other bays are empty, and the keyboard, a
-MIDI map and MCP reach none of it — the panel routes in `manual/operations.html` are still `plan`,
-because the console is an example rather than the program.
+**Five controls in the console answer a pointer**: the Outputs dot, the mixer's two faders, its
+blend chip and its tally chip. The mask mini is the one readout left in the strip, the other bays
+are empty, and the keyboard, a MIDI map and MCP reach none of it — the panel routes in
+`manual/operations.html` are still `plan`, because the console is an example rather than the
+program.
 
 **The order that makes each next thing cheaper than it would be alone:**
 
-1. **The rest of the mixer strip** — the tally becoming a control, and the mask mini. The blend mini
-   is done ([ADR-0187](adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md))
-   and proved these are the same seam the faders opened. **The tally's presentation landed first, on
-   purpose**: it says a request is pending
+1. **The rest of the mixer strip is the mask mini, and it is the only readout left in it.** The
+   blend mini ([ADR-0187](adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md))
+   and the tally ([ADR-0195](adr/0195-the-tally-chip-cycles-from-the-request-so-the-parked-case-needs-no-case.md))
+   are done, and each needed no new machinery — a claim rule and an `Operation`, which is the same
+   seam the faders opened. **The tally's presentation landed a commit before its pointer, on
+   purpose**: it had to be able to say a request is pending
    ([ADR-0190](adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md))
-   and answers no pointer, because a control that could not yet say it is pending would look dead
-   for exactly as long as one commit. Making it a control needs no new machinery — a claim rule and
-   an `Operation`, which is the blend chip's shape — and the decision it is waiting on is below. The
-   mask mini needs one too.
+   before it answered one, because a control that could not yet say it is pending would look dead.
+   The mask mini is waiting on a decision rather than on work, and the decision is below: there is
+   no `SetMask`.
 2. **The rest of P-0072, and it is nearer than this item used to say.** Three live regions with
    three characters now exist — the picture expensive and every frame, the beat grid cheap and
    twice a second, the mixer expensive and hardly moving — which is what a scheduler was waiting
@@ -552,7 +558,7 @@ than work, and every one of them was found by building the thing next to it.
   three values, never a *next*** — a pad that could only step is the shape P-0074 warns about, since
   two surfaces stepping one control disagree about where they are. **Nothing MIDI is implemented**:
   `karakuri_midi::map::Action` still has `CycleBlend`, and moving it is item 3 above.
-- **What the tally shows while the two disagree — decided in part.** One operation naming one of
+- **What the tally shows while the two disagree, and what a press on it asks for — decided.** One operation naming one of
   three states ([ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md)), and the
   console draws the *effective* residency while `SetResidency` sets the *requested* one — the
   governor holds a slot below what was asked for and never above, so Live lands and Priming may not.
@@ -577,11 +583,20 @@ than work, and every one of them was found by building the thing next to it.
   — and what a parked deck costs: about 30 panel frames a second for as long as it is parked, and
   `Repaint::Never` the moment nothing is pending.
 
-  **What is still open is the chip becoming a control**: which residency a press asks for, and the
-  claim rule and `Operation` that go with it — the blend chip's shape, one control along. Nothing on
-  the tally answers a pointer today. Since a pending control may refuse nothing
-  ([P-0076](principles/0076-a-surface-owns-the-affordance-never-the-authority.md)), there is nothing
-  to decide about locking the panel.
+  **And the chip is now a control, which closes the last of it**
+  ([ADR-0195](adr/0195-the-tally-chip-cycles-from-the-request-so-the-parked-case-needs-no-case.md)):
+  a press emits `SetResidency` naming the next of `live → priming → allocated → live`, **counted
+  from the residency that was requested** rather than from the one the chip shows. The two are the
+  same value on every settled slot and part on exactly one state the engine can produce, so that
+  state is the whole decision — a parked slot's request is `Priming`, so the next is `Allocated`,
+  which *is* the withdrawal, arrived at with no case in the code for it. Cycling from the readout
+  would have answered `Live`, and a press meant to take a request back would have put the deck on
+  air. It is the affordance
+  [P-0076](principles/0076-a-surface-owns-the-affordance-never-the-authority.md) permits — *"a press
+  on a control whose transition is pending may ask for the withdrawal"* — and P-0076's *"nowhere
+  yet, because nothing has tried it"* now has its first user. The chip refuses nothing, so there is
+  still nothing to decide about locking the panel, and `karakuri-cli`'s `w` already reads the same
+  half of the pair.
 - **`SetMask` does not exist**, so the mask mini is a readout of state no operation can set. The row
   has to be settled on [the operations page](manual/operations.html) before it can be a control.
 - **What `expand` under a solo should do.** `Layout::soloed()` can lie: the solve never reads it and

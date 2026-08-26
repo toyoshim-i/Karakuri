@@ -213,7 +213,6 @@ fn a_press_off_the_chip_asks_for_nothing_and_is_not_claimed() {
         (at.mask.center(), "the mask mini"),
         (at.num.center(), "the number"),
         (at.name.center(), "the name"),
-        (at.tally.center(), "the tally"),
         (at.meter.center(), "the meter"),
         (
             egui::pos2(at.blend.min.x - 1.0, at.blend.center().y),
@@ -244,6 +243,21 @@ fn a_press_off_the_chip_asks_for_nothing_and_is_not_claimed() {
             "{what} is being claimed as a control the panel acts on"
         );
     }
+
+    // **The tally chip is the one neighbour that is a control** (ADR-0195), so
+    // it is asserted separately and in the other direction: the panel claims
+    // it, and the blend answers nothing for it. A hit test that reached across
+    // the two would change a blend mode from a press meant for the residency.
+    assert_eq!(
+        bay.blend(point(at.tally.center())),
+        None,
+        "the tally chip asked the blend to change"
+    );
+    assert_eq!(
+        claim(&mut panel, &ctx, &strips, point(at.tally.center())),
+        Claim::Panel,
+        "the tally chip stopped being a control, so this is asserting nothing about the blend"
+    );
 
     // The guard: the chip itself does both of the things the probes above do
     // neither of. Without this the test passes on a chip that was never a
