@@ -186,13 +186,20 @@ cargo test -p karakuri-audio       # analysis, tempo tracking, beat lock
 cargo test -p karakuri-signal      # oscillator, synthesized bus, noise
 cargo test -p karakuri-store       # records, ndjson, content addressing
 cargo test -p karakuri-midi        # wire parsing and the map
+cargo test -p karakuri-operation   # the operation vocabulary, against the manual
+cargo test -p karakuri-layout      # the arrangement, solved to rectangles
+cargo test -p karakuri-console     # the console: arrangement, panel model, view (its example needs a GPU)
 cargo test -p karakuri-cli         # flags, replay, MCP, live save (needs a GPU)
 ```
 
-**Two crates take a device, not one.** Most of `karakuri-engine`'s integration suites do,
+**Three crates take a device, not one.** Most of `karakuri-engine`'s integration suites do,
 and so does part of `karakuri-cli`: eight tests in the binary build a Set, and the five in
 `tests/replay.rs` drive `karakuri-cli` as a subprocess, which takes a device of its own. The
-other six crates are pure CPU.
+third is `karakuri-console`, and **only through its example** — `examples/panel.rs` is a test
+target (`test = true` in its `Cargo.toml`, with the reason beside it), so `cargo test -p
+karakuri-console` builds and runs it; `src/` takes no device at all and that is the seam
+[ADR-0156](adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md) exists to keep.
+The other eight crates are pure CPU.
 
 ### Running only the part that needs no GPU
 
