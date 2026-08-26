@@ -45,7 +45,6 @@ use karakuri_engine::{
     Binding, Blend, Deck, Gpu, HotSwap, Look, Mask, MaskKind, ParamWrite, Present, Residency, Set,
     Signals, TonemapOp, DEFAULT_BUDGET_MS,
 };
-use karakuri_midi::Action;
 use karakuri_operation::Operation;
 use karakuri_operation_record::{Current, Written};
 use karakuri_signal::NoiseConfig;
@@ -503,10 +502,16 @@ options:
                         recorded from one replays with neither attached
   --midi-map FILE       what each knob and pad does, one per line:
                           cc 1 ch 1 -> gain 0        cc 20 -> exposure
-                          cc 5      -> opacity 0     note 32 -> on-air 0
-                          note 36 -> prime 0         note 40 -> blend 0
-                          note 44 -> preview 0       note 48 -> preview mix
-                          note 49 -> tap
+                          cc 5      -> opacity 0     note 32 -> residency 0 live
+                          note 36 -> residency 0 priming
+                          note 40 -> residency 0 allocated
+                          note 44 -> blend 0 over    note 48 -> preview 0
+                          note 52 -> preview mix     note 53 -> tap
+                        A pad names a state, never a step, so a state is a pad:
+                        `residency N live|priming|allocated`, `blend N
+                        add|over|max`. A file written against the older
+                        `on-air N`, `prime N` or bare `blend N` is refused on
+                        that line with the line to write instead.
                         `examples/surface.map` is this filled out for four
                         slots, with the reasoning; copy it and edit.
                         `ch` is the number printed on the device, 1-16, and is
@@ -5186,8 +5191,8 @@ struct Live {
     /// `None` without `--audio-in`, and then nothing in the frame path below
     /// changes at all — which is the property the whole slice is about.
     audio: Option<audio::Audio>,
-    /// The control surface, when `--midi-in` asked for one. Every action it
-    /// produces ends in the same method a key press ends in — see
+    /// The control surface, when `--midi-in` asked for one. Every operation it
+    /// produces ends in the same record a key press ends in — see
     /// [`crate::midi`] — so nothing in the frame path below changes at all when
     /// this is `None`.
     midi: Option<midi::Surface>,
@@ -5262,7 +5267,11 @@ struct Live {
     mcp: Option<mcp::Reporter>,
     /// Scratch for [`midi::Surface::take`], owned so the frame path allocates
     /// nothing. Empty on every frame nothing was touched.
-    actions: Vec<karakuri_midi::Action>,
+    ///
+    /// Nothing a map line can name carries a heap payload — every one of them
+    /// is scalars — so a fader sweep reuses this buffer and touches no
+    /// allocator, which is what the render-thread rule asks of it.
+    operations: Vec<Operation>,
     /// The musical grid a scheduled fade starts on — see [`QUANTA`]. State on
     /// the operator rather than in the record: what reaches the stream is the
     /// resolved beat count, so this is a setting for the hand and not for the
@@ -5608,7 +5617,7 @@ impl ApplicationHandler for App {
             saves,
             saves_in_flight: 0,
             mcp,
-            actions: Vec::new(),
+            operations: Vec::new(),
             quantum: QUANTA[0].0,
             fade_beats: FADE_BEATS[0],
             mask_kind: MASK_SHAPES[0].0,
@@ -5802,13 +5811,36 @@ impl Live {
     }
 
     /// **Whatever the control surface did since the last frame**, as the same
-    /// calls a key press makes.
+    /// operations a key press and a console fader name.
     ///
-    /// The whole of the MIDI connection, and it is one match on purpose: every
-    /// arm below ends in a method the keyboard already reaches, so a surface
-    /// can do nothing a key cannot and a session recorded from one replays with
-    /// neither attached. A control added to one and not the other does not
-    /// compile.
+    /// The whole of the MIDI connection, and there is almost nothing in it:
+    /// a mapped message *is* an [`Operation`], so this hands each one to
+    /// [`Live::operate`] and that is the connection. A surface can do nothing
+    /// a key cannot because both end in the same record, and a session
+    /// recorded from one replays with neither attached.
+    ///
+    /// **This used to be a match over eight `Action`s claiming that a control
+    /// added to one and not the other does not compile.** Against a
+    /// forty-six-variant vocabulary that claim would be false — a router arm
+    /// nobody wrote is a wildcard nobody notices. The guarantee is now where
+    /// it is true: `karakuri_operation_record::written` is one exhaustive
+    /// match over all forty-six, so an operation nobody has said what to do
+    /// with stops the build there.
+    ///
+    /// **[`Operation::TapBeat`] is handled here and it is the only one**, for
+    /// a reason that is visible rather than incidental: a tap moves the beat
+    /// tracker rather than writing a value, `written` answers
+    /// `Owed::NotSettled` for it, and `Live::operate` would print that gap
+    /// instead of tapping. `Live::tap` is what owns the tracker and what the
+    /// `b` key reaches, so `note -> tap` goes on doing exactly what it did.
+    /// The day the record a tap owes is settled, this arm is what goes.
+    ///
+    /// **Nothing here prints.** The old arms ended in `set_gain` and its
+    /// neighbours, each of which reports what it did — which on a fader sweep
+    /// is an `eprintln!` per MIDI message inside a frame, several hundred a
+    /// second, and is the blocking write per message `crate::midi`'s own
+    /// "once per control" rule exists to prevent. What a surface moved is read
+    /// back from the deck (`s`), not narrated per message.
     ///
     /// Before the tick, so a fader move lands on the frame it arrived for
     /// rather than the one after — the same placement `run_demo` has, and for
@@ -5817,27 +5849,21 @@ impl Live {
         let Some(surface) = &mut self.midi else {
             return;
         };
-        // Into the owned scratch, then out of `self`'s borrow, so the arms
-        // below can call `&mut self` methods. Nothing allocates: both vectors
-        // are reused and `take` clears rather than replaces.
-        let mut actions = std::mem::take(&mut self.actions);
+        // Into the owned scratch, then out of `self`'s borrow, so the calls
+        // below can take `&mut self`. Nothing allocates: both vectors are
+        // reused and `take` clears rather than replaces.
+        let mut operations = std::mem::take(&mut self.operations);
         // The slot check is the router's — it is where the "say it once"
         // machinery already is, and once per *message* would be a blocking
         // write per message on this thread. See `crate::midi`.
-        surface.take(self.deck.slot_count(), &mut actions);
-        for action in &actions {
-            match *action {
-                Action::Gain { slot, value } => self.set_gain(usize::from(slot), value),
-                Action::Opacity { slot, value } => self.set_opacity(usize::from(slot), value),
-                Action::Exposure { value } => self.set_exposure(value),
-                Action::ToggleOnAir { slot } => self.toggle_on_air(usize::from(slot)),
-                Action::TogglePriming { slot } => self.toggle_priming(usize::from(slot)),
-                Action::CycleBlend { slot } => self.cycle_blend(usize::from(slot)),
-                Action::Preview { slot } => self.show(slot.map(usize::from)),
-                Action::Tap => self.tap(),
+        surface.take(self.deck.slot_count(), &mut operations);
+        for operation in &operations {
+            match operation {
+                Operation::TapBeat => self.tap(),
+                other => self.operate(other),
             }
         }
-        self.actions = actions;
+        self.operations = operations;
     }
 
     /// **What a model has asked for since the last frame.**
@@ -5848,7 +5874,7 @@ impl Live {
     /// rather than a second way to do anything.
     ///
     /// **Collected out of the borrow before any of it is acted on**, exactly as
-    /// the MIDI actions are, because every arm below takes `&mut self`. Nothing
+    /// the MIDI operations are, because every arm below takes `&mut self`. Nothing
     /// is allocated on a frame that was asked for nothing: collecting an empty
     /// iterator makes no allocation.
     ///
@@ -5949,9 +5975,14 @@ impl Live {
         self.toggle_on_air(self.focus);
     }
 
-    /// On air and off again, for a named slot. Split from the key so a control
-    /// surface can reach a slot its hands are not focused on — a fader bank
-    /// has one strip per slot and no notion of focus at all.
+    /// On air and off again, for a named slot.
+    ///
+    /// **The toggle is the key's affordance and not an operation**, which is
+    /// why the slot is a parameter and the focus is filled in by the caller:
+    /// what reaches the deck is `SetResidency` naming one of three
+    /// (`docs/principles/0074-…`). A control surface says which state it wants
+    /// on the line and does not come through here at all — it used to, and the
+    /// state it landed in was this function's to decide.
     fn toggle_on_air(&mut self, slot: usize) {
         let t = self.deck.slot(slot).set().time();
         match self.deck.residency(slot) {
@@ -6844,10 +6875,12 @@ impl Live {
         self.show(next);
     }
 
-    /// Show one slot, or the mix. Split from the cycle so a control surface can
-    /// select one directly: a surface has a pad per slot, and reaching slot 3
-    /// through three presses is a keyboard's compromise rather than a
-    /// surface's.
+    /// Show one slot, or the mix. Split from the cycle because the cycle is
+    /// the key's compromise and not the operation: a surface has a pad per
+    /// slot, and reaching slot 3 through three presses is a keyboard's
+    /// answer to having one key. A map line says `preview 3` and arrives at
+    /// `SetPreview` directly, which is the shape this crate's map had before
+    /// the vocabulary existed.
     fn show(&mut self, slot: Option<usize>) {
         self.operate(&Operation::SetPreview {
             showing: slot.map(|slot| slot as u8),

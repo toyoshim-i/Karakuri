@@ -29,24 +29,53 @@ cc 8 -> opacity 3
 
 # -- the pads ---------------------------------------------------------------
 #
-# `on-air` is the space bar: on, and off holding its `t`. `prime` asks a slot
-# to warm out of sight, which is what gives a parked candidate something to
-# show when you audition it. `blend` cycles add / over / max.
+# **Every pad names a state, and that is why there are thirty of them.** A line
+# says `residency 0 live`, not *flip slot 0*: a pad that could only step has no
+# way to arrive, and a surface stepping the same control as a key ends up
+# disagreeing with it about where the control is. So four slots by three
+# residencies is twelve pads where two toggles were eight, and four slots by
+# three blend modes is twelve where one cycle was four.
+#
+# **That bill is real and this file is over it.** Thirty pads is not the row of
+# pads under a four-fader surface described above; no such device has them.
+# Take the ones your hands need — the file is yours, and a slot you never park
+# needs no `allocated` pad — or put the rest on a second page of the
+# controller's own banks. What is not on offer is a pad that means *next*.
+#
+# `live` is stepped and composited; `priming` is stepped out of sight, warming,
+# so a parked candidate has something to show when you audition it; `allocated`
+# is held — compiled, buffers kept, its `t` where it stopped, so a slot taken
+# off and brought back resumes rather than restarts.
 
-note 32 -> on-air 0
-note 33 -> on-air 1
-note 34 -> on-air 2
-note 35 -> on-air 3
+note 32 -> residency 0 live
+note 33 -> residency 1 live
+note 34 -> residency 2 live
+note 35 -> residency 3 live
 
-note 36 -> prime 0
-note 37 -> prime 1
-note 38 -> prime 2
-note 39 -> prime 3
+note 36 -> residency 0 priming
+note 37 -> residency 1 priming
+note 38 -> residency 2 priming
+note 39 -> residency 3 priming
 
-note 40 -> blend 0
-note 41 -> blend 1
-note 42 -> blend 2
-note 43 -> blend 3
+note 40 -> residency 0 allocated
+note 41 -> residency 1 allocated
+note 42 -> residency 2 allocated
+note 43 -> residency 3 allocated
+
+note 44 -> blend 0 add
+note 45 -> blend 1 add
+note 46 -> blend 2 add
+note 47 -> blend 3 add
+
+note 48 -> blend 0 over
+note 49 -> blend 1 over
+note 50 -> blend 2 over
+note 51 -> blend 3 over
+
+note 52 -> blend 0 max
+note 53 -> blend 1 max
+note 54 -> blend 2 max
+note 55 -> blend 3 max
 
 # -- auditioning ------------------------------------------------------------
 #
@@ -54,11 +83,11 @@ note 43 -> blend 3
 # slot 3 through three presses is a keyboard's compromise. `preview mix` is the
 # way back.
 
-note 44 -> preview 0
-note 45 -> preview 1
-note 46 -> preview 2
-note 47 -> preview 3
-note 48 -> preview mix
+note 56 -> preview 0
+note 57 -> preview 1
+note 58 -> preview 2
+note 59 -> preview 3
+note 60 -> preview mix
 
 # -- the room ---------------------------------------------------------------
 #
@@ -67,4 +96,4 @@ note 48 -> preview mix
 # --audio-in: three or more taps set the tempo, and every tap sets the phase.
 
 cc 20 -> exposure
-note 49 -> tap
+note 61 -> tap

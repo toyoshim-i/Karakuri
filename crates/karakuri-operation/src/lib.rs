@@ -21,8 +21,9 @@
 //! `karakuri-engine` would be the thing it must not be: engine-shaped.
 //!
 //! So it is a leaf, and it is **pure data**. It performs nothing. It names
-//! what was asked for and stops, exactly as `karakuri_midi::map::Action`'s
-//! documentation says of the eight gestures it was the first draft of:
+//! what was asked for and stops, exactly as `karakuri_midi::map::Action` — the
+//! eight gestures this was the first draft of, and which it has now replaced —
+//! said of itself:
 //!
 //! > What the operator asked for, in terms of the deck rather than of the
 //! > wire. Engine-neutral on purpose … this crate names the gesture and
@@ -31,13 +32,16 @@
 //! > rather than by two lists agreeing.
 //!
 //! That is this crate's charter, moved out of `karakuri-midi`, which held it
-//! only because MIDI needed it first.
+//! only because MIDI needed it first — and which now routes through it rather
+//! than through a vocabulary of its own.
 //!
-//! **Two surfaces route through it and three do not.** `karakuri-console`'s
-//! mixer faders were the first customer, and `karakuri-cli`'s mix controls are
-//! the second — gain, opacity, blend, residency, preview, the tone map, the
+//! **Three surfaces route through it and two do not.** `karakuri-console`'s
+//! mixer faders were the first customer; `karakuri-cli`'s mix controls are the
+//! second — gain, opacity, blend, residency, preview, the tone map, the
 //! exposure and the scrub each name an operation and hand it to
-//! `karakuri-operation-record`. `karakuri_midi::map::Action`,
+//! `karakuri-operation-record`; and `karakuri-midi`'s map is the third, which
+//! took `Action` away with it
+//! (`docs/adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md`).
 //! `karakuri_console::panel::Op` and the rest of `karakuri-cli`'s key handler
 //! keep working exactly as they did; this is the target they move to one at a
 //! time. Said here because an invariant that is not yet true says so
@@ -74,9 +78,10 @@
 //! with a button per direction, an MCP call that says which one it wants, and
 //! a keyboard, all have to be able to say* fold this *and mean it."* So
 //! [`Operation::SetResidency`] names one of three residencies and
-//! [`Operation::SetBlendMode`] takes a mode. `Action::ToggleOnAir`,
-//! `Action::TogglePriming` and `Action::CycleBlend` are the shape this
-//! replaces, and the first two are the sharpest case in the list: two toggles
+//! [`Operation::SetBlendMode`] takes a mode. `karakuri-midi`'s
+//! `Action::ToggleOnAir`, `Action::TogglePriming` and `Action::CycleBlend` were
+//! the shape this replaced, and the first two were the sharpest case in the
+//! list: two toggles
 //! over **three** states, where each one's `false` had no destination the
 //! vocabulary could name. One operation naming one of three has no such hole.
 //!
@@ -255,6 +260,20 @@ pub enum Residency {
 }
 
 impl Residency {
+    /// Every residency there is, **in the order they cost** — the order this
+    /// enum declares them and the order
+    /// `karakuri_engine::deck::Residency` does.
+    ///
+    /// **A list is not a cycle**, exactly as [`BlendMode::ALL`] is not: what a
+    /// surface needs from the vocabulary is *which values exist*, and a control
+    /// that steps through them is an affordance built over the three operations
+    /// they name
+    /// (`docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md`).
+    /// `karakuri-midi`'s map reads it to decide what a `residency N <word>` line
+    /// may end in, so a value added here is offered to a map file rather than
+    /// waiting for a parser's second list to catch up.
+    pub const ALL: [Residency; 3] = [Residency::Live, Residency::Priming, Residency::Allocated];
+
     /// **The lower-case word for this level**, which is what
     /// `Record::Residency` carries and what `karakuri-cli`'s
     /// `mix::residency_wire_name` writes. The status line's `LIVE`/`prim`/
@@ -649,8 +668,9 @@ operations! {
     /// what a layer covers.
     SetOpacity { deck: u8, opacity: f32 } => "Opacity",
 
-    /// **Names the mode, where `Action::CycleBlend` could only step.** A pad
-    /// that means *over* is a mapping this makes writable.
+    /// **Names the mode, where `karakuri-midi`'s `Action::CycleBlend` could
+    /// only step.** A pad that means *over* is a mapping this made writable,
+    /// and `note 40 -> blend 0 over` is that mapping.
     SetBlendMode { deck: u8, blend: BlendMode } => "Blend mode",
 
     /// Starts at the current quantum and lasts the current length, both of
@@ -698,7 +718,7 @@ operations! {
     /// The mix, or one deck auditioned.
     ///
     /// `None` is the mix. Direct rather than a cycle, which is the one place
-    /// `karakuri_midi::map::Action` already had the right shape: *"a surface
+    /// `karakuri-midi`'s map already had the right shape: *"a surface
     /// has a pad per slot and reaching slot 3 through three presses is a
     /// keyboard's compromise, not a surface's."*
     SetPreview { showing: Option<u8> } => "Choose what the output shows",

@@ -7,9 +7,21 @@
 //!
 //! ## Why this crate knows nothing about the engine
 //!
-//! It produces an [`Action`] — "the operator asked for gain 0.7 on slot 2" —
-//! and stops. `karakuri-cli` turns that into the same `gain` record a keypress
-//! writes, and the engine is driven through that.
+//! It produces a [`karakuri_operation::Operation`] — "the operator asked for
+//! gain 0.7 on deck 2" — and stops. `karakuri-operation-record` turns that
+//! into the same `gain` record a keypress writes, and the engine is driven
+//! through that.
+//!
+//! **The vocabulary is not this crate's**, and that is the point: a map line
+//! names one of the operations `docs/manual/operations.html` specifies, so a
+//! pad and a key are two routes into one name rather than two lists that have
+//! to agree. `Action` — eight gestures of this crate's own, full of toggles
+//! because a crate that would not name a value had nothing else to offer — is
+//! gone
+//! (`docs/adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md`).
+//! The one dependency it costs has no dependencies itself, which is
+//! `karakuri-operation`'s charter and was written with this crate as its
+//! worked example (ADR-0180).
 //!
 //! **That is the invariant, not an arrangement.** The record stream
 //! (`docs/principles/0028-every-control-ends-in-the-same-record.md`)
@@ -35,7 +47,8 @@
 //!
 //! - [`Message`] is the wire, parsed. Three message kinds, and everything else
 //!   ignored rather than misread.
-//! - [`Map`] is the operator's table, and turns a message into an [`Action`].
+//! - [`Map`] is the operator's table, and turns a message into a
+//!   [`karakuri_operation::Operation`].
 //! - `device` opens a port and pushes bytes across a channel. It is the only
 //!   part that cannot be tested without hardware, and it is deliberately the
 //!   part with nothing in it.
@@ -45,5 +58,5 @@ mod map;
 mod message;
 
 pub use device::Port;
-pub use map::{Action, Map};
+pub use map::Map;
 pub use message::Message;
