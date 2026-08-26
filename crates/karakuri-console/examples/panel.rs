@@ -153,6 +153,7 @@ use karakuri_engine::{
 };
 use karakuri_layout::{Axis, Hit, NodeId, Point};
 use karakuri_operation::{BlendMode, Operation};
+use karakuri_operation_record::{written, Current, Written};
 use karakuri_store::record::Record;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, StartCause, WindowEvent};
@@ -1363,9 +1364,11 @@ impl Readout {
              {} — the mock's four is the most a deck can hold, and the page keeps its four \
              tracks either way, so a track with nothing behind it is empty rather than a \
              strip full of dashes. the two FADERS are played: drag the knob on the trim or \
-             on the tall fader and the panel emits SetGain or SetOpacity, which this file \
-             turns into a Record and applies to the deck — the strip then follows because \
-             the DECK changed, not because anything here remembered. a press on the track \
+             on the tall fader and the panel emits SetGain or SetOpacity, which \
+             karakuri-operation-record turns into a Record — the one place an \
+             operation becomes one, for every surface — and this file applies to the \
+             deck. the strip then follows because the DECK changed, not because \
+             anything here remembered. a press on the track \
              off the knob does nothing, deliberately: a fader at 0.3 whose top is clicked \
              must not jump to 1.0 on stage. everything else in the strip is a READOUT.",
             self.view.mixer.len(),
@@ -2400,10 +2403,14 @@ fn tally(residency: Residency) -> view::Tally {
 /// state no operation can name and no MIDI map can reach, with nothing saying
 /// so. Failing here is the loud failure P-0027 asks for.
 ///
-/// It is this example's for the reason [`record`] is: the console cannot
-/// depend on the engine, and where the conversion finally lives is part of the
-/// same undecided question — one `From` impl per list, in the one place every
-/// control already ends (P-0028).
+/// **It stays this example's, and that is now settled rather than pending.**
+/// The console cannot depend on the engine (ADR-0156), and
+/// `karakuri-operation-record` cannot either — it is the vocabulary and the
+/// records and nothing else, by charter. So the two lists meet on the harness
+/// side of the seam, wherever a harness holds both, and ADR-0180's *"one
+/// `From` impl per list in `karakuri-cli`"* cannot be written at all: neither
+/// [`Blend`] nor [`BlendMode`] is that package's, and the orphan rule refuses
+/// it ([ADR-0194](../../../docs/adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)).
 fn blend_mode(blend: Blend) -> BlendMode {
     match blend {
         Blend::Add => BlendMode::Add,
@@ -2412,78 +2419,60 @@ fn blend_mode(blend: Blend) -> BlendMode {
     }
 }
 
-/// **A fader's operation, as the record it has to end in — and this is a
-/// shortcut, it is this example's, and it is not where the answer belongs.**
+/// **What this window says when a control's operation wrote no record**, and
+/// the two ways that happens are not the same thing — so they are not the
+/// same sentence.
 ///
-/// [P-0028](../../../docs/principles/0028-every-control-ends-in-the-same-record.md)
-/// is *every control ends in the same record*: what makes a console fader the
-/// same thing as a key press and a MIDI knob is that all three write the same
-/// `Record` and the deck is moved by the decode. So the operation the panel
-/// emitted has to become one before it reaches [`Deck`].
+/// [`written`] has three answers and only one of them is a record.
+/// A harness that printed a line for that one and nothing at all for the
+/// other two would tell an operator that a press did nothing, which is true
+/// of neither:
 ///
-/// **Where `Operation` becomes `Record` is not decided, and this does not
-/// decide it.** The conversion needs `karakuri-operation` and
-/// `karakuri-store`, neither of which depends on the other, and choosing which
-/// crate owns it is the centre of the record design rather than a side effect
-/// of a fader. The existing half is `karakuri-cli`'s `mix::gain_record`,
-/// `mix::opacity_record`, `mix::blend_record` and `mix::residency_record` —
-/// four functions that already say exactly what the four arms below say — and
-/// they are **unreachable from here**, because `karakuri-cli` has no library
-/// target.
+/// - [`Written::Silent`] is **settled**. Selecting a deck or folding a bay is
+///   a surface's own state and there is nothing to write; the sentence says
+///   which of the four kinds of nothing it is, and that is the end of it.
+/// - [`Written::Owed`] is **a gap nobody has closed yet**. A fade owes a
+///   record and no build can make it, so a press that reads as *nothing
+///   happened* is exactly the wrong reading — the sentence names the question
+///   instead, which is `Owed::why`'s whole job and the reason `Owed` is not
+///   an error.
 ///
-/// So this example writes them again, and says so rather than leaving a reader
-/// to find out: the day the conversion lands, this function is **deleted**
-/// rather than moved, and `karakuri-store` leaves this crate's
-/// dev-dependencies with it.
+/// `None` for [`Written::Records`], because that line is [`apply`]'s: it says
+/// the record *and* what the deck holds afterwards, and printing both would
+/// say one press twice.
 ///
-/// `None` for every other operation in the vocabulary, which is not a refusal:
-/// this example has four controls and 46 operations exist.
-fn record(operation: &Operation) -> Option<Record> {
-    match *operation {
-        // `mix::gain_record`, and the cast with it: the vocabulary counts
-        // decks in `u8` and `Record` counts slots in `u8`, so the two agree
-        // here and it is the *console* that counts in `usize`.
-        Operation::SetGain { deck, gain } => Some(Record::Gain {
-            slot: deck,
-            value: gain,
-        }),
-        // `mix::opacity_record`.
-        Operation::SetOpacity { deck, opacity } => Some(Record::Opacity {
-            slot: deck,
-            value: opacity,
-        }),
-        // `mix::blend_record`. `Record::Blend` carries the mode as a `String`
-        // on purpose — *"what a mode is allowed to be is the engine's to
-        // say"* — so this is where a named destination becomes a wire name,
-        // and `BlendMode::name` is the same three words `Blend::name` writes.
-        Operation::SetBlendMode { deck, blend } => Some(Record::Blend {
-            slot: deck,
-            mode: blend.name().to_owned(),
-        }),
-        // `mix::residency_record`. `Record::Residency` carries the level as a
-        // `String` for `Record::Blend`'s reason and one of its own: it is
-        // **the request and never the effective level**, because the governor
-        // recomputes the second every pass from the budget of the machine that
-        // is running. So the record a tally chip writes is the same record
-        // `w` writes, and a replay re-derives what the governor decides. The
-        // spelling is the vocabulary's own — `Residency::name` — rather than a
-        // fourth copy of the same three words.
-        Operation::SetResidency { deck, residency } => Some(Record::Residency {
-            slot: deck,
-            level: residency.name().to_owned(),
-        }),
-        _ => None,
+/// **Nothing this example draws can reach either arm today**, and that is why
+/// it is written rather than a reason to leave it out. Its four mixer
+/// controls emit `SetGain`, `SetOpacity`, `SetBlendMode` and `SetResidency`,
+/// and all four write a record from the operation alone; the Outputs dot
+/// never arrives here at all, because it asks the panel for an arrangement
+/// [`Op`] and the panel performs it ([`Acted::Operated`]). The day a control
+/// on this panel emits a fifth operation, this window says what became of the
+/// press rather than swallowing it.
+fn unwritten(operation: &Operation, written: &Written) -> Option<String> {
+    match written {
+        Written::Records(_) => None,
+        Written::Silent(silent) => Some(format!(
+            "  emitted: {operation:?} -> no record, and that is settled: {}",
+            silent.why()
+        )),
+        Written::Owed(owed) => Some(format!(
+            "  emitted: {operation:?} -> no record, and that is a gap rather than a \
+             decision: {}. nothing moved, and nothing here decides it",
+            owed.why()
+        )),
     }
 }
 
 /// **A wire spelling back to the engine's residency**, which is
-/// `mix::parse_residency`'s job and is written here for [`record`]'s reason:
+/// `mix::parse_residency`'s job and is written here for [`apply`]'s reason:
 /// `karakuri-cli` has no library target, so the same three words cannot be
 /// reached from this file.
 ///
-/// **Only this direction is written here.** The other one is
-/// `karakuri_operation::Residency::name`, which is the vocabulary's own
-/// spelling of its own values and is what [`record`] writes — the wire words,
+/// **Only this direction is written here**, and it is the direction the
+/// *decode* goes. The other one is `karakuri_operation::Residency::name`,
+/// which is the vocabulary's own spelling of its own values and is what
+/// `karakuri-operation-record` writes into the record — the wire words,
 /// deliberately not the status line's `LIVE`/`prim`/`park` and not the chip's
 /// `live`/`prim`/`alloc`.
 ///
@@ -2502,12 +2491,19 @@ fn residency_level(name: &str) -> Option<Residency> {
 
 /// **The record, applied to the deck**, and what to say about it.
 ///
+/// **This is not the half ADR-0185 promised to delete, and it did not go with
+/// it.** Turning an `Operation` into a `Record` was the shortcut — that
+/// function is gone and [`written`] answers instead
+/// ([ADR-0194](../../../docs/adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)).
+/// Turning a record into a *deck movement* is a different job and is the
+/// harness's by design: `karakuri-operation-record` has no engine and never
+/// will, so somebody who owns a deck has to decode.
+///
 /// `karakuri-cli`'s `mix::change` is the real decoder and it does two things
 /// this does not: it refuses a slot the deck has not got, with the same
 /// sentence every other surface refuses one with, and it turns a record into a
-/// `Change` that a caller applies. This is the shortest path from the two
-/// records above to the two setters, and it is the other half of the shortcut
-/// [`record`] is.
+/// `Change` that a caller applies. This is the shortest path from the records
+/// [`written`] answers with to the setters they name.
 ///
 /// The line it returns is the loop closing, printed so that it can be read
 /// rather than inferred: the operation, the record, and **what the deck says
@@ -2805,17 +2801,52 @@ impl App {
     ///   third way of writing a gain. The next frame's strips are read back off
     ///   the deck by [`mixer`], so what the fader shows is what the deck says
     ///   and never what this loop remembered.
+    ///
+    /// **What the operation becomes is [`written`]'s answer and not this
+    /// file's.** It used to be a `match` written out here, because there was
+    /// nowhere for the conversion to live; ADR-0185 said that function is
+    /// deleted the day a home lands, and
+    /// [ADR-0194](../../../docs/adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)
+    /// is that home. Three answers come back and all three are said out loud —
+    /// the records go to [`apply`], and the other two go to [`unwritten`],
+    /// which is the difference between *this press writes nothing, and that is
+    /// settled* and *this press owes a record nobody has decided how to
+    /// write*.
     fn performed(gfx: &mut Gfx, acted: &Acted, otherwise: Repaint) -> Repaint {
         match acted {
             Acted::Nothing => otherwise,
             Acted::Operated(outcome) => Change::Operated(outcome).repaint(),
             Acted::Emitted(operation) => {
-                if let Some(line) = operation
-                    .as_ref()
-                    .and_then(record)
-                    .and_then(|record| apply(&record, &mut gfx.engine.deck))
-                {
-                    println!("{line}");
+                if let Some(operation) = operation.as_ref() {
+                    // **`Current::default()` is *I read nothing*, and it is
+                    // the honest reading rather than a shortcut.** Every
+                    // control on this panel emits one of four operations, and
+                    // all four write their record from the operation alone —
+                    // a gain, an opacity, a blend mode and a residency carry
+                    // everything the record carries. The two readings
+                    // `Current` can hold are the running look and a deck's
+                    // transport, and nothing here emits an operation that
+                    // needs either; handing one in anyway would be this file
+                    // inventing a value, which is what ADR-0194 refuses a
+                    // default for.
+                    let written = written(operation, &Current::default());
+                    // **A press that wrote no record says so**, and says
+                    // which of the two kinds of nothing it was, before
+                    // anything is applied.
+                    if let Some(line) = unwritten(operation, &written) {
+                        println!("{line}");
+                    }
+                    // **Every record, in the order it was written.** One
+                    // today for each of the four, and a list because
+                    // `Crossfade` is four and `Wipe` is five — one control is
+                    // not one record (P-0028, ADR-0194).
+                    if let Written::Records(records) = &written {
+                        for record in records {
+                            if let Some(line) = apply(record, &mut gfx.engine.deck) {
+                                println!("{line}");
+                            }
+                        }
+                    }
                 }
                 Change::Emitted(operation.as_ref()).repaint()
             }
@@ -3615,6 +3646,11 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// The two answers that are not a record. They are named only here,
+    /// because nothing in the running window can reach either arm today —
+    /// [`unwritten`] takes the `Written` it is given, and this is where the
+    /// two are handed to it.
+    use karakuri_operation_record::{Owed, Silent};
 
     /// Nothing that comes back from `get_current_texture` is dropped without a
     /// decision. The loop waits for events, so an outcome that neither
@@ -3902,38 +3938,49 @@ mod tests {
     /// **A control's operation becomes the record every other surface's
     /// control ends in**, and this is the half of that which needs no device.
     ///
-    /// [`record`] is a shortcut and says so at length; what it must not be is
-    /// a *different* answer from the one `karakuri-cli` already gives. So this
-    /// asserts it against `mix::gain_record` and `mix::opacity_record` term
-    /// for term — the slot is the operation's deck and the value is the
-    /// operation's value, unchanged — which is the whole of what those two
-    /// functions do.
+    /// **This test is older than the conversion it now checks, and that is the
+    /// point of it.** It was written against the hand-written `record` this
+    /// file used to carry, asserting term for term what `karakuri-cli`'s
+    /// `mix::gain_record` and `mix::opacity_record` already wrote. That
+    /// function is deleted and [`written`] answers instead (ADR-0185's promise,
+    /// kept where ADR-0194 put the home) — **every expectation below is
+    /// unchanged**, so if the crate's conversion disagreed with the one that
+    /// was deleted, this is what says so.
+    ///
+    /// **`mix::gain_record` is deleted too**, by the same record and for the
+    /// stronger reason: the conversion *is* the derivation now, and two of
+    /// them is the drift `mix.rs` exists to end. The comments below name it
+    /// where it stood, because what this test compares against is the record
+    /// that function wrote rather than the function.
     ///
     /// And the other direction: an operation this example has no control for
-    /// produces no record at all, rather than a plausible one.
+    /// writes no record here either, and the answer says *which* kind of
+    /// nothing rather than a bare `None` — which is the whole of what the
+    /// three answers buy.
     #[test]
     fn a_controls_operation_becomes_the_record_the_cli_would_have_written() {
         assert_eq!(
-            record(&Operation::SetGain {
+            only_record(&Operation::SetGain {
                 deck: 2,
                 gain: 0.75
             }),
-            // `mix::gain_record(2, 0.75)`.
-            Some(Record::Gain {
+            // What `mix::gain_record(2, 0.75)` wrote, before ADR-0194 deleted
+            // it in favour of this conversion.
+            Record::Gain {
                 slot: 2,
                 value: 0.75
-            })
+            }
         );
         assert_eq!(
-            record(&Operation::SetOpacity {
+            only_record(&Operation::SetOpacity {
                 deck: 0,
                 opacity: 0.25
             }),
             // `mix::opacity_record(0, 0.25)`.
-            Some(Record::Opacity {
+            Record::Opacity {
                 slot: 0,
                 value: 0.25
-            })
+            }
         );
         // **Every mode of the cycle, because a chip that emits three
         // operations has three records to write** — and the mode is a wire
@@ -3942,12 +3989,12 @@ mod tests {
         for (deck, blend) in BlendMode::ALL.into_iter().enumerate() {
             let deck = deck as u8;
             assert_eq!(
-                record(&Operation::SetBlendMode { deck, blend }),
+                only_record(&Operation::SetBlendMode { deck, blend }),
                 // `mix::blend_record(deck, blend)`.
-                Some(Record::Blend {
+                Record::Blend {
                     slot: deck,
                     mode: blend.name().to_owned(),
-                }),
+                },
                 "`{}` did not become the record `mix::blend_record` writes",
                 blend.name()
             );
@@ -3978,12 +4025,12 @@ mod tests {
         {
             let deck = deck as u8;
             assert_eq!(
-                record(&Operation::SetResidency { deck, residency }),
+                only_record(&Operation::SetResidency { deck, residency }),
                 // `mix::residency_record(deck, residency)`.
-                Some(Record::Residency {
+                Record::Residency {
                     slot: deck,
                     level: level.to_owned(),
-                }),
+                },
                 "{residency:?} did not become the record `mix::residency_record` writes"
             );
             // And it reads back as the level it named, which is what says the
@@ -3997,9 +4044,110 @@ mod tests {
 
         // The vocabulary is 46 operations and this example has four controls
         // writing four records. A record invented for the other 42 would be
-        // this file deciding what they mean.
-        assert_eq!(record(&Operation::Solo { region: None }), None);
-        assert_eq!(record(&Operation::SelectDeck { deck: 1 }), None);
+        // somebody deciding what they mean — and the answer is now *which*
+        // nothing rather than `None`, because a surface's own state and a
+        // record nobody can write yet are not the same silence.
+        assert_eq!(
+            written(&Operation::Solo { region: None }, &Current::default()),
+            Written::Silent(Silent::Surface)
+        );
+        assert_eq!(
+            written(&Operation::SelectDeck { deck: 1 }, &Current::default()),
+            Written::Silent(Silent::Surface)
+        );
+    }
+
+    /// **The one record an operation writes**, for the tests that know there
+    /// is exactly one.
+    ///
+    /// Every control on this panel emits an operation whose record needs no
+    /// reading at all, so `Current::default()` — *I read nothing* — is what
+    /// the example hands in, here and in [`App::performed`]. A conversion
+    /// that answered anything but a single record for one of those four is
+    /// this file's assumption breaking rather than a test needing a helper,
+    /// which is why the panic says so.
+    pub(super) fn only_record(operation: &Operation) -> Record {
+        match written(operation, &Current::default()) {
+            Written::Records(records) if records.len() == 1 => records.into_iter().next().unwrap(),
+            other => panic!(
+                "a control's operation did not write exactly one record: \
+                 {operation:?} -> {other:?}"
+            ),
+        }
+    }
+
+    /// **An operation whose record nobody can write yet does not silently do
+    /// nothing**, and it is not the same event as one that writes no record on
+    /// purpose.
+    ///
+    /// This is what the third answer is *for*, and the cheap harness is the
+    /// one that treats *not `Records`* as a no-op. A press that emitted
+    /// `FadeDeck` would then look exactly like a press that emitted
+    /// `SelectDeck` — nothing printed and nothing moved — and an operator
+    /// would read the first as *the fade did not take* when what happened is
+    /// *nobody has decided what a fade writes* (`Owed` is a question, not an
+    /// error: ADR-0194).
+    ///
+    /// **Neither sentence is asserted word for word.** What has to hold is
+    /// that the window says something, that it names the operation and the
+    /// reason, and that the two answers are two different sentences.
+    #[test]
+    fn an_operation_whose_record_is_owed_is_said_rather_than_swallowed() {
+        // Owed, and `NotSettled` is the reason: a fade needs the grid
+        // quantised onto a musical instant and the transition settings that
+        // no record carries.
+        let fade = Operation::FadeDeck { deck: 1, to: 0.0 };
+        let owed = written(&fade, &Current::default());
+        assert_eq!(
+            owed,
+            Written::Owed(Owed::NotSettled),
+            "a fade is not owed any more — this test names the operation it does, and \
+             the one it names has to still be one nobody can write"
+        );
+        let said = unwritten(&fade, &owed).expect(
+            "a fade owes a record and this window said nothing at all — a press whose \
+             record nobody has decided how to write reads, in silence, exactly like a \
+             press that did not work",
+        );
+        assert!(
+            said.contains("FadeDeck") && said.contains(Owed::NotSettled.why()),
+            "the window said `{said}`, which does not name both the operation and the \
+             question it is waiting on"
+        );
+
+        // Silent, and settled: which deck the keys are addressed to is a
+        // surface's own state and there is nothing to write.
+        let select = Operation::SelectDeck { deck: 1 };
+        let silent = written(&select, &Current::default());
+        assert_eq!(silent, Written::Silent(Silent::Surface));
+        let settled = unwritten(&select, &silent).expect(
+            "selecting a deck writes no record and the window said nothing about it \
+             either, so a press on such a control would leave no trace at all",
+        );
+        assert!(
+            settled.contains(Silent::Surface.why()),
+            "the window said `{settled}`, which does not say why there is no record"
+        );
+
+        // **And the two are different sentences.** Collapsing them is the
+        // failure this whole test is about at one remove: a harness that
+        // printed one line for both would tell an operator that an undecided
+        // fade is as settled as a deck selection.
+        assert_ne!(
+            said, settled,
+            "a record nobody can write yet and a record nobody needs to write came out \
+             of this window as the same sentence"
+        );
+
+        // A record's line is `apply`'s — it says the record *and* what the
+        // deck holds afterwards — so this says nothing about that case.
+        // Otherwise one press prints twice.
+        let gain = Operation::SetGain { deck: 0, gain: 0.5 };
+        assert_eq!(
+            unwritten(&gain, &written(&gain, &Current::default())),
+            None,
+            "an operation that wrote a record was also announced as writing none"
+        );
     }
 
     /// [`tally`] the other way round, for the assertion above alone — the
@@ -4928,7 +5076,7 @@ mod gpu {
         );
 
         // The record, and the deck.
-        let record = record(&operation).expect("a gain operation has a record");
+        let record = super::tests::only_record(&operation);
         assert!(apply(&record, &mut engine.deck).is_some());
         assert_eq!(
             engine.deck.gain(0),
@@ -5145,7 +5293,7 @@ mod gpu {
 
         // The record, and the deck. `apply` governs after it, which is what
         // stops this from being a residency the budget never granted.
-        let record = record(&operation).expect("a residency operation has a record");
+        let record = super::tests::only_record(&operation);
         assert_eq!(
             record,
             Record::Residency {

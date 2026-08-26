@@ -508,8 +508,21 @@ program.
    one-lit-dot flip proves it only across an interval — a **preference**, and not a decision to
    change the beat.
 3. **The other surfaces onto [`karakuri-operation`](../crates/karakuri-operation).** The faders
-   proved its shape; `karakuri-midi`'s `Action`, the console's `panel::Op` and the CLI's key handler
-   have not moved, and each is a change of its own. `Action`'s toggles are the interesting one —
+   proved its shape and **`karakuri-midi` has moved** —
+   [ADR-0196](adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md): `Action` is gone, a
+   map line names a state (`residency 0 live`, `blend 0 over`) and a file holding an old line is
+   refused on that line with the line to write instead. What it cost is the pad count, which is
+   written into `examples/surface.map` rather than left to be discovered: thirty notes where there
+   were seventeen, on a file whose own prose describes a four-fader surface. **What it settled is
+   where the exhaustiveness lives** — `run_surface`'s claim that *a control added to one and not
+   the other does not compile* would be false against forty-six variants, so the MIDI path is now
+   message → `Operation` → `Live::operate` and the compiler's guarantee is
+   `karakuri-operation-record`'s `written`, which is one match over all forty-six. The one arm left
+   in `run_surface` is `TapBeat`, which needs the beat tracker rather than a value and is
+   `Owed::NotSettled`; it goes the day that record is settled.
+
+   **The console's `panel::Op` and the CLI's key handler have not moved**, and each is a change of
+   its own —
    [P-0074](principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md).
 4. **The remaining bays**: library, staging, inspector, master, sequencer.
 
@@ -547,17 +560,29 @@ than work, and every one of them was found by building the thing next to it.
   - **`--bpm` has a record now.** `SetFreeRunTempo` writes the `tempo` record `Record::Tempo`'s own
     documentation describes — no shift, no confidence — which closes the gap P-0028 names. Nothing
     routes through it yet.
-  - **`examples/panel.rs` still builds three records by hand.** ADR-0185 promised that function is
-    deleted the day this lands; it is a follow-up commit, deliberately left because another session
-    is working in that crate.
+  - **`examples/panel.rs`'s hand-written conversion is deleted, and it was deleted rather than
+    moved** — which is ADR-0185's promise, kept. The console's example asks
+    `karakuri-operation-record` now. Its four mixer controls emit `SetGain`, `SetOpacity`,
+    `SetBlendMode` and `SetResidency`, every one of which writes its record from the operation
+    alone, so the example hands in `Current::default()` — *I read nothing* — and still needs no
+    engine to convert; the Outputs dot never reaches the conversion at all, because it asks the
+    panel for an arrangement `Op` that the panel performs. **What it gained is the other two
+    answers**: a press that writes no record and a press that owes one nobody has decided how to
+    write now print two different sentences rather than nothing at all, which is what `Silent` and
+    `Owed` are for. `apply` stays, because turning a record into a *deck movement* is the harness's
+    job and is not what ADR-0185 promised to delete — and `karakuri-store` stays in the console's
+    dev-dependencies with it, where ADR-0185 expected it to leave.
 - **What a MIDI map learns from a control whose affordance is a cycle** — the half of the blend
   mini that is still open. The affordance is taken: the chip cycles, which is what P-0074 permits by
   name, and the earlier claim that the mock and the principle disagree was a misreading
   ([ADR-0187](adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)). The
   decision recorded there is that **the component owns three operations and a map is offered the
   three values, never a *next*** — a pad that could only step is the shape P-0074 warns about, since
-  two surfaces stepping one control disagree about where they are. **Nothing MIDI is implemented**:
-  `karakuri_midi::map::Action` still has `CycleBlend`, and moving it is item 3 above.
+  two surfaces stepping one control disagree about where they are. **The MIDI half is implemented
+  now**: `CycleBlend` is gone, `note 44 -> blend 0 over` is the line, and a bare `blend 0` is
+  refused with the three lines that replace it
+  ([ADR-0196](adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)). What is still open
+  is the *learn* half — how a map is reached from the chip's tooltip while running.
 - **What the tally shows while the two disagree, and what a press on it asks for — decided.** One operation naming one of
   three states ([ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md)), and the
   console draws the *effective* residency while `SetResidency` sets the *requested* one — the
@@ -896,9 +921,12 @@ shape `Record::vocabulary` already uses for records.
 
 **The four surfaces barely overlap today, and here is the count**, read off the code rather
 than estimated: **35 live operations reachable from keys** — and only from the *focused* slot,
-since nothing but `0`–`3` addresses another; **8 from MIDI**, which is the whole of `Target`
-in `karakuri-midi`'s map (`gain`, `opacity`, `exposure`, `on-air`, `prime`, `blend`,
-`preview`, `tap`) and cannot express a node address, a parameter name or an id; **6 MCP
+since nothing but `0`–`3` addresses another; **7 from MIDI** — `gain`, `opacity`, `exposure`,
+`residency`, `blend`, `preview` and `tap`, which is what a map file's grammar accepts and no
+longer a vocabulary of the crate's own; it cannot express a node address, a parameter name or an
+id, and it was read as 8 while `on-air` and `prime` were two targets over the three states
+`residency` now names
+([ADR-0196](adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)); **6 MCP
 tools**, which touch nothing in the mix, the clock or the deck's residency; and **38 command
 line flags**, many of which are the *only* route to what they set.
 
@@ -919,9 +947,10 @@ destinations unnamed, and they are one `SetResidency { deck, residency }` now
 map beside every exposure, so `cc -> exposure` could not become an operation at all, and it is
 `SetTonemap` and `SetExposure` now
 ([ADR-0192](adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)) —
-which is what unblocks the MIDI map's migration. **Nothing is migrated** —
-`karakuri-midi`'s `Action`, the console's `panel::Op` and the CLI's match arms are untouched and
-move onto it one at a time, each of which is now a change that can be reasoned about because the target has stopped
+which is what unblocked the MIDI map's migration. **The MIDI map is migrated**
+([ADR-0196](adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)) and `Action` is
+deleted; the console's `panel::Op` and the CLI's match arms are untouched and move onto it one at a
+time, each of which is now a change that can be reasoned about because the target has stopped
 moving.
 
 Building it found the thing worth having built it for: **`Action` and `panel::Op` each claim to be

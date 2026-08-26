@@ -4,7 +4,7 @@ title: A fader translates a drag into an operation and applies nothing
 status: accepted
 date: 2026-08-26
 supersedes: []
-superseded_by: []
+superseded_by: [0194]
 principles: []
 tags: [ui]
 ---
