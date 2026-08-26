@@ -1,0 +1,15 @@
+[package]
+name = "karakuri-operation-record"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+# **Exactly two, and they are the two that do not know about each other.**
+# `karakuri-operation` is a leaf by charter (ADR-0180) and `karakuri-store` is
+# one in practice — neither may grow the other as a dependency, so the place
+# they meet is a third crate that depends on both and that nothing else has to
+# pay for. See the crate documentation and ADR-0194.
+[dependencies]
+karakuri-operation = { version = "0.1.0", path = "../karakuri-operation" }
+karakuri-store = { version = "0.1.0", path = "../karakuri-store" }
