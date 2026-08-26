@@ -74,6 +74,20 @@ pub fn drawn_once() -> egui::Context {
     ctx
 }
 
+/// **A panel at `viewport` with the Program bay arranged for `canvas`** —
+/// which is what a frame does before it reads a single rectangle
+/// ([`karakuri_console::view::rearrange`]), and therefore what every rectangle
+/// on the console is read from.
+///
+/// A [`Panel`] rather than a [`Layout`] because the rearrangement writes a bit
+/// that only `Panel` may write — see `Panel::set_aside`. `panel.layout()` is
+/// what the readers here take.
+pub fn arranged(viewport: Rect, canvas: (u32, u32)) -> karakuri_console::panel::Panel {
+    let mut panel = karakuri_console::panel::Panel::new(viewport.w, viewport.h);
+    karakuri_console::view::rearrange(&mut panel, canvas);
+    panel
+}
+
 /// A solved layout at `viewport`.
 pub fn solved(viewport: Rect) -> Layout {
     let mut layout = karakuri_console::layout();
@@ -182,8 +196,12 @@ fn assert_tiles(l: &Layout, id: NodeId, axis: Axis) {
             l.name(*c)
         );
 
-        if l.is_collapsed(*c) {
-            assert!(near(e, 0.0), "collapsed {:?} took {e}", l.name(*c));
+        if !laid_out(l, *c) {
+            assert!(
+                near(e, 0.0),
+                "{:?} is out of the layout and took {e}",
+                l.name(*c)
+            );
             continue;
         }
 
@@ -234,7 +252,7 @@ fn bounds(l: &Layout, id: NodeId) {
         return;
     };
     for c in l.children(id) {
-        if !l.is_collapsed(*c) {
+        if laid_out(l, *c) {
             let (lo, hi) = l.bounds(*c);
             let (_, e) = along(axis, l.rect(*c));
             assert!(
@@ -282,6 +300,21 @@ pub fn implied_min(l: &Layout, id: NodeId, axis: Axis) -> f32 {
             .map(|c| implied_min(l, *c, axis))
             .fold(0.0, f32::max),
     }
+}
+
+/// Whether a child takes extent, a divider of its own and the bounds it
+/// declares — which is the question every geometric assertion here is about,
+/// and it is **not** whether the operator folded it.
+///
+/// A node the console has set aside is out of the layout by the other bit
+/// ([ADR-0183](../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md))
+/// and is out of it just as completely, so `is_collapsed` here would count a
+/// phantom divider before a region that is not there and would hold a region
+/// with no extent to its 72px minimum. `karakuri-layout`'s own checker has the
+/// same function for the same reason; this is the duplication this file's
+/// header already names.
+pub fn laid_out(l: &Layout, id: NodeId) -> bool {
+    !l.is_collapsed(id) && !l.is_set_aside(id)
 }
 
 fn along(axis: Axis, r: Rect) -> (f32, f32) {

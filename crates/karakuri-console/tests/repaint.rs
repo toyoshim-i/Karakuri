@@ -21,7 +21,12 @@ use common::{drawn_once, PLAUSIBLE};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{Op, Outcome, Panel};
 use karakuri_console::repaint::{Change, Repaint};
+use karakuri_console::view::rearrange;
 use karakuri_layout::Point;
+
+/// **The canvas the picture is fitted to** — the workspace's reference
+/// workload, and what the Program bay arranges its body for.
+const CANVAS: (u32, u32) = (1280, 720);
 
 /// A panel at a plausible window size, solved.
 fn panel() -> Panel {
@@ -111,6 +116,25 @@ fn a_still_panel_asks_for_no_repaint() {
         "a report printed and moved nothing"
     );
 
+    // **The Program bay, asked whether it rearranged itself and answering
+    // no.** This is the arm the clause is most exposed to, because it is the
+    // only one a caller raises on *every* frame rather than on a gesture: the
+    // bit is re-derived from the geometry each time, so an arm that answered
+    // `Now` regardless would be a window that never sleeps. It is asked of
+    // `rearrange` rather than written by hand, so it is the console's answer
+    // and not this file's.
+    let mut still = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
+    rearrange(&mut still, CANVAS);
+    assert!(
+        !rearrange(&mut still, CANVAS),
+        "the bay rearranged itself on a panel nobody touched"
+    );
+    assert_eq!(
+        Change::Rearranged { moved: false }.repaint(),
+        Repaint::Never,
+        "a frame on which the Program bay did not move asked for another one"
+    );
+
     // The pointer, where `egui` is the one answering for it.
     assert_eq!(Change::Pointer(Claim::Egui).repaint(), Repaint::Never);
     assert_eq!(Change::Wheeled(Claim::Egui).repaint(), Repaint::Never);
@@ -127,6 +151,7 @@ fn a_still_panel_asks_for_no_repaint() {
     let together = [
         Change::Pointer(Claim::Egui).repaint(),
         Change::Wheeled(Claim::Panel).repaint(),
+        Change::Rearranged { moved: false }.repaint(),
         Repaint::asked(Duration::MAX),
     ]
     .into_iter()
@@ -243,6 +268,23 @@ fn everything_that_changes_the_console_asks_for_a_frame() {
 
     // The room, which no `Outcome` reports because it is the view's and not
     // the model's: every colour changes and nothing in the arrangement moves.
+    // **The Program bay rearranging itself**, driven through the console the
+    // way every case in this test is driven through the model: a window past
+    // the crossover, and the answer is what `rearrange` returned rather than
+    // what this file asked for. Every rectangle in the bay is a new one — the
+    // picture's and all four cells' — so a frame is owed exactly as it is for
+    // a resize, and the row's node went out of the layout besides.
+    let mut wide = Panel::new(1588.0, PLAUSIBLE.h);
+    assert!(
+        rearrange(&mut wide, CANVAS),
+        "a window past the crossover did not rearrange the Program bay"
+    );
+    assert_eq!(
+        Change::Rearranged { moved: true }.repaint(),
+        Repaint::Now,
+        "the deck previews moved across the bay and no frame was owed"
+    );
+
     assert_eq!(Change::Room.repaint(), Repaint::Now, "the room toggled");
 
     // A resize, and a scale change, which re-solve the arrangement into a

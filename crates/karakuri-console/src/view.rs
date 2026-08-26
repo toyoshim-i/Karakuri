@@ -23,9 +23,8 @@
 //!
 //! # The deck previews are the one thing drawn with nothing behind it
 //!
-//! [`Kind::Previews`] paints four cells whether or not a deck is running in
-//! any of them, and that is **not** the scaffolding the paragraph above
-//! forbids. A greyed-out control is a placeholder for a control that does not
+//! [`View::draw`] paints four cells whether or not a deck is running in any of
+//! them, and that is **not** the scaffolding the paragraph above forbids. A greyed-out control is a placeholder for a control that does not
 //! exist yet; a preview cell is not a placeholder for anything, it is the
 //! region's own face. The mock's `.preview` is a well with a letter in it
 //! before it is a picture — three of its four cells hold no texels at all —
@@ -39,6 +38,23 @@
 //! See [`DECKS`], [`preview_rects`] and [`View::previews`], and
 //! [ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
 //! for the alternative that lost and for what would reopen it.
+//!
+//! # The Program bay's body arranges itself, and that is one derivation
+//!
+//! The picture and the four cells are **not** where the two regions that hold
+//! them are: on a wide, short bay the cells go down the sides of the picture
+//! and `deck-previews` is taken out of the layout altogether, which is what
+//! leaves the bay's width to the picture. [`program_bay`] is the one place
+//! that decides it and [`rearrange`] is what writes the one bit that follows;
+//! [`picture_rect`], [`preview_rects`] and [`View::draw`] are readers of that
+//! one answer and derive no rectangle of their own.
+//!
+//! It is why [`Kind::Previews`] draws nothing: the row's region is not where
+//! the cells are, and past the crossover it is not even in the plan.
+//! [ADR-0182](../../../docs/adr/0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md)
+//! is the arrangement and
+//! [ADR-0183](../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md)
+//! is the bit.
 //!
 //! The transport and the outputs are **rows, not bays**: they carry no
 //! heading, because they have none in the mock — both carry `class="bay"`,
@@ -288,15 +304,22 @@ pub enum Kind {
     /// neither the canvas nor a crop of it, and the manual asked for one of
     /// the two.
     ///
-    /// # What is beside it is the bay's card, and nothing is drawn there
+    /// # What is beside it is the bay's card, and the cells may be in it
     ///
     /// The region is wider than the picture at every window above the mock's
     /// narrowest, and the leftover is the console's ground rather than the
-    /// engine's black inside the texture. **Nothing is painted in it**: the
-    /// bay's card shows through exactly as it does in every other empty body,
-    /// which is the rule this module opens with and is also the mock's own
-    /// answer — `.program-view` *is* the picture, and what surrounds it is
-    /// `.program-body`, which sets no background of its own.
+    /// engine's black inside the texture. The bay's card shows through exactly
+    /// as it does in every other empty body, which is the rule this module
+    /// opens with and is also the mock's own answer — `.program-view` *is* the
+    /// picture, and what surrounds it is `.program-body`, which sets no
+    /// background of its own.
+    ///
+    /// **Far enough above it, the four deck previews are what is in that
+    /// ground** — [`program_bay`], and ADR-0182 for why it is the ground down
+    /// each side that they take. What is drawn beside the picture is therefore
+    /// either nothing or the cells, and never a placeholder; the paragraph
+    /// below is about the case where it is nothing, which is every window a
+    /// capture is likely to be taken at.
     ///
     /// **What that costs a capture, said here rather than found later.** The
     /// `solo` pill's tooltip is *"Solo the program view: the panel folds away
@@ -313,14 +336,18 @@ pub enum Kind {
     /// scale."* **The console's window has no `a` yet, and this rule is what
     /// creates that gap.**
     Picture,
-    /// **The row of deck previews** under the picture, which is [`DECKS`]
-    /// cells side by side.
+    /// **The region the deck previews are in when they are in a region**: the
+    /// row under the picture, [`DECKS`] cells side by side.
     ///
-    /// A pane in every other respect, and a kind of its own for the reason
-    /// [`Kind::Picture`] is one, already written above: [`View::draw`] has to
-    /// know *which* pane the cells go in, and the alternative is comparing a
-    /// name on the frame path, which puts a string where the table already
-    /// says what a region is.
+    /// A pane in every other respect, and **it draws nothing**, which is the
+    /// one thing about it that is worth reading twice. The four cells are the
+    /// *bay's* body rather than this region's — beside the picture they are
+    /// down the sides and this region is set aside, with no extent and no
+    /// entry in the plan — so they are drawn once from [`program_bay`] and
+    /// never from here. The kind stays because the arrangement still has the
+    /// region and the table still has to say what it is: a row that folds
+    /// apart from the picture, which is what the manual promises and what the
+    /// operator's `f` still acts on.
     ///
     /// **Each cell carries a label and the picture does not**, and the manual
     /// states both in one breath: *"The picture carries no label of its own …
@@ -457,10 +484,17 @@ pub struct Placed {
 /// so the card has to be painted before them. Tree order gives that for
 /// nothing, and any other order would need the rule written out.
 ///
-/// Solves first, because [`karakuri_layout::Layout::rect`] refuses to answer
-/// from a dirty layout; on a frame where nothing moved that is a flag test.
-pub fn plan_into(panel: &mut Panel, out: &mut Vec<Placed>) {
-    panel.solve();
+/// **Arranges the Program bay first**, which is [`rearrange`] and is where the
+/// solve happens: `Layout::rect` refuses to answer from a dirty layout, and a
+/// plan taken before the bay had arranged itself would list `deck-previews` as
+/// a region to draw on the very frame its cells went somewhere else. On a
+/// frame where nothing moved both solves are flag tests and the bit is written
+/// with the value it already had, which marks nothing dirty (ADR-0183).
+///
+/// `canvas` is the picture's shape, which is what decides that arrangement —
+/// [`program_bay`]. It is [`View::canvas`] at the one call site that draws.
+pub fn plan_into(panel: &mut Panel, canvas: (u32, u32), out: &mut Vec<Placed>) {
+    rearrange(panel, canvas);
     out.clear();
     let layout = panel.layout();
     for node in panel.nodes() {
@@ -504,9 +538,10 @@ pub struct Picture {
     pub rect: Rect,
 }
 
-/// **Where the picture goes**: the canvas's own shape, as large as the
-/// `program-view` region allows, centred in it — below the bay head that is
-/// painted over the top of that region and inside `.program-body`'s padding.
+/// **Where the picture goes**: the canvas's own shape, as large as the Program
+/// bay's body leaves room for once the four deck previews have their places,
+/// centred in what is left — below the bay head painted over the top of the
+/// bay and inside `.program-body`'s padding.
 ///
 /// `canvas` is what the Set renders at and what the deck is sized to: `--canvas`
 /// in the product, which reaches a replay through `Record::Canvas` so a session
@@ -525,20 +560,26 @@ pub struct Picture {
 /// screen exactly when that sink is on — so there is no state where it is
 /// hidden and still costing a pass"*: a caller that renders into this
 /// rectangle records no pass at all when there is no rectangle. A folded
-/// picture is the case that matters and it is not a case of its own — see the
-/// note in the body.
+/// picture is the case that matters — see *The rectangle is the bay's now*
+/// below, and [`program_bay`], which is where it is decided.
 ///
 /// # The insets are the bay's own derivation, read backwards
 ///
+/// The box is the **bay** less [`size::HEAD_H`] and one
+/// [`size::PROGRAM_BODY_PAD`] on each of the four sides ([`bay_body`]), and
+/// then less whatever arrangement the cells took out of it — a row and a
+/// divider along the bottom, or a column and a divider down each side.
+///
+/// It reaches the mock's own numbers by the same arithmetic it always did.
 /// The arrangement gives `program-view` 27 + 9 + 262 at the mock's width — bay
-/// head, `.program-body`'s padding above the picture, and the picture itself.
-/// So the box the canvas is fitted into is that region less [`size::HEAD_H`]
-/// and one [`size::PROGRAM_BODY_PAD`] at the top, less a pad either side, and
-/// **less nothing at the bottom**: what the CSS puts under the picture is
-/// `.program-body`'s `gap: 8px`, which is the split's divider and belongs to
-/// neither child, and the 9 further down is that body's bottom padding, which
-/// belongs to `deck-previews`. So the only 9s in this region are the one above
-/// the picture and the one either side of it.
+/// head, `.program-body`'s padding above the picture, and the picture itself —
+/// and `deck-previews` 63 + 9 under it with the split's 8px divider between,
+/// so the body less the row less the divider is that region less the head and
+/// the top pad, to the pixel. The 9 under the picture in the CSS is the
+/// divider and belongs to neither child; the 9 under the *row* is the body's
+/// bottom padding, and it is the body's now rather than the row region's,
+/// which is the one term that moved. `tests/program_body.rs`'s
+/// `below_is_what_the_console_draws_today` is that agreement as an assertion.
 ///
 /// At the narrowest console the mock will draw, that box is exactly
 /// **466 x 262** — and 466 x 262 is 16:9 *to a quarter of a pixel* rather than
@@ -579,33 +620,29 @@ pub struct Picture {
 /// capturing a soloed window is written out, along with the `a` this console's
 /// window has not got yet.
 ///
+/// # The rectangle is the **bay's** now, and not this region's
+///
+/// It was this region's until the body started arranging itself. Beside the
+/// picture the four cells stand in ground the `program-view` region owns — the
+/// row is [`Layout::set_aside`](karakuri_layout::Layout::set_aside) there and
+/// has no extent at all — so a picture inset out of this region and cells
+/// taken off the bay would be two answers to *where does the picture go*, and
+/// they would differ by two columns and a divider. **One derivation, and this
+/// is one of its readers**: [`program_bay`] arranges the whole body once and
+/// this is its picture. See [ADR-0182](../../../docs/adr/0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md).
+///
+/// **The `None` rule moved with it**, and that is the one line of this that is
+/// not the same sentence it was. *A folded region keeps its rectangle and
+/// loses its extent* was what said the picture is not on screen, and it does
+/// not any more: the box is taken off the **bay**, which keeps its 378
+/// whatever the picture does, so a folded picture would be handed a body and
+/// fitted into it. [`program_bay`] asks the operator's fold by name and this
+/// answers `None` from it — and the size test is still in there underneath,
+/// on the fitted rectangle, for a bay with no room in it.
+///
 /// `layout` must be solved: `Layout::rect` refuses to answer from a dirty one.
 pub fn picture_rect(layout: &karakuri_layout::Layout, canvas: (u32, u32)) -> Option<Rect> {
-    let id = layout.find("program-view")?;
-    let region = to_egui(layout.rect(id));
-    let body = Rect::from_min_max(
-        Pos2::new(
-            region.min.x + size::PROGRAM_BODY_PAD,
-            region.min.y + size::HEAD_H + size::PROGRAM_BODY_PAD,
-        ),
-        Pos2::new(region.max.x - size::PROGRAM_BODY_PAD, region.max.y),
-    );
-    let rect = fitted(body, canvas);
-    // **One rule, and it is the size rather than the visibility.** A folded
-    // region keeps its rectangle and loses its extent along its parent's axis,
-    // and so does one inside a fold and one a solo left out — so `visible`
-    // would be a second answer to a question this already asks, and the two
-    // would agree until somebody found the case where they did not. What is
-    // left over is the case `visible` never covered anyway: the inset is
-    // bigger than the region, which is a rectangle `egui` draws inside out
-    // rather than refuses. Asked of the fitted rectangle rather than of the
-    // box, because the fitted one is what gets drawn — and a box under half a
-    // pixel rounds to nothing, which is nothing to draw and nothing to render
-    // into.
-    match positive(rect) {
-        true => Some(rect),
-        false => None,
-    }
+    program_bay(layout, canvas)?.picture
 }
 
 /// **Whether there is anything of this rectangle to draw**, which is the one
@@ -618,7 +655,8 @@ pub fn picture_rect(layout: &karakuri_layout::Layout, canvas: (u32, u32)) -> Opt
 /// gives a negative extent `egui` draws back-to-front rather than refuses. The
 /// three call sites had a copy of this comparison each before they had a
 /// function; the sentence is the same one in all three, and now so is the
-/// answer.
+/// answer. [`kept`] is the same rule as an `Option`, for the callers that hand
+/// the rectangle straight back.
 fn positive(rect: Rect) -> bool {
     rect.width() > 0.0 && rect.height() > 0.0
 }
@@ -629,7 +667,7 @@ fn positive(rect: Rect) -> bool {
 /// # One derivation with two call sites, and they were one rule before they
 /// were one function
 ///
-/// [`picture_rect`] fits the canvas into the `program-view` region and
+/// [`picture_rect`] fits the canvas into what the bay's body leaves it and
 /// [`preview_cells`] fits a cell into its track, and
 /// [ADR-0170](../../../docs/adr/0170-a-deck-preview-cell-is-drawn-whether-or-not-a-deck-is-behind-it.md)
 /// states the second in words the first now takes unchanged: *"as large as the
@@ -685,13 +723,33 @@ fn fitted(inside: Rect, aspect: (u32, u32)) -> Rect {
 /// An audition is the **same canvas** the picture shows, so a canvas that is
 /// not 16:9 would letterbox inside a cell — a second fit inside a rectangle
 /// `Present::draw` has already fitted, which is precisely what ADR-0170
-/// rejected one level up. The honest number here is therefore the canvas's,
-/// and it is not the canvas's yet for a reason that is structural rather than
-/// lazy: [`View::draw`] derives these rectangles itself, where it is *handed*
-/// the picture's in [`View::picture`], so making a cell canvas-aware means
-/// putting a canvas on [`View`] and writing it per frame. **That is its own
-/// pass and this is not it.**
+/// rejected one level up. The honest number here is therefore the canvas's.
+///
+/// **The reason it is not the canvas's has changed, and the number has not.**
+/// It used to be structural — *"making a cell canvas-aware means putting a
+/// canvas on [`View`] and writing it per frame"*, and there was no canvas on
+/// [`View`] to read. There is one now ([`View::canvas`]), so that reason is
+/// spent; what holds the number is
+/// [ADR-0182](../../../docs/adr/0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md)'s
+/// own decision instead — a cell is the mock's shape and never the canvas's,
+/// asserted by `a_cell_is_the_mocks_shape_and_never_the_canvass` — and making
+/// it the canvas's is still a pass of its own, with the second fit above to
+/// answer for.
 const PREVIEW_ASPECT: (u32, u32) = (16, 9);
+
+/// **What the Program bay arranges its body for when nobody has said what is
+/// being rendered**: the mock's own picture, which is `.program-view`'s
+/// `aspect-ratio: 16/9` in `style.css`.
+///
+/// A console with no engine behind it has no canvas — it is `src/` taking no
+/// device, one number further on (ADR-0156) — and it still has to put four
+/// cells somewhere, so [`View::canvas`] starts here and whoever owns the
+/// `Present` writes the real thing over it every frame. It is two numbers
+/// rather than a ratio for [`picture_rect`]'s reason, and it is the mock's
+/// **picture** rather than [`PREVIEW_ASPECT`]'s cell: the two are the same 16
+/// and 9 read off two different rules in the same stylesheet, and a `--canvas`
+/// that is not 16:9 moves one of them and not the other.
+pub const MOCK_CANVAS: (u32, u32) = (16, 9);
 
 /// **Where the four deck previews go**: a row of [`DECKS`] cells inside the
 /// `deck-previews` region, under the picture.
@@ -739,18 +797,42 @@ const PREVIEW_ASPECT: (u32, u32) = (16, 9);
 ///   rectangle the engine already fitted. Two fits for one question, which is
 ///   the thing `WHOLE_TEXTURE` refuses one level up.
 ///
-/// `layout` must be solved: `Layout::rect` refuses to answer from a dirty one.
-pub fn preview_rects(layout: &karakuri_layout::Layout) -> Option<[Rect; DECKS]> {
-    let id = layout.find("deck-previews")?;
-    preview_cells(to_egui(layout.rect(id)))
+/// # The row is one of two places the cells go, and this asks which
+///
+/// **It insets the `deck-previews` region no longer**, and it cannot: beside
+/// the picture that region has no extent at all — it is
+/// [`Layout::set_aside`](karakuri_layout::Layout::set_aside), which is exactly
+/// what leaves the bay's width to the picture — so a cell derived from it
+/// would be `None` at every window past the crossover, and deck A's audition
+/// would stop being sized, stop being drawn and stop keeping the window's loop
+/// awake. The cells come through [`program_bay`] like the picture does and
+/// like the drawing does: **one derivation, and every reader of it reads the
+/// same frame's answer.**
+///
+/// `canvas` is therefore an argument that was not here before. A cell is the
+/// mock's shape and never the canvas's ([`PREVIEW_ASPECT`]), and this still
+/// holds — what the canvas decides is *which arrangement*, because the thing
+/// being compared is the picture, and the picture is the canvas's shape.
+///
+/// `layout` must be solved: `Layout::rect` refuses to answer from a dirty one,
+/// and it wants [`rearrange`] to have been run on it — see [`program_bay`].
+pub fn preview_rects(
+    layout: &karakuri_layout::Layout,
+    canvas: (u32, u32),
+) -> Option<[Rect; DECKS]> {
+    program_bay(layout, canvas)?.cells
 }
 
 /// The four cells inside a `deck-previews` region, or `None` where there is no
 /// room for them.
 ///
-/// **One derivation with two call sites**: [`preview_rects`], which a caller
-/// sizes textures from, and [`View::draw`], which paints them. A second copy
-/// of this arithmetic is a row of cells drawn somewhere the textures are not.
+/// **One call site now, and it is the one case where the row is the answer**:
+/// [`program_bay`]'s guard branch, where the picture is folded away and the
+/// row is the whole of the bay. Everywhere else the cells come off the bay's
+/// body through [`program_body`], because everywhere else there is a picture
+/// for them to be arranged around — and the two agree to the pixel where they
+/// overlap, which is `tests/program_body.rs`'s
+/// `below_is_what_the_console_draws_today`.
 fn preview_cells(region: Rect) -> Option<[Rect; DECKS]> {
     let pad = size::PROGRAM_BODY_PAD;
     let row = Rect::from_min_max(
@@ -873,9 +955,8 @@ pub struct Body {
 /// sides, whichever leaves the picture larger.
 ///
 /// `body` is the bay **less its head and less `.program-body`'s padding** —
-/// what [`picture_rect`] insets out of the `program-view` region today, taken
-/// off the bay as a whole because the arrangement below spans both of the
-/// bay's regions and the divider between them. `canvas` is the picture's
+/// [`bay_body`], taken off the bay as a whole because the arrangement below
+/// spans both of the bay's regions and the divider between them. `canvas` is the picture's
 /// aspect and arrives as two numbers for the reason [`picture_rect`] gives at
 /// length.
 ///
@@ -1102,6 +1183,206 @@ fn drawable(placement: Placement, picture: Rect, cells: [Rect; DECKS]) -> Option
         }),
         false => None,
     }
+}
+
+/// **What the Program bay holds this frame, and where it holds it**: the
+/// picture, the four deck preview cells, and which way round the two were
+/// arranged.
+///
+/// Both halves are optional because **the bay's two regions fold apart** —
+/// `console.html`: *"The picture is a sink ... The deck previews under it are
+/// auditions of their own, so they stay when it goes."* So a bay with a
+/// picture and no cells is the operator having folded the row, a bay with
+/// cells and no picture is the operator having folded the picture, and
+/// [`program_bay`] answers `None` where the bay itself is not on screen. The
+/// two are one value for [`Body`]'s own reason: whoever placed the picture and
+/// whoever placed the cells have to be one statement, and here they are one
+/// statement about one solve as well.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ProgramBay {
+    /// Which way round the body was arranged. **[`Placement::Below`] whenever
+    /// there is no picture**, which is the guard rule below written into the
+    /// value rather than left to the caller.
+    pub placement: Placement,
+    /// Where the picture goes, or `None` where the operator folded it away or
+    /// the bay has no room for it — [`picture_rect`]'s answer.
+    pub picture: Option<Rect>,
+    /// Where the four cells go, in [`DECK_LETTERS`] order, or `None` where the
+    /// operator folded the row away — [`preview_rects`]'s answer.
+    pub cells: Option<[Rect; DECKS]>,
+}
+
+/// **The Program bay, arranged for the rectangle it solved to** — the one
+/// derivation of where the picture and the four cells go, and the only thing
+/// in this crate that reads the bay's geometry to decide it.
+///
+/// [`picture_rect`], [`preview_rects`], [`rearrange`] and [`View::draw`] are
+/// its four readers and none of them derives a rectangle of its own. That is
+/// the rule [`fitted`] and [`preview_row`] already live by, one level up:
+/// **the picture and the cells move together or they overlap.**
+///
+/// # The body is the bay's, and the bay is what does not move
+///
+/// The rectangle handed to [`program_body`] is the **bay** less the head
+/// painted over it and less `.program-body`'s padding — not the `program-view`
+/// region, which is what [`picture_rect`] used to inset. It has to be the bay,
+/// for the reason ADR-0182 gives (the arrangement below spans both regions and
+/// the divider between them) and for one more that only matters here: **the
+/// bay's rectangle does not depend on the bit this decision writes.** The bay
+/// is `Fixed(378)` over a flexible `program-view`, so what it can use is
+/// unbounded whether or not the row is set aside
+/// ([ADR-0174](../../../docs/adr/0174-a-node-claims-only-what-its-visible-content-can-use.md)),
+/// and the placement is therefore a fixed point after one write rather than
+/// something that could chase itself around the solve. [`rearrange`] is where
+/// that argument is finished.
+///
+/// # The guard rule, and it is the console's because the crate may not hold it
+///
+/// **The body only arranges itself while the picture is there.** A split can
+/// use nothing when none of its children is laid out, so setting the row aside
+/// while `program-view` is folded would leave the whole bay claiming zero and
+/// the Program bay would vanish from the panel — and the manual promises the
+/// opposite: the deck previews *"are auditions of their own, so they stay when
+/// it goes"*.
+/// [ADR-0183](../../../docs/adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md)
+/// says outright that this rule is the caller's, *"and a crate that does not
+/// know what a picture is may not hold it"*. So it is here, and it is
+/// structural rather than a check: with the picture folded there is nothing to
+/// arrange around, the row is [`Placement::Below`] at its own height in the
+/// region the arrangement gave it, and ADR-0174's round trip is exactly what
+/// it was before this pass.
+///
+/// The other fold is the mirror of it and was already true: with the row
+/// folded there are no cells to place, so the picture takes the body whole.
+///
+/// # Which bit is asked, and it is the operator's
+///
+/// [`is_collapsed`](karakuri_layout::Layout::is_collapsed) for each half and
+/// [`visible`](karakuri_layout::Layout::visible) for the bay, which is
+/// ADR-0183's two bits read apart on purpose. **Asking `visible` of the row
+/// here would be this function reading its own answer back**: the row is set
+/// aside exactly when this said *beside*, so the cells would vanish on the
+/// frame after they moved. The ancestors are asked once, of the bay, where the
+/// second bit cannot be.
+///
+/// `layout` must be solved, and it wants [`rearrange`] to have been run on it
+/// this frame — with a stale bit and a folded picture the row's region is the
+/// one place here that reads a rectangle the bit decides.
+pub fn program_bay(layout: &karakuri_layout::Layout, canvas: (u32, u32)) -> Option<ProgramBay> {
+    let bay = layout.find("program")?;
+    // The bay itself, its bay folded around it, or a solo somewhere else: one
+    // question for every ancestor, asked where `set_aside` is not in the way.
+    if !layout.visible(bay) {
+        return None;
+    }
+    let picture = layout.find("program-view")?;
+    let row = layout.find("deck-previews")?;
+    let body = bay_body(to_egui(layout.rect(bay)));
+    match (!layout.is_collapsed(picture), !layout.is_collapsed(row)) {
+        // Both halves on screen, and this is the arrangement ADR-0182 decides.
+        (true, true) => program_body(body, canvas).map(|arranged| ProgramBay {
+            placement: arranged.placement,
+            picture: Some(arranged.picture),
+            cells: Some(arranged.cells),
+        }),
+        // The row is folded: nothing to arrange around, so the picture has the
+        // body whole — the same `fitted` the two arrangements end in.
+        (true, false) => Some(ProgramBay {
+            placement: Placement::Below,
+            picture: kept(fitted(body, canvas)),
+            cells: None,
+        }),
+        // **The guard.** The picture is folded, so nothing moves: the row is
+        // below at its own height, in the region the arrangement solved for
+        // it, which is the rectangle it has had since ADR-0174.
+        (false, true) => Some(ProgramBay {
+            placement: Placement::Below,
+            picture: None,
+            cells: preview_cells(to_egui(layout.rect(row))),
+        }),
+        // Both folded. The bay has a head and no body at all, which is what it
+        // had before any of this.
+        (false, false) => None,
+    }
+}
+
+/// **The Program bay's body**: its rectangle less the head painted over the
+/// top of it and less `.program-body`'s padding on all four sides.
+///
+/// The inset [`picture_rect`] used to take off the `program-view` region, off
+/// the bay instead — and with the bottom padding taken off, which that one
+/// could not: the 9 under the picture belonged to `deck-previews` when the
+/// region was the box, and belongs to the body now that the bay is.
+fn bay_body(bay: Rect) -> Rect {
+    let pad = size::PROGRAM_BODY_PAD;
+    Rect::from_min_max(
+        Pos2::new(bay.min.x + pad, bay.min.y + size::HEAD_H + pad),
+        Pos2::new(bay.max.x - pad, bay.max.y - pad),
+    )
+}
+
+/// A rectangle, where there is anything of it to draw — [`positive`] as an
+/// `Option`, which is the shape all four of its call sites wanted.
+fn kept(rect: Rect) -> Option<Rect> {
+    match positive(rect) {
+        true => Some(rect),
+        false => None,
+    }
+}
+
+/// **Arrange the Program bay for the rectangle it has, and tell the layout
+/// what that means for the row**: `deck-previews` is set aside where the cells
+/// went beside the picture, and put back where they are under it.
+///
+/// Returns **whether anything moved**, which is a
+/// [`Change::Rearranged`](crate::repaint::Change::Rearranged) and is the whole
+/// of what a caller does with it.
+///
+/// # Where in the frame this goes, and why it is here rather than in the solve
+///
+/// The bit *has to be computed from a solved layout* — it is a function of the
+/// bay's rectangle — and *writing it dirties the layout when it changes*. So
+/// the order is forced: **solve, decide, write, solve.**
+///
+/// - **A frame on which nothing moved does no work.** Both solves are the flag
+///   test `Layout::solve` opens with, and the write is
+///   [`set_aside`](karakuri_layout::Layout::set_aside) with the value the node
+///   already carries, which marks nothing dirty by construction (ADR-0183).
+///   What is left is one [`program_bay`] — a dozen divisions and two fits, no
+///   allocation — and no repaint is asked for, which is P-0072's first clause.
+/// - **The frame it does change solves to the new arrangement and not to the
+///   previous one**, because the second solve is after the write. That frame
+///   costs **two solves**, and it is worth saying plainly rather than hiding:
+///   a placement only changes when the bay's rectangle does, which is a window
+///   resize or a drag on a boundary, and P-0072 does not budget what the
+///   operator does.
+/// - **Nothing re-enters the solve.** The value written is derived from the
+///   bay's rectangle, and the bay is `Fixed(378)` over a flexible
+///   `program-view`: what it can use is unbounded whether or not the row is
+///   set aside, so the second solve gives the bay the rectangle the first one
+///   did and asking again would write the same bit. One step, and it is a
+///   fixed point rather than a loop — `tests/rearrange.rs` asserts that by
+///   running this twice and watching the second one say nothing moved.
+///
+/// The one case where the bay's rectangle *does* depend on the bit is the one
+/// the guard rule covers: with the picture folded the bay can use only the
+/// row, and a row set aside would leave it able to use nothing. [`program_bay`]
+/// never answers *beside* there, so that fixed point is the row's 72 and not
+/// zero.
+pub fn rearrange(panel: &mut Panel, canvas: (u32, u32)) -> bool {
+    panel.solve();
+    let beside = matches!(
+        program_bay(panel.layout(), canvas).map(|bay| bay.placement),
+        Some(Placement::Beside)
+    );
+    let Some(row) = panel.layout().find("deck-previews") else {
+        return false;
+    };
+    let moved = panel.set_aside(row, beside);
+    // The second solve, and on all but the frame the placement changed it is
+    // the flag test the first one was.
+    panel.solve();
+    moved
 }
 
 /// **What the transport row reads this frame**: the session's tempo and
@@ -2298,8 +2579,8 @@ impl<'a> Mixer<'a> {
 /// that minimum every time a slot was installed.
 ///
 /// So a track with no strip in it **draws nothing at all** — not an empty
-/// strip. That is the opposite of what [`Kind::Previews`] does with a cell
-/// that is off, and the two are not in tension: a preview cell is the region's
+/// strip. That is the opposite of what [`preview`] does with a cell that is
+/// off, and the two are not in tension: a preview cell is the region's
 /// own face and says `off`, where a strip is six readings and an empty one is
 /// six readings nobody took. The mock draws such a strip — `.strip.empty`,
 /// with `—` for a name, `empty` for a tally and both tracks bare — and
@@ -3042,6 +3323,22 @@ pub struct View {
     /// [`View::new`] gives it room for [`DECKS`] so the frame path never grows
     /// it. See [`Strip`] and [`mixer`].
     pub mixer: Vec<Strip>,
+    /// **The shape of what is being rendered**, which is what the Program bay
+    /// arranges its body for — [`program_bay`], and [`picture_rect`] for why
+    /// it is two numbers rather than a ratio.
+    ///
+    /// **The same seam as [`View::picture`], and it belongs beside it**: the
+    /// picture's rectangle is handed in by whoever built the `Present`, and
+    /// this is the number that rectangle was derived from. Written per frame
+    /// by that same caller and in the same breath, so that the canvas the
+    /// texture was sized for and the canvas the bay arranged itself for cannot
+    /// be two different numbers — which would put the cells in one arrangement
+    /// and the picture in the other.
+    ///
+    /// [`MOCK_CANVAS`] until somebody says otherwise, which is every test in
+    /// this crate and is a console with no engine behind it: there is no
+    /// picture to draw, and the four cells still have to go somewhere.
+    pub canvas: (u32, u32),
     placed: Vec<Placed>,
 }
 
@@ -3055,6 +3352,7 @@ impl View {
             // As many strips as a deck can ever have, so the frame path never
             // grows it — the same reason `placed` is built with a capacity.
             mixer: Vec::with_capacity(DECKS),
+            canvas: MOCK_CANVAS,
             // Every region the console has, so the frame path never grows it.
             placed: Vec::with_capacity(REGIONS.len()),
         }
@@ -3064,9 +3362,20 @@ impl View {
     /// [`egui::Context::run_ui`] hands the frame's closure.
     pub fn draw(&mut self, ui: &mut Ui, panel: &mut Panel) {
         let pal = self.room.palette();
+        // **The bay arranges itself before anything else this frame reads the
+        // layout**, the cursor below included: the boundary between the
+        // picture and the row is not there while the cells are beside the
+        // picture, and a resize cursor drawn from the solve before the
+        // rearrangement is a cursor for a divider that has gone.
+        plan_into(panel, self.canvas, &mut self.placed);
         self.cursor(ui.ctx(), panel);
-        plan_into(panel, &mut self.placed);
 
+        // **Where the four cells go, asked once and off the same derivation
+        // the picture came through.** Not from `placed`: beside the picture
+        // the row is set aside, so `deck-previews` is not in the plan at all
+        // and a cell drawn from its entry would be a cell drawn in one of the
+        // two arrangements only.
+        let cells = program_bay(panel.layout(), self.canvas).and_then(|bay| bay.cells);
         let picture = self.picture;
         let previews = self.previews;
         let values = self.transport;
@@ -3142,17 +3451,28 @@ impl View {
                             );
                         }
                     }
-                    // The other body that is not empty, and the only one that
-                    // draws something where nothing was handed in. It is the
-                    // region's face rather than a placeholder — the module
-                    // documentation is where that argument is.
-                    Kind::Previews => {
-                        if let Some(cells) = preview_cells(rect) {
-                            for (deck, cell) in cells.into_iter().enumerate() {
-                                preview(ui, &pal, cell, deck, previews[deck]);
-                            }
-                        }
-                    }
+                    // **The one arm that draws nothing, and it is not an
+                    // empty body.** The four cells are the bay's and not this
+                    // region's: they are drawn below, once, from wherever
+                    // `program_bay` put them — which is under the picture on a
+                    // narrow bay and down the sides of a wide one, where this
+                    // region has no extent and no entry in the plan at all. A
+                    // cell drawn from here would be a cell drawn in one of the
+                    // two arrangements only.
+                    Kind::Previews => {}
+                }
+            }
+
+            // **The deck previews, wherever they went.** Painted after the
+            // loop rather than in it for the reason the arm above gives, and
+            // painting last costs nothing: they sit inside the Program bay's
+            // card, which the loop has already painted, and nothing else on
+            // the panel overlaps them. A cell is the region's own face rather
+            // than a placeholder — the module documentation is where that
+            // argument is.
+            if let Some(cells) = cells {
+                for (deck, cell) in cells.into_iter().enumerate() {
+                    preview(ui, &pal, cell, deck, previews[deck]);
                 }
             }
         });

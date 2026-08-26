@@ -8,7 +8,7 @@
 
 mod common;
 
-use common::{drawn_once, id_of, near, rect_of, solved, PLAUSIBLE, SMALLEST};
+use common::{arranged, drawn_once, id_of, near, rect_of, solved, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{Palette, Room};
@@ -49,7 +49,7 @@ const ROWS: &[&str] = &["transport", "outputs"];
 
 fn planned(panel: &mut Panel) -> Vec<Placed> {
     let mut out = Vec::new();
-    plan_into(panel, &mut out);
+    plan_into(panel, CANVAS, &mut out);
     out
 }
 
@@ -67,7 +67,13 @@ fn planned(panel: &mut Panel) -> Vec<Placed> {
 /// table that the arrangement does not have is caught too.
 #[test]
 fn every_leaf_of_the_arrangement_is_drawn_and_none_is_skipped() {
-    let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
+    // **The narrowest console the mock draws**, where the Program bay's body
+    // is the mock's own arrangement and every one of the thirteen regions is
+    // in the plan. `PLAUSIBLE` is the other case and it is below, because
+    // there the deck previews are beside the picture and the row they used to
+    // be in is set aside — a region out of the plan for a reason that is not
+    // the operator's.
+    let mut panel = Panel::new(SMALLEST.w, SMALLEST.h);
     let placed = planned(&mut panel);
     let layout = panel.layout();
 
@@ -122,6 +128,36 @@ fn every_leaf_of_the_arrangement_is_drawn_and_none_is_skipped() {
     assert!(at("inspector-1") < at("inspector-2"));
     assert!(at("program") < at("program-view"));
     assert!(at("program-view") < at("deck-previews"));
+
+    // **And at a window past the crossover, one region is missing on
+    // purpose.** The four cells went beside the picture, so `deck-previews` is
+    // set aside and is not a rectangle to draw — the cells are drawn from
+    // `View::draw`'s one site off `program_bay`, and the leaf loop above is
+    // satisfied because a region that is not `visible` is not asked for.
+    // `tests/rearrange.rs` is where that arrangement is held; what this says
+    // is that the *table* is still complete, one row shorter.
+    let mut wide = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
+    let placed = planned(&mut wide);
+    let layout = wide.layout();
+    for node in wide.nodes() {
+        if layout.is_view(node.id) && layout.visible(node.id) {
+            assert!(
+                placed.iter().any(|p| p.id == node.id),
+                "{:?} is a leaf of the arrangement and nothing draws it",
+                layout.name(node.id)
+            );
+        }
+    }
+    let row = id_of(layout, "deck-previews");
+    assert!(
+        layout.is_set_aside(row) && !layout.is_collapsed(row),
+        "the row is not set aside at a 1920 window, so the cells are still under the picture"
+    );
+    assert_eq!(placed.len(), REGIONS.len() - 1);
+    assert!(
+        !placed.iter().any(|p| p.region.name == "deck-previews"),
+        "the row is set aside and is still being asked for as a rectangle to draw"
+    );
 }
 
 /// **A bay gets a head and a row does not.**
@@ -281,15 +317,32 @@ fn the_pictures_rectangle_is_its_region_less_the_head_and_the_padding() {
 /// when an operator drags the program's height past what the width can carry,
 /// and then the width limits and the leftover is above and below — a case a
 /// rule written for wide windows alone gets wrong in silence.
+///
+/// # The window is arranged first, and the region is a different region past
+/// the crossover
+///
+/// Every assertion below is against the `program-view` region, and past a
+/// 1588-wide window that region is the **whole bay**: the cells have gone down
+/// the sides and the row is set aside, so the picture's region is the bay
+/// itself less nothing. The claims still hold term for term — the picture is
+/// still the canvas's shape, still whole pixels, still centred in what the
+/// region leaves, still inside it — which is the point worth having: *the
+/// picture never leaves the rectangle it is clipped to* is the one property
+/// that does not care which arrangement won, and it is the property a
+/// rearrangement half-applied would break.
 #[test]
 fn the_picture_is_the_canvass_shape_at_every_window() {
     for width in [990.0, 1010.0, 1280.0, 1920.0, 3440.0] {
-        let layout = solved(karakuri_layout::Rect {
-            w: width,
-            ..SMALLEST
-        });
-        let rect = picture_rect(&layout, CANVAS).expect("the picture is on screen");
-        let region = rect_of(&layout, "program-view");
+        let panel = arranged(
+            karakuri_layout::Rect {
+                w: width,
+                ..SMALLEST
+            },
+            CANVAS,
+        );
+        let layout = panel.layout();
+        let rect = picture_rect(layout, CANVAS).expect("the picture is on screen");
+        let region = rect_of(layout, "program-view");
 
         assert!(
             (rect.width() / rect.height() - 16.0 / 9.0).abs() < 0.01,
@@ -329,33 +382,64 @@ fn the_picture_is_the_canvass_shape_at_every_window() {
     }
 
     // **The width stops following the window**, which is the pass the change
-    // removes: the region grows and the picture does not.
-    let narrow = picture_rect(&solved(SMALLEST), CANVAS).expect("on screen");
-    let wide = picture_rect(&solved(PLAUSIBLE), CANVAS).expect("on screen");
+    // removes: the region grows and the picture does not. Stated **within an
+    // arrangement**, because ADR-0182 put a step between the two — below, the
+    // picture stops at the mock's 466 and the leftover is ground; beside, it
+    // stops at what the bay's *height* carries and the leftover is ground
+    // again. Neither follows the window; there is one step between them and
+    // `tests/rearrange.rs` is where it is held.
+    let below = |w: f32| {
+        let panel = arranged(karakuri_layout::Rect { w, ..SMALLEST }, CANVAS);
+        picture_rect(panel.layout(), CANVAS).expect("on screen")
+    };
+    let narrow = below(SMALLEST.w);
+    let mid = below(1500.0);
     assert!(
-        near(wide.width(), narrow.width()) && near(wide.height(), narrow.height()),
-        "a window nearly twice as wide changed the picture: {:?} against {:?}",
-        wide.size(),
+        near(mid.width(), narrow.width()) && near(mid.height(), narrow.height()),
+        "a window 510 wider changed the picture below the crossover: {:?} against {:?}",
+        mid.size(),
         narrow.size()
     );
-    // And the region did grow, so the assertion above is about the rule and
-    // not about a window that never widened.
-    let region = rect_of(&solved(PLAUSIBLE), "program-view");
-    assert!(region.w - wide.width() > 900.0);
+    let wide = below(PLAUSIBLE.w);
+    let widest = below(3440.0);
+    assert!(
+        near(widest.width(), wide.width()) && near(widest.height(), wide.height()),
+        "a window 1520 wider changed the picture beside the cells: {:?} against {:?}",
+        widest.size(),
+        wide.size()
+    );
+    // And the region did grow, in both, so the assertions above are about the
+    // rule and not about a window that never widened.
+    let panel = arranged(PLAUSIBLE, CANVAS);
+    let region = rect_of(panel.layout(), "program-view");
+    assert!(region.w - wide.width() > 700.0);
 
     // **A height drag is what does still grow it**, which is the half of the
     // manual's "sized by height" that survives: the region is much wider than
     // the canvas at this window, so the height is what limits and the picture
     // follows it.
+    // **A bay dragged this tall is below's country and the layout needs no
+    // rearranging**: two columns of a body 835 tall are 1488 wide and the body
+    // is 1396, so beside cannot be drawn at all and the bit stays false. That
+    // is ADR-0182's *"a tall bay widens both columns until below wins again"*,
+    // reached from the other end.
     let mut layout = solved(PLAUSIBLE);
     let centre = id_of(&layout, "centre");
     layout.set_divider(centre, 0, 4000.0);
     layout.solve();
     let dragged = picture_rect(&layout, CANVAS).expect("on screen");
+    // **Against the same window before the drag**, and it is a ratio rather
+    // than the 400 pixels this used to add: `wide` is the picture *beside* the
+    // cells now, 592 x 333 rather than the mock's 466 x 262, so the margin it
+    // was compared against was measured on a rectangle that is no longer the
+    // one at this window. Doubling is the claim either way — the picture goes
+    // to 726 tall, and it was 333.
     assert!(
-        dragged.height() > wide.height() + 400.0,
-        "dragging the program taller left the picture at {} tall",
-        dragged.height()
+        dragged.height() > wide.height() * 2.0,
+        "dragging the program taller left the picture at {} tall against the {} it had \
+         before the drag",
+        dragged.height(),
+        wide.height()
     );
     assert!(
         (dragged.width() / dragged.height() - 16.0 / 9.0).abs() < 0.01,
@@ -505,7 +589,7 @@ fn a_folded_picture_has_no_rectangle() {
 #[test]
 fn the_preview_cells_are_the_mocks_at_the_width_the_mock_draws() {
     let layout = solved(SMALLEST);
-    let cells = preview_rects(&layout).expect("the previews are on screen");
+    let cells = preview_rects(&layout, CANVAS).expect("the previews are on screen");
     let region = rect_of(&layout, "deck-previews");
 
     for (deck, cell) in cells.iter().enumerate() {
@@ -572,15 +656,40 @@ fn the_preview_cells_are_the_mocks_at_the_width_the_mock_draws() {
 /// wider window widens the track and not the row, and a cell that filled its
 /// track would stop being 16:9 the moment the window left `SMALLEST`. It is
 /// 16:9 and centred instead, which is what these assertions say.
+///
+/// # Why the widths stop at 1500, and it is not a threshold nudged to pass
+///
+/// **This is the row, and past a 1588-wide window there is no row**: the cells
+/// go down the sides of the picture and `deck-previews` is set aside, so every
+/// assertion here about the region they tile is an assertion about a rectangle
+/// with nothing in it. The four widths are the four of the old five that are
+/// below the crossover, and the fifth is asserted at the bottom to be past it
+/// — so a crossover that moved fails here rather than quietly leaving this
+/// test asserting the row's arithmetic at one width. The cells' arrangement
+/// beside the picture is `tests/rearrange.rs`, and the arithmetic of both is
+/// `tests/program_body.rs`.
+///
+/// A body 1064 wide is where the flip is, and the body is the window less 524
+/// — the two side tracks, the four dividers and `.program-body`'s padding — so
+/// the last window with a row in it is **1587**.
 #[test]
 fn the_preview_cells_tile_their_region_and_stay_sixteen_by_nine() {
-    for width in [990.0, 1010.0, 1280.0, 1920.0, 3440.0] {
-        let layout = solved(karakuri_layout::Rect {
-            w: width,
-            ..SMALLEST
-        });
-        let cells = preview_rects(&layout).expect("the previews are on screen");
-        let region = rect_of(&layout, "deck-previews");
+    for width in [990.0, 1010.0, 1280.0, 1500.0] {
+        let panel = arranged(
+            karakuri_layout::Rect {
+                w: width,
+                ..SMALLEST
+            },
+            CANVAS,
+        );
+        let layout = panel.layout();
+        let cells = preview_rects(layout, CANVAS).expect("the previews are on screen");
+        let region = rect_of(layout, "deck-previews");
+        assert!(
+            !layout.is_set_aside(id_of(layout, "deck-previews")),
+            "at {width} wide the row is set aside, so this is not the arrangement being \
+             asserted below"
+        );
         let row_left = region.x + 9.0;
         let row_right = region.x + region.w - 9.0;
 
@@ -636,6 +745,24 @@ fn the_preview_cells_tile_their_region_and_stay_sixteen_by_nine() {
             cells[0].height()
         );
     }
+
+    // **1587 is the last window with a row in it and 1588 is the first
+    // without**, which is what makes the four widths above the four that are
+    // in this test's country rather than four that happen to pass.
+    let row_at = |w: f32| {
+        let panel = arranged(karakuri_layout::Rect { w, ..SMALLEST }, CANVAS);
+        panel
+            .layout()
+            .is_set_aside(id_of(panel.layout(), "deck-previews"))
+    };
+    assert!(
+        !row_at(1587.0),
+        "the row went beside the picture before 1588"
+    );
+    assert!(
+        row_at(1588.0),
+        "the cells are still in the row at 1588 wide"
+    );
 }
 
 /// **No rectangles where the row is folded away**, which is `picture_rect`'s
@@ -649,11 +776,11 @@ fn the_preview_cells_tile_their_region_and_stay_sixteen_by_nine() {
 #[test]
 fn a_folded_preview_row_has_no_rectangles() {
     let mut layout = solved(PLAUSIBLE);
-    assert!(preview_rects(&layout).is_some());
+    assert!(preview_rects(&layout, CANVAS).is_some());
 
     layout.collapse(id_of(&layout, "deck-previews"));
     layout.solve();
-    assert_eq!(preview_rects(&layout), None);
+    assert_eq!(preview_rects(&layout, CANVAS), None);
 
     // The picture is still there, so this is the row being folded and not the
     // bay — *"The deck previews under it are auditions of their own, so they
@@ -662,7 +789,7 @@ fn a_folded_preview_row_has_no_rectangles() {
 
     layout.expand(id_of(&layout, "deck-previews"));
     layout.solve();
-    assert!(preview_rects(&layout).is_some());
+    assert!(preview_rects(&layout, CANVAS).is_some());
 
     // **And the fold the other way round, which is the sentence the example's
     // readout now prints**: *"fold the picture away (f over it) and deck A
@@ -676,7 +803,7 @@ fn a_folded_preview_row_has_no_rectangles() {
     layout.solve();
     assert_eq!(picture_rect(&layout, CANVAS), None);
     assert!(
-        preview_rects(&layout).is_some(),
+        preview_rects(&layout, CANVAS).is_some(),
         "the picture is folded and the previews went with it, so an audition \
          that should still be running has nowhere to go"
     );
@@ -685,14 +812,14 @@ fn a_folded_preview_row_has_no_rectangles() {
     let mut layout = solved(PLAUSIBLE);
     layout.collapse(id_of(&layout, "program"));
     layout.solve();
-    assert_eq!(preview_rects(&layout), None);
+    assert_eq!(preview_rects(&layout, CANVAS), None);
 
     // And a solo on the picture, which leaves the row out rather than folding
     // it.
     let mut layout = solved(PLAUSIBLE);
     layout.solo(id_of(&layout, "program-view"));
     layout.solve();
-    assert_eq!(preview_rects(&layout), None);
+    assert_eq!(preview_rects(&layout, CANVAS), None);
 }
 
 // ---------------------------------------------------------------------------

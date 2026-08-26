@@ -317,6 +317,24 @@ Building it found that **the Program bay's height was a rounded 16:9 from the da
 claiming *"exactly 466 x 262, which is 16:9"* were never true — and the test below one of them
 already knew, checking that ratio 200 times looser than every other assertion in its file.
 
+**And the Program bay rearranges itself.** With a wide, short bay the four deck previews leave the
+row under the picture and go into two columns beside it — A and B down the left, C and D down the
+right — because that is the placement that gives the larger picture
+([ADR-0182](adr/0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md) decides,
+[ADR-0184](adr/0184-the-program-bay-rearranges-itself-and-a-still-frame-does-not.md) draws). At a
+1920 window the picture is **1.61x** what it was. The crossover is a **curve in width and height**
+rather than a width: a bay dragged to its own minimum goes beside at every width, and one dragged
+tall comes back. One flip along each axis, never a flicker, asserted by sweep rather than by
+threshold.
+
+It cost `karakuri-layout` one bit
+([ADR-0183](adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md)): a node
+is out of the layout for **two** reasons — the operator folded it, or whoever is drawing has put it
+somewhere else — and sharing one flag would have made an unfold put an empty strip back and saved a
+fold nobody made. **A still frame still does nothing**: the write is idempotent, the decision is a
+dozen divisions, and the repaint answer is `Never` unless the placement moved. The frame it moves
+costs two solves and that is written down rather than hidden.
+
 **The Outputs row is built, and it is the console's first clickable control.** One sink —
 `program view` — and nothing else, because the projector window, the plugin sinks and `+ add
 output` do not exist and a row of dead names is scaffolding that looks finished. The dot is lit
