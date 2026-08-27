@@ -67,7 +67,12 @@ not about design, and it had no home until the manual had one.
   `Operation` now** (ADR-0196), and fifteen of the CLI's thirty-nine keys reach the deck through
   the same call it does (ADR-0198); of the rest, nine name an operation whose record nobody can
   write yet and twelve name one that writes no record at all and therefore has to be performed by
-  the surface holding the state. MCP has not moved
+  the surface holding the state. **All four surfaces have an answer now**: the console's own
+  arrangement operations stay where they are, blocked on the manual rather than on the code
+  (ADR-0197), and **MCP names its six tools' operations and performs them itself** (ADR-0199) —
+  every one of the six writes no record where it is asked, so there is nothing for `Live::operate`
+  to do with them, and what routes is the name. The manual's MCP column is the first of the four
+  route columns a test can check
 - Audio input exists — spectrum, energy, onset, and a beat grid that corrects the local
   oscillator. External sync exists out of process: `--tempo-source` runs a separate program
   that reports where the beat is, and the first one is Ableton Link. See [docs/plugins.md](docs/plugins.md)

@@ -507,8 +507,18 @@ program.
    which also record that continuous movement proves liveness at every instant where the grid's
    one-lit-dot flip proves it only across an interval — a **preference**, and not a decision to
    change the beat.
-3. **The other surfaces onto [`karakuri-operation`](../crates/karakuri-operation).** The faders
-   proved its shape and **`karakuri-midi` has moved** —
+3. **The other surfaces onto [`karakuri-operation`](../crates/karakuri-operation).** **All four
+   surfaces have an answer now, and only one of the four was the wholesale move this sentence
+   described.** MIDI moved outright; the CLI's keys had mostly moved already and the rest divides
+   into gestures that convert in part and keys that cannot route at all; the console's `panel::Op`
+   stays, blocked on the page rather than on the code; and MCP names its operations and performs
+   them itself. The four are below, and what separates them is one question — **what
+   `karakuri-operation-record`'s `written` answers for the operations a surface names**. A surface
+   whose operations write records routes through `Live::operate`; a surface whose operations are
+   `Silent` performs them where the state is, because `operate` would print *no record* and do
+   nothing.
+
+   The faders proved its shape and **`karakuri-midi` has moved** —
    [ADR-0196](adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md): `Action` is gone, a
    map line names a state (`residency 0 live`, `blend 0 over`) and a file holding an old line is
    refused on that line with the line to write instead. What it cost is the pad count, which is
@@ -521,8 +531,8 @@ program.
    in `run_surface` is `TapBeat`, which needs the beat tracker rather than a value and is
    `Owed::NotSettled`; it goes the day that record is settled.
 
-   **The console's `panel::Op` and the CLI's key handler have not moved**, and each is a change of
-   its own —
+   **The console's `panel::Op` and the CLI's key handler did not move with it**, and each was a
+   change of its own —
    [P-0074](principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md).
 
    **`panel::Op` is surveyed now, and what it is waiting on is the page rather than the code** —
@@ -557,6 +567,26 @@ program.
    three records this program derived twice. A test reads the source for records written outside
    `operate` and a second asserts the seven owed operations are still owed, so the day one of those
    conversions lands the failure names the key that is due to move.
+
+   **MCP names its operations and performs them itself** —
+   [ADR-0199](adr/0199-mcp-names-its-operations-and-performs-them-itself.md). Its six tools are six
+   of the forty-six: `read_procedure`, `write_procedure`, `swap_outcome`, `save_set`, `read_set` and
+   `list_sets` are `ReadProcedure`, `WriteProcedure`, `SwapOutcome`, `SaveSet`, `ReadSet` and
+   `ListSets`, and **`written` answers `Silent` for every one of them** — `Question` for the four
+   that ask, `OnLanding` for the two whose record is written where the work lands
+   (`Record::Procedure` at the swap, `Record::Save` at the frame the save landed). So MIDI's route
+   is unavailable twice over: `Live::operate` would do nothing, and there is no `Live` on a
+   connection thread to call it on — the server reaches the render loop for exactly one thing, and
+   `save_set` already ends where the `k` key ends. What routes is the **naming**: the call becomes
+   the operation in `asked` and `perform` dispatches on that rather than on the tool's name.
+   Unlike `panel::Op` there is a caller, and unlike MIDI there is nothing downstream to gain — which
+   is why this is the third distinct answer to one sentence. **`NodeAt` and
+   `karakuri_operation::Layer` get their first caller in the workspace**, because a node address is
+   what MCP can say and the other three surfaces cannot. **The page needed no edit**: all six rows
+   exist and all six MCP badges were already right, which the other three surfaces cannot say. The
+   column is now enforced both ways round and by badge text as well as by title, which is the first
+   of the four route columns to become checkable at all — the vocabulary's own manual test says
+   those *"become checkable one surface at a time as they migrate"*.
 4. **The remaining bays**: library, staging, inspector, master, sequencer.
 
 **Decisions nobody has taken, each blocking something named above.** These are questions rather

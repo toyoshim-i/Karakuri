@@ -35,17 +35,28 @@
 //! only because MIDI needed it first — and which now routes through it rather
 //! than through a vocabulary of its own.
 //!
-//! **Three surfaces route through it and two do not.** `karakuri-console`'s
-//! mixer faders were the first customer; `karakuri-cli`'s mix controls are the
-//! second — gain, opacity, blend, residency, preview, the tone map, the
-//! exposure and the scrub each name an operation and hand it to
-//! `karakuri-operation-record`; and `karakuri-midi`'s map is the third, which
-//! took `Action` away with it
-//! (`docs/adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md`).
-//! `karakuri_console::panel::Op` and the rest of `karakuri-cli`'s key handler
-//! keep working exactly as they did; this is the target they move to one at a
-//! time. Said here because an invariant that is not yet true says so
-//! (`docs/principles/0036-…`).
+//! **Four surfaces name their operations here, and they do not all route the
+//! same way.** `karakuri-console`'s mixer faders were the first customer;
+//! `karakuri-cli`'s mix controls are the second — gain, opacity, blend,
+//! residency, preview, the tone map, the exposure and the scrub each name an
+//! operation and hand it to `karakuri-operation-record`; `karakuri-midi`'s map
+//! is the third, which took `Action` away with it
+//! (`docs/adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md`);
+//! and `karakuri-cli`'s MCP server is the fourth, which names its six tools'
+//! operations and **performs them itself**
+//! (`docs/adr/0199-mcp-names-its-operations-and-performs-them-itself.md`).
+//!
+//! **What separates them is what `karakuri-operation-record`'s `written`
+//! answers.** An operation that writes a record can be handed to a performer;
+//! one that is `Silent` has to be performed by whoever holds the state, because
+//! a performer built out of records would do nothing with it. That is why
+//! twelve of the keyboard's keys keep a path of their own
+//! (`docs/adr/0198-…`), why `karakuri_console::panel::Op` keeps its own type
+//! (`docs/adr/0197-…`), and why all six MCP tools do their own work. Said here
+//! because an invariant that is not yet true says so
+//! (`docs/principles/0036-…`): *every surface routes into the named operation*
+//! is true of the naming everywhere, and of the performing only where there is
+//! a record to perform.
 //!
 //! # What a variant carries, and what it does not
 //!
