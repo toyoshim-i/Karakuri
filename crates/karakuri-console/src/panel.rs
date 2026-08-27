@@ -392,6 +392,32 @@ pub(crate) fn unit(at: f32) -> f32 {
 /// rectangle, so the pointer could never be over one, so `f` on the keyboard
 /// only ever folded. What changes is that a *named* target can be folded
 /// already, and now the caller says which way it means.
+///
+/// # This is not `karakuri_operation::Operation`, and what keeps it apart is a
+/// name
+///
+/// The vocabulary names the same five things — `FoldBay`, `FoldPane`,
+/// `Unfold`, `Solo`, `MoveBoundary` — and names a region by `String`, because
+/// it is a leaf crate with no dependencies and cannot say [`NodeId`]. A
+/// `NodeId` has a private field and only a `Layout` hands one out, so the two
+/// cannot be one type: a caller holding a layout has the handle, and a caller
+/// with none has the name.
+///
+/// **These operations write no record**, so nothing downstream of this module
+/// changes when they move — `karakuri-operation-record` answers
+/// `Silent(Surface)` for all four. Routing into the vocabulary here would mean
+/// the panel *accepting* a named region rather than emitting one, and the
+/// survey that costed it is
+/// [ADR-0197](../../../docs/adr/0197-the-consoles-op-stays-and-what-blocks-it-is-the-page-rather-than-the-code.md).
+/// Four things are in the way and every one is a question about
+/// `docs/manual/operations.html`: [`Reset`](Op::Reset) and
+/// [`Report`](Op::Report) have no row on it,
+/// [`FoldEnclosing`](Op::FoldEnclosing) names its target by relation where
+/// every row names one outright, *Move a boundary* is a drag and never an
+/// operation, and **two splits in this arrangement have no name** — the root
+/// column and the body row — which a pointer reaches through
+/// `Hit::Divider { split, .. }` and a `String` cannot say at all.
+/// `tests/vocabulary.rs` asserts all four, both ways round.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Op {
     /// Fold this region away.

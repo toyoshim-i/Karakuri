@@ -524,6 +524,21 @@ program.
    **The console's `panel::Op` and the CLI's key handler have not moved**, and each is a change of
    its own —
    [P-0074](principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md).
+
+   **`panel::Op` is surveyed now, and what it is waiting on is the page rather than the code** —
+   [ADR-0197](adr/0197-the-consoles-op-stays-and-what-blocks-it-is-the-page-rather-than-the-code.md).
+   It is not the migration MIDI did: the four console rows are `Silent(Surface)` in `written`, so no
+   record, no `Live::operate` and no exhaustiveness are anywhere on this path, and routing here
+   would mean the panel *accepting* a named region rather than emitting one — for which there is no
+   caller, since every route on all five *Arranging the console* rows is `—` except the pointer.
+   Eight variants against five rows leaves four gaps, and every one is a decision about
+   `docs/manual/operations.html`: **`Reset` and `Report` have no row**, so renaming them would put
+   an unspecified operation on the page; **`Move a boundary` has no `Op`** and never will, being a
+   drag; **`FoldEnclosing` names its target by relation** rather than outright; and **two splits
+   have no name at all** — the root column and the body row — which the pointer folds through
+   `Hit::Divider` and a `String` cannot say. Naming those two is the decision that unblocks the
+   rest, and nobody has taken it. The inventory is a test now
+   (`crates/karakuri-console/tests/vocabulary.rs`), so none of the four closes by accident.
 4. **The remaining bays**: library, staging, inspector, master, sequencer.
 
 **Decisions nobody has taken, each blocking something named above.** These are questions rather

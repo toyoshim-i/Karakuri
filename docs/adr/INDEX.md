@@ -222,6 +222,7 @@ number; new records continue from the end.
 | [ADR-0194](0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md) | Where an operation becomes a record is a crate that depends on both, and the reading is a value handed in | 2026-08-27 | accepted |
 | [ADR-0195](0195-the-tally-chip-cycles-from-the-request-so-the-parked-case-needs-no-case.md) | The tally chip cycles from the request, so the parked case needs no case | 2026-08-27 | accepted |
 | [ADR-0196](0196-a-map-line-names-a-state-and-an-old-line-is-refused.md) | A map line names a state, and an old line is refused rather than redefined | 2026-08-27 | accepted |
+| [ADR-0197](0197-the-consoles-op-stays-and-what-blocks-it-is-the-page-rather-than-the-code.md) | The console's `Op` stays, and what blocks its migration is the page rather than the code | 2026-08-27 | accepted |
 
 ## Retired numbers
 
