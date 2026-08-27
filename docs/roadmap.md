@@ -539,6 +539,24 @@ program.
    `Hit::Divider` and a `String` cannot say. Naming those two is the decision that unblocks the
    rest, and nobody has taken it. The inventory is a test now
    (`crates/karakuri-console/tests/vocabulary.rs`), so none of the four closes by accident.
+
+   **The CLI's key handler is surveyed too, and most of it had already moved** —
+   [ADR-0198](adr/0198-a-gesture-converts-in-the-parts-that-are-decided.md). Fifteen of its
+   thirty-nine keys already reached `Live::operate`, from ADR-0194 onward; what the sentence above
+   meant was that no *arm of the `match`* moved, and the handlers those arms call had. What is left
+   divides three ways and only one of them is work: **nine keys** (`f g`, `x`, `c`, `r`, `y`, `b`,
+   `, .`) name operations that are `Owed::NotSettled` and keep their own path with the reason at the
+   function; **twelve** (`0`–`3`, `z n j`, `a`, `k`, `o p`, `esc`) name operations `written` answers
+   `Silent` for and **cannot route through `operate` at all** — it would print *no record* and the
+   key would do nothing, because what a `Silent` operation changes is the surface's own state and
+   this surface is the only thing holding it; and **three** (`s`, `h`, `?`) name nothing in the
+   vocabulary. What did move is the parts of two gestures: `crossfade` and `wipe` are owed as
+   *gestures* and their silencing, blend and put-on-air steps are ordinary `SetOpacity`,
+   `SetBlendMode` and `SetResidency`, so those go through `operate` and
+   `mix::opacity_record`, `mix::blend_record` and `mix::residency_record` are deleted — the last
+   three records this program derived twice. A test reads the source for records written outside
+   `operate` and a second asserts the seven owed operations are still owed, so the day one of those
+   conversions lands the failure names the key that is due to move.
 4. **The remaining bays**: library, staging, inspector, master, sequencer.
 
 **Decisions nobody has taken, each blocking something named above.** These are questions rather
@@ -551,8 +569,11 @@ than work, and every one of them was found by building the thing next to it.
   wipe shape) is `SetTransition`'s, and that operation writes no record at all
   ([ADR-0194](adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)).
   **Nine of the 46 conversions are built** — six that need no reading, and the look pair and
-  `ScrubDeck`, whose readings are settled. `karakuri-cli` is wired to it and is the second customer;
-  no key arm moved, so the key handler's migration is still item 3 above.
+  `ScrubDeck`, whose readings are settled. `karakuri-cli` is wired to it and is the second customer.
+  *"No key arm moved"* was written here and read as *nothing moved*: what did not move was the
+  `match` in `Live::key`, and the handlers behind fifteen of its keys had already moved with this
+  commit. The key handler's survey is
+  [ADR-0198](adr/0198-a-gesture-converts-in-the-parts-that-are-decided.md), under item 3 above.
 
   **What the survey found, and each of these is a question rather than work.**
   - **Seven operations owe a record nobody can write yet**, and they divide three ways: scheduling
@@ -569,7 +590,12 @@ than work, and every one of them was found by building the thing next to it.
     model can rewrite a procedure and cannot turn a knob *into the session stream*, and that is a
     gap in the session vocabulary rather than a conversion waiting to be written.
   - **One control is not one record.** `Crossfade` is four and `Wipe` is five, which is what
-    `karakuri-cli` already does for them.
+    `karakuri-cli` already does for them — and since
+    [ADR-0198](adr/0198-a-gesture-converts-in-the-parts-that-are-decided.md) it does the *decided*
+    ones through `Live::operate`: the silencing, the blend and the put-on-air are ordinary
+    operations whatever the gesture around them owes, and only the mask and the scheduled move are
+    built where they stand. **The mask has no operation at all** — there is no `SetMask` — which is
+    the same gap the console's mask mini reports from the other side.
   - **ADR-0180's "one `From` impl per list in `karakuri-cli`" cannot be written** — the orphan rule
     refuses it, since neither `Blend` nor `BlendMode` is that package's. They are plain functions.
   - **`--bpm` has a record now.** `SetFreeRunTempo` writes the `tempo` record `Record::Tempo`'s own

@@ -63,8 +63,11 @@ not about design, and it had no home until the manual had one.
   rule. [`karakuri-operation`](crates/karakuri-operation) is those 46 names, checked against
   [the manual's own page](docs/manual/operations.html) by a test, and
   [`karakuri-operation-record`](crates/karakuri-operation-record) is where one becomes a record —
-  the step that makes a fader, a key and a MIDI knob the same thing. The CLI's mix controls route
-  through both; its key handler, the MIDI map and MCP have not moved onto them yet
+  the step that makes a fader, a key and a MIDI knob the same thing. **The MIDI map is an
+  `Operation` now** (ADR-0196), and fifteen of the CLI's thirty-nine keys reach the deck through
+  the same call it does (ADR-0198); of the rest, nine name an operation whose record nobody can
+  write yet and twelve name one that writes no record at all and therefore has to be performed by
+  the surface holding the state. MCP has not moved
 - Audio input exists — spectrum, energy, onset, and a beat grid that corrects the local
   oscillator. External sync exists out of process: `--tempo-source` runs a separate program
   that reports where the beat is, and the first one is Ableton Link. See [docs/plugins.md](docs/plugins.md)
