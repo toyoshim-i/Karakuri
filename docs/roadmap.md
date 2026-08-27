@@ -1420,6 +1420,29 @@ the Set model.
 Note that imported material is often extremely expensive. Allowing it makes the budget
 governor mandatory rather than advisory.
 
+**A keyboard is mapped and learned the same way a control surface is.** The keys are a
+`match` in `karakuri-cli` today, and there is no reason they should be: the vocabulary is what
+made a MIDI map possible, and a key is another way to name the same operation. The grammar is
+already written — `examples/surface.map` says `<target> <deck> <value>`, and a key is a third
+`Key` beside `Cc` and `Note` — so the map file's parser is nearly all of the work, and whether
+that lives in `karakuri-midi` or moves out of it is the question that goes with it, since a
+crate named for a wire would then be parsing something that never touches one.
+
+**Learning it belongs on the control, which is the maintainer's own model**: a GUI component is
+a translator between one Karakuri operation and N ways in, so *learn this control* is one
+gesture from one place, and MIDI is only the first of the N. **Both learn paths wait on the same
+missing mechanism**, and it is worth knowing which: **this console draws no tooltips at all**.
+`view.rs` says so where the Outputs row and the mixer would have had them — a tooltip needs
+`egui` to own a widget and this console paints — so the mock's `⊕ MIDI: note 41` has nowhere to
+be shown yet, and neither would a key.
+
+**What a keyboard map has to name that a MIDI map never did**: twelve of the CLI's thirty-nine
+keys write no record at all — the deck selection, the transition settings, the window, quitting
+— because they are the surface's own state (ADR-0194's group (c), ADR-0198). Every operation a
+map line can produce today writes a record, so a keyboard map is the first map file that would
+name operations the record layer never sees, and what a map file may say is then a slightly
+larger question than *which keys*.
+
 **Also deferred:** projection mapping and multi-output warping, DMX and Art-Net lighting
 sync, collaborative multi-operator sessions, video file playback, and any browser or wasm
 target. The engine is native for Syphon, NDI, low-latency audio, MIDI, and GPU timestamp
