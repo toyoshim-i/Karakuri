@@ -79,13 +79,19 @@ karakuri-ir.workspace = true
 # It is a dev-dependency because it is the *example's*: `src/` emits operations
 # and applies nothing, and nothing in it may reach a record (ADR-0156).
 karakuri-operation-record = { version = "0.1.0", path = "../karakuri-operation-record" }
-# **For `Record`, and for one pass of the example alone.** ADR-0185 expected
+# **For `Record` and for `Store`.** ADR-0185 expected
 # this dependency to leave with the hand-written conversion; it does not, and
 # the reason is the other half of the seam: `apply` takes a `&Record` and turns
 # it into a deck movement, which is the half ADR-0185 never promised to delete.
 # `karakuri-operation-record` answers *what was written* and names `Record` in
 # its answer without re-exporting it, so the example still has to be able to
 # say the word.
+#
+# `Store` is the second reason and it is the Library bay's: the bay lists what
+# the store holds, and `Store::list_sets` is the one answer to *what does this
+# library have in it*. It is a dev-dependency for the same reason the rest of
+# this list is — reading a directory is the harness's, and `src/` takes a list
+# of names (ADR-0156).
 karakuri-store.workspace = true
 
 # **The example carries tests, so it is a test target.** Cargo builds an example

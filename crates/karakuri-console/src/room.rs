@@ -539,4 +539,42 @@ pub mod size {
         + STRIP_NUM_SIZE * LINE
         + MINI_H
         + STRIP_GAP_Y * 5.0;
+
+    // -- the library's list -------------------------------------------------
+
+    /// `.lib-list`'s `padding: 3px`: the ring of card the rows sit inside,
+    /// under the bay head. The library's minimum of 132 in `lib.rs` is written
+    /// from the same 3 — *"a list of three rows (3 + 3 of `.lib-list` padding,
+    /// plus 3 x 22.5)"* — so the padding a rectangle is inset by here and the
+    /// minimum the bay declares are one number or neither.
+    pub const LIB_LIST_PAD: f32 = 3.0;
+
+    /// `.lib-row`'s `padding: 3px 7px`, around a Set's name at [`BASE`]. The
+    /// rows stack with no gap between them: `.lib-list` is a column flex with
+    /// no `gap` at all, which is the one list in the mock that has none.
+    pub const LIB_ROW_PAD_X: f32 = 7.0;
+    pub const LIB_ROW_PAD_Y: f32 = 3.0;
+
+    /// A row's box: [`BASE`] at [`LINE`] inside that padding — **22.5**, which
+    /// is the 22.5 the library's minimum of 132 is written from in `lib.rs`,
+    /// so a row is this tall in both places or in neither.
+    pub const LIB_ROW_H: f32 = BASE * LINE + LIB_ROW_PAD_Y * 2.0;
+
+    /// `.lib-foot`'s `padding: 5px 10px`, around the count at
+    /// [`LIB_FOOT_SIZE`].
+    pub const LIB_FOOT_PAD_X: f32 = 10.0;
+    pub const LIB_FOOT_PAD_Y: f32 = 5.0;
+
+    /// `.lib-foot`'s `font-size: 10px`: how many rows are listed of how many
+    /// there are, and the only type in the row.
+    pub const LIB_FOOT_SIZE: f32 = 10.0;
+
+    /// The foot's box: [`LIB_FOOT_SIZE`] at [`LINE`] inside that padding, plus
+    /// the one pixel of the rule above it — [`HAIRLINE`], which is
+    /// `.lib-foot`'s own border-top and the same pixel every other rule in the
+    /// mock is drawn at. **26**, and unlike the bay head's 27 no minimum in
+    /// `lib.rs` is written from it: the library's minimum was written before
+    /// this row was drawn and counts the scope row this console does not draw
+    /// instead, which is 31 against this 26 and so is the larger of the two.
+    pub const LIB_FOOT_H: f32 = LIB_FOOT_PAD_Y * 2.0 + LIB_FOOT_SIZE * LINE + HAIRLINE;
 }
