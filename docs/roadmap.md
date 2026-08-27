@@ -562,14 +562,21 @@ console is an example rather than the program.
    record, no `Live::operate` and no exhaustiveness are anywhere on this path, and routing here
    would mean the panel *accepting* a named region rather than emitting one — for which there is no
    caller, since every route on all five *Arranging the console* rows is `—` except the pointer.
-   Eight variants against five rows leaves four gaps, and every one is a decision about
+   Eight variants against five rows leaves three gaps, and every one is a decision about
    `docs/manual/operations.html`: **`Reset` and `Report` have no row**, so renaming them would put
    an unspecified operation on the page; **`Move a boundary` has no `Op`** and never will, being a
-   drag; **`FoldEnclosing` names its target by relation** rather than outright; and **two splits
-   have no name at all** — the root column and the body row — which the pointer folds through
-   `Hit::Divider` and a `String` cannot say. Naming those two is the decision that unblocks the
-   rest, and nobody has taken it. The inventory is a test now
-   (`crates/karakuri-console/tests/vocabulary.rs`), so none of the four closes by accident.
+   drag; and **two splits have no name at all** — the root column and the body row — which the
+   pointer folds through `Hit::Divider` and a `String` cannot say. Naming those two is the decision
+   that unblocks the rest, and nobody has taken it. The inventory is a test now
+   (`crates/karakuri-console/tests/vocabulary.rs`), so none of the three closes by accident.
+
+   **`FoldEnclosing` was the fourth and is not a gap**, which is a rule rather than a new decision:
+   naming a target by relation is the caller's and never the operation's — `Operation::Crossfade`
+   states it at its own variant, and
+   [ADR-0175](adr/0175-an-operation-carries-what-it-acts-on.md) already moved *under the pointer*
+   out of this variant once. What is left is `Fold(layout.parent(id))`, one step up the tree on the
+   model's side of that seam, so it performs a fold the page already specifies and the page owes it
+   no row.
 
    **The CLI's key handler is surveyed too, and most of it had already moved** —
    [ADR-0198](adr/0198-a-gesture-converts-in-the-parts-that-are-decided.md). Fifteen of its
