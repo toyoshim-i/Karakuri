@@ -864,9 +864,72 @@ proc wash {
         }
         assert_eq!(deck.mask(1).position(), 1.0, "the wipe did not finish");
         // The shape survived: a move carries the position and leaves the kind
-        // alone, which is why `set_mask` does not cancel a transition.
+        // alone, which is why `set_mask_shape` does not cancel a transition.
         assert_eq!(deck.mask(1).kind(), MaskKind::Linear);
         assert_eq!(deck.transitions_on(1).count(), 0);
+    }
+
+    /// **The operator wins on the position, and the shape is not a hand on
+    /// it.**
+    ///
+    /// The two halves of a mask answer a scheduled move differently, and this
+    /// is what says so in both directions at once — because a cancel written
+    /// into the wrong one of the two setters passes every other test in this
+    /// file. `set_mask_position` writes the number `Control::MaskPosition` is
+    /// carrying, so a hand on it stops the move
+    /// (`docs/principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md`);
+    /// `set_mask_shape` writes no position, so there is nothing under its hand
+    /// and a shape chosen mid-wipe changes what is being wiped rather than
+    /// stopping it.
+    ///
+    /// No frame is drawn: the question is what the deck holds, and
+    /// `Deck::transitions_on` is where the answer is.
+    #[test]
+    fn a_hand_on_the_front_stops_the_wipe_and_a_hand_on_the_shape_does_not() {
+        let gpu = Gpu::headless().expect("no GPU available");
+        let mut deck = deck_of(&gpu, &[SEED_A, SEED_B]);
+        deck.set_signals(Signals::new(120.0, 1));
+        let wipe = |deck: &mut Deck| {
+            deck.set_mask_shape(1, MaskKind::Linear, 0.0);
+            deck.set_mask_position(1, 0.0);
+            let start = deck.signals().oscillator().beats();
+            deck.schedule(Transition::new(
+                1,
+                Control::MaskPosition,
+                0.0,
+                1.0,
+                start,
+                4.0,
+                Curve::Lin,
+            ));
+        };
+
+        wipe(&mut deck);
+        deck.set_mask_shape(1, MaskKind::Radial, 0.0);
+        assert_eq!(
+            deck.transitions_on(1).count(),
+            1,
+            "choosing a shape mid-wipe cancelled the move — a shape writes no position, \
+             so it is not a hand on the control the transition is carrying, and a wipe \
+             that stopped because somebody changed what it wipes with is a move nobody \
+             withdrew"
+        );
+        assert_eq!(
+            deck.mask(1).kind(),
+            MaskKind::Radial,
+            "the shape did not land"
+        );
+
+        wipe(&mut deck);
+        deck.set_mask_position(1, 0.75);
+        assert_eq!(
+            deck.transitions_on(1).count(),
+            0,
+            "a hand on the front left the move running — the transition writes that same \
+             number every frame, so it would take the front straight back and the \
+             operator would be holding a control that fights back"
+        );
+        assert_eq!(deck.mask(1).position(), 0.75, "the front did not land");
     }
 
     /// A Set drawn by two renderers over one simulation, composited.

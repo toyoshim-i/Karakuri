@@ -416,9 +416,11 @@ asserted mid-gesture, so nothing keeps a second copy of the mix.
 
 The vocabulary survived contact and four things about it are now known rather than assumed:
 `Operation` is not `Copy`, so its cheapest variants pay for its heaviest; `deck: u8` costs a cast
-per gesture; **there is no `SetMask`**, so the mask mini is a readout of state no operation can set;
-and the trim reaches only the bottom half of what `SetGain` expresses, because it is drawn over
-`[0, 1]` while the mix is HDR.
+per gesture; **there was no `SetMask`**, so the mask mini was a readout of state no operation could
+set — the mask has two rows now, a shape and a position
+([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)), and what is
+left is the mini becoming a control; and the trim reaches only the bottom half of what `SetGain`
+expresses, because it is drawn over `[0, 1]` while the mix is HDR.
 
 **The blend mini is the third control and it cycles**
 ([ADR-0187](adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)). A
@@ -488,8 +490,16 @@ console is an example rather than the program.
    purpose**: it had to be able to say a request is pending
    ([ADR-0190](adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md))
    before it answered one, because a control that could not yet say it is pending would look dead.
-   The mask mini is waiting on a decision rather than on work, and the decision is below: there is
-   no `SetMask`.
+   **The mask mini was waiting on a decision and is now waiting on work.** The decision is taken —
+   the mask is two rows, a shape and a position
+   ([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)) — and
+   turning the mini into a control is deliberately not part of it, for the reason the tally's
+   presentation landed a commit before its pointer: the row a picker would emit into now exists to
+   be aimed at, and the picker is the mini's own change. **The MIDI map's two targets are the same
+   shape of leftover**: `parse_target` names no mask, so `note -> mask 0 radial` is a line nobody
+   can write yet — and an **angle has no spelling in that grammar at all**, since a map line
+   carries a slot number, a word out of a value list, or a range, and there is no float form. Both
+   are a change of their own.
 2. **The rest of P-0072, and it is nearer than this item used to say.** Three live regions with
    three characters now exist — the picture expensive and every frame, the beat grid cheap and
    twice a second, the mixer expensive and hardly moving — which is what a scheduler was waiting
@@ -548,7 +558,7 @@ console is an example rather than the program.
    where the exhaustiveness lives** — `run_surface`'s claim that *a control added to one and not
    the other does not compile* would be false against forty-six variants, so the MIDI path is now
    message → `Operation` → `Live::operate` and the compiler's guarantee is
-   `karakuri-operation-record`'s `written`, which is one match over all forty-six. The one arm left
+   `karakuri-operation-record`'s `written`, which is one match over all forty-eight. The one arm left
    in `run_surface` is `TapBeat`, which needs the beat tracker rather than a value and is
    `Owed::NotSettled`; it goes the day that record is settled.
 
@@ -598,7 +608,7 @@ console is an example rather than the program.
 
    **MCP names its operations and performs them itself** —
    [ADR-0199](adr/0199-mcp-names-its-operations-and-performs-them-itself.md). Its six tools are six
-   of the forty-six: `read_procedure`, `write_procedure`, `swap_outcome`, `save_set`, `read_set` and
+   of the forty-eight: `read_procedure`, `write_procedure`, `swap_outcome`, `save_set`, `read_set` and
    `list_sets` are `ReadProcedure`, `WriteProcedure`, `SwapOutcome`, `SaveSet`, `ReadSet` and
    `ListSets`, and **`written` answers `Silent` for every one of them** — `Question` for the four
    that ask, `OnLanding` for the two whose record is written where the work lands
@@ -673,8 +683,9 @@ than work, and every one of them was found by building the thing next to it.
   rather than a trait — because part of what a record needs (the quantum, the length of a fade, the
   wipe shape) is `SetTransition`'s, and that operation writes no record at all
   ([ADR-0194](adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)).
-  **Nine of the 46 conversions are built** — six that need no reading, and the look pair and
-  `ScrubDeck`, whose readings are settled. `karakuri-cli` is wired to it and is the second customer.
+  **Eleven of the 48 conversions are built** — six that need no reading, and the look pair,
+  `ScrubDeck` and the mask pair, whose readings are settled. `karakuri-cli` is wired to it and is
+  the second customer.
   *"No key arm moved"* was written here and read as *nothing moved*: what did not move was the
   `match` in `Live::key`, and the handlers behind fifteen of its keys had already moved with this
   commit. The key handler's survey is
@@ -694,13 +705,16 @@ than work, and every one of them was found by building the thing next to it.
     nowhere to put the deck — and `SetCompositing` is the same shape against `Record::Merge`. A
     model can rewrite a procedure and cannot turn a knob *into the session stream*, and that is a
     gap in the session vocabulary rather than a conversion waiting to be written.
-  - **One control is not one record.** `Crossfade` is four and `Wipe` is five, which is what
+  - **One control is not one record.** `Crossfade` is four and `Wipe` is **six**, which is what
     `karakuri-cli` already does for them — and since
     [ADR-0198](adr/0198-a-gesture-converts-in-the-parts-that-are-decided.md) it does the *decided*
     ones through `Live::operate`: the silencing, the blend and the put-on-air are ordinary
-    operations whatever the gesture around them owes, and only the mask and the scheduled move are
-    built where they stand. **The mask has no operation at all** — there is no `SetMask` — which is
-    the same gap the console's mask mini reports from the other side.
+    operations whatever the gesture around them owes. **The mask joined them and cost the gesture a
+    record**: it is two operations now, a shape and a position
+    ([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)), each of
+    which writes `Record::Mask` whole — so a wipe writes two where it wrote one, which is what
+    routing it honestly costs rather than a saving that was available. Only the scheduled move is
+    still built where it stands.
   - **ADR-0180's "one `From` impl per list in `karakuri-cli`" cannot be written** — the orphan rule
     refuses it, since neither `Blend` nor `BlendMode` is that package's. They are plain functions.
   - **`--bpm` has a record now.** `SetFreeRunTempo` writes the `tempo` record `Record::Tempo`'s own
@@ -768,8 +782,17 @@ than work, and every one of them was found by building the thing next to it.
   yet, because nothing has tried it"* now has its first user. The chip refuses nothing, so there is
   still nothing to decide about locking the panel, and `karakuri-cli`'s `w` already reads the same
   half of the pair.
-- **`SetMask` does not exist**, so the mask mini is a readout of state no operation can set. The row
-  has to be settled on [the operations page](manual/operations.html) before it can be a control.
+- **~~`SetMask` does not exist~~ — taken, and it is two rows rather than one.** *Set a deck's mask
+  shape* and *Set a deck's mask position*, because a single row carrying both would be a press and
+  `karakuri-midi`'s grammar refuses a control change on a press — so no control change could ever
+  reach a mask position
+  ([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)). `softness`
+  stays out for `white_point`'s reason: one constant, no control, no row. **What it leaves undone is
+  named where the work is**: the mask mini becoming a control is item 1 above, and the map's two
+  targets are beside it. The rule the split makes expressible is
+  [P-0078](principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md), which
+  also says where it stops holding — a `Record::Mask` is a state and not an ask, so the stream
+  cannot carry which half was asked for.
 - **What a status line is, on a console with no terminal.** `karakuri-cli`'s `s`, `h` and `?` name
   nothing in the vocabulary, because the status line and the bindings text have **no row on
   [the operations page](manual/operations.html)** — the specification for which keys exist. They
@@ -1155,7 +1178,7 @@ event rather than an operation), and **the camera**.
 could be edited there until nodes had names, and nothing can be routed here until operations
 do. [Every operation](manual/operations.html) is where that enumeration is written down, and a
 surface missing from an operation's row is a line of this milestone's work. **It is written**:
-46 operations, and 50 of the 200 ways in exist. **Five of those arrived from
+48 operations, and 50 of the 208 ways in exist. **Five of those arrived from
 the console's own shape** — moving a boundary, folding a bay or a pane, bringing one back, and
 solo — and all twenty of their routes are empty except the pointer, which is the first rule broken
 by the surface the first rule is about.

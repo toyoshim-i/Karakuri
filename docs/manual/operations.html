@@ -46,7 +46,7 @@
       <span><i class="gap"></i> nothing &mdash; this surface cannot reach it at all</span>
     </div>
     <p>
-      <strong>46 operations, and 50 of the 200 ways in exist.</strong> Five of them
+      <strong>48 operations, and 50 of the 208 ways in exist.</strong> Five of them
       arrived with the console's own shape &mdash; moving a boundary, folding a bay
       or a pane, bringing one back, and solo &mdash; and every one of their twenty
       routes is empty except the pointer, which four of the five have. Bringing
@@ -254,6 +254,26 @@
         <div class="rts">
           <span class="rt plan">panel <b>transition row</b></span>
           <span class="rt has">key <b>c</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Set a deck's mask shape</h3><span class="op-when ">immediate</span></div>
+        <p>What shape of the frame a deck's layer reaches &mdash; none, a straight front at an angle, or an iris &mdash; and it leaves the front where it is. Not the row <b>z</b> presses: that one chooses what the <em>next</em> wipe will be, where this one changes the mask a deck has now. A pad would name a shape the way it names a blend mode; the angle it could not name at all, because a map line has no way to write a bare number.</p>
+        <div class="rts">
+          <span class="rt plan">panel <b>strip mask mini</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
+      <div class="op">
+        <div class="op-head"><h3>Set a deck's mask position</h3><span class="op-when ">immediate</span></div>
+        <p>How far the front has travelled: 0 reveals nothing, 1 reveals everything. The number a wipe's scheduled move is writing, so a hand here stops the move &mdash; which is the whole reason the mask is two rows and not one, since a control change carries a position and can only set.</p>
+        <div class="rts">
+          <span class="rt gap">panel <b>&mdash;</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
           <span class="rt gap">MIDI <b>&mdash;</b></span>
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
@@ -602,8 +622,10 @@
     <h2>What the gaps say</h2>
     <p>
       <strong>MIDI is the narrowest by a wide margin.</strong> It reaches
-      seven of these forty-six operations, and it cannot express a node
-      address, a parameter name or an id. It no longer has a vocabulary of its
+      seven of these forty-eight operations, and it cannot express a node
+      address, a parameter name or an id &mdash; nor a bare number, so a mask's
+      angle has no spelling there even once a mask target exists. It no
+      longer has a vocabulary of its
       own, though: a map line names one of the operations on this page, and it
       names it outright &mdash; which state, which mode &mdash; rather than
       saying <em>step it</em>. It also has no idea of a selected deck &mdash;

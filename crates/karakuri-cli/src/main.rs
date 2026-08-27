@@ -42,7 +42,7 @@ use karakuri_engine::frame;
 use karakuri_engine::swap::Event;
 use karakuri_engine::transport::{Sync, Transport};
 use karakuri_engine::{
-    Binding, Blend, Deck, Gpu, HotSwap, Look, Mask, MaskKind, ParamWrite, Present, Residency, Set,
+    Binding, Blend, Deck, Gpu, HotSwap, Look, MaskKind, ParamWrite, Present, Residency, Set,
     Signals, TonemapOp, DEFAULT_BUDGET_MS,
 };
 use karakuri_operation::Operation;
@@ -5821,10 +5821,10 @@ impl Live {
     ///
     /// **This used to be a match over eight `Action`s claiming that a control
     /// added to one and not the other does not compile.** Against a
-    /// forty-six-variant vocabulary that claim would be false — a router arm
+    /// forty-eight-variant vocabulary that claim would be false — a router arm
     /// nobody wrote is a wildcard nobody notices. The guarantee is now where
     /// it is true: `karakuri_operation_record::written` is one exhaustive
-    /// match over all forty-six, so an operation nobody has said what to do
+    /// match over all forty-eight, so an operation nobody has said what to do
     /// with stops the build there.
     ///
     /// **[`Operation::TapBeat`] is handled here and it is the only one**, for
@@ -6727,12 +6727,21 @@ impl Live {
     /// wherever the operator had it, and `over` is only forced when the slot
     /// was still at the default. That way `m` in front of `c` means something.
     ///
-    /// **Three of its five records are operations, and two are not.** The
-    /// opacity, the blend mode and the put-on-air go through
-    /// [`Live::operate`], because each of them *is* an operation the
-    /// vocabulary names. The mask has no operation at all — there is no
-    /// `SetMask` — and the scheduled move is [`Operation::Wipe`]'s own record,
-    /// which is `Owed::NotSettled` for [`Live::crossfade`]'s reason.
+    /// **Five of its six records are operations, and one is not.** The mask's
+    /// shape, its position, the opacity, the blend mode and the put-on-air go
+    /// through [`Live::operate`], because each of them *is* an operation the
+    /// vocabulary names; only the scheduled move is left, and it is
+    /// [`Operation::Wipe`]'s own record, `Owed::NotSettled` for
+    /// [`Live::crossfade`]'s reason.
+    ///
+    /// **Six records where it used to write five**, and the extra one is what
+    /// routing the mask honestly costs rather than an accident: the shape and
+    /// the front are two operations
+    /// (`docs/adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md`)
+    /// and each of them writes a whole `Record::Mask`, because the record is a
+    /// state and not an ask. The pair lands in that order, so the front is at
+    /// 0 when the move is scheduled — which is the same picture the one
+    /// hand-built record made.
     fn wipe(&mut self) {
         let under = self.focus;
         let over = (under + 1) % self.deck.slot_count();
@@ -6744,13 +6753,19 @@ impl Live {
             eprintln!("no mask shape — `z` chooses one, and a wipe is a shape moving");
             return;
         }
-        let mask = Mask::new(self.mask_kind, self.mask_angle, 0.0, MASK_SOFTNESS);
-        // **The mask is the owed part of this gesture and the only one left
-        // here.** There is no `SetMask`, so nothing in the vocabulary names
-        // what this record carries — see the roadmap's *decisions nobody has
-        // taken*. The three below it are ordinary operations and go the way a
-        // MIDI pad goes.
-        self.record(mix::mask_record(over, mask));
+        // The shape first and the front second, which is the order the picture
+        // needs: the front has to be at 0 before the move that carries it to 1
+        // is scheduled. Each writes a whole `Record::Mask`, so the second one
+        // restates the shape the first one chose.
+        self.operate(&Operation::SetMaskShape {
+            deck: over as u8,
+            kind: mix::wipe_kind(self.mask_kind),
+            angle: self.mask_angle,
+        });
+        self.operate(&Operation::SetMaskPosition {
+            deck: over as u8,
+            position: 0.0,
+        });
         self.operate(&Operation::SetOpacity {
             deck: over as u8,
             opacity: 1.0,
@@ -7118,9 +7133,21 @@ impl Live {
             }
             _ => None,
         };
+        // The mask of the deck the operation names, on the transport's terms:
+        // both halves of a mask write the record whole, so each of them needs
+        // the half it did not ask for.
+        let mask = match operation {
+            Operation::SetMaskShape { deck, .. } | Operation::SetMaskPosition { deck, .. } => {
+                let slot = usize::from(*deck);
+                slot_in_range(slot, self.deck.slot_count())
+                    .then(|| mix::current_mask(self.deck.mask(slot)))
+            }
+            _ => None,
+        };
         let current = Current {
             look: Some(mix::current_look(&self.look)),
             transport,
+            mask,
         };
         match karakuri_operation_record::written(operation, &current) {
             Written::Records(records) => {
