@@ -93,11 +93,20 @@ fn nothing_resolves_that_is_not_a_named_region() {
     );
 }
 
-/// The body row — the one holding the two panes and the centre — is
-/// deliberately anonymous: nothing folds, solos or drags it, and
-/// `karakuri-layout` gives a split a name only where an operation addresses
-/// it. This is here so that giving it one is a decision somebody makes rather
-/// than a line somebody adds.
+/// The body row — the one holding the two panes and the centre — has **no
+/// name**, and *nothing reaches it* is not the reason. `Layout::hit` hands the
+/// row out as `Hit::Divider { split, .. }` and `examples/panel.rs`'s
+/// fold-at-pointer turns that into `Op::Fold(split)`, so `g` over the gap
+/// between two panes folds this row today. What it cannot be is reached by
+/// anything holding only a name — a keyboard, a MIDI map or MCP — and giving
+/// it one would assert that folding the row of three panes is an operation an
+/// operator asks for, which is a decision nobody has taken (ADR-0197).
+///
+/// So this is not a test that the row is unreachable. It pins the two things
+/// that decision would change: the row is still the three-way split holding
+/// the panes and the centre, and it still answers `None` when asked for a
+/// name. Naming it is then a line somebody writes here on purpose, rather
+/// than one that arrives with an edit to the arrangement.
 #[test]
 fn the_row_holding_the_panes_and_the_centre_is_unnamed() {
     let layout = karakuri_console::layout();

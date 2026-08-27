@@ -409,15 +409,21 @@ pub(crate) fn unit(at: f32) -> f32 {
 /// the panel *accepting* a named region rather than emitting one, and the
 /// survey that costed it is
 /// [ADR-0197](../../../docs/adr/0197-the-consoles-op-stays-and-what-blocks-it-is-the-page-rather-than-the-code.md).
-/// Four things are in the way and every one is a question about
+/// Three things are in the way and every one is a question about
 /// `docs/manual/operations.html`: [`Reset`](Op::Reset) and
-/// [`Report`](Op::Report) have no row on it,
-/// [`FoldEnclosing`](Op::FoldEnclosing) names its target by relation where
-/// every row names one outright, *Move a boundary* is a drag and never an
-/// operation, and **two splits in this arrangement have no name** — the root
-/// column and the body row — which a pointer reaches through
+/// [`Report`](Op::Report) have no row on it, *Move a boundary* is a drag and
+/// never an operation, and **two splits in this arrangement have no name** —
+/// the root column and the body row — which a pointer reaches through
 /// `Hit::Divider { split, .. }` and a `String` cannot say at all.
-/// `tests/vocabulary.rs` asserts all four, both ways round.
+/// `tests/vocabulary.rs` asserts all three, both ways round.
+///
+/// [`FoldEnclosing`](Op::FoldEnclosing) was counted as a fourth, for naming
+/// its target by relation where every row names one outright. It is not one:
+/// naming a target by relation is the caller's and not the operation's — the
+/// rule `Operation::Crossfade` states at its own variant, and the one
+/// ADR-0175 applied here — so what is left on this side is
+/// `Fold(self.layout.parent(id))`, the fold the page already specifies on a
+/// node this model works out. **The page owes it no row.**
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Op {
     /// Fold this region away.

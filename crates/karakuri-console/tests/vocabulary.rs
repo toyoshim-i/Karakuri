@@ -18,7 +18,7 @@
 //! the same type, and the question *do they name the same operations* is not
 //! answered by either crate's own suite.
 //!
-//! # The four things it pins, and every one of them is a gap
+//! # The three things it pins, and every one of them is a gap
 //!
 //! - **Two `Op` variants have no row**: [`Op::Reset`] and [`Op::Report`]. The
 //!   page is the specification for *which operations exist*, so an operation
@@ -29,11 +29,6 @@
 //!   [`karakuri_console::panel::Panel::press`], `moved` and `released` — a
 //!   gesture rather than an operation. The vocabulary carries it as
 //!   `Undecided` for the same reason, and says so at the variant.
-//! - **One `Op` is an addressing form** and not an operation of its own:
-//!   [`Op::FoldEnclosing`] names its target *by relation* — the split around
-//!   whatever the pointer is over — where the page's two fold rows name theirs
-//!   outright. It lands on *Fold a pane away* when that split is a pane, and
-//!   on nothing at all when it is not, which is the next gap.
 //! - **Two splits in the console's arrangement have no name**, so nothing but
 //!   the pointer can reach them: the root column and the body row. `Layout`
 //!   hands both to a caller as `Hit::Divider { split, .. }`, the example's `g`
@@ -42,8 +37,34 @@
 //!   `String` cannot say either — `Layout::name` answers `None` — so an `Op`
 //!   replaced by an `Operation` would lose them.
 //!
-//! None of the four is a bug to fix here. Each is a decision about the page,
+//! None of the three is a bug to fix here. Each is a decision about the page,
 //! and this file is what stops one of them being closed by accident.
+//!
+//! # [`Op::FoldEnclosing`] is not a fourth, and the rule is what settles it
+//!
+//! It reads like one. It names its target *by relation* — the split around
+//! whatever the pointer is over — where every row on the page names one
+//! outright, so an inventory taken by eye counts it as an operation the page
+//! has no word for. But **naming a target by relation is the caller's and
+//! never the operation's**, and that is settled three times over.
+//! `karakuri_operation::Operation::Crossfade` states it as a rule at the
+//! variant — *"**Both decks named.** *The next deck* is the keyboard's
+//! translation of this, not the operation."* ADR-0175 applied it to this
+//! variant already: *under the pointer* stopped being part of what an
+//! operation **means** and became one way of naming which region, so the two
+//! arms live in `examples/panel.rs` and a divider arrives as
+//! [`Op::Fold`] of the split it already names. And [`Op`]'s own doc says it
+//! outright — *"**Resolving the pointer is the caller's**"*.
+//!
+//! What is left on the model's side of that seam is one step up the tree:
+//! `FoldEnclosing(id)` is `Fold(layout.parent(id))`, and `Panel::op` is where
+//! the parent is read. So it performs the fold the page already specifies, on
+//! a node the model works out, and **the page owes it no row** — which is why
+//! [`rows_of`] gives it the same two rows as [`Op::Fold`] rather than a row of
+//! its own. A row appearing on the page *for* it would be the specification
+//! gaining an operation this rule says it does not need, and
+//! [`every_row_on_the_page_has_an_operation`] is the assertion that fails
+//! then: a row no `Op` reaches is a row somebody has to account for.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -129,9 +150,14 @@ fn rows() -> Vec<String> {
 fn rows_of(op: Op) -> &'static [&'static str] {
     match op {
         Op::Fold(_) => &["Fold a bay away", "Fold a pane away"],
-        // The split around what the pointer is over. A pane when that split is
-        // one, and nothing the page names when it is the root or the body row.
-        Op::FoldEnclosing(_) => &["Fold a pane away"],
+        // `Fold` of a node the model works out — `layout.parent(id)` — so it
+        // performs whichever of the two folds that node turns out to be, and
+        // needs no row of its own. Both rows for the same reason `Fold` has
+        // both: the split enclosing a region of a bay is that bay, and the
+        // split enclosing a bay is the pane it is stacked in. Where the parent
+        // is a split the page specifies no fold for, that is a question about
+        // the page's rows rather than about this variant.
+        Op::FoldEnclosing(_) => &["Fold a bay away", "Fold a pane away"],
         // One row over both, which is the vocabulary's own reading:
         // `Unfold { region }` is `Some` for the named region and `None` for
         // everything folded — "two of its variants under one heading".
