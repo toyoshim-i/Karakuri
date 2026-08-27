@@ -157,8 +157,17 @@ const PROGRAM_DIVIDER: f32 = 8.0;
 /// addressed — the program's bottom edge is a divider of *this* split, and a
 /// drag on the program's height reaches it by name.
 ///
-/// The body row holding all three is left **unnamed**: nothing folds, solos
-/// or drags it as a whole, and a split nobody addresses does not get a name.
+/// The body row holding all three has **no name**, and neither has the root
+/// column it sits in — and *nobody addresses them* is not the reason.
+/// `Layout::hit` hands a split out as `Hit::Divider { split, .. }`,
+/// `examples/panel.rs`'s fold-at-pointer turns that into `Op::Fold(split)`,
+/// and `Outcome::Folded`'s `root` exists to report the root's own case. So
+/// **both splits fold through the pointer today**; what they cannot be is
+/// reached by anything holding only a name — a keyboard, a MIDI map or MCP.
+/// **Naming them is a decision nobody has taken** (ADR-0197): it would assert
+/// that folding the whole panel away, and folding the row of three panes, are
+/// operations an operator asks for, and neither has a row on the manual's
+/// operations page.
 ///
 /// `inspector-1` and `inspector-2` are the inspector's two panes. The
 /// inspector itself is the split, so the divider between them is reached as
