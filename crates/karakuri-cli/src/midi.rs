@@ -163,9 +163,9 @@ impl Router {
 ///
 /// **The five arms are every operation a map line can produce**, and
 /// `karakuri_midi::map`'s `parse_target` is that list — `cc -> exposure` and
-/// `note -> tap` name no deck, and the other forty-one operations have no
+/// `note -> tap` name no deck, and the other forty-three operations have no
 /// spelling in the grammar at all. The wildcard is what the vocabulary being
-/// forty-six wide costs here, and it is safe rather than merely convenient:
+/// forty-eight wide costs here, and it is safe rather than merely convenient:
 /// **the record path is the backstop.** A slot this deck does not hold is
 /// refused by `mix::change` with [`crate::no_such_slot`] — this very sentence —
 /// and nothing moves, where the old `Action` path indexed a `Vec` directly and

@@ -226,6 +226,7 @@ number; new records continue from the end.
 | [ADR-0198](0198-a-gesture-converts-in-the-parts-that-are-decided.md) | A gesture converts in the parts that are decided, and a key that writes no record performs it itself | 2026-08-27 | accepted |
 | [ADR-0199](0199-mcp-names-its-operations-and-performs-them-itself.md) | MCP names its operations and performs them itself, because all six are `Silent` | 2026-08-27 | accepted |
 | [ADR-0200](0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md) | A bay's first pass draws the values that exist and omits the rest, rather than drawing an empty case the mock never drew | 2026-08-27 | accepted |
+| [ADR-0201](0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md) | The mask is two rows, because a control change can only set | 2026-08-27 | accepted |
 
 ## Retired numbers
 

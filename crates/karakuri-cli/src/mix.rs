@@ -50,10 +50,17 @@
 //! decided and builds only the parts that are not, and the second derivation is
 //! gone rather than kept in step by a test.
 //!
-//! **The rest are still here and each has a reason.** `mask_record` is `wipe`'s
-//! and has **no operation at all** — there is no `SetMask` — so it is not a
-//! second derivation of anything. `transition_record` is `fade_slot`'s and
-//! `wipe`'s and `select_record` is `cycle_renderer`'s: `Operation::FadeDeck`,
+//! **`mask_record` went the same way, and it is the one that needed a page
+//! change first.** It was `wipe`'s and had no operation at all; the mask now
+//! has two — a shape and a position, because a row carrying both could only
+//! ever be reached by a press
+//! (`docs/adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md`)
+//! — so the gesture asks `Live::operate` for each of them and the hand-built
+//! record is gone. It writes two `Record::Mask` where it wrote one, which is
+//! what routing it honestly costs: each row writes the record whole.
+//!
+//! **The rest are still here and each has a reason.** `transition_record` is
+//! `fade_slot`'s and `wipe`'s and `select_record` is `cycle_renderer`'s: `Operation::FadeDeck`,
 //! `Operation::Crossfade`, `Operation::Wipe` and `Operation::SelectRenderer`
 //! all need the grid quantised onto a musical instant, plus the quantum and the
 //! length that `Operation::SetTransition` sets and no record carries.
@@ -199,6 +206,15 @@ pub fn residency(level: Residency) -> karakuri_operation::Residency {
     }
 }
 
+/// The engine's mask shape, as the vocabulary's. See [`blend_mode`].
+pub fn wipe_kind(kind: MaskKind) -> karakuri_operation::WipeKind {
+    match kind {
+        MaskKind::None => karakuri_operation::WipeKind::None,
+        MaskKind::Linear => karakuri_operation::WipeKind::Linear,
+        MaskKind::Radial => karakuri_operation::WipeKind::Radial,
+    }
+}
+
 /// The engine's sync mode, as the vocabulary's. See [`blend_mode`].
 pub fn sync(mode: Sync) -> karakuri_operation::Sync {
     match mode {
@@ -243,14 +259,27 @@ pub fn current_transport(transport: &Transport) -> karakuri_operation_record::Tr
     }
 }
 
-/// A slot's mask, as the record that carries it.
-pub fn mask_record(slot: usize, mask: Mask) -> Record {
-    Record::Mask {
-        slot: slot as u8,
-        kind: mask.kind().name().to_string(),
+/// **The mask a slot is wearing, as the reading the conversion needs.**
+///
+/// `Operation::SetMaskShape` carries a shape and `Operation::SetMaskPosition`
+/// carries a position, because those are the two things a surface can say
+/// separately; `Record::Mask` carries both and the soft edge, because that is
+/// what a replay can reconstruct a picture from. This is what closes the gap
+/// between them, on [`current_look`]'s terms.
+pub fn current_mask(mask: Mask) -> karakuri_operation_record::Mask {
+    karakuri_operation_record::Mask {
+        kind: wipe_kind(mask.kind()),
         angle: mask.angle(),
         position: mask.position(),
-        softness: mask.softness(),
+        // **The soft edge is this program's rather than the slot's**, and it
+        // is the one field here that is not read back. No operation names a
+        // softness — it has one constant behind it and no control, which is
+        // why it is not in the vocabulary — and a slot nobody has masked
+        // reports the engine's default of zero, so reading it back would give
+        // the first wipe of a run the hard aliased front `MASK_SOFTNESS`
+        // exists to not have. What this program writes is what it has always
+        // written.
+        softness: crate::MASK_SOFTNESS,
     }
 }
 
@@ -662,12 +691,36 @@ mod tests {
     /// nothing on an operation that is not one record, because a test silently
     /// given no record is a test that checks nothing.
     fn from_operation(operation: karakuri_operation::Operation) -> Record {
-        use karakuri_operation_record::{Current, Written};
-        match karakuri_operation_record::written(&operation, &Current::default()) {
+        from_operation_reading(operation, karakuri_operation_record::Current::default())
+    }
+
+    /// The same, for an operation whose record is not a function of the
+    /// operation alone. The mask pair is the case: each half writes
+    /// `Record::Mask` whole, so each needs the other half read back.
+    fn from_operation_reading(
+        operation: karakuri_operation::Operation,
+        current: karakuri_operation_record::Current,
+    ) -> Record {
+        use karakuri_operation_record::Written;
+        match karakuri_operation_record::written(&operation, &current) {
             Written::Records(records) if records.len() == 1 => {
                 records.into_iter().next().expect("length just checked")
             }
             other => panic!("`{}` is not one record: {other:?}", operation.title()),
+        }
+    }
+
+    /// A reading of a mask that is wearing exactly this, for the two
+    /// operations that need one.
+    fn reading_of(mask: Mask) -> karakuri_operation_record::Current {
+        karakuri_operation_record::Current {
+            mask: Some(karakuri_operation_record::Mask {
+                kind: wipe_kind(mask.kind()),
+                angle: mask.angle(),
+                position: mask.position(),
+                softness: mask.softness(),
+            }),
+            ..karakuri_operation_record::Current::default()
         }
     }
 
@@ -765,7 +818,14 @@ mod tests {
                 },
             ),
             (
-                mask_record(2, Mask::new(MaskKind::Linear, 1.5, 0.25, 0.1)),
+                from_operation_reading(
+                    karakuri_operation::Operation::SetMaskShape {
+                        deck: 2,
+                        kind: karakuri_operation::WipeKind::Linear,
+                        angle: 1.5,
+                    },
+                    reading_of(Mask::new(MaskKind::Linear, 1.5, 0.25, 0.1)),
+                ),
                 Change::Mask {
                     slot: 2,
                     mask: Mask::new(MaskKind::Linear, 1.5, 0.25, 0.1),
@@ -871,12 +931,25 @@ mod tests {
 
     /// **Every mask shape round-trips**, so a shape added to the engine and not
     /// to the wire vocabulary is a layer silently unmasked.
+    ///
+    /// Through `Operation::SetMaskShape` rather than a record spelled here,
+    /// which is `from_operation`'s rule and buys the third spelling with it:
+    /// the engine's `MaskKind`, the vocabulary's `WipeKind` and the wire name
+    /// all have to agree for this to decode back.
     #[test]
     fn every_mask_shape_has_a_wire_name_that_decodes_back() {
         for kind in MaskKind::ALL {
             let mask = Mask::new(kind, 0.5, 0.75, 0.2);
+            let record = from_operation_reading(
+                karakuri_operation::Operation::SetMaskShape {
+                    deck: 1,
+                    kind: wipe_kind(kind),
+                    angle: 0.5,
+                },
+                reading_of(mask),
+            );
             assert_eq!(
-                change(&mask_record(1, mask), 4).expect("built here"),
+                change(&record, 4).expect("built here"),
                 Some(Change::Mask { slot: 1, mask }),
                 "{} did not survive its own wire name",
                 kind.name()

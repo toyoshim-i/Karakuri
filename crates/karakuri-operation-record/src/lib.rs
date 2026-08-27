@@ -19,7 +19,10 @@
 //! would describe a look nobody can reconstruct
 //! ([ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)).
 //! The exposure alone does not determine the record — **the look that is
-//! running does**. So the conversion takes an operation *and a reading of what
+//! running does**. The mask pair is the same shape: `Record::Mask` is a shape,
+//! an angle, a position and a softness, and each of
+//! `Operation::SetMaskShape` and `Operation::SetMaskPosition` asks for a part
+//! of it (ADR-0201). So the conversion takes an operation *and a reading of what
 //! is current*, which is [`Current`], and a function of two arguments is not a
 //! `From`.
 //!
@@ -43,12 +46,12 @@
 //!
 //! # What it answers, and the three answers are the survey
 //!
-//! [`written`] is **one exhaustive match over all 46 operations**, which is
+//! [`written`] is **one exhaustive match over all 48 operations**, which is
 //! what makes the classification a fact rather than an intention: an operation
 //! added to the vocabulary does not compile here until somebody has said what
 //! it writes. The three answers are the three groups the survey found:
 //!
-//! - [`Written::Records`] — it writes these, in this order. Nine operations,
+//! - [`Written::Records`] — it writes these, in this order. Eleven operations,
 //!   six of which need no reading at all.
 //! - [`Written::Silent`] — it writes none, and that is settled. Twenty-six,
 //!   for [`Silent`]'s four different reasons.
@@ -99,6 +102,30 @@ pub struct Look {
     pub white_point: f32,
 }
 
+/// **The mask a deck's layer is wearing**, which is what
+/// [`Operation::SetMaskShape`] and [`Operation::SetMaskPosition`] each need
+/// the other half of.
+///
+/// [`Record::Mask`] is written whole — a shape, an angle, a position and a
+/// softness — and each of the two operations asks for a part of it, which is
+/// [`Look`]'s arrangement exactly and for ADR-0192's reason: a record is what a
+/// replay reconstructs a session from, an operation is what a surface can say.
+/// A shape written without the position beside it would send the front back to
+/// wherever a default put it, mid-wipe.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Mask {
+    pub kind: karakuri_operation::WipeKind,
+    /// Which way a linear front runs, in radians.
+    pub angle: f32,
+    /// How far it has travelled, `[0, 1]`.
+    pub position: f32,
+    /// **In [`Record::Mask`] and on no surface** — one constant in
+    /// `karakuri-cli`, which says of itself that it is not a key. Carried here
+    /// for [`Look::white_point`]'s reason: the record is written whole and a
+    /// conversion that dropped it would rewrite a value nobody asked about.
+    pub softness: f32,
+}
+
 /// **What one deck's clock is doing**, which is what
 /// [`Operation::ScrubDeck`] needs to say where it moved *to*.
 ///
@@ -136,10 +163,12 @@ pub struct Transport {
 /// *the operation names*, and no other: every operation here that needs one
 /// names exactly one deck, so a map from deck to transport would be a
 /// container built to be indexed once.
+/// [`Current::mask`] is the mask of that same deck, on the same terms.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Current {
     pub look: Option<Look>,
     pub transport: Option<Transport>,
+    pub mask: Option<Mask>,
 }
 
 /// Which reading an [`Owed::NotRead`] wanted, so a caller can say what it did
@@ -150,6 +179,8 @@ pub enum Reading {
     Look,
     /// [`Current::transport`], for the deck the operation names.
     Transport,
+    /// [`Current::mask`], for the deck the operation names.
+    Mask,
 }
 
 /// **Why an operation writes no record**, and there are four different
@@ -232,6 +263,7 @@ impl Owed {
             Owed::NotRead(Reading::Transport) => {
                 "the transport of the deck it names was not read"
             }
+            Owed::NotRead(Reading::Mask) => "the mask of the deck it names was not read",
             Owed::Undecided => "what it acts on is an open question in the vocabulary itself",
             Owed::NotSettled => "the record it writes is not a function of values alone, and who supplies the rest is undecided",
         }
@@ -246,7 +278,9 @@ pub enum Written {
     ///
     /// A list rather than one record, although every conversion built today
     /// answers exactly one. `Operation::Crossfade` is four records and
-    /// `Operation::Wipe` is five — that is what `karakuri-cli`'s `crossfade`
+    /// `Operation::Wipe` is six — five until the mask took a row for its
+    /// shape and a row for its position, each of which writes a whole
+    /// `Record::Mask` (ADR-0201) — that is what `karakuri-cli`'s `crossfade`
     /// and `wipe` already do, and it is the whole of what P-0028 claims: one
     /// control, however many records the deck needs to be told. Both are
     /// [`Owed::NotSettled`] for a different reason, and the shape of this
@@ -332,6 +366,34 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
                 white_point: look.white_point,
             }),
             None => Written::Owed(Owed::NotRead(Reading::Look)),
+        },
+        // **Half a mask each, and the record is whole.** The half that was
+        // not asked for comes from the mask that is running, exactly as the
+        // look pair fills in the two thirds a control change cannot say —
+        // ADR-0192, one layer down. Which half is the ask is what decides
+        // whether a running move is cancelled, and that is the deck's rule
+        // rather than this crate's: `Record::Mask` carries a state and not an
+        // ask, so nothing downstream of here can tell the two apart. See
+        // `docs/principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md`.
+        Operation::SetMaskShape { deck, kind, angle } => match current.mask {
+            Some(mask) => one(Record::Mask {
+                slot: *deck,
+                kind: kind.name().to_string(),
+                angle: *angle,
+                position: mask.position,
+                softness: mask.softness,
+            }),
+            None => Written::Owed(Owed::NotRead(Reading::Mask)),
+        },
+        Operation::SetMaskPosition { deck, position } => match current.mask {
+            Some(mask) => one(Record::Mask {
+                slot: *deck,
+                kind: mask.kind.name().to_string(),
+                angle: mask.angle,
+                position: *position,
+                softness: mask.softness,
+            }),
+            None => Written::Owed(Owed::NotRead(Reading::Mask)),
         },
         // **Relative, and the one operation here that is** — nothing in the
         // instrument can set a position, so the record's absolute offset is
@@ -529,6 +591,124 @@ mod tests {
         );
     }
 
+    /// A mask nothing else in these tests happens to be: a shape that is not
+    /// the default, an angle nobody would reach for, a front part way across
+    /// and a soft edge — so a conversion filling any of the three it was not
+    /// asked for from thin air is visible rather than coincidentally right.
+    fn mask() -> Mask {
+        Mask {
+            kind: karakuri_operation::WipeKind::Radial,
+            angle: 1.25,
+            position: 0.4,
+            softness: 0.02,
+        }
+    }
+
+    /// **The shape is asked for and the front is kept**, which is the mask
+    /// half of ADR-0192's argument: `Record::Mask` is written whole and only
+    /// the shape was asked for.
+    ///
+    /// A conversion that put the front back to a default here would send a
+    /// running wipe to the start every time somebody chose a different shape.
+    #[test]
+    fn a_shape_keeps_the_front_where_it_is() {
+        let current = Current {
+            mask: Some(mask()),
+            ..Current::default()
+        };
+        let written = written(
+            &Operation::SetMaskShape {
+                deck: 2,
+                kind: karakuri_operation::WipeKind::Linear,
+                angle: 0.0,
+            },
+            &current,
+        );
+        assert_eq!(
+            records(written),
+            vec![Record::Mask {
+                slot: 2,
+                kind: "linear".to_string(),
+                angle: 0.0,
+                position: 0.4,
+                softness: 0.02,
+            }],
+            "choosing a shape moved the front or changed the soft edge — the record \
+             carries all four and only the shape and its angle were asked for"
+        );
+    }
+
+    /// The other half, and it fails apart from the first: a control change
+    /// carries a position and says nothing about a shape, so the shape and the
+    /// angle come from the reading.
+    ///
+    /// This is the row that exists **because** a control change can only set —
+    /// a conversion that reset the shape here would turn every fader move into
+    /// a layer silently unmasked.
+    #[test]
+    fn a_front_keeps_the_shape_that_is_running() {
+        let current = Current {
+            mask: Some(mask()),
+            ..Current::default()
+        };
+        let written = written(
+            &Operation::SetMaskPosition {
+                deck: 2,
+                position: 1.0,
+            },
+            &current,
+        );
+        assert_eq!(
+            records(written),
+            vec![Record::Mask {
+                slot: 2,
+                kind: "radial".to_string(),
+                angle: 1.25,
+                position: 1.0,
+                softness: 0.02,
+            }],
+            "moving the front rewrote the shape, the angle or the soft edge — the record \
+             carries all four and only the position was asked for"
+        );
+    }
+
+    /// **A mask that was not read is said, never defaulted.**
+    ///
+    /// Its own test rather than a third assertion beside the look and the
+    /// transport, because the failure it names is the mask's: a conversion
+    /// that defaulted would answer `none` for a shape nobody chose, and a
+    /// `Record::Mask` saying `none` takes the mask off the layer — so a
+    /// caller that read nothing would not get a refusal, it would get a wipe
+    /// silently undone.
+    #[test]
+    fn a_mask_that_was_not_read_is_owed_rather_than_defaulted() {
+        assert_eq!(
+            written(
+                &Operation::SetMaskPosition {
+                    deck: 1,
+                    position: 0.5
+                },
+                &Current::default()
+            ),
+            Written::Owed(Owed::NotRead(Reading::Mask)),
+            "a front moved with no mask read came back with a record — which means the \
+             shape in it was invented"
+        );
+        assert_eq!(
+            written(
+                &Operation::SetMaskShape {
+                    deck: 1,
+                    kind: karakuri_operation::WipeKind::Radial,
+                    angle: 0.0,
+                },
+                &Current::default()
+            ),
+            Written::Owed(Owed::NotRead(Reading::Mask)),
+            "a shape chosen with no mask read came back with a record — which means the \
+             front in it was invented"
+        );
+    }
+
     /// **A scrub moves from where the slot is**, which is why it is the one
     /// operation in the vocabulary that is relative: nothing in the instrument
     /// can set a position. The record is absolute, so the conversion is the
@@ -633,6 +813,9 @@ mod tests {
         assert_eq!(Tonemap::Reinhard.name(), "reinhard");
         assert_eq!(Tonemap::Aces.name(), "aces");
         assert_eq!(Tonemap::AgX.name(), "agx");
+        assert_eq!(karakuri_operation::WipeKind::None.name(), "none");
+        assert_eq!(karakuri_operation::WipeKind::Linear.name(), "linear");
+        assert_eq!(karakuri_operation::WipeKind::Radial.name(), "radial");
     }
 
     /// **A free-running tempo being stated**, which closes the gap P-0028

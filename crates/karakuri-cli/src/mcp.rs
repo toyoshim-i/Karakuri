@@ -28,7 +28,7 @@
 //!
 //! ## It names its operations, and it performs them itself
 //!
-//! Every one of the six tools is one of the forty-six operations
+//! Every one of the six tools is one of the forty-eight operations
 //! `docs/manual/operations.html` specifies — `read_procedure`,
 //! `write_procedure`, `swap_outcome`, `save_set`, `read_set` and `list_sets`
 //! are `ReadProcedure`, `WriteProcedure`, `SwapOutcome`, `SaveSet`, `ReadSet`
@@ -5059,7 +5059,7 @@ mod tests {
     fn every_tool_this_server_publishes_has_a_route_on_the_page() {
         let routes = mcp_routes();
         assert!(
-            routes.len() >= 46,
+            routes.len() >= 48,
             "only {} rows with an MCP badge found in {PAGE} — is a row still `{ROW}` \
              followed by an `<h3>` and four `rt` badges? A scan that matched nothing would \
              pass every assertion below",

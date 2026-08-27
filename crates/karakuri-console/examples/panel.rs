@@ -4170,7 +4170,7 @@ mod tests {
             );
         }
 
-        // The vocabulary is 46 operations and this example has four controls
+        // The vocabulary is 48 operations and this example has four controls
         // writing four records. A record invented for the other 42 would be
         // somebody deciding what they mean — and the answer is now *which*
         // nothing rather than `None`, because a surface's own state and a

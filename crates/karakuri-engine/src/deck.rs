@@ -1567,15 +1567,63 @@ impl Deck {
         self.slots[slot].mask
     }
 
-    /// What shape of the frame this slot's layer reaches. See [`Mask`].
+    /// **The shape of this slot's mask, and nothing else.** See [`Mask`].
     ///
-    /// Not cancelled by a scheduled move the way the faders are: a transition
-    /// on a mask carries its *position* and leaves the shape alone, so
-    /// changing the shape mid-wipe is a change to what is being wiped rather
-    /// than a hand on the control that is moving. The position it writes is
-    /// the one a move would have written next frame anyway.
+    /// **The one write to a control a transition carries that does not
+    /// cancel**, and it is the exception the rule is stated against: a
+    /// transition on a mask
+    /// carries its *position*, so changing the shape mid-wipe is a change to
+    /// what is being wiped rather than a hand on the control that is moving.
+    /// It writes no position, so there is nothing for it to be a hand on. See
+    /// "The operator wins" in [`crate::transition`], and
+    /// `docs/principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md`
+    /// for where that holds.
+    ///
+    /// Split from [`Deck::set_mask_position`] rather than left as one setter
+    /// taking a whole [`Mask`], because the two answer the cancel differently
+    /// and a setter that took both could only answer it one way. The
+    /// vocabulary is split the same way and for a related reason
+    /// (`karakuri_operation::Operation::SetMaskShape`).
+    pub fn set_mask_shape(&mut self, slot: usize, kind: MaskKind, angle: f32) {
+        let mask = self.slots[slot].mask;
+        self.slots[slot].mask = Mask::new(kind, angle, mask.position(), mask.softness());
+    }
+
+    /// **How far this slot's mask front has travelled**, `[0, 1]`.
+    ///
+    /// **Cancels**, on [`Deck::set_gain`]'s and [`Deck::set_opacity`]'s terms
+    /// and for their reason: this is the number a scheduled move writes
+    /// ([`Control::MaskPosition`]), so a hand on it is a hand on the control
+    /// that is moving and the move stops. That is the half of the mask the
+    /// exemption at [`Deck::set_mask_shape`] never covered — it was written
+    /// when the only caller wrote position 0 before scheduling, and it stops
+    /// being safe the moment a surface can write a position.
+    pub fn set_mask_position(&mut self, slot: usize, position: f32) {
+        self.cancel(slot, Control::MaskPosition);
+        let mask = self.slots[slot].mask;
+        self.slots[slot].mask = mask.at(position);
+    }
+
+    /// **The whole mask at once** — the shape, the front and the soft edge.
+    ///
+    /// What a `Record::Mask` decodes to, and the only writer of `softness`,
+    /// which no operation names. **It cancels**, because it carries a position
+    /// and applying it puts the front where the record says: a record is a
+    /// state rather than an ask, so nothing here can tell a shape change that
+    /// restated the front from a hand that moved it, and of the two readings
+    /// only one leaves the operator winning. The two setters above are what
+    /// keep the distinction where it can still be made.
     pub fn set_mask(&mut self, slot: usize, mask: Mask) {
-        self.slots[slot].mask = mask;
+        // The two halves through the setters that own them, rather than one
+        // assignment beside them: the cancel is [`Deck::set_mask_position`]'s
+        // rule and this is a caller of it, not a second place stating it.
+        self.set_mask_shape(slot, mask.kind(), mask.angle());
+        self.set_mask_position(slot, mask.position());
+        // And the soft edge, which neither of them names because no operation
+        // does — `MASK_SOFTNESS` in `karakuri-cli` is the only value it has
+        // ever had.
+        let at = self.slots[slot].mask;
+        self.slots[slot].mask = Mask::new(at.kind(), at.angle(), at.position(), mask.softness());
     }
 
     /// **Schedule a move**, replacing whatever was already moving that control.
@@ -1710,10 +1758,11 @@ impl Deck {
                 Control::Opacity => {
                     self.slots[t.slot()].opacity = clamp_opacity(value);
                 }
-                // The position and nothing else, which is why `set_mask` does
-                // not cancel: changing the shape mid-wipe is a change to what
-                // is being wiped rather than a hand on the control that is
-                // moving.
+                // The position and nothing else, which is why
+                // `set_mask_shape` does not cancel: changing the shape
+                // mid-wipe is a change to what is being wiped rather than a
+                // hand on the control that is moving. `set_mask_position`
+                // does cancel, and it is this number it writes.
                 Control::MaskPosition => {
                     let mask = self.slots[t.slot()].mask;
                     self.slots[t.slot()].mask = mask.at(value);

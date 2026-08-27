@@ -63,6 +63,12 @@
 //! operator reaches when something is wrong is the same place an automatic
 //! thing is writing. A transition is the first automatic writer on this deck,
 //! and the rule is meant to hold for every one that follows it.
+//!
+//! It is
+//! `docs/principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md`,
+//! which carries the whole of it — including the one write that does not
+//! cancel and why it is not an exception: `Deck::set_mask_shape` writes no
+//! position, so there is no control under its hand.
 
 use crate::binding::Curve;
 

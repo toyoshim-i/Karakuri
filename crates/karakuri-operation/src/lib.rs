@@ -104,6 +104,15 @@
 //! it outright."* The one exception is [`Operation::ScrubDeck`], and it is an
 //! exception for a reason given at the variant.
 //!
+//! **It is also what decides how many rows a control gets.** The mask is two —
+//! [`Operation::SetMaskShape`] and [`Operation::SetMaskPosition`] — because a
+//! single row carrying the shape and the position together would be a press,
+//! and `karakuri-midi`'s grammar refuses a control change on a press and a
+//! note on a position alike, so no control change could ever reach a mask
+//! position. A row that is a sum can only be reached the way its coarsest arm
+//! can be
+//! (`docs/adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md`).
+//!
 //! # The cost this crate pays, stated plainly
 //!
 //! Naming a value means owning the list of values. [`BlendMode`], [`Sync`],
@@ -410,6 +419,28 @@ pub enum WipeKind {
     Radial,
 }
 
+impl WipeKind {
+    /// **The lower-case word for this shape**, which is what `Record::Mask`'s
+    /// `kind` carries and what the engine reads back.
+    ///
+    /// A match rather than a table, for [`BlendMode::name`]'s reason: a shape
+    /// added to the enum does not compile until it has a name. The three words
+    /// are `karakuri_engine::deck::MaskKind::name`'s, because a record carries
+    /// a name and the engine is what reads it back.
+    ///
+    /// **There is no `ALL` beside it**, where [`BlendMode`] and [`Residency`]
+    /// have one. That constant exists so a map file can be offered the values
+    /// a target may end in, and no map target names a shape — see the row at
+    /// [`Operation::SetMaskShape`]. It arrives with the first reader.
+    pub fn name(self) -> &'static str {
+        match self {
+            WipeKind::None => "none",
+            WipeKind::Linear => "linear",
+            WipeKind::Radial => "radial",
+        }
+    }
+}
+
 /// Which way [`Operation::ScaleGrid`] moves the grid. Two values and not an
 /// `f32`: the manual's row is *"Halve or double the grid"*, and a factor of
 /// 1.3 is not an operation anything in this instrument has.
@@ -712,6 +743,62 @@ operations! {
         to: u8,
     } => "Wipe the next deck in",
 
+    /// **What shape of the frame a deck's layer reaches**, and which way a
+    /// linear front runs, in radians.
+    ///
+    /// Half of a mask, and the half that is a *choice*: `WipeKind::None`
+    /// reveals everything at every position, and an angle is what makes one
+    /// linear front a different picture from another. It says nothing about
+    /// how far the front has travelled, which is
+    /// [`Operation::SetMaskPosition`].
+    ///
+    /// **Not the row `z` presses.** That key sets the shape the *next* wipe
+    /// takes, which is a console setting deciding what a later gesture means
+    /// ([`TransitionSetting::WipeShape`]); this is the shape a deck's mask has
+    /// now, and it names a deck because it changes one.
+    ///
+    /// **`softness` is not here**, on `white_point`'s terms at
+    /// [`Operation::SetExposure`]: it is in `Record::Mask`, it has one
+    /// constant behind it — `karakuri-cli`'s `MASK_SOFTNESS`, which says of
+    /// itself that it is *"not a key"* — and no control on any surface. The
+    /// conversion fills it in from the mask that is running.
+    SetMaskShape {
+        deck: u8,
+        kind: WipeKind,
+        /// Which way a linear front runs, in radians. The other two shapes
+        /// ignore it, exactly as the mask does.
+        angle: f32,
+    } => "Set a deck's mask shape",
+
+    /// **How far a mask's front has travelled**, `[0, 1]` — 0 reveals nothing
+    /// anywhere and 1 reveals everything, both exactly.
+    ///
+    /// **This is why the mask is two rows and not one.** A single row carrying
+    /// a shape, a position and a softness together could not satisfy this
+    /// crate's own standing rule that *a continuous control is set, not
+    /// nudged*: `karakuri-midi`'s grammar refuses the cross product in both
+    /// directions — *"a note is a press, and this control takes a position"*
+    /// and *"a control change is a position, and this control takes a press"*
+    /// — so a row that was a sum would be a press, and no control change could
+    /// ever reach a mask position. Splitting it is
+    /// [ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)
+    /// one layer down: an operation asks for what a surface can say, and
+    /// `Record::Mask` stays whole.
+    ///
+    /// **It cancels a move, as the gain and the fader do.** It is the number a
+    /// wipe's transition is writing, so a hand on it wins and whatever was
+    /// moving it stops — which is the rule reaching the one control that had
+    /// an exemption from it. `karakuri_engine::deck::Deck` is where that is
+    /// written and
+    /// [P-0078](../../../docs/principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md)
+    /// is the rule itself. [`Operation::SetMaskShape`] does not cancel,
+    /// because it writes no position.
+    SetMaskPosition {
+        deck: u8,
+        /// Where the front is, `[0, 1]`.
+        position: f32,
+    } => "Set a deck's mask position",
+
     /// These change nothing you can see and write nothing to the stream. They
     /// decide what the *next* fade, crossfade or wipe means.
     SetTransition { setting: TransitionSetting }
@@ -997,13 +1084,14 @@ mod tests {
     /// A floor, not a count: the point is that the list cannot come back
     /// empty. The exact number is the manual's to state and is asserted
     /// against the page itself in `tests/`. It read 46 when this landed, 45
-    /// once two residency rows became one (ADR-0186), and 46 again since the
-    /// look split into a tone map and an exposure (ADR-0192); it moves with
-    /// the page and is never lowered to make a shorter list pass.
+    /// once two residency rows became one (ADR-0186), 46 again since the look
+    /// split into a tone map and an exposure (ADR-0192), and 48 since the mask
+    /// took a row for its shape and a row for its position (ADR-0201); it
+    /// moves with the page and is never lowered to make a shorter list pass.
     #[test]
     fn the_vocabulary_is_not_empty() {
         assert!(
-            Operation::TITLES.len() >= 46,
+            Operation::TITLES.len() >= 48,
             "only {} operations named — the vocabulary has shrunk below what the manual \
              specifies",
             Operation::TITLES.len()
