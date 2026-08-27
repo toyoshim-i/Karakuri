@@ -38,16 +38,30 @@
 //! `Operation::SetPreview`. Two derivations of one record is the drift this
 //! module was written to end, in miniature, so the second one went.
 //!
-//! **The rest are still here and each has a reason.** `opacity_record`,
-//! `blend_record`, `residency_record`, `mask_record` and `transition_record`
-//! are called by `crossfade` and `wipe`, which are **one operation each and
-//! four or five records each** — and those two conversions are the ones the
-//! new crate cannot make, because they need the grid quantised onto a musical
-//! instant and the quantum and the length that `Operation::SetTransition` sets
-//! and no record carries. `look_record` builds the launch look, which is a
-//! complete look rather than an ask. `transport_record` is `cycle_sync`'s, for
-//! the anchor clamp the vocabulary has no way to apply. Each of them goes the
-//! day its operation's conversion is settled — see ADR-0194.
+//! **`opacity_record`, `blend_record` and `residency_record` went the same way,
+//! and what moved was not a conversion but a reading of what a gesture is made
+//! of.** They were the last three records this program built twice, and their
+//! second caller was `crossfade` and `wipe` — one operation each and four or
+//! five records each. That count is why the *gestures* cannot convert; it was
+//! never a reason their **parts** could not. Silencing the incoming deck is
+//! `Operation::SetOpacity`, forcing `over` is `Operation::SetBlendMode` and
+//! putting it on air is `Operation::SetResidency`, whatever the gesture around
+//! them still owes. So each gesture asks `Live::operate` for the parts that are
+//! decided and builds only the parts that are not, and the second derivation is
+//! gone rather than kept in step by a test.
+//!
+//! **The rest are still here and each has a reason.** `mask_record` is `wipe`'s
+//! and has **no operation at all** — there is no `SetMask` — so it is not a
+//! second derivation of anything. `transition_record` is `fade_slot`'s and
+//! `wipe`'s and `select_record` is `cycle_renderer`'s: `Operation::FadeDeck`,
+//! `Operation::Crossfade`, `Operation::Wipe` and `Operation::SelectRenderer`
+//! all need the grid quantised onto a musical instant, plus the quantum and the
+//! length that `Operation::SetTransition` sets and no record carries.
+//! `look_record` builds the launch look, which is a complete look rather than
+//! an ask. `transport_record` is `cycle_sync`'s, for the anchor clamp the
+//! vocabulary has no way to apply. `canvas_record` names a record no operation
+//! writes. Each of them goes the day its operation's conversion is settled —
+//! see ADR-0194.
 //!
 //! ## Opacity, which used to be deliberately not here
 //!
@@ -229,22 +243,6 @@ pub fn current_transport(transport: &Transport) -> karakuri_operation_record::Tr
     }
 }
 
-/// A slot's opacity — the fader — as the record that carries it.
-pub fn opacity_record(slot: usize, value: f32) -> Record {
-    Record::Opacity {
-        slot: slot as u8,
-        value,
-    }
-}
-
-/// A slot's blend mode, as the record that carries it.
-pub fn blend_record(slot: usize, mode: Blend) -> Record {
-    Record::Blend {
-        slot: slot as u8,
-        mode: mode.name().to_string(),
-    }
-}
-
 /// A slot's mask, as the record that carries it.
 pub fn mask_record(slot: usize, mask: Mask) -> Record {
     Record::Mask {
@@ -286,15 +284,6 @@ pub fn select_record(slot: usize, renderer: usize, start: f64) -> Record {
         slot: slot as u8,
         renderer: renderer as u32,
         start,
-    }
-}
-
-/// A slot's **requested** residency, as the record that carries it. See
-/// [`Record::Residency`] for why the effective one is not recordable.
-pub fn residency_record(slot: usize, level: Residency) -> Record {
-    Record::Residency {
-        slot: slot as u8,
-        level: residency_wire_name(level).to_string(),
     }
 }
 
@@ -664,48 +653,87 @@ mod tests {
         }
     }
 
-    /// **The conversion and this module answer with the same record**, for the
-    /// operations both of them can still write.
+    /// One record, as `karakuri-operation-record` writes it.
     ///
-    /// `crossfade` and `wipe` build their parts through the builders here
-    /// because their own conversions are not settled, so `Record::Opacity`,
-    /// `Record::Blend` and `Record::Residency` are still made two ways in this
-    /// program. That is an interim and it is stated as one: the conversion is
-    /// the canonical derivation, and these builders go as each operation lands.
-    /// Until then this is what stops the two drifting.
-    #[test]
-    fn the_builders_left_here_agree_with_the_conversion() {
-        use karakuri_operation::Operation;
+    /// **The canonical derivation**, and the only one this program has for
+    /// these now: a test that wants a `Record::Opacity` asks the conversion
+    /// for one rather than spelling it, so what it round-trips below is what a
+    /// key press and a mapped pad actually write. Panics rather than returning
+    /// nothing on an operation that is not one record, because a test silently
+    /// given no record is a test that checks nothing.
+    fn from_operation(operation: karakuri_operation::Operation) -> Record {
         use karakuri_operation_record::{Current, Written};
+        match karakuri_operation_record::written(&operation, &Current::default()) {
+            Written::Records(records) if records.len() == 1 => {
+                records.into_iter().next().expect("length just checked")
+            }
+            other => panic!("`{}` is not one record: {other:?}", operation.title()),
+        }
+    }
 
-        let same = |operation: Operation, record: Record| {
-            assert_eq!(
-                karakuri_operation_record::written(&operation, &Current::default()),
-                Written::Records(vec![record]),
-                "`{}` is built two ways in this program and the two have drifted",
-                operation.title()
-            );
-        };
-        same(
-            Operation::SetOpacity {
+    /// **The records `crossfade` and `wipe` used to build by hand are the ones
+    /// the conversion writes.**
+    ///
+    /// The two gestures asked this module for a `Record::Opacity`, a
+    /// `Record::Blend` and a `Record::Residency` while their own operations
+    /// were unsettled — and their own operations are unsettled still, because
+    /// what is owed is the *scheduled move*, never the silencing or the
+    /// put-on-air. Those three parts go through `Live::operate` now, and this
+    /// is what says the change of route did not change a byte of what they
+    /// write.
+    ///
+    /// **Literals on the right-hand side on purpose.** An expectation derived
+    /// from `written` would assert that `written` equals itself; these are the
+    /// records the deleted builders produced, spelled out, including the
+    /// values the two gestures pass — `0.0` on the deck being silenced and
+    /// `1.0` on the one arriving under a mask.
+    #[test]
+    fn the_records_the_gestures_built_by_hand_are_what_the_conversion_writes() {
+        use karakuri_operation::Operation;
+
+        assert_eq!(
+            from_operation(Operation::SetOpacity {
                 deck: 2,
-                opacity: 0.25,
+                opacity: 0.0,
+            }),
+            Record::Opacity {
+                slot: 2,
+                value: 0.0,
             },
-            opacity_record(2, 0.25),
+            "the silencing a crossfade writes is not what `mix::opacity_record` wrote"
         );
-        same(
-            Operation::SetBlendMode {
+        assert_eq!(
+            from_operation(Operation::SetOpacity {
+                deck: 1,
+                opacity: 1.0,
+            }),
+            Record::Opacity {
+                slot: 1,
+                value: 1.0,
+            },
+            "the opacity a wipe writes is not what `mix::opacity_record` wrote"
+        );
+        assert_eq!(
+            from_operation(Operation::SetBlendMode {
                 deck: 1,
                 blend: blend_mode(Blend::Over),
+            }),
+            Record::Blend {
+                slot: 1,
+                mode: "over".to_string(),
             },
-            blend_record(1, Blend::Over),
+            "the blend mode a wipe forces is not what `mix::blend_record` wrote"
         );
-        same(
-            Operation::SetResidency {
+        assert_eq!(
+            from_operation(Operation::SetResidency {
                 deck: 3,
-                residency: residency(Residency::Priming),
+                residency: residency(Residency::Live),
+            }),
+            Record::Residency {
+                slot: 3,
+                level: "live".to_string(),
             },
-            residency_record(3, Residency::Priming),
+            "the put-on-air both gestures write is not what `mix::residency_record` wrote"
         );
     }
 
@@ -727,7 +755,10 @@ mod tests {
                 },
             ),
             (
-                opacity_record(0, 0.25),
+                from_operation(karakuri_operation::Operation::SetOpacity {
+                    deck: 0,
+                    opacity: 0.25,
+                }),
                 Change::Opacity {
                     slot: 0,
                     value: 0.25,
@@ -768,14 +799,20 @@ mod tests {
                 Change::Preview { slot: None },
             ),
             (
-                blend_record(3, Blend::Over),
+                from_operation(karakuri_operation::Operation::SetBlendMode {
+                    deck: 3,
+                    blend: blend_mode(Blend::Over),
+                }),
                 Change::Blend {
                     slot: 3,
                     mode: Blend::Over,
                 },
             ),
             (
-                residency_record(1, Residency::Priming),
+                from_operation(karakuri_operation::Operation::SetResidency {
+                    deck: 1,
+                    residency: residency(Residency::Priming),
+                }),
                 Change::Residency {
                     slot: 1,
                     level: Residency::Priming,
@@ -820,7 +857,10 @@ mod tests {
     #[test]
     fn every_residency_level_has_a_wire_name_that_decodes_back() {
         for level in LEVELS {
-            let record = residency_record(0, level);
+            let record = from_operation(karakuri_operation::Operation::SetResidency {
+                deck: 0,
+                residency: residency(level),
+            });
             assert_eq!(
                 change(&record, 1).expect("built here"),
                 Some(Change::Residency { slot: 0, level }),
@@ -876,7 +916,10 @@ mod tests {
     #[test]
     fn every_blend_mode_has_a_wire_name_that_decodes_back() {
         for mode in Blend::ALL {
-            let record = blend_record(2, mode);
+            let record = from_operation(karakuri_operation::Operation::SetBlendMode {
+                deck: 2,
+                blend: blend_mode(mode),
+            });
             assert_eq!(
                 change(&record, 4).expect("built here"),
                 Some(Change::Blend { slot: 2, mode }),
