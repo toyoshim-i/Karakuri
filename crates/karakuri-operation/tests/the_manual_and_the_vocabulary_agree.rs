@@ -34,10 +34,13 @@
 //!
 //! **Not the routes.** Every row carries four badges — `has`, `plan`, `gap` —
 //! and asserting those means asserting that a key binding, a map target, a
-//! panel control and an MCP tool exist for each. None of the surfaces route
-//! through this type yet, so such a test could only read the page against
-//! itself. It becomes checkable one surface at a time as they migrate, which
-//! is the rest of this milestone.
+//! panel control and an MCP tool exist for each. This crate cannot check one:
+//! it has no dependencies at all and the surfaces are what would have to be
+//! read. It becomes checkable one surface at a time as they migrate, in the
+//! crate that owns the surface — and **the MCP column is checked now**, both
+//! ways round, in `karakuri-cli`'s `mcp.rs`
+//! (`docs/adr/0199-mcp-names-its-operations-and-performs-them-itself.md`). The
+//! other three columns are still nobody's.
 //!
 //! **Not the payloads.** Nothing here can tell whether a variant carries the
 //! right fields; that is what the prose at each variant is for, and five of

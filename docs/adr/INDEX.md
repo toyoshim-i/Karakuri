@@ -224,6 +224,7 @@ number; new records continue from the end.
 | [ADR-0196](0196-a-map-line-names-a-state-and-an-old-line-is-refused.md) | A map line names a state, and an old line is refused rather than redefined | 2026-08-27 | accepted |
 | [ADR-0197](0197-the-consoles-op-stays-and-what-blocks-it-is-the-page-rather-than-the-code.md) | The console's `Op` stays, and what blocks its migration is the page rather than the code | 2026-08-27 | accepted |
 | [ADR-0198](0198-a-gesture-converts-in-the-parts-that-are-decided.md) | A gesture converts in the parts that are decided, and a key that writes no record performs it itself | 2026-08-27 | accepted |
+| [ADR-0199](0199-mcp-names-its-operations-and-performs-them-itself.md) | MCP names its operations and performs them itself, because all six are `Silent` | 2026-08-27 | accepted |
 
 ## Retired numbers
 

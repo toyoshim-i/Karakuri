@@ -26,6 +26,30 @@
 //! closes it, so **a session driven by a model does replay with no model
 //! attached**, and what an agent did during a set can be watched back.
 //!
+//! ## It names its operations, and it performs them itself
+//!
+//! Every one of the six tools is one of the forty-six operations
+//! `docs/manual/operations.html` specifies — `read_procedure`,
+//! `write_procedure`, `swap_outcome`, `save_set`, `read_set` and `list_sets`
+//! are `ReadProcedure`, `WriteProcedure`, `SwapOutcome`, `SaveSet`, `ReadSet`
+//! and `ListSets` — and the call becomes that operation in [`asked`] before
+//! anything is done with it. [`perform`] then dispatches on the operation
+//! rather than on the tool's name, so the row on the page a tool claims is the
+//! row its operation's title names.
+//!
+//! **What it does not do is hand the operation to `Live::operate`, and that is
+//! `Silent`'s shape rather than an omission.** `karakuri_operation_record`'s
+//! `written` answers `Silent` for all six: `Question` for the four that ask —
+//! a record is what a replay reconstructs a performance from, and a question
+//! changes no performance — and `OnLanding` for the two whose record is
+//! written where the work lands, `Record::Procedure` at the swap and
+//! `Record::Save` at the frame the save landed. An operation routed through
+//! `operate` that writes no record prints *no record* and does nothing, which
+//! is `docs/adr/0198-…`'s finding about twelve of the keyboard's keys and holds
+//! here for all six tools. There is no `Live` on these threads to route into
+//! either: this server reaches the render loop for exactly one thing, and it is
+//! the channel below.
+//!
 //! ## Most of this never touches the frame
 //!
 //! Reading a procedure is reading a file. Writing one is checking it and
@@ -64,6 +88,20 @@ use std::sync::mpsc;
 
 use karakuri_ir::typed::Checked;
 use karakuri_ir::Kind;
+// **The vocabulary this surface names its operations in.** Not a dependency
+// this module performs anything through — see [`asked`] — but the one list of
+// what an operation *is*, so that a tool and the manual's row for it cannot
+// drift apart.
+//
+// `karakuri_operation::Layer` is spelled in full everywhere below, because
+// `Layer` in this file is already `karakuri_store::record::Layer` and a name
+// means one thing across the system
+// (`docs/principles/0031-a-name-means-one-thing-across-the-system.md`). That
+// there are three spellings of one list — the compiler's `Kind`, the record's
+// `Layer` and the vocabulary's — is the cost `karakuri-operation` states it
+// pays on purpose, and this package is where two of them are checked against
+// each other.
+use karakuri_operation::{NodeAt, Operation};
 use karakuri_store::hash::Hash;
 use karakuri_store::ndjson::Line;
 use karakuri_store::record::{Layer, Record};
@@ -338,6 +376,43 @@ fn layer_name(layer: Kind) -> &'static str {
         Kind::L3 => "L3",
         Kind::L4 => "L4",
         Kind::Field => "Field",
+    }
+}
+
+/// **The compiler's layer, in the vocabulary's spelling.**
+///
+/// One function per list, in the one package that depends on both — which is
+/// what `karakuri-operation`'s module documentation prescribes for every list
+/// it copies, and what `mix::blend_mode` and its three neighbours already are
+/// for the mix. Exhaustive both ways round, so a sixth `Kind` or a sixth
+/// `karakuri_operation::Layer` stops the build here until somebody has said
+/// what the other one calls it.
+///
+/// **[`NodeAt`]'s first caller in this workspace is this surface**, and that is
+/// not an accident: the manual's own gap section says MIDI *"cannot express a
+/// node address, a parameter name or an id"*, a key press has nothing to say
+/// one with, and the panel does not reach inside a Set. A node address is the
+/// thing MCP can say and the other three cannot.
+fn layer_of(layer: Kind) -> karakuri_operation::Layer {
+    match layer {
+        Kind::L1 => karakuri_operation::Layer::L1,
+        Kind::L2 => karakuri_operation::Layer::L2,
+        Kind::L3 => karakuri_operation::Layer::L3,
+        Kind::L4 => karakuri_operation::Layer::L4,
+        Kind::Field => karakuri_operation::Layer::Field,
+    }
+}
+
+/// And back, for the two things that want the compiler's own: resolving an
+/// address to a file, and comparing a written source's `kind` line against the
+/// address it arrived at.
+fn kind_of(layer: karakuri_operation::Layer) -> Kind {
+    match layer {
+        karakuri_operation::Layer::L1 => Kind::L1,
+        karakuri_operation::Layer::L2 => Kind::L2,
+        karakuri_operation::Layer::L3 => Kind::L3,
+        karakuri_operation::Layer::L4 => Kind::L4,
+        karakuri_operation::Layer::Field => Kind::Field,
     }
 }
 
@@ -1060,6 +1135,266 @@ enum Called {
     Saving(mpsc::Receiver<News>),
 }
 
+/// **What one tool call names, in the vocabulary** — or the refusal its
+/// arguments earned.
+///
+/// A tool call is a request from outside the process naming a thing to do,
+/// which is a MIDI message's shape rather than a key press's, and
+/// [ADR-0196](../../../docs/adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)
+/// is what that surface did with it: message becomes `Operation`, and something
+/// else performs it. **The second half of that does not exist here and cannot.**
+/// `karakuri_operation_record::written` answers `Silent` for all six of these —
+/// `Question` for the four that ask and `OnLanding` for the two whose record is
+/// written where the work lands — so `Live::operate` would print *no record* and
+/// do nothing, which is
+/// [ADR-0198](../../../docs/adr/0198-a-gesture-converts-in-the-parts-that-are-decided.md)'s
+/// finding about twelve keys, holding here for all six tools. There is also no
+/// `Live` on this thread to route into: this server reaches the render loop for
+/// exactly one thing, over the channel [`SaveRequest`] travels on.
+///
+/// So what routes is the **naming**. The wire's own words — a tool name and a
+/// JSON object — become the operation the manual specifies, once, here; and
+/// [`perform`] dispatches on that operation rather than on the string. A tool
+/// whose payload the vocabulary cannot say does not compile, and the row on
+/// `docs/manual/operations.html` that a tool claims is the row its operation's
+/// title names rather than one a second list asserts.
+///
+/// **The order arguments are refused in is the order they were refused in
+/// before this routed**, deliberately: a change of route may not change what a
+/// tool answers, and the refusals here are the surface's product — a model that
+/// is told which mistake it made fixes its own call. So the slot is checked
+/// where each tool checked it, `checked_id` runs where each tool ran it, and
+/// nothing new is decided in front of anything old.
+fn asked(name: &str, args: &Value, slots: &Slots) -> Result<Asked, String> {
+    Ok(match name {
+        "read_procedure" => match address(args, slots) {
+            Ok((deck, node)) => Asked::Named(Operation::ReadProcedure { deck, node }),
+            Err(refusal) => Asked::Refused(refusal),
+        },
+        "write_procedure" => match written_procedure(args, slots) {
+            Ok(operation) => Asked::Named(operation),
+            Err(refusal) => Asked::Refused(refusal),
+        },
+        "swap_outcome" => Asked::Named(Operation::SwapOutcome),
+        "read_set" => match named_set(args) {
+            Ok(operation) => Asked::Named(operation),
+            Err(refusal) => Asked::Refused(refusal),
+        },
+        "list_sets" => match listing(args) {
+            Ok(operation) => Asked::Named(operation),
+            Err(refusal) => Asked::Refused(refusal),
+        },
+        "save_set" => match kept(args, slots) {
+            Ok(operation) => Asked::Named(operation),
+            Err(refusal) => Asked::Refused(refusal),
+        },
+        other => return Err(format!("no tool `{other}`")),
+    })
+}
+
+/// What [`asked`] made of one call: the operation, or what the caller is told
+/// instead.
+///
+/// **The refusal is a tool result and not a protocol error**, which is why it
+/// is carried in the `Ok` half rather than returned — see [`tool_result`]. The
+/// `Err` of [`asked`] is the one thing that really is a protocol mistake: a
+/// tool this server does not publish.
+enum Asked {
+    Named(Operation),
+    Refused(String),
+}
+
+/// **The deck one slot number names.**
+///
+/// `Operation` carries `deck: u8`, and every `slot` in
+/// `karakuri_store::record::Record` is a `u8` too, so a slot past 255 is not a
+/// deck anything in this program can address. Refused in the words
+/// [`Slots::nodes`] and [`Slots::holds`] refuse an absent slot in, because it
+/// is the same mistake and an operator is told one story about it
+/// ([`crate::no_such_slot`]).
+///
+/// **Called after every argument the tool used to parse before it reached the
+/// slot**, so that a call with two mistakes in it is still told about the same
+/// one it was told about before.
+fn deck_named(slot: usize, slots: &Slots) -> Result<u8, String> {
+    slots.holds(slot)?;
+    u8::try_from(slot).map_err(|_| crate::no_such_slot(slot, slots.0.len()))
+}
+
+/// `read_procedure`'s arguments as the deck and node they name.
+fn address(args: &Value, slots: &Slots) -> Result<(u8, NodeAt), String> {
+    let (slot, layer, index) = slot_layer_index(args)?;
+    let deck = deck_named(slot, slots)?;
+    Ok((
+        deck,
+        NodeAt {
+            layer: layer_of(layer),
+            index: index as u32,
+        },
+    ))
+}
+
+/// `write_procedure`'s arguments as the operation they name.
+///
+/// **`source` is parsed before the slot is checked**, which is the order this
+/// tool has always refused in: a call with no `source` at all is told that
+/// first, whatever slot it named.
+fn written_procedure(args: &Value, slots: &Slots) -> Result<Operation, String> {
+    let (slot, layer, index) = slot_layer_index(args)?;
+    let source = args
+        .get("source")
+        .and_then(Value::as_str)
+        .ok_or("`source` is required")?;
+    let deck = deck_named(slot, slots)?;
+    Ok(Operation::WriteProcedure {
+        deck,
+        node: NodeAt {
+            layer: layer_of(layer),
+            index: index as u32,
+        },
+        source: source.to_string(),
+    })
+}
+
+/// `save_set`'s arguments as the operation they name.
+///
+/// **`slot` is required and `id` is not**, which is [`slot_layer_index`]'s
+/// convention and its reason: an argument a client says nothing about should
+/// mean the obvious thing, and the obvious thing here is the name a key press
+/// gets. Unlike `index` there is no default written down — the loop stamps it,
+/// and stamping it here would be a second answer to what a nameless save is
+/// called, which is why [`Operation::SaveSet`]'s `id` is an `Option` as well.
+///
+/// The slot is checked before the id is read, because that is the order this
+/// tool refused in before it routed. See [`Slots::holds`] on why this is not
+/// [`Slots::nodes`].
+fn kept(args: &Value, slots: &Slots) -> Result<Operation, String> {
+    let slot = args
+        .get("slot")
+        .and_then(Value::as_u64)
+        .ok_or("`slot` is required and is a number")? as usize;
+    let deck = deck_named(slot, slots)?;
+    let id = match args.get("id") {
+        // **`null` is absent, not a bad string.** A client that builds its
+        // arguments from a record with an empty field sends `"id": null`, and
+        // that is a caller saying nothing about the id rather than one getting
+        // its type wrong — "`id` is a string" is a refusal about a mistake it
+        // did not make. Every other optional argument here reads an absent one
+        // as its default; `null` is the second spelling of absent and gets the
+        // same answer. It is *not* the same as `""`, which is a caller naming a
+        // file with no name and is still refused — see [`checked_id`].
+        None | Some(Value::Null) => None,
+        Some(id) => Some(checked_id(
+            id.as_str()
+                .ok_or("`id` is a string: what to file the set under")?,
+        )?),
+    };
+    Ok(Operation::SaveSet { deck, id })
+}
+
+/// `read_set`'s argument as the operation it names.
+///
+/// **The same check `save_set` puts a name through, and the reason is the same
+/// one.** This id becomes `<store>/sets/<id>.set.ndjson`, so
+/// `../../../somewhere/else` is a path, and paths never cross this protocol —
+/// see [`checked_id`] and [`Slots`]. A read is not the harmless half of that
+/// rule: it is the half that hands a file's contents back to the caller.
+///
+/// It runs here rather than in the tool because an id that is a path is not an
+/// id, and an operation carries what it acts on.
+fn named_set(args: &Value) -> Result<Operation, String> {
+    let id = args
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or("`id` is required and is a string: which set to read")?;
+    Ok(Operation::ReadSet {
+        id: checked_id(id)?,
+    })
+}
+
+/// `list_sets`'s arguments as the operation they name.
+///
+/// **The caller's spelling of `holds` is carried, not a folded one.** The match
+/// is case-insensitive and that is [`list_sets`]'s decision about matching; an
+/// operation carries what it was asked for.
+fn listing(args: &Value) -> Result<Operation, String> {
+    let holds = match args.get("holds") {
+        // `null` is absent, for the reason [`kept`]'s `id` says: a client
+        // building arguments from a record with an empty field sends one, and
+        // that is a caller saying nothing rather than a caller getting a type
+        // wrong.
+        None | Some(Value::Null) => None,
+        Some(value) => Some(
+            value
+                .as_str()
+                .ok_or("`holds` is a string: part of a node's name")?
+                .to_string(),
+        ),
+    };
+    let layer = match args.get("layer") {
+        None | Some(Value::Null) => None,
+        Some(value) => {
+            let spelled = value
+                .as_str()
+                .ok_or("`layer` is a string: which layer a set must hold a node on")?;
+            // **The same spellings the other tools take**, from the same table:
+            // a model that addressed `Field` in `read_procedure` must not be
+            // told there is no such layer here.
+            let kind = layer_named(spelled)
+                .ok_or_else(|| format!("no layer `{spelled}` — {}", layer_list()))?;
+            Some(layer_of(kind))
+        }
+    };
+    Ok(Operation::ListSets { holds, layer })
+}
+
+/// **One named operation, done.**
+///
+/// The dispatch is over the vocabulary rather than over the tool's name, which
+/// is the whole of what routing buys this surface: the arm that reads a
+/// procedure is chosen by [`Operation::ReadProcedure`], so a tool renamed on the
+/// wire goes on doing what its operation says, and a tool that named a different
+/// operation would visibly do something else.
+///
+/// **The last arm cannot happen** — [`asked`] builds six operations and this
+/// matches those six. It is written out rather than left to a wildcard for
+/// [`absent`]'s reason: the arm that cannot happen is the one that stops saying
+/// so quietly when the shape around it changes, and if a seventh tool ever
+/// arrives without an arm here the client is told which operation nothing
+/// performs rather than being answered by the wrong one.
+fn perform(operation: &Operation, state: &mut State) -> Called {
+    match operation {
+        Operation::ReadProcedure { deck, node } => {
+            Called::Answered(read_procedure(*deck, *node, state))
+        }
+        Operation::WriteProcedure { deck, node, source } => {
+            Called::Answered(write_procedure(*deck, *node, source, state))
+        }
+        Operation::SwapOutcome => Called::Answered(swap_outcome(state)),
+        // Answered here like a read and unlike `save_set`: a card is a file, the
+        // render loop does not hold one, and there is nothing to wait for.
+        Operation::ReadSet { id } => Called::Answered(read_set(id, state)),
+        // A directory read and a file read per set, and nothing else — see
+        // [`list_sets`]. Answered here for the same reason `read_set` is.
+        Operation::ListSets { holds, layer } => {
+            Called::Answered(list_sets(holds.as_deref(), *layer, state))
+        }
+        // **Refused before it is sent and waited for elsewhere.** Everything
+        // this module can decide by itself — a slot that does not exist, an `id`
+        // that is not a name — was decided in [`asked`] under the lock like any
+        // other tool's arguments, and only the wait for somebody else's thread
+        // is deferred.
+        Operation::SaveSet { deck, id } => match save_set(*deck, id.as_deref(), state) {
+            Ok(news) => Called::Saving(news),
+            Err(refusal) => Called::Answered(Err(refusal)),
+        },
+        other => Called::Answered(Err(format!(
+            "`{}` is an operation this server publishes no tool for",
+            other.title()
+        ))),
+    }
+}
+
 fn call_tool(request: &Value, state: &mut State) -> Result<Called, String> {
     let params = request.get("params").ok_or("no params")?;
     let name = params
@@ -1068,25 +1403,9 @@ fn call_tool(request: &Value, state: &mut State) -> Result<Called, String> {
         .ok_or("no tool name")?;
     let args = params.get("arguments").cloned().unwrap_or(json!({}));
 
-    Ok(match name {
-        "read_procedure" => Called::Answered(read_procedure(&args, state)),
-        "write_procedure" => Called::Answered(write_procedure(&args, state)),
-        "swap_outcome" => Called::Answered(swap_outcome(state)),
-        // Answered here like a read and unlike `save_set`: a card is a file, the
-        // render loop does not hold one, and there is nothing to wait for.
-        "read_set" => Called::Answered(read_set(&args, state)),
-        // A directory read and a file read per set, and nothing else — see
-        // [`list_sets`]. Answered here for the same reason `read_set` is.
-        "list_sets" => Called::Answered(list_sets(&args, state)),
-        // **Refused here and waited for elsewhere.** Everything this module can
-        // decide by itself — a slot that does not exist, an `id` that is not a
-        // name — is decided under the lock like any other tool's arguments, and
-        // only the wait for somebody else's thread is deferred.
-        "save_set" => match save_set(&args, state) {
-            Ok(news) => Called::Saving(news),
-            Err(refusal) => Called::Answered(Err(refusal)),
-        },
-        other => return Err(format!("no tool `{other}`")),
+    Ok(match asked(name, &args, &state.slots)? {
+        Asked::Named(operation) => perform(&operation, state),
+        Asked::Refused(refusal) => Called::Answered(Err(refusal)),
     })
 }
 
@@ -1143,18 +1462,30 @@ fn slot_layer_index(args: &Value) -> Result<(usize, Kind, usize), String> {
     Ok((slot, layer, index))
 }
 
-fn read_procedure(args: &Value, state: &State) -> Result<String, String> {
-    let (slot, layer, index) = slot_layer_index(args)?;
-    let path = state.slots.path(slot, layer, index)?;
+/// **[`Operation::ReadProcedure`], done**: the source of one node of one deck.
+///
+/// The address arrives as the vocabulary's [`NodeAt`] and is turned back into
+/// the compiler's own [`Kind`] here, at the one place that resolves a file —
+/// see [`kind_of`].
+fn read_procedure(deck: u8, node: NodeAt, state: &State) -> Result<String, String> {
+    let path = state
+        .slots
+        .path(usize::from(deck), kind_of(node.layer), node.index as usize)?;
     std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-fn write_procedure(args: &Value, state: &State) -> Result<String, String> {
-    let (slot, layer, index) = slot_layer_index(args)?;
-    let source = args
-        .get("source")
-        .and_then(Value::as_str)
-        .ok_or("`source` is required")?;
+/// **[`Operation::WriteProcedure`], done**: check a procedure and, if it
+/// compiles, write it.
+///
+/// The record this owes is `Record::Procedure` and it is not written here —
+/// `karakuri_operation_record::written` answers `Silent(OnLanding)`, because a
+/// record written at the ask would claim a swap the budget went on to roll
+/// back. It is written where the swap lands, which is the render loop, and this
+/// tool's answer says as much.
+fn write_procedure(deck: u8, node: NodeAt, source: &str, state: &State) -> Result<String, String> {
+    let slot = usize::from(deck);
+    let layer = kind_of(node.layer);
+    let index = node.index as usize;
     let path = state.slots.path(slot, layer, index)?.clone();
     let name = layer_name(layer);
 
@@ -1250,45 +1581,23 @@ fn swap_outcome(state: &mut State) -> Result<String, String> {
     })
 }
 
-/// Ask the render loop to keep what a slot is playing.
-///
-/// **`slot` is required and `id` is not**, which is [`slot_layer_index`]'s
-/// convention and its reason: an argument a client says nothing about should
-/// mean the obvious thing, and the obvious thing here is the name a key press
-/// gets. Unlike `index` there is no default written down — the loop stamps it,
-/// and stamping it here would be a second answer to what a nameless save is
-/// called.
+/// **[`Operation::SaveSet`], done**: ask the render loop to keep what a slot is
+/// playing.
 ///
 /// Nothing about the Set is read here and nothing could be: this thread does not
-/// hold it. What this does is check what it can check, hand the request over,
-/// and give the caller back the half it waits on.
-fn save_set(args: &Value, state: &State) -> Result<mpsc::Receiver<News>, String> {
-    let slot = args
-        .get("slot")
-        .and_then(Value::as_u64)
-        .ok_or("`slot` is required and is a number")? as usize;
-    // **The refusal `read_procedure` gives for a slot this deck does not hold,
-    // from the same place.** The loop checks the range again — it is the only
-    // thing that knows the *deck*'s slot count — but a model that asked for slot
-    // 9 is owed the answer now rather than after a round trip. See
-    // [`Slots::holds`] on why this is not [`Slots::nodes`].
-    state.slots.holds(slot)?;
-    let id = match args.get("id") {
-        // **`null` is absent, not a bad string.** A client that builds its
-        // arguments from a record with an empty field sends `"id": null`, and
-        // that is a caller saying nothing about the id rather than one getting
-        // its type wrong — "`id` is a string" is a refusal about a mistake it
-        // did not make. Every other optional argument here reads an absent one
-        // as its default; `null` is the second spelling of absent and gets the
-        // same answer. It is *not* the same as `""`, which is a caller naming a
-        // file with no name and is still refused — see [`checked_id`].
-        None | Some(Value::Null) => None,
-        Some(id) => Some(checked_id(
-            id.as_str()
-                .ok_or("`id` is a string: what to file the set under")?,
-        )?),
-    };
-
+/// hold it. What this does is hand the request over and give the caller back the
+/// half it waits on — everything decidable from the arguments alone was decided
+/// in [`kept`].
+///
+/// **This is the one tool that reaches the render loop, and it is not a second
+/// save path.** The request is taken where the MIDI surface is taken and ends in
+/// `Live::save_set`, the method the `k` key ends in. The record is
+/// `Record::Save` and it is written at the frame the save landed, which is why
+/// `karakuri_operation_record::written` answers `Silent(OnLanding)` for this
+/// operation rather than handing anybody a record to write here.
+fn save_set(deck: u8, id: Option<&str>, state: &State) -> Result<mpsc::Receiver<News>, String> {
+    let slot = usize::from(deck);
+    let id = id.map(str::to_string);
     let (tx, rx) = mpsc::channel();
     state
         .asked
@@ -1372,20 +1681,13 @@ fn save_set(args: &Value, state: &State) -> Result<mpsc::Receiver<News>, String>
 /// Set will allocate to hold elements. See [`element_storage_block`] for why
 /// that is computed rather than measured, and why it is the one figure in this
 /// answer that is about the Set as a whole rather than about a procedure.
-fn read_set(args: &Value, state: &State) -> Result<String, String> {
-    let id = args
-        .get("id")
-        .and_then(Value::as_str)
-        .ok_or("`id` is required and is a string: which set to read")?;
-    // **The same check `save_set` puts a name through, and the reason is the
-    // same one.** This id becomes `<store>/sets/<id>.set.ndjson`, so
-    // `../../../somewhere/else` is a path, and paths never cross this protocol —
-    // see [`checked_id`] and [`Slots`]. A read is not the harmless half of that
-    // rule: it is the half that hands a file's contents back to the caller.
-    let id = checked_id(id)?;
+fn read_set(id: &str, state: &State) -> Result<String, String> {
+    // Already one path component, because that is part of naming a set rather
+    // than part of reading one — see [`asked`]'s `read_set` arm and
+    // [`checked_id`].
     let store = Store::open(&state.store)
         .map_err(|e| format!("the store at `{}`: {e}", state.store.display()))?;
-    let lines = store.read_set(&id).map_err(|e| {
+    let lines = store.read_set(id).map_err(|e| {
         format!(
             "reading set `{id}`: {e} — a set is filed under the id it was saved \
              under, by `save_set`, by the operator's `k` key or by `--save-set ID`, \
@@ -1428,7 +1730,7 @@ fn read_set(args: &Value, state: &State) -> Result<String, String> {
         out.push_str(&node_block(&store, layer, index, name.as_deref(), &hash));
     }
     out.push('\n');
-    out.push_str(&element_storage_block(&store, &id));
+    out.push_str(&element_storage_block(&store, id));
     Ok(out)
 }
 
@@ -1475,37 +1777,20 @@ const LISTED: usize = 20;
 /// renders too. One derivation, two renderings — an operator's line and this —
 /// so the two surfaces cannot come to disagree about what a store holds or
 /// about what a node in it is called.
-fn list_sets(args: &Value, state: &State) -> Result<String, String> {
+fn list_sets(
+    holds: Option<&str>,
+    layer: Option<karakuri_operation::Layer>,
+    state: &State,
+) -> Result<String, String> {
     // **Lowercased once here rather than per node.** Case-insensitive because a
     // model that read `drift_shell` in one answer and types `Drift_Shell` into
-    // the next is not asking a different question.
-    let holds = match args.get("holds") {
-        // `null` is absent, for the reason [`save_set`]'s `id` says: a client
-        // building arguments from a record with an empty field sends one, and
-        // that is a caller saying nothing rather than a caller getting a type
-        // wrong.
-        None | Some(Value::Null) => None,
-        Some(value) => Some(
-            value
-                .as_str()
-                .ok_or("`holds` is a string: part of a node's name")?
-                .to_ascii_lowercase(),
-        ),
-    };
-    let layer = match args.get("layer") {
-        None | Some(Value::Null) => None,
-        Some(value) => {
-            let spelled = value
-                .as_str()
-                .ok_or("`layer` is a string: which layer a set must hold a node on")?;
-            // **The same spellings the other tools take**, from the same table:
-            // a model that addressed `Field` in `read_procedure` must not be
-            // told there is no such layer here.
-            let kind = layer_named(spelled)
-                .ok_or_else(|| format!("no layer `{spelled}` — {}", layer_list()))?;
-            Some(crate::setfile::layer_of(kind))
-        }
-    };
+    // the next is not asking a different question. Folded here rather than in
+    // [`listing`], because it is a decision about *matching* and an operation
+    // carries what it was asked for.
+    let holds = holds.map(str::to_ascii_lowercase);
+    // The vocabulary's layer into the record's, which is the third spelling of
+    // this list and the one a Set file is written in — see [`layer_of`].
+    let layer = layer.map(|layer| crate::setfile::layer_of(kind_of(layer)));
     let opened = |e: StoreError| format!("the store at `{}`: {e}", state.store.display());
     let store = Store::open(&state.store).map_err(opened)?;
     let mut sets = crate::setfile::summarise(&store).map_err(opened)?;
@@ -2383,6 +2668,27 @@ proc probe_source_b {
 
   element {
     position = vec3(1.0, 0.0, 0.0);
+  }
+}
+"#;
+
+    /// **A second renderer, and every number in it different.** For the test
+    /// that a write lands on the node its address names: two files that read
+    /// the same would let a write to `L4:1` land on `L4:0` and pass.
+    const PROBE_L4_B: &str = r#"
+proc probe_l4_b {
+  kind  L4
+  blend additive
+
+  consumes position
+
+  vertex {
+    clip       = camera * vec4(position, 1.0);
+    point_size = 5.0;
+  }
+
+  fragment {
+    color = vec4(0.0, 1.0, 0.0, 1.0);
   }
 }
 "#;
@@ -3980,6 +4286,56 @@ proc probe_knobs {
         assert!(said.contains("never_saved"), "{said}");
         assert!(said.contains("save_set"), "{said}");
     }
+
+    /// **A write lands on the node its address names, and its neighbour is left
+    /// alone** — asserted on the files rather than on what the call said.
+    ///
+    /// This is the one property the routing through
+    /// [`karakuri_operation::Operation`] could quietly lose: the wire's `index`
+    /// becomes [`NodeAt::index`] and comes back out again to resolve a file, so
+    /// an address that arrived correct and was carried wrong would still return
+    /// *compiled and written* and change the wrong procedure. A slot with two
+    /// renderers is what makes that visible: with one, every wrong index is the
+    /// right one.
+    #[test]
+    fn a_write_reaches_the_node_its_address_names_and_not_its_neighbour() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let write = |name: &str, source: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, source).expect("fixture");
+            path
+        };
+        let head = write("l1.kir", PROBE_L1);
+        let first = write("l4_a.kir", PROBE_L4);
+        let second = write("l4_b.kir", PROBE_L4);
+        let reporter = serve(
+            0,
+            Slots(vec![(head, vec![first.clone(), second.clone()])]),
+            store_root(&dir),
+            true,
+        )
+        .expect("serve");
+        let port = reporter.port();
+        stand_in(reporter, no_loop);
+
+        let (failed, said) = call(
+            port,
+            "write_procedure",
+            json!({"slot":0,"layer":"L4","index":1,"source":PROBE_L4_B}),
+        );
+        assert!(!failed, "the second renderer could not be written: {said}");
+        assert_eq!(
+            std::fs::read_to_string(&second).expect("the second renderer"),
+            PROBE_L4_B,
+            "`L4:1` was addressed and the file behind it does not hold what was written"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&first).expect("the first renderer"),
+            PROBE_L4,
+            "`L4:1` was addressed and `L4:0` changed — the address did not survive the \
+             call, and the answer said the write had landed"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -4564,5 +4920,261 @@ mod tests {
             refusal.contains("is 66 bytes"),
             "an id was refused for a length its caller cannot count to: {refusal}"
         );
+    }
+
+    // -- the surface against the vocabulary and the page -------------------
+
+    /// The specification, relative to the workspace root — the same page
+    /// `karakuri-operation`'s `the_manual_and_the_vocabulary_agree.rs` and
+    /// `karakuri-console`'s `tests/vocabulary.rs` read, and this is that check
+    /// for the third surface.
+    const PAGE: &str = "docs/manual/operations.html";
+
+    /// **What marks an operation on that page.** Every row opens with this div
+    /// and nothing else on the page uses it; sections are `<h2>` and the legend
+    /// is a paragraph. The same marker both other tests match, for their
+    /// reason.
+    const ROW: &str = r#"<div class="op-head">"#;
+
+    fn page() -> String {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(PAGE);
+        std::fs::read_to_string(&path).unwrap_or_else(|e| {
+            panic!(
+                "{} is the specification and could not be read: {e}",
+                path.display()
+            )
+        })
+    }
+
+    /// **Every row's title and its MCP badge**, in page order: the badge's
+    /// class — `has`, `plan` or `gap` — and the text it names the route with.
+    ///
+    /// Read verbatim and never decoded, exactly as the vocabulary's own test
+    /// reads a heading: a `gap` badge says `&mdash;`, and a tool name that
+    /// needed decoding to match would be a tool nobody could type.
+    fn mcp_routes() -> Vec<(String, String, String)> {
+        let html = page();
+        let mut found = Vec::new();
+        for row in html.split(ROW).skip(1) {
+            let Some(open) = row.find("<h3>") else {
+                continue;
+            };
+            let rest = &row[open + "<h3>".len()..];
+            let Some(close) = rest.find("</h3>") else {
+                continue;
+            };
+            let title = rest[..close].to_string();
+            // The row ends where the next section does; a badge found past that
+            // would belong to another row.
+            let body = &rest[close..];
+            let body = &body[..body.find("</section>").unwrap_or(body.len())];
+            let Some(at) = body.find(r#"<span class="rt "#) else {
+                continue;
+            };
+            let mut badge = None;
+            for span in body[at..].split(r#"<span class="rt "#).skip(1) {
+                let Some(quote) = span.find('"') else {
+                    continue;
+                };
+                let class = span[..quote].to_string();
+                let Some(text) = span[quote..].strip_prefix(r#"">MCP <b>"#) else {
+                    continue;
+                };
+                let Some(shut) = text.find("</b>") else {
+                    continue;
+                };
+                badge = Some((class, text[..shut].to_string()));
+                break;
+            }
+            let Some((class, names)) = badge else {
+                continue;
+            };
+            found.push((title, class, names));
+        }
+        found
+    }
+
+    /// **Arguments each published tool accepts**, and the only thing this file
+    /// says about a tool that the code does not.
+    ///
+    /// Not a second list of titles: what a tool *is* comes back from [`asked`],
+    /// which is the path a real call takes. This is the smallest call that gets
+    /// past each schema, so that a tool cannot be surveyed by inventing what it
+    /// would have been named.
+    fn sample(name: &str) -> Value {
+        match name {
+            "read_procedure" => json!({ "slot": 0, "layer": "L4" }),
+            "write_procedure" => json!({ "slot": 0, "layer": "L4", "source": "" }),
+            "swap_outcome" => json!({}),
+            "save_set" => json!({ "slot": 0 }),
+            "read_set" => json!({ "id": "a_set" }),
+            "list_sets" => json!({}),
+            other => panic!(
+                "`{other}` is published by `tools()` and this file has no arguments for it — \
+                 add the smallest call that gets past its schema, so the survey below reaches \
+                 it rather than passing over it"
+            ),
+        }
+    }
+
+    /// Every tool this server publishes, with the operation one call names.
+    fn published() -> Vec<(String, Operation)> {
+        let slots = slots();
+        tools()
+            .as_array()
+            .expect("tools() is an array")
+            .iter()
+            .map(|tool| {
+                let name = tool["name"]
+                    .as_str()
+                    .expect("a tool has a name")
+                    .to_string();
+                let asked = asked(&name, &sample(&name), &slots)
+                    .unwrap_or_else(|e| panic!("`{name}` is advertised and is not a tool: {e}"));
+                match asked {
+                    Asked::Named(operation) => (name, operation),
+                    Asked::Refused(refusal) => panic!(
+                        "`{name}` refused the sample call in this file: {refusal} — the \
+                         arguments in `sample` no longer get past its schema"
+                    ),
+                }
+            })
+            .collect()
+    }
+
+    /// **A tool with no row is an operation nobody specified.**
+    ///
+    /// The page is the specification for which operations exist — that is what
+    /// `karakuri-operation`'s own manual test is built on — so a tool reaching
+    /// something the page does not name would be this surface inventing an
+    /// operation, with no prose and no other three routes.
+    ///
+    /// The row is matched on the operation's title, which comes from
+    /// [`asked`] rather than from a table here, **and** on the badge's own text,
+    /// which has to name the tool: a row marked `has` that named a different
+    /// tool would be a route the page describes and nobody can call.
+    #[test]
+    fn every_tool_this_server_publishes_has_a_route_on_the_page() {
+        let routes = mcp_routes();
+        assert!(
+            routes.len() >= 46,
+            "only {} rows with an MCP badge found in {PAGE} — is a row still `{ROW}` \
+             followed by an `<h3>` and four `rt` badges? A scan that matched nothing would \
+             pass every assertion below",
+            routes.len()
+        );
+        let published = published();
+        assert!(
+            published.len() >= 6,
+            "only {} tools published — this server has fewer than the page's MCP column \
+             claims",
+            published.len()
+        );
+        for (name, operation) in &published {
+            let title = operation.title();
+            let row = routes
+                .iter()
+                .find(|(row, _, _)| row == title)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`{name}` names `{title}` and {PAGE} has no row with that heading — a \
+                         tool reaching an operation nobody specified. The page is the \
+                         specification, so add the row there first"
+                    )
+                });
+            assert_eq!(
+                row.1, "has",
+                "`{name}` names `{title}`, which {PAGE} marks `{}` for MCP — a tool that \
+                 exists and a page that says it does not",
+                row.1
+            );
+            assert_eq!(
+                row.2, *name,
+                "`{title}` is marked as reached over MCP by `{}`, and the tool that names \
+                 that operation is `{name}` — the page names a call nobody can make",
+                row.2
+            );
+        }
+    }
+
+    /// The other direction: **a `has` badge with no tool is the page claiming a
+    /// route that does not exist.**
+    ///
+    /// It fails apart from the test above because it is a different failure:
+    /// that one says the surface reached past the specification, this one says
+    /// the specification promises a model something it cannot do.
+    #[test]
+    fn every_mcp_route_the_page_claims_is_a_tool_this_server_publishes() {
+        let routes = mcp_routes();
+        let claimed: Vec<&(String, String, String)> = routes
+            .iter()
+            .filter(|(_, class, _)| class == "has")
+            .collect();
+        assert!(
+            claimed.len() >= 6,
+            "only {} rows of {PAGE} claim an MCP route — the scan found less than the \
+             column holds, which would pass this test by finding nothing",
+            claimed.len()
+        );
+        let published = published();
+        for (title, _, names) in claimed {
+            let tool = published
+                .iter()
+                .find(|(name, _)| name == names)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{PAGE} says `{title}` is reached over MCP by `{names}`, and this \
+                         server publishes no such tool — the page claims a route a model \
+                         cannot take. Either the tool went and the badge is now `gap`, or it \
+                         was renamed on the wire"
+                    )
+                });
+            assert_eq!(
+                tool.1.title(),
+                title,
+                "{PAGE} says `{title}` is reached by `{names}`, and `{names}` names \
+                 `{}` — one operation on the page and another in the server",
+                tool.1.title()
+            );
+        }
+    }
+
+    /// **Not one of the six writes a record where it is asked**, which is why
+    /// none of them routes through `Live::operate` and why this module performs
+    /// its own.
+    ///
+    /// Asserted against `karakuri-operation-record` rather than against this
+    /// file, in the shape ADR-0198 gave the key handler's owed list: the day one
+    /// of these conversions changes — a `read_set` that logged, a `save_set`
+    /// whose record moved off the landing frame — the failure names the tool
+    /// that is due to move rather than leaving this surface performing something
+    /// the record layer has since taken over.
+    #[test]
+    fn no_tool_writes_a_record_where_it_is_asked() {
+        use karakuri_operation_record::{Current, Silent, Written};
+        for (name, operation) in published() {
+            let written = karakuri_operation_record::written(&operation, &Current::default());
+            let expected = match name.as_str() {
+                // It asks rather than changes, and a question writes no record.
+                "read_procedure" | "read_set" | "list_sets" | "swap_outcome" => Silent::Question,
+                // Its record is written where the work lands: `Record::Save` at
+                // the frame the save landed, `Record::Procedure` when a swap
+                // lands or is rolled back.
+                "save_set" | "write_procedure" => Silent::OnLanding,
+                other => {
+                    panic!("`{other}` is published and this test does not know what it writes")
+                }
+            };
+            assert_eq!(
+                written,
+                Written::Silent(expected),
+                "`{name}` names `{}`, and what it writes is no longer `{expected:?}` — this \
+                 surface performs it here because there was no record to route into, and \
+                 that is what has changed",
+                operation.title()
+            );
+        }
     }
 }
