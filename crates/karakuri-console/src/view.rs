@@ -307,6 +307,18 @@ pub enum Kind {
     /// See [`mixer`] for what is drawn here, for where the values come from,
     /// and for the four things in the mock's bay that are **not** drawn.
     Mixer,
+    /// **The Library bay**, which is a bay in every other respect: the same
+    /// card and the same [`bay_head`], carrying [`LIBRARY_TITLE`], no pill and
+    /// the grip the mock draws in this head.
+    ///
+    /// A kind of its own for [`Kind::Mixer`]'s reason: [`View::draw`] has to
+    /// know **which** bay the listing goes in, and the alternative is
+    /// comparing a name on the frame path, which puts a string where the table
+    /// already says what a region is.
+    ///
+    /// See [`library`] for what is drawn here, for where the values come from,
+    /// and for the six things in the mock's bay that are **not** drawn.
+    Library,
     /// One subdivision of a bay, which has no head of its own because the bay
     /// around it has one. The inspector's two panes.
     Pane,
@@ -414,11 +426,7 @@ pub const REGIONS: &[Region] = &[
     },
     Region {
         name: "library",
-        kind: Kind::Bay {
-            title: "Library",
-            pills: &[],
-            grip: true,
-        },
+        kind: Kind::Library,
     },
     Region {
         name: "staging",
@@ -3927,6 +3935,251 @@ fn tint(colour: Color32, percent: u8) -> Color32 {
     Color32::from_rgba_unmultiplied(colour.r(), colour.g(), colour.b(), alpha)
 }
 
+// ---------------------------------------------------------------------------
+// The Library bay
+// ---------------------------------------------------------------------------
+
+/// **The word at the head of the Library bay**, in the source's own
+/// capitalisation for [`Kind::Bay`]'s reason: the mock upper-cases in CSS, and
+/// that is done at paint time so the word a reader searches for is the word in
+/// the source.
+const LIBRARY_TITLE: &str = "Library";
+
+/// **The Library bay, laid out**: where the rows go, how many of them there is
+/// room for, and where the count under them goes.
+///
+/// # What the bay is standing on, and it is a listing rather than a walk
+///
+/// The manual: *"A scope and a walk, not one flat list: favourites, my sets,
+/// app presets, a folder."* **One of those four exists** — `my sets`, which is
+/// [`karakuri_store::Store::list_sets`](../../../crates/karakuri-store/src/store.rs)
+/// and is a directory of Set files. So this draws that list and no scope
+/// chooser above it, for the reason [`outputs`] draws one sink of four: a
+/// control over machinery that does not exist is the scaffolding this module's
+/// documentation refuses.
+///
+/// # What is in the mock's bay and is deliberately not here
+///
+/// - **The `.scopes` row** — `favourites`, `my sets`, `presets`, `folder` and
+///   a `+`. Every chip is a control, three of the four name a collection
+///   nothing in this workspace can produce, and what a folder scope even reads
+///   is one of the two questions `console.html` itself lists as **still
+///   open**: *"A directory of `.kir` files is a different thing from a
+///   directory of Set files, and a bundle is a third."* The `+` is the arena's
+///   own gap drawn a fifth time, which [`outputs`] already names.
+/// - **The `.path` row**, `~/sets/tour-2026/night-b › opening`. It is the
+///   walk *inside* a folder scope, so it says nothing until that scope is
+///   decided.
+/// - **The `.lib-filters` fields**, `holds…` and `layer…`. Two text controls,
+///   and the vocabulary has the operation they would emit —
+///   `Operation::ListSets { holds, layer }` — but nothing in the store answers
+///   it: `list_sets` reads names off a directory and no index anywhere says
+///   what a Set *holds*.
+/// - **`.lib-row`'s `.star`.** A favourite is a fact about a Set that nothing
+///   in this workspace keeps — there is no such field on a `SetEntry`, no
+///   record that carries one, and no metadata card that mentions one. Drawing
+///   a hollow star on every row would assert that nothing is a favourite,
+///   which is a reading nobody took.
+/// - **`.lib-row .dim`, the time beside each name.** This one is different
+///   from the others and is worth the sentence: the *value* exists —
+///   `SetEntry::written` is the Set file's own mtime — and what does not exist
+///   is a spelling for it. The one answer in this workspace is
+///   `karakuri-cli`'s `setfile::written_at`, in a package with no library
+///   target, and it is local time to the second where the mock's column is
+///   `16:09`. Writing a second spelling here is the kind of second answer this
+///   repository deletes rather than adds, so the column waits for the one
+///   spelling to be somewhere both callers can reach.
+/// - **`.lib-row.cursor`, and the `load → C` pill in the foot.** A cursor is a
+///   selection this console does not keep — the same sentence [`mixer`] writes
+///   about the deck selection — and the pill is *"How a Set gets from the
+///   library to a deck"*, which is the second of `console.html`'s own still
+///   open questions. **Neither blocks the listing**: what is missing is a way
+///   to play from this bay, not a way to draw it.
+///
+/// # The foot's number is the mock's own, read the mock's way
+///
+/// `5 of 27` is how many rows are listed against how many the scope holds, and
+/// both halves are here: the total is what the harness handed over, and the
+/// count is how many rows the bay had room for. So a library taller than its
+/// list says so in the one place the mock puts it, and nothing scrolls —
+/// which is honest, because there is no scroll position anywhere in this
+/// crate and inventing one would be a control.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LibraryBay {
+    /// `.lib-list`'s content box: the region under the bay head and above the
+    /// foot, inside [`size::LIB_LIST_PAD`], where the rows are laid from the
+    /// top with no gap between them.
+    pub list: Rect,
+    /// **How many rows are drawn**, which is how many fit in [`list`](Self::list) —
+    /// never more than [`total`](Self::total), and never zero, because a bay
+    /// with no room for one row is no bay at all.
+    pub rows: usize,
+    /// **How many Sets the store holds**, which is what the harness handed
+    /// over. The second half of the foot's `n of m`.
+    pub total: usize,
+    /// `.lib-foot`, along the bottom edge of the bay, with its rule on top.
+    pub foot: Rect,
+}
+
+impl LibraryBay {
+    /// The `index`th row's rectangle, counting from the top of the list.
+    ///
+    /// Derived rather than stored for [`TransportRow::dot`]'s reason: the rows
+    /// are a stride and a count, and a `Vec` of them would be an allocation a
+    /// frame does not need. `index` past [`rows`](Self::rows) is a rectangle
+    /// past the end of the list, which is a caller's error and not a state —
+    /// the one caller iterates `0..rows`.
+    pub fn row(&self, index: usize) -> Rect {
+        Rect::from_min_size(
+            Pos2::new(
+                self.list.min.x,
+                self.list.min.y + size::LIB_ROW_H * index as f32,
+            ),
+            egui::vec2(self.list.width(), size::LIB_ROW_H),
+        )
+    }
+
+    /// What the foot reads: `n of m`, the mock's own `5 of 27`.
+    pub fn count(&self) -> String {
+        format!("{} of {}", self.rows, self.total)
+    }
+}
+
+/// **The Library bay's rows, derived** — see [`LibraryBay`] for what is drawn
+/// here and for the six things in the mock's bay that are not.
+///
+/// `layout` must be solved: [`Layout::rect`] refuses to answer from a dirty
+/// one. Unlike [`outputs`], [`transport`] and [`mixer`] this asks `egui` for
+/// nothing: every box in the bay is the full width of the list, so no
+/// rectangle here is the width of the type in it.
+///
+/// `None` where there is nothing to list, and `None` where there is no room to
+/// list it: a console with no store behind it is every test in this crate and
+/// the whole of `cargo test -p karakuri-console`, and what the bay draws then
+/// is the card and its head and nothing else — this is [`mixer`]'s rule, one
+/// column along, and [`View::picture`]'s before that.
+pub fn library(layout: &karakuri_layout::Layout, sets: &[String]) -> Option<LibraryBay> {
+    // **No store behind the console, so there is nothing to list.** Drawing an
+    // empty list with `0 of 0` under it would be a reading of a library nobody
+    // opened, which is the row of zeroes ADR-0177 is about.
+    if sets.is_empty() {
+        return None;
+    }
+    library_box(to_egui(layout.rect(layout.find("library")?)), sets.len())
+}
+
+/// The arithmetic of the bay, away from the layout it reads.
+///
+/// Term for term from `style.css`:
+///
+/// - `.lib-foot { padding: 5px 10px; font-size: 10px; border-top: 1px solid
+///   var(--c-hair) }` — a [`size::LIB_FOOT_H`] row along the bottom of the
+///   bay, its rule the top pixel of it.
+/// - `.lib-list { display: flex; flex-direction: column; padding: 3px }` —
+///   what is left between the bay head and that row, inset by
+///   [`size::LIB_LIST_PAD`] on all four sides.
+/// - `.lib-row { padding: 3px 7px }` — [`size::LIB_ROW_H`] each, stacked from
+///   the top of the list with no gap, because `.lib-list` states none.
+///
+/// # The foot is at the bottom and the leftover is the list's
+///
+/// The mock's bay is a flow: its children stack from the top and whatever is
+/// left over is under the last of them. **Here the leftover goes to the list
+/// instead**, and the mock says which: the Library is the bay that carries
+/// `style="flex:1"` in its column and a `.grip` in its head, which is *"the
+/// bay that absorbs its column's height"* — and what absorbs it is the list,
+/// since a foot of one line at a fixed type size has nothing in it that gets
+/// bigger. A foot left floating under the last row would also put its
+/// `border-top` between the list and bare card, which is a rule separating
+/// something from nothing.
+///
+/// `None` where the region cannot hold the foot and one row, which is
+/// [`picture_rect`]'s rule stated on a listing.
+fn library_box(region: Rect, total: usize) -> Option<LibraryBay> {
+    let foot = Rect::from_min_max(
+        Pos2::new(region.min.x, region.max.y - size::LIB_FOOT_H),
+        region.max,
+    );
+    let list = Rect::from_min_max(
+        Pos2::new(
+            region.min.x + size::LIB_LIST_PAD,
+            region.min.y + size::HEAD_H + size::LIB_LIST_PAD,
+        ),
+        Pos2::new(
+            region.max.x - size::LIB_LIST_PAD,
+            foot.min.y - size::LIB_LIST_PAD,
+        ),
+    );
+    // **Narrower than its own padding is no list**, which is
+    // [`picture_rect`]'s rule stated across the axis. There is no matching
+    // check down it: a bay too short for the foot is already a bay too short
+    // for a row, and `rows` below is what answers that.
+    if list.width() <= 0.0 {
+        return None;
+    }
+    let fits = (list.height() / size::LIB_ROW_H).floor().max(0.0) as usize;
+    let rows = fits.min(total);
+    (rows > 0).then_some(LibraryBay {
+        list,
+        rows,
+        total,
+        foot,
+    })
+}
+
+/// **The Library bay's rows, painted.**
+///
+/// Where everything goes is [`library`]'s, so this paints and derives nothing.
+///
+/// Term for term from `style.css`:
+///
+/// - `.lib-row` — `color: var(--c-dim)`, a name at [`size::BASE`], one
+///   [`size::LIB_ROW_PAD_X`] in from the left of the list and centred across
+///   the row's own height.
+/// - `.lib-foot` — `color: var(--c-faint)` at [`size::LIB_FOOT_SIZE`], one
+///   [`size::LIB_FOOT_PAD_X`] in and centred, over a
+///   `border-top: 1px solid var(--c-hair)`.
+///
+/// **A name too long for the track is clipped rather than elided**, which is
+/// the mock's own answer: `.lib-row` sets no `text-overflow` where `.path` and
+/// `.strip-name` both do, so there is no ellipsis to draw. The clip is
+/// `.lib-list`'s box, which is the same `with_clip_rect` the picture, a
+/// preview cell and a tally are each drawn inside.
+fn library_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, sets: &[String]) {
+    let painter = ui.painter().with_clip_rect(bay.list);
+    for (index, name) in sets.iter().take(bay.rows).enumerate() {
+        let row = bay.row(index);
+        let galley = painter.layout_job(span_at(name, size::BASE, pal.dim));
+        painter.galley(
+            Pos2::new(
+                row.min.x + size::LIB_ROW_PAD_X,
+                row.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            pal.dim,
+        );
+    }
+
+    let painter = ui.painter().with_clip_rect(bay.foot);
+    let rule = bay.foot.min.y + size::HAIRLINE * 0.5;
+    painter.line_segment(
+        [
+            Pos2::new(bay.foot.min.x, rule),
+            Pos2::new(bay.foot.max.x, rule),
+        ],
+        Stroke::new(size::HAIRLINE, pal.hair),
+    );
+    let galley = painter.layout_job(span_at(&bay.count(), size::LIB_FOOT_SIZE, pal.faint));
+    painter.galley(
+        Pos2::new(
+            bay.foot.min.x + size::LIB_FOOT_PAD_X,
+            bay.foot.center().y - galley.size().y * 0.5,
+        ),
+        galley,
+        pal.faint,
+    );
+}
+
 /// The console's view: which room it is in, and the frame's plan, kept so a
 /// frame does not allocate one.
 pub struct View {
@@ -3984,6 +4237,26 @@ pub struct View {
     /// [`View::new`] gives it room for [`DECKS`] so the frame path never grows
     /// it. See [`Strip`] and [`mixer`].
     pub mixer: Vec<Strip>,
+    /// **What the Library bay lists this frame**: the name of every Set the
+    /// store holds, in the order the store listed them — and **empty** for a
+    /// console with no store behind it, which is every test in this crate and
+    /// what the bay draws then is nothing at all.
+    ///
+    /// **The same seam as [`View::mixer`]**, and empty rather than
+    /// `Option<Vec<_>>` for the same reason: an empty listing is already the
+    /// whole of *no library*, and a store that holds nothing and a store that
+    /// is not there are the same bay — one with no row to draw.
+    ///
+    /// **Read once rather than per frame**, by whoever owns the store. A
+    /// listing is a directory read, which is not a thing to do on a frame
+    /// path (P-0072), and nothing in this crate can do it anyway: opening a
+    /// store is `karakuri-store`'s and `src/` depends on neither it nor the
+    /// engine (ADR-0156). What crosses the seam is a list of names.
+    ///
+    /// A name and nothing else, because a name is what exists: see [`library`]
+    /// for the star and the time the mock draws beside it, and for why neither
+    /// is here.
+    pub library: Vec<String>,
     /// **The shape of what is being rendered**, which is what the Program bay
     /// arranges its body for — [`program_bay`], and [`picture_rect`] for why
     /// it is two numbers rather than a ratio.
@@ -4023,6 +4296,11 @@ impl View {
             // As many strips as a deck can ever have, so the frame path never
             // grows it — the same reason `placed` is built with a capacity.
             mixer: Vec::with_capacity(DECKS),
+            // Nothing until somebody lists a store, which is every test in
+            // this crate. No capacity is reserved: how many Sets a store holds
+            // is not a number this crate has, and the list is written once
+            // rather than per frame.
+            library: Vec::new(),
             canvas: MOCK_CANVAS,
             phase: Phase::ZERO,
             // Every region the console has, so the frame path never grows it.
@@ -4117,6 +4395,7 @@ impl View {
         let previews = self.previews;
         let values = self.transport;
         let strips = self.mixer.as_slice();
+        let sets = self.library.as_slice();
         let phase = self.phase;
         let frame = egui::Frame::NONE.fill(pal.ground);
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
@@ -4165,6 +4444,20 @@ impl View {
                         bay_head(ui, &pal, rect, MIXER_TITLE, &[], false);
                         if let Some(bay) = mixer(ui.ctx(), panel.layout(), strips) {
                             mixer_into(ui, &pal, &bay, phase);
+                        }
+                    }
+                    // The other bay with something in its body, and it is a
+                    // bay in every other respect: the same card and the same
+                    // head, and then as many rows as the bay has room for.
+                    // With no store behind the console there are none and the
+                    // body is as empty as every other one in this pass —
+                    // `library`'s answer, not this pass's, so that *no store
+                    // means nothing at all* is decided in one place.
+                    Kind::Library => {
+                        card(ui, &pal, rect);
+                        bay_head(ui, &pal, rect, LIBRARY_TITLE, &[], true);
+                        if let Some(bay) = library(panel.layout(), sets) {
+                            library_into(ui, &pal, &bay, sets);
                         }
                     }
                     // A pane draws nothing of its own. It has no card — it is

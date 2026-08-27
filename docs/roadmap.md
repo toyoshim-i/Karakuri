@@ -240,8 +240,12 @@ number read off `docs/manual/style.css`; the panel's model, which is what a poin
 act on; and the `egui` view, whose palette is the mock's and whose seven bay heads are one
 component. Its tests still run without a device.
 
-**Every bay is empty except the Program bay's two regions**, on purpose — a bay that looks
-finished does not get replaced. The picture is a live engine frame, and under it the **row of four
+**Four of the seven bays are empty** — staging, inspector, master and sequencer — **on purpose**: a
+bay that looks finished does not get replaced, and each of the four is waiting on values that do not
+exist, which the survey under *Where this goes next* now names one by one. The other three have
+bodies: the Program bay's two regions, the Mixer bay's strips, and the Library bay's listing.
+
+The picture is a live engine frame, and under it the **row of four
 deck previews** is built: four cells, with **deck A auditioning in the first** and B, C and D
 reading `off`. The example's engine is a deck of two slots and only deck A is making texels: deck B
 is **parked**, which is neither stepping nor drawn, and C and D have nothing behind them at all. A
@@ -463,10 +467,10 @@ throws the expand away with nothing said. Nothing in the console reaches that st
 ### Where this goes next, and the decisions it is waiting on
 
 **Five controls in the console answer a pointer**: the Outputs dot, the mixer's two faders, its
-blend chip and its tally chip. The mask mini is the one readout left in the strip, the other bays
-are empty, and the keyboard, a MIDI map and MCP reach none of it — the panel routes in
-`manual/operations.html` are still `plan`, because the console is an example rather than the
-program.
+blend chip and its tally chip. The mask mini is the one readout left in the strip, **the Library bay
+lists what the store holds** and the other four bays are empty, and the keyboard, a MIDI map and MCP
+reach none of it — the panel routes in `manual/operations.html` are still `plan`, because the
+console is an example rather than the program.
 
 **The order that makes each next thing cheaper than it would be alone:**
 
@@ -587,7 +591,54 @@ program.
    column is now enforced both ways round and by badge text as well as by title, which is the first
    of the four route columns to become checkable at all — the vocabulary's own manual test says
    those *"become checkable one surface at a time as they migrate"*.
-4. **The remaining bays**: library, staging, inspector, master, sequencer.
+4. **The remaining bays, surveyed — and the survey is the order.** One of the five is built and the
+   other four are each waiting on something. What each is standing on is
+   [console.html](manual/console.html); what decides which comes next is whether the values behind
+   it exist anywhere in this workspace.
+
+   - **Library — built, as a listing.** `Store::list_sets` is the one answer to *what does this
+     library hold*, so the bay draws a row per Set and a foot reading `n of m` — how many are
+     listed against how many there are, which is the mock's own `5 of 27`. **Six of the mock's
+     controls stay undrawn and each is waiting on something different**: a *favourite* is a fact
+     nothing here keeps; the *scope* row is four collections of which one exists, and what a folder
+     scope reads is `console.html`'s own still-open question; the *filters* have an operation
+     (`Operation::ListSets { holds, layer }`) and no index to answer it; and `load → C` is *how a
+     Set gets from the library to a deck*, the manual's largest named gap. **That gap blocks playing
+     from this bay and not drawing it** — a readout says what is there, and this one can. The
+     seventh omission is the odd one and is
+     [ADR-0200](adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md): the
+     **time** beside each name has a value (`SetEntry::written`) and no spelling — the one in this
+     workspace is `karakuri-cli`'s `setfile::written_at`, in a package with no library target — so
+     the column waits rather than getting a third format. The example lists `.karakuri` once at
+     startup, which is why a Set saved while the window is up does not appear until the next run.
+   - **Staging — blocked on machinery, and there is not even an empty case.** Candidates waiting,
+     *"whether they came from you or from an agent"*. Nothing in this workspace produces one: there
+     are no agents, and `HotSwap`'s rolled-back candidate is a different thing — a build that lost,
+     not a proposal waiting to be accepted. The head's `2 waiting` and each row's `you, 14:41` are
+     readings of a queue that does not exist, and the mock's third row — *a rejected candidate costs
+     nothing* — is a standing note beside two candidates rather than what the lane draws when it is
+     empty. **The cheapest of the four to build and the one with the least behind it.**
+   - **Inspector — the richest in values and the poorest in decisions.** `Set::published`,
+     `Set::params`, `Set::node_names`, `Set::bindings`, `Set::inputs` and `Set::layering` are all
+     there, so the node groups, the numbered rows, the values, the renderer row and a bound row's
+     source are readable off a running Set. Three things are not. **Authority — `man / sug / auto` —
+     exists nowhere at all**: not in the engine, not in `karakuri-operation`, and the manual calls
+     it *"one of the four properties the whole system is defined by"*. **The panes overflow**: a Set
+     with more rows than fit is the first thing in this console that would want a scroll position,
+     and this crate keeps none — the Library's answer, *list what fits and say how many*, is a
+     listing's answer and not a node tree's. And the `showing` header, `keep` and `2 up` are
+     controls, the last of them the arena gap `view::outputs` already names as drawn five times.
+   - **Master — blocked on machinery, and the bay is two things neither of which exists.** There is
+     **no master out level anywhere in `karakuri-engine`**: `Deck::gain` and `Deck::opacity` are per
+     slot and the Mixer bay draws both. And a master effect is `console.html`'s own *"giving L5 a
+     writable form"*, which is not built — the callout on that page is the argument for it, not a
+     record that it happened. What is left of the bay is its footnote, *runs in linear HDR, before
+     the one tonemap*, which is true and is a sentence rather than a readout.
+   - **Sequencer — blocked on machinery, and it is the largest of the four.** Lanes, steps, a ruler
+     and a playhead. **Nothing in this workspace holds a pattern.** *"A lane is a binding — a
+     source, a target, a curve and a range, a record that already exists"* — and bindings do exist,
+     but a *stepped* source does not: there is no step grid, no pattern record, and `seq 1` is a
+     source name nothing publishes.
 
 **Decisions nobody has taken, each blocking something named above.** These are questions rather
 than work, and every one of them was found by building the thing next to it.
@@ -695,6 +746,16 @@ than work, and every one of them was found by building the thing next to it.
   half of the pair.
 - **`SetMask` does not exist**, so the mask mini is a readout of state no operation can set. The row
   has to be settled on [the operations page](manual/operations.html) before it can be a control.
+- **The library's two questions are `console.html`'s own, and building the bay is what made them
+  due.** *Whether a folder scope reads Sets or artifacts* is what the scope row is waiting on — a
+  directory of `.kir` files, a directory of Set files and a bundle are three different things, and
+  the chip is a control over whichever it turns out to be. *How a Set gets from the library to a
+  deck* is the `load → C` pill, and the manual already says what should decide it: the
+  keyboard-only constraint, with dragging added afterwards as a second route to the same command.
+  Neither blocked the listing
+  ([ADR-0200](adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)); both
+  block everything after it. A third is smaller and is not on that page: **nothing keeps a
+  favourite**, so the star has no value to read and the `favourites` scope has no membership.
 - **What `expand` under a solo should do.** `Layout::soloed()` can lie: the solve never reads it and
   `check_structure` only checks that it addresses a node, so a solo's exclusivity lives in flags any
   later `expand` may contradict. Nothing reaches that state today.

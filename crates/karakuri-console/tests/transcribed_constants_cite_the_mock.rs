@@ -603,24 +603,27 @@ fn every_transcribed_constant_matches_the_source_it_cites() {
     // marker gives no constants at all; a broken CSS parse gives constants but
     // resolves no selector; and a stylesheet that has quietly lost its rules
     // gives both but nothing to resolve against. They read 76, 63 and 67 when
-    // `lib.rs` was added to the scan, and are meant to be raised, never
-    // lowered to fit a smaller one.
+    // `lib.rs` was added to the scan and 85, 70 and 77 when the Library bay's
+    // eight landed, and are meant to be raised, never lowered to fit a smaller
+    // one. The margin under each reading is the same two or three it was set
+    // with: a floor at the reading itself fails on any deletion at all, which
+    // is a different question from the one this guards.
     assert_eq!(
         total,
         transcribed + derived + own,
         "every constant is exactly one of the three kinds"
     );
     assert!(
-        total >= 74,
+        total >= 83,
         "only {total} constants read out of {} files — has a marker drifted?",
         SOURCES.len()
     );
     assert!(
-        transcribed >= 60,
+        transcribed >= 67,
         "only {transcribed} constants read as transcribed — the citation scan is not seeing them"
     );
     assert!(
-        resolved >= 64,
+        resolved >= 74,
         "only {resolved} citations resolved against {STYLESHEET} — is the stylesheet still parsing?"
     );
     assert!(

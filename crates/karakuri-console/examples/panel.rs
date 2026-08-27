@@ -155,6 +155,7 @@ use karakuri_layout::{Axis, Hit, NodeId, Point};
 use karakuri_operation::{BlendMode, Operation};
 use karakuri_operation_record::{written, Current, Written};
 use karakuri_store::record::Record;
+use karakuri_store::store::Store;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -1454,6 +1455,15 @@ impl Readout {
                     Kind::Previews => "four previews, A live".to_owned(),
                     // A bay like the other six, and then a strip per slot:
                     // a strip is a deck slot, and this deck has two.
+                    // A bay like the other five, and then a row per Set
+                    // the store holds — as many as the bay has room for, and
+                    // the foot says so. `n of m`, exactly as the bay draws it.
+                    Kind::Library => {
+                        match karakuri_console::view::library(layout, &self.view.library) {
+                            Some(bay) => format!("bay, {} listed", bay.count()),
+                            None => "bay, no store behind it".to_owned(),
+                        }
+                    }
                     Kind::Mixer => format!(
                         "bay, {} strip{}",
                         self.view.mixer.len(),
@@ -2283,6 +2293,71 @@ fn transport(
     })
 }
 
+/// **Where this example looks for a library**, and it is the directory
+/// `karakuri-cli` looks in when nobody passes `--store`.
+///
+/// Relative, like `L1_KIR` and `L4_KIR` above, because this example is run
+/// from the workspace root and reads its material the same way. The repository
+/// keeps one here, so a `cargo run --example panel` from the root has a Set to
+/// list rather than an empty bay.
+///
+/// Transcribed rather than asked for: `karakuri-cli`'s `DEFAULT_STORE` is a
+/// private constant of a package with no library target, so there is nothing
+/// to ask. The two are the same directory on purpose, and the day one moves
+/// this example lists an empty library rather than the wrong one.
+const STORE: &str = ".karakuri";
+
+/// **What the Library bay lists**: the name of every Set the store holds.
+///
+/// # Read once, and by the side of the seam that may read a disk
+///
+/// Called from `resumed`, before the first frame. A listing is a directory
+/// read and a frame path does not do those
+/// ([P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)),
+/// and nothing in `karakuri-console`'s `src/` could do it anyway: opening a
+/// store is `karakuri-store`'s and the crate depends on neither it nor the
+/// engine (ADR-0156). What crosses into the console is a list of names.
+///
+/// The cost of reading it once is that a Set saved while this window is up
+/// does not appear in the bay until the next run. That is the example's
+/// limitation and not the console's — the field is rewritable per frame like
+/// every other one — and closing it wants a reason to re-read rather than a
+/// timer, which is a decision and not this pass's.
+///
+/// # A missing store is listed as nothing, and is not created
+///
+/// [`karakuri_store::store::Store::open`] *"establishes the store layout under
+/// `root`, creating any directories that do not exist yet"*, which is the
+/// right thing for a program that is about to write one and the wrong thing
+/// for one that only wants to read. An example that listed a library by first
+/// making one would change the directory it was run in, so the root is
+/// required to be there already.
+///
+/// Either way the answer is a list, and an empty one is a bay with nothing in
+/// it — which is what `view::library` draws for it, and is honest: a store
+/// this run could not read holds nothing it can name.
+fn library(root: &std::path::Path) -> Vec<String> {
+    if !root.is_dir() {
+        println!(
+            "library: no store at {}, so the bay lists nothing",
+            root.display()
+        );
+        return Vec::new();
+    }
+    let sets = Store::open(root).and_then(|store| store.list_sets());
+    match sets {
+        Ok(sets) => sets.into_iter().map(|entry| entry.id).collect(),
+        Err(e) => {
+            // Said rather than swallowed, for the reason every other failure
+            // in this file is said: a bay that is empty because the store
+            // could not be read looks exactly like a bay that is empty
+            // because the store is.
+            println!("library: {} could not be listed: {e}", root.display());
+            Vec::new()
+        }
+    }
+}
+
 /// **What the mixer strips read this frame**: one per slot the deck has, out
 /// of the six things a `Deck` will say about a slot.
 ///
@@ -2987,6 +3062,10 @@ impl ApplicationHandler for App {
         // written again on every frame; this is the first one.
         let material = material();
         mixer(&engine.deck, &material, &mut self.readout.view.mixer);
+        // **The library before the legend too**, and once for the run: the
+        // legend says how many Sets the bay lists, and `library` says why
+        // where it is none.
+        self.readout.view.library = library(std::path::Path::new(STORE));
         self.readout.print_legend(budget, &governed);
 
         // The first frame is owed to the window appearing, not drawn on a
@@ -3651,6 +3730,55 @@ mod tests {
     /// [`unwritten`] takes the `Written` it is given, and this is where the
     /// two are handed to it.
     use karakuri_operation_record::{Owed, Silent};
+
+    /// **The library is what the store holds, and a store that is not there is
+    /// listed as nothing rather than created.**
+    ///
+    /// Two claims, and the second is the one worth a test: `Store::open`
+    /// establishes the layout it is pointed at, so a listing that opened first
+    /// would leave a `.karakuri` behind in whatever directory this example was
+    /// run from. [`library`] asks whether the root is there before it opens
+    /// anything, and this is what says so.
+    ///
+    /// A CPU test: nothing here takes a device, and the store is a directory.
+    #[test]
+    fn a_library_is_the_store_and_a_missing_store_is_not_made() {
+        let root = std::env::temp_dir().join(format!(
+            "karakuri-console-library-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        // Whatever a previous run left, so the first claim is about a root
+        // that is genuinely not there.
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert!(
+            library(&root).is_empty(),
+            "a store that is not there listed something"
+        );
+        assert!(
+            !root.exists(),
+            "listing a library that is not there created one at {}",
+            root.display()
+        );
+
+        // And with two Sets in it, both names come back — in the order
+        // `list_sets` sorts them, which is the order the bay draws.
+        let store = Store::open(&root).expect("a store to list");
+        for id in ["night01", "morph01"] {
+            store
+                .write_set(id, &[])
+                .unwrap_or_else(|e| panic!("writing {id}: {e}"));
+        }
+        let listed = library(&root);
+        assert_eq!(
+            listed,
+            vec!["morph01".to_owned(), "night01".to_owned()],
+            "the bay lists {listed:?}"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
 
     /// Nothing that comes back from `get_current_texture` is dropped without a
     /// decision. The loop waits for events, so an outcome that neither
