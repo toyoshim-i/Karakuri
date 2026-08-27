@@ -297,9 +297,15 @@ magnitude a decision gets made on rather than as a quantity two of them can be s
 The number is restated whenever the code under it changes shape, because a figure taken on a shape
 that no longer exists reads as current forever.
 
-**The rest of P-0072 is not built** — nothing declares a cost or a staleness and there is no
-scheduler. What it was waiting for was a second live region with a different character from the
-first, and the transport row is that; see below.
+**Most of P-0072 is not built** — **no region declares a cost** and there is no scheduler. What
+does exist is one declared *staleness*: the mixer strip's residency chip, through
+`View::animating`, which names the roll's 30 Hz while a request the engine has not granted is
+outstanding
+([ADR-0190](adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md))
+and declares nothing at all while the bay that draws it is folded away
+([ADR-0193](adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md))
+— which is what P-0072's own *Where it holds* records. What the rest was waiting for was a second
+live region with a different character from the first, and the transport row is that; see below.
 
 **Half of *making the picture a sink in fact* is built, and it is the half that had to come
 first.** `frame::compose` no longer gates the frame on a sink: it takes a slice of them, asks each
@@ -495,7 +501,18 @@ console is an example rather than the program.
    drew it — a pending transition that animates for as long as a request is outstanding and can
    therefore run for the length of a set, at about 30 panel frames a second. It is also the first
    region to **declare** a staleness, which is the half of P-0072 that can exist without a
-   scheduler; what is still missing is anything that arbitrates between two of them. `egui` is immediate mode, so what
+   scheduler. **What is left is the inputs rather than the policy.** P-0072 already states the
+   arbitration in full — a region is scheduled by how stale it is against what it can afford, a
+   region is the unit of deferral and is redrawn whole or not at all, the composite is drawn every
+   frame at the highest priority regardless, a deterministic offset separates two regions that
+   still come due together, and rate-limiting the panel is ruled out as a way of affording it —
+   and [P-0077](principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md) adds
+   the one region a budget under pressure may not stop. What nothing supplies is what that policy
+   reads: **no region declares a cost**, ADR-0190 having measured what the roll costs rather than
+   the region announcing it, and **neither schedulability condition is checked anywhere** —
+   neither `Σ (cost / staleness) ≤ budget / frame interval` nor `max(cost) ≤ a small part of the
+   budget`. Neither of those is a decision waiting to be taken; both are work.
+   `egui` is immediate mode, so what
    repaints is the panel rather than the chip. The argument is not the bytes — it is that a beat
    indicator the maintainer wants analogue and a pending animation at another rate **cannot both be
    special cases**, and each rate written by hand is the first half of the scheduler written badly.
@@ -746,6 +763,16 @@ than work, and every one of them was found by building the thing next to it.
   half of the pair.
 - **`SetMask` does not exist**, so the mask mini is a readout of state no operation can set. The row
   has to be settled on [the operations page](manual/operations.html) before it can be a control.
+- **What a status line is, on a console with no terminal.** `karakuri-cli`'s `s`, `h` and `?` name
+  nothing in the vocabulary, because the status line and the bindings text have **no row on
+  [the operations page](manual/operations.html)** — the specification for which keys exist. They
+  were deliberately not added from the implementation: *"a row invented from the implementation is
+  a specification written backwards, and the page is written ahead of the interface on purpose"*,
+  and *"what a status line **is** on a console with no terminal is a question for the page"* rather
+  than one a key handler may answer
+  ([ADR-0198](adr/0198-a-gesture-converts-in-the-parts-that-are-decided.md), §4). Until the page
+  has an answer, three of the thirty-nine keys stay outside the vocabulary and the console has
+  nothing to draw a status line from.
 - **The library's two questions are `console.html`'s own, and building the bay is what made them
   due.** *Whether a folder scope reads Sets or artifacts* is what the scope row is waiting on — a
   directory of `.kir` files, a directory of Set files and a bundle are three different things, and
@@ -756,6 +783,23 @@ than work, and every one of them was found by building the thing next to it.
   ([ADR-0200](adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)); both
   block everything after it. A third is smaller and is not on that page: **nothing keeps a
   favourite**, so the star has no value to read and the `favourites` scope has no membership.
+- **What authority is set on: a layer, a node, or a slot.** Three documents give it three
+  addresses, and none of them is a synonym for the others. The four properties at the top of this
+  file say *"Authority is a per-layer setting, not a global mode"*; rule 06 of
+  [the seven rules](manual/index.html) says *"Authority is per node, never a global mode ... Each
+  node of a Set is manual, suggesting, or automatic, and you set that node by node"*;
+  [the console page](manual/console.html) says *"`man / sug / auto` on each node head, never a
+  global mode"* and draws the control on a node head addressed `L1:0`; and M6 below asks for
+  *"Slot agents, one per slot rather than per graph node"* while the bullet under it demotes
+  *"that layer's agent"*. A layer, a node of a Set and a slot are three different things to
+  address, and a control set per node is not the same control as one set per slot.
+  [P-0031](principles/0031-a-name-means-one-thing-across-the-system.md) is what makes this a defect
+  rather than a difference of wording — *"One signal name is one signal, at one confidence,
+  whichever code path reaches it"*, and *"it is not enough to be disjoint in practice; they have to
+  be disjoint by name"*. **This is what actually leaves the Inspector's authority row undecided**,
+  above: that row is named as blocked on `man / sug / auto` existing nowhere at all, and what it is
+  really waiting on is which address the control is per — because an implementation would have to
+  pick one, and picking one from the code is the specification written backwards. Not taken here.
 - **What `expand` under a solo should do.** `Layout::soloed()` can lie: the solve never reads it and
   `check_structure` only checks that it addresses a node, so a solo's exclusivity lives in flags any
   later `expand` may contradict. Nothing reaches that state today.
