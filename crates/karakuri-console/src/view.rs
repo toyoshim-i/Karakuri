@@ -104,17 +104,24 @@
 //! ADR-0177 refuses, with a different glyph. See [`mixer`] and [`Strip`], and
 //! [`Meter`] for why a meter is not a [`Fader`].
 //!
-//! **Four things in that bay answer a pointer and the rest are readouts**,
+//! **Five things in that bay answer a pointer and the rest are readouts**,
 //! and the source says which rather than leaving the next reader to discover
-//! it. The two fader knobs are played, the blend mini cycles and the tally
-//! chip cycles
+//! it. The two fader knobs are played, and the blend mini, the tally chip and
+//! the mask mini each cycle
 //! ([ADR-0185](../../../docs/adr/0185-a-fader-translates-a-drag-into-an-operation-and-applies-nothing.md),
 //! [ADR-0187](../../../docs/adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md),
-//! [ADR-0195](../../../docs/adr/0195-the-tally-chip-cycles-from-the-request-so-the-parked-case-needs-no-case.md)):
+//! [ADR-0195](../../../docs/adr/0195-the-tally-chip-cycles-from-the-request-so-the-parked-case-needs-no-case.md),
+//! [ADR-0203](../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)):
 //! each emits an [`Operation`] and applies nothing, because the value belongs
-//! to the engine rather than to the arrangement. The mask mini, the meter and
-//! the number are drawn from what the deck says and a press on any of them
-//! reaches nothing — and so does a press on a fader's *track*, off the knob.
+//! to the engine rather than to the arrangement. The meter and the number are
+//! drawn from what the deck says and a press on either reaches nothing — and
+//! so does a press on a fader's *track*, off the knob.
+//!
+//! **The mask mini is the one control that carries a value it never draws.**
+//! The chip says *which shape*, and [`Operation::SetMaskShape`] carries a
+//! shape **and an angle**; so [`Strip::mask_angle`] is read to build the
+//! operation and painted nowhere, which is what stops choosing a shape from
+//! straightening a diagonal front ([`Mixer::mask`]).
 //!
 //! **The tally is the one control that reads two values.** `Deck::residency`
 //! is what a slot is doing and `Deck::requested_residency` is what it was asked
@@ -156,7 +163,7 @@ use std::time::Duration;
 use egui::epaint::text::{LayoutJob, TextFormat};
 use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, StrokeKind, Ui};
 use karakuri_layout::{Axis, Hit, NodeId};
-use karakuri_operation::{BlendMode, Operation, Residency};
+use karakuri_operation::{BlendMode, Operation, Residency, WipeKind};
 
 use crate::panel::{unit, Grab, InHand, Knob, Op, Panel, GRAB};
 use crate::room::{size, Palette, Room};
@@ -2433,6 +2440,19 @@ impl Tally {
 /// kind that is, and it draws no third mark anywhere; a glyph for the third
 /// would be a character picked out of a font, where a **mark** is the shape
 /// the mask makes and can be argued from the mask.
+///
+/// # There is no `ALL` beside it, where [`Tally`] and `BlendMode` have one
+///
+/// Both of those constants exist for a **reader**: `Tally::ALL` is what
+/// [`mixer`] measures the tally capsule against, because a `match` cannot
+/// express *the widest of them*, and `BlendMode::ALL` is what a map file is
+/// offered. Nothing measures this chip against its three shapes — it holds a
+/// mark rather than a word and is [`size::MINI_SIZE`] wide whichever shape it
+/// is showing — and no map target names a shape, which is why
+/// `karakuri_operation::WipeKind` has no `ALL` either and says so at
+/// [`WipeKind::name`]. A list written here would be a second statement of the
+/// order with no reader, and the order is [`next_shape`]'s: a `match`, so a
+/// fourth shape does not compile until somebody says what follows it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mask {
     /// No mask: the layer reaches the whole frame. The mock's `◯`.
@@ -2503,7 +2523,7 @@ pub struct Level {
 /// everything that can change what the console shows and a fader that reached
 /// no repaint would leave the strip drawn at the value before the drag.
 ///
-/// # Four of these are controls and the rest are readouts, and the source
+/// # Five of these are controls and the rest are readouts, and the source
 /// says which
 ///
 /// **The two faders are played.** A press on the trim's knob or the fader's
@@ -2527,12 +2547,19 @@ pub struct Level {
 /// prime request without a case in the code for it
 /// ([ADR-0195](../../../docs/adr/0195-the-tally-chip-cycles-from-the-request-so-the-parked-case-needs-no-case.md)).
 ///
-/// **Everything else in the bay is a readout.** The mask mini, the meter and
-/// the number are drawn from what the deck says and a press on any of them
-/// reaches nothing — and so does a press on a fader's *track*, off the knob,
-/// which would otherwise be a jump nobody asked for. `tests/mixer.rs` asserts
-/// both directions rather than leaving either to be inferred from the absence
-/// of a hit test.
+/// **The mask mini is the fifth, and it cycles too.** A press on it emits
+/// [`Operation::SetMaskShape`] naming the shape after this one ([`Mixer::mask`])
+/// — **and the angle this strip is already wearing**, which is
+/// [`Strip::mask_angle`]: the chip chooses a shape and the angle is not its
+/// business, so it hands back the one it was given rather than a default that
+/// would straighten a diagonal front
+/// ([ADR-0203](../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)).
+///
+/// **Everything else in the bay is a readout.** The meter and the number are
+/// drawn from what the deck says and a press on either reaches nothing — and
+/// so does a press on a fader's *track*, off the knob, which would otherwise
+/// be a jump nobody asked for. `tests/mixer.rs` asserts both directions rather
+/// than leaving either to be inferred from the absence of a hit test.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Strip {
     /// **What the deck is playing**, in `.strip-name`.
@@ -2640,7 +2667,40 @@ pub struct Strip {
     /// The mask in force — `Deck::mask(slot).kind()`. Its angle, position and
     /// softness are not drawn: `.mini` is a chip that says *which shape*, and
     /// three numbers about that shape are the inspector's row, not this one.
+    ///
+    /// **What a press on the chip counts from** ([`Mixer::mask`]), the way
+    /// [`Strip::requested`] is what the tally's press counts from.
     pub mask: Mask,
+    /// **The angle the mask is already wearing** — `Deck::mask(slot).angle()`,
+    /// in radians. **Read to build an operation, and drawn nowhere.**
+    ///
+    /// # Why the strip carries a number no part of it paints
+    ///
+    /// [`Operation::SetMaskShape`] carries a shape **and an angle**, because
+    /// the vocabulary's row is one an operator can say the whole of and a
+    /// record is written whole
+    /// ([ADR-0201](../../../docs/adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)).
+    /// The chip names the shape and nothing on this strip names the angle — so
+    /// a press has to carry a value the control does not control, and the only
+    /// honest one is **the value it already has**. Sending `0.0` would make
+    /// choosing a shape silently straighten a diagonal wipe: a press that
+    /// changed something nobody asked it to, which is the class of failure
+    /// [ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)
+    /// and ADR-0201 are both about, arriving one layer further out.
+    ///
+    /// **It is [`Strip::requested`]'s arrangement exactly**: a value the strip
+    /// carries because a press has to be computed from it, written by whoever
+    /// owns the deck like every other field here, and never a value this crate
+    /// keeps. See
+    /// [ADR-0203](../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md).
+    ///
+    /// **Not the position and not the softness**, which the record also
+    /// carries: neither is in the operation at all, and the half a shape
+    /// operation does not ask for is filled in from a reading of the mask that
+    /// is running, where the record is written — `karakuri_operation_record`'s
+    /// `Current`. The angle is here because the *operation* names it; those
+    /// two are not, because it does not.
+    pub mask_angle: f32,
     /// **What the slot's meter last read**, or `None` for no reading at all.
     ///
     /// `Deck::level` is already `None` for *no meter, no measurement yet, a
@@ -2796,7 +2856,13 @@ pub struct StripBox {
     /// this rectangle. As wide as the word in it, inside `.mini`'s padding and
     /// border.
     pub blend: Rect,
-    /// The mask `.mini`.
+    /// The mask `.mini`, which is **the chip a press acts on** and not only
+    /// the box a mark is drawn into — [`Mixer::mask`] hit-tests exactly this
+    /// rectangle, the way [`StripBox::blend`] and [`StripBox::tally`] are.
+    /// It holds a mark rather than a word, so it is the same width whichever
+    /// shape it is showing: a target that stands still while the deck moves
+    /// under it, which the tally's capsule buys by being the widest word's and
+    /// the blend chip cannot say at all.
     pub mask: Rect,
 }
 
@@ -3056,6 +3122,75 @@ impl<'a> Mixer<'a> {
                     .map(|_| Operation::SetResidency {
                         deck: index as u8,
                         residency: residency(next(strip.requested)),
+                    })
+            })
+    }
+
+    /// **What a press at `p` asks the mask's shape to become**, or `None`
+    /// where there is no mask mini under it.
+    ///
+    /// # The chip cycles, and the operation names where it arrived
+    ///
+    /// Click it and the deck's mask moves to the next shape — none, linear,
+    /// radial, wrapping — and what comes out is
+    /// [`Operation::SetMaskShape`] naming that **destination**. The affordance
+    /// is the blend chip's ([`Mixer::blend`], ADR-0187) and the tally's
+    /// (ADR-0195), and so is the division under it: the cycle is
+    /// [`next_shape`] here and nothing at all in `karakuri-operation`, which
+    /// is P-0074's *"a toggle is an affordance, built over operations by
+    /// whoever draws the control"*.
+    ///
+    /// **The order starts at `None`**, which is
+    /// `karakuri_engine::deck::MaskKind::ALL`'s and is written down there:
+    /// *"`None` first, because it is the default and a cycle should start
+    /// where a slot starts."* This crate has no engine (ADR-0156), so the
+    /// order is restated in [`next_shape`] rather than read from it.
+    ///
+    /// # It carries the angle it does not control, and that is the decision
+    ///
+    /// [`Operation::SetMaskShape`] is a shape **and an angle**, and this chip
+    /// names only the shape — *"`.mini` is a chip that says which shape, and
+    /// three numbers about that shape are the inspector's row, not this one."*
+    /// So the angle handed back is [`Strip::mask_angle`], the one the slot is
+    /// already wearing: a press chooses a shape and changes nothing else.
+    /// Sending `0.0` would make choosing a shape straighten a diagonal front,
+    /// which is a surface asking for a change nobody made — see
+    /// [ADR-0203](../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md).
+    ///
+    /// **The position and the softness are not here at all.** The operation
+    /// does not name them, and the record that does is filled in from a
+    /// reading of the running mask where the record is written (ADR-0201).
+    /// A surface carrying a value no operation asks for would be this crate
+    /// keeping half a deck.
+    ///
+    /// # One derivation, asked twice, and the whole chip is the target
+    ///
+    /// [`crate::input::claim`]'s rule 3 asks this and so does the caller that
+    /// acts on the press — [`Outputs::op`], [`Mixer::grab`], [`Mixer::blend`]
+    /// and [`Mixer::tally`] are the same arrangement. [`StripBox::mask`] is
+    /// the chip's own rectangle, the one the mark is drawn into, and it is
+    /// [`size::MINI_SIZE`] wide inside `.mini`'s padding whichever shape it is
+    /// showing — so this target, like the tally's capsule and unlike the blend
+    /// chip's, does not move under the value it draws.
+    ///
+    /// # It names the strip's own deck
+    ///
+    /// The slot index, cast the way [`Mixer::grab`], [`Mixer::blend`] and
+    /// [`Mixer::tally`] cast it — the manual's *deck* is the code's *slot*
+    /// (ADR-0180), and a deck holds `MAX_SLOTS` of them, so the index is a
+    /// `u8` with room to spare.
+    pub fn mask(&self, p: karakuri_layout::Point) -> Option<Operation> {
+        let p = Pos2::new(p.x, p.y);
+        self.strips
+            .iter()
+            .zip(self.boxes)
+            .enumerate()
+            .find_map(|(index, (strip, at))| {
+                at.filter(|at| at.mask.contains(p))
+                    .map(|_| Operation::SetMaskShape {
+                        deck: index as u8,
+                        kind: wipe_kind(next_shape(strip.mask)),
+                        angle: strip.mask_angle,
                     })
             })
     }
@@ -3472,6 +3607,54 @@ fn residency(tally: Tally) -> Residency {
         Tally::Live => Residency::Live,
         Tally::Priming => Residency::Priming,
         Tally::Allocated => Residency::Allocated,
+    }
+}
+
+/// **The next mask shape round the cycle**, wrapping from the last back to the
+/// first — the whole of the affordance the mask mini is.
+///
+/// [`after`]'s division, one control along: the cycle is three lines here and
+/// nothing in `karakuri-operation`, which owns the three shapes and not the
+/// order a pointer walks them in (P-0074).
+///
+/// **A match, for [`after`]'s reason**: a fourth shape does not compile until
+/// somebody says what follows it. Unlike [`after`] and [`next`] the price is
+/// not a second copy of the order — [`Mask`] has no `ALL` and neither does
+/// `karakuri_operation::WipeKind`, because nothing reads one (see [`Mask`]) —
+/// so this is the only statement of the order in this crate, and
+/// `tests/mask.rs` is what checks it against the order it is a copy of.
+///
+/// **It starts at [`Mask::None`]**, which is `karakuri_engine::deck::MaskKind::ALL`'s
+/// own order and its own reason: *"`None` first, because it is the default and
+/// a cycle should start where a slot starts."* A cycle that began at `Linear`
+/// would be a control whose first press on a fresh slot moves it somewhere it
+/// has never been.
+fn next_shape(mask: Mask) -> Mask {
+    match mask {
+        Mask::None => Mask::Linear,
+        Mask::Linear => Mask::Radial,
+        Mask::Radial => Mask::None,
+    }
+}
+
+/// **The console's word for a mask shape, as the vocabulary's** — [`residency`]
+/// one control along, and for its reason exactly.
+///
+/// [`Mask`] is the mock's second `.mini` and the engine's `MaskKind` seen from
+/// the surface; [`karakuri_operation::WipeKind`] is what an operation may name.
+/// They are the same three shapes and two crates' words for them, so the
+/// translation is a match — and a match rather than a cast so that a fourth
+/// shape on either side stops the build here, where the two lists meet, rather
+/// than at a chip drawing a mark no operation can carry.
+///
+/// The mirror image of it is `examples/panel.rs`'s reading of
+/// `Deck::mask(slot).kind()`, which turns the *engine's* `MaskKind` into a
+/// [`Mask`] on the way in.
+fn wipe_kind(mask: Mask) -> WipeKind {
+    match mask {
+        Mask::None => WipeKind::None,
+        Mask::Linear => WipeKind::Linear,
+        Mask::Radial => WipeKind::Radial,
     }
 }
 

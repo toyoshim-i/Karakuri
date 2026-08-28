@@ -55,6 +55,7 @@ fn settled(slot: usize, tally: Tally) -> Strip {
         opacity: 0.8 - 0.15 * slot as f32,
         blend: BlendMode::ALL[slot % BlendMode::ALL.len()],
         mask: Mask::None,
+        mask_angle: 0.0,
         level: Some(Level {
             mean: 0.5,
             peak: 0.6,
@@ -323,7 +324,6 @@ fn a_press_off_the_chip_asks_for_nothing_and_is_not_claimed() {
         (at.name.center(), "the name above it"),
         (at.trim_label.center(), "the trim's label below it"),
         (at.num.center(), "the number"),
-        (at.mask.center(), "the mask mini"),
         (at.meter.center(), "the meter"),
         (
             egui::pos2(at.tally.min.x - 1.0, at.tally.center().y),
@@ -359,20 +359,26 @@ fn a_press_off_the_chip_asks_for_nothing_and_is_not_claimed() {
         );
     }
 
-    // **The blend chip is the one neighbour that is a control**, so it is
-    // asserted separately and in the other direction: the panel claims it, and
-    // the tally answers nothing for it. A hit test that reached across the two
-    // would change a residency from a press meant for the blend.
-    assert_eq!(
-        bay.tally(point(at.blend.center())),
-        None,
-        "the blend chip asked the residency to change"
-    );
-    assert_eq!(
-        claim(&mut panel, &ctx, &strips, point(at.blend.center())),
-        Claim::Panel,
-        "the blend chip stopped being a control, so this is asserting nothing about the tally"
-    );
+    // **The mode row's two chips are controls**, so they are asserted
+    // separately and in the other direction: the panel claims each, and the
+    // tally answers nothing for either. A hit test that reached across would
+    // change a residency from a press meant for the blend or for the mask
+    // shape.
+    for (probe, what) in [
+        (at.blend.center(), "the blend chip"),
+        (at.mask.center(), "the mask mini"),
+    ] {
+        assert_eq!(
+            bay.tally(point(probe)),
+            None,
+            "{what} asked the residency to change"
+        );
+        assert_eq!(
+            claim(&mut panel, &ctx, &strips, point(probe)),
+            Claim::Panel,
+            "{what} stopped being a control, so this is asserting nothing about the tally"
+        );
+    }
 
     // The guard: the chip itself does both of the things the probes above do
     // neither of. Without this the test passes on a chip that was never a

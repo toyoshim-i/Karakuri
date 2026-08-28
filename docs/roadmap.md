@@ -418,9 +418,11 @@ The vocabulary survived contact and four things about it are now known rather th
 `Operation` is not `Copy`, so its cheapest variants pay for its heaviest; `deck: u8` costs a cast
 per gesture; **there was no `SetMask`**, so the mask mini was a readout of state no operation could
 set — the mask has two rows now, a shape and a position
-([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)), and what is
-left is the mini becoming a control; and the trim reaches only the bottom half of what `SetGain`
-expresses, because it is drawn over `[0, 1]` while the mix is HDR.
+([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)), and the mini
+is the control that presses the first of them
+([ADR-0203](adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)); and the trim reaches
+only the bottom half of what `SetGain` expresses, because it is drawn over `[0, 1]` while the mix is
+HDR.
 
 **The blend mini is the third control and it cycles**
 ([ADR-0187](adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)). A
@@ -452,8 +454,24 @@ residency that was **requested** rather than from the one the chip shows
 ([ADR-0195](adr/0195-the-tally-chip-cycles-from-the-request-so-the-parked-case-needs-no-case.md)).
 That is what makes a press on a *parked* chip the withdrawal of its own prime request with no case
 in the code for it — the affordance P-0076 permits a surface, where cycling from the readout would
-put the deck on air. The mask mini is the last readout in the strip, and it is the one with a
-decision left rather than work: it is state no operation can set.
+put the deck on air.
+
+**And the mask mini is the fifth, which finishes the strip: nothing in it is a readout that a
+pointer might have expected to answer.** A press cycles the shape — none, linear, radial, the
+engine's own order, *because a cycle should start where a slot starts* — and emits `SetMaskShape`
+naming where it arrived
+([ADR-0203](adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)). **It is the first
+control that carries a value it does not draw.** The row is a shape *and an angle*, and the chip
+names only the shape, so the press hands back the angle the slot is already wearing —
+`Strip::mask_angle`, read to build the operation and painted nowhere. A default there would make
+choosing a shape straighten a diagonal wipe, invisibly, since the mark is the same mark at any
+angle. The position and the soft edge are not on this surface at all: `Record::Mask` is written
+whole, and the half the operation does not ask for is read off the running mask where the record is
+written. **What the press does cost is the move**: a record is a state rather than an intention, so
+a shape chosen mid-wipe stops the scheduled move and leaves the front where it had got to — the
+honest limit
+[P-0078](principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md) already
+states about the record stream, now met by the surface it was waiting for.
 
 **Four live regions now, and one of them declares a price.** The picture is expensive and moves
 every frame; the beat grid is cheap, high priority, and moves two to four times a second; the mixer
@@ -474,28 +492,35 @@ throws the expand away with nothing said. Nothing in the console reaches that st
 
 ### Where this goes next, and the decisions it is waiting on
 
-**Five controls in the console answer a pointer**: the Outputs dot, the mixer's two faders, its
-blend chip and its tally chip. The mask mini is the one readout left in the strip, **the Library bay
-lists what the store holds** and the other four bays are empty, and the keyboard, a MIDI map and MCP
-reach none of it — the panel routes in `manual/operations.html` are still `plan`, because the
-console is an example rather than the program.
+**Six controls in the console answer a pointer**: the Outputs dot, the mixer's two faders, its
+blend chip, its tally chip and its mask mini. **The mixer strip is finished** — nothing in it is a
+readout a pointer might have expected to answer — **the Library bay lists what the store holds** and
+the other four bays are empty, and the keyboard, a MIDI map and MCP reach none of it — the panel
+routes in `manual/operations.html` are still `plan`, because the console is an example rather than
+the program.
 
 **The order that makes each next thing cheaper than it would be alone:**
 
-1. **The rest of the mixer strip is the mask mini, and it is the only readout left in it.** The
-   blend mini ([ADR-0187](adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md))
-   and the tally ([ADR-0195](adr/0195-the-tally-chip-cycles-from-the-request-so-the-parked-case-needs-no-case.md))
-   are done, and each needed no new machinery — a claim rule and an `Operation`, which is the same
-   seam the faders opened. **The tally's presentation landed a commit before its pointer, on
-   purpose**: it had to be able to say a request is pending
+1. **The mixer strip is finished, and what is left of it is another surface's.** The blend mini
+   ([ADR-0187](adr/0187-the-blend-mini-cycles-and-a-map-learns-the-three-it-cycles-through.md)),
+   the tally ([ADR-0195](adr/0195-the-tally-chip-cycles-from-the-request-so-the-parked-case-needs-no-case.md))
+   and now the mask mini
+   ([ADR-0203](adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)) are done, and each
+   needed no new machinery — a claim rule and an `Operation`, which is the same seam the faders
+   opened. **The tally's presentation landed a commit before its pointer, on purpose**: it had to
+   be able to say a request is pending
    ([ADR-0190](adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md))
    before it answered one, because a control that could not yet say it is pending would look dead.
-   **The mask mini was waiting on a decision and is now waiting on work.** The decision is taken —
-   the mask is two rows, a shape and a position
-   ([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)) — and
-   turning the mini into a control is deliberately not part of it, for the reason the tally's
-   presentation landed a commit before its pointer: the row a picker would emit into now exists to
-   be aimed at, and the picker is the mini's own change. **The MIDI map's two targets were the same
+   **The mask mini waited on a decision rather than on work**, and the decision was the vocabulary's
+   — the mask is two rows, a shape and a position
+   ([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)) — so the
+   press was four lines and a claim rule once the row existed to aim at. What it cost instead was a
+   field: the row carries a shape **and an angle**, the chip names only the shape, so the strip
+   carries the angle it is wearing to hand back with the press. **The one thing it leaves owed is
+   the wipe**: a record is a state rather than an intention, so a shape chosen while a move is
+   running stops the move — the limit
+   [P-0078](principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md) named
+   before there was a surface to meet it, now met. **The MIDI map's two targets were the same
    shape of leftover and are now one**: `cc -> mask-position N` is a line, and it is the cleanest
    continuous target since `exposure` — `[0, 1]`, both ends exact, linear
    ([ADR-0202](adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md)). The
@@ -505,8 +530,11 @@ console is an example rather than the program.
    pad that named the kind alone would have to invent the angle beside it, which is ADR-0192's
    fault one field along. **It is waiting on a decision**, and ADR-0202 names the three and costs
    them without taking one: a float form in the grammar, an angle-less shape operation, or the row
-   staying a gap with the reason on the page. It is where the mask mini's picker will meet it, so
-   whoever builds the picker is the likeliest person to settle it.
+   staying a gap with the reason on the page. It is where the mask mini's press already meets it:
+   the mini is a control now and hands back the angle the slot is wearing
+   ([ADR-0203](adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)), which is the one
+   answer a pad has no way to copy — so the decision is the map's alone rather than shared with a
+   control nobody had built.
 2. **The rest of P-0072, and it is nearer than this item used to say.** Three live regions with
    three characters now exist — the picture expensive and every frame, the beat grid cheap and
    twice a second, the mixer expensive and hardly moving — which is what a scheduler was waiting
@@ -794,9 +822,10 @@ than work, and every one of them was found by building the thing next to it.
   `karakuri-midi`'s grammar refuses a control change on a press — so no control change could ever
   reach a mask position
   ([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)). `softness`
-  stays out for `white_point`'s reason: one constant, no control, no row. **What it leaves undone is
-  named where the work is**: the mask mini becoming a control is item 1 above, and the map's two
-  targets are beside it. **One of the two is taken** — `cc -> mask-position N` is a line now, and
+  stays out for `white_point`'s reason: one constant, no control, no row. **What it left undone was
+  named where the work is, and the panel's half is done**: the mask mini is a control
+  ([ADR-0203](adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)), which leaves the
+  map's two targets. **One of the two is taken** — `cc -> mask-position N` is a line now, and
   the same record's other half turned out not to be work at all but a decision nobody has taken
   ([ADR-0202](adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md)): the
   grammar has no bare number, so a shape target could not carry the angle the row was given. The rule the split makes expressible is

@@ -55,6 +55,7 @@ fn strips() -> Vec<Strip> {
             opacity: 0.8 - 0.15 * slot as f32,
             blend: BlendMode::ALL[slot % BlendMode::ALL.len()],
             mask: Mask::None,
+            mask_angle: 0.0,
             level: Some(Level {
                 mean: 0.5,
                 peak: 0.6,
@@ -187,16 +188,20 @@ fn the_operation_names_the_strips_own_deck() {
 /// **A press off the chip emits nothing and is not claimed.**
 ///
 /// `input`'s rule 3: *"a control claims what it acts on and no more."* The
-/// mask mini beside it, the number above it, the strip's own well and the
-/// ground between two strips are all painted by the console and none of them
-/// is a control, so `egui` gets the event — which owns no widget there either,
-/// so the two answers are the same nothing, arrived at without the panel
-/// claiming a press it would throw away.
+/// number above it, the strip's own well and the ground between two strips are
+/// all painted by the console and none of them is a control, so `egui` gets
+/// the event — which owns no widget there either, so the two answers are the
+/// same nothing, arrived at without the panel claiming a press it would throw
+/// away.
 ///
 /// **Both halves, because either alone is satisfiable by the wrong code.** A
 /// chip that emitted nothing but was claimed would take presses it does
 /// nothing with; a chip that emitted from anywhere would change the mix from a
-/// press on the mask.
+/// press on the name above it.
+///
+/// **The mask mini 3px to its right is asserted separately**, because it is a
+/// control (ADR-0203) and the two halves come apart there: the panel claims
+/// it, and this chip must answer nothing for it.
 #[test]
 fn a_press_off_the_chip_asks_for_nothing_and_is_not_claimed() {
     let (mut panel, ctx) = console();
@@ -210,7 +215,6 @@ fn a_press_off_the_chip_asks_for_nothing_and_is_not_claimed() {
     let gap = egui::pos2(at.blend.max.x + size::MODE_GAP * 0.5, at.blend.center().y);
     let probes = [
         (gap, "the gap between the two minis"),
-        (at.mask.center(), "the mask mini"),
         (at.num.center(), "the number"),
         (at.name.center(), "the name"),
         (at.meter.center(), "the meter"),
@@ -244,20 +248,27 @@ fn a_press_off_the_chip_asks_for_nothing_and_is_not_claimed() {
         );
     }
 
-    // **The tally chip is the one neighbour that is a control** (ADR-0195), so
-    // it is asserted separately and in the other direction: the panel claims
-    // it, and the blend answers nothing for it. A hit test that reached across
-    // the two would change a blend mode from a press meant for the residency.
-    assert_eq!(
-        bay.blend(point(at.tally.center())),
-        None,
-        "the tally chip asked the blend to change"
-    );
-    assert_eq!(
-        claim(&mut panel, &ctx, &strips, point(at.tally.center())),
-        Claim::Panel,
-        "the tally chip stopped being a control, so this is asserting nothing about the blend"
-    );
+    // **The two neighbours that are controls** — the tally chip above
+    // (ADR-0195) and the mask mini 3px to the right (ADR-0203) — are asserted
+    // separately and in the other direction: the panel claims each, and the
+    // blend answers nothing for either. A hit test that reached across would
+    // change a blend mode from a press meant for the residency, or from one
+    // meant for the shape.
+    for (probe, what) in [
+        (at.tally.center(), "the tally chip"),
+        (at.mask.center(), "the mask mini"),
+    ] {
+        assert_eq!(
+            bay.blend(point(probe)),
+            None,
+            "{what} asked the blend to change"
+        );
+        assert_eq!(
+            claim(&mut panel, &ctx, &strips, point(probe)),
+            Claim::Panel,
+            "{what} stopped being a control, so this is asserting nothing about the blend"
+        );
+    }
 
     // The guard: the chip itself does both of the things the probes above do
     // neither of. Without this the test passes on a chip that was never a

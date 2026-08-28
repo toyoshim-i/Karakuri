@@ -50,9 +50,15 @@ says what it is about.
   change that restated the front from a hand that moved it, and the decode applies the whole state
   and cancels. Of the two available readings only one leaves the operator winning, so that is the
   one taken; the cost is that a shape change **routed through the stream** while a wipe is running
-  stops the wipe. Nothing routes one today — the shape's only home is the console's mask mini and it
-  is still a readout — so the first surface to make that press is where this is decided again, with
-  the shape's own setter already in the engine waiting for it.
+  stops the wipe. **One surface routes one now, and it took the decision this sentence was waiting
+  for**: the console's mask mini is a control, and it goes through the record like every other
+  control on that panel rather than reaching for the shape's own setter, which would be a second
+  route to the deck for one press
+  ([ADR-0203](../adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)). So a shape
+  chosen there while a wipe is running stops the move and leaves the front where it had got to, and
+  `docs/manual/console.html` says so on the chip's own tooltip rather than leaving an operator to
+  find out. `Deck::set_mask_shape` is still what the engine offers a caller that is not writing a
+  record, and nothing on any surface is.
 - **The transition is the only automatic writer that exists.** A follower, a sequencer lane and a
   signal binding are all named in the plan and none of them writes a mix control yet. This is
   written down now rather than when the second one arrives, because the second one is the change

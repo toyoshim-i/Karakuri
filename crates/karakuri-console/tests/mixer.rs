@@ -57,6 +57,7 @@ fn mock() -> Strip {
         opacity: 1.0,
         blend: BlendMode::Add,
         mask: Mask::None,
+        mask_angle: 0.0,
         level: Some(Level {
             mean: 0.74,
             peak: 0.82,
@@ -77,6 +78,7 @@ fn mock_strips() -> Vec<Strip> {
             opacity: 0.3,
             blend: BlendMode::Over,
             mask: Mask::Linear,
+            mask_angle: 0.0,
             level: Some(Level {
                 mean: 0.12,
                 peak: 0.12,
@@ -90,6 +92,7 @@ fn mock_strips() -> Vec<Strip> {
             opacity: 0.0,
             blend: BlendMode::Add,
             mask: Mask::Radial,
+            mask_angle: 0.0,
             level: None,
         },
     ]
@@ -1036,25 +1039,25 @@ fn a_name_too_long_for_a_strip_is_elided_on_one_line() {
 }
 
 // ---------------------------------------------------------------------------
-// Two controls, and the rest are readouts
+// Five controls, and the rest are readouts
 // ---------------------------------------------------------------------------
 
-/// **The two knobs and the two chips are the panel's, and everything else in
+/// **The two knobs and the three chips are the panel's, and everything else in
 /// the bay is `egui`'s.**
 ///
 /// The console's rule has three claims before `egui`'s: a drag in hand, a
 /// boundary within `GRAB`, and a control the console draws (ADR-0176). This
-/// bay now has four of the third kind — the trim's knob, the fader's knob, the
-/// blend chip (ADR-0187) and the tally chip (ADR-0195) — and nothing else in
-/// it: the mask mini, the meter and the number are readouts, and so is a
-/// fader's **track** off the knob, because a press there would be a jump
-/// nobody asked for.
+/// bay now has five of the third kind — the trim's knob, the fader's knob, the
+/// blend chip (ADR-0187), the tally chip (ADR-0195) and the mask mini
+/// (ADR-0203) — and nothing else in it: the meter and the number are readouts,
+/// and so is a fader's **track** off the knob, because a press there would be
+/// a jump nobody asked for.
 ///
 /// **Stated rather than inferred in both directions.** A knob that stopped
 /// being claimed would be a control drawn where it cannot be grabbed, and a
 /// bay that claimed everything would take presses it does nothing with.
 #[test]
-fn the_four_controls_are_claimed_and_the_rest_of_the_bay_is_not() {
+fn the_five_controls_are_claimed_and_the_rest_of_the_bay_is_not() {
     let (mut panel, ctx) = console(PLAUSIBLE);
     let strips = mock_strips();
     let bay = bay(&panel, &ctx, &strips);
@@ -1062,12 +1065,13 @@ fn the_four_controls_are_claimed_and_the_rest_of_the_bay_is_not() {
     let trim = at.trim_at(mock().gain);
     let fader = at.fader_at(mock().opacity);
 
-    // The four that are.
+    // The five that are.
     for (probe, what) in [
         (trim.knob.center(), "the trim's knob"),
         (fader.knob.center(), "the fader's knob"),
         (at.blend.center(), "the blend chip"),
         (at.tally.center(), "the tally chip"),
+        (at.mask.center(), "the mask mini"),
     ] {
         assert_eq!(
             claim(&mut panel, &ctx, &strips, point(probe)),
@@ -1088,7 +1092,6 @@ fn the_four_controls_are_claimed_and_the_rest_of_the_bay_is_not() {
         (track_floor, "the fader's track, below the knob"),
         (at.meter.center(), "the meter"),
         (at.num.center(), "the number"),
-        (at.mask.center(), "the mask"),
     ];
     for (probe, what) in probes {
         assert_eq!(
@@ -1103,7 +1106,8 @@ fn the_four_controls_are_claimed_and_the_rest_of_the_bay_is_not() {
     assert!(!trim.knob.contains(track_end));
     assert!(!fader.knob.contains(track_floor));
     // And the mask mini has to actually be off the blend chip, or the list
-    // above would be asserting that a control is not one.
+    // above would be asserting one control twice and never asking about the
+    // other.
     assert!(!at.blend.contains(at.mask.center()));
 
     // The boundary **under** the bay still has its grab, which is what says
