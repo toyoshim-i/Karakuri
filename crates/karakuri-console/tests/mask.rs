@@ -110,7 +110,9 @@ fn wearing(slot: usize, mask: Mask, angle: f32) -> Strip {
         // whose two halves disagree draws is `parked.rs`.
         requested: Tally::Live,
         gain: 0.2 + 0.15 * slot as f32,
+        gain_to: None,
         opacity: 0.8 - 0.15 * slot as f32,
+        opacity_to: None,
         blend: BlendMode::ALL[slot % BlendMode::ALL.len()],
         mask,
         mask_angle: angle,

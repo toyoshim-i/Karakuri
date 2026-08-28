@@ -473,14 +473,34 @@ honest limit
 [P-0078](principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md) already
 states about the record stream, now met by the surface it was waiting for.
 
+**And the two faders say where a scheduled move is taking them**, which is the same rule as the
+tally's roll on a control whose idiom is *position* rather than a word
+([ADR-0206](adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)). A transition is
+armed on the beat grid, so with the default quantum a fade is due up to a bar after the key that
+asked for it — invisible on the panel until now, and named only in `karakuri-cli`'s status line,
+which is the log P-0075 says a destination may not be delivered from. The knob and the fill go on
+saying where the control is, a hairline mark says where it is going, and the fill keeps setting off
+toward the mark and falling back, never covering the gap. `view::Strip` carries `gain_to` and
+`opacity_to` — `Deck::transitions_on` read for a surface instead of a status line — and derives
+whether anything is pending every frame, as the tally does. **Neither mark is a control**, which is
+the tally's order kept: a readout of a pending state comes before any press that could arm one.
+**And the third control a transition can move has nowhere to say it**: an armed wipe moves
+`Control::MaskPosition`, the strip has no control and no readout for that number, so it is drawn
+nowhere and the gap is named in the record rather than left to be found.
+
 **Four live regions now, and one of them declares a price.** The picture is expensive and moves
 every frame; the beat grid is cheap, high priority, and moves two to four times a second; the mixer
 is expensive, repetitive and **hardly moves at all** — six readouts that change when a hand changes
-them; and the tally's roll is expensive, runs at 30 Hz and runs **only while a request is
-outstanding and the bay that draws it is laid out**, which can be the length of a set. The roll is
-the first region to declare a staleness (`View::animating`, and `repaint::Change::Animating` turns
-it into a deadline), and it declares nothing while it is folded away — a region that is not laid out
-declares nothing rather than declaring and being dropped by a scheduler that does not exist
+them; and *whatever is pending* is expensive, runs at 30 Hz and runs **only while a request is
+outstanding and the bay that draws it is laid out**, which can be the length of a set. That last one
+is one live region with **three presentations** now: the tally's roll, and a reach on each of a
+strip's two faders while a transition is armed on it
+([ADR-0206](adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)). They share a
+period, a curve and a staleness, so a parked slot and eight armed fades are one deadline rather than
+nine — which is P-0075's *everything pending moves together* paying for itself. It is the first
+region to declare a staleness (`View::animating`, and `repaint::Change::Animating` turns it into a
+deadline), and it declares nothing while it is folded away — a region that is not laid out declares
+nothing rather than declaring and being dropped by a scheduler that does not exist
 ([ADR-0193](adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md)).
 **There is still no scheduler**, and the four of them are what one would be scheduling.
 
@@ -493,8 +513,16 @@ throws the expand away with nothing said. Nothing in the console reaches that st
 ### Where this goes next, and the decisions it is waiting on
 
 **Six controls in the console answer a pointer**: the Outputs dot, the mixer's two faders, its
-blend chip, its tally chip and its mask mini. **The mixer strip is finished** — nothing in it is a
-readout a pointer might have expected to answer — **the Library bay lists what the store holds** and
+blend chip, its tally chip and its mask mini. **The mixer strip is finished as a set of controls** —
+nothing in it is a readout a pointer might have expected to answer — and its faders now also say
+where a *scheduled* move is taking them
+([ADR-0206](adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)): a mark on the
+track where the knob would land, and the fill reaching for it and falling back. **What that leaves
+owed is the wipe, again from the other side**: `Control::MaskPosition` is the third control a
+transition can move, the strip has no control and no readout for that number, so **an armed wipe is
+the one scheduled move the console cannot draw** — an under-draw named in ADR-0206 rather than
+discovered later, and closed by whatever surface gives the mask's front a position. **The Library
+bay lists what the store holds** and
 the other four bays are empty, and the keyboard, a MIDI map and MCP reach none of it — the panel
 routes in `manual/operations.html` are still `plan`, because the console is an example rather than
 the program.

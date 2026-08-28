@@ -49,7 +49,9 @@ fn strips() -> Vec<Strip> {
             // strip whose two halves disagree draws is `parked.rs`.
             requested: Tally::Live,
             gain: 0.2 + 0.15 * slot as f32,
+            gain_to: None,
             opacity: 0.8 - 0.15 * slot as f32,
+            opacity_to: None,
             blend: BlendMode::Over,
             mask: Mask::None,
             mask_angle: 0.0,
