@@ -635,10 +635,26 @@ reaches for the same program.
 ([ADR-0214](adr/0214-the-program-moves-out-of-the-cli-and-two-thin-binaries-sit-over-it.md)): the command line stays the scaffolding [README.md](../README.md) declares it to
 be, the panel becomes the destination, and `karakuri-console/src/` keeps the device-free seam
 [contributing.md](contributing.md) §3 names — the seam a `[[bin]]` in that package would have sold to
-save writing a new one. **It is the first item because it is what the meter is a meter of.** What
-that record deliberately does *not* settle is the shared package's name, its boundary — which of the
-CLI's fourteen modules are a program's and which are the command line's own — and whether it lands in
-one move or several.
+save writing a new one. **It is the first item because it is what the meter is a meter of.**
+
+**Two of the three things ADR-0214 left open are taken** ([ADR-0215](adr/0215-the-package-is-karakuri-environment-and-a-module-belongs-if-what-it-deals-with-is-outside-this-process.md)): the package is
+**`karakuri-environment`**, and **a module belongs in it if what it deals with lives outside this
+process — a disk, a device, a port, a socket, another process — or is the record of what happened.**
+The name was chosen to be the test: *inner* and *outer* are relations between crates and say nothing
+about a struct, so `core`, `host` and `shell` could not have decided anything, while this sentence
+decides `Clock` (in — wall time comes from outside) and `Live` (out — it holds a window and a device)
+without anyone adjudicating what a *program* is. All thirteen modules pass, two of them on the second
+clause alone. What is still open is whether it lands in one commit or several.
+
+**And `main.rs` divides along a line that can be named now**, which ADR-0214 said it would not:
+measured on 2026-08-28, the thirteen modules reach into it through **sixteen items and forty-nine
+references** — `Named` (22, nearly all in `watch.rs`'s tests), `no_such_slot` (11, from `mcp`, `mix`
+and `midi`), `nothing_to_save`, `TONEMAPS`, `Names`, and eleven singletons. Every one of the sixteen
+passes the test — material types, constants, and two refusal sentences that
+[P-0061](principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md) says
+belong where both surfaces can reach them. What stays behind is the window, the arguments, the key
+handler and `Live`. The order the move is cheapest in: the nine modules with no intra-crate
+dependency first, then `meta` → `setfile` → `watch`, then `mcp`, then `mix` and `midi`.
 
 **The ~10–14 week estimate does not carry this, which is the second time.** *What the range assumes*
 names the four undrawn bays, three decisions and the manual's missing deck head, and not a program to
