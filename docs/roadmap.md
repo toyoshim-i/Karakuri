@@ -1652,30 +1652,204 @@ device and no window, which means the `wgpu` 30 migration and the layout model w
 same time without waiting on each other. Beyond that first piece the order is open, and nothing
 below is blocked on anything else.
 
+#### What this milestone has delivered, and why the list below stopped counting it
+
+**The list below is the second half of the work, and reading it as the milestone is what makes
+the progress invisible.** Not one of its seven items is finished. Meanwhile
+`karakuri-layout` and `karakuri-console` were written from nothing — the first commit in either
+is 2026-08-24 — the operation vocabulary and its record crate landed beside them, and **fifty-five
+records — [ADR-0156](adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md), which
+opened the console, and the fifty-four after it — and eight principles have landed**. None of that
+is on the list, because the list was written before anybody knew what the floor under those seven
+items was made of. This is what it turned out to be.
+
+- **An arrangement this repository owns, and it round-trips.** `karakuri-layout` hands out
+  rectangles with no toolkit in it, solves without mutating what the operator arranged
+  ([P-0071](principles/0071-solving-a-layout-never-mutates-it.md)), honours a maximum as trailing
+  space rather than as stretch ([ADR-0157](adr/0157-a-maximum-is-honoured-and-the-leftover-is-trailing-space.md)),
+  lets a node claim only what its visible content can use
+  ([ADR-0174](adr/0174-a-node-claims-only-what-its-visible-content-can-use.md),
+  [P-0073](principles/0073-a-node-claims-only-what-its-visible-content-can-use.md)), and
+  **refuses a saved arrangement that disagrees with itself rather than repairing it**
+  ([ADR-0158](adr/0158-a-saved-arrangement-that-disagrees-with-itself-is-refused-not-repaired.md)).
+  A boundary is a rectangle rather than a coordinate
+  ([ADR-0160](adr/0160-a-boundary-is-a-rectangle-not-a-coordinate.md)) and gets first refusal on a
+  pointer ([ADR-0163](adr/0163-a-boundary-gets-first-refusal-on-a-pointer.md)); solo remembers
+  which region because it cannot be derived
+  ([ADR-0161](adr/0161-solo-remembers-which-region-because-it-cannot-be-derived.md)); and a region
+  that is not laid out declares nothing rather than being dropped later
+  ([ADR-0193](adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md),
+  [ADR-0183](adr/0183-a-node-is-out-of-the-layout-for-two-reasons-and-they-are-two-bits.md),
+  [ADR-0204](adr/0204-the-root-and-the-body-row-stay-unnamed-and-a-folded-root-is-not-hit-testable.md)).
+  **This is the half of *an arrangement saved and restored* that nobody costed**, and it is done.
+- **One vocabulary, and the surfaces beginning to route into it.**
+  `crates/karakuri-operation/` is a leaf crate with no dependencies at all
+  ([ADR-0180](adr/0180-the-operation-vocabulary-is-a-crate-with-no-dependencies.md)) whose
+  specification is [every operation](manual/operations.html), checked both ways round by a test.
+  An operation says what it wants and never which way to move
+  ([P-0074](principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md)) and
+  carries what it acts on ([ADR-0175](adr/0175-an-operation-carries-what-it-acts-on.md)); it asks
+  for what a surface can say while the record stays whole
+  ([ADR-0192](adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md));
+  three residencies are one operation
+  ([ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md)) and the mask is two rows
+  because a control change can only set
+  ([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)).
+  `karakuri-operation-record/` is where an operation becomes a record, a crate that depends on
+  both ([ADR-0194](adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)).
+  **The MIDI map is migrated and `Action` is deleted**
+  ([ADR-0196](adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md),
+  [ADR-0202](adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md)); MCP names
+  its operations and performs them itself
+  ([ADR-0199](adr/0199-mcp-names-its-operations-and-performs-them-itself.md)); the console's `Op`
+  stays for now and what blocks it is the page rather than the code
+  ([ADR-0197](adr/0197-the-consoles-op-stays-and-what-blocks-it-is-the-page-rather-than-the-code.md)).
+- **The console draws five of its nine regions, each argued against the manual.** The transport
+  row shows what the console can know
+  ([ADR-0177](adr/0177-the-transport-row-shows-what-the-console-can-know.md)); the Program bay
+  arranges itself for the larger picture and rearranges when it must
+  ([ADR-0181](adr/0181-the-picture-is-the-canvass-shape-and-the-leftover-is-the-consoles.md),
+  [ADR-0182](adr/0182-the-program-bays-body-arranges-itself-for-the-larger-picture.md),
+  [ADR-0184](adr/0184-the-program-bay-rearranges-itself-and-a-still-frame-does-not.md)); the mixer
+  draws four tracks and as many strips as the deck has
+  ([ADR-0178](adr/0178-the-mixer-draws-four-tracks-and-as-many-strips-as-the-deck-has.md)), where a
+  fader translates a drag into an operation and applies nothing
+  ([ADR-0185](adr/0185-a-fader-translates-a-drag-into-an-operation-and-applies-nothing.md)) and
+  marks where it is going while it reaches for it
+  ([ADR-0206](adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md),
+  [P-0075](principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md),
+  [ADR-0188](adr/0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md)). A
+  control the console draws is the panel's
+  ([ADR-0176](adr/0176-a-control-the-console-draws-is-the-panels.md)), and a surface owns the
+  affordance and never the authority
+  ([P-0076](principles/0076-a-surface-owns-the-affordance-never-the-authority.md)). **What is not
+  drawn is `staging`, `inspector`, `master` and `sequencer`** — the four the console page's own
+  footer says are not built.
+- **The frame the panel is drawn on.** `egui` draws it and it cost a `wgpu` 30 bump
+  ([ADR-0155](adr/0155-egui-draws-the-panel-and-the-price-is-wgpu-30.md)); the engine's frame and
+  the panel's are one submission
+  ([ADR-0166](adr/0166-the-engines-frame-and-the-panels-are-one-submission.md),
+  [ADR-0173](adr/0173-a-frames-submission-is-not-only-its-sinks.md)); the frame loop is the
+  engine's because the CLI is scaffolding
+  ([ADR-0172](adr/0172-the-frame-loop-is-the-engines-because-the-cli-is-scaffolding.md)); **the
+  deck advances and each sink either gets the frame or misses it**
+  ([ADR-0171](adr/0171-the-deck-advances-and-each-sink-either-gets-the-frame-or-misses-it.md)),
+  which is what makes a second sink a thing to add rather than a thing to design. A still panel
+  costs nothing and what moves declares its price
+  ([P-0072](principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md),
+  [ADR-0164](adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md),
+  [ADR-0210](adr/0210-a-declared-cost-is-one-panel-pass-written-down-and-held-against-the-run.md)),
+  the repaint decision is one closed list
+  ([ADR-0165](adr/0165-the-repaint-decision-is-one-closed-list.md)), and motion may carry the
+  meaning, so a stopped animation is a fault to report
+  ([P-0077](principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md),
+  [ADR-0189](adr/0189-motion-may-carry-the-meaning-and-a-stopped-animation-is-a-fault-to-report.md)).
+- **And the measuring apparatus was corrected on the way.** The timestamp verdict is the
+  backend's rather than the machine's
+  ([ADR-0169](adr/0169-the-timestamp-verdict-is-the-backends-not-the-machines.md)), which took
+  three machines to find out; a transcribed number cites the rule it was copied from and the
+  citation is checked
+  ([ADR-0179](adr/0179-a-transcribed-number-cites-the-rule-it-was-copied-from.md)); and a question
+  whose reply the vocabulary cannot say gets no row, which is what caught the status line
+  concealing five console gaps
+  ([ADR-0205](adr/0205-a-question-whose-reply-the-vocabulary-cannot-say-gets-no-row.md)).
+
+**None of that is a changelog entry.** Every one of the seven items below assumed a panel to be
+drawn into, a name to be routed by, and a frame to be drawn on, and none of the three existed when
+the list was written.
+
 **Adds**
 
-- Node editor. Waits on the authoring notation at the head of M4 — M3 introduced node
+**Each bullet says whether it is ready, gated or partly done, and on what.** They read alike
+today, which is most of why the count stopped meaning anything: a bullet waiting on a decision
+nobody has taken and a bullet waiting on an afternoon's drawing are not the same item. Nothing has
+been moved between milestones here — that is the maintainer's, and two of these are candidates for
+it.
+
+- Node editor. ~~Waits on the authoring notation at the head of M4 — M3 introduced node
   *ownership* and deliberately not a graph model, so there is nothing to edit until nodes
-  have names
+  have names~~
+
+  **That blocker is stale, and it is the one worth the maintainer's attention.** The authoring
+  notation is built and M4 is closed on it: a procedure declares `uses far : Geometry` and the Set
+  binds it with `--edge morph.far=sphere_shell`, an unbound slot is refused
+  ([ADR-0152](adr/0152-a-kir-names-a-slot-and-the-set-names-the-nodes.md),
+  [P-0068](principles/0068-a-kir-never-names-a-node-of-a-set.md)); `Set::node_names` answers what
+  every node is called, whether or not a caller wrote one; and M4's own table marks *"which
+  geometry a node's second input takes is `--set` order"* **Closed**. Nodes have names. There is
+  something to edit.
+
+  **Partly done, and what it is really waiting on is two things this bullet never mentioned.**
+  Naming a node's *source* is done — `ReadProcedure` and `WriteProcedure` are operations, and so is
+  `WireInput`, the one operation addressed by name at both ends. What has no name anywhere is
+  **adding or removing a node**: there is no such operation in `karakuri-operation`, no row on
+  [every operation](manual/operations.html), and the same gap has an arena half —
+  `karakuri-layout`'s arena has no insert and no remove either, and `NodeId` is a bare index, so a
+  removal shifts every id anything is holding. The second is a surface: the inspector is one of the
+  four regions the console does not draw. **Ready to be worked, gated on nothing outside M5.**
 - Parameter surfaces with MIDI learn and signal binding UI. **What they show is decided in
   M3** — a Set declares which of its controls it publishes, so this surface renders an
   interface rather than inventing one. Without that it would be twenty-five knobs per slot
   and a filter nobody can save. **How learning works is settled above**: a control is bound to
   a deck and a position in that published interface, the assignment lives in the control's own
   tooltip, and the map is a file saved per controller
+
+  **Both stated blockers hold, and a third one is not stated at all — this is gated inside M5.**
+  `Set::published` is there and `WriteParam`, `AttachSignal` and `TakeParamBack` are named
+  operations, so the *what* half is real. But **the console draws no tooltip anywhere** and has not
+  half-drawn one either: a tooltip needs `egui` to own a widget, and this console paints, with no
+  widget anywhere in it — the four controls of the mixer that carry a `data-tip` in the mock get
+  none, and neither does the Outputs row. So the learn mechanism starts from something that does
+  not exist. **Gated on a decision, not on work**: who owns the pointer — whether the panel gains
+  `egui` widgets, or paints its own hover layer — which
+  [`karakuri-console`'s `input`](../crates/karakuri-console/src/input.rs) names as its own decision
+  and deliberately does not take. Nothing outside M5 is in the way; the decision is.
 - Set browser with live previews of priming Sets. **It carries M4's unsettled thumbnail question with
   it**: a stored still is not the live preview beside it, and what a thumbnail is *of* is
   undecided because a metadata card is per artifact and one procedure cannot be rendered
   alone — see what M4 still owes, where the machinery is costed and the question stated
+
+  **Checked, and it holds exactly as stated.** M4 is closed and says so honestly — *"What closed is
+  the machinery, tested at the scale that exists"* — and it owes six things, of which thumbnails is
+  one, filed as *"a decision rather than machinery"* and handed here in its own words: *"M5's Set
+  browser is where somebody will next be in a position to judge a framing."* **Partly done and
+  gated on that judgement.** The library bay is drawn and lists what the store holds; the previews
+  and the thumbnail beside them are what waits. Note the judgement is M5's to make and the
+  machinery it would revive is M4's — **do not read this as a reason to move the item**; M4 is
+  closed and its debt is recorded where it belongs.
 - Staging lane — where candidates appear before they go live. Its first producer is the
   operator's own regeneration of a slot, which needs no agents and makes the lane useful
   and testable as soon as it exists; M6's agents write to the same place rather than
   inventing one. Because a rejected candidate costs nothing — the previous artifact is
   still in the library and the slot record still points at it — this is an A/B between two
   versions, not a merge tool
-- The `man / sug / auto` control: Manual / Suggest / Auto — **on an address this document
+
+  **The stated producer does not exist, and it is not an agent's absence that stops it.**
+  *Regeneration of a slot* has no operation in `karakuri-operation` and no row on
+  [every operation](manual/operations.html); `HotSwap`'s rolled-back candidate is a different thing
+  — a build that lost, not a proposal waiting. What *is* built is the region: `staging` is a named
+  bay in the console's arrangement with a fixed height and a minimum, so the lane has a home and
+  nothing to put in it. **Gated inside M5** on naming that operation, and this is the bullet with
+  the least behind it once it is named — see *What exists today*, which costs the four bays and
+  reaches the same verdict.
+- The `man / sug / auto` control: Manual / Suggest / Auto — ~~**on an address this document
   has not settled**, see *What authority is set on*. This bullet said *per-layer*, which is
-  one of the three answers in play and not a decision
+  one of the three answers in play and not a decision~~
+
+  **The address is settled — per node — and the vocabulary half landed while this was being
+  written.** `karakuri-operation` holds `SetAuthority { deck, node, authority }` over an `Authority`
+  of `Manual` / `Suggesting` / `Automatic`, three destinations and no toggle, on
+  [P-0074](principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md)'s terms; the
+  operator wins and an automatic writer yields to a hand
+  ([P-0078](principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md)). Its
+  record is the session's and the engine holds no copy of the value list yet, which is what that
+  work still owes. *(Read as of 2026-08-28, mid-flight: the crate cites its record by number and
+  `docs/adr/INDEX.md` does not carry the row yet, so the record is the citation to follow when it
+  lands.)*
+
+  **Partly done, and the half that is left is a control on a region the console does not draw.**
+  `man / sug / auto` is a node head, the node head is the inspector's, and the inspector is
+  undrawn. **Gated inside M5**, and no longer gated on a decision.
 - **Per-slot tempo-sync and beat-sync toggles, with beat-sync greyed out for accumulating
   material.** The two are different requests and only one of them is always available:
   tempo-sync changes the *rate*, which any procedure can follow because it only ever means
@@ -1689,6 +1863,15 @@ below is blocked on anything else.
   the check pass, travels with the artifact, and arrives at the interface as a fact. Had it
   been left for the engine to infer at runtime, the surface could not have said anything
   until the Set was built and run.
+
+  **The vocabulary is there and the surface it would live on is not drawn — nor described.**
+  `SetSync { deck, sync }` over `Free` / `Tempo` / `Beat` and `ScrubDeck` are both operations, and
+  both already have a key. Both rows on [every operation](manual/operations.html) route their panel
+  way in to a **deck head** — and `docs/manual/console.html` has no deck head: the word appears
+  nowhere on the page, and neither does *sync* or *scrub*. So this is not a control waiting to be
+  drawn into a region; **it is a region the manual has not described**, which is the manual's own
+  order of work — *a sentence you cannot write about a control is a control designed wrong*.
+  **Gated inside M5, on the manual before the panel.**
 - **An arrangement is saved and restored, and resetting is the special case of restoring the
   default.** The panel's own state — every fold, every boundary, what is soloed — lives only in a
   running process today, and the one operation that changes it wholesale is `Reset`. That is the
@@ -1709,13 +1892,43 @@ below is blocked on anything else.
   empty for unrelated reasons.
 
   **What it needs that does not exist**: a name for an arrangement, a record carrying one, and two
-  operations beside `Reset`. What it does not need is a serialiser — `karakuri-layout`'s
-  `Arrangement` already derives `Serialize`/`Deserialize`, an unbounded maximum is written as
-  `null` deliberately, and a `NodeId` goes on the wire as the bare number it is. The mock has the
-  shape one level over: the Library's scope row already lists **presets** beside favourites and a
-  folder, and says the scope list is itself extensible.
+  operations beside `Reset`. What it does not need is a serialiser — **`karakuri-layout`'s `Layout`
+  round-trips today**, an unbounded maximum is written as `null` deliberately, and a `NodeId` goes
+  on the wire as the bare number it is. *(That sentence said `Arrangement` derives
+  `Serialize`/`Deserialize`, and it does not: `Arrangement` is a private struct deriving `Debug,
+  Clone`, and what round-trips is `Layout`, through a hand-written `Serialize` over a borrowed
+  `WireOut` and a `TryFrom<Wire>` that refuses an arrangement disagreeing with itself rather than
+  repairing it —
+  [ADR-0158](adr/0158-a-saved-arrangement-that-disagrees-with-itself-is-refused-not-repaired.md).
+  The conclusion survives the correction and is stronger than it was written: the load half is
+  built and hardened, not merely derivable.)* **Partly done, and the least gated of the seven.**
 
-~8–10 weeks.
+  The mock has the shape one level over: the Library's scope row already lists **presets** beside
+  favourites and a folder, and says the scope list is itself extensible.
+
+**~10–14 weeks from here, and the original ~8–10 was not a bad estimate of the wrong thing.** It
+was written against the seven items above, and those seven turned out to be the *second half* of
+this milestone: a panel to draw into, a name to route by and a frame to draw on were all assumed
+and none of them existed. The section above is what the first half cost. **The pace is not what was
+wrong** — `karakuri-layout` and `karakuri-console` went from nothing to five drawn regions, a
+solved and round-tripping arrangement and a migrated MIDI map in five days, with fifty-five records
+behind it. The list was.
+
+**What the range assumes.** That the four undrawn regions — `staging`, `inspector`, `master`,
+`sequencer` — are the bulk of what is left, and that they cost roughly what the five drawn ones
+did. That three decisions get taken rather than deferred: **who owns the pointer** (which the
+parameter surfaces and every tooltip in the console wait on), **what a thumbnail is of** (M4's, and
+judged here), and **the arena's insert and remove** (which the node editor and the inspector's `2
+up` both want, and whose remove half moves every `NodeId`). That the manual gains the deck head it
+does not have, before the panel does. And that the vocabulary keeps converging — `panel::Op` and
+the CLI's match arms onto `karakuri-operation`, one at a time.
+
+**What is not in the range.** The five operations still named `Undecided`, if any of them turns out
+to need designing rather than naming; a second `Sink`, which the fan-out is built for and which
+nothing has been written for; and **the sequencer's producer** — the region is costed above, but
+what fills it is *a step sequencer is one more name on `karakuri-signal`'s bus*, which is an
+argument rather than a measurement. **Widen the top of the range rather than the bottom if those
+land here.**
 
 ---
 
