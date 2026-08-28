@@ -263,7 +263,7 @@
       </div>
       <div class="op">
         <div class="op-head"><h3>Set a deck's mask shape</h3><span class="op-when ">immediate</span></div>
-        <p>What shape of the frame a deck's layer reaches &mdash; none, a straight front at an angle, or an iris &mdash; and it leaves the front where it is. Not the row <b>z</b> presses: that one chooses what the <em>next</em> wipe will be, where this one changes the mask a deck has now. A pad would name a shape the way it names a blend mode; the angle it could not name at all, because a map line has no way to write a bare number.</p>
+        <p>What shape of the frame a deck's layer reaches &mdash; none, a straight front at an angle, or an iris &mdash; and it leaves the front where it is. Not the row <b>z</b> presses: that one chooses what the <em>next</em> wipe will be, where this one changes the mask a deck has now. A pad would name a shape the way it names a blend mode; the angle it could not name at all, because a map line has no way to write a bare number. <strong>The badge is empty on purpose rather than pending.</strong> Teaching the map a bare number would be teaching it the one kind of value it can check against nothing, and taking the angle off this row would hand it to a default. So this waits for a control that <em>shows</em> an angle, which is what would say what a map ought to write &mdash; and until then the front is the half of the mask a knob reaches.</p>
         <div class="rts">
           <span class="rt plan">panel <b>strip mask mini</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -642,7 +642,11 @@
       none of the three; a pad naming a shape alone would have to invent the
       angle beside it, and the map reads nothing back to invent it from. So the
       front has a fader and <em>Set a deck's mask shape</em> stays empty here
-      rather than being given a route that guesses. It no
+      rather than being given a route that guesses. <strong>That is settled and
+      not outstanding</strong>: the two ways to fill the badge in are a number the
+      format cannot check and an angle somebody defaults, and the thing that would
+      decide between them is a control that shows an angle, which does not exist
+      yet. It no
       longer has a vocabulary of its
       own, though: a map line names one of the operations on this page, and it
       names it outright &mdash; which state, which mode &mdash; rather than

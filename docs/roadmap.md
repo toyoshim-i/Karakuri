@@ -568,13 +568,16 @@ the program.
    grammar at all**, since a map line carries a slot number, a word out of a value list, or a
    range, and there is no float form — so `note -> mask 0 radial` is a line nobody can write, and a
    pad that named the kind alone would have to invent the angle beside it, which is ADR-0192's
-   fault one field along. **It is waiting on a decision**, and ADR-0202 names the three and costs
-   them without taking one: a float form in the grammar, an angle-less shape operation, or the row
-   staying a gap with the reason on the page. It is where the mask mini's press already meets it:
-   the mini is a control now and hands back the angle the slot is wearing
+   fault one field along. **The decision is taken and it is the third of the three ADR-0202 costed**
+   ([ADR-0209](adr/0209-the-masks-shape-keeps-its-empty-midi-badge-until-a-control-shows-an-angle.md)):
+   the row keeps its empty MIDI badge with the reason on the page, because a float form in the
+   grammar buys the badge with the one kind of value the format can check against nothing, and an
+   angle-less shape operation buys it by handing the angle to a default. **What stays open is what
+   would reopen it**: a control that *shows* an angle. The mask mini is not it — it is a control now
+   and hands back the angle the slot is already wearing
    ([ADR-0203](adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)), which is the one
-   answer a pad has no way to copy — so the decision is the map's alone rather than shared with a
-   control nobody had built.
+   answer a pad has no way to copy — so nothing on any surface has asked the map for an angle, and
+   this item is off the list rather than owed.
 2. **The rest of P-0072, and it is nearer than this item used to say.** Three live regions with
    three characters now exist — the picture expensive and every frame, the beat grid cheap and
    twice a second, the mixer expensive and hardly moving — which is what a scheduler was waiting
@@ -901,7 +904,11 @@ than work, and every one of them was found by building the thing next to it.
   map's two targets. **One of the two is taken** — `cc -> mask-position N` is a line now, and
   the same record's other half turned out not to be work at all but a decision nobody has taken
   ([ADR-0202](adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md)): the
-  grammar has no bare number, so a shape target could not carry the angle the row was given. The rule the split makes expressible is
+  grammar has no bare number, so a shape target could not carry the angle the row was given.
+  **That decision is taken now** — the row keeps `MIDI —` and the page carries why, rather than the
+  grammar growing a float or the operation losing its angle
+  ([ADR-0209](adr/0209-the-masks-shape-keeps-its-empty-midi-badge-until-a-control-shows-an-angle.md));
+  a surface that shows an angle is what would reopen it. The rule the split makes expressible is
   [P-0078](principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md), which
   also says where it stops holding — a `Record::Mask` is a state and not an ask, so the stream
   cannot carry which half was asked for.

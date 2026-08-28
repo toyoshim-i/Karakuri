@@ -4,7 +4,7 @@ title: The map reaches the mask's front, and the shape has no spelling to reach 
 status: accepted
 date: 2026-08-28
 supersedes: []
-superseded_by: []
+superseded_by: [0209]
 principles: [0078, 0074]
 tags: [midi, vocabulary, surfaces, mixing]
 ---
