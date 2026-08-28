@@ -241,3 +241,107 @@ fn hit_finds_a_nested_divider_and_nothing_outside_the_viewport() {
     l.solve();
     assert_eq!(l.hit(Point::new(12.0, 100.0), 3.0), Hit::View(program));
 }
+
+/// **A node that is not laid out is not hit-testable, and the root is a node.**
+///
+/// [`Layout::hit`] descends from the root and filters *children* by
+/// `out_of_layout`, so the one node it never asked about was the one node with
+/// nobody to ask on its behalf. With the root folded, every rectangle under it
+/// solves exactly as it did before — a fold empties a node by taking its
+/// extent out of its *parent*, and the root's rect is the viewport whatever
+/// its own bits say — so the pointer went on resolving to bays and to dividers
+/// on a panel that draws nothing at all,
+/// since a view's plan skips every node [`Layout::visible`] says no to and
+/// `visible` walks up to the root.
+///
+/// The rule is P-0073's and ADR-0193's on the pointer axis: a region that is
+/// not laid out declares nothing, claims nothing, and is touched by nothing.
+/// **Both bits**, because it is the disjunction that decides it (ADR-0183) —
+/// a root somebody set aside is as absent as a root somebody folded.
+#[test]
+fn a_folded_root_is_not_a_hit_target() {
+    let mut l = console();
+    l.set_viewport(Rect::new(0.0, 0.0, 1280.0, 720.0));
+    l.solve();
+    let library = l.find("library").unwrap();
+    let root = l.root();
+    // Inside the library bay, and on the root's own first divider — the gap
+    // between the transport and the row of panes, which is 48 to 52.
+    let bay = Point::new(100.0, 300.0);
+    let gap = Point::new(600.0, 50.0);
+    assert_eq!(l.hit(bay, 3.0), Hit::View(library));
+    assert_eq!(
+        l.hit(gap, 3.0),
+        Hit::Divider {
+            split: root,
+            index: 0
+        }
+    );
+
+    l.collapse(root);
+    l.solve();
+    assert!(!l.visible(library), "a folded root still lays out its bays");
+    assert_eq!(
+        l.hit(bay, 3.0),
+        Hit::Nothing,
+        "the pointer reached a bay on a panel with nothing on it"
+    );
+    assert_eq!(
+        l.hit(gap, 3.0),
+        Hit::Nothing,
+        "the pointer grabbed a divider on a panel with nothing on it"
+    );
+
+    // The other bit, and the same answer: `set_aside` is not the operator's,
+    // and the hit test does not care whose it is.
+    l.expand(root);
+    l.set_aside(root, true);
+    l.solve();
+    assert_eq!(
+        l.hit(bay, 3.0),
+        Hit::Nothing,
+        "a root that was set aside was still a hit target"
+    );
+}
+
+/// **And it stops at the root**, which is the whole of what the rule above
+/// changes: a folded *bay* leaves everything else exactly as reachable as it
+/// was, and the space it gave up belongs to whoever took it.
+///
+/// Without this, *not laid out is not hit-testable* could be read as *nothing
+/// is hit-testable while anything is folded* — a panel that stops answering
+/// the pointer the moment an operator folds one bay away.
+#[test]
+fn folding_a_bay_leaves_everything_else_hit_testable() {
+    let mut l = console();
+    l.set_viewport(Rect::new(0.0, 0.0, 1280.0, 720.0));
+    l.solve();
+    let root = l.root();
+    let library = l.find("library").unwrap();
+    let staging = l.find("staging").unwrap();
+    let program = l.find("program").unwrap();
+    let bay = Point::new(100.0, 300.0);
+    let gap = Point::new(600.0, 50.0);
+    assert_eq!(l.hit(bay, 3.0), Hit::View(library));
+
+    l.collapse(library);
+    l.solve();
+    assert_eq!(
+        l.hit(bay, 3.0),
+        Hit::View(staging),
+        "the space a folded bay gave up is not a target for whoever took it"
+    );
+    assert_eq!(
+        l.hit(Point::new(600.0, 300.0), 3.0),
+        Hit::View(program),
+        "a fold in one pane took another pane out of the hit test"
+    );
+    assert_eq!(
+        l.hit(gap, 3.0),
+        Hit::Divider {
+            split: root,
+            index: 0
+        },
+        "a fold somewhere in the tree took the root's own divider out of reach"
+    );
+}

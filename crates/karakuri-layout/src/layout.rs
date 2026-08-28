@@ -1158,9 +1158,33 @@ impl Layout {
     /// is drawn instead would spend the panel's space on something that is
     /// there to be dragged rather than to be seen. So a point inside the grab
     /// area belongs to the divider, not to the view under it.
+    ///
+    /// **A node that is not laid out is not hit-testable**, and that includes
+    /// the root. The descent below tests a node's *children* against
+    /// `out_of_layout` and never the node it starts from, so the root was the
+    /// one node nothing asked about — and a folded root keeps the viewport
+    /// while everything under it is solved as usual, since a fold takes its
+    /// extent out of its *parent* and the root has none. The pointer therefore
+    /// went on resolving to bays and dividers on a panel drawing nothing at
+    /// all, [`visible`](Layout::visible) having answered no for every one of
+    /// them. It is
+    /// [P-0073](../../../docs/principles/0073-a-node-claims-only-what-its-visible-content-can-use.md)
+    /// and [ADR-0193](../../../docs/adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md)
+    /// on the pointer axis: a region that is not laid out claims no space,
+    /// declares no staleness, and is under nobody's pointer.
+    ///
+    /// The way back does not go through here — [`expand`](Layout::expand) and
+    /// a solo's undo take a node or no argument at all, and a folded region
+    /// has no rectangle for a pointer to reach anyway, which the manual says
+    /// outright.
     pub fn hit(&self, p: Point, grab: f32) -> Hit {
         debug_assert!(!self.dirty, "hit() read a stale solve; call solve() first");
         if !self.viewport.contains(p) {
+            return Hit::Nothing;
+        }
+        // Only the root: every other node is reached through the filter in the
+        // descent, so this is the whole of *the node reported is laid out*.
+        if self.arrangement.out_of_layout(self.arrangement.root.0) {
             return Hit::Nothing;
         }
         let mut cur = self.arrangement.root.0;

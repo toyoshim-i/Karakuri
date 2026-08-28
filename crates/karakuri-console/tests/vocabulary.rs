@@ -37,8 +37,13 @@
 //!   `String` cannot say either — `Layout::name` answers `None` — so an `Op`
 //!   replaced by an `Operation` would lose them.
 //!
-//! None of the three is a bug to fix here. Each is a decision about the page,
-//! and this file is what stops one of them being closed by accident.
+//! **The third of those is decided now, and the decision is that they stay
+//! unnamed** (ADR-0204): folding the root produces a blank window, which is
+//! not the outcome the manual reaches for — *Solo a region* is, and its row
+//! says so — and the body row has no word on the page at all. So the count
+//! below is no longer a decision waiting to be taken; it is **what the
+//! migration costs, held at two**. The other two are still open, and this file
+//! is what stops any of the three being closed by accident.
 //!
 //! # [`Op::FoldEnclosing`] is not a fourth, and the rule is what settles it
 //!
@@ -292,6 +297,15 @@ fn the_variants_with_no_row_are_the_ones_written_down() {
 /// `Hit::Divider { split, .. }`, which `examples/panel.rs` turns into
 /// `Op::Fold` of the split. So this is the cost of `Op` becoming `Operation`,
 /// counted: it is two, and they are these.
+///
+/// **The decision was taken rather than left pending** (ADR-0204): the two
+/// stay unnamed, so `Op` stays `Op`, and this assertion is the standing price
+/// rather than a note that somebody still has to choose. Naming either of them
+/// is what fails here, and it should: it would be asserting that folding the
+/// whole panel away, or folding the row of three panes, is an operation an
+/// operator asks for — and the page says the opposite twice, once by having no
+/// row for either and once by reaching the outcome an operator does want
+/// through *Solo a region*.
 ///
 /// The count is asserted rather than the list alone, because a third unnamed
 /// split would be a third region only a mouse could fold, arriving without

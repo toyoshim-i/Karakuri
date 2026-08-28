@@ -4,7 +4,7 @@ title: The console's `Op` stays, and what blocks its migration is the page rathe
 status: accepted
 date: 2026-08-27
 supersedes: []
-superseded_by: []
+superseded_by: [0204]
 principles: [0074, 0036]
 tags: [console, vocabulary, surfaces, layout]
 ---

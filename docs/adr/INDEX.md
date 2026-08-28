@@ -229,6 +229,7 @@ number; new records continue from the end.
 | [ADR-0201](0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md) | The mask is two rows, because a control change can only set | 2026-08-27 | accepted |
 | [ADR-0202](0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md) | The map reaches the mask's front, and the shape has no spelling to reach it with | 2026-08-28 | accepted |
 | [ADR-0203](0203-the-mask-chip-carries-the-angle-it-does-not-control.md) | The mask chip carries the angle it does not control | 2026-08-28 | accepted |
+| [ADR-0204](0204-the-root-and-the-body-row-stay-unnamed-and-a-folded-root-is-not-hit-testable.md) | The root and the body row stay unnamed, and a node that is not laid out is not hit-testable | 2026-08-28 | accepted |
 
 ## Retired numbers
 
