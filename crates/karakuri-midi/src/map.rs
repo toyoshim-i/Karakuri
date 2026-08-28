@@ -10,6 +10,7 @@
 //!   # slot faders, on the channel the surface is set to
 //!   cc 1 ch 1 -> gain 0
 //!   cc 5      -> opacity 0
+//!   cc 9      -> mask-position 0
 //!   cc 20     -> exposure
 //!
 //!   # pads
@@ -37,6 +38,25 @@
 //! silently re-read, because `on-air 0` means *flip it* in a file written last
 //! month and would mean *put it live* today
 //! ([ADR-0196](../../../docs/adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)).
+//!
+//! ## Half the mask, because half of it can be said here
+//!
+//! `cc -> mask-position N` is the front of a deck's mask, `[0, 1]`, and a hand
+//! on it stops the wipe that was carrying it
+//! ([P-0078](../../../docs/principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md)).
+//! **The mask's other row has no line here**, and the reason is in this
+//! grammar rather than in the vocabulary:
+//! [`karakuri_operation::Operation::SetMaskShape`] carries an angle as well as
+//! a kind, a line can say a slot number, a value word out of a list, or a
+//! trailing `[lo, hi]` — and **none of those is a bare number**, so an angle
+//! cannot be written. A pad that named a kind alone would have to invent the
+//! angle beside it, and this crate reads nothing back to invent it *from*,
+//! which is [ADR-0192](../../../docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)'s
+//! fault one field along. So the row is left with no route rather than given a
+//! lossy one, and what it would cost to give it one — a float form, an
+//! angle-less operation, or the gap — is
+//! [ADR-0202](../../../docs/adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md),
+//! which names the three and takes none.
 //!
 //! ## What this deliberately does not do
 //!
@@ -92,6 +112,7 @@ enum Target {
     Gain { slot: u8, range: [f32; 2] },
     Opacity { slot: u8, range: [f32; 2] },
     Exposure { range: [f32; 2] },
+    MaskPosition { slot: u8, range: [f32; 2] },
     Residency { slot: u8, residency: Residency },
     Blend { slot: u8, blend: BlendMode },
     Preview { slot: Option<u8> },
@@ -112,7 +133,10 @@ impl Target {
     fn continuous(self) -> bool {
         matches!(
             self,
-            Target::Gain { .. } | Target::Opacity { .. } | Target::Exposure { .. }
+            Target::Gain { .. }
+                | Target::Opacity { .. }
+                | Target::Exposure { .. }
+                | Target::MaskPosition { .. }
         )
     }
 }
@@ -129,9 +153,25 @@ impl Target {
 ///
 /// Exposure's `[0.25, 4]` is two stops either side of unity, and it is a ratio
 /// scale, so the middle of the fader is exactly 1.0.
+///
+/// **A mask position's `[0, 1]` is the control's own range rather than a
+/// default chosen here**, and both ends being exact matters for a stronger
+/// reason than matching two faders. `karakuri_engine::deck::Mask` says of its
+/// `position` that 0 shows nothing anywhere and 1 shows everything everywhere
+/// *for any softness* — which `Blend::silent_at` depends on at the bottom and a
+/// wipe that has to actually finish depends on at the top. A fader that came up
+/// an ulp short at the top would leave a front that never quite arrives, on a
+/// deck that looks finished. It is linear because a front travelling at an even
+/// rate is what a wipe is, which is [`Shape::Linear`] and is what
+/// [`Target::shape`] answers for everything that is not exposure.
+///
+/// Writing a wider range is allowed here as it is on a gain, and buys less: the
+/// engine clamps a mask to the unit interval on apply, where a gain above unity
+/// is a real place to be.
 const GAIN_RANGE: [f32; 2] = [0.0, 1.0];
 const OPACITY_RANGE: [f32; 2] = [0.0, 1.0];
 const EXPOSURE_RANGE: [f32; 2] = [0.25, 4.0];
+const MASK_POSITION_RANGE: [f32; 2] = [0.0, 1.0];
 
 /// Which message a mapping is keyed by.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -257,6 +297,10 @@ impl Map {
             }),
             (Target::Exposure { range }, Some(v)) => Some(Operation::SetExposure {
                 exposure: scale(v, range, shape),
+            }),
+            (Target::MaskPosition { slot, range }, Some(v)) => Some(Operation::SetMaskPosition {
+                deck: slot,
+                position: scale(v, range, shape),
             }),
             (Target::Residency { slot, residency }, None) => Some(Operation::SetResidency {
                 deck: slot,
@@ -398,6 +442,16 @@ fn parse_target(to: &str) -> Result<Target, String> {
         "exposure" => Target::Exposure {
             range: range.unwrap_or(EXPOSURE_RANGE),
         },
+        // **The mask's front, and the mask's front only.** Hyphenated rather
+        // than a bare `mask`, which is the word the shape would want — the two
+        // are halves of one record and a grammar that spent the short word on
+        // one of them would have nothing left for the other. Why the shape has
+        // no line here at all is the module documentation and
+        // `docs/adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md`.
+        "mask-position" => Target::MaskPosition {
+            slot: slot(&mut words)?,
+            range: range.unwrap_or(MASK_POSITION_RANGE),
+        },
         "residency" => {
             let slot = slot(&mut words)?;
             Target::Residency {
@@ -456,8 +510,8 @@ fn parse_target(to: &str) -> Result<Target, String> {
         }
         other => {
             return Err(format!(
-                "`{other}` is not a control — expected gain, opacity, exposure, residency, \
-                 blend, preview or tap"
+                "`{other}` is not a control — expected gain, opacity, exposure, \
+                 mask-position, residency, blend, preview or tap"
             ))
         }
     };
@@ -622,6 +676,105 @@ mod tests {
         assert!(at(1) - at(0) < at(127) - at(126));
     }
 
+    /// **A mask's front reaches both ends of its travel exactly, and moves in
+    /// equal steps.** Not the fader argument — a mask at 0 shows nothing
+    /// anywhere and a mask at 1 shows everything everywhere *for any
+    /// softness*, which is what `karakuri_engine::deck::Mask` promises of its
+    /// `position` and what a wipe that has to actually finish depends on. A
+    /// range that came up short at the top is a front that never quite
+    /// arrives, on a deck that looks done; a ratio shape would spend the
+    /// bottom of the travel on nothing and is refused outright at zero.
+    #[test]
+    fn a_mask_front_reaches_both_ends_exactly_and_moves_in_equal_steps() {
+        let m = map("cc 9 -> mask-position 0");
+        let at = |v: u8| match m.operation(cc(9, v)) {
+            Some(Operation::SetMaskPosition { deck: 0, position }) => position,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(at(0), 0.0, "the front could not be sent back to hidden");
+        assert_eq!(at(127), 1.0, "the front could not be carried all the way");
+        // Equal steps in position, which is what separates this from
+        // exposure's ratio: the middle of the fader is the middle of the
+        // travel, and the step at the bottom is the step at the top. The
+        // second is to within a float's last place rather than exactly —
+        // `lo + t*(hi - lo)` rounds per step and a ratio scale is out by two
+        // orders of magnitude here, not by an ulp.
+        let middle = at(63) + (at(64) - at(63)) / 2.0;
+        assert!((middle - 0.5).abs() < 1e-6, "{middle}");
+        let (bottom, top) = (at(1) - at(0), at(127) - at(126));
+        assert!((bottom - top).abs() < 1e-6, "{bottom} against {top}");
+        // A written range is the operator's, exactly as a gain's is — a fader
+        // that only crosses the middle of the frame is a line somebody will
+        // write. It buys less here than on a gain, because the engine clamps a
+        // mask to the unit interval on apply and a gain above unity is a real
+        // place to be.
+        let m = map("cc 9 -> mask-position 2 [0.25, 0.75]");
+        assert_eq!(
+            m.operation(cc(9, 0)),
+            Some(Operation::SetMaskPosition {
+                deck: 2,
+                position: 0.25
+            })
+        );
+        assert_eq!(
+            m.operation(cc(9, 127)),
+            Some(Operation::SetMaskPosition {
+                deck: 2,
+                position: 0.75
+            })
+        );
+    }
+
+    /// **The front takes a fader and refuses a pad**, with the grammar's own
+    /// complaint rather than a special case. A pad on a position would set the
+    /// front to one number and nothing else, which is a wipe with one frame in
+    /// it — and the refusal has to name the message to write instead, because
+    /// that is the whole of what an operator can act on.
+    #[test]
+    fn the_mask_front_takes_a_fader_and_refuses_a_pad() {
+        let (m, notes) = Map::parse("note 62 -> mask-position 0");
+        assert!(m.is_empty(), "a pad on the mask's front loaded");
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert!(notes[0].contains("map a `cc`"), "{}", notes[0]);
+        // And the message it names does load, so the complaint is a route and
+        // not a dead end.
+        assert_eq!(map("cc 9 -> mask-position 0").len(), 1);
+    }
+
+    /// **The mask's other half has no line, and a file that tries to write one
+    /// is refused rather than half-loaded.**
+    ///
+    /// `Operation::SetMaskShape` carries an angle beside its kind, and this
+    /// grammar has no bare number in it — a line says a slot, a word out of a
+    /// value list, or a trailing `[lo, hi]`. A target that took the kind and
+    /// invented the angle would be ADR-0192's fault one field along, and this
+    /// crate reads nothing back to invent it from. So every spelling somebody
+    /// would reach for is refused by the same arm every unknown control is,
+    /// naming the controls there are. The defect this is against is a target
+    /// added for the kind alone: it would load, and it would write a record
+    /// squaring the front's angle to whatever a default said, mid-wipe.
+    #[test]
+    fn the_mask_shape_has_no_line_and_every_spelling_of_one_is_refused() {
+        for line in [
+            "note 62 -> mask-shape 0 linear",
+            "note 62 -> mask 0 radial",
+            "cc 9 -> mask 0",
+            "cc 9 -> mask-angle 0",
+        ] {
+            let (m, notes) = Map::parse(line);
+            assert!(m.is_empty(), "`{line}` loaded");
+            assert_eq!(notes.len(), 1, "`{line}`: {notes:?}");
+            assert!(
+                notes[0].contains("is not a control"),
+                "`{line}`: {}",
+                notes[0]
+            );
+            // The complaint lists what there is, and the front is on the list
+            // — the one half of the mask a line can reach.
+            assert!(notes[0].contains("mask-position"), "`{line}`: {}", notes[0]);
+        }
+    }
+
     /// **A pad and a fader cannot be mapped to each other's targets.** A knob
     /// wired to `on-air` would toggle the slot on every message it sent, which
     /// is sixty times a second while it is moving.
@@ -721,12 +874,13 @@ mod tests {
         let m = map("cc 1 -> gain 2\n\
              cc 2 -> opacity 3\n\
              cc 3 -> exposure\n\
+             cc 4 -> mask-position 2\n\
              note 36 -> residency 1 live\n\
              note 37 -> blend 3 over\n\
              note 39 -> preview 1\n\
              note 40 -> preview mix\n\
              note 41 -> tap");
-        assert_eq!(m.len(), 8);
+        assert_eq!(m.len(), 9);
         assert!(matches!(
             m.operation(cc(1, 127)),
             Some(Operation::SetGain { deck: 2, .. })
@@ -738,6 +892,13 @@ mod tests {
         assert!(matches!(
             m.operation(cc(3, 64)),
             Some(Operation::SetExposure { .. })
+        ));
+        assert!(matches!(
+            m.operation(cc(4, 127)),
+            Some(Operation::SetMaskPosition {
+                deck: 2,
+                position: 1.0
+            })
         ));
         assert_eq!(
             m.operation(note(36)),

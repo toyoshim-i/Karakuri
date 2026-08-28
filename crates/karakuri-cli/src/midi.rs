@@ -161,9 +161,9 @@ impl Router {
 
 /// The deck an operation names, if it names one.
 ///
-/// **The five arms are every operation a map line can produce**, and
+/// **The six arms are every operation a map line can produce**, and
 /// `karakuri_midi::map`'s `parse_target` is that list — `cc -> exposure` and
-/// `note -> tap` name no deck, and the other forty-three operations have no
+/// `note -> tap` name no deck, and the other forty-two operations have no
 /// spelling in the grammar at all. The wildcard is what the vocabulary being
 /// forty-eight wide costs here, and it is safe rather than merely convenient:
 /// **the record path is the backstop.** A slot this deck does not hold is
@@ -174,12 +174,21 @@ impl Router {
 /// So what this buys is not safety but silence: the refusal is said **once per
 /// slot per run** rather than once per message, and `cc 1 -> gain 4` on a deck
 /// of four is the likeliest typo a map has.
+///
+/// **`SetMaskPosition` is here because for it the backstop is not silent.**
+/// The other five reach `mix::change` and are refused once; a mask operation is
+/// stopped a step earlier, at `Live::operate`, which cannot read the mask of a
+/// slot the deck does not hold and answers `Owed::NotRead` — and `operate`
+/// prints that, every time. On a fader sweep against a mistyped slot that is a
+/// blocking write per message inside `Live::frame`, which is the exact cost
+/// this router exists to keep off the frame path.
 fn deck_of(operation: &Operation) -> Option<usize> {
     match operation {
         Operation::SetGain { deck, .. }
         | Operation::SetOpacity { deck, .. }
         | Operation::SetResidency { deck, .. }
-        | Operation::SetBlendMode { deck, .. } => Some(usize::from(*deck)),
+        | Operation::SetBlendMode { deck, .. }
+        | Operation::SetMaskPosition { deck, .. } => Some(usize::from(*deck)),
         Operation::SetPreview { showing } => showing.map(usize::from),
         _ => None,
     }
@@ -304,6 +313,21 @@ mod tests {
         // The boundary either side of it, which is where an off-by-one lives.
         assert_eq!(routed(&mut r, &[cc(1, 127)], 4).len(), 1);
         assert_eq!(routed(&mut r, &[cc(1, 127)], 3).len(), 0);
+    }
+
+    /// **The mask's front is checked here too**, and for a sharper reason than
+    /// the other five: a `gain 4` that got past this is refused once by
+    /// `mix::change`, where a `mask-position 4` is stopped at `Live::operate`
+    /// — which cannot read a mask the deck does not hold, answers
+    /// `Owed::NotRead` and **prints it every time**. Left out of `deck_of`,
+    /// a fader sweep into a mistyped slot would be a blocking write per
+    /// message inside `Live::frame`.
+    #[test]
+    fn a_mask_front_past_the_end_of_the_deck_is_dropped_here_rather_than_printed() {
+        let mut r = router("cc 9 -> mask-position 4\ncc 10 -> mask-position 1");
+        let out = routed(&mut r, &[cc(9, 127), cc(10, 64)], 2);
+        assert_eq!(out.len(), 1, "{out:?}");
+        assert!(matches!(out[0], Operation::SetMaskPosition { deck: 1, .. }));
     }
 
     /// **Previous frame's operations do not arrive again.** `out` is a buffer
