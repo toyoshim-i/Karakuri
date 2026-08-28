@@ -2075,7 +2075,7 @@ without either appearing in the file.
   `--bind index=1`.
 - Unknown `t` values are ignored, for forward compatibility.
 - **`gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `preview`, `residency`,
-  `look`, `canvas`, `procedure` and `transport` are not in this list and must never be.** They are the session's
+  `look`, `canvas`, `procedure`, `authority` and `transport` are not in this list and must never be.** They are the session's
   rather than any Set's — see the session stream format. `canvas` is the sharpest case: a
   Set renders at whatever size it is handed, so a Set file that carried one would resize
   every *other* Set in the deck by being loaded.
@@ -2339,11 +2339,11 @@ session tempo, which **v0.2 had no record for**.
 Neither is state, so neither appears in a Set file: both are what a frame *saw* or
 *decided*, and the tempo belongs to the session rather than to any one Set.
 
-### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `preview`, `residency`, `look`, `canvas`, `procedure` and `transport`
+### The mix in the stream — `gain`, `opacity`, `blend`, `mask`, `transition`, `select`, `preview`, `residency`, `look`, `canvas`, `procedure`, `authority` and `transport`
 
 A session that carried the material and not the performance would replay the same Sets, on
 the same beat, all at whatever gain they happened to start at, with nothing ever going on
-or off air. Twelve records carry what an operator moves — ten states and two events:
+or off air. Thirteen records carry what an operator moves — eleven states and two events:
 
 ```ndjson
 {"t":"gain","slot":0,"value":0.75}
@@ -2357,6 +2357,7 @@ or off air. Twelve records carry what an operator moves — ten states and two e
 {"t":"look","op":"aces","exposure":1.2,"white_point":4.0}
 {"t":"canvas","width":1920,"height":1080}
 {"t":"procedure","slot":0,"layer":"L4","proc":"sha256:486779…"}
+{"t":"authority","slot":0,"layer":"L1","authority":"manual"}
 ```
 
 **`gain` is a deck slot's level into the mix**, and **`opacity` is its fader.** The slot is
@@ -2565,6 +2566,42 @@ the first would compile an L1 against the L4 it is replacing.
 L4s. It is 0 for the L1 and for the first renderer, and **absent when it is 0** — so a
 stream written before stacks existed replays byte for byte, and a new one carries the field
 only where it says something.
+
+**Who may move one node of the Set a deck slot is playing** is `authority`.
+
+```ndjson
+{"t":"authority","slot":0,"layer":"L1","authority":"manual"}
+{"t":"authority","slot":2,"layer":"L4","index":1,"authority":"suggesting"}
+{"t":"authority","slot":1,"layer":"Field","authority":"automatic"}
+```
+
+Three levels — `manual` is yours alone, `suggesting` proposes and waits, `automatic` acts —
+and the address is a **node**, which is the manual's sixth rule: *"There is no switch that
+hands the whole instrument to an agent, because the useful arrangement is almost always
+partial."* A flag beside the `slot` and nothing else would be that switch at deck
+granularity.
+
+**It is a session record and not a Set file's**, which is the one thing about it worth
+stating twice. Every other record that names a node of a Set — `slot`, `capacity`, `param`,
+`bind`, `seed` — goes in a Set file and carries no `slot`, because what a Set *is* does not
+depend on which deck slot it is playing in. A Set does not know which agent is watching it
+either: an authority is an arrangement made during a performance, and a Set file carrying one
+would hand that node over wherever it was next loaded. So it is addressed the way `procedure`
+is, and it is the second record in this vocabulary to name a node.
+
+`index` says which node of that layer and is **absent when it is 0**, on `procedure`'s
+terms. A `kind Field` node takes one like any other: it draws nothing and its params are
+still declared, addressable and an operator's to ride. The L5 that folds a Set's renderers
+cannot be addressed at all — `crate::node::Merge` is a node and an L5 has no `kind`, so there
+is no `layer` value that names it, and nothing on it can be moved by anybody today either.
+
+The level is carried as a word and not interpreted here, on `residency`'s terms: what a level
+is allowed to be is the engine's to say.
+
+**Nothing writes one yet.** The vocabulary can say it and a deck rebuild does not carry it,
+so a node's authority would not survive the next swap — see
+[ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md), which names
+that as owed.
 
 **One thing it cannot carry.** A rollback restores the outgoing Set at the `t` it was parked
 at; a reader meeting these records builds afresh, so `t` restarts there. A swap *in* is

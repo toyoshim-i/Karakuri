@@ -441,6 +441,63 @@ impl WipeKind {
     }
 }
 
+/// **Who may move one node of a Set.** The manual's sixth rule, as a list of
+/// three: *"Each node of a Set is manual, suggesting, or automatic, and you set
+/// that node by node."*
+///
+/// **A permission granted forward, and not a record of who moved something
+/// last.** The second is rule 02 — *"a parameter driven by something else shows
+/// its source instead of a number"* — and it is read off the binding that is
+/// driving the param. This is the other question, asked before anything moves:
+/// what an agent is *allowed* to do to this node.
+///
+/// **Three destinations and no toggle**, which is [`Residency`]'s shape and
+/// [`BlendMode`]'s: an operation names one of them outright, and a control that
+/// steps through them is an affordance built over the three
+/// (`docs/principles/0074-an-operation-says-what-it-wants-never-which-way-to-move.md`).
+/// The console draws that affordance as `man / sug / auto` on a node head, and
+/// those three words are a surface's abbreviations rather than this list —
+/// exactly as the status line's `LIVE`/`prim`/`park` is not [`Residency::name`].
+///
+/// **The value list is this crate's, which is the cost the module documentation
+/// states.** `karakuri-engine` holds no copy of it at all yet, so for once this
+/// is not a duplicate — see the record at
+/// `docs/adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md`
+/// for what the engine still owes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Authority {
+    /// Yours alone. Nothing else writes this node's params.
+    Manual,
+    /// An agent proposes and you accept.
+    Suggesting,
+    /// An agent acts.
+    Automatic,
+}
+
+impl Authority {
+    /// **The lower-case word for this level**, which is what
+    /// `karakuri_store::record::Record::Authority` carries.
+    ///
+    /// A match rather than a table, for [`BlendMode::name`]'s reason: a level
+    /// added to the enum does not compile until it has a name. The three words
+    /// are rule 06's own — *manual*, *suggesting*, *automatic* — and not the
+    /// console's `man / sug / auto`, which is a node head's abbreviation for a
+    /// reader rather than a name a record is read back with.
+    ///
+    /// **There is no `ALL` beside it**, on [`WipeKind`]'s terms exactly: that
+    /// constant exists so a map file can be offered the values a target may end
+    /// in, and no map target names an authority — a map line cannot say a node
+    /// address at all, which is what the manual's gap section says of MIDI. It
+    /// arrives with the first reader.
+    pub fn name(self) -> &'static str {
+        match self {
+            Authority::Manual => "manual",
+            Authority::Suggesting => "suggesting",
+            Authority::Automatic => "automatic",
+        }
+    }
+}
+
 /// Which way [`Operation::ScaleGrid`] moves the grid. Two values and not an
 /// `f32`: the manual's row is *"Halve or double the grid"*, and a factor of
 /// 1.3 is not an operation anything in this instrument has.
@@ -910,6 +967,47 @@ operations! {
     /// Each comes from a Set file or a declared default.
     SetProperty { deck: u8, property: Property } => "Element capacity, seeds, the camera",
 
+    /// **Who may move one node**, which is rule 06 of the manual and one of
+    /// the four properties this system is defined by.
+    ///
+    /// **Two shapes at once, and both are already here.** It names one of
+    /// three, which is [`Operation::SetResidency`]'s shape and
+    /// [`Operation::SetBlendMode`]'s — the vocabulary owns the value list, so a
+    /// surface asks for a destination rather than for a step
+    /// (`docs/principles/0074-…`). And it addresses a node of a deck's Set,
+    /// which is [`Operation::WriteProcedure`]'s shape: a `deck` beside a
+    /// [`NodeAt`], which is *"one address shape for within a Set and one for
+    /// which Set"*.
+    ///
+    /// **Per node rather than per deck slot**, and the manual rules the slot
+    /// out in the row above it: *"There is no switch that hands the whole
+    /// instrument to an agent, because the useful arrangement is almost always
+    /// partial"*. A flag on a `deck: u8` is that switch at deck granularity.
+    /// Per *layer* is not addressable at all — no operation here names a layer
+    /// of a live Set, and [`Operation::ListSets`]'s `layer` narrows a search of
+    /// the store rather than reaching one.
+    /// See
+    /// `docs/adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md`.
+    ///
+    /// **[`Layer::Field`] takes one and the merge cannot.** A field addresses
+    /// no node in the rendering sense and its params are still declared,
+    /// addressable and an operator's to ride, which is the whole reason that
+    /// arm is in [`Layer`] — so it is a node an agent can be let at. The L5
+    /// that folds a Set's renderers is a node too — `docs/ir-spec.md` says
+    /// *"`crate::node::Merge` is the node"* — and it is in neither spelling of
+    /// [`Layer`], because a `kind` says what a procedure lowers to and
+    /// compositing has none. So this operation cannot address it, and nothing
+    /// on it can be moved by anybody today either: `Record::Merge` carries no
+    /// `gain`, `opacity`, `blend` or `mask` *"because a record whose producer
+    /// does not exist waits for it"*. Reaching it means [`Layer`] growing an
+    /// arm, which is a change to what a `.kir` may declare and not a question
+    /// about authority.
+    SetAuthority {
+        deck: u8,
+        node: NodeAt,
+        authority: Authority,
+    } => "Set a node's authority",
+
     // ----- The library --------------------------------------------------
 
     /// Writes the material **on screen** — the versions running, with their
@@ -1118,11 +1216,12 @@ mod tests {
     /// split into a tone map and an exposure (ADR-0192), and 48 since the mask
     /// took a row for its shape and a row for its position (ADR-0201); it
     /// moves with the page and is never lowered to make a shorter list pass.
-    /// It is 49 since the arrangement gained a reset (ADR-0208).
+    /// It was 49 once the arrangement gained a reset (ADR-0208), and is 50
+    /// since a node gained an authority (ADR-0211).
     #[test]
     fn the_vocabulary_is_not_empty() {
         assert!(
-            Operation::TITLES.len() >= 49,
+            Operation::TITLES.len() >= 50,
             "only {} operations named — the vocabulary has shrunk below what the manual \
              specifies",
             Operation::TITLES.len()
