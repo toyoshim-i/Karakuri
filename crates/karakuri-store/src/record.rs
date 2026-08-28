@@ -599,7 +599,8 @@ pub enum Record {
     /// `bind`: what a name is allowed to be is the engine's to say.
     Transition {
         slot: u8,
-        /// `gain` or `opacity`.
+        /// `gain`, `opacity` or `mask` — the last being the `position` a
+        /// `mask` record carries, which is what a wipe moves.
         control: String,
         /// Where the control ends up.
         to: f32,

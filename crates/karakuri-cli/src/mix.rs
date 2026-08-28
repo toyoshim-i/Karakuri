@@ -23,11 +23,45 @@
 //! agree with it. A decode that only a test exercises is a decode that is
 //! correct until the day it matters.
 //!
-//! Not on the frame path — a fader moves when a hand moves it — so the `String`
-//! a `residency` or a `look` record carries is a key press's allocation and not
-//! a frame's. `audio.rs`'s record is reused in place precisely because that one
-//! *is* on the frame path; this one does not need to be, and pretending it did
-//! would be complexity bought with nothing.
+//! ## The `String`s here are on the frame path, and this is what they cost
+//!
+//! This used to say they were not: a fader moved when a hand moved it, so a
+//! record's `String` was a key press's allocation. The MIDI map ended that.
+//! `Live::run_surface` is called from `Live::frame`, and `crate::midi` puts the
+//! number on it — *"A fader sweep is several hundred messages, this runs inside
+//! `Live::frame`"* — so a swept control's record is built once per message, on
+//! the render thread.
+//!
+//! **What allocates is the record and nothing either side of it.**
+//! `karakuri_midi::map` says of its own routing that nothing there allocates,
+//! every operation a map line can name carrying scalars only, and
+//! `session::Recorder::push` allocates nothing and never blocks. Of the four
+//! continuous targets a map line can reach, `gain` and `opacity` become records
+//! of scalars and touch no heap at all. The other two become a record carrying
+//! a name — `exposure` writes `Record::Look` with the tone map operator's, and
+//! `mask-position` writes `Record::Mask` with the shape's — each a `String`
+//! copied from a `&'static str` of at most eight bytes. `Live::record` clones
+//! the record for the recorder, so with `--record-session` attached it is two
+//! such allocations per message and otherwise one.
+//!
+//! **What bounds it is the message count, not the value range.** A control
+//! change is 7-bit, so a sweep passes through at most 128 *distinct* values —
+//! but nothing between the port and here drops a repeat, and a knob held
+//! against its stop keeps sending, so what arrives is however many messages the
+//! device sends: a few hundred a second, which is the figure `midi::INBOX` is
+//! sized from. That is a few hundred eight-byte allocations a second at worst,
+//! twice that while recording, each freed in the same frame or on the writer
+//! thread, with no lock and nothing unbounded in it.
+//!
+//! **Bounded is not the same as allowed, and this is not settled.**
+//! [P-0001](../../../docs/principles/0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md)
+//! says the frame path allocates no heap memory, with no clause for a small
+//! one; the figures above are read off this code rather than measured on a
+//! surface, and nobody has decided whether a byte-sized allocation per message
+//! is inside that rule or a hole in it. It is written down here so that the
+//! next reader meets the question rather than the old reassurance. `audio.rs`'s
+//! record is reused in place because that one was on the frame path from the
+//! start; this one arrived on it later and has not been re-argued since.
 //!
 //! ## What of this moved to the vocabulary, and what did not
 //!
