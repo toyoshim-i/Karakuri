@@ -238,6 +238,7 @@ number; new records continue from the end.
 | [ADR-0210](0210-a-declared-cost-is-one-panel-pass-written-down-and-held-against-the-run.md) | A declared cost is one panel pass, written down and held against the run | 2026-08-28 | accepted |
 | [ADR-0211](0211-authority-is-set-per-node-and-the-record-is-the-sessions.md) | Authority is set per node, and the record that carries it is the session's | 2026-08-28 | accepted |
 | [ADR-0212](0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md) | The beat is a light that travels, and it declares for itself | 2026-08-28 | accepted |
+| [ADR-0213](0213-the-interface-milestones-meter-is-the-panel-column-and-has-means-an-operator-reaches-it.md) | The Interface milestone's meter is the panel column, and `has` means an operator reaches it | 2026-08-28 | accepted |
 
 ## Retired numbers
 
