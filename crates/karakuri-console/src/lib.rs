@@ -44,6 +44,15 @@
 //! decision is a value with one list of everything that can change the
 //! console, and a test asks it rather than an operator noticing.
 //!
+//! [`budget`] is the other half of that rule and it is inputs rather than a
+//! decision: P-0072's second clause has every live region declare **what its
+//! update costs and how stale it may get**, and that module is where the two
+//! numbers, the panel's budget and the frame interval are written down.
+//! Nothing reads them on a frame — the two schedulability conditions are
+//! arithmetic over the declarations and `tests/schedulable.rs` asserts them,
+//! which is what the principle asks for in place of a stage discovering them.
+//! There is still no scheduler.
+//!
 //! # Where the numbers come from
 //!
 //! `docs/manual/console.html` is the reference the panel is checked against,
@@ -87,6 +96,7 @@
 //! an unbounded maximum on `program`, `centre` and the body row is load
 //! bearing rather than a default nobody got round to changing.
 
+pub mod budget;
 pub mod input;
 pub mod panel;
 pub mod repaint;
