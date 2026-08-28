@@ -13,10 +13,10 @@
 //!
 //! **The exhaustiveness moved and did not go.** This used to be one match over
 //! eight `Action`s in [`crate::Live`], and *a control added to one and not the
-//! other does not compile* was its whole claim. Against a 49-variant
+//! other does not compile* was its whole claim. Against a fifty-variant
 //! vocabulary that claim would be false, and the guarantee lives where it is
 //! now true: `karakuri_operation_record::written` is one exhaustive match over
-//! all 49, so an operation nobody has said what to do with stops the build
+//! all fifty, so an operation nobody has said what to do with stops the build
 //! there rather than reaching a router arm nobody wrote
 //! (`docs/adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md`).
 //!
