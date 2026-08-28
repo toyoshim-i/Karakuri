@@ -46,7 +46,7 @@ enum Key {
     /// later answer.
     Merge,
     Seed(Layer, u32),
-    /// A node and the slot of it being bound — the two halves of what an edge
+    /// A node and the *input slot* of it being bound — the two halves of what an edge
     /// is *about*, where the node it is bound *to* is what the edge says.
     Edge(String, String),
     Src(Hash, u32),
@@ -71,8 +71,8 @@ enum Key {
 /// `Mask` and
 /// `Transition` describe the deck the Sets are playing on. Dropping them is not "there is nothing to fold", it
 /// is "there is something to fold and this is not the projection it folds into"
-/// — a Set file that restored a gain would apply it to whatever slot it was
-/// next loaded into, one that restored a residency would put a Set on air
+/// — a Set file that restored a gain would apply it to whatever deck slot it
+/// was next loaded into, one that restored a residency would put a Set on air
 /// by being opened, and one that restored a canvas would resize every *other*
 /// Set in the deck. **The projection that would fold them — a session down to
 /// the deck state it ends at — does not exist**, and nothing needs it: a
@@ -135,9 +135,10 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         // onto one seed is two geometries salted alike, which is the one thing
         // salting exists to prevent.
         Record::Seed { stream, index, .. } => Some(Key::Seed(*stream, *index)),
-        // **By the slot it fills and not by what fills it**, which is the same
-        // reason a `slot` record folds by its address rather than by its name:
-        // rebinding a slot in a session is one slot with a later answer, and a
+        // **By the input slot it fills and not by what fills it**, which is
+        // the same reason a `slot` record folds by its address rather than by
+        // its name: rebinding an input slot in a session is one input slot
+        // with a later answer, and a
         // fold keyed by the far end would keep both and describe a node with
         // two inputs it never had.
         Record::Edge { node, slot, .. } => Some(Key::Edge(node.clone(), slot.clone())),
@@ -166,8 +167,9 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         // writes one, that "a session stream cannot say what a deck held". So
         // a projection meeting a selection cannot tell whether it is about the
         // Set it is folding, and folding it in would be guessing that the head
-        // is the slot the record names. When a session record says which slot
-        // composites, this arm becomes a fold into that slot's `merge`.
+        // is the deck slot the record names. When a session record says which
+        // deck slot composites, this arm becomes a fold into that slot's
+        // `merge`.
         | Record::Select { .. }
         | Record::Mask { .. }
         // **Nothing to fold, and nothing that could be.** A `save` names a Set
@@ -246,8 +248,9 @@ mod tests {
     /// that is not "there was nothing to fold".
     ///
     /// A gain, a residency and a look describe the deck, and a Set file that
-    /// carried them would apply them to whatever slot it was next loaded into:
-    /// a Set opened into slot 0 would pull slot 2's fader down, and one whose
+    /// carried them would apply them to whatever deck slot it was next loaded
+    /// into: a Set opened into deck slot 0 would pull deck slot 2's fader down,
+    /// and one whose
     /// residency said `live` would go on air by being opened. The folding
     /// machinery would happily key them and produce a stable projection — it is
     /// *correct* folding into the wrong file — so nothing but this test stands
@@ -632,7 +635,7 @@ mod tests {
     /// nothing in a stream says which slots composite nor which deck slot the
     /// Set at the head of the stream was played in. The `merge` line below is
     /// the head's, so this session says as much as any session can, and it
-    /// still does not say that slot 1 is the slot this Set is in. Folding the
+    /// still does not say that deck slot 1 is the one this Set is in. Folding the
     /// selection would be guessing that.
     ///
     /// So the `merge` passes through as it was written — `live` still absent,

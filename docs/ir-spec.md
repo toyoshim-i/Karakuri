@@ -51,6 +51,16 @@ procedure *lowers to*, and an L5 has no code to lower since the compositing is f
 there is no `kind L5` file, and `crate::node::Merge` is the node. See
 [L5](#l5--built).
 
+**A note on the word, because it is used in two senses here.** A bare **layer** in this
+specification is a **kind** — the `layer` field on a record names one, and so does every
+bare use in the prose below. The other sense is *what one deck slot contributes to the
+mix*, and it is **never written bare**: it is always *a deck slot's layer*, with its owner
+attached. The two have to be disjoint **by name** rather than merely in practice, which is
+[P-0031](principles/0031-a-name-means-one-thing-across-the-system.md). A third sense is not
+this file's at all — an architecture *model position*, `L0` through `L5`, of which only `L1`
+through `L4` are kinds — and [manual/concepts.html](manual/concepts.html) disowns the loose
+reading outright: *"A deck is not a layer in an image editor."*
+
 **As signatures, the five kinds are the layer algebra**, which is this specification's own
 and not a summary of anything outside it:
 
@@ -1618,7 +1628,7 @@ The pipeline is linear and HDR end to end.
 - **Alpha is coverage, and belongs in `[0, 1]`.** It is what the sprite covers of the texel,
   and L5's `over` blend mode composites against it — see the session stream's `blend`
   record. Nothing rejects an alpha outside that range and the L5 mix saturates what it
-  reads, so writing `1.5` costs a layer some of the hiding it asked for rather than a
+  reads, so writing `1.5` costs a deck slot's layer some of the hiding it asked for rather than a
   diagnostic. It is not a second brightness: RGB is where a value above 1.0 means something
 
 `hsv_to_rgb` returns **linear** RGB. It performs the sRGB→linear conversion internally so
@@ -2357,16 +2367,16 @@ The two are separate records because they are separate controls, and what makes 
 separate is `blend`. Every mode composites its **colour** as
 `acc <- mix(acc, f(acc, gain * src), opacity)`: gain is the level the material arrives at
 and touches colour alone, opacity is how much of the blend lands and is the only one of the
-two that scales what a layer *covers*. Under `add` they collapse into one multiply and a
-stream carrying either would replay the same; under `over` one dims a layer and the other
-stops it hiding what is beneath.
+two that scales what a deck slot's layer *covers*. Under `add` they collapse into one
+multiply and a stream carrying either would replay the same; under `over` one dims that
+layer and the other stops it hiding what is beneath.
 
 Coverage is the exception to that formula and composes as `over` under every mode, because
 "there is material at this texel" is an `over` question even when the colour is being added.
 `opacity` is a proportion of a blend and is clamped to `[0, 1]`; `gain` is a level into an
 HDR mix and deliberately is not clamped above 1.0.
 
-**`blend` is how a slot's layer meets the ones under it** — `add`, `over` or `max`. Slot
+**`blend` is how a deck slot's layer meets the ones under it** — `add`, `over` or `max`. Slot
 order is stacking order, so this is the one mix control whose meaning depends on where the
 slot sits.
 
@@ -2375,7 +2385,7 @@ what a VJ mixer usually lists. `screen` is `d + s - d*s` and `multiply` is `d * 
 assume display-referred inputs in `[0, 1]`, and nothing has tone mapped this far up the
 pipeline — `screen` of two 2.0s is 0.0. They belong after the transfer curve or not at all.
 
-`over` needs to know what a layer covers, which is why **alpha in a slot target is
+`over` needs to know what a deck slot's layer covers, which is why **alpha in a slot target is
 coverage**: the L4 pass accumulates `1 - prod(1 - a_i)` there while colour adds, so the
 colour that reaches L5 is premultiplied and emissive material still sums past what its
 coverage would allow. Sparse material barely covers, so `over` on a thin point cloud reads
@@ -2440,23 +2450,24 @@ costs. And it is the *fold* that skips an unselected renderer, never the draw: e
 one of them still fills a frame-sized target of its own, which is what makes the choice a
 uniform write and what it costs to have it be one.
 
-**`mask` is what shape of the frame a layer reaches.** It multiplies that layer's
-opacity per texel, which is what makes it a mask rather than a second fader: everything
-opacity does — how much of the blend lands, and under `over` how much the layer covers — is
+**`mask` is what shape of the frame a deck slot's layer reaches.** It multiplies that
+layer's opacity per texel, which is what makes it a mask rather than a second fader:
+everything opacity does — how much of the blend lands, and under `over` how much that layer
+covers — is
 what a mask wants done to part of the frame. `kind` is `none`, `linear` or `radial`;
 `angle` is the linear front's, in radians; `position` is how far it has travelled, `[0, 1]`,
 **exact at both ends** — 0 reveals nothing anywhere and 1 reveals everything everywhere, for
 any `softness`.
 
 **The two lines above are a wipe, and there is no `wipe` record.** A mask at position 0 on a
-layer that blends `over`, and a `transition` carrying `mask` to 1: the front hides what is
+deck slot's layer that blends `over`, and a `transition` carrying `mask` to 1: the front hides what is
 beneath it exactly where it has passed. Neither half knows about the other — the transition
 moves a number and the mask reads one — which is the same shape as a crossfade being two
 `transition`s. Both ends being exact is what makes it *finish*: a `position` of 1 that left
 a corner half-lit would be a wipe that stopped short.
 
 What is deliberately not here is a mask read from a **texture** — an arbitrary shape, or
-another layer's luminance. That needs somewhere for the shape to come from, and the answer
+another deck slot's luminance. That needs somewhere for the shape to come from, and the answer
 is a [`Field`](#the-field-block) rather than a third `kind`.
 
 **`preview` is which slot the output is showing**, or `null` for the mix. It is not a mix
@@ -2509,8 +2520,9 @@ one value in this format that is meant to go backwards. Both are carried under e
 including `free` where neither does anything, so that a slot moved back onto the grid
 returns to where the operator left it rather than to a default.
 
-**`canvas` is what the session renders at**, in texels — the surface every layer draws
-into, what every deck slot is sized to match, and what an offscreen render writes.
+**`canvas` is what the session renders at**, in texels — the surface every deck slot's
+layer draws into, what every deck slot is sized to match, and what an offscreen render
+writes.
 
 It is **not the size of any window.** A window is a preview of what leaves by some other
 route, so it is fitted to the canvas rather than the other way round: dragging one changes

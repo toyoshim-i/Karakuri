@@ -197,7 +197,7 @@ impl Renderer {
             // multiplies colour by this same alpha.
             //
             // Nothing in this pass reads it back. It exists for L5:
-            // `Blend::Over` needs to know what a layer covers, and
+            // `Blend::Over` needs to know what an input covers, and
             // before this the channel was written by nothing and held
             // the clear value forever. Colour is premultiplied by
             // coverage on the way out, which is what makes the mix's
