@@ -561,3 +561,81 @@ fn a_fold_during_a_drag_leaves_the_release_with_no_boundary() {
         "the boundary is gone and the release rested on something"
     );
 }
+
+/// **With the root folded, the panel is blank and answers no pointer — and
+/// the way back was never the pointer's.**
+///
+/// `g` over the transport folds the split enclosing it, which is the root, and
+/// what that leaves is a window with nothing drawn in it: a view's plan skips
+/// every node `Layout::visible` says no to, and `visible` walks up to the
+/// root. The hit test used to disagree with the plan — it descends from the
+/// root testing *children* — so `f`, `g` and `s` went on folding and soloing
+/// regions nobody could see.
+///
+/// What the change leaves working is the whole of what an operator needs, and
+/// it is what it always was: **`z` and `r` take no target.** `UnfoldAll` reads
+/// the arrangement and `Reset` builds a fresh one, so neither asks where the
+/// pointer is — which is the manual's own sentence, *"a folded region has no
+/// rectangle, so a pointer cannot reach it to undo itself"*, one node further
+/// up than it was written for.
+#[test]
+fn a_folded_root_answers_no_pointer_and_z_and_r_are_still_the_way_back() {
+    let mut p = Panel::new(1600.0, 1000.0);
+    p.solve();
+    let before = rects(&mut p);
+    let root = p.layout().root();
+    let middle = Point::new(800.0, 500.0);
+
+    p.set_cursor(middle);
+    let under = p.under();
+    assert!(
+        matches!(under, Hit::View(_)),
+        "the middle of the window is not a region: {under:?}"
+    );
+
+    assert_eq!(
+        p.op(Op::Fold(root)),
+        Outcome::Folded {
+            id: root,
+            folded: true,
+            root: true
+        }
+    );
+    p.set_cursor(middle);
+    assert_eq!(
+        p.under(),
+        Hit::Nothing,
+        "the panel is empty and the pointer still named a region to fold"
+    );
+    assert_eq!(
+        p.press(middle),
+        Pressed::Nothing,
+        "a press on an empty panel found something to take hold of"
+    );
+
+    // `z`: no target, so the fold that hid everything is undone by the one
+    // operation a hand can still reach.
+    assert_eq!(
+        p.op(Op::UnfoldAll),
+        Outcome::Unfolded(vec![root]),
+        "z did not unfold the root, which is the fold nothing else can reach"
+    );
+    assert!(
+        same(&before, &rects(&mut p)),
+        "z did not bring the panel back"
+    );
+    p.set_cursor(middle);
+    assert_eq!(p.under(), under, "z brought back a different arrangement");
+
+    // `r`: the other one, and it does not read the arrangement at all.
+    p.op(Op::Fold(root));
+    p.set_cursor(middle);
+    assert_eq!(p.under(), Hit::Nothing);
+    assert_eq!(p.op(Op::Reset), Outcome::Reset);
+    assert!(
+        same(&before, &rects(&mut p)),
+        "r did not bring the panel back"
+    );
+    p.set_cursor(middle);
+    assert_eq!(p.under(), under, "r built a different arrangement");
+}

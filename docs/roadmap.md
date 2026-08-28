@@ -577,8 +577,8 @@ the program.
    surfaces have an answer now, and only one of the four was the wholesale move this sentence
    described.** MIDI moved outright; the CLI's keys had mostly moved already and the rest divides
    into gestures that convert in part and keys that cannot route at all; the console's `panel::Op`
-   stays, blocked on the page rather than on the code; and MCP names its operations and performs
-   them itself. The four are below, and what separates them is one question — **what
+   stays, and the page question it was blocked on has now been answered against the migration; and
+   MCP names its operations and performs them itself. The four are below, and what separates them is one question — **what
    `karakuri-operation-record`'s `written` answers for the operations a surface names**. A surface
    whose operations write records routes through `Live::operate`; a surface whose operations are
    `Silent` performs them where the state is, because `operate` would print *no record* and do
@@ -611,9 +611,42 @@ the program.
    `docs/manual/operations.html`: **`Reset` and `Report` have no row**, so renaming them would put
    an unspecified operation on the page; **`Move a boundary` has no `Op`** and never will, being a
    drag; and **two splits have no name at all** — the root column and the body row — which the
-   pointer folds through `Hit::Divider` and a `String` cannot say. Naming those two is the decision
-   that unblocks the rest, and nobody has taken it. The inventory is a test now
-   (`crates/karakuri-console/tests/vocabulary.rs`), so none of the three closes by accident.
+   pointer folds through `Hit::Divider` and a `String` cannot say. The inventory is a test now
+   (`crates/karakuri-console/tests/vocabulary.rs`), so none of them closes by accident.
+
+   **The third of those is taken, and it is taken against naming them** —
+   [ADR-0204](adr/0204-the-root-and-the-body-row-stay-unnamed-and-a-folded-root-is-not-hit-testable.md).
+   Folding the root produces a blank window, which is not the outcome anybody reaches for — *Solo a
+   region* is, and its own row says so — and the body row has no word in the manual at all; ADR-0159
+   named the three columns and left the row holding them out. **What it costs is the migration**:
+   `panel::Op` cannot become `Operation` without losing two foldable regions, so **the console's
+   arrangement operations are the one surface that does not route into the vocabulary, and that is
+   now permanent rather than pending**. `operations.html`'s *"arranging the console is reachable
+   from a pointer and nothing else"* stays true for these two. The other two of the three are
+   still open and both are still page questions: `Reset` and `Report` have no row, and *Move a
+   boundary* is a gesture. **It also closed a behaviour gap the decision made visible**: with the
+   root folded the pointer still resolved to bays nobody could see, because `Layout::hit` tested a
+   node's children and never the root while `Layout::visible` walks up to it — so a node that is
+   not laid out is not hit-testable now, which is
+   [P-0073](principles/0073-a-node-claims-only-what-its-visible-content-can-use.md) and
+   [ADR-0193](adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md)
+   on the pointer axis. `UnfoldAll` and `Reset` name no target, so the way back never went through
+   the pointer.
+
+   **And `Report` is taken now, which leaves one** —
+   [ADR-0205](adr/0205-a-question-whose-reply-the-vocabulary-cannot-say-gets-no-row.md). It gets no
+   row, and the reason is not that nobody has built the routes: `Report` is a question in
+   `karakuri-operation-record`'s exact sense — `repaint.rs` returns `Repaint::Never` for it because
+   *"a report is a print and nothing else"* — but **its reply cannot be said in the vocabulary's
+   terms**. `Outcome::Report` is a `Vec<Placement>`, a `NodeId` is a handle with a private field
+   only a `Layout` hands out, and a `Rect` is a pixel — which is the same half of
+   `Operation::MoveBoundary`'s `Undecided`. The four question rows that exist all answer prose to a
+   model over MCP, so a row here would promise three of the four surfaces something the types
+   refuse, and its dashes would never become badges. **What it costs is that the console goes on
+   performing an operation the page does not name**, pinned by
+   `crates/karakuri-console/tests/vocabulary.rs` so it stays visible. **`Reset` is the one left**,
+   and it is a different question: a change rather than a question, and a row of its own is what it
+   is waiting for.
 
    **`FoldEnclosing` was the fourth and is not a gap**, which is a rule rather than a new decision:
    naming a target by relation is the caller's and never the operation's — `Operation::Crossfade`

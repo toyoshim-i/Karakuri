@@ -164,10 +164,24 @@ const PROGRAM_DIVIDER: f32 = 8.0;
 /// and `Outcome::Folded`'s `root` exists to report the root's own case. So
 /// **both splits fold through the pointer today**; what they cannot be is
 /// reached by anything holding only a name — a keyboard, a MIDI map or MCP.
-/// **Naming them is a decision nobody has taken** (ADR-0197): it would assert
-/// that folding the whole panel away, and folding the row of three panes, are
-/// operations an operator asks for, and neither has a row on the manual's
-/// operations page.
+/// **Naming them was the decision ADR-0197 left open, and it has been taken:
+/// they stay unnamed** (ADR-0204). Naming them would assert that folding the
+/// whole panel away, and folding the row of three panes, are operations an
+/// operator asks for. Neither has a row on the manual's operations page — the
+/// blank window a folded root leaves is not what anybody is reaching for, and
+/// *Solo a region* is how the page reaches the outcome that is (*"the panel
+/// folding away and only the picture left"*), while the body row has no word
+/// on that page at all. **What it costs is that `panel::Op` cannot become
+/// `Operation`**, so the console's arrangement operations stay the one surface
+/// that does not route into the vocabulary, and *"arranging the console is
+/// reachable from a pointer and nothing else"* stays true for these two.
+///
+/// **The pointer no longer reaches what they hide**: a folded root is not a
+/// hit target, because a node that is not laid out is not hit-testable
+/// (ADR-0204, with
+/// [P-0073](../../../docs/principles/0073-a-node-claims-only-what-its-visible-content-can-use.md)
+/// and ADR-0193 as the same rule on the other two axes). `Op::UnfoldAll` and
+/// `Op::Reset` name no target, so the way back never went through the pointer.
 ///
 /// `inspector-1` and `inspector-2` are the inspector's two panes. The
 /// inspector itself is the split, so the divider between them is reached as
