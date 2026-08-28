@@ -234,6 +234,7 @@ number; new records continue from the end.
 | [ADR-0206](0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md) | A fader marks where it is going and keeps reaching for it | 2026-08-28 | accepted |
 | [ADR-0207](0207-a-continuous-control-says-one-thing-per-frame.md) | A continuous control says one thing per frame | 2026-08-28 | accepted |
 | [ADR-0208](0208-resetting-is-the-default-case-of-restoring-an-arrangement.md) | Resetting is the default case of restoring an arrangement, and that is what gives it a row | 2026-08-28 | accepted |
+| [ADR-0209](0209-the-masks-shape-keeps-its-empty-midi-badge-until-a-control-shows-an-angle.md) | The mask's shape keeps its empty MIDI badge, and what would reopen it is a control that shows an angle | 2026-08-28 | accepted |
 
 ## Retired numbers
 

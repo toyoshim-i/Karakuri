@@ -56,7 +56,10 @@
 //! lossy one, and what it would cost to give it one — a float form, an
 //! angle-less operation, or the gap — is
 //! [ADR-0202](../../../docs/adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md),
-//! which names the three and takes none.
+//! which names the three and takes none. **The third is taken**
+//! ([ADR-0209](../../../docs/adr/0209-the-masks-shape-keeps-its-empty-midi-badge-until-a-control-shows-an-angle.md)):
+//! this grammar stays as it is, and what would reopen it is a control that
+//! *shows* an angle rather than any change here.
 //!
 //! ## What this deliberately does not do
 //!
