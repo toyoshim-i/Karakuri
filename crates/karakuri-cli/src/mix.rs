@@ -53,15 +53,26 @@
 //! twice that while recording, each freed in the same frame or on the writer
 //! thread, with no lock and nothing unbounded in it.
 //!
-//! **Bounded is not the same as allowed, and this is not settled.**
+//! **Bounded is not the same as allowed, and it is the message count that is
+//! now gone.** The figures above are what a sweep *would* cost and are why:
 //! [P-0001](../../../docs/principles/0001-nothing-allocates-or-compiles-a-shader-on-the-render-thread.md)
 //! says the frame path allocates no heap memory, with no clause for a small
-//! one; the figures above are read off this code rather than measured on a
-//! surface, and nobody has decided whether a byte-sized allocation per message
-//! is inside that rule or a hole in it. It is written down here so that the
-//! next reader meets the question rather than the old reassurance. `audio.rs`'s
+//! one, so the question a byte-sized allocation per message raised was settled
+//! by taking away the *per message* rather than by writing the clause.
+//! `crate::midi`'s router **coalesces a continuous control per frame** — the
+//! last value a fader sent within a frame is the one that becomes an
+//! operation — so a sweep builds one of these records a frame, and two only
+//! while recording. A pad is untouched, because two presses in one frame are
+//! two things that happened
+//! (`docs/adr/0207-a-continuous-control-says-one-thing-per-frame.md`, which
+//! also carries what the record stream loses and the two alternatives it
+//! turned down: moving the engine's list of names into `karakuri-store`, and
+//! an exception in the first rule with no measured threshold behind it).
+//!
+//! The numbers are kept rather than deleted because they are the reason the
+//! coalescer exists, and whoever removes it should meet them.  `audio.rs`'s
 //! record is reused in place because that one was on the frame path from the
-//! start; this one arrived on it later and has not been re-argued since.
+//! start; this one arrived on it later and is now on it a frame at a time.
 //!
 //! ## What of this moved to the vocabulary, and what did not
 //!

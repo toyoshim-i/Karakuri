@@ -232,6 +232,7 @@ number; new records continue from the end.
 | [ADR-0204](0204-the-root-and-the-body-row-stay-unnamed-and-a-folded-root-is-not-hit-testable.md) | The root and the body row stay unnamed, and a node that is not laid out is not hit-testable | 2026-08-28 | accepted |
 | [ADR-0205](0205-a-question-whose-reply-the-vocabulary-cannot-say-gets-no-row.md) | A question whose reply the vocabulary cannot say gets no row, and the status line was concealing five console gaps | 2026-08-28 | accepted |
 | [ADR-0206](0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md) | A fader marks where it is going and keeps reaching for it | 2026-08-28 | accepted |
+| [ADR-0207](0207-a-continuous-control-says-one-thing-per-frame.md) | A continuous control says one thing per frame | 2026-08-28 | accepted |
 
 ## Retired numbers
 

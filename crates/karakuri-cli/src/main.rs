@@ -7168,9 +7168,16 @@ impl Live {
             // `look`, `mask`, `blend`, `residency`, `transport` — and for no
             // other. This was written when the only way in was a key press. A
             // mapped MIDI fader reaches it from `Live::run_surface` inside
-            // `Live::frame`, so on `exposure` and `mask-position` it is a small
-            // heap touch per control-change message on the render thread; see
-            // `mix.rs`, which carries the bound and the open question.
+            // `Live::frame`, so on `exposure` and `mask-position` it was a
+            // small heap touch per control-change message on the render
+            // thread, which is the first rule this repository has. It is now
+            // **once a frame per control**: `crate::midi`'s router keeps the
+            // last value a continuous control sent within a frame and drops
+            // the ones before it, so a sweep of several hundred messages
+            // reaches here once
+            // (`docs/adr/0207-a-continuous-control-says-one-thing-per-frame.md`;
+            // `mix.rs` carries the measurement, which is why the coalescer is
+            // there).
             recorder.push(record.clone());
         }
         match mix::change(&record, self.deck.slot_count()) {

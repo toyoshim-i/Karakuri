@@ -13,10 +13,10 @@
 //!
 //! **The exhaustiveness moved and did not go.** This used to be one match over
 //! eight `Action`s in [`crate::Live`], and *a control added to one and not the
-//! other does not compile* was its whole claim. Against a 46-variant
+//! other does not compile* was its whole claim. Against a 48-variant
 //! vocabulary that claim would be false, and the guarantee lives where it is
 //! now true: `karakuri_operation_record::written` is one exhaustive match over
-//! all 46, so an operation nobody has said what to do with stops the build
+//! all 48, so an operation nobody has said what to do with stops the build
 //! there rather than reaching a router arm nobody wrote
 //! (`docs/adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md`).
 //!
@@ -42,6 +42,22 @@
 //! way to find out what a controller sends is to turn it and read: an
 //! unmapped message prints the line that would map it, so discovering a surface
 //! is turning every knob once and pasting the output into a file.
+//!
+//! ## A continuous control says one thing per frame, and a pad says everything
+//!
+//! A sweep is several hundred messages and a frame renders once, so a fader's
+//! earlier values are positions it passed through rather than places it was.
+//! [`Router::emit`] keeps the last value each continuous control sent within a
+//! frame and drops the ones before it — which is what takes a record's
+//! `String` off the frame path on `exposure` and `mask-position`, where
+//! building one per message was an allocation per message inside `Live::frame`
+//! and the first rule this repository has says there is none
+//! (`docs/adr/0207-a-continuous-control-says-one-thing-per-frame.md`, and
+//! `crate::mix` carries the measurement).
+//!
+//! **A pad is untouched.** Two presses in one frame are two operations that
+//! both mean something, and the line between the two halves is
+//! `karakuri_midi::Map::is_continuous` rather than a list kept here.
 //!
 //! **Everything said here is said once per control**, and that is not tidiness.
 //! A fader sweep is several hundred messages, this runs inside `Live::frame`,
@@ -73,15 +89,46 @@ pub struct Router {
     /// twice.
     seen_unmapped: HashSet<(u8, u8, bool)>,
     seen_no_slot: HashSet<usize>,
+    /// Where in `out` each continuous control this frame already spoke put its
+    /// operation, so a later message from the same control overwrites it
+    /// instead of adding one. Cleared at the top of every [`Router::route`];
+    /// see [`Router::emit`], which is where the whole of coalescing is.
+    ///
+    /// **A `Vec` with room for the whole map and a linear scan**, not a
+    /// `HashMap`: a map's continuous controls are single figures, and a
+    /// `HashMap` that had to grow would allocate on the frame path — which is
+    /// what this field exists to stop. The capacity is an upper bound rather
+    /// than a guess, because every key here comes from a target and a target
+    /// comes from an entry.
+    coalescing: Vec<(Continuous, usize)>,
 }
+
+/// **What state a continuous operation names**: its variant, and the deck it
+/// names if it names one.
+///
+/// The key a frame's messages are coalesced by, and it is deliberately not the
+/// knob's number on the wire. Two lines can put two knobs on one `gain 0` —
+/// and a line that names no channel puts one knob on every channel — where
+/// what reaches the deck is one value either way, so the control being
+/// coalesced is the thing that moves rather than the hand on it.
+///
+/// **`discriminant` rather than a match over the continuous operations.** A
+/// list here would be a second answer to [`Map::is_continuous`]'s question,
+/// kept in step by hand against a forty-eight-variant vocabulary; this is the
+/// same "which one is it" the compiler already knows. `deck_of` is beside it
+/// because `gain 0` and `gain 1` are two faders, and it is the function this
+/// module already had for the question.
+type Continuous = (std::mem::Discriminant<Operation>, Option<usize>);
 
 impl Router {
     pub fn new(map: Map) -> Router {
+        let controls = map.len();
         Router {
             map,
             notices: Vec::new(),
             seen_unmapped: HashSet::new(),
             seen_no_slot: HashSet::new(),
+            coalescing: Vec::with_capacity(controls),
         }
     }
 
@@ -100,9 +147,15 @@ impl Router {
     /// than in an index — `Deck::gain` and friends index directly and would
     /// panic on the render thread — and said once. A map is written by hand
     /// against a deck the operator remembers.
+    ///
+    /// **A continuous control says one thing per frame**, which is
+    /// [`Router::emit`]: the last value a fader sent within a frame is the one
+    /// that becomes an operation and the ones before it are dropped. A pad is
+    /// untouched — two presses in one frame are two operations.
     pub fn route(&mut self, messages: &[Message], slot_count: usize, out: &mut Vec<Operation>) {
         out.clear();
         self.notices.clear();
+        self.coalescing.clear();
         for message in messages {
             let Some(operation) = self.map.operation(*message) else {
                 // A release is unmapped by construction — every pad acts on
@@ -115,9 +168,64 @@ impl Router {
             };
             match deck_of(&operation) {
                 Some(slot) if slot >= slot_count => self.report_no_slot(slot, slot_count),
-                _ => out.push(operation),
+                _ => self.emit(*message, operation, out),
             }
         }
+    }
+
+    /// **One operation per continuous control per frame, carrying the last
+    /// value that control sent**; everything else is pushed as it arrives.
+    ///
+    /// A sweep is several hundred messages and a frame renders once, so the
+    /// values before the last are positions a fader passed *through* rather
+    /// than places it was: `Live` applies each operation into the deck and the
+    /// frame draws what the deck holds afterwards, and a replay applies every
+    /// record between two `tick`s before drawing the frame they close. Neither
+    /// side of the recording can show a value that was overwritten within a
+    /// frame, so what is dropped here was never on screen and never
+    /// reconstructible — see
+    /// `docs/adr/0207-a-continuous-control-says-one-thing-per-frame.md`, which
+    /// also carries what it costs the record stream.
+    ///
+    /// **The line between a fader and a pad is
+    /// [`karakuri_midi::Map::is_continuous`]**, which is `Target::continuous`
+    /// — the same predicate the grammar refuses a `note` on a fader's target
+    /// with. Two presses in one frame are two operations that both mean
+    /// something: `residency 0 live` then `residency 0 allocated` is not the
+    /// second one alone, and a note is a press rather than a position.
+    ///
+    /// **Coalesced, not filtered for change.** A repeat is dropped within a
+    /// frame and never across two, which is the difference between this and
+    /// the console's fader — *"a pointer dragged on past the end of a track
+    /// asks for the end sixty times a second and the value is already there"*.
+    /// The console holds the value it last drew; this holds nothing between
+    /// frames and could not, because MIDI out is not built: a transition can
+    /// move the mask front under a hand that is not moving, so a fader
+    /// re-asserting the position it last sent is asking for something the deck
+    /// may no longer be at.
+    ///
+    /// **Nothing here allocates.** `coalescing` has the map's own length
+    /// reserved and is cleared rather than dropped, the scan is over single
+    /// figures, and the overwrite drops a scalar — every operation a map line
+    /// can name carries scalars only, which `karakuri_midi::map` says of
+    /// itself.
+    fn emit(&mut self, message: Message, operation: Operation, out: &mut Vec<Operation>) {
+        if !self.map.is_continuous(message) {
+            out.push(operation);
+            return;
+        }
+        let control = (std::mem::discriminant(&operation), deck_of(&operation));
+        if let Some((_, at)) = self.coalescing.iter().find(|(seen, _)| *seen == control) {
+            // **In place, so the control keeps the position it first spoke
+            // in.** The alternative — dropping the earlier one and pushing the
+            // later — shifts a swept fader behind every pad hit during the
+            // sweep, and a frame's operations are applied in the order they
+            // are given.
+            out[*at] = operation;
+            return;
+        }
+        self.coalescing.push((control, out.len()));
+        out.push(operation);
     }
 
     fn report_unmapped(&mut self, message: Message) {
@@ -421,6 +529,116 @@ mod tests {
             4,
         );
         assert_eq!(r.notices().len(), 3, "{:?}", r.notices());
+    }
+
+    /// **A sweep in one frame is one operation, carrying the value the fader
+    /// ended the frame at.** Several hundred messages arrive between two
+    /// frames; each one built a record, and on `exposure` and `mask-position`
+    /// that record carries a name, which is a heap allocation per message
+    /// inside `Live::frame` — the first rule this repository has. The values
+    /// before the last were never on screen: the frame draws what the deck
+    /// holds once, after all of them have been applied.
+    #[test]
+    fn a_sweep_in_one_frame_is_one_operation_carrying_the_last_value() {
+        let mut r = router("cc 20 -> exposure");
+        let sweep: Vec<Message> = (0..128).map(|v| cc(20, v)).collect();
+        let out = routed(&mut r, &sweep, 4);
+        assert_eq!(out.len(), 1, "{out:?}");
+        // The top of the default range, which is what `cc 20 127` asks for.
+        assert_eq!(out[0], Operation::SetExposure { exposure: 4.0 });
+    }
+
+    /// **Two presses in one frame are two operations**, and that is the half
+    /// of this that must not coalesce: `residency 0 live` then `residency 0
+    /// allocated` is not the second one alone in intent, and a note is a press
+    /// rather than a position. The same control, so a coalescer that keyed on
+    /// the pad would keep one of them.
+    #[test]
+    fn two_presses_of_one_pad_in_one_frame_are_two_operations() {
+        let mut r = router("note 36 -> residency 0 live\nnote 37 -> residency 0 allocated");
+        let out = routed(&mut r, &[note(36), note(37)], 4);
+        assert_eq!(
+            out,
+            vec![
+                Operation::SetResidency {
+                    deck: 0,
+                    residency: karakuri_operation::Residency::Live
+                },
+                Operation::SetResidency {
+                    deck: 0,
+                    residency: karakuri_operation::Residency::Allocated
+                },
+            ]
+        );
+        // And the same pad twice, which is a press repeated rather than a
+        // value repeated: both are hits.
+        let mut r = router("note 36 -> preview 1");
+        assert_eq!(routed(&mut r, &[note(36), note(36)], 4).len(), 2);
+    }
+
+    /// **Two faders are two controls.** Coalescing is per control, so a frame
+    /// in which four of them moved says four things — collapsing to one
+    /// operation a frame would leave three faders dead whenever a hand was on
+    /// a fourth.
+    #[test]
+    fn two_continuous_controls_in_one_frame_are_one_operation_each() {
+        let mut r = router("cc 1 -> gain 0\ncc 2 -> gain 1");
+        let messages: Vec<Message> = (0..64).flat_map(|v| [cc(1, v), cc(2, 127 - v)]).collect();
+        let out = routed(&mut r, &messages, 4);
+        assert_eq!(out.len(), 2, "{out:?}");
+        // Each carries its own last value, and the first control keeps the
+        // place it first spoke in.
+        assert_eq!(
+            out,
+            vec![
+                Operation::SetGain {
+                    deck: 0,
+                    gain: 63.0 / 127.0
+                },
+                Operation::SetGain {
+                    deck: 1,
+                    gain: 64.0 / 127.0
+                },
+            ]
+        );
+    }
+
+    /// **Coalescing is per frame and not a filter on change.** The same value
+    /// on the next frame is asked for again, because nothing here holds what a
+    /// control last sent and nothing could: MIDI out is not built, so a
+    /// transition can move the mask front under a hand that is not moving, and
+    /// a fader re-asserting its position is asking for somewhere the deck may
+    /// no longer be.
+    #[test]
+    fn a_value_repeated_on_the_next_frame_is_not_swallowed() {
+        let mut r = router("cc 9 -> mask-position 0");
+        let held = Operation::SetMaskPosition {
+            deck: 0,
+            position: 1.0,
+        };
+        for _ in 0..3 {
+            // A knob held against its stop keeps sending; three frames of it.
+            let out = routed(&mut r, &[cc(9, 127), cc(9, 127)], 4);
+            assert_eq!(out, vec![held.clone()], "{out:?}");
+        }
+    }
+
+    /// **A pad hit during a sweep keeps its place in the frame.** The fader
+    /// holds the position it first spoke in and carries the value it ended at,
+    /// so a press that arrived between two of its messages is still applied
+    /// after it — the order a frame's operations are given is the order they
+    /// are applied in.
+    #[test]
+    fn a_press_between_two_fader_messages_keeps_its_order() {
+        let mut r = router("cc 1 -> gain 0\nnote 36 -> preview 1");
+        let out = routed(&mut r, &[cc(1, 0), note(36), cc(1, 127)], 4);
+        assert_eq!(
+            out,
+            vec![
+                Operation::SetGain { deck: 0, gain: 1.0 },
+                Operation::SetPreview { showing: Some(1) },
+            ]
+        );
     }
 
     /// A release is not a discovery. Every pad acts on the press, so reporting
