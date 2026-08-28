@@ -156,5 +156,5 @@ cycle is ADR-0187's measurement, and the residency words are wider than the blen
   that is not an example, this function is deleted rather than moved. The record's `level` is
   `karakuri_operation::Residency::name` rather than a fourth copy of the three wire words —
   the vocabulary grew that spelling in the same session, for
-  [ADR-0196](0196-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md), and the
+  [ADR-0194](0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md), and the
   wire words are `Record::Residency`'s rather than the chip's `live`/`prim`/`alloc`.

@@ -61,7 +61,7 @@ fold rather than a different one; **`withheld`** implies from someone.
 assembled into, because the bit is a pure function of the geometry and is re-derived on the next
 solve. `Spec` gained nothing: it is not the arrangement's to declare.
 
-[ADR-0158](0158-a-saved-arrangement-that-disagrees-with-itself-is-refused.md) refuses a file that
+[ADR-0158](0158-a-saved-arrangement-that-disagrees-with-itself-is-refused-not-repaired.md) refuses a file that
 disagrees with itself, and **a field that is never written cannot**. A check would need a second
 copy of the bit in the file to compare against, and putting one there in order to check it is
 exactly what not saving it avoids. That argument is written where the other unchecked things are.

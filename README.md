@@ -56,11 +56,11 @@ not about design, and it had no home until the manual had one.
   the command line is deliberately an auxiliary way to reach what the records already carry. That
   application is being built: [`karakuri-console`](crates/karakuri-console) opens a window with the
   panel's arrangement in it — dividers that drag, regions that fold, a live engine frame in the
-  Program bay, the deck previews under or beside it, the transport, the mixer read off the deck, and
-  the outputs. **It is an example rather than a program yet**: `cargo run -p karakuri-console
+  Program bay, the deck previews under or beside it, the transport, the mixer read off the deck, the Library bay
+  listing what the store holds, and the outputs. **It is an example rather than a program yet**: `cargo run -p karakuri-console
   --example panel`, and `karakuri-cli` is still what you play a set with
 - **Every operation is named once and every surface routes into that name** — the manual's first
-  rule. [`karakuri-operation`](crates/karakuri-operation) is those 46 names, checked against
+  rule. [`karakuri-operation`](crates/karakuri-operation) is those 50 names, checked against
   [the manual's own page](docs/manual/operations.html) by a test, and
   [`karakuri-operation-record`](crates/karakuri-operation-record) is where one becomes a record —
   the step that makes a fader, a key and a MIDI knob the same thing. **The MIDI map is an

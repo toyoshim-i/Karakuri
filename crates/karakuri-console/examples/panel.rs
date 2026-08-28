@@ -4429,8 +4429,8 @@ mod tests {
             );
         }
 
-        // The vocabulary is 49 operations and this example has five controls
-        // writing five records. A record invented for the other 42 would be
+        // The vocabulary is 50 operations and this example has five controls
+        // writing five records. A record invented for the other 45 would be
         // somebody deciding what they mean — and the answer is now *which*
         // nothing rather than `None`, because a surface's own state and a
         // record nobody can write yet are not the same silence.
@@ -6149,7 +6149,7 @@ mod gpu {
         };
         let mut output = ctx.run_ui(input, |ui| view.draw(ui, &mut panel));
         let primitives = ctx.tessellate(output.shapes, output.pixels_per_point);
-        // The console has eleven regions and seven headings, so a frame that
+        // The console has thirteen regions and seven headings, so a frame that
         // tessellated to nothing is a frame that drew nothing.
         assert!(
             !primitives.is_empty(),

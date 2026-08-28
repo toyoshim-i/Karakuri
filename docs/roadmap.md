@@ -565,6 +565,15 @@ the other four bays are empty, and the keyboard, a MIDI map and MCP reach none o
 routes in `manual/operations.html` are still `plan`, because the console is an example rather than
 the program.
 
+**What is already under this, and how much is left.** The list below is the second half of M5, and
+reading it as the whole milestone is what makes the progress invisible. The floor it stands on is
+[what this milestone has delivered](#what-this-milestone-has-delivered-and-why-the-list-below-stopped-counting-it)
+— `karakuri-layout` and `karakuri-console` written from nothing, the vocabulary and its record crate
+beside them, five of the console's nine regions drawn — and none of that is on any list, because the
+lists were written before anybody knew what that floor was made of. **The estimate from here is
+~10–14 weeks**, and what the range assumes, what is outside it, and whether each of M5's seven
+*Adds* is ready, gated or partly done are stated together at the end of *M5 — Interface*, below.
+
 **The order that makes each next thing cheaper than it would be alone:**
 
 1. **The mixer strip is finished, and what is left of it is another surface's.** The blend mini
@@ -686,7 +695,7 @@ the program.
    written into `examples/surface.map` rather than left to be discovered: thirty notes where there
    were eighteen, on a file whose own prose describes a four-fader surface. **What it settled is
    where the exhaustiveness lives** — `run_surface`'s claim that *a control added to one and not
-   the other does not compile* would be false against forty-six variants, so the MIDI path is now
+   the other does not compile* would be false against fifty variants, so the MIDI path is now
    message → `Operation` → `Live::operate` and the compiler's guarantee is
    `karakuri-operation-record`'s `written`, which is one match over all fifty. The one arm left
    in `run_surface` is `TapBeat`, which needs the beat tracker rather than a value and is
@@ -850,7 +859,7 @@ than work, and every one of them was found by building the thing next to it.
   rather than a trait — because part of what a record needs (the quantum, the length of a fade, the
   wipe shape) is `SetTransition`'s, and that operation writes no record at all
   ([ADR-0194](adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)).
-  **Eleven of the 48 conversions are built** — six that need no reading, and the look pair,
+  **Twelve of the 50 conversions are built** — seven that need no reading, and the look pair,
   `ScrubDeck` and the mask pair, whose readings are settled. `karakuri-cli` is wired to it and is
   the second customer.
   *"No key arm moved"* was written here and read as *nothing moved*: what did not move was the
@@ -1071,6 +1080,16 @@ than work, and every one of them was found by building the thing next to it.
   an operation), and the camera.
 - **The console's window has no `a`.** `karakuri-cli`'s snaps the window to the canvas so a capture
   is one texel to one texel; ADR-0181 made the picture the canvas's shape and created that gap.
+- **Whether any of M5's gated items belongs in another milestone**, which is the maintainer's and
+  nobody else's. The seven *Adds* at the end of *M5 — Interface* each say now whether they are
+  ready, gated or partly done and on what, and they still read alike on the page: a bullet waiting
+  on a decision nobody has taken and a bullet waiting on an afternoon's drawing are the same shape.
+  That list says **two of these are candidates** for a move and does not say which two, and nothing
+  has been moved. So the question is open in its weakest form — the candidates are not written down
+  — and naming them is the cheap half of taking it. Two of the seven already carry their own answer
+  and it is *stay*: the Set browser's thumbnail judgement is M5's to make even though the machinery
+  it revives is M4's, and the `man / sug / auto` control is gated inside M5 on a region the console
+  does not draw.
 
 #### What the three words mean, and where
 
@@ -1456,10 +1475,10 @@ fade, and starting or stopping a session recording.
 
 **The vocabulary exists now**
 ([ADR-0180](adr/0180-the-operation-vocabulary-is-a-crate-with-no-dependencies.md)):
-`crates/karakuri-operation/` is a leaf crate with **no dependencies at all**, holding all 48
+`crates/karakuri-operation/` is a leaf crate with **no dependencies at all**, holding all 50
 operations, and a test reads [every operation](manual/operations.html) and asserts that the page and
-the type enumerate the same ones both ways round. It held 46 when it landed, has been 45 in
-between, and is 48 now: `SetOnAir` and `SetPriming` were two booleans for three states with both `false`
+the type enumerate the same ones both ways round. It held 46 when it landed, has been 45, 46, 48 and
+49 in between, and is 50 now: `SetOnAir` and `SetPriming` were two booleans for three states with both `false`
 destinations unnamed, and they are one `SetResidency { deck, residency }` now
 ([ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md)); `SetLook` demanded a tone
 map beside every exposure, so `cc -> exposure` could not become an operation at all, and it is
@@ -1467,11 +1486,24 @@ map beside every exposure, so `cc -> exposure` could not become an operation at 
 ([ADR-0192](adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)) —
 which is what unblocked the MIDI map's migration; and the mask was a record no operation named, which
 is `SetMaskShape` and `SetMaskPosition` now
-([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)). **The MIDI map is migrated**
+([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)). The last two
+are rows the page **gained** rather than split: resetting the arrangement is the default case of a
+family rather than a thing standing alone
+([ADR-0208](adr/0208-resetting-is-the-default-case-of-restoring-an-arrangement.md)), and authority
+is set per node of a Set
+([ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md)). **The MIDI map is migrated**
 ([ADR-0196](adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)) and `Action` is
-deleted; the console's `panel::Op` and the CLI's match arms are untouched and move onto it one at a
-time, each of which is now a change that can be reasoned about because the target has stopped
-moving.
+deleted; the other three surfaces are surveyed and answered rather than pending — the console's
+`panel::Op` stays where it is
+([ADR-0197](adr/0197-the-consoles-op-stays-and-what-blocks-it-is-the-page-rather-than-the-code.md),
+[ADR-0204](adr/0204-the-root-and-the-body-row-stay-unnamed-and-a-folded-root-is-not-hit-testable.md)),
+fifteen of the CLI's thirty-nine keys already reach `Live::operate` and the rest divides into keys
+that cannot route at all and keys whose record is owed
+([ADR-0198](adr/0198-a-gesture-converts-in-the-parts-that-are-decided.md)), and MCP names its
+operations and performs them itself
+([ADR-0199](adr/0199-mcp-names-its-operations-and-performs-them-itself.md)). Each of those was a
+change that could be reasoned about because the target had stopped moving. The order of work and
+what each is still waiting on is under *Where this goes next*, above.
 
 Building it found the thing worth having built it for: **`Action` and `panel::Op` each claim to be
 the vocabulary idea and contradict each other head-on.** `Action` is engine-neutral by declaration
@@ -1492,13 +1524,20 @@ event rather than an operation), and **the camera**.
 could be edited there until nodes had names, and nothing can be routed here until operations
 do. [Every operation](manual/operations.html) is where that enumeration is written down, and a
 surface missing from an operation's row is a line of this milestone's work. **It is written**:
-49 operations, and 51 of the 212 ways in exist. **Six of those arrived from
+50 operations, and 51 of the 216 ways in exist. **Six of those arrived from
 the console's own shape** — moving a boundary, folding a bay or a pane, bringing one back, solo, and
 resetting the arrangement — and all twenty-four of their routes are empty except the pointer, which
 four of the six have, and which is the first rule broken by the surface the first rule is about.
-The count was written as 50 of 208 while the page said 51 of 208: the mask's front gained a MIDI
-route in [ADR-0202](adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md) and
-this sentence was not recounted with it.
+**This sentence has gone stale twice, the same way both times.** It was written as 50 of 208 while
+the page said 51 of 208 — the mask's front gained a MIDI route in
+[ADR-0202](adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md) and this
+sentence was not recounted with it — and it then read 49 of 212 while the reset row
+([ADR-0208](adr/0208-resetting-is-the-default-case-of-restoring-an-arrangement.md)) and the
+authority row
+([ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md)) took the page to
+50 of 216. Both figures are transcribed off a page nothing in the workspace counts, so they go
+stale in silence: `grep -c '<h3' docs/manual/operations.html` is the first, and the `class="rt has"`
+badges in it against every `class="rt ` badge are the second.
 
 #### What was settled about the panel, and where each thing is argued
 
@@ -1608,12 +1647,17 @@ rather than by running a `Context` and reading rectangles back out of the toolki
 minima produces small rectangles and changes nothing stored, so a window dragged narrow and back
 comes back to exactly what it left.
 
-**And it leaves the operations page short.** Arranging the panel is operations, and
-[every operation](manual/operations.html) carries no row for folding a pane, for moving a divider,
-or for `solo` — which the console page already draws as a control with a tooltip. So the 41 is not
-the whole count. What makes this more than bookkeeping is the first rule: **every operation is
-reachable from the keyboard alone**, and a divider that is only draggable is not. Naming these is
-what decides how a pane is resized without a mouse, and it is owed before the panel is drawn.
+**It left the operations page short, and the naming has since happened.** Arranging the panel is
+operations, and the page carried no row for folding a pane, for moving a divider, or for `solo`.
+[Every operation](manual/operations.html) now heads an *Arranging the console* section of six —
+moving a boundary, folding a bay, folding a pane, bringing one back, solo, and resetting the
+arrangement — which is how the vocabulary reached its present width. **What the naming did not
+close is the rule that made it worth doing**: every operation is reachable from the keyboard alone,
+and all twenty-four of those routes are still empty except the pointer, which four of the six have.
+*Move a boundary* is the sharpest of them and is `Undecided` for exactly this reason —
+`set_divider` takes a viewport pixel a key press cannot mean. So the count is right now and the
+first rule is not yet kept here, which is a different debt from the one this paragraph opened
+with.
 
 #### What building the console's arrangement found
 
@@ -1694,9 +1738,9 @@ below is blocked on anything else.
 **The list below is the second half of the work, and reading it as the milestone is what makes
 the progress invisible.** Not one of its seven items is finished. Meanwhile
 `karakuri-layout` and `karakuri-console` were written from nothing — the first commit in either
-is 2026-08-24 — the operation vocabulary and its record crate landed beside them, and **fifty-five
+is 2026-08-24 — the operation vocabulary and its record crate landed beside them, and **fifty-seven
 records — [ADR-0156](adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md), which
-opened the console, and the fifty-four after it — and eight principles have landed**. None of that
+opened the console, and the fifty-six after it — and eight principles have landed**. None of that
 is on the list, because the list was written before anybody knew what the floor under those seven
 items was made of. This is what it turned out to be.
 
@@ -1764,7 +1808,11 @@ items was made of. This is what it turned out to be.
   control the console draws is the panel's
   ([ADR-0176](adr/0176-a-control-the-console-draws-is-the-panels.md)), and a surface owns the
   affordance and never the authority
-  ([P-0076](principles/0076-a-surface-owns-the-affordance-never-the-authority.md)). **What is not
+  ([P-0076](principles/0076-a-surface-owns-the-affordance-never-the-authority.md)). The fifth is
+  the Library, whose first pass draws the values that exist and omits the rest
+  ([ADR-0200](adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)) — a
+  row per Set and a foot reading `n of m`, with six of the mock's controls waiting on something
+  different each. **What is not
   drawn is `staging`, `inspector`, `master` and `sequencer`** — the four the console page's own
   footer says are not built.
 - **The frame the panel is drawn on.** `egui` draws it and it cost a `wgpu` 30 bump
@@ -1953,7 +2001,7 @@ was written against the seven items above, and those seven turned out to be the 
 this milestone: a panel to draw into, a name to route by and a frame to draw on were all assumed
 and none of them existed. The section above is what the first half cost. **The pace is not what was
 wrong** — `karakuri-layout` and `karakuri-console` went from nothing to five drawn regions, a
-solved and round-tripping arrangement and a migrated MIDI map in five days, with fifty-five records
+solved and round-tripping arrangement and a migrated MIDI map in five days, with fifty-seven records
 behind it. The list was.
 
 **What the range assumes.** That the four undrawn regions — `staging`, `inspector`, `master`,
