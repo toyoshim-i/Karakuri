@@ -865,8 +865,9 @@ than work, and every one of them was found by building the thing next to it.
   [P-0078](principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md), which
   also says where it stops holding — a `Record::Mask` is a state and not an ask, so the stream
   cannot carry which half was asked for.
-- **What a status line is, on a console with no terminal.** `karakuri-cli`'s `s`, `h` and `?` name
-  nothing in the vocabulary, because the status line and the bindings text have **no row on
+- **~~What a status line is, on a console with no terminal~~ — taken, and it was two questions
+  rather than one.** `karakuri-cli`'s `s`, `h` and `?` name nothing in the vocabulary, because the
+  status line and the bindings text have **no row on
   [the operations page](manual/operations.html)** — the specification for which keys exist. They
   were deliberately not added from the implementation: *"a row invented from the implementation is
   a specification written backwards, and the page is written ahead of the interface on purpose"*,
@@ -875,6 +876,54 @@ than work, and every one of them was found by building the thing next to it.
   ([ADR-0198](adr/0198-a-gesture-converts-in-the-parts-that-are-decided.md), §4). Until the page
   has an answer, three of the thirty-nine keys stay outside the vocabulary and the console has
   nothing to draw a status line from.
+
+  **The answer is that neither gets a row, and that the three keys are two different questions**
+  ([ADR-0205](adr/0205-a-question-whose-reply-the-vocabulary-cannot-say-gets-no-row.md)).
+  **`h`/`?` prints a static string that has already been printed twice unprompted** — `--help`
+  prints it and so does the run, before the first frame — so `h` only reprints it after it has
+  scrolled away, which is a terminal's problem rather than an operation. On a console there is
+  nothing to print at all: the mock draws no key hints anywhere, and its tooltip contract carries
+  *"the control's **MIDI assignment**"* and not its key. **The consequence is noted rather than
+  fixed and it is larger than the key**: the console as drawn gives an operator **no way to learn a
+  key binding**, which is rule 01's keyboard surface with no teaching path — hooked to the deferred
+  *a keyboard is mapped and learned the same way a control surface is* below, beside the tooltip
+  mechanism that entry already names as what both learn paths wait on. **`s` is a question in
+  `Report`'s exact sense** — it calls the same function the 500 ms timer calls, prints exactly what
+  the timer prints and changes nothing — and it gets no row because a row would make the panel owe
+  an answer it cannot give.
+
+  **What that owed answer turned out to be is the deliverable, and it is five console gaps the
+  status line's existence has been concealing.** Each is checked against the source rather than read
+  off the line's format string:
+
+  1. **A slot's simulation clock** (`t0.0s`, per slot, from `Set::time`). Nothing in `view::Strip`
+     carries a per-deck time — `name`, `tally`, `requested`, `gain`, `gain_to`, `opacity`,
+     `opacity_to`, `blend`, `mask` — and neither does the mock's strip.
+  2. **An armed transition's destination** (`g>` / `o>` / `w>`), and **this one is not a gap but a
+     rule already broken**:
+     [P-0075](principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)
+     wants the destination *"identifiable from the surface itself. Not from a tooltip alone, and not
+     from a log"*, and the status line is that log. **In progress**: `view::Strip` carries `gain_to`
+     and `opacity_to` now and their documentation cites that clause. Two are not covered —
+     `MaskPosition`, which is the `w>` of the three, and the armed renderer selection `r>`, which
+     `Deck::selections_on` answers and no `view` field carries.
+  3. **Non-finite texels** (`x{n}`). `view::Level` carries `mean` and `peak` only, so the console
+     draws two numbers without the field whose own comment says it *"explains the two numbers beside
+     it"* — a mean and a peak over the texels that were not counted.
+  4. **The tempo source** — its name, its peers, the anchors it rejected, and its liveness, which is
+     three states and not two (`?`, `stop`, running) beside `GONE`. `view::Transport` is `bpm`,
+     `beats`, `beats_per_bar`, `fps`, `frame_ms`, `budget_ms`, and the mock's transport row has no
+     field for any of it. **The `audio-in` pill is not this**: a tempo source is a separate program,
+     of which the in-process beat tracker is one kind, and the pill names an input and says nothing
+     about peers or liveness.
+  5. **Sync mode, anchor and offset** (`T{anchor}`, `B{anchor}±offset`). The page routes *Set a
+     deck's sync mode* and *Scrub a deck a quarter beat* to `panel deck head` — **and there is no
+     deck head anywhere in the mock**, whose heads are `bay-head`, `half-head`, `node-head` and
+     `seq-head`. It is the sharpest of the five because the page names a home that does not exist;
+     the other four name no home at all.
+
+  **A sixth was found beside them and is a routing question rather than a gap**: the page routes
+  *Tone map* and *Exposure* to `panel transport`, and the mock's transport row draws neither.
 - **The library's two questions are `console.html`'s own, and building the bay is what made them
   due.** *Whether a folder scope reads Sets or artifacts* is what the scope row is waiting on — a
   directory of `.kir` files, a directory of Set files and a bundle are three different things, and
@@ -1694,6 +1743,15 @@ missing mechanism**, and it is worth knowing which: **this console draws no tool
 `view.rs` says so where the Outputs row and the mixer would have had them — a tooltip needs
 `egui` to own a widget and this console paints — so the mock's `⊕ MIDI: note 41` has nowhere to
 be shown yet, and neither would a key.
+
+**And the mock has no key to show even where a tooltip could show one.** It draws no key hints
+anywhere, and the tooltip contract it does carry is the control's *MIDI assignment* — so **the
+console as drawn gives an operator no way to learn a key binding at all**, which is rule 01's
+keyboard surface with no teaching path. Found while separating `h`/`?` from `s`
+([ADR-0205](adr/0205-a-question-whose-reply-the-vocabulary-cannot-say-gets-no-row.md)), where the
+CLI's answer to the same need — reprinting a static bindings text into a terminal — is what the
+console has no equivalent of. It is one hole with two halves: this entry's *learn* gesture needs a
+tooltip to hang on, and a key hint needs somewhere to be drawn in the first place.
 
 **What a keyboard map has to name that a MIDI map never did**: twelve of the CLI's thirty-nine
 keys write no record at all — the deck selection, the transition settings, the window, quitting
