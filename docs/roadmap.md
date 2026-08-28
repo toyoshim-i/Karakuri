@@ -574,6 +574,80 @@ lists were written before anybody knew what that floor was made of. **The estima
 ~10–14 weeks**, and what the range assumes, what is outside it, and whether each of M5's seven
 *Adds* is ready, gated or partly done are stated together at the end of *M5 — Interface*, below.
 
+#### The meter is one column, and the board is derived from the page
+
+**The milestone's progress meter is the panel column of [every operation](manual/operations.html)**,
+where a `has` badge means an operator running the instrument reaches that operation
+([ADR-0213](adr/0213-the-interface-milestones-meter-is-the-panel-column-and-has-means-an-operator-reaches-it.md)). It reads **0 of 46**, against 21 of 50 for the keyboard, 8 for MIDI and 6 for
+MCP, and it reads zero with five operations already emitted by console controls — which is the first
+item below rather than a caveat about the meter.
+
+**No count is written down in this section**, for the reason the vocabulary's is not written down
+either. Three commands are the whole of the instrumentation:
+
+```sh
+# the meter — how far each surface has got
+for col in panel key MIDI MCP CLI; do
+  echo -n "$col: "
+  grep -o "class=\"rt [a-z]*\">$col " docs/manual/operations.html |
+    sed 's/.*rt //;s/">.*//' | sort | uniq -c | tr '\n' ' '; echo
+done
+
+# the board — what is left on the panel, grouped by where the control lives
+grep -o 'rt plan">panel <b>[^<]*' docs/manual/operations.html | sed 's/.*<b>//' |
+  sort | uniq -c | sort -rn
+
+# the vocabulary — how many operations there are
+grep -c '<h3' docs/manual/operations.html
+```
+
+**The second of the three is the board, and it is the page's rather than this file's.** Every `plan`
+badge names where its control lives, so what is left arrives already grouped by region and already
+ordered by weight, and there is no list here for anyone to keep in step. What each group is standing
+on is written region by region under *The remaining bays, surveyed* below and on
+[the console page](manual/console.html); this section does not repeat any of it.
+
+**Running it found a gap in the prose survey on the first day, which is the argument for it.** The
+`deck head` row reads **three**, and the *Sync mode, anchor and offset* item below named two — the
+third is *Composite a deck's renderers*, which routes to the same home the manual does not have. A
+`grep` caught what a survey written region by region against the manual had read past twice.
+
+#### What no list here has ever carried is the application
+
+**This milestone opens *Goal: the application*, and nothing in it names building one.** Not the seven
+*Adds*, not the four items below, not the decisions after them. What exists instead is two programs
+that cannot reach each other, measured on 2026-08-28: `karakuri-cli` is **27,517 lines with no
+library target**, holding everything
+[ADR-0172](adr/0172-the-frame-loop-is-the-engines-because-the-cli-is-scaffolding.md) called *a
+program* — the clock, the recorder, the watcher and the MCP server, and with them the store wiring,
+audio, MIDI, the Set file format and the flags — so nothing can depend on any of it; and the panel is
+hosted by a **6,276-line example** built from two `.kir` files.
+
+**That boundary has already been paid for five times, and each time it arrived as a different
+question** — the frame loop (ADR-0172, paid by moving seven types into the engine), where an
+operation becomes a record (ADR-0185 and ADR-0194, paid with a whole new crate), the Library bay's
+time column ([ADR-0200](adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md),
+**paid by cutting a drawn feature** and filed as a date-formatting question), and twice by the
+example transcribing a constant and a parser. **Four bays are still undrawn**, and each of them
+reaches for the same program.
+
+**The program moves out of the CLI, and two thin binaries sit over a shared package**
+([ADR-0214](adr/0214-the-program-moves-out-of-the-cli-and-two-thin-binaries-sit-over-it.md)): the command line stays the scaffolding [README.md](../README.md) declares it to
+be, the panel becomes the destination, and `karakuri-console/src/` keeps the device-free seam
+[contributing.md](contributing.md) §3 names — the seam a `[[bin]]` in that package would have sold to
+save writing a new one. **It is the first item because it is what the meter is a meter of.** What
+that record deliberately does *not* settle is the shared package's name, its boundary — which of the
+CLI's fourteen modules are a program's and which are the command line's own — and whether it lands in
+one move or several.
+
+**The ~10–14 week estimate does not carry this, which is the second time.** *What the range assumes*
+names the four undrawn bays, three decisions and the manual's missing deck head, and not a program to
+draw any of them in — exactly as the original ~8–10 was taken against a list that assumed a panel, a
+name and a frame that did not exist. **No new range is written here.** The board makes the panel half
+countable for the first time and ADR-0214 settles the shape of the other half without settling its
+boundary, so a range taken now would be a third estimate of a list still missing a piece. It is
+re-taken once that boundary is drawn.
+
 **The order that makes each next thing cheaper than it would be alone:**
 
 1. **The mixer strip is finished, and what is left of it is another surface's.** The blend mini
@@ -1031,7 +1105,9 @@ than work, and every one of them was found by building the thing next to it.
   5. **Sync mode, anchor and offset** (`T{anchor}`, `B{anchor}±offset`). The page routes *Set a
      deck's sync mode* and *Scrub a deck a quarter beat* to `panel deck head` — **and there is no
      deck head anywhere in the mock**, whose heads are `bay-head`, `half-head`, `node-head` and
-     `seq-head`. It is the sharpest of the five because the page names a home that does not exist;
+     `seq-head`. **It is three operations rather than two**, which the board found and this survey
+     had not: *Composite a deck's renderers* routes to the same home, and is the one of the three
+     with no key either. It is the sharpest of the five because the page names a home that does not exist;
      the other four name no home at all.
 
   **A sixth was found beside them and is a routing question rather than a gap**: the page routes
@@ -1958,7 +2034,9 @@ it.
   `SetSync { deck, sync }` over `Free` / `Tempo` / `Beat` and `ScrubDeck` are both operations, and
   both already have a key. Both rows on [every operation](manual/operations.html) route their panel
   way in to a **deck head** — and `docs/manual/console.html` has no deck head: the word appears
-  nowhere on the page, and neither does *sync* or *scrub*. So this is not a control waiting to be
+  nowhere on the page, and neither does *sync* or *scrub*. **A third row routes there too and is not
+  this bullet's**: *Composite a deck's renderers*, which has no key at all, so the region the manual
+  owes carries three operations rather than the two costed here. So this is not a control waiting to be
   drawn into a region; **it is a region the manual has not described**, which is the manual's own
   order of work — *a sentence you cannot write about a control is a control designed wrong*.
   **Gated inside M5, on the manual before the panel.**
