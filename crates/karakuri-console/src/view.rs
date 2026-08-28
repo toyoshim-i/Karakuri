@@ -132,11 +132,11 @@
 //! for what that has to say. **A press on it cycles from the residency that
 //! was *requested*** ([`Mixer::tally`]), which is what makes a parked chip's
 //! press the withdrawal of its own prime request with no case in the code for
-//! it. It is the panel's first live region and the first
-//! to declare a price ([`View::animating`]) — and it declares it only while
-//! the bay it rolls in is laid out, because a fold takes the chip off the
-//! screen and a price paid for what nobody can see is P-0072 broken rather
-//! than served.
+//! it. It is the panel's first live region and still its only
+//! one ([`View::declares`], which answers with the bay's name, what one update
+//! of it costs and how stale it may get) — and it declares only while the bay
+//! it rolls in is laid out, because a fold takes the chip off the screen and a
+//! price paid for what nobody can see is P-0072 broken rather than served.
 //!
 //! # The bay head is one component with seven call sites
 //!
@@ -165,6 +165,7 @@ use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, Stroke
 use karakuri_layout::{Axis, Hit, NodeId};
 use karakuri_operation::{BlendMode, Operation, Residency, WipeKind};
 
+use crate::budget::{Declared, PANEL_PASS};
 use crate::panel::{unit, Grab, InHand, Knob, Op, Panel, GRAB};
 use crate::room::{size, Palette, Room};
 
@@ -4791,28 +4792,33 @@ impl View {
         }
     }
 
-    /// **What the panel's live regions declare**, as the soonest staleness any
-    /// of them will tolerate — and `None` when nothing on the panel is moving.
+    /// **Every live region that is declaring this frame**, each with what one
+    /// update of it costs and how stale it may get.
     ///
-    /// # The view is what knows the rate, so the harness is told rather than
-    /// guessing
+    /// # This is P-0072's naming, and the unit is a region
     ///
-    /// [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)
-    /// has every live region declare a cost and a staleness; this is the
-    /// declaring end of it, and `crate::repaint::Change::Animating` is where
-    /// the number becomes a deadline. A rate written into the harness instead
-    /// would be a presentation's number kept where the presentation is not —
-    /// change the roll and the window goes on servicing the old one, with
-    /// nothing failing to compile and nothing to assert against.
+    /// [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md):
+    /// *"What must be live during a performance is named, and each named thing
+    /// declares two numbers: what its update costs, and how stale it may get,
+    /// in milliseconds."* This is that naming, and [`crate::budget`] holds the
+    /// numbers with the arguments for where each came from. **A region is
+    /// redrawn whole or not at all**, so what appears here is a node of the
+    /// arrangement — by the name every surface addresses it by — and never an
+    /// animation, a control or a slice of a frame.
     ///
-    /// # Nothing pending means nothing moving, and that is the whole of
-    /// P-0072's first clause
+    /// # One region, three presentations, one declaration
     ///
-    /// `None` is not an absence of information: it is the panel saying it is
-    /// still, and the window then sleeps. **A console with no parked slot and
-    /// no scheduled move on a fader costs exactly what it cost before either
-    /// existed**, which is a claim `tests/parked.rs` and `tests/armed.rs` make
-    /// rather than a hope.
+    /// The mixer bay is the only entry today. Inside it the tally's word rolls
+    /// toward a residency that has not been granted and each of a strip's two
+    /// faders reaches toward a value a transition has not reached yet — three
+    /// presentations at one rate, off one [`Phase`], so they are one term and
+    /// not three
+    /// ([ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md),
+    /// [ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)).
+    /// A second *rate* would be a second declaration; a second *user* of this
+    /// rate is not. The beat is the panel's other candidate and P-0077 wants
+    /// it moving continuously; it is in the transport row, which folds, and it
+    /// would carry its own node here exactly as this one does.
     ///
     /// # Pending is not enough: the region that shows it has to be laid out
     ///
@@ -4820,14 +4826,16 @@ impl View {
     /// pending behind it. The strips are rewritten every frame from the deck,
     /// so *is anything pending* is a fact about the deck; P-0072 is about what
     /// **must be live**, and a bay the operator has folded away is not live.
-    /// A staleness declared for it buys a repaint of something nobody can
-    /// see — measured, before this asked: with the picture and the preview row
+    /// A declaration made for it buys a repaint of something nobody can see —
+    /// measured, before this asked: with the picture and the preview row
     /// folded the window sat at 28.7 to 29.0 frames a second, and folding the
     /// mixer bay on top of that moved the price of a frame and not the rate.
     /// It draws nothing at all now. The alternative — declare it anyway and
     /// let a scheduler drop it — is
     /// [ADR-0193](../../../docs/adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md),
-    /// which is where it lost.
+    /// which is where it lost, and it lost on the sentence being **false**
+    /// rather than unaffordable: a region nobody can see is not showing
+    /// anything, so it cannot be showing anything out of date.
     ///
     /// This is
     /// [P-0073](../../../docs/principles/0073-a-node-claims-only-what-its-visible-content-can-use.md)
@@ -4848,27 +4856,69 @@ impl View {
     /// one without a solve, which matters because the fold is applied and this
     /// is asked before the next one.
     ///
-    /// One region today, and now three presentations inside it — the tally's
-    /// roll and a reach on each of a strip's two faders. They share a rate, so
-    /// the answer is still one constant rather than a maximum over a list; a
-    /// second *region* declares beside this one and carries its own node the
-    /// same way, and then the answer is the soonest of them. The beat is the
-    /// panel's other candidate, and P-0077 wants it moving continuously.
-    pub fn animating(&self, layout: &karakuri_layout::Layout) -> Option<Duration> {
+    /// # Nothing arbitrates between two of these
+    ///
+    /// P-0072's second half is a scheduler and there is not one. What this
+    /// feeds is [`View::animating`], which takes the soonest staleness and
+    /// nothing else, and `tests/schedulable.rs`, which sums over whatever this
+    /// answers and asserts the two conditions the principle states.
+    pub fn declares(&self, layout: &karakuri_layout::Layout) -> impl Iterator<Item = Declared> {
+        // An array rather than a `Vec`, so asking what the panel declares
+        // allocates nothing on a path that is walked every frame — and so that
+        // the second live region is one more element rather than a change of
+        // shape.
+        [self.mixer_declares(layout)].into_iter().flatten()
+    }
+
+    /// **What the mixer bay declares**: the roll's staleness while anything in
+    /// it is pending *and* the bay is laid out, and nothing otherwise.
+    ///
+    /// Three pending things, one rate — see [`View::declares`], which carries
+    /// the whole argument.
+    fn mixer_declares(&self, layout: &karakuri_layout::Layout) -> Option<Declared> {
         let bay = layout.find("mixer").is_some_and(|id| layout.visible(id));
-        // **Three presentations, one number.** The tally's roll and the two
-        // faders' reaches are the same curve at the same rate off the same
-        // phase, so the soonest staleness any of them will tolerate is
-        // `ROLL_STALENESS` whichever of them is moving and however many are.
-        // A second *rate* is what would make this a maximum over a list; a
-        // second *user of this rate* is not.
         let moving = bay
             && self.mixer.iter().any(|strip| {
                 strip.pending().is_some()
                     || strip.gain_pending().is_some()
                     || strip.opacity_pending().is_some()
             });
-        moving.then_some(ROLL_STALENESS)
+        moving.then_some(Declared {
+            region: "mixer",
+            cost: PANEL_PASS,
+            staleness: ROLL_STALENESS,
+        })
+    }
+
+    /// **The soonest staleness any live region on this panel will tolerate**,
+    /// and `None` when nothing on it is moving.
+    ///
+    /// # The view is what knows the rate, so the harness is told rather than
+    /// guessing
+    ///
+    /// [`View::declares`] is where the regions and their two numbers are, and
+    /// this is the one of the two numbers a window can act on today:
+    /// `crate::repaint::Change::Animating` turns it into a deadline. A rate
+    /// written into the harness instead would be a presentation's number kept
+    /// where the presentation is not — change the roll and the window goes on
+    /// servicing the old one, with nothing failing to compile and nothing to
+    /// assert against.
+    ///
+    /// **The soonest, not the sum**, and that is the whole of what is decided
+    /// here: a deadline is met by drawing, and one frame drawn in time for the
+    /// soonest is in time for every other. Choosing which region a frame is
+    /// *for* is a scheduler's, and there is not one.
+    ///
+    /// # Nothing pending means nothing moving, and that is the whole of
+    /// P-0072's first clause
+    ///
+    /// `None` is not an absence of information: it is the panel saying it is
+    /// still, and the window then sleeps. **A console with no parked slot and
+    /// no scheduled move on a fader costs exactly what it cost before either
+    /// existed**, which is a claim `tests/parked.rs` and `tests/armed.rs` make
+    /// rather than a hope.
+    pub fn animating(&self, layout: &karakuri_layout::Layout) -> Option<Duration> {
+        self.declares(layout).map(|live| live.staleness).min()
     }
 
     /// Draw the whole console. The `ui` is the root one

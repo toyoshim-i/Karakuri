@@ -13,14 +13,16 @@
 //! it, and holds its own quoted figure against every run of it). This is the
 //! decision that stops those frames being drawn at all.
 //!
-//! **One region declares a staleness now, and the scheduler still does not
-//! exist.** [`Change::Animating`] carries what
-//! [`crate::view::View::animating`] answers — the mixer's tally, while a
-//! residency request has not landed — and turns it into a deadline. That is
-//! P-0072's *declares its price* with one client; the two schedulability
-//! conditions and the arithmetic over several regions are still absent,
-//! because a scheduler that arbitrates between one region and nothing is an
-//! abstraction with one call site. They arrive with the second one.
+//! **One region declares a cost and a staleness now, and the scheduler still
+//! does not exist.** [`crate::view::View::declares`] is the declaration —
+//! the mixer bay, while a residency request has not landed or a fade has not
+//! run — and [`Change::Animating`] carries the soonest staleness out of it and
+//! turns that into a deadline. The **cost** reaches nothing here and is not
+//! meant to: both schedulability conditions are arithmetic over the
+//! declarations and `tests/schedulable.rs` asserts them, which is what
+//! P-0072 asks for in place of a stage discovering them. What is still absent
+//! is arbitration — nothing chooses between two regions, because with one
+//! region declaring there is nothing to choose between.
 //!
 //! # Why this is a module and not a line beside each handler
 //!

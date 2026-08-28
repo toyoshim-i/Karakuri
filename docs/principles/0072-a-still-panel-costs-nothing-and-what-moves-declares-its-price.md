@@ -97,22 +97,47 @@ a frame being drawn at all is [`repaint.rs`](../../crates/karakuri-console/src/r
 closed list of everything that can change what the console shows —
 [ADR-0165](../adr/0165-the-repaint-decision-is-one-closed-list.md).
 
-**One region declares, and there is still no scheduler.** The mixer strip's residency chip is the
-only client: `View::animating` returns `view::ROLL_STALENESS` — `ROLL_TRAVEL` in `ROLL_STEPS`
-steps, 33.33 ms, about thirty a second — while any strip carries a request the engine has not
-granted **and the bay that draws the chip is laid out**, and `repaint::Change::Animating` turns that
-into the deadline the window waits on
+**One region declares both numbers, and there is still no scheduler.** The mixer bay is the only
+live region on this console: [`View::declares`](../../crates/karakuri-console/src/view.rs) answers
+with its name, a **cost** and a **staleness** while anything in it is pending *and* the bay is laid
+out, and `repaint::Change::Animating` turns the staleness into the deadline the window waits on.
+Three presentations share that one declaration, because the unit is a region — the tally's word
+rolling toward a residency the governor has not granted, and a reach on each of a strip's two faders
+while a transition has not run
 ([ADR-0190](../adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md),
+[ADR-0206](../adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md),
 [P-0075](0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)).
-That is the *declaring* half of this file, with one caller. **Everything downstream of the
-declaration is still absent**: no region declares a **cost** — ADR-0190 measured what the roll costs
-rather than the region announcing it — nothing arbitrates between two regions, and neither
-schedulability condition above is checked anywhere. They arrive with the second declaring region,
-which [P-0077](0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md) wants to be the
-beat.
+The staleness is `view::ROLL_STALENESS` — `ROLL_TRAVEL` in `ROLL_STEPS` steps, 33.33 ms, about
+thirty a second. The cost is
+[`budget::PANEL_PASS`](../../crates/karakuri-console/src/budget.rs), **1.26 ms**, and it is one
+constant every region declares rather than a figure of its own: `egui` is immediate mode, so there
+is no way to redraw one region of this panel and a per-region number would describe work this
+console cannot do — a deliberate over-declaration a scheduler can refine downwards, which is what
+[ADR-0210](../adr/0210-a-declared-cost-is-one-panel-pass-written-down-and-held-against-the-run.md)
+decided along with how a written-down cost is kept honest.
+
+**Both conditions are checked, and this is what they read.**
+[`tests/schedulable.rs`](../../crates/karakuri-console/tests/schedulable.rs) sums over whatever the
+view declares, at the most this console can ever declare — every strip pending in all three ways,
+every region laid out. `Σ (cost / staleness)` is **0.0378** against a `budget / frame interval` of
+**1.0**, and `max(cost)` is **1.26 ms** against **4.17 ms**, a quarter of the 16.6 ms a frame has to
+fit in. **The budget is the whole frame's**, because the console has never written down a panel's
+share of one — so the conditions hold in their most permissive form, and what they cannot catch is a
+panel that fits the frame while leaving the engine nothing. A folded region is in neither sum
+([ADR-0193](../adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md)),
+which is asserted rather than assumed, both ways in.
+
+**What is still absent is the policy rather than the inputs**: nothing arbitrates between two
+regions, because there is one region and choosing between one and nothing is an abstraction with one
+call site. The arbitration arrives with the second declaring region, which
+[P-0077](0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md) wants to be the beat.
 
 **What a drawn frame costs.** A median of **525 allocations and 694.3 kB** in the middle of those
 nine runs, the nine spread 524 to 538 and 671.4 to 695.3 kB — with everything above on the panel.
+**Re-taken on 2026-08-28 over ten runs**, with the faders' reaches since added: **524 allocations in
+every one of them**, 55.3 to 58.7 frames a second in nine and 37.0 in the tenth, and 19.6 to 26.3%
+of a second drawing in those nine against 14.3% in the tenth. The allocation count did not move and the milliseconds did, which is the
+machine rather than the panel and is exactly the swing the paragraphs above warn about.
 [ADR-0164](../adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s **184 and
 226.2 kB** is not that number's predecessor in any comparable sense: it was a mean over 180 frames
 of an empty panel driven by a loop that always drew, it is still true of the panel it measured, and

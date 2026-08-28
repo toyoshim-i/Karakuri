@@ -309,15 +309,23 @@ magnitude a decision gets made on rather than as a quantity two of them can be s
 The number is restated whenever the code under it changes shape, because a figure taken on a shape
 that no longer exists reads as current forever.
 
-**Most of P-0072 is not built** — **no region declares a cost** and there is no scheduler. What
-does exist is one declared *staleness*: the mixer strip's residency chip, through
-`View::animating`, which names the roll's 30 Hz while a request the engine has not granted is
-outstanding
-([ADR-0190](adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md))
-and declares nothing at all while the bay that draws it is folded away
-([ADR-0193](adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md))
-— which is what P-0072's own *Where it holds* records. What the rest was waiting for was a second
-live region with a different character from the first, and the transport row is that; see below.
+**P-0072's inputs are built and its policy is not: there is still no scheduler.** One region
+declares — the mixer bay, through `View::declares` — and it declares **both** numbers now. The
+staleness is the roll's 30 Hz while a request the engine has not granted is outstanding or a fade
+has not run
+([ADR-0190](adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md),
+[ADR-0206](adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)), and nothing at
+all while the bay that draws it is folded away
+([ADR-0193](adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md)).
+The cost is `budget::PANEL_PASS`, **1.26 ms** measured over five runs on 2026-08-28 and written down
+rather than sampled, one constant every region declares because immediate mode cannot redraw one
+region of a panel
+([ADR-0210](adr/0210-a-declared-cost-is-one-panel-pass-written-down-and-held-against-the-run.md)).
+**Both schedulability conditions are asserted** in
+`crates/karakuri-console/tests/schedulable.rs`: `Σ (cost / staleness)` reads 0.0378 against 1.0, and
+`max(cost)` 1.26 ms against 4.17 ms. What is left is the arbitration, and what is owed with it is a
+**panel's share of the frame budget** — nothing writes one down, so the conditions are asserted
+against the whole frame and hold in their most permissive form.
 
 **Half of *making the picture a sink in fact* is built, and it is the half that had to come
 first.** `frame::compose` no longer gates the frame on a sink: it takes a slice of them, asks each
@@ -500,21 +508,28 @@ the tally's order kept: a readout of a pending state comes before any press that
 `Control::MaskPosition`, the strip has no control and no readout for that number, so it is drawn
 nowhere and the gap is named in the record rather than left to be found.
 
-**Four live regions now, and one of them declares a price.** The picture is expensive and moves
-every frame; the beat grid is cheap, high priority, and moves two to four times a second; the mixer
-is expensive, repetitive and **hardly moves at all** — six readouts that change when a hand changes
-them; and *whatever is pending* is expensive, runs at 30 Hz and runs **only while a request is
-outstanding and the bay that draws it is laid out**, which can be the length of a set. That last one
-is one live region with **three presentations** now: the tally's roll, and a reach on each of a
+**Four things move on this panel and exactly one of them is a live region that declares**, which is
+worth separating because this line used to run the four together. The picture is expensive and moves
+every frame — and it is the engine's output, *"already accounted for by the governor"*, so P-0072
+keeps it off this budget and off any schedule. The beat grid is cheap, high priority and moves two to
+four times a second — and it moves because the panel is being redrawn for something else rather than
+because anything decided it must, which is what P-0077 is still waiting for. The mixer's six
+readouts change when a hand changes them, and *what the operator does costs what it costs*. What is
+left, and the whole of what declares, is *whatever is pending*: expensive, 30 Hz, and running **only
+while a request is outstanding and the bay that draws it is laid out**, which can be the length of a
+set. It is one live region with **three presentations**: the tally's roll, and a reach on each of a
 strip's two faders while a transition is armed on it
 ([ADR-0206](adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)). They share a
 period, a curve and a staleness, so a parked slot and eight armed fades are one deadline rather than
-nine — which is P-0075's *everything pending moves together* paying for itself. It is the first
-region to declare a staleness (`View::animating`, and `repaint::Change::Animating` turns it into a
-deadline), and it declares nothing while it is folded away — a region that is not laid out declares
-nothing rather than declaring and being dropped by a scheduler that does not exist
+nine — which is P-0075's *everything pending moves together* paying for itself. It is the first and
+only region to declare, it declares a **cost** as well as a staleness now
+([ADR-0210](adr/0210-a-declared-cost-is-one-panel-pass-written-down-and-held-against-the-run.md)),
+and it declares nothing while it is folded away — a region that is not laid out declares nothing
+rather than declaring and being dropped by a scheduler that does not exist
 ([ADR-0193](adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md)).
-**There is still no scheduler**, and the four of them are what one would be scheduling.
+`View::declares` is the declaration and `repaint::Change::Animating` turns its staleness into a
+deadline. **There is still no scheduler**, and until a second region declares there is nothing for
+one to choose between.
 
 **Owed, and found by building this: `Layout::soloed()` can lie.** The solve never reads it and
 `check_structure` only checks that it addresses a node, so a solo's exclusivity lives entirely in
@@ -578,32 +593,42 @@ the program.
    ([ADR-0203](adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)), which is the one
    answer a pad has no way to copy — so nothing on any surface has asked the map for an angle, and
    this item is off the list rather than owed.
-2. **The rest of P-0072, and it is nearer than this item used to say.** Three live regions with
-   three characters now exist — the picture expensive and every frame, the beat grid cheap and
-   twice a second, the mixer expensive and hardly moving — which is what a scheduler was waiting
-   for. Nothing is over budget yet (18.1–22.2% of a second on 2026-08-26, with headroom), and the
-   trigger this item named — *when the mixer's controls make it move* — **has happened**:
-   [ADR-0188](adr/0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md)
-   decided there would be a **fourth** rate on the panel and
-   [ADR-0190](adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)
-   drew it — a pending transition that animates for as long as a request is outstanding and can
-   therefore run for the length of a set, at about 30 panel frames a second. It is also the first
-   region to **declare** a staleness, which is the half of P-0072 that can exist without a
-   scheduler. **What is left is the inputs rather than the policy.** P-0072 already states the
-   arbitration in full — a region is scheduled by how stale it is against what it can afford, a
-   region is the unit of deferral and is redrawn whole or not at all, the composite is drawn every
-   frame at the highest priority regardless, a deterministic offset separates two regions that
-   still come due together, and rate-limiting the panel is ruled out as a way of affording it —
-   and [P-0077](principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md) adds
-   the one region a budget under pressure may not stop. What nothing supplies is what that policy
-   reads: **no region declares a cost**, ADR-0190 having measured what the roll costs rather than
-   the region announcing it, and **neither schedulability condition is checked anywhere** —
-   neither `Σ (cost / staleness) ≤ budget / frame interval` nor `max(cost) ≤ a small part of the
-   budget`. Neither of those is a decision waiting to be taken; both are work.
-   `egui` is immediate mode, so what
-   repaints is the panel rather than the chip. The argument is not the bytes — it is that a beat
-   indicator the maintainer wants analogue and a pending animation at another rate **cannot both be
-   special cases**, and each rate written by hand is the first half of the scheduler written badly.
+2. **The rest of P-0072 is the policy, and this item has turned over: the inputs are built.** The
+   trigger it named — *when the mixer's controls make it move* — happened with
+   [ADR-0188](adr/0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md) and
+   [ADR-0190](adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md),
+   which drew a pending transition that animates for as long as a request is outstanding and can
+   therefore run for the length of a set, at about 30 panel frames a second. **That region now
+   declares both of P-0072's numbers, and both schedulability conditions are asserted**
+   ([ADR-0210](adr/0210-a-declared-cost-is-one-panel-pass-written-down-and-held-against-the-run.md)):
+   `budget::PANEL_PASS` is the cost — 1.26 ms, written down rather than sampled, because a measured
+   schedule reorders itself with the machine's noise (ADR-0164) — and
+   `crates/karakuri-console/tests/schedulable.rs` reads `Σ (cost / staleness)` at 0.0378 against 1.0
+   and `max(cost)` at 1.26 ms against 4.17 ms. Nothing is over budget (19.6–26.3% of a second over
+   ten runs on 2026-08-28, with headroom).
+
+   **What is left is the policy rather than the inputs**, which is the sentence this item used to
+   carry the other way round. P-0072 already states the arbitration in full — a region is scheduled
+   by how stale it is against what it can afford, a region is the unit of deferral and is redrawn
+   whole or not at all, the composite is drawn every frame at the highest priority regardless, a
+   deterministic offset separates two regions that still come due together, and rate-limiting the
+   panel is ruled out as a way of affording it — and
+   [P-0077](principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md) adds the
+   one region a budget under pressure may not stop. **Nothing arbitrates, and until a second region
+   declares there is nothing to arbitrate**: choosing between one region and nothing is an
+   abstraction with one call site. The beat is the candidate second one, and P-0077 wants it moving
+   continuously.
+
+   **Two things are owed by what has just landed.** A **panel's share of the frame budget**: the
+   console writes down only what a *frame* has to fit in (the transport row's `/16.6`), so the first
+   condition is asserted at the whole frame and cannot catch a panel that fits it while leaving the
+   engine nothing. And a **per-region cost**: `egui` is immediate mode, so what repaints is the panel
+   rather than the chip and every region honestly declares the same whole pass — a deliberate
+   over-declaration that a scheduler can refine downwards, and one that only stops being needed the
+   day a bay can be drawn once into a texture and composited after. The argument for the scheduler is
+   not the bytes — it is that a beat indicator the maintainer wants analogue and a pending animation
+   at another rate **cannot both be special cases**, and each rate written by hand is the first half
+   of the scheduler written badly.
 
    **One region is not the scheduler's to stop, and it is the beat.** A budget under pressure offers
    the panel's continuous motion first — it is a real saving that degrades nothing being read at
