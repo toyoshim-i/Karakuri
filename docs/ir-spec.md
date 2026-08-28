@@ -2397,11 +2397,14 @@ would capture it at a different beat — which is the one property this record e
 have. Nothing can move the control in between: a hand cancels the move and another move
 replaces it.
 
-`control` is `gain` or `opacity`, and `curve` is a `bind`'s vocabulary — `lin`, `pow2`,
-`sqrt`, `smooth` — because a fade's shape and a signal's shape are the same question. There
-is no `crossfade` record and there should not be: a crossfade is two of these sharing a
-start and a length, a fade-in is one, and a cut is one with a duration of zero. The
-first-class thing is the move.
+`control` is `gain`, `opacity` or `mask`. The third is the `position` a `mask` record
+carries, and `mask` is its spelling on the wire — a transition names the record whose
+number it moves rather than the field inside it — which is the whole of what makes the
+wipe described below a scheduled move rather than a mode of its own. `curve` is a `bind`'s
+vocabulary — `lin`, `pow2`, `sqrt`, `smooth` — because a fade's shape and a signal's shape
+are the same question. There is no `crossfade` record and there should not be: a crossfade
+is two of these sharing a start and a length, a fade-in is one, and a cut is one with a
+duration of zero. The first-class thing is the move.
 
 **`select` is which renderer of a slot's Set is the live one**, from a musical instant on.
 The other scheduled event, and a record of its own rather than a `control` on `transition`,

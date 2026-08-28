@@ -7164,9 +7164,13 @@ impl Live {
 
     fn record(&mut self, record: karakuri_store::record::Record) {
         if let Some(recorder) = &mut self.recorder {
-            // Cloned, which allocates — and this is a key press rather than a
-            // frame, so it is the one place in the record path where that is
-            // allowed. The render-thread rule is about what a frame does.
+            // Cloned, which allocates for the records that carry a name —
+            // `look`, `mask`, `blend`, `residency`, `transport` — and for no
+            // other. This was written when the only way in was a key press. A
+            // mapped MIDI fader reaches it from `Live::run_surface` inside
+            // `Live::frame`, so on `exposure` and `mask-position` it is a small
+            // heap touch per control-change message on the render thread; see
+            // `mix.rs`, which carries the bound and the open question.
             recorder.push(record.clone());
         }
         match mix::change(&record, self.deck.slot_count()) {
