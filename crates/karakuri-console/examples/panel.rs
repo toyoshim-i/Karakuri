@@ -58,9 +58,17 @@
 //!
 //! Two slots, built from two of the repository's own `examples/*.kir` the way
 //! `karakuri-cli` builds them, and **no more than that**: no audio, no MIDI,
-//! no store, no argument parsing, no records. What `karakuri-cli` puts around
-//! a deck is a program; this is the shortest path from two files to texels,
-//! because the question being answered is whether the texels arrive.
+//! no argument parsing, and no session. Two things beyond the engine are here
+//! and both are the harness's. **The store is opened to be read** — once, at
+//! startup, so the Library bay has names to list ([`library`]) — and it is
+//! neither created nor written to. And **records exist**: a mixer control
+//! emits an operation, `karakuri-operation-record` turns it into a `Record`,
+//! and [`apply`] is what moves the deck with it, because
+//! [P-0028](../../../docs/principles/0028-every-control-ends-in-the-same-record.md)
+//! is that every control ends in the same record. Nothing here reaches a disk
+//! either way, and no record stream drives time. What `karakuri-cli` puts
+//! around a deck is a program; this is the shortest path from two files to
+//! texels, because the question being answered is whether the texels arrive.
 //!
 //! **There is a governor, and it is the one thing here that is not the
 //! shortest path.** It runs once, at startup, and it is [`Engine::ask_to_prime`]:
