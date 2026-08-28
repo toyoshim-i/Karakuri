@@ -1158,7 +1158,7 @@ mod tests {
             assert_eq!(sink.lit, Some(true), "the fixture drew nothing to darken");
 
             // The same frame, with the fader taken to zero inside the closure.
-            // Opacity rather than gain because opacity silences a layer under every
+            // Opacity rather than gain because opacity silences a slot under every
             // blend mode and gain does not silence `over`.
             let mut deck = one_slot_deck(&gpu);
             let mut sink = TestSink::new(&gpu, vec![]);

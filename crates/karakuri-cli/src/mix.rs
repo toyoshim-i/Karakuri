@@ -124,8 +124,8 @@
 //! when [`karakuri_engine::deck::Blend`] made it mean something a gain does not
 //! — the fader across the blend rather than the level the material arrives at.
 //! Under `add` the two multiply together and a stream carrying either would
-//! replay the same; under `over` one dims a layer and the other stops it
-//! hiding what is beneath.
+//! replay the same; under `over` one dims a deck slot's layer and the other
+//! stops it hiding what is beneath.
 
 use karakuri_engine::binding::Curve;
 use karakuri_engine::deck::{Blend, Mask, MaskKind, Residency};
@@ -975,7 +975,7 @@ mod tests {
     }
 
     /// **Every mask shape round-trips**, so a shape added to the engine and not
-    /// to the wire vocabulary is a layer silently unmasked.
+    /// to the wire vocabulary is a deck slot silently unmasked.
     ///
     /// Through `Operation::SetMaskShape` rather than a record spelled here,
     /// which is `from_operation`'s rule and buys the third spelling with it:
@@ -1029,8 +1029,8 @@ mod tests {
     }
 
     /// **Every blend mode round-trips**, so a mode added to the engine and not
-    /// to the wire vocabulary is a layer silently composited the wrong way —
-    /// which under `over` is a layer that was supposed to hide and does not.
+    /// to the wire vocabulary is a deck slot silently composited the wrong way
+    /// — which under `over` is a slot that was supposed to hide and does not.
     #[test]
     fn every_blend_mode_has_a_wire_name_that_decodes_back() {
         for mode in Blend::ALL {

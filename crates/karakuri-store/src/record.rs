@@ -26,6 +26,23 @@
 //! decoder would come back [`Record::Unknown`], and the format promises to pass
 //! over exactly that.
 //!
+//! **`slot` is three things in this vocabulary, and only the prose keeps them apart.**
+//! [`Record::Slot`] is **a node of a Set** — a procedure at a `(layer, index)` address,
+//! optionally with a name. The `slot: u8` field on [`Record::Gain`], [`Record::Opacity`],
+//! [`Record::Blend`], [`Record::Residency`], [`Record::Procedure`], [`Record::Mask`],
+//! [`Record::Transition`], [`Record::Select`], [`Record::Preview`], [`Record::Transport`]
+//! and [`Record::Save`] is **a member of the deck** — an index into the mixer, and nothing
+//! about the Set in it. [`Record::Edge`]'s `slot: String` is the third: **an input a node
+//! declares**, which is what `uses far : Geometry` names.
+//!
+//! None of the three is renamed.
+//! `docs/adr/0049-slot-means-two-things-and-the-clash-is-recorded.md` recorded the first
+//! clash rather than resolving it, and a wire field cannot be renamed for a wording reason
+//! anyway — every session stream on disk carries it. What the prose does instead is **never
+//! write the deck one bare**: it is *a deck slot*, everywhere, so
+//! `docs/principles/0031-a-name-means-one-thing-across-the-system.md`'s *"they have to be
+//! disjoint by name"* is met by the sentence where the field cannot meet it.
+//!
 //! **The one collision there was is settled, and it is the metadata name that
 //! moved.** `docs/ir-spec.md` listed a metadata `preview` carrying a `path`
 //! beside [`Record::Preview`], the deck's record for which slot is being
@@ -368,8 +385,11 @@ pub enum Record {
     },
     /// **Binds one node's declared input slot to another node of this Set.**
     ///
+    /// **`slot` here is the third sense the module doc names** — an input a
+    /// node declares, not a node of a Set and not a member of the deck.
+    ///
     /// A procedure declares what it takes and refuses to say where it comes
-    /// from — `uses far : Geometry` names a slot the way `consumes position`
+    /// from — `uses far : Geometry` names an input slot the way `consumes position`
     /// names an attribute, without naming which node supplies it, because a
     /// `.kir` that named one would be coupled to one Set and would stop being a
     /// library part. This record is the other half, and it is here rather than
@@ -384,13 +404,13 @@ pub enum Record {
     /// whether or not one was written — a name nobody wrote is derived from the
     /// procedure where the Set is built — so both ends always resolve.
     ///
-    /// A slot bound twice is refused where the Set is built rather than here,
+    /// An input slot bound twice is refused where the Set is built rather than here,
     /// on the terms a duplicate node name is: the vocabulary's job is to carry
     /// what a file said.
     Edge {
-        /// The node that declares the slot.
+        /// The node that declares the input slot.
         node: String,
-        /// What that node's procedure calls it.
+        /// What that node's procedure calls that input slot.
         slot: String,
         /// The node bound to it.
         to: String,
@@ -433,11 +453,12 @@ pub enum Record {
     /// **Separate from [`Record::Gain`] because they are separate controls**,
     /// which only became visible once there was a blend mode that was not
     /// `add`. Gain is the level the material arrives at; opacity is how much of
-    /// the blend takes effect, including how much the layer covers. Under `add`
-    /// the two multiply together and a stream could have carried either — under
-    /// `over` a session that replayed one as the other would replay a layer
-    /// that hides as a layer that dims.
+    /// the blend takes effect, including how much that slot's layer covers.
+    /// Under `add` the two multiply together and a stream could have carried
+    /// either — under `over` a session that replayed one as the other would
+    /// replay a deck slot's layer that hides as one that dims.
     Opacity {
+        /// The deck slot whose fader this is.
         slot: u8,
         value: f32,
     },
@@ -516,9 +537,9 @@ pub enum Record {
     Procedure {
         slot: u8,
         layer: Layer,
-        /// **Which node of that layer**, when a slot has more than one.
+        /// **Which node of that layer**, when a deck slot has more than one.
         ///
-        /// A slot draws with one L1 and however many L4s — several renderers
+        /// A deck slot draws with one L1 and however many L4s — several renderers
         /// over one geometry, in draw order — so naming a layer is no longer
         /// enough to name a procedure. Zero for the L1 and for the first
         /// renderer, which is every stream written before stacks existed:
@@ -541,7 +562,7 @@ pub enum Record {
     /// the stream said which of them was the performance.
     ///
     /// **Written once, at the head, and a stream carries no second one.**
-    /// Changing it reallocates every slot's target and the HDR target, which is
+    /// Changing it reallocates every deck slot's target and the HDR target, which is
     /// an allocation on the render thread — the one thing this engine's frame
     /// path forbids. So the canvas is a property of a run rather than a control
     /// an operator moves during one, and this is the only record here that is
@@ -552,7 +573,7 @@ pub enum Record {
     },
     /// **What shape of the frame a deck slot's layer reaches.**
     ///
-    /// A mask multiplies the layer's opacity per texel, which is what makes it
+    /// A mask multiplies that layer's opacity per texel, which is what makes it
     /// a mask rather than a second fader — everything opacity does, done to
     /// part of the frame. `position` is how far the front has travelled and is
     /// the number a `transition` moves, so **a wipe is this record plus a
@@ -598,6 +619,7 @@ pub enum Record {
     /// `control` and `curve` are strings on the same terms as `curve` on a
     /// `bind`: what a name is allowed to be is the engine's to say.
     Transition {
+        /// The deck slot whose control is moving.
         slot: u8,
         /// `gain`, `opacity` or `mask` — the last being the `position` a
         /// `mask` record carries, which is what a wipe moves.
@@ -622,7 +644,8 @@ pub enum Record {
     /// fade of zero beats with nothing left for a curve to shape. The other
     /// half of the argument is the address: every `transition` is about one
     /// `(slot, control)` pair and a selection is about one renderer *inside*
-    /// the Set a slot is playing, which is a second index no control carries.
+    /// the Set a deck slot is playing, which is a second index no control
+    /// carries.
     ///
     /// **`start` alone, on `transition`'s terms**: an absolute position on the
     /// session's beat count, because "on the next bar" is a different instant
@@ -630,8 +653,8 @@ pub enum Record {
     /// operator asked.
     ///
     /// **What it selects is an edge into the Set's L5**, so it says something
-    /// only where the slot was built to composite — `--merge N`. A slot that
-    /// overdraws has no L5 for an edge to go into, and this record is then
+    /// only where the deck slot was built to composite — `--merge N`. A deck
+    /// slot that overdraws has no L5 for an edge to go into, and this record is then
     /// carried, replayed and without effect, exactly as `Set::set_input` is:
     /// refusing it would make a replay fail on a line that describes a
     /// performance that happened.
@@ -649,8 +672,9 @@ pub enum Record {
     /// `project::key_for`, and `docs/manual.md`, "Selecting one renderer of a
     /// slot".
     Select {
+        /// The deck slot whose Set the selection is inside.
         slot: u8,
-        /// Which renderer of that slot, in draw order — the same numbering
+        /// Which renderer of that deck slot, in draw order — the same numbering
         /// `--param L4:1:name=value` and a `slot` record's `index` use.
         ///
         /// **No wildcard and no `Option`.** Absent is not "every renderer": a
@@ -662,13 +686,13 @@ pub enum Record {
         /// The musical instant it lands on, in beats.
         start: f64,
     },
-    /// **Which slot is being auditioned**, or none of them for the mix.
+    /// **Which deck slot is being auditioned**, or none of them for the mix.
     ///
     /// Not a mix control — it changes nothing about how the Sets are combined,
     /// only which of them the output is showing — but it is session state and it
     /// is in the stream for one reason: **today the preview is the output**.
     /// A replay that ignored it would show the mix where the operator was
-    /// looking at one slot, which is replaying a different picture than the one
+    /// looking at one deck slot, which is replaying a different picture than the one
     /// that happened.
     ///
     /// That reason has an expiry date. When output routing gives the deck a
@@ -693,7 +717,7 @@ pub enum Record {
     /// and the one value in this format that is meant to go backwards.
     ///
     /// Both are carried even under `free`, where neither does anything, so that
-    /// a slot moved back onto the grid returns to where the operator left it
+    /// a deck slot moved back onto the grid returns to where the operator left it
     /// rather than to a default.
     Transport {
         slot: u8,
@@ -711,7 +735,7 @@ pub enum Record {
     /// over — see `docs/ir-spec.md`, "Records with an effect outside the
     /// stream".
     ///
-    /// **The slot and the id, and deliberately not the node hashes.** The Set
+    /// **The deck slot and the id, and deliberately not the node hashes.** The Set
     /// file under that id already names every node it holds, and a copy of them
     /// here would be a second place for one fact — free to be right on the day
     /// it was written and wrong the moment the two are read apart. What this
@@ -1002,15 +1026,15 @@ impl Record {
     ///   about no Set. A Set file carrying one would claim, every time it was
     ///   loaded, that a save had just happened.
     ///
-    ///   [`Record::Select`] says which renderer of a slot is live, which is a
+    ///   [`Record::Select`] says which renderer of a deck slot is live, which is a
     ///   fact about a run — and it used to be in this group twice over,
     ///   because the layering that makes the question mean anything was not in
     ///   a Set file at all. It is now: [`Record::Merge`] records it, and its
     ///   `live` field is where a *Set* says which renderer is the live one.
     ///   What remains is the first reason and it is enough — a selection is
     ///   addressed to a deck slot and scheduled at an instant, and no session
-    ///   record says which slot's Set composites or which slot a folded Set
-    ///   was played in.
+    ///   record says which deck slot's Set composites or which deck slot a
+    ///   folded Set was played in.
     ///
     /// - [`Record::Meta`], [`Record::ParamDecl`], [`Record::CapacityDecl`] and
     ///   [`Record::Emit`] are a **third file's** vocabulary: what an artifact

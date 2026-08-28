@@ -26,6 +26,10 @@ Four properties define whether this succeeded:
    a recording.
 2. **Manual and autonomous on the same mechanism.** A human and an agent affect the system
    through the identical interface. Authority is a per-layer setting, not a global mode.
+   **What *per-layer* addresses is undecided**: this sentence, rule 06 of the manual and M6
+   name three different things, and the disagreement is *What authority is set on*, below.
+   The senses each word carries are in [What the three words mean, and
+   where](#what-the-three-words-mean-and-where).
 3. **Reproducible.** The same record stream and the same seeds produce the same show.
 4. **Unbreakable on stage.** Nothing stops working when the network drops or the DJ gear
    changes. Defended continuously rather than built once — see Continuous concerns.
@@ -54,9 +58,14 @@ becomes affordable.
 
 ## Architecture beyond V1
 
-V1 implements L1 and L4 inside a single Set. The full model:
+V1 implements L1 and L4 inside a single Set. The full model — **six positions in the
+architecture, which is not the IR's list of five `kind`s**: `L1` through `L4` are in both,
+`Field` is a kind with no row here, and `L0` and `L5` have a row here and no `kind` file at
+all, because [ir-spec.md](ir-spec.md) says outright there is no `kind L5` — compositing has
+no code to lower. *Layer* in this column is the model position and nothing else; see
+[What the three words mean, and where](#what-the-three-words-mean-and-where).
 
-| Layer | Role | Milestone |
+| Layer (model position) | Role | Milestone |
 |---|---|---|
 | L0 | Signal bus. Synthesized values from M1; audio, tempo and MIDI landed in M2 | M1 / M2 |
 | L1 | Geometry generation. Vertices, particles, SDF builtins used inline. Built, and `kind Field` made the SDF builtins reachable: `examples/melt_blob.kir` is a shape and nothing else, `examples/field_march.kir` marches one | M1 / M3 |
@@ -67,7 +76,10 @@ V1 implements L1 and L4 inside a single Set. The full model:
 
 Orthogonal to the layers:
 
-- **Control plane** — node agents, director, mix agent, generation worker (M6). **MCP
+- **Control plane** — agents, director, mix agent, generation worker (M6). **What an agent
+  is one *of* is undecided**: this roster said *node agents* and M6 below asks for one per
+  deck slot, which is the same disagreement as *What authority is set on*, and naming it
+  either way here would settle it by wording. **MCP
   arrived early and took a bite out of this**: an external model driving the system through
   the same records a key press writes is M6's stated demand, arriving from outside the
   process. What it does not cover is the autonomous half — an agent that prepares material
@@ -968,10 +980,11 @@ than work, and every one of them was found by building the thing next to it.
   [the seven rules](manual/index.html) says *"Authority is per node, never a global mode ... Each
   node of a Set is manual, suggesting, or automatic, and you set that node by node"*;
   [the console page](manual/console.html) says *"`man / sug / auto` on each node head, never a
-  global mode"* and draws the control on a node head addressed `L1:0`; and M6 below asks for
-  *"Slot agents, one per slot rather than per graph node"* while the bullet under it demotes
-  *"that layer's agent"*. A layer, a node of a Set and a slot are three different things to
-  address, and a control set per node is not the same control as one set per slot.
+  global mode"* and draws the control on a node head addressed `L1:0`; and M6 below asked
+  for *"Slot agents, one per slot rather than per graph node"* while the bullet under it
+  demoted *"that layer's agent"* — both now marked as this question rather than reworded
+  into an answer. A layer, a node of a Set and a deck slot are three different things to
+  address, and a control set per node is not the same control as one set per deck slot.
   [P-0031](principles/0031-a-name-means-one-thing-across-the-system.md) is what makes this a defect
   rather than a difference of wording — *"One signal name is one signal, at one confidence,
   whichever code path reaches it"*, and *"it is not enough to be disjoint in practice; they have to
@@ -979,6 +992,9 @@ than work, and every one of them was found by building the thing next to it.
   above: that row is named as blocked on `man / sug / auto` existing nowhere at all, and what it is
   really waiting on is which address the control is per — because an implementation would have to
   pick one, and picking one from the code is the specification written backwards. Not taken here.
+  **What has been taken is the wording**: which sense each of the three words carries where is
+  [What the three words mean, and where](#what-the-three-words-mean-and-where), below, so the
+  next change can be written without re-deriving it.
 - **What `expand` under a solo should do.** `Layout::soloed()` can lie: the solve never reads it and
   `check_structure` only checks that it addresses a node, so a solo's exclusivity lives in flags any
   later `expand` may contradict. Nothing reaches that state today.
@@ -988,6 +1004,79 @@ than work, and every one of them was found by building the thing next to it.
   an operation), and the camera.
 - **The console's window has no `a`.** `karakuri-cli`'s snaps the window to the canvas so a capture
   is one texel to one texel; ADR-0181 made the picture the canvas's shape and created that gap.
+
+#### What the three words mean, and where
+
+Three words each carry more than one sense, and that — rather than the granularity itself —
+is what made *What authority is set on* unrecordable:
+[P-0031](principles/0031-a-name-means-one-thing-across-the-system.md) asks that names be
+*"disjoint by name"* and not merely *"disjoint in practice"*, so a decision written in words
+that mean two things is a defect and not a wording preference. This is the table the next
+change is written from. **It takes none of the decisions.**
+
+**`layer` carries three senses.**
+
+- **A kind** — what a procedure lowers to: `L1`, `L2`, `L3`, `L4`, `Field`. This is the
+  `layer` field on a `slot`, `capacity`, `param`, `bind` and `procedure` record, the
+  `karakuri_store::record::Layer` type and `karakuri_operation::Layer`. There are **five**,
+  and [ir-spec.md](ir-spec.md) says outright there is no `kind L5`, because compositing has
+  no code to lower. A bare *layer* in `docs/ir-spec.md` means this.
+- **A position in the architecture model** — the six rows `L0` through `L5` in *Architecture
+  beyond V1*, above. Overlaps the kinds on four: `L0` and `L5` have a row and no `kind`
+  file, and `Field` is a kind with no row.
+- **What one deck slot contributes to the mix**, stacked in deck slot order. **Never written
+  bare**: it is *a deck slot's layer* or *a deck's layer*, with its owner attached.
+  `karakuri-store` already wrote it that way; `karakuri-engine/src/deck.rs`,
+  `docs/ir-spec.md` and this file do now. [Concepts](manual/concepts.html) disowns the loose
+  reading outright — *"A deck is not a layer in an image editor"* — because a deck is running
+  material with its own time, which is why it has a residency rather than a visibility.
+
+**Three sentences in the manual still write the third sense bare and are not fixed here**:
+*"what a layer covers"* and *"a layer that has to disappear"* on
+[the operations page](manual/operations.html), and *"touches what a layer covers"* on
+[the console page](manual/console.html). The manual is the specification the implementation
+is checked against and is being edited elsewhere, so these are reported rather than touched.
+(*"an effect layer's controls"*, also on the console page, is the **kind** sense — `L2` — and
+is right as written.)
+
+Ordinary-English uses of the word are not this vocabulary and are left alone: *the
+persistence layer* in `docs/ir-spec.md`, and *the declaration-plus-adapter layer* and *the
+command layer* in this file.
+
+**`authority` carries two senses, and both are in force.**
+
+- **Where a rule lives** —
+  [P-0076](principles/0076-a-surface-owns-the-affordance-never-the-authority.md): *"A surface
+  owns the affordance, never the authority."* A constraint on what the instrument will accept
+  lives where the record is applied, so every one of the four ways in meets the same wall.
+  This sense is about code, and it is settled.
+- **Who may move a control** — `man / sug / auto`, which is rule 06 of
+  [the seven rules](manual/index.html). This sense is about an operator and an agent, and
+  *what it is set on* is the open question above.
+
+They are not the same word twice by accident. P-0076 is the reason the second one cannot be
+built as a lock the console holds, whichever address it lands on — a rule that binds one
+surface binds none.
+
+**`slot` carries three senses**, and the first two are
+[ADR-0049](adr/0049-slot-means-two-things-and-the-clash-is-recorded.md), which recorded the
+clash rather than resolving it: *"Neither is renamed. The discrepancy is written into the
+vocabulary."*
+
+- **A node of a Set.** `Record::Slot`, and the `slot` lines in a Set file — a procedure at a
+  `(layer, index)` address. Say *a node of a Set*.
+- **A member of the deck.** The `slot: u8` field on every session record, and the deck's own
+  indexing. Say *a deck slot*; `karakuri-store`'s prose now does so everywhere, which it did
+  not before.
+- **A declared input on a node.** `Record::Edge`'s `slot: String` — what `uses far :
+  Geometry` names. Say *an input slot*. This third one is not in ADR-0049 and had no guard
+  at all before.
+
+**What this does not settle.** Whether `man / sug / auto` is per *node of a Set*, per *deck
+slot*, or per *kind*. Three documents still name three different answers, and every place
+this file said one and meant another is now marked as that question rather than reworded
+into an answer — the four properties at the top, the control-plane roster, M5's mode control
+and M6's agents. The next change is the one that picks.
 
 The table below is what exists, part by part. What is still absent, and why, is in the
 milestones further down rather than listed here: agents, the library, the node editor.
@@ -1105,14 +1194,14 @@ governor and is not built, alongside the decision about whether GPU timestamps c
 | Diagnostics | Works, and it turned out to have a second audience. Seventy-three diagnostics carry a `hint`, written to be kind to whoever typed the mistake. The first real MCP session showed they are also **the specification an LLM reads**: denied an example to copy, a model probed the checker instead — safely, because `write_procedure` checks before it writes, so a failed compile changes nothing. `hint: v0.2 defines 'points' only` closed off line primitives in one try — a hint that has since had to be rewritten, because the language grew the primitive it was refusing. And the hint that carried a *reason* — `loop bounds cannot reference a param… cost estimation needs them fixed at parse time` — changed the model's whole approach rather than its syntax: it concluded that integrating a streamline per element was incompatible with the cost model and switched to an analytic curve. **A hint that only corrects syntax produces a procedure that compiles and cannot be afforded.** Every hint should say why |
 | Examples | Twenty-two procedures. **`drift_shell + swirl_warp + soft_points` is the first chain**: an L2 twisting the geometry between the simulation and the draw, which no `.kir` could reach before because a Set was a pair. `drift_shell + soft_points` is the default and is particles; **`drift_shell + drift_streaks` is the same L1 drawn as segments**; **`drift_shell + glass_shell` is the same L1 again, drawn as a solid** — the same cloud that is a lamp under `additive` is an opaque ball under `weighted`; **`drift_shell + field_march` draws no elements at all** and marches a distance field instead; **`drift_shell + melt_blob + field_lens` splits that in two** — `melt_blob` is a shape and nothing else, `field_lens` is a marcher containing no shape, `--edge field_lens.shape=melt_blob` says which shape it marches, and either can be swapped without touching the other. `drift_shell + kaleidoscope + soft_points` turns one point cloud into six; **`drift_shell + beat_jump + soft_points` is the camera written as a procedure** — `beat_jump` cuts to a new angle on the beat and keeps facing the centre, and does it by hashing the beat number, so it holds no state and stays seekable under a scrub; **adding `second_eye` draws the same cloud from a second viewpoint in the same frame** — it declares `uses view : Camera` and `--edge second_eye.view=orbit` points it at the built-in orbit while `soft_points` keeps `beat_jump`; **`drift_shell + swirl_warp + late_bloom + soft_points` stacks two deformations** and `late_bloom` is where a `mask` block earns the layer its claim — three lines of `deform` that are a different effect masked on `age`, on `seed` or on distance, with a `weight` beside it as the fader; **`lattice_shell + sphere_shell + morph + soft_points` is a cube becoming a sphere on one fader** — two geometries in one Set, paired element by element, with `--edge morph.far=sphere_shell` saying which of them the morph reaches for. `beat_strands + beat_strokes + beat_bloom` are three a model wrote over MCP in one session, and what they do with `lines` is not what I would have written — `velocity` redefined as the offset to the next sample, so consecutive segments share an endpoint. **`strand_shell + strand_strokes` is line art made *without* a line primitive**, kept as written now that `lines` exists because it is the measurement of what one topology cost: roughly twice the elements. `beat_shell` reads `beats`, `spark_fountain` spawns and kills |
 | **Rendering primitives** | **Three topologies and two blends.** **`lines` cost the engine nothing** — the same quad, six vertices per instance and a `TriangleList` pipeline, laid along the segment from `clip` to `clip_b` instead of around a point. Both ends of a segment belong to **one element**: no element links to another, deliberately, since an index into the element buffer is what compaction invalidates. **`fullscreen` cost rather more, and it is what the SDF builtins were for** — `sd_sphere`, `sd_box`, `sd_torus`, `sd_plane` and the four CSG operators passed the checker from M1 with nothing able to draw them. An L4 declares it by having **no `vertex` block**, gets `eye` and `ray`, and **consumes nothing** — which is a checked rule rather than a consequence, and is what makes skipping the paired L1's whole simulation provable instead of merely plausible. Its fragment budget is eight times a sprite renderer's, because a fullscreen pass covers the canvas exactly once where sprites overdraw an unknown number of times. **`blend weighted` is the second way fragments combine, and the first way material in this project has ever occluded anything** — weighted blended OIT: an accumulation target, an `R16Float` revealage whose blend state multiplies rather than adds, and a resolve pass. Order independent, so it does not fight compaction the way a depth sort would. It reads `color`'s alpha as *opacity* where `additive` reads it as emission strength, and clamps it, which is the one thing an author has to know. What leaves the resolve is exactly what the additive path leaves — premultiplied colour, coverage in alpha — so **L5 was not touched**: the mix reads a weighted slot without knowing the mode exists |
-| Blend modes | Works: `add`, `over`, `max`. The set is what survives an **unbounded linear HDR** mix rather than what a VJ mixer usually lists — `screen` and `multiply` assume `[0, 1]` and nothing has tone mapped this far up the pipeline, so `screen` of two 2.0s is 0.0. `over` is the only mode in which one layer hides another, and what it hides with is coverage the L4 pass accumulates into alpha; thin material barely covers, which is correct rather than a defect. This is also what finally separates **gain from opacity** — gain is the level the material arrives at, opacity is the fader across the blend and the only control that silences a slot under every mode. What is not built: a layer stack that is anything other than slot order |
+| Blend modes | Works: `add`, `over`, `max`. The set is what survives an **unbounded linear HDR** mix rather than what a VJ mixer usually lists — `screen` and `multiply` assume `[0, 1]` and nothing has tone mapped this far up the pipeline, so `screen` of two 2.0s is 0.0. `over` is the only mode in which one deck slot's layer hides another, and what it hides with is coverage the L4 pass accumulates into alpha; thin material barely covers, which is correct rather than a defect. This is also what finally separates **gain from opacity** — gain is the level the material arrives at, opacity is the fader across the blend and the only control that silences a slot under every mode. What is not built: a stack that is anything other than deck slot order |
 | Priming and the governor | Works. Priming steps a slot and does not draw it — L1 owns every piece of per-element state and L4 is stateless, so warming is the compute passes and nothing else. The governor computes each slot's effective residency from the operator's request and a budget of per-Set costs measured by the probe at build time. It **never demotes a Live slot**: an over-budget deck reports and suspends priming. An unmeasured Live slot means the committed cost is unknown, and unknown is not headroom, so priming is suspended until every slot has been measured |
 | Audio | Works. Analysis runs in the driver's callback, not on the frame path, and the frame reads one small value through a `try_lock` on both sides so neither can block. Level is RMS mapped −60 to −6 dBFS: a mastered track's loud windows sit near the top of that, where a top at 0 dBFS would leave real music between 0.80 and 0.90 and a bound parameter barely moving |
 | Beat tracking | Works. The grid is **predicted, not chased**: once locked it free-runs, takes a slow trim, and moves not at all for a single disagreeing estimate — re-acquiring takes eight consecutive consistent revisions. **The octave is folded, not judged**: every candidate period is halved or doubled into a one-octave window centred on the grid, which starts at `--bpm`. So a window centred an octave off tracks an octave off, `,` and `.` are the fix, and there is deliberately no automatic one — the alternative is a heuristic that can be confidently wrong, which is the failure that shows on stage. A 3:2 error is a different problem and is not touched. The correction leads by the analysis lag plus the output lag, so what is shown lands on the beat rather than behind it |
 | Where the lead comes from | The measurable part is computed and the rest is a **signed operator offset**, on `o`/`p`. That is not a gap waiting for a better sensor: sound and picture leave by different paths, neither ends at this machine, and what has to line up is what a person in the room sees and hears. So the measured half aims at being *stable* rather than complete — a constant unknown costs one adjustment, a drifting one costs the whole night — and the offset goes negative, because a delayed PA makes the sound the late one |
 | Per-slot metering | Works. Mean and peak linear Rec.709 luminance per drawn slot — Live, or being auditioned — reduced on the GPU and read back without ever waiting, so it lags a few frames and says by how many. A slot nobody is drawing reads nothing rather than reading what it last drew. Texels whose luminance is not a finite number are counted and left out of both figures: one NaN admitted to a sum makes the mean NaN, and dividing by a value that reaches zero is ordinary enough in a shader that a routine artifact would otherwise cost a slot the number its fader is set by |
 | `kind Field` | Works. A signed distance function in a file of its own: handed a `point`, it assigns a `distance`, and it draws nothing and holds no elements. **It has a file and no node** — the L5 argument run backwards, since a `kind` says what a procedure lowers to and this has only code to lower — so it is spliced as one WGSL function per *slot* into whichever procedures declare one, and into no others. **A caller says what it takes and the Set says which** — `uses shape : Field` in the header, `shape(p)` in the body, `--edge field_lens.shape=melt_blob` on the command line — and a slot nothing binds is refused rather than filled in from whatever field is lying around. That replaced `field(p)`, a reserved word, which is a breaking change to the language and is exactly what capped a procedure at one field. Its cost is **per evaluation** and the caller pays it once per call, so a marcher and a field that each fit alone can still be refused together, with both figures in the message. Several per Set, each a node with a name and an address of its own |
-| Masks | Works: a straight front at an angle, and an iris, per slot. A mask multiplies the layer's opacity per texel — everything the fader does, done to part of the frame — so it needed no new place in the composite. Both ends of the front are exact, 0 revealing nothing anywhere and 1 revealing everything everywhere, which is what lets a layer masked to nothing be **skipped**: a third escape from material that has gone NaN, beside residency and the fader. **A wipe is a mask and one scheduled move** (`c`), and neither half knows about the other. Out: a mask read from a texture — an arbitrary shape, or another layer's luminance. `kind Field` now exists and is what such a mask would be written as; what is missing is the deck's mask reading one, since `shaders/composite.wgsl` is a hand-written engine shader with a fixed set of mask kinds rather than a generated one |
+| Masks | Works: a straight front at an angle, and an iris, per slot. A mask multiplies that deck slot's layer opacity per texel — everything the fader does, done to part of the frame — so it needed no new place in the composite. Both ends of the front are exact, 0 revealing nothing anywhere and 1 revealing everything everywhere, which is what lets a deck slot masked to nothing be **skipped**: a third escape from material that has gone NaN, beside residency and the fader. **A wipe is a mask and one scheduled move** (`c`), and neither half knows about the other. Out: a mask read from a texture — an arbitrary shape, or another deck slot's luminance. `kind Field` now exists and is what such a mask would be written as; what is missing is the deck's mask reading one, since `shaders/composite.wgsl` is a hand-written engine shader with a fixed set of mask kinds rather than a generated one |
 | Transitions | Works. One scheduled move — a control, a destination, a musical duration, a curve — and a crossfade is two of them sharing a start and a length. `f`/`g` fade the focused slot out and in, `x` crossfades to the next slot, `n` and `j` choose where a fade starts and how long it lasts. **The first thing in the engine that schedules on the beat clock** — the transport already *follows* it — and a fade is a function of the session's beat count and of nothing else, so the same records reproduce it on a machine at a different frame rate and a tempo change mid-fade moves the fade with it. One record schedules the whole move and the values it produces are not recorded, which is `tick`'s shape from the other end. A hand on a control cancels whatever was moving it. A wipe is one of these carrying a mask's front, which is why there is no `wipe` record and no `crossfade` record — the first-class things are the shape and the move |
 | Slot preview | Works. `v` cycles what the output shows: the mix, then each slot. An audition **adds a draw and never a step**, so an off-air slot is drawn while it is being looked at and nothing moves that would not have moved anyway — an allocated slot shows the still it stopped at, a priming one shows what it is warming into. Not a second pass: the mix runs as always with that slot's terms at unity and the others skipped, so what lands is its own texels through the same tone mapper. Shown ignoring its faders, and metered, because the number wanted before putting it on air is the level the material arrives at. What is not built is a default renderer per topology — there is no slot holding geometry with no L4 to draw it, so there is nothing yet for one to do |
 | MIDI in | Works. `--midi-in` opens a port, `--midi-map` says what each knob and pad does, and a mapped message **is** a `karakuri_operation::Operation` — the same name a key press carries, ending in **the same record a key press writes**, so a surface can do nothing a key cannot and a session recorded from one replays with neither attached. A line names a state rather than a step (`residency 0 live`, `blend 0 over`), and a file written against the older spellings is refused line by line with the line to write instead ([ADR-0196](adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)). Eight targets, the newest of which is `mask-position` — a wipe's own front, `[0, 1]` with both ends exact, and a hand on it stops the move that was carrying it; the mask's *shape* has no line, because the grammar has no bare number to write its angle with ([ADR-0202](adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md)). The map is a file and is deliberately **not** in the stream: which knob is which belongs to the hardware in the room. With no map, every message prints the line that would map it, which is how a surface is discovered until M5 has a UI to assign one in. 7-bit; the 14-bit MSB/LSB convention is not implemented, which is about 0.8% of a fader's range per step. **A continuous control says one thing per frame**: the router keeps the last value a fader sent within a frame and drops the ones before it, so a sweep of several hundred messages builds one record rather than several hundred — which is what takes a record's `String` off the frame path on `exposure` and `mask-position`, where P-0001 has no clause for a small allocation. Pads are untouched, because two presses in one frame are two things that happened. What it costs the stream is fewer records for a swept fader and nothing that was ever reconstructible, since a replay applies every record between two `tick`s before drawing the frame they close ([ADR-0207](adr/0207-a-continuous-control-says-one-thing-per-frame.md)). **MIDI out is not built**, so a surface's LEDs and motorised faders do not follow the deck — which starts to matter the moment two things can move one fader, and a transition is now one of them — on the mask's front they are the same number, and a motorised fader is the only thing that could show which of the two last wrote it |
@@ -1549,7 +1638,9 @@ below is blocked on anything else.
   inventing one. Because a rejected candidate costs nothing — the previous artifact is
   still in the library and the slot record still points at it — this is an A/B between two
   versions, not a merge tool
-- Per-layer mode control: Manual / Suggest / Auto
+- The `man / sug / auto` control: Manual / Suggest / Auto — **on an address this document
+  has not settled**, see *What authority is set on*. This bullet said *per-layer*, which is
+  one of the three answers in play and not a decision
 - **Per-slot tempo-sync and beat-sync toggles, with beat-sync greyed out for accumulating
   material.** The two are different requests and only one of them is always available:
   tempo-sync changes the *rate*, which any procedure can follow because it only ever means
@@ -1589,15 +1680,19 @@ below is blocked on anything else.
 
 **Adds**
 
-- Slot agents, one per slot rather than per graph node. Each owns a prompt, watches
-  designated inputs, selects from its prepared variants, and queues generation for material
-  it expects to need. Autonomous selection means choosing among what already exists, never
-  generating on a path the frame waits for
-- Director. Cross-layer coherence — whether the camera behaviour suits the geometry,
-  whether L4 is killing the shape L1 produced
+- Agents, and **what each one is attached to is undecided.** This bullet asked for one per
+  *deck slot* rather than per node of a Set; the architecture roster above said *node
+  agents*; rule 06 of the manual puts authority on a node. That granularity is part of *What
+  authority is set on* and is not taken here. Whatever it is attached to, each owns a prompt,
+  watches designated inputs, selects from its prepared variants, and queues generation for
+  material it expects to need. Autonomous selection means choosing among what already exists,
+  never generating on a path the frame waits for
+- Director. Coherence across the **kinds** — whether the camera behaviour suits the
+  geometry, whether L4 is killing the shape L1 produced
 - Mix agent. Set-level arc, energy trajectory, monitoring for staleness
 - Authority model. Budget constraints ("camera changes at most once per four bars"),
-  and manual intervention instantly demoting that layer's agent to `Suggest`
+  and manual intervention instantly demoting to `Suggest` whichever agent was moving the
+  control — *which* agent that is depends on the undecided granularity above
 - Generation queue with priority and cost awareness
 
 **Demands on earlier work**

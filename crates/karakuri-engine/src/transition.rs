@@ -88,7 +88,7 @@ pub enum Control {
     /// **How far a mask's front has travelled**, `[0, 1]`.
     ///
     /// This is what makes a wipe a transition rather than a mode: an incoming
-    /// layer under `over`, with a linear mask, and one scheduled move carrying
+    /// deck slot's layer under `over`, with a linear mask, and one scheduled move carrying
     /// this from 0 to 1. Neither half had to know about the other — the
     /// transition moves a number and the mask reads one.
     ///
@@ -341,7 +341,7 @@ mod tests {
     }
 
     /// **Both ends are exact.** A fade that stops a hair short of silence
-    /// leaves a layer contributing something the operator asked to be gone, and
+    /// leaves a slot contributing something the operator asked to be gone, and
     /// one that stops short of unity leaves a slot quietly below every other.
     #[test]
     fn a_transition_is_exact_at_both_ends_under_every_curve() {

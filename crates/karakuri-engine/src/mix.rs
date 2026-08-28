@@ -43,7 +43,7 @@ pub struct Input {
     /// The level the material arrives at. Colour only.
     pub gain: f32,
     /// The fader across the blend, `[0, 1]`. The only one of the two that
-    /// touches what a layer covers.
+    /// touches what this input covers.
     pub opacity: f32,
     pub blend: Blend,
     /// What shape of the frame this input reaches.
