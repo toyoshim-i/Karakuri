@@ -9,9 +9,11 @@
 //!    invented for a panel that has none. It is asserted by drawing a frame
 //!    and counting what landed in the row, because *nothing is drawn* is a
 //!    claim about the paint pass and not about a rectangle.
-//! 2. **That the beat grid lights the beat the position says**, across a bar
+//! 2. **That the beat grid draws the position it is handed**, across a bar
 //!    boundary, at beat zero, and at the two edges arithmetic on an `f64` gets
-//!    wrong.
+//!    wrong — and that what it draws between two beats is a light on its way
+//!    from one dot to the next rather than a dot switching
+//!    ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
 //! 3. Where everything in the row is, derived from the row's own geometry and
 //!    the mock's boxes.
 //! 4. **That nothing in it is a control**, which is the answer stated rather
@@ -31,7 +33,7 @@ use common::{drawn_once, id_of, near, rect_of, solved, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{size, Room};
-use karakuri_console::view::{transport, Transport, TransportRow, View};
+use karakuri_console::view::{beat_at, transport, Transport, TransportRow, View};
 use karakuri_layout::{Point, Rect};
 
 /// **The mock's own transport, as numbers**: `128.0 BPM`, the first beat of
@@ -436,78 +438,103 @@ fn a_folded_or_soloed_or_narrow_row_draws_nothing() {
 // The beat grid
 // ---------------------------------------------------------------------------
 
-/// **The lit dot and the bar are one number read two ways**, and this is that
-/// number walked across a bar boundary.
+/// **The position of the light and the bar are one number read two ways**, and
+/// this is that number walked across a bar boundary.
 ///
 /// Four beats to the bar, so beats 0 through 3 are bar 1 and beat 4 is bar 2 —
-/// the boundary is where a beat index that counted from the session instead of
+/// the boundary is where a position that counted from the session instead of
 /// from the bar shows itself, and where a bar that counted from zero does.
-/// The half-beats are there because `beats` is a position and not a count: the
-/// grid lights the beat that has started, so 1.5 is still beat 1.
+/// **The half-beats are the half of this the grid used to throw away**: the
+/// light is between two dots at 1.5, and where it is at every instant is what
+/// the grid draws now (ADR-0212).
 #[test]
-fn the_beat_grid_lights_the_beat_the_position_says() {
-    for (beats, beat, bar) in [
-        (0.0, 0, 1),
-        (0.5, 0, 1),
-        (1.0, 1, 1),
-        (1.5, 1, 1),
-        (3.0, 3, 1),
-        (3.999, 3, 1),
+fn the_grid_reads_the_position_the_beats_say() {
+    for (beats, at, bar) in [
+        (0.0, 0.0, 1),
+        (0.5, 0.5, 1),
+        (1.0, 1.0, 1),
+        (1.5, 1.5, 1),
+        (3.0, 3.0, 1),
         // The bar boundary, from both sides.
-        (4.0, 0, 2),
-        (4.25, 0, 2),
-        (7.0, 3, 2),
-        (8.0, 0, 3),
+        (4.0, 0.0, 2),
+        (4.25, 0.25, 2),
+        (7.0, 3.0, 2),
+        (8.0, 0.0, 3),
         // The mock's own reading: the first beat of bar 37.
-        (144.0, 0, 37),
-        (147.0, 3, 37),
-        (148.0, 0, 38),
+        (144.0, 0.0, 37),
+        (147.0, 3.0, 37),
+        (148.0, 0.0, 38),
     ] {
         let t = Transport { beats, ..mock() };
-        assert_eq!(t.beat(), beat, "beat {beats} lights dot {}", t.beat());
+        assert!(
+            near(t.position(), at),
+            "beat {beats} put the light at {}",
+            t.position()
+        );
         assert_eq!(t.bar(), bar, "beat {beats} is in bar {}", t.bar());
     }
 }
 
-/// **Beat zero is a dot and not the absence of one**, and the two ways an
-/// `f64` gets it wrong are here rather than left to be discovered on a panel.
+/// **Beat zero is a place on the grid and not the absence of one**, and the
+/// two ways an `f64` gets it wrong are here rather than left to be discovered
+/// on a panel.
 ///
 /// - **A position a hair before the downbeat.** `(-1e-18).rem_euclid(4.0)` is
 ///   `4.0` exactly — the true remainder is a hair under the divisor and rounds
-///   up to it — which is one dot past the end of a four-dot grid: a panic on
-///   `TransportRow::dot`, or a dot painted beside the grid.
+///   up to it. As a dot *index* that was one past the end of a four-dot grid
+///   and had to be clamped; as a position it is the downbeat, because
+///   `beat_at` measures round the cycle and `4.0` is no distance at all from
+///   the first dot. **The clamp went with the index** (ADR-0212), so what this
+///   asserts now is that the light lands on dot 0 rather than that a number
+///   was caught on the way out.
 /// - **A position before the session's own zero.** `Oscillator::behind` reads
 ///   the same grid at an earlier time, which is what a slot warming behind the
-///   session is, and a `%` on a negative is negative: a dot index no grid has.
+///   session is, and a `%` on a negative is negative: a position no grid has.
 #[test]
-fn beat_zero_and_the_beats_before_it_are_dots_this_grid_has() {
+fn beat_zero_and_the_beats_before_it_are_places_on_this_grid() {
     for beats in [0.0, -1e-18, -0.5, -1.0, -4.0, -4.5, -7.9] {
         let t = Transport { beats, ..mock() };
         assert!(
-            t.beat() < t.dots(),
-            "beat {beats} lights dot {} of a grid of {}",
-            t.beat(),
+            (0.0..=t.dots() as f32).contains(&t.position()),
+            "beat {beats} put the light at {} on a grid of {}",
+            t.position(),
             t.dots()
+        );
+        // Whatever the position is, the light is on the grid: the four dots
+        // add up to exactly one dot's worth of light, wherever it is sitting.
+        let total: f32 = (0..t.dots())
+            .map(|i| beat_at(t.position(), i, t.dots()))
+            .sum();
+        assert!(
+            near(total, 1.0),
+            "beat {beats} lit {total} dots' worth of grid"
         );
     }
 
-    // Named, because each one is a different way of being wrong.
-    assert_eq!(
-        Transport {
-            beats: -1e-18,
-            ..mock()
-        }
-        .beat(),
-        3
-    );
-    assert_eq!(
+    // The hair before the downbeat is the downbeat, and it is dot 0 that is
+    // lit rather than dot 3 or a rectangle beside the grid.
+    let edge = Transport {
+        beats: -1e-18,
+        ..mock()
+    };
+    assert!(near(edge.position(), 4.0));
+    assert!(near(beat_at(edge.position(), 0, 4), 1.0));
+    for index in 1..4 {
+        assert_eq!(beat_at(edge.position(), index, 4), 0.0);
+    }
+
+    // Named, because each one is a different way of being wrong. Half a beat
+    // before the session's zero is half a beat before the downbeat, which is
+    // between the last dot and the first — and the bar it is in is the one
+    // before the first.
+    assert!(near(
         Transport {
             beats: -0.5,
             ..mock()
         }
-        .beat(),
-        3
-    );
+        .position(),
+        3.5
+    ));
     assert_eq!(
         Transport {
             beats: -0.5,
@@ -516,14 +543,14 @@ fn beat_zero_and_the_beats_before_it_are_dots_this_grid_has() {
         .bar(),
         0
     );
-    assert_eq!(
+    assert!(near(
         Transport {
             beats: -4.5,
             ..mock()
         }
-        .beat(),
-        3
-    );
+        .position(),
+        3.5
+    ));
     assert_eq!(
         Transport {
             beats: -4.5,
@@ -533,29 +560,114 @@ fn beat_zero_and_the_beats_before_it_are_dots_this_grid_has() {
         -1
     );
 
-    // And the lit dot the row hands the painter is one the grid has, at every
+    // And every dot the row hands the painter is one the grid has, at every
     // one of them.
     let (panel, ctx) = console(PLAUSIBLE);
     for beats in [0.0, -1e-18, -0.5, 3.999, 144.0] {
         let values = Transport { beats, ..mock() };
         let row = transport(&ctx, panel.layout(), Some(values)).expect("a row");
-        assert!(row.on < row.dots, "beat {beats} lit dot {} of 4", row.on);
-        assert!(row.grid.contains_rect(row.dot(row.on)));
+        for index in 0..row.dots {
+            assert!(row.grid.contains_rect(row.dot(index)));
+            assert!(
+                (0.0..=1.0).contains(&row.lit(index)),
+                "beat {beats} lit dot {index} by {}",
+                row.lit(index)
+            );
+        }
     }
 }
 
-/// **The dot the position lights is the one painted pink**, which is the
-/// claim above followed all the way to the paint pass.
+/// **The light is a pure function of the position it is handed**, and this is
+/// that function on its own — no row, no panel, no `egui` and no clock.
 ///
-/// `Transport::beat` is arithmetic and `TransportRow::on` is that arithmetic
-/// carried, and neither of them is a colour: a grid that lit the right index
-/// and painted the wrong dot would pass every assertion above. So this draws
-/// the frame and counts the dots by their fill — `.beat-grid i` is
-/// `--c-line`, `.beat-grid i.on` is `--c-pink` — and walks the beat across a
-/// bar, checking each time that exactly one is lit and that it is the one at
-/// the position.
+/// `beat_at` is [`karakuri_console::view::roll_at`]'s shape one row up
+/// (ADR-0212), and the four claims below are the presentation: it peaks under
+/// the light, it is exactly dark a dot pitch away, the grid's total light is
+/// constant wherever the light is sitting, and it measures **round the
+/// cycle** so the last dot and the first are one pitch apart rather than
+/// three.
+///
+/// **Run against its defect**: a falloff measured along the row rather than
+/// round it — `(index as f32 - at).abs()` — fails the wrap with *"the light at
+/// 3.5 of 4 lit dot 0 by 0"*, which is the light disappearing off the
+/// right-hand end of the grid and reappearing at the left a quarter of a beat
+/// later.
 #[test]
-fn the_lit_dot_is_the_pink_one_and_there_is_exactly_one() {
+fn the_light_is_a_pure_function_of_the_position() {
+    // On a dot: all of the light, and none anywhere else.
+    for index in 0..4 {
+        assert!(near(beat_at(index as f32, index, 4), 1.0));
+        for other in 0..4 {
+            if other != index {
+                assert_eq!(
+                    beat_at(index as f32, other, 4),
+                    0.0,
+                    "the light on dot {index} reached dot {other}"
+                );
+            }
+        }
+    }
+
+    // Between two dots: both of them, and nothing else. Halfway is half each,
+    // which is the raised cosine's own midpoint.
+    assert!(near(beat_at(1.5, 1, 4), 0.5));
+    assert!(near(beat_at(1.5, 2, 4), 0.5));
+    assert_eq!(beat_at(1.5, 0, 4), 0.0);
+    assert_eq!(beat_at(1.5, 3, 4), 0.0);
+
+    // **Round the cycle.** Between the last dot and the first, which is one
+    // pitch and not three: the light leaves the right-hand end and arrives at
+    // the left in the same instant.
+    assert!(near(beat_at(3.5, 3, 4), 0.5));
+    assert!(
+        near(beat_at(3.5, 0, 4), 0.5),
+        "the light at 3.5 of 4 lit dot 0 by {}",
+        beat_at(3.5, 0, 4)
+    );
+    assert_eq!(beat_at(3.5, 1, 4), 0.0);
+    assert_eq!(beat_at(3.5, 2, 4), 0.0);
+
+    // **The grid's total light is constant**, walked round a whole bar: the
+    // row does not brighten and dim as the light travels, so a still grid at
+    // half brightness is not a picture this can draw and a stop is visible.
+    for step in 0..=64 {
+        let at = step as f32 / 64.0 * 4.0;
+        let total: f32 = (0..4).map(|index| beat_at(at, index, 4)).sum();
+        assert!(
+            near(total, 1.0),
+            "the light at {at} lit {total} dots' worth of grid"
+        );
+        // And never more than two dots at once, which is what makes it a
+        // light with a position rather than a row that pulses.
+        assert!((0..4).filter(|&index| beat_at(at, index, 4) > 0.0).count() <= 2);
+    }
+
+    // A bar of one beat is a grid of one dot, and it holds all of the light
+    // wherever the position is — the nearest thing to a grid there is.
+    for at in [0.0, 0.25, 0.5, 0.99] {
+        assert!(near(beat_at(at, 0, 1), 1.0));
+    }
+}
+
+/// **At the instant of a beat the grid is the mock's own picture**, which is
+/// the claim above followed all the way to the paint pass.
+///
+/// `Transport::position` is arithmetic and `TransportRow::at` is that
+/// arithmetic carried, and neither of them is a colour: a grid that read the
+/// right position and painted the wrong dot would pass every assertion above.
+/// So this draws the frame and counts the dots by their fill — `.beat-grid i`
+/// is `--c-line`, `.beat-grid i.on` is `--c-pink` — and walks the light from
+/// beat to beat, checking each time that **exactly one** dot is fully lit,
+/// that it is the one the light is on, and that the other three are exactly
+/// the unlit colour.
+///
+/// **That is the mock's markup**, `<i class="on"></i><i></i><i></i><i></i>`,
+/// and it is why the mock did not have to be contradicted to make the beat
+/// continuous: it is a frame of the travel rather than a different drawing
+/// (ADR-0212). What happens between two of these frames is
+/// `between_two_beats_the_light_is_on_two_dots_and_the_halo_follows_it`.
+#[test]
+fn at_the_instant_of_a_beat_the_grid_is_the_mocks_picture() {
     let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
     panel.solve();
     let strip = rect_of(panel.layout(), "transport");
@@ -564,7 +676,7 @@ fn the_lit_dot_is_the_pink_one_and_there_is_exactly_one() {
     let pal = Room::Day.palette();
     let mut view = View::new(Room::Day);
 
-    for (beats, beat) in [(0.0, 0), (1.0, 1), (2.5, 2), (3.0, 3), (4.0, 0), (147.0, 3)] {
+    for (beats, beat) in [(0.0, 0), (1.0, 1), (2.0, 2), (3.0, 3), (4.0, 0), (147.0, 3)] {
         let values = Transport { beats, ..mock() };
         view.transport = Some(values);
         let row = transport(&drawn_once(), panel.layout(), Some(values)).expect("a row");
@@ -593,8 +705,10 @@ fn the_lit_dot_is_the_pink_one_and_there_is_exactly_one() {
             .collect();
         assert_eq!(dots.len(), 4, "beat {beats} drew {} dots", dots.len());
 
-        // The halo: one, in `--c-glowp`, at the blur the CSS names, and on the
-        // dot the beat lit.
+        // The halo: one, in `--c-glowp` at full strength, at the blur the CSS
+        // names, and on the dot the light is on. It is scaled by how much of
+        // the light is on a dot, so *one at full strength* is the instant of
+        // a beat and nothing else.
         let halos: Vec<&egui::epaint::RectShape> = painted
             .iter()
             .filter(|rect| rect.blur_width > 0.0)
@@ -641,6 +755,100 @@ fn the_lit_dot_is_the_pink_one_and_there_is_exactly_one() {
     }
 }
 
+/// **Between two beats the light is on both dots, and the halo goes with
+/// it** — which is the half of this presentation the mock's still picture
+/// cannot show and the whole of what P-0077 asked for.
+///
+/// [P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)
+/// prefers continuous movement to a discrete flip because a flip proves
+/// liveness *across an interval* — an observer knows the panel was alive
+/// between two flips — where movement proves it *at every instant*. So the
+/// frame drawn halfway between two beats has to be a different picture from
+/// the frame drawn at either of them, and a picture nothing else on this panel
+/// draws: two dots part lit, two halos, and a total light of exactly one dot.
+///
+/// **Run against its defect**: painting the fill as
+/// `match lit > 0.5 { true => pal.pink, false => pal.line }` — a flip with a
+/// threshold, which is what a continuous position drawn discretely comes to —
+/// fails with *"halfway between two beats painted 0 dots between the two
+/// colours, so the light is switching rather than travelling"*.
+#[test]
+fn between_two_beats_the_light_is_on_two_dots_and_the_halo_follows_it() {
+    let mut panel = Panel::new(PLAUSIBLE.w, PLAUSIBLE.h);
+    panel.solve();
+    let strip = rect_of(panel.layout(), "transport");
+    let strip =
+        egui::Rect::from_min_size(egui::pos2(strip.x, strip.y), egui::vec2(strip.w, strip.h));
+    let pal = Room::Day.palette();
+    let mut view = View::new(Room::Day);
+
+    // Halfway between the second dot and the third, and halfway between the
+    // last dot and the first — the second is the one that crosses the bar, and
+    // the light arrives at the left-hand end as it leaves the right-hand one.
+    for (beats, pair) in [(1.5, (1, 2)), (3.5, (3, 0))] {
+        let values = Transport { beats, ..mock() };
+        view.transport = Some(values);
+        let row = transport(&drawn_once(), panel.layout(), Some(values)).expect("a row");
+
+        let painted: Vec<egui::epaint::RectShape> = shapes_inside(&mut view, &mut panel, strip)
+            .into_iter()
+            .filter_map(|shape| match shape {
+                egui::Shape::Rect(rect)
+                    if near(rect.rect.width(), size::BEAT_W)
+                        && near(rect.rect.height(), size::BEAT_H) =>
+                {
+                    Some(rect)
+                }
+                _ => None,
+            })
+            .collect();
+        let dots: Vec<(egui::Rect, egui::Color32)> = painted
+            .iter()
+            .filter(|rect| rect.blur_width == 0.0)
+            .map(|rect| (rect.rect, rect.fill))
+            .collect();
+        assert_eq!(dots.len(), 4, "beat {beats} drew {} dots", dots.len());
+
+        // **Two dots between the two colours**, and they are the two the
+        // light is between.
+        let between: Vec<egui::Rect> = dots
+            .iter()
+            .filter(|(_, fill)| *fill != pal.line && *fill != pal.pink)
+            .map(|(rect, _)| *rect)
+            .collect();
+        assert_eq!(
+            between.len(),
+            2,
+            "halfway between two beats painted {} dots between the two colours, so the \
+             light is switching rather than travelling",
+            between.len()
+        );
+        assert!(between.contains(&row.dot(pair.0)) && between.contains(&row.dot(pair.1)));
+        assert!(near(row.lit(pair.0), 0.5) && near(row.lit(pair.1), 0.5));
+
+        // **Two halos**, one under each, and each of them fainter than the
+        // one a whole beat draws — the light is spread across the two rather
+        // than lit twice over.
+        let halos: Vec<&egui::epaint::RectShape> = painted
+            .iter()
+            .filter(|rect| rect.blur_width > 0.0)
+            .collect();
+        assert_eq!(
+            halos.len(),
+            2,
+            "beat {beats} drew {} halos and the light is on two dots",
+            halos.len()
+        );
+        for halo in &halos {
+            assert!(near(halo.blur_width, size::BEAT_GLOW as f32));
+            assert!(
+                halo.fill.a() < pal.glow_pink.a(),
+                "a dot with half the light on it drew a halo at full strength"
+            );
+        }
+    }
+}
+
 /// **How many beats there are in a bar is the harness's answer and not a
 /// constant here**, so a grid of three is three dots and lights the third.
 ///
@@ -657,12 +865,13 @@ fn the_grid_is_as_many_dots_as_the_bar_has_beats() {
             beats,
             ..mock()
         };
-        assert_eq!(values.beat(), beat);
+        assert!(near(values.position(), beat as f32));
         assert_eq!(values.bar(), bar);
 
         let row = transport(&ctx, panel.layout(), Some(values)).expect("a row");
         assert_eq!(row.dots, beats_per_bar);
-        assert_eq!(row.on, beat);
+        assert!(near(row.at, beat as f32));
+        assert!(near(row.lit(beat), 1.0), "the light is not on dot {beat}");
         assert!(
             near(
                 row.grid.width(),
@@ -681,7 +890,7 @@ fn the_grid_is_as_many_dots_as_the_bar_has_beats() {
         ..mock()
     };
     assert_eq!(none.dots(), 1);
-    assert_eq!(none.beat(), 0);
+    assert_eq!(none.position(), 0.0);
     let row = transport(&ctx, panel.layout(), Some(none)).expect("a row");
     assert_eq!(row.dots, 1);
     assert!(near(row.grid.width(), size::BEAT_W));
@@ -798,7 +1007,7 @@ fn nothing_in_the_transport_row_is_a_control() {
         (row.bpm.center(), "the tempo"),
         (row.label.center(), "the BPM label"),
         (row.grid.center(), "the beat grid"),
-        (row.dot(row.on).center(), "the lit beat"),
+        (row.dot(0).center(), "the dot the light is on"),
         (row.dot(row.dots - 1).center(), "the last beat"),
         (row.bar.center(), "the bar"),
         (row.frame.center(), "the frame readout"),
@@ -865,8 +1074,8 @@ fn the_values_are_the_harnesss_and_are_stored_nowhere() {
         "two different transports drew the same row, so something in it is not coming \
          from the argument"
     );
-    assert_eq!(first.on, 0);
-    assert_eq!(other.on, 0);
+    assert_eq!(first.at, 0.0);
+    assert_eq!(other.at, 0.0);
     assert_eq!(other.dots, 3, "the grid did not follow the bar's beats");
     assert_ne!(
         first.bpm.width(),

@@ -1539,21 +1539,39 @@ impl Transport {
         self.beats_per_bar.max(1)
     }
 
-    /// **Which dot is lit**: the beat within the current bar, from zero.
+    /// **Where the beat is inside the current bar**, from zero, and
+    /// continuous: `0.0` is on the first dot, `1.5` is halfway between the
+    /// second and the third, and `3.75` is three quarters of the way from the
+    /// last dot back round to the first.
+    ///
+    /// **A position and not an index**, which is the whole of what the grid
+    /// draws now
+    /// ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)):
+    /// the light is somewhere on the grid at every instant rather than on one
+    /// dot at a time, so what the row reads is the fractional beat the
+    /// oscillator already accumulates rather than a truncation of it. The
+    /// fraction was always in [`Transport::beats`] and was thrown away here.
+    ///
+    /// **It is the whole of the beat's motion, and it is not a clock.** No
+    /// second value is written for the grid and none is derived from
+    /// [`Phase`]: the beat moves because the session moves, which is what a
+    /// beat grid is for, and a wall-clock sweep would go on sweeping at its
+    /// own rate over a session running at another one — see [`beat_at`].
     ///
     /// `rem_euclid` rather than `%` because [`Transport::beats`] can be
     /// negative — `Oscillator::behind` reads the same grid at an earlier time,
     /// and a slot warming behind the session is exactly what that is for — and
-    /// `%` on a negative is negative, which is a dot index no grid has.
+    /// `%` on a negative is negative, which is a position no grid has.
     ///
-    /// **The clamp on the way out is not belt and braces.** `(-1e-18_f64)
+    /// **The clamp this used to need went with the index.** `(-1e-18_f64)
     /// .rem_euclid(4.0)` is `4.0` exactly: the true remainder is a hair under
-    /// the divisor and rounds up to it. That is one dot past the end of the
-    /// grid, which is a rectangle drawn beside it or a panic on an index, for
-    /// a value that is *just before* the downbeat.
-    pub fn beat(&self) -> u32 {
-        let dots = self.dots();
-        (self.beats.rem_euclid(dots as f64) as u32).min(dots - 1)
+    /// the divisor and rounds up to it. As a dot *index* that was one past the
+    /// end of the grid — a rectangle drawn beside it, or a panic — and it was
+    /// clamped. As a *position* it is the downbeat: `4.0` and `0.0` are the
+    /// same point on a cycle of four, [`beat_at`] measures round the cycle,
+    /// and the value arrives where it belongs with nothing written for it.
+    pub fn position(&self) -> f32 {
+        self.beats.rem_euclid(self.dots() as f64) as f32
     }
 
     /// **Which bar it is, counting from one** — the `37` in the mock's
@@ -1627,8 +1645,10 @@ impl Transport {
 ///
 /// # No tooltips, for the reason the Outputs row has none
 ///
-/// Four of the mock's ten items carry a `data-tip` and two of the four drawn
-/// ones do. A tooltip needs `egui` to own a widget, this console paints, and
+/// Five of the mock's ten items carry a `data-tip` and three of the four drawn
+/// ones do — the beat grid's is what the travelling light means, and it landed
+/// with the light
+/// ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)). A tooltip needs `egui` to own a widget, this console paints, and
 /// giving one readout a widget is a decision about who owns the pointer — see
 /// [`outputs`], where the same sentence is written about a control.
 ///
@@ -1683,9 +1703,12 @@ pub struct TransportRow {
     /// How many dots are in that grid — [`Transport::dots`], carried so the
     /// painter and a test read the same number the width was built from.
     pub dots: u32,
-    /// **Which of them is lit**: [`Transport::beat`], which is always a dot
-    /// this grid has.
-    pub on: u32,
+    /// **Where the light is**, in beats from the first dot's centre —
+    /// [`Transport::position`], carried for the reason [`TransportRow::dots`]
+    /// is carried: the painter and a test read the one number the row was
+    /// measured from. How much of it lands on any given dot is
+    /// [`TransportRow::lit`].
+    pub at: f32,
     /// `bar 37`.
     pub bar: Rect,
     /// The frame readout, pushed to the right edge by the `.sep`.
@@ -1714,12 +1737,134 @@ impl TransportRow {
     pub fn dot(&self, index: u32) -> Rect {
         assert!(index < self.dots, "dot {index} of a grid of {}", self.dots);
         Rect::from_min_size(
-            Pos2::new(
-                self.grid.min.x + (size::BEAT_W + size::BEAT_GAP) * index as f32,
-                self.grid.min.y,
-            ),
+            Pos2::new(self.grid.min.x + BEAT_PITCH * index as f32, self.grid.min.y),
             egui::vec2(size::BEAT_W, size::BEAT_H),
         )
+    }
+
+    /// **How much of the light is on the dot at `index` this frame**, from
+    /// `0.0` to `1.0` — [`beat_at`] at this row's position, so the painter and
+    /// a test ask one question and get one answer.
+    ///
+    /// Panics on a dot this grid has not got, for [`TransportRow::dot`]'s
+    /// reason.
+    pub fn lit(&self, index: u32) -> f32 {
+        assert!(index < self.dots, "dot {index} of a grid of {}", self.dots);
+        beat_at(self.at, index, self.dots)
+    }
+}
+
+/// **From one dot to the next**: [`size::BEAT_W`] and the [`size::BEAT_GAP`]
+/// after it, which is what one beat of travel measures on this grid.
+///
+/// Derived rather than transcribed: the mock declares an item width and a flex
+/// `gap`, and the pitch of a flex row is the one plus the other. It is the
+/// unit [`beat_at`] measures in and the unit [`TransportRow::dot`] steps by,
+/// which is why it is a constant rather than the same sum written twice.
+pub const BEAT_PITCH: f32 = size::BEAT_W + size::BEAT_GAP;
+
+/// **The tempo this row is drawn at in the mock** — `.bpm`'s `128.0` — in
+/// thousandths of a beat a minute, so [`BEAT_STALENESS`]'s arithmetic stays in
+/// integers.
+const MOCK_BPM_MILLI: u64 = 128_000;
+
+/// **One beat at that tempo**, in microseconds: 468 750, which is 468.75 ms.
+const BEAT_MICROS: u64 = 60 * 1_000_000 * 1_000 / MOCK_BPM_MILLI;
+
+/// **How many steps one beat of travel is drawn in**: the pixels in one
+/// [`BEAT_PITCH`], so the light moves by at most one of them between updates.
+///
+/// [`ROLL_STEPS`]'s shape and a different answer, because the two motions are
+/// different sizes: the roll travels a few pixels of a word's pitch and twelve
+/// steps is smooth over it, where the light crosses a whole dot and a gap
+/// every beat.
+const BEAT_STEPS: u64 = BEAT_PITCH as u64;
+
+/// **How stale the beat grid may get**, which is what the transport row
+/// declares under
+/// [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)
+/// and what the harness turns into a deadline.
+///
+/// [`BEAT_MICROS`] in [`BEAT_STEPS`] steps — **24.67 ms, about forty a
+/// second**. One beat of travel is one [`BEAT_PITCH`], so this is the light
+/// moving by one pixel and no more, which is the coarsest step that reads as a
+/// movement rather than as a sequence of positions
+/// ([P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)).
+///
+/// **Stated at the mock's tempo, and it is the one number here that the music
+/// moves.** A beat is 468.75 ms at 128.0 BPM and 375 ms at 160, so the same
+/// declaration is a pixel and a quarter a step up there. The alternative —
+/// derive it per frame from [`Transport::bpm`], which the row is handed — is
+/// [ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md),
+/// and it lost on what it does to the arithmetic rather than on the drawing: a
+/// staleness that falls with the tempo makes `Σ (cost / staleness)` a function
+/// of how fast the music is, so the two schedulability conditions could only
+/// be asserted against a fastest tempo nobody has written down — and inventing
+/// one inside the test that noticed it was missing is exactly what
+/// [ADR-0210](../../../docs/adr/0210-a-declared-cost-is-one-panel-pass-written-down-and-held-against-the-run.md)
+/// refused for the panel's share of the budget.
+///
+/// **Finer than [`ROLL_STALENESS`]'s 33.33 ms and coarser than a frame**, and
+/// both are the presentation rather than a preference for frames: the roll
+/// travels a few pixels and this crosses the grid, so it wants more steps; and
+/// a 60 Hz frame is 16.6 ms, so a beat grid that asked for every frame would
+/// be asking for more than its own drawing can use.
+pub const BEAT_STALENESS: Duration = Duration::from_micros(BEAT_MICROS / BEAT_STEPS);
+
+/// **How much of the light is on the dot at `index`**, with the light `at`
+/// beats into a bar of `dots`: `1.0` under its centre, `0.0` a whole
+/// [`BEAT_PITCH`] away, and a raised cosine between the two.
+///
+/// # The same curve as [`roll_at`], and two of the reasons are the same
+///
+/// It leaves and arrives at zero **with zero velocity**, so a dot does not
+/// snap into being dark as the light leaves it. And it is a pure function of a
+/// value the harness handed in, so a test asserts it at a position it chose
+/// and nothing samples a clock to find out what the panel is doing.
+///
+/// # Two dots at once, and the row's total light is constant
+///
+/// The falloff is exactly one pitch wide, so at most two dots are lit and
+/// `f(d) + f(1 - d) = 1` for every `d` — the raised cosine's own identity, and
+/// therefore the grid's dots always sum to exactly one dot's worth of light
+/// (every grid but the degenerate one below, which is one dot and holds all of
+/// it). The
+/// light **moves along the grid** rather than the grid brightening and dimming
+/// as it goes, which is what makes a stop visible: a still grid at half
+/// brightness would be indistinguishable from a light sat between two dots.
+///
+/// # Measured round the cycle, not along the row
+///
+/// The bar wraps, so the distance from the last dot to the first is one pitch
+/// and not three: the light leaves the right-hand end of the grid and arrives
+/// at the left-hand end in the same instant, each dot half lit, and there is
+/// no frame on which it jumps. That is also why [`Transport::position`] needs
+/// no clamp — a position of exactly `dots` is a distance of zero from the
+/// first dot.
+///
+/// # What it draws at the instant of a beat is the mock
+///
+/// At a whole `at` the dot under the light is `1.0` and every other is exactly
+/// `0.0`: one dot in `--c-pink` with its halo and the rest in `--c-line`,
+/// which is `.beat-grid i.on` and the four dots the mock's markup draws. **The
+/// mock is a frame of this** rather than a picture this contradicts, and
+/// `docs/manual/style.css` carries the travel between those frames.
+pub fn beat_at(at: f32, index: u32, dots: u32) -> f32 {
+    let dots = dots.max(1) as f32;
+    // **A grid of one dot has nowhere for the light to go**, so it is on that
+    // dot at every position. Measuring round a cycle one pitch long would say
+    // *half lit* halfway through the beat and leave the row dimming with
+    // nothing to dim toward — the identity above wants two dots to share the
+    // light between. This is [`Transport::dots`]' own clamp seen from here: a
+    // bar of no beats is drawn as the nearest thing to a grid there is.
+    if dots < 2.0 {
+        return 1.0;
+    }
+    let round = (index as f32 - at).rem_euclid(dots);
+    let away = round.min(dots - round);
+    match away < 1.0 {
+        true => 0.5 * (1.0 + (away * std::f32::consts::PI).cos()),
+        false => 0.0,
     }
 }
 
@@ -1809,7 +1954,7 @@ fn transport_row(
             label,
             grid,
             dots,
-            on: t.beat(),
+            at: t.position(),
             bar,
             frame,
             values: *t,
@@ -1936,7 +2081,11 @@ fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
 ///   `var(--c-pink)` with `box-shadow: 0 0 9px var(--c-glowp)`. The halo is an
 ///   [`egui::epaint::Shadow`] at [`size::BEAT_GLOW`] with a corner radius of
 ///   half the dot's height, which is the same mechanism the Outputs row's dot
-///   uses for its own glow.
+///   uses for its own glow. **Those two are the ends of a ramp rather than two
+///   states**: [`beat_at`] says how much of the light is on each dot, the fill
+///   is mixed between the two colours by it and the halo is scaled by it, and
+///   the mock's `.on` is what a dot with all of the light on it looks like.
+///   The mock's own travel between those frames is `@keyframes beat-sweep`.
 /// - `bar 37` — `style="color:var(--c-dim)"`, `pal.dim`, *a label beside a
 ///   value*.
 /// - the frame readout — `.val` over `--c-faint`, which is [`frame_job`]'s.
@@ -1965,26 +2114,24 @@ fn transport_into(ui: &Ui, pal: &Palette, row: &TransportRow) {
     let radius = CornerRadius::same((size::BEAT_H * 0.5) as u8);
     for index in 0..row.dots {
         let dot = row.dot(index);
-        let lit = index == row.on;
-        if lit {
+        let lit = row.lit(index);
+        // **The halo belongs to the light rather than to the dot**, so it
+        // fades in and out with it instead of switching. Nothing at all is
+        // added for a dot the light has left: `beat_at` is exactly zero a
+        // pitch away, so a grid of four is one halo at the instant of a beat
+        // and two between two of them, and never four.
+        if lit > 0.0 {
             painter.add(
                 egui::epaint::Shadow {
                     offset: [0, 0],
                     blur: size::BEAT_GLOW,
                     spread: 0,
-                    color: pal.glow_pink,
+                    color: pal.glow_pink.gamma_multiply(lit),
                 }
                 .as_shape(dot, radius),
             );
         }
-        painter.rect_filled(
-            dot,
-            radius,
-            match lit {
-                true => pal.pink,
-                false => pal.line,
-            },
-        );
+        painter.rect_filled(dot, radius, mix(pal.line, pal.pink, lit));
     }
 
     centred(row.bar, painter.layout_job(span(&bar_text(t), pal.dim)));
@@ -4806,19 +4953,31 @@ impl View {
     /// arrangement — by the name every surface addresses it by — and never an
     /// animation, a control or a slice of a frame.
     ///
-    /// # One region, three presentations, one declaration
+    /// # Two regions, at two rates, for two different reasons
     ///
-    /// The mixer bay is the only entry today. Inside it the tally's word rolls
-    /// toward a residency that has not been granted and each of a strip's two
-    /// faders reaches toward a value a transition has not reached yet — three
-    /// presentations at one rate, off one [`Phase`], so they are one term and
-    /// not three
+    /// **The transport row**, whenever the beat grid is drawn: the light
+    /// travels the grid once a bar and it is the panel's continuous motion,
+    /// which [P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)
+    /// says is how a stopped panel announces itself. It declares
+    /// [`BEAT_STALENESS`] and **it does not ask whether anything is pending**,
+    /// which is the whole point of it: a signal that only ran while something
+    /// was happening would be quiet exactly when the panel had gone quiet.
+    ///
+    /// **The mixer bay**, while something in it is outstanding. Inside it the
+    /// tally's word rolls toward a residency that has not been granted and
+    /// each of a strip's two faders reaches toward a value a transition has
+    /// not reached yet — three presentations at one rate, off one [`Phase`],
+    /// so they are one term and not three
     /// ([ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md),
     /// [ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)).
-    /// A second *rate* would be a second declaration; a second *user* of this
-    /// rate is not. The beat is the panel's other candidate and P-0077 wants
-    /// it moving continuously; it is in the transport row, which folds, and it
-    /// would carry its own node here exactly as this one does.
+    /// A second *rate* would be a second declaration; a second *user* of one
+    /// rate is not — which is why the beat is a second entry here and the two
+    /// faders are not.
+    ///
+    /// **This is the first frame on which either sum has two terms**, and
+    /// `tests/schedulable.rs` reads them: `Σ (cost / staleness)` is 0.0889
+    /// against 1.0, and `max(cost)` is still one number because both regions
+    /// declare the same whole panel pass (ADR-0210).
     ///
     /// # Pending is not enough: the region that shows it has to be laid out
     ///
@@ -4865,9 +5024,46 @@ impl View {
     pub fn declares(&self, layout: &karakuri_layout::Layout) -> impl Iterator<Item = Declared> {
         // An array rather than a `Vec`, so asking what the panel declares
         // allocates nothing on a path that is walked every frame — and so that
-        // the second live region is one more element rather than a change of
-        // shape.
-        [self.mixer_declares(layout)].into_iter().flatten()
+        // the second live region was one more element rather than a change of
+        // shape, which is what it turned out to be. In `REGIONS`' order, so
+        // the declarations read down the panel.
+        [self.transport_declares(layout), self.mixer_declares(layout)]
+            .into_iter()
+            .flatten()
+    }
+
+    /// **What the transport row declares**: the beat's staleness for as long
+    /// as the grid is being drawn, and nothing when it is not.
+    ///
+    /// # Two conditions, and neither of them is *pending*
+    ///
+    /// **The row is laid out**, which is ADR-0193 asked of a row rather than
+    /// of a bay — [`Layout::visible`](karakuri_layout::Layout::visible)
+    /// answers for `transport` exactly as it answers for `mixer`, and a folded
+    /// row is not showing a beat, so it cannot be showing one out of date.
+    /// The transport is a direct child of the unnamed root, so the only thing
+    /// that encloses it is the root itself (ADR-0204).
+    ///
+    /// **There are values behind it.** [`View::transport`] is `None` for a
+    /// console with no engine, and [`transport`] draws no row at all then —
+    /// there is no light on a grid that is not there. That is the same seam as
+    /// [`View::picture`] and not a second rule.
+    ///
+    /// **Nothing else is asked, and that is the declaration's whole content.**
+    /// P-0077's forced clause is that *something is moving continuously while
+    /// the console is live*, so a beat that declared only while something was
+    /// pending would be the signal going quiet at the moment it is worth
+    /// having. It is also why this is not folded into
+    /// [`View::mixer_declares`]: two rates, two deadlines, two regions.
+    fn transport_declares(&self, layout: &karakuri_layout::Layout) -> Option<Declared> {
+        let row = layout
+            .find("transport")
+            .is_some_and(|id| layout.visible(id));
+        (row && self.transport.is_some()).then_some(Declared {
+            region: "transport",
+            cost: PANEL_PASS,
+            staleness: BEAT_STALENESS,
+        })
     }
 
     /// **What the mixer bay declares**: the roll's staleness while anything in
@@ -4909,14 +5105,23 @@ impl View {
     /// soonest is in time for every other. Choosing which region a frame is
     /// *for* is a scheduler's, and there is not one.
     ///
-    /// # Nothing pending means nothing moving, and that is the whole of
-    /// P-0072's first clause
+    /// # `None` is the panel saying it is still, and that is now a narrower
+    /// state than *nothing pending*
     ///
     /// `None` is not an absence of information: it is the panel saying it is
     /// still, and the window then sleeps. **A console with no parked slot and
     /// no scheduled move on a fader costs exactly what it cost before either
     /// existed**, which is a claim `tests/parked.rs` and `tests/armed.rs` make
-    /// rather than a hope.
+    /// rather than a hope — and both of them ask it of a console with no
+    /// engine behind it, which is what every test in this crate is.
+    ///
+    /// **With an engine behind it and the transport row on screen this never
+    /// answers `None`**, because the beat is moving and says so
+    /// ([`View::transport_declares`],
+    /// [P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)).
+    /// That is P-0072's first clause narrowing rather than failing: a panel
+    /// with something moving on it is a panel with something changing on it,
+    /// and the reason it is moving is a declaration rather than an accident.
     pub fn animating(&self, layout: &karakuri_layout::Layout) -> Option<Duration> {
         self.declares(layout).map(|live| live.staleness).min()
     }

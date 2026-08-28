@@ -46,40 +46,55 @@ the chosen part, separately.
 it to make room.
 
 **Preference rather than force: continuous movement is a better carrier of this signal than a
-discrete flip.** The beat indicator today lights **exactly one dot** — `TransportRow::on` is
-`Transport::beat`, and `.beat-grid i` is `var(--c-line)` where `.on` is `var(--c-pink)` with a glow
-— so it is a 0/1 switch per dot, changing once a beat, two to four times a second at ordinary
-tempos. That proves liveness **across an interval**: an observer knows the panel was alive between
-two flips, and a stop is only apparent once a flip that was due does not arrive. A continuous
-movement proves it **at every instant**, which is what this signal wants.
+discrete flip.** A flip is a 0/1 switch — the beat grid used to light **exactly one dot**, changing
+once a beat, two to four times a second at ordinary tempos. That proves liveness **across an
+interval**: an observer knows the panel was alive between two flips, and a stop is only apparent
+once a flip that was due does not arrive. A continuous movement proves it **at every instant**,
+which is what this signal wants.
 
-**This is a reason to prefer continuous motion. It is not a decision to change the beat.** The
-maintainer wants the beat analogue eventually and that is where the two lines meet, but nothing here
-settles what the indicator becomes, at what rate, or what it costs — and the discrete grid satisfies
-the forced part today.
+**It is a preference and it has been taken.** The beat grid is now a light that travels the grid
+rather than a dot that switches — `TransportRow::at` is a position, `view::beat_at` says how much of
+the light is on each dot, and the mock's one lit dot is a *frame* of that travel rather than a
+different picture
+([ADR-0212](../adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)). It stays
+marked as preference because it is what a future proposal would have to argue against: what the
+indicator is, at what rate and at what cost is a decision that can be re-taken, where the forced
+clause above cannot.
 
 ## Where it holds
 
-**Nowhere yet, and one of the three reasons has gone.** There is still no scheduler to refuse the
-economy, and the beat grid still moves because the panel redraws rather than because anything
-decided it must. What has changed is the third: **one region now declares a staleness** — a
-staleness and not yet a cost, which is the half of
-[P-0072](0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md) that has a customer
-— the mixer strip's residency chip, which rolls at a rate it names while a request of the
-operator's has not landed
-([ADR-0190](../adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md)).
+**The forced clause holds, and the scheduler that would have to respect it does not exist.**
 
-**That region is not this rule's motion**, and the distinction is the whole of why this file is
-still waiting. The roll runs **only while something is pending**: a console with nothing parked is a
-console with nothing moving on it, which is exactly what P-0072's first clause asks for and exactly
-what this rule says is not enough. What proves the panel is alive has to move whether or not
-anything is happening, and the only thing on this panel that does that is the beat — a discrete
-flip, which satisfies the forced part and is not the continuous carrier this file prefers.
+**What holds.** The beat grid is the panel's continuous motion and it moves on its own account: the
+transport row declares a cost and a staleness — `budget::PANEL_PASS` and `view::BEAT_STALENESS`,
+1.26 ms every 24.67, about forty a second — for as long as the grid is drawn, and
+`repaint::Change::Animating` turns that into the deadline the window waits on. **It does not ask
+whether anything is pending**, which is the sentence this rule is: a console with nothing parked and
+no fade armed goes on moving, where before it went still and looked calm
+([ADR-0212](../adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)). And the
+preference above is met with it — the light is somewhere on the grid at every instant, at most two
+dots carry it, and the four of them always sum to exactly one dot's worth, so a still grid at half
+brightness is not a picture the console can draw.
 
-So the first candidate for the forced clause is still the beat indicator, and the roll is the first
-evidence that the *declaration* half of P-0072 works. This is written **before** the scheduler
-rather than after it: the rest of P-0072 is the next item in [roadmap.md](../roadmap.md)'s order of
-work, and the first thing a budget under pressure offers is this saving.
+**What does not.** *A scheduler may not stop it to make room* is a rule with nothing to bind:
+**there is no scheduler**. P-0072's arbitration is still unbuilt, and what stops this being urgent
+is that both declaring regions fit — `Σ (cost / staleness)` is 0.0889 against 1.0, so nothing has to
+be refused and nothing is choosing. The economy this rule forbids becomes available on the day
+something *does* choose, and the day it does, this file is what it is checked against.
+
+**And the motion is the operator's to fold away.** A folded transport row declares nothing
+([ADR-0193](../adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md)),
+and so does a console with no engine behind it — which is every test in this crate. Neither is the
+economy this rule forbids: what it rules out is the *panel* buying budget by stopping the motion,
+not an operator hiding the row it is in. It is still a hole to know about — the panel has one
+continuous region, and folding one row leaves it with none.
+
+**One region, three presentations, and it is still not this rule's motion.** The mixer bay declares
+too, and it runs **only while something is pending** — the tally's roll toward a residency the
+governor has not granted, and a reach on each of a strip's two faders
+([ADR-0190](../adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md),
+[ADR-0206](../adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)). That is what
+P-0072's first clause asks for and what this rule says is not enough on its own.
 
 Decided in
 [ADR-0189](../adr/0189-motion-may-carry-the-meaning-and-a-stopped-animation-is-a-fault-to-report.md),

@@ -13,16 +13,18 @@
 //! it, and holds its own quoted figure against every run of it). This is the
 //! decision that stops those frames being drawn at all.
 //!
-//! **One region declares a cost and a staleness now, and the scheduler still
-//! does not exist.** [`crate::view::View::declares`] is the declaration —
-//! the mixer bay, while a residency request has not landed or a fade has not
-//! run — and [`Change::Animating`] carries the soonest staleness out of it and
-//! turns that into a deadline. The **cost** reaches nothing here and is not
-//! meant to: both schedulability conditions are arithmetic over the
-//! declarations and `tests/schedulable.rs` asserts them, which is what
-//! P-0072 asks for in place of a stage discovering them. What is still absent
-//! is arbitration — nothing chooses between two regions, because with one
-//! region declaring there is nothing to choose between.
+//! **Two regions declare a cost and a staleness now, and the scheduler still
+//! does not exist.** [`crate::view::View::declares`] is the declaration — the
+//! transport row for as long as the beat grid is drawn, and the mixer bay
+//! while a residency request has not landed or a fade has not run — and
+//! [`Change::Animating`] carries the soonest staleness out of them and turns
+//! that into a deadline. The **cost** reaches nothing here and is not meant
+//! to: both schedulability conditions are arithmetic over the declarations and
+//! `tests/schedulable.rs` asserts them, which is what P-0072 asks for in place
+//! of a stage discovering them. What is still absent is arbitration — nothing
+//! chooses between the two, and nothing has to: `Σ (cost / staleness)` is
+//! 0.0889 against 1.0, so the frame that meets the sooner deadline meets the
+//! other one as well.
 //!
 //! # Why this is a module and not a line beside each handler
 //!
@@ -261,6 +263,15 @@ pub enum Change<'a> {
     /// that is the honest cost rather than an accident: `egui` is immediate
     /// mode, so what repaints is the panel and not the chip
     /// ([ADR-0188](../../../docs/adr/0188-a-pending-transition-says-it-is-pending-and-no-surface-holds-the-rule.md)).
+    ///
+    /// **And the beat ends it for as long as the console is live**, which is
+    /// [P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)
+    /// arriving in this arm: something has to be moving whether or not
+    /// anything is happening, or a panel that has stopped and a panel that is
+    /// idle are the same picture. So `None` here is now a console with **no
+    /// engine behind it** or with the transport row folded away, rather than
+    /// simply a console with nothing pending
+    /// ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
     Animating(Option<Duration>),
     /// The window resized, or the display's scale factor changed: the
     /// arrangement is re-solved into a different viewport, so every rectangle

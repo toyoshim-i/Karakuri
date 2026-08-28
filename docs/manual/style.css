@@ -259,9 +259,42 @@
   .transport { display: flex; align-items: center; gap: 14px; padding: 9px 12px; flex-wrap: wrap; }
   .bpm { font-family: var(--f-round); font-size: 20px; font-weight: 800; letter-spacing: -0.01em;
          background: linear-gradient(94deg, var(--c-mint), var(--c-lav)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  /* The beat grid is a light that travels, and it is the one thing on this
+     panel that moves whether or not anything is happening: a panel that has
+     stopped and a panel that is idle are the same picture unless something is
+     always moving, so the stop has to be visible against motion rather than
+     announced by a convention. One traverse of the grid a bar — 1.875s at the
+     128.0 BPM this row is drawn at — and `.on` is where the light is centred,
+     which is what the four dots draw at the instant of a beat. */
   .beat-grid { display: flex; gap: 4px; }
-  .beat-grid i { width: 15px; height: 6px; border-radius: 999px; background: var(--c-line); display: block; }
+  .beat-grid i { width: 15px; height: 6px; border-radius: 999px; background: var(--c-line); display: block; animation: beat-sweep 1.875s linear infinite; }
   .beat-grid i.on { background: var(--c-pink); box-shadow: 0 0 9px var(--c-glowp); }
+  /* Each dot a quarter of the bar behind the one before it, as a negative
+     delay so the grid is already mid-travel on the first frame. The light
+     leaves the right-hand end and arrives at the left in the same instant. */
+  .beat-grid i:nth-child(2) { animation-delay: -1.406s; }
+  .beat-grid i:nth-child(3) { animation-delay: -0.938s; }
+  .beat-grid i:nth-child(4) { animation-delay: -0.469s; }
+  /* A raised cosine one dot pitch wide either side of the light: all of it
+     under the centre, none at all a pitch away — a pitch is a quarter of the
+     bar — and 85 / 50 / 15 at the quarters between, which is the curve's own
+     0.854, 0.5 and 0.146. It leaves and arrives at zero *with zero velocity*,
+     so a dot does not snap into being dark as the light goes; and the two
+     either side add up to exactly one dot's worth of light at every instant,
+     so the row does not brighten and dim as the light travels. A still grid
+     at half brightness is therefore not a picture this can draw, which is what
+     makes a stopped panel visible. */
+  @keyframes beat-sweep {
+    0%       { background: var(--c-pink); box-shadow: 0 0 9px var(--c-glowp); }
+    6.25%    { background: color-mix(in srgb, var(--c-pink) 85%, var(--c-line)); box-shadow: 0 0 9px color-mix(in srgb, var(--c-glowp) 85%, transparent); }
+    12.5%    { background: color-mix(in srgb, var(--c-pink) 50%, var(--c-line)); box-shadow: 0 0 9px color-mix(in srgb, var(--c-glowp) 50%, transparent); }
+    18.75%   { background: color-mix(in srgb, var(--c-pink) 15%, var(--c-line)); box-shadow: 0 0 9px color-mix(in srgb, var(--c-glowp) 15%, transparent); }
+    25%, 75% { background: var(--c-line); box-shadow: none; }
+    81.25%   { background: color-mix(in srgb, var(--c-pink) 15%, var(--c-line)); box-shadow: 0 0 9px color-mix(in srgb, var(--c-glowp) 15%, transparent); }
+    87.5%    { background: color-mix(in srgb, var(--c-pink) 50%, var(--c-line)); box-shadow: 0 0 9px color-mix(in srgb, var(--c-glowp) 50%, transparent); }
+    93.75%   { background: color-mix(in srgb, var(--c-pink) 85%, var(--c-line)); box-shadow: 0 0 9px color-mix(in srgb, var(--c-glowp) 85%, transparent); }
+    100%     { background: var(--c-pink); box-shadow: 0 0 9px var(--c-glowp); }
+  }
 
   /* three columns */
   .body-grid { display: grid; grid-template-columns: 218px minmax(340px, 1fr) 268px; gap: 10px; align-items: stretch; }

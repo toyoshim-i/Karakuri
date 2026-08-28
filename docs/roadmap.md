@@ -421,7 +421,10 @@ BPM, the beat grid, the bar number, and the frame readout against the display's 
 `learn`, `map`, `landed` and `● rec` are named in the source with what is missing behind each and
 drawn nowhere. The grid is **as many dots as a bar has beats** rather than four, because
 `karakuri-signal` marks its own `BEATS_PER_BAR` provisional until the format carries a time
-signature, and a transcribed 4 would go on saying four the day that changes.
+signature, and a transcribed 4 would go on saying four the day that changes. **What it draws is a
+light that travels those dots** rather than one of them lighting at a time, and the mock's own
+picture is a frame of that travel
+([ADR-0212](adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
 
 **The Mixer bay is drawn**, from the deck's own state — a strip per slot with its name, its
 residency, its gain trim, its opacity fader, its meter and its blend and mask marks
@@ -514,21 +517,23 @@ the tally's order kept: a readout of a pending state comes before any press that
 `Control::MaskPosition`, the strip has no control and no readout for that number, so it is drawn
 nowhere and the gap is named in the record rather than left to be found.
 
-**Four things move on this panel and exactly one of them is a live region that declares**, which is
+**Four things move on this panel and two of them are live regions that declare**, which is
 worth separating because this line used to run the four together. The picture is expensive and moves
 every frame — and it is the engine's output, *"already accounted for by the governor"*, so P-0072
-keeps it off this budget and off any schedule. The beat grid is cheap, high priority and moves two to
-four times a second — and it moves because the panel is being redrawn for something else rather than
-because anything decided it must, which is what P-0077 is still waiting for. The mixer's six
-readouts change when a hand changes them, and *what the operator does costs what it costs*. What is
+keeps it off this budget and off any schedule. **The beat grid is the second region and it declares
+now**: it is a light that travels the grid once a bar rather than one dot lighting at a time, it
+asks for its own frames at 24.67 ms — about forty a second — and it does so **whether or not
+anything is pending**, which is P-0077's forced clause held by something rather than by accident
+([ADR-0212](adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)). The mixer's
+six readouts change when a hand changes them, and *what the operator does costs what it costs*. What is
 left, and the whole of what declares, is *whatever is pending*: expensive, 30 Hz, and running **only
 while a request is outstanding and the bay that draws it is laid out**, which can be the length of a
 set. It is one live region with **three presentations**: the tally's roll, and a reach on each of a
 strip's two faders while a transition is armed on it
 ([ADR-0206](adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)). They share a
 period, a curve and a staleness, so a parked slot and eight armed fades are one deadline rather than
-nine — which is P-0075's *everything pending moves together* paying for itself. It is the first and
-only region to declare, it declares a **cost** as well as a staleness now
+nine — which is P-0075's *everything pending moves together* paying for itself. It was the first region to declare and it is now one of two, it declares a **cost** as well as a
+staleness
 ([ADR-0210](adr/0210-a-declared-cost-is-one-panel-pass-written-down-and-held-against-the-run.md)),
 and it declares nothing while it is folded away — a region that is not laid out declares nothing
 rather than declaring and being dropped by a scheduler that does not exist
@@ -636,6 +641,22 @@ the program.
    at another rate **cannot both be special cases**, and each rate written by hand is the first half
    of the scheduler written badly.
 
+   **The beat is the second declaring region, and it landed on 2026-08-28**
+   ([ADR-0212](adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)). It is a
+   light that travels the grid once a bar — a raised cosine one dot pitch wide, measured round the
+   cycle, so at most two dots carry it and the four of them always sum to exactly one dot's worth —
+   and its position is the fractional beat `Oscillator::beats` already accumulates rather than a
+   phase of its own or `View::phase`'s wall clock. The transport row declares
+   `view::BEAT_STALENESS`, 24.67 ms, **for as long as the grid is drawn and without asking whether
+   anything is pending**, which is what makes it P-0077's motion where the roll is not. **`Σ (cost /
+   staleness)` is 0.0889 against 1.0** — the first time that sum has had two terms — and `max(cost)`
+   is still 1.26 ms against 4.17, because both regions declare one whole panel pass. **Still nothing
+   arbitrates, and the reason has changed**: it is no longer that there is nothing to choose
+   between, it is that both fit. What is left undone is the scheduler itself, a panel's share of the
+   frame budget, and a per-region cost — and one hole this record names rather than closes: **fold
+   the transport row away and the panel has no continuous motion at all**, which is the operator's
+   doing rather than a scheduler's economy, and is not what P-0077 forbids.
+
    **One region is not the scheduler's to stop, and it is the beat.** A budget under pressure offers
    the panel's continuous motion first — it is a real saving that degrades nothing being read at
    that instant — and taking it sells the signal that says the frame is in trouble at the moment the
@@ -645,8 +666,8 @@ the program.
    [P-0077](principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md) and
    [ADR-0189](adr/0189-motion-may-carry-the-meaning-and-a-stopped-animation-is-a-fault-to-report.md),
    which also record that continuous movement proves liveness at every instant where the grid's
-   one-lit-dot flip proves it only across an interval — a **preference**, and not a decision to
-   change the beat.
+   one-lit-dot flip proves it only across an interval — a **preference**, and one that has since
+   been taken (ADR-0212).
 3. **The other surfaces onto [`karakuri-operation`](../crates/karakuri-operation).** **All four
    surfaces have an answer now, and only one of the four was the wholesale move this sentence
    described.** MIDI moved outright; the CLI's keys had mostly moved already and the rest divides

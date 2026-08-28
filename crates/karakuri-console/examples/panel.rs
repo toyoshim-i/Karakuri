@@ -476,8 +476,8 @@ struct Costs {
     /// answer.
     live: bool,
     /// **What the panel declared it needed**, as `View::animating` answered it
-    /// on the last frame: a staleness while a slot is parked and the tally is
-    /// rolling, `None` while nothing on the panel is moving.
+    /// on the last frame: the soonest staleness out of the regions that are
+    /// declaring, and `None` only when none of them is.
     ///
     /// It is here for one sentence, and the sentence was wrong without it.
     /// With nothing in the Program bay making texels the reading used to blame
@@ -489,6 +489,15 @@ struct Costs {
     /// as well takes it to 0 frames, because the chip that declares the 30 Hz
     /// is then not laid out (ADR-0193).
     /// A reading that names the wrong cause is worse than one that names none.
+    ///
+    /// **Those two readings were taken before the beat declared**, and the
+    /// beat declares whenever the transport row is drawn and there is an
+    /// engine behind it — 24.7 ms, about forty a second, whether or not
+    /// anything is pending
+    /// ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md),
+    /// [P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)).
+    /// So this window's `None` now needs the transport row folded away as
+    /// well, which is a **fourth** fold and is the arm below saying so.
     declared: Option<Duration>,
 }
 
@@ -629,9 +638,13 @@ impl Costs {
         let rate = self.rate_over(STILL.as_secs_f64());
         match (self.live, self.still == Still::default()) {
             // The reading this was written for. It is reachable with the
-            // picture, the preview row and the mixer bay folded away — the
-            // first two stop the texels and the third stops the declaration
-            // (ADR-0193) — and with any one of the three on screen it is not.
+            // picture, the preview row, the mixer bay **and the transport
+            // row** folded away — the first two stop the texels and the last
+            // two stop the two declarations (ADR-0193) — and with any one of
+            // the four on screen it is not. The fourth is P-0077 arriving:
+            // the beat is a light travelling the grid, it declares for as
+            // long as it is drawn, and a console claiming to show a live
+            // instrument has something moving on it (ADR-0212).
             (false, true) => println!(
                 "  so P-0072's first clause holds here: no per-frame work is done to \
                  redraw what nobody has touched and nothing has moved."
@@ -654,12 +667,21 @@ impl Costs {
                 // record closes.
                 Some(staleness) => println!(
                     "  so P-0072's first clause does NOT hold here, and the reason is a \
-                     declaration rather than a fault: something on this panel is parked, \
-                     the mixer's tally is rolling toward a residency nobody granted, and \
-                     it declares a staleness of {:.1} ms — about {:.0} frames a second \
-                     (ADR-0190). Folding the mixer bay away ends it: the slot stays \
-                     parked, and a region that is not laid out declares nothing \
-                     (ADR-0193).",
+                     declaration rather than a fault: {}, and the soonest staleness \
+                     declared is {:.1} ms — about {:.0} frames a second. Folding the \
+                     region that draws it ends its term: a region that is not laid out \
+                     declares nothing (ADR-0193).",
+                    match staleness == view::BEAT_STALENESS {
+                        // The one that runs whether or not anything is
+                        // happening, which is the whole of why it is here.
+                        true =>
+                            "the beat grid is a light travelling the transport row, \
+                                 and it moves for as long as the console is live rather \
+                                 than while something is pending (P-0077, ADR-0212)",
+                        false =>
+                            "something on this panel is parked and the mixer's tally \
+                                  is rolling toward a residency nobody granted (ADR-0190)",
+                    },
                     staleness.as_secs_f64() * 1000.0,
                     1.0 / staleness.as_secs_f64()
                 ),
@@ -692,9 +714,12 @@ impl Costs {
                 );
                 println!(
                     "  it is P-0072's second clause from here — what moves declares its \
-                     price — and this is the price, measured. Nothing in this run \
-                     schedules, caches the panel to a texture or declares anything; the \
-                     number is what the next decision gets made on."
+                     price — and this is the price, measured. Two regions declare it: the \
+                     transport row for as long as the beat grid is drawn (P-0077, \
+                     ADR-0212) and the mixer bay while something in it is pending. \
+                     Nothing in this run schedules, caches the panel to a texture or \
+                     arbitrates between the two; the number is what the next decision gets \
+                     made on."
                 );
             }
         }
@@ -949,8 +974,12 @@ impl Costs {
                      block. Two things are: the picture, and deck A auditioning in the \
                      preview row under it. Fold the picture away (f over it) and deck A \
                      keeps the loop awake on its own; fold the preview row away as well \
-                     and `ControlFlow::Wait` finally blocks — that is the same window \
-                     drawing nothing, and it is what P-0072's remaining clauses are for.",
+                     and nothing is making texels — and the window still draws, because \
+                     the beat grid declares a deadline of its own for as long as it is on \
+                     screen (P-0077, ADR-0212) and the mixer bay declares another while \
+                     deck B is parked. `ControlFlow::Wait` blocks when all three are gone, \
+                     which is a fourth fold, and it is what P-0072's remaining clauses are \
+                     for.",
                 false =>
                     "the loop is on `ControlFlow::Wait` from here: it does nothing at all \
                      until the window is touched or `egui` names a deadline of its own.",
