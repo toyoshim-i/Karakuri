@@ -46,12 +46,15 @@
       <span><i class="gap"></i> nothing &mdash; this surface cannot reach it at all</span>
     </div>
     <p>
-      <strong>48 operations, and 51 of the 208 ways in exist.</strong> Five of them
+      <strong>49 operations, and 51 of the 212 ways in exist.</strong> Six of them
       arrived with the console's own shape &mdash; moving a boundary, folding a bay
-      or a pane, bringing one back, and solo &mdash; and every one of their twenty
-      routes is empty except the pointer, which four of the five have. Bringing
-      one back has no route at all: a folded region has no rectangle for a
-      pointer to find, and nothing else reaches it yet. Every
+      or a pane, bringing one back, solo, and resetting the arrangement &mdash; and
+      every one of their twenty-four
+      routes is empty except the pointer, which four of the six have. Two have
+      no route at all: a folded region has no rectangle for a
+      pointer to find, and resetting is the default case of a family &mdash; keeping an
+      arrangement and putting one back &mdash; that has nowhere on the console to live
+      until the rest of it exists. Every
       <em>panel</em> route is marked designed rather than built, because the
       panel itself is not built &mdash; where it says a region, that is where
       the control lives in <a href="console.html">the console</a>. The counts
@@ -566,6 +569,16 @@
           <span class="rt gap">MCP <b>&mdash;</b></span>
         </div>
       </div>
+      <div class="op">
+        <div class="op-head"><h3>Reset the arrangement</h3><span class="op-when ">immediate</span></div>
+        <p>The default arrangement back, in the window you already have. <strong>It is the one operation here that forgets</strong>, and what it forgets is what the rest of this section promises to keep: every fold, every boundary you have dragged, the solo, and the remembered sizes a folded bay and a window dragged too small are both holding for you. This is the special case of putting a saved arrangement back &mdash; and it is the only member of that family that exists, because naming an arrangement, keeping one and restoring one are not built, so there is nothing to reset <em>to</em> but the default and nothing to return to afterwards. A pad could name it: it addresses nothing, where every other row here needs a region a map line has no way to spell. None does yet.</p>
+        <div class="rts">
+          <span class="rt gap">panel <b>&mdash;</b></span>
+          <span class="rt gap">key <b>&mdash;</b></span>
+          <span class="rt gap">MIDI <b>&mdash;</b></span>
+          <span class="rt gap">MCP <b>&mdash;</b></span>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -622,7 +635,7 @@
     <h2>What the gaps say</h2>
     <p>
       <strong>MIDI is the narrowest by a wide margin.</strong> It reaches
-      eight of these forty-eight operations, and it cannot express a node
+      eight of these forty-nine operations, and it cannot express a node
       address, a parameter name or an id &mdash; nor a bare number, which is
       why it reaches one half of the mask and not the other. A map line carries
       a slot number, a word out of a value list, or a range, and an angle is
@@ -651,7 +664,11 @@
       and folding is worse than that: a folded region has no rectangle, so a
       pointer cannot even reach it to undo itself. <strong>How a pane is sized and
       unfolded without a mouse is not decided</strong>, and it is decided by naming
-      these operations rather than by drawing anything.
+      these operations rather than by drawing anything. <em>Reset the arrangement</em>
+      is the exception that says what the rest of the section is short of rather
+      than what a surface is: it names no region, so a pad could reach it the way a
+      pad reaches <em>tap</em>, and what it is waiting for is the family it is the
+      default case of.
     </p>
     <p>
       <strong>The command line is the only way into most of what a Set is</strong>

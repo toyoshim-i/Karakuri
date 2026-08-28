@@ -633,7 +633,7 @@ the program.
    where the exhaustiveness lives** — `run_surface`'s claim that *a control added to one and not
    the other does not compile* would be false against forty-six variants, so the MIDI path is now
    message → `Operation` → `Live::operate` and the compiler's guarantee is
-   `karakuri-operation-record`'s `written`, which is one match over all forty-eight. The one arm left
+   `karakuri-operation-record`'s `written`, which is one match over all forty-nine. The one arm left
    in `run_surface` is `TapBeat`, which needs the beat tracker rather than a value and is
    `Owed::NotSettled`; it goes the day that record is settled.
 
@@ -716,7 +716,7 @@ the program.
 
    **MCP names its operations and performs them itself** —
    [ADR-0199](adr/0199-mcp-names-its-operations-and-performs-them-itself.md). Its six tools are six
-   of the forty-eight: `read_procedure`, `write_procedure`, `swap_outcome`, `save_set`, `read_set` and
+   of the forty-nine: `read_procedure`, `write_procedure`, `swap_outcome`, `save_set`, `read_set` and
    `list_sets` are `ReadProcedure`, `WriteProcedure`, `SwapOutcome`, `SaveSet`, `ReadSet` and
    `ListSets`, and **`written` answers `Silent` for every one of them** — `Question` for the four
    that ask, `OnLanding` for the two whose record is written where the work lands
@@ -1423,10 +1423,13 @@ event rather than an operation), and **the camera**.
 could be edited there until nodes had names, and nothing can be routed here until operations
 do. [Every operation](manual/operations.html) is where that enumeration is written down, and a
 surface missing from an operation's row is a line of this milestone's work. **It is written**:
-48 operations, and 50 of the 208 ways in exist. **Five of those arrived from
-the console's own shape** — moving a boundary, folding a bay or a pane, bringing one back, and
-solo — and all twenty of their routes are empty except the pointer, which is the first rule broken
-by the surface the first rule is about.
+49 operations, and 51 of the 212 ways in exist. **Six of those arrived from
+the console's own shape** — moving a boundary, folding a bay or a pane, bringing one back, solo, and
+resetting the arrangement — and all twenty-four of their routes are empty except the pointer, which
+four of the six have, and which is the first rule broken by the surface the first rule is about.
+The count was written as 50 of 208 while the page said 51 of 208: the mask's front gained a MIDI
+route in [ADR-0202](adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md) and
+this sentence was not recounted with it.
 
 #### What was settled about the panel, and where each thing is argued
 
@@ -1662,6 +1665,16 @@ below is blocked on anything else.
   belongs to a family rather than standing alone, and the family is what decides its prose — the
   page promises on *Move a boundary* that a window dragged too small **forgets nothing**, and an
   operation that discards every fold and drag has to say so against that promise.
+
+  **The default member has landed as a row**
+  ([ADR-0208](adr/0208-resetting-is-the-default-case-of-restoring-an-arrangement.md)): *Reset the
+  arrangement* is on [every operation](manual/operations.html) with all four routes empty, and its
+  prose is written from this entry's framing — it says what it discards against *Move a boundary*'s
+  promise that a window dragged too small forgets nothing. **What that leaves owed is the rest of
+  the family, and it is now visible as a row nobody can reach**: its panel badge names no home,
+  because the home is the family's rather than the reset's — which makes it the second row in
+  *Arranging the console* with no route at all, beside *Bring back what is folded*, and the two are
+  empty for unrelated reasons.
 
   **What it needs that does not exist**: a name for an arrangement, a record carrying one, and two
   operations beside `Reset`. What it does not need is a serialiser — `karakuri-layout`'s

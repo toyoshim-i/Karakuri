@@ -13,10 +13,10 @@
 //!
 //! **The exhaustiveness moved and did not go.** This used to be one match over
 //! eight `Action`s in [`crate::Live`], and *a control added to one and not the
-//! other does not compile* was its whole claim. Against a 48-variant
+//! other does not compile* was its whole claim. Against a 49-variant
 //! vocabulary that claim would be false, and the guarantee lives where it is
 //! now true: `karakuri_operation_record::written` is one exhaustive match over
-//! all 48, so an operation nobody has said what to do with stops the build
+//! all 49, so an operation nobody has said what to do with stops the build
 //! there rather than reaching a router arm nobody wrote
 //! (`docs/adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md`).
 //!
@@ -114,7 +114,7 @@ pub struct Router {
 ///
 /// **`discriminant` rather than a match over the continuous operations.** A
 /// list here would be a second answer to [`Map::is_continuous`]'s question,
-/// kept in step by hand against a forty-eight-variant vocabulary; this is the
+/// kept in step by hand against a forty-nine-variant vocabulary; this is the
 /// same "which one is it" the compiler already knows. `deck_of` is beside it
 /// because `gain 0` and `gain 1` are two faders, and it is the function this
 /// module already had for the question.
@@ -273,7 +273,7 @@ impl Router {
 /// `karakuri_midi::map`'s `parse_target` is that list — `cc -> exposure` and
 /// `note -> tap` name no deck, and the other forty-two operations have no
 /// spelling in the grammar at all. The wildcard is what the vocabulary being
-/// forty-eight wide costs here, and it is safe rather than merely convenient:
+/// forty-nine wide costs here, and it is safe rather than merely convenient:
 /// **the record path is the backstop.** A slot this deck does not hold is
 /// refused by `mix::change` with [`crate::no_such_slot`] — this very sentence —
 /// and nothing moves, where the old `Action` path indexed a `Vec` directly and

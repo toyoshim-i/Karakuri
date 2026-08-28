@@ -5821,10 +5821,10 @@ impl Live {
     ///
     /// **This used to be a match over eight `Action`s claiming that a control
     /// added to one and not the other does not compile.** Against a
-    /// forty-eight-variant vocabulary that claim would be false — a router arm
+    /// forty-nine-variant vocabulary that claim would be false — a router arm
     /// nobody wrote is a wildcard nobody notices. The guarantee is now where
     /// it is true: `karakuri_operation_record::written` is one exhaustive
-    /// match over all forty-eight, so an operation nobody has said what to do
+    /// match over all forty-nine, so an operation nobody has said what to do
     /// with stops the build there.
     ///
     /// **[`Operation::TapBeat`] is handled here and it is the only one**, for

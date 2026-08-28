@@ -233,6 +233,7 @@ number; new records continue from the end.
 | [ADR-0205](0205-a-question-whose-reply-the-vocabulary-cannot-say-gets-no-row.md) | A question whose reply the vocabulary cannot say gets no row, and the status line was concealing five console gaps | 2026-08-28 | accepted |
 | [ADR-0206](0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md) | A fader marks where it is going and keeps reaching for it | 2026-08-28 | accepted |
 | [ADR-0207](0207-a-continuous-control-says-one-thing-per-frame.md) | A continuous control says one thing per frame | 2026-08-28 | accepted |
+| [ADR-0208](0208-resetting-is-the-default-case-of-restoring-an-arrangement.md) | Resetting is the default case of restoring an arrangement, and that is what gives it a row | 2026-08-28 | accepted |
 
 ## Retired numbers
 
