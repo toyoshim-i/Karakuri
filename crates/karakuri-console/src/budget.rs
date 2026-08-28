@@ -21,9 +21,17 @@
 //! over the named regions, so **a test asserts them** rather than a stage
 //! discovering them."* So the four numbers below are here and the arithmetic
 //! is not — `tests/schedulable.rs` is the only place either sum is taken, and
-//! nothing in this crate arbitrates between two regions at runtime. A
-//! scheduler is still absent, and a scheduler that chose between one region
-//! and nothing would be an abstraction with one call site.
+//! nothing in this crate arbitrates between two regions at runtime.
+//!
+//! **There are two regions now and still nothing arbitrates, and the reason
+//! has changed.** It used to be that choosing between one region and nothing
+//! is an abstraction with one call site. What it is now is that **both fit**:
+//! `Σ (cost / staleness)` is 0.0889 against 1.0, so a frame drawn for the
+//! sooner deadline is in time for the other one and nothing has to be
+//! refused. [`crate::view::View::animating`] takes the soonest staleness and
+//! that is the whole policy. A scheduler is what a budget that cannot afford
+//! everything needs, and this one can
+//! ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
 //!
 //! # What is *not* on this budget
 //!
@@ -63,8 +71,9 @@ use std::time::Duration;
 /// is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Declared {
-    /// The arrangement's name for the region that is declaring — `"mixer"`
-    /// today, and the only one.
+    /// The arrangement's name for the region that is declaring —
+    /// `"transport"` and `"mixer"` today, in that order, which is the order
+    /// they are drawn down the panel.
     pub region: &'static str,
     /// **What one update of this region costs**, on the CPU. Today that is
     /// [`PANEL_PASS`] for every region, and the constant says why.
@@ -208,7 +217,11 @@ pub const FRAME_INTERVAL: Duration = Duration::from_nanos(16_666_667);
 /// a rule that passes by a third of what the measurement itself moves by is a
 /// rule about this laptop rather than about the console. A quarter is 4.17 ms
 /// and leaves a factor of 3.3, which is the same order of headroom
-/// `examples/panel.rs` allows its own quoted figure and for the same reason. It is a number to revisit when a
-/// second region declares a cost of its own, which is the first moment
-/// `max(cost)` stops being one number.
+/// `examples/panel.rs` allows its own quoted figure and for the same reason.
+///
+/// **A second region declares now and this number did not have to move**,
+/// because `max(cost)` is still one number: both of them declare one whole
+/// [`PANEL_PASS`], which is what immediate mode makes true. It is the day a
+/// region declares a cost **of its own** that `max` starts choosing, and that
+/// is the day to revisit this fraction.
 pub const SMALL_PART: f32 = 0.25;

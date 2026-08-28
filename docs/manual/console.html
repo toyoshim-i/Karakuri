@@ -67,7 +67,7 @@
             <span class="bpm">128.0</span>
             <span style="color:var(--c-faint)">BPM</span>
             <span class="pill armed">audio&#8209;in</span>
-            <span class="beat-grid"><i class="on"></i><i></i><i></i><i></i></span>
+            <span class="beat-grid" data-tip="Where the beat is, and the one thing on this panel that moves whether or not anything is happening. The light travels the grid once a bar rather than one dot lighting at a time, so you can tell at any instant that the panel is live &mdash; a flip only tells you that between two flips. A grid that has stopped is a panel that has stopped, and nothing else looks like it."><i class="on"></i><i></i><i></i><i></i></span>
             <span style="color:var(--c-dim)">bar 37</span>
             <span class="pill">tap</span>
             <span class="pill lav" data-tip="MIDI learn. Off. Click, then point at any control and move a knob on your surface, and the two are mapped. Every control that has a tooltip can be learned, so nothing is unreachable by accident.">learn</span>
@@ -608,6 +608,29 @@
           Manual is yours alone, suggest proposes into the staging lane, auto
           acts. One of the four properties the whole system is defined by, so it
           belongs on the face of the panel rather than in a preferences window.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>The beat moves, always</h3>
+        <p>
+          A person does not read a stopped display as current &mdash; and on a
+          panel where nothing moves, <strong>a panel that has stopped and a
+          panel that is idle are the same picture</strong>. So the beat grid is
+          a light that travels: one traverse a bar, every dot as bright as the
+          light is near it, and the two either side of it always adding up to
+          exactly one dot's worth. It is not decoration and it is not spare
+          budget. It is the cheapest thing the console has to say <em>this is
+          live</em>, it needs no legend, and it is the only statement still
+          working when whatever would otherwise report the fault is itself what
+          has stopped.
+        </p>
+        <p>
+          One dot lighting at a time would say the same thing only
+          <em>between</em> two flips; a light that is somewhere at every instant
+          says it at every instant. The still picture above is a frame of that
+          travel &mdash; the instant of a beat, where all of the light is on one
+          dot.
         </p>
       </div>
 

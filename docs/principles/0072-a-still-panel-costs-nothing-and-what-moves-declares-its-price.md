@@ -57,9 +57,9 @@ remove the cost, it clumps it, and a periodic hitch is more visible than a const
 
 ## Where it holds
 
-**The first clause is not reachable on the example as it opens** — though it is three folds away,
-which it was not before 2026-08-26 — and that is a fact about what the panel holds rather than about
-this rule.
+**The first clause is not reachable on the example as it opens** — and it is **four** folds away
+now, which was three between 2026-08-26 and the beat declaring on 2026-08-28 — and that is a fact
+about what the panel holds rather than about this rule.
 `crates/karakuri-console/examples/panel.rs` opens a window with a live picture in the Program bay,
 deck A auditioning in the preview row under it, a mixer bay, a transport, an outputs row, and deck
 B parked by the governor with its tally rolling once a second. Nothing on it is still. Over three
@@ -81,6 +81,15 @@ declares it is being drawn. **Fold the mixer bay on top of that and the window d
 all**: 0 frames, 0 allocations and 0 bytes over three seconds, in both of two runs, and the reading
 prints *"so P-0072's first clause holds here"*.
 
+**That zero now takes a fourth fold, and this sentence is derived rather than re-measured.** The
+beat grid declares for as long as it is drawn
+([ADR-0212](../adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)), so with
+the three folds above the window goes on drawing at `view::BEAT_STALENESS` — 24.67 ms, about forty a
+second — and the transport row has to be folded away as well before nothing on this panel is
+declaring. The three-fold reading above is what this example measured on 2026-08-26 and stands as
+that; the fourth fold has not been measured, and `examples/panel.rs` now says which of the two
+declarations its arm is looking at.
+
 **It did not, and that was this file's own measurement of a defect.** The same three folds used to
 leave the rate exactly where two folds had it — 28.7 and 29.0 a second, re-taken on 2026-08-26 with
 the fix backed out, at 259 and 261 allocations a frame against 427 with the bay drawn. Only the
@@ -97,11 +106,21 @@ a frame being drawn at all is [`repaint.rs`](../../crates/karakuri-console/src/r
 closed list of everything that can change what the console shows —
 [ADR-0165](../adr/0165-the-repaint-decision-is-one-closed-list.md).
 
-**One region declares both numbers, and there is still no scheduler.** The mixer bay is the only
-live region on this console: [`View::declares`](../../crates/karakuri-console/src/view.rs) answers
-with its name, a **cost** and a **staleness** while anything in it is pending *and* the bay is laid
-out, and `repaint::Change::Animating` turns the staleness into the deadline the window waits on.
-Three presentations share that one declaration, because the unit is a region — the tally's word
+**Two regions declare both numbers, and there is still no scheduler.**
+[`View::declares`](../../crates/karakuri-console/src/view.rs) answers with a region's name, a
+**cost** and a **staleness**, and `repaint::Change::Animating` turns the soonest staleness into the
+deadline the window waits on.
+
+**The transport row** declares whenever the beat grid is drawn — a light travelling the grid once a
+bar, which is
+[P-0077](0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)'s continuous motion and
+is the one declaration on this panel that **does not ask whether anything is pending**
+([ADR-0212](../adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)). Its
+staleness is `view::BEAT_STALENESS`, one beat at the mock's 128.0 BPM in as many steps as the travel
+has pixels: **24.67 ms, about forty a second**.
+
+**The mixer bay** declares while anything in it is pending *and* the bay is laid out. Three
+presentations share that one declaration, because the unit is a region — the tally's word
 rolling toward a residency the governor has not granted, and a reach on each of a strip's two faders
 while a transition has not run
 ([ADR-0190](../adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md),
@@ -118,19 +137,26 @@ decided along with how a written-down cost is kept honest.
 
 **Both conditions are checked, and this is what they read.**
 [`tests/schedulable.rs`](../../crates/karakuri-console/tests/schedulable.rs) sums over whatever the
-view declares, at the most this console can ever declare — every strip pending in all three ways,
-every region laid out. `Σ (cost / staleness)` is **0.0378** against a `budget / frame interval` of
-**1.0**, and `max(cost)` is **1.26 ms** against **4.17 ms**, a quarter of the 16.6 ms a frame has to
-fit in. **The budget is the whole frame's**, because the console has never written down a panel's
+view declares, at the most this console can ever declare — an engine behind it, every strip pending
+in all three ways, every region laid out. `Σ (cost / staleness)` is **0.0889** against a
+`budget / frame interval` of **1.0** — 0.0511 for the beat and 0.0378 for the roll, and the first
+frame on which that sum has had two terms — and `max(cost)` is **1.26 ms** against **4.17 ms**, a
+quarter of the 16.6 ms a frame has to fit in. The second is still one number, because both regions
+declare the same whole panel pass.
+
+**The budget is the whole frame's**, because the console has never written down a panel's
 share of one — so the conditions hold in their most permissive form, and what they cannot catch is a
 panel that fits the frame while leaving the engine nothing. A folded region is in neither sum
 ([ADR-0193](../adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md)),
 which is asserted rather than assumed, both ways in.
 
-**What is still absent is the policy rather than the inputs**: nothing arbitrates between two
-regions, because there is one region and choosing between one and nothing is an abstraction with one
-call site. The arbitration arrives with the second declaring region, which
-[P-0077](0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md) wants to be the beat.
+**What is still absent is the policy rather than the inputs, and the reason has changed.** It used
+to be that choosing between one region and nothing is an abstraction with one call site. The second
+declaring region has arrived and it is the beat, as P-0077 wanted — and still nothing arbitrates,
+because **both fit**: at 0.0889 of a frame the frame that meets the sooner deadline meets the other
+one as well, and `View::animating`'s *soonest staleness* is the whole policy. A scheduler is what a
+budget that cannot afford everything needs, and the first thing one under pressure will offer is the
+beat, which is exactly what P-0077 forbids.
 
 **What a drawn frame costs.** A median of **525 allocations and 694.3 kB** in the middle of those
 nine runs, the nine spread 524 to 538 and 671.4 to 695.3 kB — with everything above on the panel.
@@ -138,6 +164,15 @@ nine runs, the nine spread 524 to 538 and 671.4 to 695.3 kB — with everything 
 every one of them**, 55.3 to 58.7 frames a second in nine and 37.0 in the tenth, and 19.6 to 26.3%
 of a second drawing in those nine against 14.3% in the tenth. The allocation count did not move and the milliseconds did, which is the
 machine rather than the panel and is exactly the swing the paragraphs above warn about.
+
+**Taken once more on 2026-08-28, with the beat declaring**: **535 allocations** and 673.9 kB a
+frame, 58.3 frames a second, 20.1% of a second drawing, and the panel-draw median at **0.997 ms**
+against the 1.260 `PANEL_PASS` declares — both inside the 2x band `examples/panel.rs` holds its own
+figures to, and 535 inside the 524 to 538 the nine runs of 2026-08-26 spread. **One run rather than
+a batch**, so read the ten allocations as a direction and not a finding: the likeliest place for
+them is the second halo the travelling light draws on the frames it is between two dots
+([ADR-0212](../adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)), and one
+reading cannot tell that from the swing this paragraph has already been caught by twice.
 [ADR-0164](../adr/0164-the-panel-is-budgeted-rather-than-forbidden-to-allocate.md)'s **184 and
 226.2 kB** is not that number's predecessor in any comparable sense: it was a mean over 180 frames
 of an empty panel driven by a loop that always drew, it is still true of the panel it measured, and

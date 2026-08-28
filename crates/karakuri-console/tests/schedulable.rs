@@ -33,20 +33,29 @@
 //! *everything pending, with every region laid out* — the most a console with
 //! this arrangement can ever declare.
 //!
-//! # One region, and that is counted rather than assumed
+//! # Two regions, and that is counted rather than assumed
 //!
-//! The mixer bay is the only live region on this panel. `docs/roadmap.md` has
-//! read *four* — the picture, the beat grid, the mixer's readouts and whatever
-//! is pending — and three of those four do not declare anything and two of
-//! them are not this principle's business at all: the picture is the engine's
-//! output and *"counting it here would count it twice"*, the beat grid moves
-//! because the panel is being redrawn for something else rather than because
-//! anything decided it must (which is exactly what
+//! **The transport row** declares whenever the beat grid is drawn: the light
+//! travels the grid once a bar, it is the panel's continuous motion, and
 //! [P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)
-//! is still waiting for), and the mixer's readouts change when a hand changes
-//! them, which P-0072 does not budget. What is left is one region with three
-//! presentations in it. `a_declaration_names_a_region_of_this_arrangement`
-//! holds the count where the next person will see it move.
+//! says that is how a stopped panel announces itself — so it declares whether
+//! or not anything is pending, which is what separates it from the other one
+//! ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
+//! **The mixer bay** declares while something in it is outstanding: three
+//! presentations at one rate, in one region, which is one term and not three.
+//!
+//! `docs/roadmap.md` has read *four* — the picture, the beat grid, the mixer's
+//! readouts and whatever is pending — and two of the four still declare
+//! nothing and are not this principle's business at all: the picture is the
+//! engine's output and *"counting it here would count it twice"*, and the
+//! mixer's readouts change when a hand changes them, which P-0072 does not
+//! budget. `a_declaration_names_a_region_of_this_arrangement` holds the count
+//! where the next person will see it move.
+//!
+//! **This is the first time either sum has had two terms**, which is the
+//! moment P-0072 wrote the arithmetic for: `Σ (cost / staleness)` reads
+//! **0.0889** and `max(cost)` is still one number, because both regions
+//! declare the same whole panel pass (ADR-0210).
 //!
 //! Nothing here needs a window, a device or a clock.
 
@@ -58,7 +67,9 @@ use common::PLAUSIBLE;
 use karakuri_console::budget::{Declared, BUDGET, FRAME_INTERVAL, PANEL_PASS, SMALL_PART};
 use karakuri_console::panel::{Op, Panel};
 use karakuri_console::room::Room;
-use karakuri_console::view::{Level, Mask, Strip, Tally, View, DECKS, REGIONS, ROLL_STALENESS};
+use karakuri_console::view::{
+    Level, Mask, Strip, Tally, Transport, View, BEAT_STALENESS, DECKS, REGIONS, ROLL_STALENESS,
+};
 use karakuri_layout::NodeId;
 use karakuri_operation::BlendMode;
 
@@ -120,15 +131,36 @@ fn pending() -> Strip {
     }
 }
 
-/// **The most this console can ever declare**: every strip a deck can hold,
-/// each of them pending in all three ways, with the whole arrangement laid
-/// out.
+/// **The mock's own transport**, which is a console with an engine behind it:
+/// `128.0` BPM, the first beat of bar 37, and a frame that cost 12.4 of 16.6
+/// ms. `tests/transport.rs` writes the same six numbers and says where each of
+/// them is in the mock.
+///
+/// It is here because **the beat declares off the row being drawn**, and the
+/// row is drawn when there are values behind it — so a `View` with this unset
+/// is a console with no engine, which is what every other test in this crate
+/// is and what makes the still-panel assertions below reachable at all.
+fn running() -> Transport {
+    Transport {
+        bpm: 128.0,
+        beats: 144.0,
+        beats_per_bar: 4,
+        fps: Some(58.0),
+        frame_ms: 12.4,
+        budget_ms: Some(16.6),
+    }
+}
+
+/// **The most this console can ever declare**: an engine behind it with the
+/// beat moving, every strip a deck can hold pending in all three ways, and the
+/// whole arrangement laid out.
 ///
 /// The worst case rather than a plausible one, because a schedulability
 /// condition that only held for the panel somebody happened to be looking at
 /// would be a condition about that panel.
 fn worst_case() -> View {
     let mut view = View::new(Room::Day);
+    view.transport = Some(running());
     view.mixer = (0..DECKS).map(|_| pending()).collect();
     view
 }
@@ -191,6 +223,12 @@ fn small_part() -> Duration {
 /// condition alone, and at 40 ms it breaks both — the second is the binding
 /// one on this console by a factor of eight, which is P-0072's own point about
 /// which of the two gets forgotten.
+///
+/// **With two regions declaring, the first sum is two terms**: 1.26 ms every
+/// 24.671 and 1.26 every 33.333, which is 0.0510 + 0.0378 = **0.0889** against
+/// 1.0. The second is still one number, because both of them declare one whole
+/// panel pass (ADR-0210) — and the day a region declares a cost of its own is
+/// the day `max` starts choosing.
 #[test]
 fn both_conditions_hold_at_the_most_this_console_declares() {
     let panel = arrangement();
@@ -258,8 +296,9 @@ fn a_folded_region_is_in_neither_sum_and_unfolding_puts_it_back() {
         let drawn = declared(&view, &panel);
         assert_eq!(
             drawn.len(),
-            1,
-            "the mixer bay is drawn and everything in it is pending, and it declared {drawn:?}"
+            2,
+            "the mixer bay is drawn and everything in it is pending, and the console \
+             declared {drawn:?}"
         );
 
         panel.op(Op::Fold(folds));
@@ -274,18 +313,17 @@ fn a_folded_region_is_in_neither_sum_and_unfolding_puts_it_back() {
 
         let folded = declared(&view, &panel);
         assert!(
-            folded.is_empty(),
+            !folded.iter().any(|live| live.region == "mixer"),
             "a folded region declared {folded:?} (enclosing: {enclosing})"
         );
+        // The transport row is untouched by either fold and goes on
+        // declaring, so what the fold took out of the sums is exactly the
+        // mixer's own term: 1.26 ms every 33.333 is 0.0378.
         assert_eq!(
-            load(&folded),
-            0.0,
-            "a folded region contributed to Σ (cost / staleness) (enclosing: {enclosing})"
-        );
-        assert_eq!(
-            peak(&folded),
-            Duration::ZERO,
-            "a folded region contributed to max(cost) (enclosing: {enclosing})"
+            load(&declared(&view, &arrangement())) - load(&folded),
+            PANEL_PASS.as_secs_f64() / ROLL_STALENESS.as_secs_f64(),
+            "folding the mixer bay took something other than its own term out of \
+             Σ (cost / staleness) (enclosing: {enclosing})"
         );
 
         panel.op(Op::Unfold(folds));
@@ -304,6 +342,15 @@ fn a_folded_region_is_in_neither_sum_and_unfolding_puts_it_back() {
 /// it is paid for once and not again, so there is nothing to schedule and
 /// nothing to be over budget with. It is the direction worth having a test
 /// for — an animation is the most likely thing to take it away by accident.
+///
+/// **A still panel is a narrower thing than it was**, and this test says which
+/// one it is: a console with **no engine behind it**, so the transport row
+/// draws no grid and there is no beat to move
+/// ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
+/// That is every test in this crate. Put an engine behind it and the beat
+/// declares whether or not anything is pending, which is
+/// `the_beat_declares_while_the_console_is_live_and_nothing_is_pending` below
+/// and is P-0077 rather than a regression here.
 #[test]
 fn a_still_panel_is_zero_in_both_sums() {
     let panel = arrangement();
@@ -325,6 +372,134 @@ fn a_still_panel_is_zero_in_both_sums() {
     );
     assert_eq!(load(&declared), 0.0);
     assert_eq!(peak(&declared), Duration::ZERO);
+}
+
+// ---------------------------------------------------------------------------
+// The beat, which declares for a different reason from everything else here
+// ---------------------------------------------------------------------------
+
+/// **The beat declares while the console is live, and it does not ask whether
+/// anything is pending.**
+///
+/// [P-0077](../../../docs/principles/0077-continuous-motion-is-how-a-stopped-panel-announces-itself.md)'s
+/// forced clause is that *something is moving continuously while the console
+/// is live, and a scheduler may not stop it*. A beat that declared only while
+/// a slot was parked or a fade was armed would be the panel's liveness signal
+/// going quiet exactly when there is nothing else to say the panel is alive —
+/// which is the state that rule exists to make visible as a fault.
+///
+/// So this is asked of the emptiest live console there is: an engine behind
+/// it, **no deck at all**, and nothing anywhere that could be described as
+/// pending.
+///
+/// **Run against its defect**: `transport_declares` made to ask
+/// `self.mixer.iter().any(|strip| strip.pending().is_some())` as well fails
+/// with *"a live console with nothing pending declared [], so nothing on this
+/// panel is moving and a stopped panel looks exactly like this one"*.
+#[test]
+fn the_beat_declares_while_the_console_is_live_and_nothing_is_pending() {
+    let panel = arrangement();
+    let mut view = View::new(Room::Day);
+    view.transport = Some(running());
+
+    let declared = declared(&view, &panel);
+    assert_eq!(
+        declared,
+        vec![Declared {
+            region: "transport",
+            cost: PANEL_PASS,
+            staleness: BEAT_STALENESS,
+        }],
+        "a live console with nothing pending declared {declared:?}, so nothing on this \
+         panel is moving and a stopped panel looks exactly like this one"
+    );
+
+    // And a deck that has settled — every strip where it was asked to be, no
+    // transition armed on either fader — takes nothing away from it.
+    view.mixer = (0..DECKS).map(|_| settled()).collect();
+    assert_eq!(
+        declared,
+        self::declared(&view, &panel),
+        "a settled deck changed what the beat declares"
+    );
+
+    // The mixer's own declaration is the one that comes and goes with what is
+    // outstanding, and it arrives beside this rather than instead of it.
+    view.mixer = (0..DECKS).map(|_| pending()).collect();
+    assert_eq!(
+        self::declared(&view, &panel).len(),
+        2,
+        "a parked deck on a live console is two live regions"
+    );
+}
+
+/// **A folded transport row declares nothing**, and the transport is a *row*
+/// rather than a bay.
+///
+/// [ADR-0193](../../../docs/adr/0193-a-region-that-is-not-laid-out-declares-nothing-rather-than-being-dropped-later.md)
+/// is asked of the layout and not of the region's own kind, so this is the
+/// same question `a_folded_region_is_in_neither_sum_and_unfolding_puts_it_back`
+/// asks of the mixer bay, put to something with a different shape: a row of
+/// four readouts, `Fixed(48)` with its minimum equal to its maximum, and a
+/// direct child of the unnamed root rather than of a pane. **`Layout::visible`
+/// answers for it the same way**, which is the whole of what is being checked
+/// — a fold is a fold.
+///
+/// There is no enclosing case to try beside it: the transport's only ancestor
+/// is the root, and folding the root is the whole panel going away (ADR-0204).
+///
+/// **The fold is not a latch**: unfolding declares again off the same values,
+/// because the declaration is re-derived from the arrangement as it now is.
+///
+/// **Run against its defect**: dropping the `layout.visible` term from
+/// `transport_declares` — so it answers off `self.transport.is_some()` alone —
+/// fails with *"a folded transport row declared [Declared { region:
+/// \"transport\", .. }], so the panel is asking for frames to move a beat
+/// grid that is not on screen"*.
+#[test]
+fn a_folded_transport_row_declares_nothing_and_unfolding_puts_it_back() {
+    let mut panel = arrangement();
+    let mut view = View::new(Room::Day);
+    view.transport = Some(running());
+    let row = node(&panel, "transport");
+
+    let drawn = declared(&view, &panel);
+    assert_eq!(drawn.len(), 1, "a live console declared {drawn:?}");
+
+    panel.op(Op::Fold(row));
+    assert!(
+        !panel.layout().visible(row),
+        "folding the transport row left it laid out"
+    );
+
+    let folded = declared(&view, &panel);
+    assert!(
+        folded.is_empty(),
+        "a folded transport row declared {folded:?}, so the panel is asking for frames \
+         to move a beat grid that is not on screen"
+    );
+    assert_eq!(load(&folded), 0.0);
+    assert_eq!(peak(&folded), Duration::ZERO);
+
+    panel.op(Op::Unfold(row));
+    assert_eq!(
+        declared(&view, &panel),
+        drawn,
+        "unfolding the transport row left the beat out of both sums while the console \
+         is still live"
+    );
+
+    // **And the mixer bay is unaffected either way**, which is what makes
+    // these two regions and not one: a fold on the row takes the beat's term
+    // out of the sums and leaves the roll's where it was.
+    view.mixer = (0..DECKS).map(|_| pending()).collect();
+    panel.op(Op::Fold(row));
+    let folded = declared(&view, &panel);
+    assert_eq!(
+        folded.iter().map(|live| live.region).collect::<Vec<_>>(),
+        vec!["mixer"],
+        "folding the transport row moved what the mixer bay declares"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -381,9 +556,9 @@ fn a_declaration_names_a_region_of_this_arrangement() {
 
     assert_eq!(
         declared.len(),
-        1,
-        "the console declares {declared:?}; it had one live region when this was written, \
-         and a second one wants both sums re-read"
+        2,
+        "the console declares {declared:?}; it had two live regions when this was written, \
+         and a third one wants both sums re-read"
     );
 
     for live in &declared {
@@ -399,10 +574,19 @@ fn a_declaration_names_a_region_of_this_arrangement() {
         );
     }
 
-    // And the one there is, is the mixer bay at the roll's rate — the tally's
-    // and both faders', which share it.
+    // And the two there are, in `REGIONS`' order: the transport row at the
+    // beat's rate, and the mixer bay at the roll's — the tally's and both
+    // faders', which share it.
     assert_eq!(
         declared[0],
+        Declared {
+            region: "transport",
+            cost: PANEL_PASS,
+            staleness: BEAT_STALENESS,
+        }
+    );
+    assert_eq!(
+        declared[1],
         Declared {
             region: "mixer",
             cost: PANEL_PASS,
