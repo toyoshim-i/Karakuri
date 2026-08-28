@@ -495,11 +495,18 @@ console is an example rather than the program.
    ([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)) — and
    turning the mini into a control is deliberately not part of it, for the reason the tally's
    presentation landed a commit before its pointer: the row a picker would emit into now exists to
-   be aimed at, and the picker is the mini's own change. **The MIDI map's two targets are the same
-   shape of leftover**: `parse_target` names no mask, so `note -> mask 0 radial` is a line nobody
-   can write yet — and an **angle has no spelling in that grammar at all**, since a map line
-   carries a slot number, a word out of a value list, or a range, and there is no float form. Both
-   are a change of their own.
+   be aimed at, and the picker is the mini's own change. **The MIDI map's two targets were the same
+   shape of leftover and are now one**: `cc -> mask-position N` is a line, and it is the cleanest
+   continuous target since `exposure` — `[0, 1]`, both ends exact, linear
+   ([ADR-0202](adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md)). The
+   shape is the one left and it is **not** waiting on work: an **angle has no spelling in that
+   grammar at all**, since a map line carries a slot number, a word out of a value list, or a
+   range, and there is no float form — so `note -> mask 0 radial` is a line nobody can write, and a
+   pad that named the kind alone would have to invent the angle beside it, which is ADR-0192's
+   fault one field along. **It is waiting on a decision**, and ADR-0202 names the three and costs
+   them without taking one: a float form in the grammar, an angle-less shape operation, or the row
+   staying a gap with the reason on the page. It is where the mask mini's picker will meet it, so
+   whoever builds the picker is the likeliest person to settle it.
 2. **The rest of P-0072, and it is nearer than this item used to say.** Three live regions with
    three characters now exist — the picture expensive and every frame, the beat grid cheap and
    twice a second, the mixer expensive and hardly moving — which is what a scheduler was waiting
@@ -789,7 +796,10 @@ than work, and every one of them was found by building the thing next to it.
   ([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)). `softness`
   stays out for `white_point`'s reason: one constant, no control, no row. **What it leaves undone is
   named where the work is**: the mask mini becoming a control is item 1 above, and the map's two
-  targets are beside it. The rule the split makes expressible is
+  targets are beside it. **One of the two is taken** — `cc -> mask-position N` is a line now, and
+  the same record's other half turned out not to be work at all but a decision nobody has taken
+  ([ADR-0202](adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md)): the
+  grammar has no bare number, so a shape target could not carry the angle the row was given. The rule the split makes expressible is
   [P-0078](principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md), which
   also says where it stops holding — a `Record::Mask` is a state and not an ask, so the stream
   cannot carry which half was asked for.
@@ -966,7 +976,7 @@ governor and is not built, alongside the decision about whether GPU timestamps c
 | Masks | Works: a straight front at an angle, and an iris, per slot. A mask multiplies the layer's opacity per texel — everything the fader does, done to part of the frame — so it needed no new place in the composite. Both ends of the front are exact, 0 revealing nothing anywhere and 1 revealing everything everywhere, which is what lets a layer masked to nothing be **skipped**: a third escape from material that has gone NaN, beside residency and the fader. **A wipe is a mask and one scheduled move** (`c`), and neither half knows about the other. Out: a mask read from a texture — an arbitrary shape, or another layer's luminance. `kind Field` now exists and is what such a mask would be written as; what is missing is the deck's mask reading one, since `shaders/composite.wgsl` is a hand-written engine shader with a fixed set of mask kinds rather than a generated one |
 | Transitions | Works. One scheduled move — a control, a destination, a musical duration, a curve — and a crossfade is two of them sharing a start and a length. `f`/`g` fade the focused slot out and in, `x` crossfades to the next slot, `n` and `j` choose where a fade starts and how long it lasts. **The first thing in the engine that schedules on the beat clock** — the transport already *follows* it — and a fade is a function of the session's beat count and of nothing else, so the same records reproduce it on a machine at a different frame rate and a tempo change mid-fade moves the fade with it. One record schedules the whole move and the values it produces are not recorded, which is `tick`'s shape from the other end. A hand on a control cancels whatever was moving it. A wipe is one of these carrying a mask's front, which is why there is no `wipe` record and no `crossfade` record — the first-class things are the shape and the move |
 | Slot preview | Works. `v` cycles what the output shows: the mix, then each slot. An audition **adds a draw and never a step**, so an off-air slot is drawn while it is being looked at and nothing moves that would not have moved anyway — an allocated slot shows the still it stopped at, a priming one shows what it is warming into. Not a second pass: the mix runs as always with that slot's terms at unity and the others skipped, so what lands is its own texels through the same tone mapper. Shown ignoring its faders, and metered, because the number wanted before putting it on air is the level the material arrives at. What is not built is a default renderer per topology — there is no slot holding geometry with no L4 to draw it, so there is nothing yet for one to do |
-| MIDI in | Works. `--midi-in` opens a port, `--midi-map` says what each knob and pad does, and a mapped message **is** a `karakuri_operation::Operation` — the same name a key press carries, ending in **the same record a key press writes**, so a surface can do nothing a key cannot and a session recorded from one replays with neither attached. A line names a state rather than a step (`residency 0 live`, `blend 0 over`), and a file written against the older spellings is refused line by line with the line to write instead ([ADR-0196](adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)). The map is a file and is deliberately **not** in the stream: which knob is which belongs to the hardware in the room. With no map, every message prints the line that would map it, which is how a surface is discovered until M5 has a UI to assign one in. 7-bit; the 14-bit MSB/LSB convention is not implemented, which is about 0.8% of a fader's range per step. **MIDI out is not built**, so a surface's LEDs and motorised faders do not follow the deck — which starts to matter the moment two things can move one fader, and a transition is now one of them |
+| MIDI in | Works. `--midi-in` opens a port, `--midi-map` says what each knob and pad does, and a mapped message **is** a `karakuri_operation::Operation` — the same name a key press carries, ending in **the same record a key press writes**, so a surface can do nothing a key cannot and a session recorded from one replays with neither attached. A line names a state rather than a step (`residency 0 live`, `blend 0 over`), and a file written against the older spellings is refused line by line with the line to write instead ([ADR-0196](adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)). Eight targets, the newest of which is `mask-position` — a wipe's own front, `[0, 1]` with both ends exact, and a hand on it stops the move that was carrying it; the mask's *shape* has no line, because the grammar has no bare number to write its angle with ([ADR-0202](adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md)). The map is a file and is deliberately **not** in the stream: which knob is which belongs to the hardware in the room. With no map, every message prints the line that would map it, which is how a surface is discovered until M5 has a UI to assign one in. 7-bit; the 14-bit MSB/LSB convention is not implemented, which is about 0.8% of a fader's range per step. **MIDI out is not built**, so a surface's LEDs and motorised faders do not follow the deck — which starts to matter the moment two things can move one fader, and a transition is now one of them — on the mask's front they are the same number, and a motorised fader is the only thing that could show which of the two last wrote it |
 | Window output | Works, and it is a **preview**. `--canvas` is what a run renders at (1920x1080 by default) and `--size` is only how big the window is; the canvas is fitted into the window and the leftover is black, so dragging one changes what an operator can see and nothing about what is drawn. `a` sizes the window to the canvas one texel to one texel, which is what a downstream window capture wants. Three things came out of splitting them: the canvas now goes through a **record**, so a replay is at the size the performance ran at rather than at whatever `--size` says; a window resize no longer reallocates every slot's target on the render thread, which was the last GPU allocation on the frame path; and `present_mode` is now chosen (`Fifo`) rather than taken from whatever order the driver listed, which had made frame pacing a property of the machine with nothing saying so. Not built: fullscreen and display selection, because anything past a preview is the output-routing seam's job |
 | MCP | Works. `--mcp PORT` serves the Model Context Protocol on loopback, so a chat client can read a slot's procedure, rewrite it, and be told what the compiler and the frame budget made of it — **vibe live coding**, where "the one that's showing, a bit more vivid" is a small edit to a declarative file. It is the **third control surface** after the keyboard and MIDI and obeys the same rule, so **a set a model rewrote replays with no model attached** — which is not a feature anyone could retrofit but this invariant used for something it was not designed for. It was not true when this landed: a review found that a procedure change went through a *file* and not a record, so an AI-driven set replayed with the procedures it started with. `procedure` records close it, and the material is now the last thing a session was missing. Most of it never touches the frame — reading is a file, writing is a check and a file, and the compile, the frame-boundary swap and the rollback are `--watch`'s, so **a model that writes something too expensive is caught by the machinery that already catches a human who does**. `write_procedure` returns the checker's diagnostics rather than a bare failure, which is what closes the loop. `save_set` is the fourth tool and the first control in this system a hand, a model and a future interface all want: it is the `k` key, reachable from a client, and it is one control rather than three — a call names a slot and may name the file, and everything after that is the key press's own code path, refusals and session records included. It needed a **server-to-loop request channel**, because what a slot is playing lives on the render thread and this server is a thread that cannot reach it; the tool waits for the outcome and says which id it landed under, because a model told "saved" before the disk has answered will tell its user something nobody can support. **The wait happens with the server's state unlocked** — there is a thread per connection and one mutex, so a call that waited while holding it would stop a client that only wanted to read a procedure. Two resources come with it: the IR spec, and a built-in vocabulary **generated from the checker's own table**, because prose drifts from code and a generated list cannot. Loopback only, on purpose; `ssh -L` is the way in |
 | Tempo source | Works, and the verification is the interesting part. `--tempo-source` runs a separate program that reports where the beat is, as an **anchor** — a beat, a tempo, and the source's own clock reading at which both were true — so the pipe's delay never becomes phase error. The first anchor aligns the grid and every one after it is trimmed, because the source is another program from another repository; a shared grid carries a beat *number*, which is the one thing a beat tracker structurally cannot find. **The first implementation is Ableton Link, and what it is for changed when it was tested.** rekordbox joins a Link session and its decks can be made to follow it, but it never publishes the deck's BPM — Pioneer's answer is that Link has no master for a tempo fader to be the master of — so with rekordbox the picture does not follow the music by itself. That is a smaller failure than it first reads: a set is not a rehearsed timeline, matching the timing on the night is the craft, and "set by hand" is the answer this milestone gave to gain, the tempo octave and the panic key alike. What Link adds even when set by hand is that the setting is **shared** — `b` taps a grid on this machine, a Link tap puts every peer on it at once. With a peer that *drives* Link it follows on its own |
@@ -1127,12 +1137,17 @@ shape `Record::vocabulary` already uses for records.
 
 **The four surfaces barely overlap today, and here is the count**, read off the code rather
 than estimated: **35 live operations reachable from keys** — and only from the *focused* slot,
-since nothing but `0`–`3` addresses another; **7 from MIDI** — `gain`, `opacity`, `exposure`,
-`residency`, `blend`, `preview` and `tap`, which is what a map file's grammar accepts and no
+since nothing but `0`–`3` addresses another; **8 from MIDI** — `gain`, `opacity`, `exposure`,
+`mask-position`, `residency`, `blend`, `preview` and `tap`, which is what a map file's grammar
+accepts and no
 longer a vocabulary of the crate's own; it cannot express a node address, a parameter name or an
 id, and it was read as 8 while `on-air` and `prime` were two targets over the three states
 `residency` now names
-([ADR-0196](adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)); **6 MCP
+([ADR-0196](adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)) before falling to 7
+and coming back a different way. **What it still cannot express is a bare number**, which is
+exactly the line between the mask's two rows: the front is a fader and the shape carries an angle,
+so `mask-position` landed and the shape has no line to write
+([ADR-0202](adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md)); **6 MCP
 tools**, which touch nothing in the mix, the clock or the deck's residency; and **38 command
 line flags**, many of which are the *only* route to what they set.
 
@@ -1144,16 +1159,18 @@ fade, and starting or stopping a session recording.
 
 **The vocabulary exists now**
 ([ADR-0180](adr/0180-the-operation-vocabulary-is-a-crate-with-no-dependencies.md)):
-`crates/karakuri-operation/` is a leaf crate with **no dependencies at all**, holding all 46
+`crates/karakuri-operation/` is a leaf crate with **no dependencies at all**, holding all 48
 operations, and a test reads [every operation](manual/operations.html) and asserts that the page and
-the type enumerate the same ones both ways round. It held 46 when it landed and has been 45 in
-between: `SetOnAir` and `SetPriming` were two booleans for three states with both `false`
+the type enumerate the same ones both ways round. It held 46 when it landed, has been 45 in
+between, and is 48 now: `SetOnAir` and `SetPriming` were two booleans for three states with both `false`
 destinations unnamed, and they are one `SetResidency { deck, residency }` now
 ([ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md)); `SetLook` demanded a tone
 map beside every exposure, so `cc -> exposure` could not become an operation at all, and it is
 `SetTonemap` and `SetExposure` now
 ([ADR-0192](adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md)) —
-which is what unblocked the MIDI map's migration. **The MIDI map is migrated**
+which is what unblocked the MIDI map's migration; and the mask was a record no operation named, which
+is `SetMaskShape` and `SetMaskPosition` now
+([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)). **The MIDI map is migrated**
 ([ADR-0196](adr/0196-a-map-line-names-a-state-and-an-old-line-is-refused.md)) and `Action` is
 deleted; the console's `panel::Op` and the CLI's match arms are untouched and move onto it one at a
 time, each of which is now a change that can be reasoned about because the target has stopped

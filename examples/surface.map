@@ -27,6 +27,22 @@ cc 6 -> opacity 1
 cc 7 -> opacity 2
 cc 8 -> opacity 3
 
+# `mask-position` is the front of a deck's mask — 0 hides the layer entirely, 1
+# shows all of it — and it is the number a wipe's scheduled move is carrying.
+# So a hand here stops the wipe: that is what the control is for, and the reason
+# it is a fader rather than a pad is that a front is somewhere rather than on or
+# off. The mask's *shape* has no line to write yet; a map can say a slot, a word
+# out of a list or a range, and an angle is none of those.
+#
+# Twelve continuous controls for four slots is three per strip, which is a knob
+# beside the two faders rather than a third fader — and the same bill the pads
+# pay below, in the same currency: take the slots your hands need.
+
+cc 9  -> mask-position 0
+cc 10 -> mask-position 1
+cc 11 -> mask-position 2
+cc 12 -> mask-position 3
+
 # -- the pads ---------------------------------------------------------------
 #
 # **Every pad names a state, and that is why there are thirty of them.** A line
