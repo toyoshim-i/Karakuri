@@ -65,6 +65,7 @@ fn settled(tally: Tally) -> Strip {
         opacity: 0.3,
         blend: BlendMode::Over,
         mask: Mask::Linear,
+        mask_angle: 0.0,
         level: Some(Level {
             mean: 0.12,
             peak: 0.12,

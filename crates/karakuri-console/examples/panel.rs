@@ -148,8 +148,8 @@ use karakuri_console::view::{
 };
 use karakuri_engine::governor::{Report, SLOWEST_PRIME_ONE_IN};
 use karakuri_engine::{
-    compose, Blend, Committed, Deck, Gpu, HotSwap, Look, MaskKind, Present, Residency, Set, Sink,
-    Skip, TonemapOp,
+    compose, Blend, Committed, Deck, Gpu, HotSwap, Look, Mask, MaskKind, Present, Residency, Set,
+    Sink, Skip, TonemapOp,
 };
 use karakuri_layout::{Axis, Hit, NodeId, Point};
 use karakuri_operation::{BlendMode, Operation};
@@ -1183,17 +1183,17 @@ impl Readout {
                     did = Acted::Emitted(operation);
                 }
             }
-            // **A press the panel claimed is on one of the four controls or
+            // **A press the panel claimed is on one of the five controls or
             // on the panel itself**, and the controls are asked first for the
             // reason `claim` asked them last: rule 2 has already had its
             // refusal, so a press that got here and is on a control is that
-            // control's. All four are the same calls `claim` made — asked
+            // control's. All five are the same calls `claim` made — asked
             // again, not copied.
             //
-            // **The bay is derived once and asked three times**, exactly as
-            // `claim` does it: a knob, a blend chip and a tally chip are three
-            // questions about one laid-out strip, and three derivations would
-            // be three answers.
+            // **The bay is derived once and asked four times**, exactly as
+            // `claim` does it: a knob, a blend chip, a tally chip and a mask
+            // mini are four questions about one laid-out strip, and four
+            // derivations would be four answers.
             (Pointer::Down, Claim::Panel) => {
                 self.panel.solve();
                 let sink = outputs(ctx, self.panel.layout()).filter(|row| row.hit(at));
@@ -1201,7 +1201,8 @@ impl Readout {
                 let knob = bay.as_ref().and_then(|bay| bay.grab(at));
                 let chip = bay.as_ref().and_then(|bay| bay.blend(at));
                 let tally = bay.as_ref().and_then(|bay| bay.tally(at));
-                match (sink, knob, chip, tally) {
+                let mask = bay.as_ref().and_then(|bay| bay.mask(at));
+                match (sink, knob, chip, tally, mask) {
                     (Some(row), ..) => did = Acted::Operated(self.sink(row.op())),
                     // **The value does not move on the press.** The grab keeps
                     // the offset it took hold at, so the first move continues
@@ -1227,14 +1228,16 @@ impl Readout {
                     // reached the deck another way would be a second route for
                     // the same change.
                     //
-                    // **One arm for the two chips**, because what this file
-                    // does with either is the same three steps; which chip it
-                    // was is in the operation, and the line `apply` prints
+                    // **One arm for the three chips**, because what this file
+                    // does with any of them is the same three steps; which chip
+                    // it was is in the operation, and the line `apply` prints
                     // says so.
-                    (None, None, Some(operation), _) | (None, None, None, Some(operation)) => {
+                    (None, None, Some(operation), ..)
+                    | (None, None, None, Some(operation), _)
+                    | (None, None, None, None, Some(operation)) => {
                         did = Acted::Emitted(Some(operation))
                     }
-                    (None, None, None, None) => self.press(at),
+                    (None, None, None, None, None) => self.press(at),
                 }
             }
             (Pointer::Up, Claim::Panel) => self.released(),
@@ -2390,9 +2393,14 @@ fn library(root: &std::path::Path) -> Vec<String> {
 ///   (ADR-0187). **This is where a fourth engine mode with no operation
 ///   variant stops the build**, which is the failure worth having — the
 ///   alternative is a word drawn on a chip no map can ask for.
-/// - **The mask** is `Deck::mask(slot).kind()`, and its angle, position and
-///   softness are left behind: the strip's `.mini` says *which shape*, and
-///   three numbers about that shape are an inspector row.
+/// - **The mask** is `Deck::mask(slot).kind()` for the mark, **and its angle
+///   beside it** — `view::Strip::mask_angle`, which is read to build the
+///   press's operation and drawn nowhere
+///   ([ADR-0203](../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)).
+///   The position and the softness are left behind: the strip's `.mini` says
+///   *which shape*, three numbers about that shape are an inspector row, and
+///   the two the record needs are read where the record is written rather
+///   than carried across this seam.
 /// - **The level** is `Deck::level`, which is already `None` for every case
 ///   where a held reading would be about a different image. Its
 ///   `frames_behind` is not passed on — `view::Level` is where that argument
@@ -2420,6 +2428,7 @@ fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
             opacity: 0.0,
             blend: BlendMode::Add,
             mask: view::Mask::None,
+            mask_angle: 0.0,
             level: None,
         });
     }
@@ -2438,6 +2447,13 @@ fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
             MaskKind::Linear => view::Mask::Linear,
             MaskKind::Radial => view::Mask::Radial,
         };
+        // **Read for the press and painted nowhere**, which is what
+        // `view::Strip::mask_angle` is for: the chip asks for a shape and the
+        // operation carries an angle, so the angle it carries is the one the
+        // slot already has (ADR-0203). A harness that left this at zero would
+        // make every press straighten a diagonal front, and nothing on the
+        // panel would show it having happened.
+        strip.mask_angle = deck.mask(slot).angle();
         strip.level = deck.level(slot).map(|level| view::Level {
             mean: level.mean,
             peak: level.peak,
@@ -2517,13 +2533,19 @@ fn blend_mode(blend: Blend) -> BlendMode {
 /// say one press twice.
 ///
 /// **Nothing this example draws can reach either arm today**, and that is why
-/// it is written rather than a reason to leave it out. Its four mixer
-/// controls emit `SetGain`, `SetOpacity`, `SetBlendMode` and `SetResidency`,
-/// and all four write a record from the operation alone; the Outputs dot
-/// never arrives here at all, because it asks the panel for an arrangement
-/// [`Op`] and the panel performs it ([`Acted::Operated`]). The day a control
-/// on this panel emits a fifth operation, this window says what became of the
-/// press rather than swallowing it.
+/// it is written rather than a reason to leave it out. Its five mixer
+/// controls emit `SetGain`, `SetOpacity`, `SetBlendMode`, `SetResidency` and
+/// `SetMaskShape`, and all five write a record — four from the operation
+/// alone and the mask's from that plus the reading [`reading`] takes; the
+/// Outputs dot never arrives here at all, because it asks the panel for an
+/// arrangement [`Op`] and the panel performs it ([`Acted::Operated`]). The day
+/// a control on this panel emits an operation nobody can write a record for,
+/// this window says what became of the press rather than swallowing it.
+///
+/// **The mask is also the one that can reach [`Written::Owed`] by accident**,
+/// and that is worth having rather than designing away: a reading that did not
+/// arrive answers `Owed(NotRead(Reading::Mask))`, so a harness that stopped
+/// handing one in would say so out loud instead of moving nothing.
 fn unwritten(operation: &Operation, written: &Written) -> Option<String> {
     match written {
         Written::Records(_) => None,
@@ -2658,7 +2680,110 @@ fn apply(record: &Record, deck: &mut Deck) -> Option<String> {
                 deck.residency(slot)
             ))
         }
+        // **The whole mask, because the record is a state and not an ask.**
+        // `Record::Mask` carries a shape, an angle, a position and a softness,
+        // and `Deck::set_mask` is what it decodes to — the engine says so at
+        // that setter. Reaching for `Deck::set_mask_shape` instead, to keep a
+        // running wipe alive, would be this file decoding a record by picking
+        // two fields out of it and dropping the softness on the floor: a
+        // second route to the deck, where P-0028 is that every control ends in
+        // the same record. **So a shape press stops a wipe on that deck**, and
+        // that is not a fault here — it is the honest limit
+        // `docs/principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md`
+        // states about the record stream, met by the first surface to make the
+        // press
+        // ([ADR-0203](../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)).
+        //
+        // **The shape comes back off the wire name**, refused rather than
+        // defaulted, exactly as the blend's and the residency's do. Nothing in
+        // this file can produce a name the engine has not got, since the chip
+        // only ever emits one of `WipeKind`'s three and the record is written
+        // from `WipeKind::name`.
+        Record::Mask {
+            slot,
+            ref kind,
+            angle,
+            position,
+            softness,
+        } => {
+            let slot = held(slot)?;
+            let shape = MaskKind::from_name(kind)?;
+            deck.set_mask(slot, Mask::new(shape, angle, position, softness));
+            Some(format!(
+                "  mask: deck {} -> SetMaskShape {{ deck: {slot}, kind: {kind},                  angle: {angle:.3} }} -> Record::Mask -> deck.mask({slot}) = {} at {:.3} rad,                  front at {:.3}",
+                deck_letter(slot as u8),
+                deck.mask(slot).kind().name(),
+                deck.mask(slot).angle(),
+                deck.mask(slot).position()
+            ))
+        }
         _ => None,
+    }
+}
+
+/// **The reading an operation's record needs, taken off the deck it names.**
+///
+/// [`written`] builds `Record::Mask` **whole** — a shape, an angle, a position
+/// and a softness — out of an operation that names two of the four, and the
+/// other two come from a reading of the mask that is running (ADR-0201). This
+/// is that reading, and it is the harness's because the deck is
+/// (ADR-0156, ADR-0194).
+///
+/// **`Current::default()` is *I read nothing*, and it is still the answer for
+/// four of this panel's five controls**: a gain, an opacity, a blend mode and
+/// a residency each carry everything their record carries, so handing a
+/// reading in would be this file inventing a value. The mask mini is the one
+/// that needs one, and it needs it for the deck the operation *names* rather
+/// than for the deck the pointer is over — which is `Reading::Mask`'s own
+/// wording and the reason this takes the operation and not a slot.
+///
+/// **The softness is read back**, where `karakuri-cli`'s `mix::current_mask`
+/// substitutes its own `MASK_SOFTNESS`: that program writes wipes and has a
+/// softness of its own to write, and this window has never written one. What
+/// is read back here is therefore what is actually on the slot, and reading it
+/// back is what stops a press rewriting it — the same argument the angle's is,
+/// one field along.
+///
+/// A slot the deck has not got answers `None`, and [`written`] then says the
+/// reading was owed rather than indexing something that is not there — the
+/// guard [`apply`] has, at the other end of the same press.
+fn reading(operation: &Operation, deck: &Deck) -> Current {
+    let mask = match *operation {
+        Operation::SetMaskShape { deck: slot, .. } => {
+            let slot = usize::from(slot);
+            (slot < deck.slot_count()).then(|| {
+                let mask = deck.mask(slot);
+                karakuri_operation_record::Mask {
+                    kind: wipe_kind(mask.kind()),
+                    angle: mask.angle(),
+                    position: mask.position(),
+                    softness: mask.softness(),
+                }
+            })
+        }
+        _ => None,
+    };
+    Current {
+        mask,
+        ..Current::default()
+    }
+}
+
+/// **The engine's mask shape, as the vocabulary's** — [`blend_mode`]'s
+/// function one control along, and the one place these two lists are made to
+/// agree.
+///
+/// A match, so the day a fourth `MaskKind` lands in the engine this stops
+/// compiling rather than reading a shape the vocabulary cannot name into a
+/// record that has to name one. The mirror image of it is `view::Mixer::mask`,
+/// which turns the console's own word into the same vocabulary — three names
+/// for three shapes, which is the cost `karakuri-operation` pays for depending
+/// on nothing (P-0074).
+fn wipe_kind(kind: MaskKind) -> karakuri_operation::WipeKind {
+    match kind {
+        MaskKind::None => karakuri_operation::WipeKind::None,
+        MaskKind::Linear => karakuri_operation::WipeKind::Linear,
+        MaskKind::Radial => karakuri_operation::WipeKind::Radial,
     }
 }
 
@@ -2878,7 +3003,8 @@ impl App {
     ///   and never what this loop remembered.
     ///
     /// **What the operation becomes is [`written`]'s answer and not this
-    /// file's.** It used to be a `match` written out here, because there was
+    /// file's**, out of the operation and what [`reading`] read off the deck.
+    /// It used to be a `match` written out here, because there was
     /// nowhere for the conversion to live; ADR-0185 said that function is
     /// deleted the day a home lands, and
     /// [ADR-0194](../../../docs/adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)
@@ -2893,18 +3019,16 @@ impl App {
             Acted::Operated(outcome) => Change::Operated(outcome).repaint(),
             Acted::Emitted(operation) => {
                 if let Some(operation) = operation.as_ref() {
-                    // **`Current::default()` is *I read nothing*, and it is
-                    // the honest reading rather than a shortcut.** Every
-                    // control on this panel emits one of four operations, and
-                    // all four write their record from the operation alone —
-                    // a gain, an opacity, a blend mode and a residency carry
-                    // everything the record carries. The two readings
-                    // `Current` can hold are the running look and a deck's
-                    // transport, and nothing here emits an operation that
-                    // needs either; handing one in anyway would be this file
-                    // inventing a value, which is what ADR-0194 refuses a
-                    // default for.
-                    let written = written(operation, &Current::default());
+                    // **The reading is taken off the deck, and for four of the
+                    // five controls it is *I read nothing*.** A gain, an
+                    // opacity, a blend mode and a residency carry everything
+                    // their record carries, so a reading handed in for one of
+                    // them would be this file inventing a value — which is
+                    // what ADR-0194 refuses a default for. The mask mini is
+                    // the fifth and its record is written whole out of two
+                    // halves (ADR-0201), so its half is read here rather than
+                    // assumed. See [`reading`].
+                    let written = written(operation, &reading(operation, &gfx.engine.deck));
                     // **A press that wrote no record says so**, and says
                     // which of the two kinds of nothing it was, before
                     // anything is applied.
@@ -4170,8 +4294,8 @@ mod tests {
             );
         }
 
-        // The vocabulary is 48 operations and this example has four controls
-        // writing four records. A record invented for the other 42 would be
+        // The vocabulary is 48 operations and this example has five controls
+        // writing five records. A record invented for the other 41 would be
         // somebody deciding what they mean — and the answer is now *which*
         // nothing rather than `None`, because a surface's own state and a
         // record nobody can write yet are not the same silence.
@@ -4188,12 +4312,18 @@ mod tests {
     /// **The one record an operation writes**, for the tests that know there
     /// is exactly one.
     ///
-    /// Every control on this panel emits an operation whose record needs no
-    /// reading at all, so `Current::default()` — *I read nothing* — is what
-    /// the example hands in, here and in [`App::performed`]. A conversion
-    /// that answered anything but a single record for one of those four is
-    /// this file's assumption breaking rather than a test needing a helper,
-    /// which is why the panic says so.
+    /// **For the four whose record needs no reading at all**, which is where
+    /// `Current::default()` — *I read nothing* — is the honest answer. A
+    /// conversion that answered anything but a single record for one of those
+    /// four is this file's assumption breaking rather than a test needing a
+    /// helper, which is why the panic says so.
+    ///
+    /// **The mask's operation is not one of them** and must not be passed
+    /// here: its record is written out of the operation *and* a reading of the
+    /// running mask (ADR-0201), so it would come back `Owed(NotRead)` and this
+    /// would panic — correctly, and saying which operation. What the mask's
+    /// tests hand in is a reading, through [`reading`] where there is a deck
+    /// and by hand where there is not.
     pub(super) fn only_record(operation: &Operation) -> Record {
         match written(operation, &Current::default()) {
             Written::Records(records) if records.len() == 1 => records.into_iter().next().unwrap(),
@@ -5503,6 +5633,162 @@ mod gpu {
             engine.deck.is_parked(ASKED_TO_PRIME),
             "the prime request was granted rather than parked, so nothing governed the record \
              and the panel is drawing a residency the budget never allowed"
+        );
+    }
+
+    /// **The whole loop, closed on a masked deck: a press on the mask mini
+    /// chooses the next shape and leaves the front, the soft edge and — the
+    /// one this test exists for — the *angle* exactly where they were.**
+    ///
+    /// `tests/mask.rs` asserts everything up to the operation with no deck
+    /// anywhere, which is the point of that file. This is the other end, and
+    /// it needs a device because a `Deck` does.
+    ///
+    /// **What separates this from the plausible wrong answer is the angle.**
+    /// The chip names a *shape*; `Operation::SetMaskShape` carries a shape and
+    /// an angle (ADR-0201), so a press must carry an angle it does not
+    /// control. Carrying the one the slot already wears is the whole of
+    /// [ADR-0203](../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md);
+    /// carrying `0.0` would look like a chip minding its own business and
+    /// would straighten a diagonal wipe on every press, with nothing on the
+    /// panel saying so — the mark is the same mark at any angle.
+    ///
+    /// **The middle step is the one worth the device**, as in the fader's test
+    /// and the tally's: between the press and the record the deck must not
+    /// have moved, or the console would be applying what it is only supposed
+    /// to ask for.
+    #[test]
+    fn a_press_on_the_mask_mini_chooses_a_shape_and_keeps_the_angle() {
+        const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+        const W: u32 = 1440;
+        const H: u32 = 900;
+        /// A diagonal front, in radians — **not zero, and not the default**,
+        /// which is the only reason this test can tell the two designs apart.
+        const ANGLE: f32 = 0.9;
+        /// Half way across, and a soft edge, so that a record written from the
+        /// operation alone would show up in these two as well.
+        const FRONT: f32 = 0.4;
+        const SOFTNESS: f32 = 0.05;
+
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer =
+            egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
+        let mut panel = Panel::new(W as f32, H as f32);
+        panel.solve();
+        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
+        let material = material();
+
+        // A wipe in progress on the deck that is on air: a straight front,
+        // running at an angle, part of the way across.
+        engine
+            .deck
+            .set_mask(ON_AIR, Mask::new(MaskKind::Linear, ANGLE, FRONT, SOFTNESS));
+        let mut strips = Vec::new();
+        mixer(&engine.deck, &material, &mut strips);
+        assert_eq!(
+            strips[ON_AIR].mask,
+            view::Mask::Linear,
+            "the strip is not showing the mask the deck is wearing"
+        );
+        assert_eq!(
+            strips[ON_AIR].mask_angle, ANGLE,
+            "the strip did not carry the angle off the deck, so a press has nothing to \
+             hand back and this test cannot tell the two designs apart"
+        );
+
+        // The press, at the centre of that strip's mini.
+        let ctx = super::tests::drawn_once();
+        let bay = mixer_bay(&ctx, panel.layout(), &strips).expect("the bay draws its strips");
+        let chip = bay.strip(ON_AIR).mask.center();
+        let operation = bay
+            .mask(Point::new(chip.x, chip.y))
+            .expect("the mask mini of the masked strip");
+        assert_eq!(
+            operation,
+            Operation::SetMaskShape {
+                deck: ON_AIR as u8,
+                kind: karakuri_operation::WipeKind::Radial,
+                angle: ANGLE,
+            },
+            "the press did not ask for the next shape at the angle the deck is wearing"
+        );
+        assert_ne!(
+            operation,
+            Operation::SetMaskShape {
+                deck: ON_AIR as u8,
+                kind: karakuri_operation::WipeKind::Radial,
+                angle: 0.0,
+            },
+            "the press sent a default angle, so choosing a shape straightens a diagonal \
+             wipe and nothing on the panel says so"
+        );
+
+        // **Nothing has been told anything yet**, so the deck is where it was
+        // and so is the strip the frame would draw.
+        assert_eq!(engine.deck.mask(ON_AIR).kind(), MaskKind::Linear);
+        let mut after = Vec::new();
+        mixer(&engine.deck, &material, &mut after);
+        assert_eq!(
+            after, strips,
+            "the strip moved before the deck did, so the console is keeping a value"
+        );
+
+        // The record, out of the operation and the reading the harness takes
+        // off the deck — written **whole**, which is the half the operation
+        // does not name (ADR-0201).
+        let written = written(&operation, &reading(&operation, &engine.deck));
+        let Written::Records(records) = &written else {
+            panic!("a press on the mask mini wrote no record: {written:?}")
+        };
+        assert_eq!(
+            records.as_slice(),
+            [Record::Mask {
+                slot: ON_AIR as u8,
+                kind: "radial".to_owned(),
+                angle: ANGLE,
+                position: FRONT,
+                softness: SOFTNESS,
+            }],
+            "the record is not the whole mask with only the shape changed"
+        );
+
+        // And the deck.
+        assert!(apply(&records[0], &mut engine.deck).is_some());
+        let mask = engine.deck.mask(ON_AIR);
+        assert_eq!(
+            mask.kind(),
+            MaskKind::Radial,
+            "the record was built and the shape did not move, so the control ends nowhere"
+        );
+        assert_eq!(
+            mask.angle(),
+            ANGLE,
+            "choosing a shape straightened the front — the angle the chip does not control \
+             was rewritten by a press meant to choose a shape"
+        );
+        assert_eq!(
+            mask.position(),
+            FRONT,
+            "choosing a shape moved the front, which is the half of the mask this operation \
+             does not name"
+        );
+        assert_eq!(mask.softness(), SOFTNESS, "the soft edge was rewritten");
+
+        // And the strip follows, because it is read off the deck rather than
+        // remembered — and the next press carries on round the cycle from what
+        // the deck now holds, still at the same angle.
+        mixer(&engine.deck, &material, &mut after);
+        assert_eq!(after[ON_AIR].mask, view::Mask::Radial);
+        assert_eq!(after[ON_AIR].mask_angle, ANGLE);
+        let bay = mixer_bay(&ctx, panel.layout(), &after).expect("the bay draws its strips");
+        assert_eq!(
+            bay.mask(Point::new(chip.x, chip.y)),
+            Some(Operation::SetMaskShape {
+                deck: ON_AIR as u8,
+                kind: karakuri_operation::WipeKind::None,
+                angle: ANGLE,
+            }),
+            "the second press did not wrap round to `none` at the angle the deck still holds"
         );
     }
 

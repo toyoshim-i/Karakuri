@@ -52,6 +52,7 @@ fn strips() -> Vec<Strip> {
             opacity: 0.8 - 0.15 * slot as f32,
             blend: BlendMode::Over,
             mask: Mask::None,
+            mask_angle: 0.0,
             level: Some(Level {
                 mean: 0.5,
                 peak: 0.6,

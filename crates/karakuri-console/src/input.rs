@@ -44,20 +44,27 @@
 //!    all. The panel's controls are painted shapes, and the only thing that
 //!    knows a press landed on one is this rule.
 //!
-//!    **There are four of them now**: the Outputs row's sink
+//!    **There are five of them now**: the Outputs row's sink
 //!    ([`crate::view::outputs`]), a mixer strip's fader knob
 //!    ([`crate::view::Mixer::grab`]), its blend chip
-//!    ([`crate::view::Mixer::blend`]) and its tally chip
-//!    ([`crate::view::Mixer::tally`]). The rule did not change to hold the
-//!    second, the third or the fourth, which is what it was written for — and
-//!    each is asked exactly the way the first is: the derivation that draws
-//!    it, asked whether the point is on it, with nothing stored.
+//!    ([`crate::view::Mixer::blend`]), its tally chip
+//!    ([`crate::view::Mixer::tally`]) and its mask mini
+//!    ([`crate::view::Mixer::mask`]). The rule did not change to hold the
+//!    second, the third, the fourth or the fifth, which is what it was written
+//!    for — and each is asked exactly the way the first is: the derivation
+//!    that draws it, asked whether the point is on it, with nothing stored.
 //!
 //!    **The fourth is the first control with a state that can be pending**,
 //!    and it is still only an affordance: it names a destination and refuses
 //!    nothing, because what may be asked belongs where the record is applied
 //!    ([P-0076](../../../docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md)).
 //!    So this rule holds it unchanged too.
+//!
+//!    **The fifth is the first control that carries a value it does not
+//!    draw**, and this rule does not change for that either: what a press
+//!    *asks for* is [`crate::view::Mixer::mask`]'s, and whether a press landed
+//!    on the chip is one rectangle either way
+//!    ([ADR-0203](../../../docs/adr/0203-the-mask-chip-carries-the-angle-it-does-not-control.md)).
 //!
 //!    **A control claims what it acts on and no more.** A fader's *track* is
 //!    drawn by the console and is not claimed, because a press on it does
@@ -75,13 +82,20 @@
 //! and in the same file's spirit — `tests/fader.rs` asserts that no knob in
 //! the bay is within [`GRAB`] of any boundary, and carries the same guard on
 //! itself, so the ordering goes on costing nothing there too. **The blend
-//! chip is measured a third time** in `tests/blend.rs` and **the tally chip a
-//! fourth** in `tests/tally.rs`, each with its own guard: whether a control
-//! clears every boundary's band is two constants and a rectangle, and it is
-//! never inherited from the control above it. The two chips are not even the
-//! same number — the nearest boundary to either is the pane divider down the
-//! left of the bay, and the **8.97** the blend chip clears it by is the mode
-//! row's width, where the tally's **14.23** is its own capsule's.
+//! chip is measured a third time** in `tests/blend.rs`, **the tally chip a
+//! fourth** in `tests/tally.rs` and **the mask mini a fifth** in
+//! `tests/mask.rs`, each with its own guard: whether a control clears every
+//! boundary's band is two constants and a rectangle, and it is never inherited
+//! from the control above it. No two of the three chips are the same number —
+//! the nearest boundary to all of them is the pane divider down the left of
+//! the bay, and the **8.97** the blend chip clears it by is the mode row's
+//! width, where the tally's **14.23** is its own capsule's. The mask mini
+//! shares the blend chip's row and clears the same divider by **41.03**,
+//! because it sits at the far end of that row — and it is the one chip whose
+//! *nearest boundary is not the same one on every strip*: on the three strips
+//! that are not against the pane, the nearest is the boundary under the bay,
+//! **74.50** below the mode row. So the number that binds is 41.03 and it was
+//! measured rather than inherited from the chip 3px to its left.
 //!
 //! # A caller acts on the control, and it asks the same question again
 //!
@@ -101,10 +115,17 @@
 //! which is the whole of ADR-0195 and is why a press on a parked chip asks for
 //! the withdrawal of its own prime request.
 //!
-//! **Three questions, one derivation.** The mixer bay is laid out once per
-//! event and asked for every control it has — a knob, a blend chip and a tally
-//! chip are three questions about one laid-out strip, and a third derivation
-//! would be a third answer that could disagree with the two the frame drew.
+//! So is the mask mini: [`crate::view::Mixer::mask`] answers *is this a
+//! control* and *what does a press on it ask for* — `SetMaskShape` naming the
+//! shape after the one the deck reports, **and the angle the deck reports
+//! beside it**, which is the whole of ADR-0203 and is why choosing a shape
+//! does not straighten a diagonal front.
+//!
+//! **Four questions, one derivation.** The mixer bay is laid out once per
+//! event and asked for every control it has — a knob, a blend chip, a tally
+//! chip and a mask mini are four questions about one laid-out strip, and a
+//! second derivation would be a second answer that could disagree with the one
+//! the frame drew.
 //!
 //! # One exception, and it is not a hole in the rule
 //!
@@ -163,8 +184,9 @@ pub enum Claim {
 /// are laid out around. It is paid on a pointer event and not on a frame, and
 /// a console with no deck behind it pays nothing at all — [`mixer`] answers
 /// `None` to an empty slice before it asks for any type. **The chips cost
-/// none of that again**: the bay is derived once and all three of the mixer's
-/// controls are asked of it.
+/// none of that again**: the bay is derived once and all four of the mixer's
+/// controls are asked of it — and the mask mini adds no lookup of its own,
+/// because it holds a mark rather than a word.
 ///
 /// **A control in a bay that is not laid out is never reached**, and it is
 /// [`mixer`] that answers so rather than a check here: a folded mixer — or one
@@ -192,17 +214,20 @@ pub fn claim(panel: &mut Panel, ctx: &egui::Context, strips: &[Strip], p: Point)
     // anything. See the module documentation and `tests/outputs.rs`.
     match panel.layout().hit(p, GRAB) {
         Hit::Divider { .. } => Claim::Panel,
-        // Rule 3, over all four of the console's controls. Each is asked the
+        // Rule 3, over all five of the console's controls. Each is asked the
         // same way — the derivation that draws it, asked whether the point is
         // on it — and no answer is stored.
         Hit::View(_) | Hit::Nothing => {
             let on_sink = outputs(ctx, panel.layout()).is_some_and(|row| row.hit(p));
             // **The bay is derived once for all of its controls**, since a
-            // knob, a blend chip and a tally chip are three questions about
-            // one laid-out strip.
+            // knob, a blend chip, a tally chip and a mask mini are four
+            // questions about one laid-out strip.
             let on_strip = || {
                 mixer(ctx, panel.layout(), strips).is_some_and(|bay| {
-                    bay.grab(p).is_some() || bay.blend(p).is_some() || bay.tally(p).is_some()
+                    bay.grab(p).is_some()
+                        || bay.blend(p).is_some()
+                        || bay.tally(p).is_some()
+                        || bay.mask(p).is_some()
                 })
             };
             match on_sink || on_strip() {
