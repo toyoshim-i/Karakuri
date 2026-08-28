@@ -240,38 +240,10 @@ impl Map {
     /// these, not the same one read twice.
     pub fn operation(&self, message: crate::Message) -> Option<Operation> {
         use crate::Message;
-        let (key, value) = match message {
-            Message::ControlChange {
-                channel,
-                controller,
-                value,
-            } => (
-                self.find(Key::Cc {
-                    channel: Some(channel),
-                    controller,
-                })
-                .or_else(|| {
-                    self.find(Key::Cc {
-                        channel: None,
-                        controller,
-                    })
-                })?,
-                Some(value),
-            ),
-            Message::NoteOn { channel, note, .. } => (
-                self.find(Key::Note {
-                    channel: Some(channel),
-                    note,
-                })
-                .or_else(|| {
-                    self.find(Key::Note {
-                        channel: None,
-                        note,
-                    })
-                })?,
-                None,
-            ),
-            Message::NoteOff { .. } => return None,
+        let key = self.target(message)?;
+        let value = match message {
+            Message::ControlChange { value, .. } => Some(value),
+            _ => None,
         };
 
         // A fader mapped to a pad's target, or the reverse, cannot happen:
@@ -312,6 +284,65 @@ impl Map {
             (Target::Preview { slot }, None) => Some(Operation::SetPreview { showing: slot }),
             (Target::Tap, None) => Some(Operation::TapBeat),
             _ => None,
+        }
+    }
+
+    /// **Whether this message moves a control that carries a position**, and
+    /// `false` for anything nothing is mapped to.
+    ///
+    /// [`Map::operation`]'s question one step earlier, and here for one
+    /// caller: `karakuri-cli`'s router keeps the last value a control sent
+    /// within a frame and drops the ones before it, which it may do to a fader
+    /// and may not do to a pad — two presses in one frame are two things that
+    /// happened, where two positions from one fader are one place it ended up.
+    ///
+    /// **It is [`Target::continuous`] and not a second list.** That is the
+    /// same predicate `parse_line` refuses a `note` on a fader's target with,
+    /// so the line is drawn once; a caller matching on the operations it
+    /// believes to be continuous would be a list to keep in step with this
+    /// one, and a target added to only one of them would coalesce a press.
+    ///
+    /// A pure function of one message, like [`Map::operation`] and for the
+    /// same reason: it reads the table and nothing else.
+    pub fn is_continuous(&self, message: crate::Message) -> bool {
+        self.target(message).is_some_and(Target::continuous)
+    }
+
+    /// What this message is mapped to, before its value is known. The channel
+    /// it arrived on wins over a line that named no channel.
+    fn target(&self, message: crate::Message) -> Option<Target> {
+        use crate::Message;
+        match message {
+            Message::ControlChange {
+                channel,
+                controller,
+                ..
+            } => self
+                .find(Key::Cc {
+                    channel: Some(channel),
+                    controller,
+                })
+                .or_else(|| {
+                    self.find(Key::Cc {
+                        channel: None,
+                        controller,
+                    })
+                }),
+            Message::NoteOn { channel, note, .. } => self
+                .find(Key::Note {
+                    channel: Some(channel),
+                    note,
+                })
+                .or_else(|| {
+                    self.find(Key::Note {
+                        channel: None,
+                        note,
+                    })
+                }),
+            // A release is nothing here for [`Map::operation`]'s reason: every
+            // pad is a press, so a release names no target rather than the
+            // target the press named.
+            Message::NoteOff { .. } => None,
         }
     }
 
@@ -1146,5 +1177,35 @@ mod tests {
         let (m, notes) = Map::parse("note 36 -> tap [0, 1]");
         assert!(m.is_empty());
         assert!(notes[0].contains("no range"), "{}", notes[0]);
+    }
+
+    /// **Every fader's target is continuous and no pad's is**, which is the
+    /// line `karakuri-cli`'s router coalesces a frame's messages along: a
+    /// target that answered `false` here would have a sweep's every message
+    /// kept, and one that answered `true` would have the second of two presses
+    /// in a frame dropped. All eight targets, because the answer is per target
+    /// and a ninth added to one half of `Target::continuous` is what this
+    /// catches.
+    #[test]
+    fn a_fader_moves_a_continuous_control_and_a_pad_does_not() {
+        let m = map(
+            "cc 1 -> gain 0\ncc 2 -> opacity 0\ncc 3 -> exposure\ncc 4 -> mask-position 0\n\
+             note 36 -> residency 0 live\nnote 37 -> blend 0 over\nnote 38 -> preview 1\n\
+             note 39 -> tap",
+        );
+        for controller in 1..=4 {
+            assert!(m.is_continuous(cc(controller, 0)), "cc {controller}");
+        }
+        for n in 36..=39 {
+            assert!(!m.is_continuous(note(n)), "note {n}");
+        }
+        // Unmapped is not continuous: there is nothing to coalesce, and the
+        // router reports it rather than routing it.
+        assert!(!m.is_continuous(cc(9, 0)));
+        // Nor is a release, which names no target at all.
+        assert!(!m.is_continuous(Message::NoteOff {
+            channel: 0,
+            note: 36
+        }));
     }
 }
