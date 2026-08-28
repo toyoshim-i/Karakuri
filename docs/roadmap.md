@@ -1453,6 +1453,21 @@ below is blocked on anything else.
   the check pass, travels with the artifact, and arrives at the interface as a fact. Had it
   been left for the engine to infer at runtime, the surface could not have said anything
   until the Set was built and run.
+- **An arrangement is saved and restored, and resetting is the special case of restoring the
+  default.** The panel's own state — every fold, every boundary, what is soloed — lives only in a
+  running process today, and the one operation that changes it wholesale is `Reset`. That is the
+  wrong way round: an operator who has spent a set arranging the console wants that arrangement
+  back tomorrow, and *the default* is one arrangement among the ones they could name. So `Reset`
+  belongs to a family rather than standing alone, and the family is what decides its prose — the
+  page promises on *Move a boundary* that a window dragged too small **forgets nothing**, and an
+  operation that discards every fold and drag has to say so against that promise.
+
+  **What it needs that does not exist**: a name for an arrangement, a record carrying one, and two
+  operations beside `Reset`. What it does not need is a serialiser — `karakuri-layout`'s
+  `Arrangement` already derives `Serialize`/`Deserialize`, an unbounded maximum is written as
+  `null` deliberately, and a `NodeId` goes on the wire as the bare number it is. The mock has the
+  shape one level over: the Library's scope row already lists **presets** beside favourites and a
+  folder, and says the scope list is itself extensible.
 
 ~8–10 weeks.
 
