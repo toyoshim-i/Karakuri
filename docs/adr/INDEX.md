@@ -240,6 +240,7 @@ number; new records continue from the end.
 | [ADR-0212](0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md) | The beat is a light that travels, and it declares for itself | 2026-08-28 | accepted |
 | [ADR-0213](0213-the-interface-milestones-meter-is-the-panel-column-and-has-means-an-operator-reaches-it.md) | The Interface milestone's meter is the panel column, and `has` means an operator reaches it | 2026-08-28 | accepted |
 | [ADR-0214](0214-the-program-moves-out-of-the-cli-and-two-thin-binaries-sit-over-it.md) | The program moves out of the CLI, and two thin binaries sit over a shared package | 2026-08-28 | accepted |
+| [ADR-0215](0215-the-package-is-karakuri-environment-and-a-module-belongs-if-what-it-deals-with-is-outside-this-process.md) | The package is `karakuri-environment`, and a module belongs in it if what it deals with is outside this process | 2026-08-28 | accepted |
 
 ## Retired numbers
 
