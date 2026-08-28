@@ -4,7 +4,7 @@ title: A gesture converts in the parts that are decided, and a key that writes n
 status: accepted
 date: 2026-08-27
 supersedes: []
-superseded_by: []
+superseded_by: [0205]
 principles: [0028, 0074]
 tags: [cli, keys, vocabulary, surfaces]
 ---
