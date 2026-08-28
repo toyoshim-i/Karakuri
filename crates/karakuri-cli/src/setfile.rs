@@ -1079,6 +1079,11 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
             | Record::Look { .. }
             | Record::Canvas { .. }
             | Record::Procedure { .. }
+            // An authority names a node the way the records above it do, and
+            // is still not a Set file's: it says which agent an operator let at
+            // that node during a performance, and a Set file obeying one would
+            // hand the node over on every load. See `Record::Authority`.
+            | Record::Authority { .. }
             | Record::Transport { .. }
             | Record::Preview { .. }
             | Record::Transition { .. }

@@ -236,6 +236,7 @@ number; new records continue from the end.
 | [ADR-0208](0208-resetting-is-the-default-case-of-restoring-an-arrangement.md) | Resetting is the default case of restoring an arrangement, and that is what gives it a row | 2026-08-28 | accepted |
 | [ADR-0209](0209-the-masks-shape-keeps-its-empty-midi-badge-until-a-control-shows-an-angle.md) | The mask's shape keeps its empty MIDI badge, and what would reopen it is a control that shows an angle | 2026-08-28 | accepted |
 | [ADR-0210](0210-a-declared-cost-is-one-panel-pass-written-down-and-held-against-the-run.md) | A declared cost is one panel pass, written down and held against the run | 2026-08-28 | accepted |
+| [ADR-0211](0211-authority-is-set-per-node-and-the-record-is-the-sessions.md) | Authority is set per node, and the record that carries it is the session's | 2026-08-28 | accepted |
 
 ## Retired numbers
 

@@ -46,13 +46,13 @@
 //!
 //! # What it answers, and the three answers are the survey
 //!
-//! [`written`] is **one exhaustive match over all 49 operations**, which is
+//! [`written`] is **one exhaustive match over all 50 operations**, which is
 //! what makes the classification a fact rather than an intention: an operation
 //! added to the vocabulary does not compile here until somebody has said what
 //! it writes. The three answers are the three groups the survey found:
 //!
-//! - [`Written::Records`] — it writes these, in this order. Eleven operations,
-//!   six of which need no reading at all.
+//! - [`Written::Records`] — it writes these, in this order. Twelve operations,
+//!   seven of which need no reading at all.
 //! - [`Written::Silent`] — it writes none, and that is settled. Twenty-seven,
 //!   for [`Silent`]'s four different reasons.
 //! - [`Written::Owed`] — it writes one and this build cannot make it. Eleven,
@@ -306,10 +306,11 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
     match operation {
         // ----- What it writes, with no reading at all ----------------------
         //
-        // Six, and every one of them is a control whose record carries exactly
-        // what the operation carries. These are the arms `karakuri-cli`'s
-        // `mix::gain_record` and its neighbours were, moved to where a console
-        // can reach them.
+        // Seven, and every one of them is a control whose record carries
+        // exactly what the operation carries. Six are the arms
+        // `karakuri-cli`'s `mix::gain_record` and its neighbours were, moved to
+        // where a console can reach them; the seventh, an authority, never had
+        // one anywhere.
         Operation::SetGain { deck, gain } => one(Record::Gain {
             slot: *deck,
             value: *gain,
@@ -334,6 +335,25 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             level: residency.name().to_string(),
         }),
         Operation::SetPreview { showing } => one(Record::Preview { slot: *showing }),
+        // **A node address and a word, and nothing else** — which is what puts
+        // this in the group that needs no reading, beside the faders rather
+        // than beside the mask. `Record::Authority` is written whole by the
+        // operation alone: there is no other half of it to fill in from what is
+        // running, the way `Record::Look` and `Record::Mask` have one.
+        //
+        // The `layer` is the one thing that is translated, and
+        // [`store_layer`] is where — this crate is the only one that sees both
+        // spellings of the list.
+        Operation::SetAuthority {
+            deck,
+            node,
+            authority,
+        } => one(Record::Authority {
+            slot: *deck,
+            layer: store_layer(node.layer),
+            index: node.index,
+            authority: authority.name().to_string(),
+        }),
         // **A free-running tempo being stated**, which is `Record::Tempo`'s own
         // words for a correction with no shift and no confidence: *"The first
         // one in a stream is what sets the session tempo … a correction with
@@ -485,6 +505,33 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
 /// The common answer: one record, and the list that carries it.
 fn one(record: Record) -> Written {
     Written::Records(vec![record])
+}
+
+/// **The vocabulary's layer as the store's**, which is the one list this crate
+/// has to translate between rather than carry.
+///
+/// A function and not a `From` impl, for the reason `karakuri-cli`'s
+/// `mix::blend_mode` and its neighbours are functions: both types are foreign
+/// here, so the orphan rule forbids the impl outright
+/// (`docs/adr/0194-…`). A match rather than a cast, for
+/// `karakuri_operation::BlendMode::name`'s reason — a kind added to either list
+/// does not compile until somebody says what it is on the other side, which is
+/// the guarantee the two copies of this list are kept honest by.
+///
+/// **This crate is where it belongs.** It is the only place in the workspace
+/// that sees `karakuri_operation::Layer` and `karakuri_store::record::Layer` at
+/// once; `karakuri-cli`'s `mcp.rs` translates between the vocabulary's and
+/// `karakuri_ir::Kind`, which is a third spelling and a different pair.
+fn store_layer(layer: karakuri_operation::Layer) -> karakuri_store::record::Layer {
+    use karakuri_operation::Layer as From;
+    use karakuri_store::record::Layer as To;
+    match layer {
+        From::L1 => To::L1,
+        From::L2 => To::L2,
+        From::L3 => To::L3,
+        From::L4 => To::L4,
+        From::Field => To::Field,
+    }
 }
 
 #[cfg(test)]
@@ -757,7 +804,7 @@ mod tests {
         );
     }
 
-    /// **Six operations need no reading at all**, and a caller that has none
+    /// **Seven operations need no reading at all**, and a caller that has none
     /// to give still gets its record. `karakuri-console`'s panel is exactly
     /// that caller: three faders, no engine, and `Current::default()`.
     #[test]
@@ -802,6 +849,64 @@ mod tests {
         );
     }
 
+    /// **An authority converts with no reading, and carries the node it names.**
+    ///
+    /// Its own test rather than a fourth assertion in
+    /// [`the_faders_records_need_no_reading`], because what it pins is not the
+    /// absence of a reading but the **address**: this is the only conversion
+    /// here that turns a `NodeAt` into a record's `(layer, index)`, and
+    /// `store_layer` is a second spelling of a list that has to stay in step.
+    /// A conversion that dropped the index would put every renderer's authority
+    /// on the first one; one that mistranslated the layer would put an L4's on
+    /// an L1.
+    #[test]
+    fn an_authority_carries_the_node_it_names_and_needs_no_reading() {
+        assert_eq!(
+            records(written(
+                &Operation::SetAuthority {
+                    deck: 2,
+                    node: karakuri_operation::NodeAt {
+                        layer: karakuri_operation::Layer::L4,
+                        index: 1,
+                    },
+                    authority: karakuri_operation::Authority::Suggesting,
+                },
+                &Current::default()
+            )),
+            vec![Record::Authority {
+                slot: 2,
+                layer: karakuri_store::record::Layer::L4,
+                index: 1,
+                authority: "suggesting".to_string(),
+            }],
+            "an authority landed on another node, another deck slot or another \
+             level than the one it named"
+        );
+
+        // A `kind Field` node takes one too, which is the arm most easily lost
+        // in a translation: it addresses no node in the rendering sense and its
+        // params are still an operator's to ride.
+        assert_eq!(
+            records(written(
+                &Operation::SetAuthority {
+                    deck: 0,
+                    node: karakuri_operation::NodeAt {
+                        layer: karakuri_operation::Layer::Field,
+                        index: 0,
+                    },
+                    authority: karakuri_operation::Authority::Manual,
+                },
+                &Current::default()
+            )),
+            vec![Record::Authority {
+                slot: 0,
+                layer: karakuri_store::record::Layer::Field,
+                index: 0,
+                authority: "manual".to_string(),
+            }]
+        );
+    }
+
     /// **The wire spellings, which are the cost the vocabulary pays.**
     ///
     /// `karakuri-operation` owns copies of lists `karakuri-engine` already
@@ -826,6 +931,12 @@ mod tests {
         assert_eq!(Tonemap::Reinhard.name(), "reinhard");
         assert_eq!(Tonemap::Aces.name(), "aces");
         assert_eq!(Tonemap::AgX.name(), "agx");
+        assert_eq!(karakuri_operation::Authority::Manual.name(), "manual");
+        assert_eq!(
+            karakuri_operation::Authority::Suggesting.name(),
+            "suggesting"
+        );
+        assert_eq!(karakuri_operation::Authority::Automatic.name(), "automatic");
         assert_eq!(karakuri_operation::WipeKind::None.name(), "none");
         assert_eq!(karakuri_operation::WipeKind::Linear.name(), "linear");
         assert_eq!(karakuri_operation::WipeKind::Radial.name(), "radial");

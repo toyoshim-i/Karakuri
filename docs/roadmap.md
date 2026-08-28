@@ -25,11 +25,13 @@ Four properties define whether this succeeded:
    every frame, not images or video. What gets saved is an instrument with parameters, not
    a recording.
 2. **Manual and autonomous on the same mechanism.** A human and an agent affect the system
-   through the identical interface. Authority is a per-layer setting, not a global mode.
-   **What *per-layer* addresses is undecided**: this sentence, rule 06 of the manual and M6
-   name three different things, and the disagreement is *What authority is set on*, below.
-   The senses each word carries are in [What the three words mean, and
-   where](#what-the-three-words-mean-and-where).
+   through the identical interface. **Authority is set per node of a Set**, not a global mode
+   — [ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md). This
+   sentence read *a per-layer setting* until then, which was one of three answers in play and
+   was the oldest of them; it loses because no operation in this system addresses a layer of a
+   live Set, and per *deck slot* loses to rule 06 of the manual, which rules out any switch
+   that hands a whole instrument over. The senses each word carries are in [What the three
+   words mean, and where](#what-the-three-words-mean-and-where).
 3. **Reproducible.** The same record stream and the same seeds produce the same show.
 4. **Unbreakable on stage.** Nothing stops working when the network drops or the DJ gear
    changes. Defended continuously rather than built once — see Continuous concerns.
@@ -77,9 +79,13 @@ no code to lower. *Layer* in this column is the model position and nothing else;
 Orthogonal to the layers:
 
 - **Control plane** — agents, director, mix agent, generation worker (M6). **What an agent
-  is one *of* is undecided**: this roster said *node agents* and M6 below asks for one per
-  deck slot, which is the same disagreement as *What authority is set on*, and naming it
-  either way here would settle it by wording. **MCP
+  is one *of* is still undecided**: this roster said *node agents* and M6 below asks for one
+  per deck slot, and naming it either way here would settle it by wording. It used to be the
+  same disagreement as *What authority is set on*, and is not any more — that one is taken,
+  per node
+  ([ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md)), and it
+  does not decide this one: an agent scoped to a deck slot can perfectly well respect an
+  authority set per node. **MCP
   arrived early and took a bite out of this**: an external model driving the system through
   the same records a key press writes is M6's stated demand, arriving from outside the
   process. What it does not cover is the autonomous half — an agent that prepares material
@@ -661,7 +667,7 @@ the program.
    where the exhaustiveness lives** — `run_surface`'s claim that *a control added to one and not
    the other does not compile* would be false against forty-six variants, so the MIDI path is now
    message → `Operation` → `Live::operate` and the compiler's guarantee is
-   `karakuri-operation-record`'s `written`, which is one match over all forty-nine. The one arm left
+   `karakuri-operation-record`'s `written`, which is one match over all fifty. The one arm left
    in `run_surface` is `TapBeat`, which needs the beat tracker rather than a value and is
    `Owed::NotSettled`; it goes the day that record is settled.
 
@@ -744,7 +750,7 @@ the program.
 
    **MCP names its operations and performs them itself** —
    [ADR-0199](adr/0199-mcp-names-its-operations-and-performs-them-itself.md). Its six tools are six
-   of the forty-nine: `read_procedure`, `write_procedure`, `swap_outcome`, `save_set`, `read_set` and
+   of the fifty: `read_procedure`, `write_procedure`, `swap_outcome`, `save_set`, `read_set` and
    `list_sets` are `ReadProcedure`, `WriteProcedure`, `SwapOutcome`, `SaveSet`, `ReadSet` and
    `ListSets`, and **`written` answers `Silent` for every one of them** — `Question` for the four
    that ask, `OnLanding` for the two whose record is written where the work lands
@@ -792,8 +798,12 @@ the program.
      `Set::params`, `Set::node_names`, `Set::bindings`, `Set::inputs` and `Set::layering` are all
      there, so the node groups, the numbered rows, the values, the renderer row and a bound row's
      source are readable off a running Set. Three things are not. **Authority — `man / sug / auto` —
-     exists nowhere at all**: not in the engine, not in `karakuri-operation`, and the manual calls
-     it *"one of the four properties the whole system is defined by"*. **The panes overflow**: a Set
+     is named now and readable off nothing**: `Operation::SetAuthority` and `Record::Authority`
+     exist, per node
+     ([ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md)), and the
+     engine holds neither the value list nor a place to keep one — a per-node flag has to be
+     restated on every rebuild the way `params` and `bindings` are, and that field is not written.
+     So the chip has a vocabulary to speak and no value to draw, where before it had neither. **The panes overflow**: a Set
      with more rows than fit is the first thing in this console that would want a scroll position,
      and this crate keeps none — the Library's answer, *list what fits and say how many*, is a
      listing's answer and not a node tree's. And the `showing` header, `keep` and `2 up` are
@@ -1006,27 +1016,31 @@ than work, and every one of them was found by building the thing next to it.
   ([ADR-0200](adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)); both
   block everything after it. A third is smaller and is not on that page: **nothing keeps a
   favourite**, so the star has no value to read and the `favourites` scope has no membership.
-- **What authority is set on: a layer, a node, or a slot.** Three documents give it three
-  addresses, and none of them is a synonym for the others. The four properties at the top of this
-  file say *"Authority is a per-layer setting, not a global mode"*; rule 06 of
-  [the seven rules](manual/index.html) says *"Authority is per node, never a global mode ... Each
-  node of a Set is manual, suggesting, or automatic, and you set that node by node"*;
-  [the console page](manual/console.html) says *"`man / sug / auto` on each node head, never a
-  global mode"* and draws the control on a node head addressed `L1:0`; and M6 below asked
-  for *"Slot agents, one per slot rather than per graph node"* while the bullet under it
-  demoted *"that layer's agent"* — both now marked as this question rather than reworded
-  into an answer. A layer, a node of a Set and a deck slot are three different things to
-  address, and a control set per node is not the same control as one set per deck slot.
-  [P-0031](principles/0031-a-name-means-one-thing-across-the-system.md) is what makes this a defect
-  rather than a difference of wording — *"One signal name is one signal, at one confidence,
-  whichever code path reaches it"*, and *"it is not enough to be disjoint in practice; they have to
-  be disjoint by name"*. **This is what actually leaves the Inspector's authority row undecided**,
-  above: that row is named as blocked on `man / sug / auto` existing nowhere at all, and what it is
-  really waiting on is which address the control is per — because an implementation would have to
-  pick one, and picking one from the code is the specification written backwards. Not taken here.
-  **What has been taken is the wording**: which sense each of the three words carries where is
-  [What the three words mean, and where](#what-the-three-words-mean-and-where), below, so the
-  next change can be written without re-deriving it.
+- ~~**What authority is set on: a layer, a node, or a slot.**~~ **Taken: per node of a Set** —
+  [ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md). Three
+  documents gave it three addresses and none was a synonym for the others: the four properties at
+  the top of this file said *"Authority is a per-layer setting"*, rule 06 of
+  [the seven rules](manual/index.html) says *"Each node of a Set is manual, suggesting, or
+  automatic, and you set that node by node"*, and
+  [the console page](manual/console.html) draws `man / sug / auto` on a node head addressed
+  `L1:0`. **Per layer lost because the address does not exist** — no operation names a layer of a
+  live Set, and the only `Layer` in a payload is `ListSets`'s search filter — and **per deck slot
+  lost to rule 06's own sentence**, *"There is no switch that hands the whole instrument to an
+  agent, because the useful arrangement is almost always partial"*, which a flag on a `deck: u8`
+  is at deck granularity.
+  [P-0031](principles/0031-a-name-means-one-thing-across-the-system.md) is what made this a defect
+  rather than a difference of wording, and the guarding it needed is
+  [What the three words mean, and where](#what-the-three-words-mean-and-where), below, which
+  landed first and is what the record is written in the terms of.
+  **What it unblocks is the Inspector's authority row**, above: that row reads as blocked on
+  `man / sug / auto` existing nowhere and was really waiting on the address. The vocabulary
+  and the record exist now — `Operation::SetAuthority` and `Record::Authority`, the second
+  session record to name a node — and **what is still owed is the engine**: a per-node flag has
+  to be restated on `karakuri_engine::swap::Request` the way `params`, `published`, `bindings`,
+  `names` and `edges` are, or a rebuild hands a node back to an agent an operator had taken it
+  from, saying nothing. Until that lands nothing writes an `authority` record and the manual's
+  row says so. **What an agent is one *of* is a separate question and is still open** — see the
+  control plane above.
 - **What `expand` under a solo should do.** `Layout::soloed()` can lie: the solve never reads it and
   `check_structure` only checks that it addresses a node, so a solo's exclusivity lives in flags any
   later `expand` may contradict. Nothing reaches that state today.
@@ -1104,11 +1118,13 @@ vocabulary."*
   Geometry` names. Say *an input slot*. This third one is not in ADR-0049 and had no guard
   at all before.
 
-**What this does not settle.** Whether `man / sug / auto` is per *node of a Set*, per *deck
-slot*, or per *kind*. Three documents still name three different answers, and every place
-this file said one and meant another is now marked as that question rather than reworded
-into an answer — the four properties at the top, the control-plane roster, M5's mode control
-and M6's agents. The next change is the one that picks.
+**What this settled, and what it did not.** It took none of the decisions — that was the
+point of it. What it made possible is the one that followed:
+[ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md) picked *per
+node of a Set*, and could be written down as that rather than as *per layer* only because this
+table says which of three senses `layer` would have been carrying. The four properties at the
+top, the control-plane roster, M5's mode control and M6's agents are updated to it. **What is
+still open is what an agent is one *of***, which this table also does not settle.
 
 The table below is what exists, part by part. What is still absent, and why, is in the
 milestones further down rather than listed here: agents, the library, the node editor.
@@ -1695,6 +1711,11 @@ items was made of. This is what it turned out to be.
   ([ADR-0186](adr/0186-one-operation-names-one-of-three-residencies.md)) and the mask is two rows
   because a control change can only set
   ([ADR-0201](adr/0201-the-mask-is-two-rows-because-a-control-change-can-only-set.md)).
+  **Authority is set per node**, which is the fiftieth row and the first concept the page gained
+  rather than split
+  ([ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md)); it writes
+  `Record::Authority`, the second session record to name a node, and **the engine field a per-node
+  flag needs to survive a rebuild is owed and not written**.
   `karakuri-operation-record/` is where an operation becomes a record, a crate that depends on
   both ([ADR-0194](adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)).
   **The MIDI map is migrated and `Action` is deleted**
@@ -1843,9 +1864,9 @@ it.
   operator wins and an automatic writer yields to a hand
   ([P-0078](principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md)). Its
   record is the session's and the engine holds no copy of the value list yet, which is what that
-  work still owes. *(Read as of 2026-08-28, mid-flight: the crate cites its record by number and
-  `docs/adr/INDEX.md` does not carry the row yet, so the record is the citation to follow when it
-  lands.)*
+  work still owes:
+  [ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md), which names the
+  engine field as the thing between this and a value the chip can draw.
 
   **Partly done, and the half that is left is a control on a region the console does not draw.**
   `man / sug / auto` is a node head, the node head is the inspector's, and the inspector is
@@ -1938,10 +1959,13 @@ land here.**
 
 **Adds**
 
-- Agents, and **what each one is attached to is undecided.** This bullet asked for one per
-  *deck slot* rather than per node of a Set; the architecture roster above said *node
-  agents*; rule 06 of the manual puts authority on a node. That granularity is part of *What
-  authority is set on* and is not taken here. Whatever it is attached to, each owns a prompt,
+- Agents, and **what each one is attached to is still undecided.** This bullet asked for one
+  per *deck slot* rather than per node of a Set; the architecture roster above said *node
+  agents*. **What is no longer part of that question is the authority**: it is set per node
+  ([ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md)), and an
+  agent scoped to a deck slot can respect a per-node authority perfectly well — so this
+  granularity is a question about agents and not about rule 06 any more. Whatever it is
+  attached to, each owns a prompt,
   watches designated inputs, selects from its prepared variants, and queues generation for
   material it expects to need. Autonomous selection means choosing among what already exists,
   never generating on a path the frame waits for
@@ -1950,7 +1974,10 @@ land here.**
 - Mix agent. Set-level arc, energy trajectory, monitoring for staleness
 - Authority model. Budget constraints ("camera changes at most once per four bars"),
   and manual intervention instantly demoting to `Suggest` whichever agent was moving the
-  control — *which* agent that is depends on the undecided granularity above
+  control — *which* agent that is depends on the undecided granularity above. **What the
+  demotion writes is decided**: `Operation::SetAuthority` on the node, and
+  [P-0078](principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md) is
+  the rule it is the standing case of
 - Generation queue with priority and cost awareness
 
 **Demands on earlier work**

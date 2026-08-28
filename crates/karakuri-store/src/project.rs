@@ -153,6 +153,14 @@ fn key_for(record: &Record, ordinal: usize) -> Option<Key> {
         | Record::Look { .. }
         | Record::Canvas { .. }
         | Record::Procedure { .. }
+        // **A node's address and still dropped**, which none of its neighbours
+        // here are. An authority names `(layer, index)` the way a `slot` does,
+        // so it looks foldable — and what it says is not about the Set at all:
+        // it is an arrangement between an operator and an agent, made during a
+        // performance, about the node a deck slot happened to be playing. A
+        // Set file that carried one would hand that node over wherever it was
+        // next loaded. See `Record::Authority`.
+        | Record::Authority { .. }
         | Record::Transport { .. }
         | Record::Preview { .. }
         | Record::Transition { .. }

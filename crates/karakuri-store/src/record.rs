@@ -424,15 +424,15 @@ pub enum Record {
     // -- The mix: durable state that belongs to the *session* -------------
     //
     // Everything above describes one Set and goes into a Set file. These
-    // thirteen describe the deck the Sets are playing on, and a Set file must
+    // fourteen describe the deck the Sets are playing on, and a Set file must
     // not contain them — a Set does not know what fader it is under or whether
     // it is on air, and one that carried its gain would restore that gain
     // wherever it was next loaded. They are state all the same, which is what
     // separates them from the three below: `is_set_state` says no to all
-    // sixteen of them and means two different things by it. (It says no to the
+    // seventeen of them and means two different things by it. (It says no to the
     // four metadata records further down as well, for a third reason that is
     // not about state at all — see the group comment above `Record::Meta`; the
-    // count here is these sixteen and not that twenty. It read "seven" and
+    // count here is these seventeen and not that twenty-one. It read "seven" and
     // "twelve" from the commit that gave the mix a vocabulary until this one:
     // every record added since went in without the count moving, because a
     // prose count is not checked by anything. Both are counted off the
@@ -550,6 +550,59 @@ pub enum Record {
         index: u32,
         #[serde(rename = "proc")]
         proc_hash: Hash,
+    },
+    /// **Who may move one node of the Set a deck slot is playing** —
+    /// `manual`, `suggesting` or `automatic`.
+    ///
+    /// **A session fact about a node, which is [`Record::Procedure`]'s shape
+    /// exactly and is why this is not a Set file's record.** Every other record
+    /// that names a node of a Set — [`Record::Slot`], [`Record::Capacity`],
+    /// [`Record::Param`], [`Record::Bind`], [`Record::Seed`] — is written into
+    /// a Set file and carries no `slot`, because what a Set *is* does not
+    /// depend on which deck slot it is playing in. A Set does not know which
+    /// agent is watching it either: authority is an arrangement between an
+    /// operator and whatever else is in the room, made during a performance,
+    /// and a Set file that carried one would hand a node to an agent wherever
+    /// it was next loaded. So it is addressed the way `procedure` is — a deck
+    /// slot, a layer and an index — and it goes in a session stream and never
+    /// in a Set file.
+    ///
+    /// **The address is a node and deliberately not a deck slot.** Rule 06 of
+    /// the manual: *"There is no switch that hands the whole instrument to an
+    /// agent, because the useful arrangement is almost always partial."* A flag
+    /// beside the `slot` and nothing else would be that switch.
+    ///
+    /// `index` is which node of that layer, on [`Record::Procedure`]'s terms:
+    /// absent means 0 and 0 is not written, so this record costs an existing
+    /// stream nothing and says something only where it is written.
+    ///
+    /// A `String` rather than an enum, on `residency`'s terms and `curve`'s:
+    /// **what a level is allowed to be is the engine's to say**, and a stream
+    /// from a newer build should reach a diagnostic about what this build
+    /// supports rather than a parser that refuses the line.
+    ///
+    /// **Nothing writes one yet, and what is missing is the engine.** A node's
+    /// authority has to survive a rebuild, which means it is restated on
+    /// `karakuri_engine::swap::Request` the way that request's `params`,
+    /// `published`, `bindings`, `names` and `edges` are — *"a rebuild that lets
+    /// a value be re-derived is a rebuild that quietly discards what was
+    /// loaded"*. Written here first because the vocabulary is what a surface
+    /// asks in, and because the record is what says the fact is the session's:
+    /// see
+    /// `docs/adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md`.
+    Authority {
+        slot: u8,
+        layer: Layer,
+        /// **Which node of that layer.** Absent is 0 and 0 is not written, on
+        /// [`Record::Procedure`]'s terms.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        index: u32,
+        /// `manual`, `suggesting` or `automatic` — the words
+        /// `karakuri_operation::Authority::name` writes. Named for the concept
+        /// rather than shortened, because there is no shorter word for it that
+        /// is not already taken: `mode` is the word rule 06 refuses (*"never a
+        /// global mode"*) and `level` is `residency`'s.
+        authority: String,
     },
     /// **What size the session renders at**, in texels — the canvas every
     /// `VideoSource` draws into and every deck slot is sized to match.
@@ -991,7 +1044,7 @@ enum Vocabulary {
 }
 
 impl Record {
-    /// Whether this record belongs in a Set file. **Twenty say no, for three
+    /// Whether this record belongs in a Set file. **Twenty-one say no, for three
     /// different reasons, and keeping them apart is the point of the name** —
     /// it is `is_set_state` rather than `is_state` because most of what it
     /// refuses is state.
@@ -1002,7 +1055,7 @@ impl Record {
     ///   particular moment's microphone reading is part of what a Set is.
     /// - [`Record::Gain`], [`Record::Opacity`], [`Record::Blend`],
     ///   [`Record::Residency`], [`Record::Look`], [`Record::Canvas`],
-    ///   [`Record::Procedure`],
+    ///   [`Record::Procedure`], [`Record::Authority`],
     ///   [`Record::Transport`],
     ///   [`Record::Preview`], [`Record::Mask`], [`Record::Transition`] and
     ///   [`Record::Select`] are
@@ -1051,7 +1104,7 @@ impl Record {
     /// jobs. It lives in `docs/ir-spec.md` under "Records with an effect
     /// outside the stream", where a replay reads it.
     ///
-    /// A session stream carries the sixteen of the first two groups and none of
+    /// A session stream carries the seventeen of the first two groups and none of
     /// the third. That is the difference between the two files, stated from
     /// this side, and it is what [`Record::is_metadata`] is a separate function
     /// for: `Store::write_set` refuses a `param_decl` through *that* question so
@@ -1123,6 +1176,7 @@ impl Record {
             | Record::Look { .. }
             | Record::Canvas { .. }
             | Record::Procedure { .. }
+            | Record::Authority { .. }
             | Record::Transport { .. }
             | Record::Preview { .. }
             | Record::Transition { .. }
@@ -1390,6 +1444,71 @@ mod tests {
             panic!("not a procedure");
         };
         assert_eq!((slot, index), (2, 1), "the second renderer of slot 2");
+    }
+
+    /// **An authority round-trips through its wire name**, bytes and all, and
+    /// is the session's rather than any Set's.
+    ///
+    /// `round_trip_verbatim` rather than `round_trip`, on
+    /// [`Record::Procedure`]'s terms: the address is `(layer, index)` with the
+    /// index absent at zero, so a field appearing where nothing wrote one is
+    /// the failure this catches and a value comparison cannot see it.
+    ///
+    /// **The word is carried, not interpreted.** `manual`, `suggesting` and
+    /// `automatic` are `karakuri_operation::Authority::name`'s, and a level
+    /// this build does not know reaches the engine's diagnostic rather than
+    /// this decoder's refusal — which is why the third line here parses at all.
+    ///
+    /// The `is_set_state` assertion is the one this record exists to make: a
+    /// Set does not know which agent is watching it, so a Set file carrying an
+    /// authority would hand a node over every time it was loaded.
+    #[test]
+    fn an_authority_round_trips_and_an_absent_index_stays_absent() {
+        let first = r#"{"t":"authority","slot":0,"layer":"L1","authority":"manual"}"#;
+        let rec = round_trip_verbatim(first);
+        assert_eq!(
+            rec,
+            Record::Authority {
+                slot: 0,
+                layer: Layer::L1,
+                index: 0,
+                authority: "manual".to_string(),
+            },
+            "an absent index is the first node of that layer"
+        );
+        assert!(
+            !rec.is_set_state(),
+            "authority is the session's: a Set does not know which agent is watching it, \
+             and a Set file carrying one would hand that node over wherever it was loaded"
+        );
+        assert!(!rec.is_metadata());
+
+        let second =
+            r#"{"t":"authority","slot":2,"layer":"L4","index":1,"authority":"suggesting"}"#;
+        assert_eq!(
+            round_trip_verbatim(second),
+            Record::Authority {
+                slot: 2,
+                layer: Layer::L4,
+                index: 1,
+                authority: "suggesting".to_string(),
+            },
+            "the second renderer of deck slot 2"
+        );
+
+        // A `kind Field` node takes one: it draws nothing and its params are
+        // still an operator's to ride, which is why `Layer` has the arm.
+        assert_eq!(
+            round_trip_verbatim(
+                r#"{"t":"authority","slot":1,"layer":"Field","authority":"automatic"}"#
+            ),
+            Record::Authority {
+                slot: 1,
+                layer: Layer::Field,
+                index: 0,
+                authority: "automatic".to_string(),
+            }
+        );
     }
 
     /// The same for `slot`, which gained the same field for the same reason —
