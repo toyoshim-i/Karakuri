@@ -1017,6 +1017,36 @@ operations! {
     /// says which way.
     Solo { region: Option<String> } => "Solo a region",
 
+    /// **The default arrangement, at the viewport the window already has** —
+    /// and it takes nothing, because it acts on the arrangement as a whole.
+    /// ADR-0175 put it in that group with `UnfoldAll` and `Unsolo` and it has
+    /// stayed there.
+    ///
+    /// **What it discards is the rest of this section's promise.** *Move a
+    /// boundary* says a window dragged too small *"gives everything less and
+    /// forgets nothing"*, and *Fold a bay away* says a folded bay's *"size is
+    /// remembered, so bringing it back puts it where it was"*. Both of those
+    /// are kept in the arrangement this replaces: `karakuri_console::layout()`
+    /// is built fresh and only the viewport survives, so every fold, every
+    /// divider a hand has moved, the solo and both sets of remembered sizes go
+    /// at once. It is the one operation on the page that forgets, and the row
+    /// says so.
+    ///
+    /// **It is the default member of a family that does not exist**, which is
+    /// the framing this row was written to rather than *start again*: an
+    /// arrangement is named, kept and put back, and resetting is putting back
+    /// the one that came with the program. The other members have no row here,
+    /// no record to carry a saved arrangement and nowhere on the console to
+    /// live — which is why this row's panel badge names no home. It is the
+    /// second row in the section with no route at all; the other is *Bring
+    /// back what is folded*, and the two are empty for unrelated reasons.
+    ///
+    /// **No payload, and that is decided rather than [`Undecided`].** The
+    /// default arrangement is not a value a caller chooses; the day one is,
+    /// this variant gains the name of the arrangement to restore and stops
+    /// being the only member.
+    ResetArrangement => "Reset the arrangement",
+
     // ----- Output and recording -----------------------------------------
 
     /// The window is a preview and has no say in what is drawn: the canvas is
@@ -1088,10 +1118,11 @@ mod tests {
     /// split into a tone map and an exposure (ADR-0192), and 48 since the mask
     /// took a row for its shape and a row for its position (ADR-0201); it
     /// moves with the page and is never lowered to make a shorter list pass.
+    /// It is 49 since the arrangement gained a reset (ADR-0208).
     #[test]
     fn the_vocabulary_is_not_empty() {
         assert!(
-            Operation::TITLES.len() >= 48,
+            Operation::TITLES.len() >= 49,
             "only {} operations named — the vocabulary has shrunk below what the manual \
              specifies",
             Operation::TITLES.len()

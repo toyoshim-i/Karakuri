@@ -20,11 +20,15 @@
 //!
 //! # The three things it pins, and every one of them is a gap
 //!
-//! - **Two `Op` variants have no row**: [`Op::Reset`] and [`Op::Report`]. The
-//!   page is the specification for *which operations exist*, so an operation
-//!   the console performs and the page does not name is an operation nobody
+//! - **One `Op` variant has no row**: [`Op::Report`], and that one is
+//!   permanent (ADR-0205) — its reply is a list of pixel rectangles keyed by a
+//!   handle, and three of the four surfaces could not carry it. The page is
+//!   the specification for *which operations exist*, so an operation the
+//!   console performs and the page does not name is an operation nobody
 //!   specified — and giving it a row is an edit to the specification rather
-//!   than a rename.
+//!   than a rename. [`Op::Reset`] was the second of the two until that edit
+//!   was made: *Reset the arrangement* is its row now (ADR-0208), and the
+//!   mapping to it is what [`rows_of`] pins.
 //! - **One row has no `Op`**: *Move a boundary*, which is
 //!   [`karakuri_console::panel::Panel::press`], `moved` and `released` — a
 //!   gesture rather than an operation. The vocabulary carries it as
@@ -42,8 +46,10 @@
 //! not the outcome the manual reaches for — *Solo a region* is, and its row
 //! says so — and the body row has no word on the page at all. So the count
 //! below is no longer a decision waiting to be taken; it is **what the
-//! migration costs, held at two**. The other two are still open, and this file
-//! is what stops any of the three being closed by accident.
+//! migration costs, held at two**. The first is decided too, and in both
+//! directions: [`Op::Report`] keeps no row for good and [`Op::Reset`] gained
+//! one. *Move a boundary* is the one still open, and this file is what stops
+//! any of the three being closed by accident.
 //!
 //! # [`Op::FoldEnclosing`] is not a fourth, and the rule is what settles it
 //!
@@ -101,13 +107,21 @@ const NO_OP: &[&str] = &["Move a boundary"];
 
 /// [`Op`] variants that no row names, with why.
 ///
-/// **`Reset` is a change and `Report` is a question**, and the page has
-/// neither. They are the console's own — a fresh arrangement at the same
-/// viewport, and every node with where it solved to — and the vocabulary has
-/// nothing like them in *Arranging the console*. Naming them there is an edit
-/// to the specification, so they stay here and this list is what says so out
-/// loud.
-const NO_ROW: &[&str] = &["Reset", "Report"];
+/// **One entry, and it is permanent.** [`Op::Report`] is a question whose
+/// reply the vocabulary cannot say: `Outcome::Report` is a `Vec<Placement>`,
+/// and a `Placement` carries a [`NodeId`] and a pixel `Rect` — a handle no
+/// surface but this crate can hold, in the coordinates of a window a model is
+/// not looking at. A row for it would promise three surfaces a reply that does
+/// not cross, which is not the same as three routes nobody has built yet
+/// (ADR-0205).
+///
+/// **[`Op::Reset`] was the other entry and is not one any more.** It is a
+/// change rather than a question, it names no target, and *Reset the
+/// arrangement* is its row (ADR-0208) — so what this file pins about it is now
+/// the mapping in [`rows_of`] rather than its absence, and putting it back
+/// here fails [`the_variants_with_no_row_are_the_ones_written_down`] in one
+/// direction and [`every_row_on_the_page_has_an_operation`] in the other.
+const NO_ROW: &[&str] = &["Report"];
 
 fn workspace() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -171,7 +185,11 @@ fn rows_of(op: Op) -> &'static [&'static str] {
         // The same shape again: `Solo { region: None }` undoes the solo.
         Op::Solo(_) => &["Solo a region"],
         Op::Unsolo => &["Solo a region"],
-        Op::Reset => &[],
+        // The page's title, byte for byte. Renaming the row without renaming
+        // it here is `Op::Reset` reaching for an operation nobody named, and
+        // renaming it here without renaming the row is the same failure from
+        // the other side; the two assertions below catch one direction each.
+        Op::Reset => &["Reset the arrangement"],
         Op::Report => &[],
     }
 }

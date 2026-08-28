@@ -46,14 +46,14 @@
 //!
 //! # What it answers, and the three answers are the survey
 //!
-//! [`written`] is **one exhaustive match over all 48 operations**, which is
+//! [`written`] is **one exhaustive match over all 49 operations**, which is
 //! what makes the classification a fact rather than an intention: an operation
 //! added to the vocabulary does not compile here until somebody has said what
 //! it writes. The three answers are the three groups the survey found:
 //!
 //! - [`Written::Records`] — it writes these, in this order. Eleven operations,
 //!   six of which need no reading at all.
-//! - [`Written::Silent`] — it writes none, and that is settled. Twenty-six,
+//! - [`Written::Silent`] — it writes none, and that is settled. Twenty-seven,
 //!   for [`Silent`]'s four different reasons.
 //! - [`Written::Owed`] — it writes one and this build cannot make it. Eleven,
 //!   for [`Owed`]'s three different reasons.
@@ -431,6 +431,19 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         | Operation::FoldPane { .. }
         | Operation::Unfold { .. }
         | Operation::Solo { .. }
+        // **The console's own arrangement, which is a surface's state in
+        // exactly the sense this arm is for**: `Silent::Surface` names *what
+        // is folded* among its examples, and a reset is every fold, every
+        // divider and the solo at once. It is not `Silent::NoRecord` — that
+        // arm is for state a *performance* has and the record vocabulary
+        // cannot carry, and an arrangement is not something a replay
+        // reconstructs anything from. It is not `Owed` either: nothing is
+        // missing, because there is nothing to write.
+        //
+        // **A saved arrangement would not change this arm.** The record it
+        // would need is the panel's own, not the session's — the same reason
+        // `Operation::SizeWindow` is here beside it.
+        | Operation::ResetArrangement
         | Operation::SizeWindow { .. } => Written::Silent(Silent::Surface),
 
         // ----- Silent: it asks rather than changes -------------------------

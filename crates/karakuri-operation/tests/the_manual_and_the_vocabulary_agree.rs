@@ -4,7 +4,7 @@
 //!
 //! # Why the page is the specification and not the other way round
 //!
-//! The naming was done there. Forty-eight operations, one `<h3>` each, grouped
+//! The naming was done there. Forty-nine operations, one `<h3>` each, grouped
 //! into sections, each row carrying which of the four surfaces reaches it —
 //! and the page's own footer states the direction of authority for behaviour:
 //! *"Where a row here and the program disagree, the program is right and this
@@ -137,10 +137,11 @@ fn the_manual_and_the_vocabulary_name_the_same_operations() {
     // pass by finding nothing to check. It read 46 when this landed, 45 once
     // two residency rows became one (ADR-0186), 46 again since the look split
     // into a tone map and an exposure (ADR-0192), and 48 since the mask took a
-    // row for its shape and a row for its position (ADR-0201); it is meant to
+    // row for its shape and a row for its position (ADR-0201), and 49 since
+    // the arrangement took one for its reset (ADR-0208); it is meant to
     // move with the page, never to be lowered to fit a smaller scan.
     assert!(
-        rows.len() >= 48,
+        rows.len() >= 49,
         "only {} operations found in {PAGE} — is a row still `{ROW}` followed by an `<h3>`?",
         rows.len()
     );

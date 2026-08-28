@@ -136,6 +136,7 @@ use std::cell::Cell;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use karakuri_console::budget::PANEL_PASS;
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::{
     Dragged, InHand, Knob, Op, Outcome, Panel, Pressed, Released, Visibility,
@@ -229,8 +230,14 @@ const WRITTEN_ON: &str = "2026-08-26";
 /// mixer bay's 456 is 2.5x, so a band of two would have said so on the first
 /// run after that bay landed, and a band of ten would not have.
 ///
-/// Only the allocation count is held: the bytes move with it, and two verdicts
-/// about one pass is one more thing to keep passing for nothing.
+/// **Two figures are held and the bytes are not**, which is a distinction
+/// rather than an omission: the bytes move with the allocation count, so a
+/// verdict on them would be the same verdict twice. The second is
+/// [`PANEL_PASS`] — what one update of a live region costs, declared under
+/// [P-0072](../../../docs/principles/0072-a-still-panel-costs-nothing-and-what-moves-declares-its-price.md)
+/// and read by `tests/schedulable.rs` rather than by anything at runtime. It
+/// is a different claim from an allocation count and it is the one a
+/// schedulability condition is asserted against, so it gets its own verdict.
 const DRIFT: f64 = 2.0;
 
 /// **Has the reading moved away from the sentence that quotes it?** `Some` is
@@ -242,6 +249,18 @@ const DRIFT: f64 = 2.0;
 /// noticed by accident.
 fn drifted(measured: u64, written: u64) -> Option<f64> {
     let factor = measured.max(written) as f64 / measured.min(written).max(1) as f64;
+    (factor > DRIFT).then_some(factor)
+}
+
+/// [`drifted`] for a figure in milliseconds, which is what a **cost** is.
+///
+/// The same band and the same both-directions rule, said again for `f64`
+/// because the two numbers are of different kinds and neither is convertible
+/// into the other without saying something untrue about it. A run that read
+/// nothing at all cannot divide, and a zero-length sample never reaches here —
+/// the caller is inside `if !self.frames.is_empty()`.
+fn drifted_ms(measured: f64, written: f64) -> Option<f64> {
+    let factor = measured.max(written) / measured.min(written).max(f64::MIN_POSITIVE);
     (factor > DRIFT).then_some(factor)
 }
 
@@ -689,6 +708,21 @@ impl Costs {
             let mut record: Vec<f64> = self.frames.iter().map(|c| ms(c.record)).collect();
             let mut submit: Vec<f64> = self.frames.iter().map(|c| ms(c.submit)).collect();
             let mut wait: Vec<f64> = self.frames.iter().map(|c| ms(c.wait)).collect();
+            // **What drawing the panel costs**, which is the figure
+            // `karakuri_console::budget::PANEL_PASS` declares and the reason
+            // this vector exists: the immediate-mode pass, plus the panel's
+            // own texture and geometry uploads and the recording of its render
+            // pass. Not `engine`, which is the governor's and would be counted
+            // twice (P-0072); not `wait`, which is doing nothing on purpose;
+            // and **not `submit`**, which is larger than all of this together
+            // and carries the engine's half of the frame as well, so charging
+            // it to a region would charge a region for a frame it did not ask
+            // for.
+            let mut draw: Vec<f64> = self
+                .frames
+                .iter()
+                .map(|c| ms(c.ui + c.textures + c.buffers + c.record))
+                .collect();
             // **Median, where the figure this replaces was a mean.** The mean
             // was over 180 frames and the first one was lost in it; the sample
             // here is however many frames somebody asked for, which on a run
@@ -705,6 +739,7 @@ impl Costs {
             record.sort_by(f64::total_cmp);
             submit.sort_by(f64::total_cmp);
             wait.sort_by(f64::total_cmp);
+            draw.sort_by(f64::total_cmp);
             allocs.sort_unstable();
             bytes.sort_unstable();
             let n = self.frames.len();
@@ -826,6 +861,49 @@ impl Costs {
                     "  and THIS run read {}, within {DRIFT:.0}x of that, so the sentence above \
                      is still one this window produces.",
                     allocs[n / 2]
+                ),
+            }
+            // **What P-0072 calls a cost, measured and held against what
+            // declares it.** `budget::PANEL_PASS` is a constant somebody wrote
+            // down — ADR-0164 refuses a schedule made of measurements, because
+            // one reorders itself with the machine's noise — and a constant
+            // that nothing checks is the failure `WRITTEN_ALLOCS` above exists
+            // for, one number along. So the declaration and the reading are
+            // printed together, and this is the only place either can be: the
+            // figure needs a window, three seconds of nobody touching it and a
+            // device, and none of those is reachable from `cargo test`.
+            //
+            // **It reports and does not fail**, which is deliberate. This
+            // machine reads about a sixth of these numbers with its other
+            // cores loaded, and a gate on a millisecond here would be one
+            // nobody could keep passing — flaky is worse than broken
+            // (`docs/contributing.md` §1). What *is* asserted, without a
+            // clock, is that every region declares this one constant:
+            // `tests/schedulable.rs`.
+            println!(
+                "  drawing the panel is a median {:.3} ms of that — the egui pass, its \
+                 texture and geometry uploads and the recording of its render pass, which \
+                 is what one update of a live region costs under P-0072. The submission is \
+                 not in it: it carries the engine's half of the frame as well. \
+                 `karakuri_console::budget::PANEL_PASS` declares {:.3} ms,",
+                draw[n / 2],
+                ms(PANEL_PASS),
+            );
+            match drifted_ms(draw[n / 2], ms(PANEL_PASS)) {
+                Some(factor) => println!(
+                    "  and THIS run read {:.3}, which is {factor:.1}x that — past the \
+                     {DRIFT:.0}x this file will quote a figure across. **The declared cost \
+                     is stale.** Re-take it over several runs of this example and rewrite \
+                     `PANEL_PASS` in `crates/karakuri-console/src/budget.rs`, with the \
+                     machine and the date beside it, because both schedulability \
+                     conditions are asserted against that number and nothing else measures \
+                     it.",
+                    draw[n / 2]
+                ),
+                None => println!(
+                    "  and THIS run read {:.3}, within {DRIFT:.0}x of that, so the declared \
+                     cost is still one this window produces.",
+                    draw[n / 2]
                 ),
             }
             println!("  taken on {}", self.taken_on);
@@ -4322,8 +4400,8 @@ mod tests {
             );
         }
 
-        // The vocabulary is 48 operations and this example has five controls
-        // writing five records. A record invented for the other 41 would be
+        // The vocabulary is 49 operations and this example has five controls
+        // writing five records. A record invented for the other 42 would be
         // somebody deciding what they mean — and the answer is now *which*
         // nothing rather than `None`, because a surface's own state and a
         // record nobody can write yet are not the same silence.
