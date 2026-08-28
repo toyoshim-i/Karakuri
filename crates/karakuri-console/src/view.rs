@@ -2305,12 +2305,21 @@ impl Phase {
     }
 }
 
-/// **How often the tally's word rolls at the residency it was asked for**, and
-/// the period every other number in this presentation is a fraction of.
+/// **How often anything pending on this panel sets off toward where it is
+/// going**, and the period every other number in the presentation is a
+/// fraction of.
 ///
 /// One second, which is P-0075's own *"once a second"* and is the rate that
 /// reads as *waiting* rather than as a fault. See
 /// [ADR-0190](../../../docs/adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md).
+///
+/// **Two users, one rate, and that is the rule rather than a coincidence**:
+/// the tally's word rolling toward a residency, and a fader's fill reaching
+/// toward a scheduled value ([`Reach`],
+/// [ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)).
+/// P-0075 asks for one phase panel-wide because two controls moving out of
+/// step looks broken rather than informative, and a second period here is how
+/// that would happen with nothing failing to compile.
 pub const ROLL_PERIOD: Duration = Duration::from_millis(1000);
 
 /// **How much of the period the word is moving for**: 400 ms out and back,
@@ -2323,14 +2332,16 @@ pub const ROLL_PERIOD: Duration = Duration::from_millis(1000);
 /// of the time (P-0075's first clause).
 pub const ROLL_TRAVEL: Duration = Duration::from_millis(400);
 
-/// **How far up the destination the word gets**, as a fraction of the pitch
-/// between the two words.
+/// **How far toward the destination the moving thing gets**: a fraction of the
+/// pitch between the two words on the tally, and a fraction of the gap between
+/// the two values on a fader.
 ///
 /// Less than one, and that is the presentation: *"a slot machine that never
 /// quite lands"*. Landing is what arrival looks like, so a roll that reached
-/// 1.0 would state the opposite of the truth once a second. At 0.4 the current
-/// word keeps most of its rows and the destination shows enough of its own to
-/// be read.
+/// 1.0 would state the opposite of the truth once a second — and a band that
+/// covered the gap to a fader's mark would say a scheduled fade had already
+/// run. At 0.4 the current word keeps most of its rows and the destination
+/// shows enough of its own to be read.
 pub const ROLL_REACH: f32 = 0.4;
 
 /// **How many steps the travel is drawn in**, which is the only reason
@@ -2351,9 +2362,13 @@ const ROLL_STEPS: u32 = 12;
 pub const ROLL_STALENESS: Duration =
     Duration::from_micros(ROLL_TRAVEL.as_millis() as u64 * 1000 / ROLL_STEPS as u64);
 
-/// **How far the tally's word has rolled**, as a fraction of the pitch between
-/// it and the word it is rolling toward: `0.0` at rest, [`ROLL_REACH`] at the
-/// top of the travel, and never `1.0`.
+/// **How far a pending presentation has got toward its destination this
+/// frame**, as a fraction of the distance to it: `0.0` at rest, [`ROLL_REACH`]
+/// at the top of the travel, and never `1.0`.
+///
+/// One curve, two readers — the pitch between the tally's two words
+/// ([`tally_into`]) and the gap between a fader's value and its mark
+/// ([`reach`]).
 ///
 /// A raised cosine over [`ROLL_TRAVEL`], flat for the rest of
 /// [`ROLL_PERIOD`]. It is that curve rather than a triangle for one reason
@@ -2560,6 +2575,15 @@ pub struct Level {
 /// so does a press on a fader's *track*, off the knob, which would otherwise
 /// be a jump nobody asked for. `tests/mixer.rs` asserts both directions rather
 /// than leaving either to be inferred from the absence of a hit test.
+///
+/// **[`Strip::gain_to`] and [`Strip::opacity_to`] are readouts too**, and the
+/// order is the tally's: the roll was drawn a commit before the chip became a
+/// control, because a control that could not yet say it was pending would look
+/// dead for exactly as long as that commit. Nothing here schedules a move,
+/// nothing here cancels one, and no press on a mark reaches anything — a
+/// scheduled fade is armed from a key, a map or an MCP call, and what this
+/// strip owes it is that it is not invisible until it happens
+/// ([ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Strip {
     /// **What the deck is playing**, in `.strip-name`.
@@ -2630,10 +2654,67 @@ pub struct Strip {
     /// sliders. A `g` and a mini fader lying down against the tall one in the
     /// middle of the strip.
     pub gain: f32,
+    /// **Where a scheduled move is taking the trim**, or `None` for a trim
+    /// nothing is moving — `Deck::transitions_on(slot)`'s
+    /// `Control::Gain` entry, and its `Transition::to`.
+    ///
+    /// # It is the destination and nothing else about the move
+    ///
+    /// A `Transition` also carries the instant it starts, how long it lasts
+    /// and the curve it takes. None of the three is here, and the reason is
+    /// the same seam every other field on this type is on: **the console has
+    /// no beat count**, so a start in beats and a length in beats are two
+    /// numbers it could not turn into anything a strip draws. What it can draw
+    /// is where the control is going, which is P-0075's second clause and the
+    /// whole of what the fader is being asked to say.
+    ///
+    /// **Armed and running are the same state here, deliberately.** A
+    /// transition is in the deck's list from the moment it is scheduled until
+    /// the beat it finishes on, and `Deck::transitions_on` answers with it
+    /// throughout — so a fade quantised to the next bar and a fade halfway
+    /// through are both *a request that has not arrived*, which is exactly the
+    /// relation P-0075 is about. What separates them on the surface is that
+    /// the value under the knob is moving in the second case, and the mark
+    /// stands still in both.
+    ///
+    /// **One per control, because the engine allows one**: `Deck::schedule`
+    /// cancels whatever was moving that pair before pushing, so a harness that
+    /// finds two has read the wrong slot.
+    ///
+    /// # What it cannot say, and it is the trim's existing gap
+    ///
+    /// The track shows `[0, 1]` and the mix is HDR, so a move from 1.5 to 2.0
+    /// is two values the track draws in one place — see [`StripBox::trim_at`],
+    /// where that gap is already written down. [`Strip::gain_pending`] answers
+    /// `None` there rather than declaring a staleness for an animation that
+    /// would not move a pixel.
+    pub gain_to: Option<f32>,
     /// **The fader** — `Deck::opacity`: a proportion in `[0, 1]`, and the one
     /// control that silences a slot under every blend mode, which is what
     /// makes it the way out of material that has gone NaN.
     pub opacity: f32,
+    /// **Where a scheduled move is taking the fader**, or `None` for a fader
+    /// nothing is moving — `Deck::transitions_on(slot)`'s `Control::Opacity`
+    /// entry, on [`Strip::gain_to`]'s terms and for its reasons.
+    ///
+    /// # And the third control has nowhere to say it
+    ///
+    /// `Control` has three members and this strip carries two of them.
+    /// `Control::MaskPosition` — *how far a mask's front has travelled* — is
+    /// the one a wipe is made of, and **the strip has no control and no
+    /// readout for it at all**: the mask `.mini` names a *shape*, and the
+    /// position, the angle and the softness are an inspector row that does not
+    /// exist yet ([`Strip::mask`] says so, and [`Strip::mask_angle`] is the
+    /// same fact from the other side). A destination carried here for it would
+    /// be a number with nowhere to be drawn, and drawing it on the shape chip
+    /// would say a shape was changing when none is.
+    ///
+    /// So an armed wipe is invisible on this panel, it is an under-draw rather
+    /// than a decision that it does not matter, and it is
+    /// [ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md)'s
+    /// named consequence: what closes it is a mask-position control, and it
+    /// closes the same day that control lands.
+    pub opacity_to: Option<f32>,
     /// **The blend in force**, as one of the vocabulary's three — and the word
     /// drawn on the chip is [`BlendMode::name`].
     ///
@@ -2751,6 +2832,55 @@ impl Strip {
             false => Some(self.requested),
         }
     }
+
+    /// **Where the trim is going and has not got to**, or `None` for a trim
+    /// that is where it has been asked to be.
+    ///
+    /// [`Strip::pending`] one control along, and the same shape: the field is
+    /// the request, the derivation is the third clause, and nothing is stored
+    /// that says *a move is pending* — that fact is `self.gain_to` against
+    /// `self.gain`, read every frame off values the harness rewrote this
+    /// frame.
+    ///
+    /// # It compares what the track can show, and that is not the same as the
+    /// raw pair
+    ///
+    /// The trim draws `[0, 1]` and gain is open above unity, so a scheduled
+    /// move from 1.5 to 2.0 is two values with **one position** on this track
+    /// ([`StripBox::trim_at`]). Compared raw it is pending; compared through
+    /// [`unit`] it is not, and this compares through [`unit`].
+    ///
+    /// The reason is [`View::animating`] rather than the mark: a `Some` here
+    /// declares a staleness, and a staleness bought for an animation that
+    /// cannot move a pixel is the cost ADR-0193 refused to pay for a bay
+    /// nobody can see, arriving through the other door. **It is still an
+    /// under-draw and it is the trim's existing gap, not a new one** — the
+    /// same track that cannot show 1.0 against 3.0 cannot show a move between
+    /// them, and both close together, on the pass that lets a hand push the
+    /// control past the top.
+    ///
+    /// A destination that is not a number is zero, which is [`unit`]'s rule
+    /// and is where a NaN out of an engine stops being a `NaN`-wide band.
+    pub fn gain_pending(&self) -> Option<f32> {
+        self.gain_to
+            .filter(|to| unit(*to) != unit(self.gain))
+            .map(unit)
+    }
+
+    /// **Where the fader is going and has not got to**, on
+    /// [`Strip::gain_pending`]'s terms.
+    ///
+    /// Opacity is a proportion, so the clamp is the identity on every value a
+    /// deck can hold and the comparison is the plain one. It is written
+    /// through [`unit`] anyway, because a harness writing a destination the
+    /// engine never held is the case both of these are the last line of
+    /// defence for — and two derivations that agree except in the case nobody
+    /// tests are worse than one shape written twice.
+    pub fn opacity_pending(&self) -> Option<f32> {
+        self.opacity_to
+            .filter(|to| unit(*to) != unit(self.opacity))
+            .map(unit)
+    }
 }
 
 /// **A fader, laid out**: the track, the length of it the value fills, and the
@@ -2809,6 +2939,54 @@ pub struct Meter {
     pub fill: Rect,
     /// [`Level::peak`], a [`size::VMETER_PEAK_H`] bar across the well.
     pub peak: Rect,
+}
+
+/// **A scheduled move on a fader, laid out**: the mark on the destination, and
+/// how far this frame's attempt to get there has reached.
+///
+/// The presentation
+/// [P-0075](../../../docs/principles/0075-a-pending-transition-shows-where-it-is-where-it-is-going-and-that-it-has-not-arrived.md)
+/// is met with on a track, decided in
+/// [ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md):
+/// **the knob and the fill go on saying where the control is, a mark says
+/// where it is going, and the fill keeps setting off toward the mark and
+/// falling back**. Nothing about the value moves, which is a stricter first
+/// clause than the tally's roll manages — the word there is lifted off its
+/// centre line and this is not.
+///
+/// # Two rectangles and no phase
+///
+/// It is a [`Fader`]'s neighbour and it is measured the same way: a pure
+/// function of the two values and the displacement, with no clock and no
+/// `Phase` in it — [`roll_at`] is applied by whoever is painting, exactly as
+/// it is for the tally's word. A test asks for a reach at a displacement it
+/// chose.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Reach {
+    /// **The destination**, as a hairline across the track at the position the
+    /// knob would sit at if the move had landed.
+    ///
+    /// **As long as the knob is wide**, so it is the knob's own footprint
+    /// reduced to a line — and so it always has the same two pixels of strip
+    /// to be read against that the knob stands proud on
+    /// ([`size::VFADER_KNOB_OUT`]), whatever the fill is doing underneath. A
+    /// mark the width of the *track* would cross the fill's own lavender end
+    /// in its own colour on a move down from the top.
+    ///
+    /// It is painted **over** the knob rather than under it. Where the two
+    /// nearly coincide the knob would otherwise swallow it — 9 pixels of knob
+    /// on a 98-pixel travel is every move under about a tenth of the fader,
+    /// and a quarter of the trim — and a mark that disappears exactly when the
+    /// control is nearly there says *arrived* at the one moment it must not.
+    pub mark: Rect,
+    /// **What the reach has covered at this displacement**: from the value's
+    /// own edge toward [`Reach::mark`], and never as far as it — [`ROLL_REACH`]
+    /// of the way at the top of the travel, nothing at rest.
+    ///
+    /// Across the fill's own width rather than the track's, because it is the
+    /// fill reaching. Empty at rest, which is a rectangle with no area and
+    /// nothing painted.
+    pub band: Rect,
 }
 
 /// **One strip's furniture**: a rectangle for each of the six things stacked
@@ -2895,6 +3073,25 @@ impl StripBox {
             size::VFADER_INSET,
             egui::vec2(size::VFADER_KNOB_W, size::VFADER_KNOB_H),
         )
+    }
+
+    /// **The trim's scheduled move**, from the gain it is at to the one it was
+    /// asked for, `rolled` of the way — which is [`reach`] on the horizontal
+    /// track.
+    ///
+    /// Off [`StripBox::trim_at`] twice rather than off any arithmetic of its
+    /// own: the destination's mark is *where the knob would be*, so it is the
+    /// same derivation asked a second question, and a mark that drifted from
+    /// the knob it stands for would be a fader with two ideas of what a value
+    /// looks like.
+    pub fn trim_reach(&self, gain: f32, to: f32, rolled: f32) -> Reach {
+        reach(self.trim_at(gain), self.trim_at(to), rolled)
+    }
+
+    /// **The fader's scheduled move**, on [`StripBox::trim_reach`]'s terms and
+    /// off [`StripBox::fader_at`].
+    pub fn fader_reach(&self, opacity: f32, to: f32, rolled: f32) -> Reach {
+        reach(self.fader_at(opacity), self.fader_at(to), rolled)
     }
 
     /// **The meter at a reading.**
@@ -3520,6 +3717,58 @@ fn fader(track: Rect, axis: Axis, at: f32, inset: f32, knob: egui::Vec2) -> Fade
     }
 }
 
+/// **A scheduled move on a laid-out fader**: the mark on where it is going,
+/// and the band reaching `rolled` of the way from where it is.
+///
+/// **Two faders in and no value arithmetic**, which is what keeps this honest:
+/// `now` and `to` are the same track measured at the two values, so the mark
+/// lands exactly where the knob would and the band starts exactly where the
+/// fill ends. The knob's centre is the fill's moving edge — [`fader`] says so
+/// — and that one number is the whole of what this reads out of each.
+///
+/// **The displacement is a fraction of the gap rather than a distance**, so
+/// the reach is in proportion to the move: a fade across the fader sets off a
+/// long way and a fade of a hundredth sets off a pixel. That is the honest
+/// picture and it is also the limit — under about a hundredth of the travel
+/// the whole disagreement is a pixel, and what carries the message there is
+/// the mark rather than the motion. See
+/// [ADR-0206](../../../docs/adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md).
+///
+/// Two call sites the day it is written, which is this repository's rule about
+/// an abstraction: the trim and the opacity fader, exactly as [`fader`] itself
+/// has.
+fn reach(now: Fader, to: Fader, rolled: f32) -> Reach {
+    let (from, dest) = (now.knob.center(), to.knob.center());
+    match now.axis {
+        Axis::Row => {
+            let head = from.x + (dest.x - from.x) * rolled;
+            Reach {
+                mark: Rect::from_center_size(
+                    Pos2::new(dest.x, now.track.center().y),
+                    egui::vec2(size::HAIRLINE, now.knob.height()),
+                ),
+                band: Rect::from_min_max(
+                    Pos2::new(from.x.min(head), now.fill.min.y),
+                    Pos2::new(from.x.max(head), now.fill.max.y),
+                ),
+            }
+        }
+        Axis::Column => {
+            let head = from.y + (dest.y - from.y) * rolled;
+            Reach {
+                mark: Rect::from_center_size(
+                    Pos2::new(now.track.center().x, dest.y),
+                    egui::vec2(now.knob.width(), size::HAIRLINE),
+                ),
+                band: Rect::from_min_max(
+                    Pos2::new(now.fill.min.x, from.y.min(head)),
+                    Pos2::new(now.fill.max.x, from.y.max(head)),
+                ),
+            }
+        }
+    }
+}
+
 /// **One laid-out fader, taken hold of at `p`** — or `None` where `p` is not
 /// on its knob.
 ///
@@ -3742,12 +3991,28 @@ fn strip_into(ui: &Ui, pal: &Palette, strip: &Strip, at: StripBox, phase: Phase)
         galley,
         pal.faint,
     );
-    fader_into(&painter, pal, at.trim_at(strip.gain), false);
+    // **The same displacement for both faders and for the chip above them**,
+    // because it is the same phase: P-0075's *everything pending moves
+    // together*, which on this strip is three presentations reading one
+    // number. A strip with a fade on each fader reaches twice, in step.
+    let rolled = roll_at(phase);
+    fader_into(
+        &painter,
+        pal,
+        at.trim_at(strip.gain),
+        false,
+        strip
+            .gain_pending()
+            .map(|to| at.trim_reach(strip.gain, to, rolled)),
+    );
     fader_into(
         &painter,
         pal,
         at.fader_at(strip.opacity),
         strip.tally == Tally::Live,
+        strip
+            .opacity_pending()
+            .map(|to| at.fader_reach(strip.opacity, to, rolled)),
     );
     meter_into(&painter, pal, at.meter, strip.level.map(|l| at.meter_at(l)));
 
@@ -3913,7 +4178,13 @@ fn tally_into(
 /// 0 0 9px var(--c-glowp)`, so the knob of a slot that is on air takes a pink
 /// rim and a pink halo and no other knob does. It is the mock saying *the
 /// fader you are about to move is the one the audience is watching*.
-fn fader_into(painter: &egui::Painter, pal: &Palette, fader: Fader, live: bool) {
+fn fader_into(
+    painter: &egui::Painter,
+    pal: &Palette,
+    fader: Fader,
+    live: bool,
+    reach: Option<Reach>,
+) {
     let track_r = CornerRadius::same((fader.track.width().min(fader.track.height()) * 0.5) as u8);
     painter.rect_filled(fader.track, track_r, pal.well);
     painter.rect_stroke(
@@ -3923,6 +4194,25 @@ fn fader_into(painter: &egui::Painter, pal: &Palette, fader: Fader, live: bool) 
         StrokeKind::Inside,
     );
     gradient(painter, fader.fill, fader.axis, pal.mint, pal.lav, true);
+
+    // **The band, over the fill and under the knob**: it is the fill setting
+    // off, so it is drawn where the fill is drawn and the truth stays on top
+    // of it. `.vfader em`'s 20% wash of `var(--c-lav)` — the mock's own ink
+    // for *an address*, which is what a destination is — square rather than a
+    // capsule, because it is a stretch of the track rather than a value's own
+    // shape.
+    //
+    // **The mock draws it standing up only**, on deck B's fader: the trim's is
+    // the same band lying down, and no strip in the mock has a gain fade armed
+    // on it to draw one in.
+    //
+    // **Nothing at all while it rests**, which is where two thirds of an armed
+    // strip's frames are: at a displacement of zero the band has no area, and
+    // an empty rectangle painted every frame is a shape on the frame's budget
+    // (ADR-0164) that draws nothing.
+    if let Some(reach) = reach.filter(|reach| positive(reach.band)) {
+        painter.rect_filled(reach.band, CornerRadius::ZERO, tint(pal.lav, 20));
+    }
 
     let knob_r = CornerRadius::same((fader.knob.width().min(fader.knob.height()) * 0.5) as u8);
     if live {
@@ -3949,6 +4239,16 @@ fn fader_into(painter: &egui::Painter, pal: &Palette, fader: Fader, live: bool) 
         ),
         StrokeKind::Outside,
     );
+
+    // **The mark last, over everything, and it is one pixel.** `.vfader i`'s
+    // `background: var(--c-lav)`. It is the only thing here that may not be
+    // lost: painted under the knob it would vanish inside it for every move
+    // shorter than the knob is long, which is where a mark saying *not yet* is
+    // needed most. A hairline over a 9px knob hides nothing of where the
+    // control is.
+    if let Some(reach) = reach {
+        painter.rect_filled(reach.mark, CornerRadius::ZERO, pal.lav);
+    }
 }
 
 /// The meter: the well, the mean's column and the peak's mark — and **nothing
@@ -4509,9 +4809,10 @@ impl View {
     /// P-0072's first clause
     ///
     /// `None` is not an absence of information: it is the panel saying it is
-    /// still, and the window then sleeps. **A console with no parked slot
-    /// costs exactly what it cost before this existed**, which is a claim
-    /// `tests/parked.rs` makes rather than a hope.
+    /// still, and the window then sleeps. **A console with no parked slot and
+    /// no scheduled move on a fader costs exactly what it cost before either
+    /// existed**, which is a claim `tests/parked.rs` and `tests/armed.rs` make
+    /// rather than a hope.
     ///
     /// # Pending is not enough: the region that shows it has to be laid out
     ///
@@ -4547,13 +4848,27 @@ impl View {
     /// one without a solve, which matters because the fold is applied and this
     /// is asked before the next one.
     ///
-    /// One region today. A second declares beside this one and carries its own
-    /// node the same way, and the answer is the soonest of them — the beat is
-    /// the panel's other candidate, and P-0077 wants it moving continuously.
+    /// One region today, and now three presentations inside it — the tally's
+    /// roll and a reach on each of a strip's two faders. They share a rate, so
+    /// the answer is still one constant rather than a maximum over a list; a
+    /// second *region* declares beside this one and carries its own node the
+    /// same way, and then the answer is the soonest of them. The beat is the
+    /// panel's other candidate, and P-0077 wants it moving continuously.
     pub fn animating(&self, layout: &karakuri_layout::Layout) -> Option<Duration> {
         let bay = layout.find("mixer").is_some_and(|id| layout.visible(id));
-        let rolling = bay && self.mixer.iter().any(|strip| strip.pending().is_some());
-        rolling.then_some(ROLL_STALENESS)
+        // **Three presentations, one number.** The tally's roll and the two
+        // faders' reaches are the same curve at the same rate off the same
+        // phase, so the soonest staleness any of them will tolerate is
+        // `ROLL_STALENESS` whichever of them is moving and however many are.
+        // A second *rate* is what would make this a maximum over a list; a
+        // second *user of this rate* is not.
+        let moving = bay
+            && self.mixer.iter().any(|strip| {
+                strip.pending().is_some()
+                    || strip.gain_pending().is_some()
+                    || strip.opacity_pending().is_some()
+            });
+        moving.then_some(ROLL_STALENESS)
     }
 
     /// Draw the whole console. The `ui` is the root one

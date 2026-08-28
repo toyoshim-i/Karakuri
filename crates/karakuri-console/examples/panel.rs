@@ -148,8 +148,8 @@ use karakuri_console::view::{
 };
 use karakuri_engine::governor::{Report, SLOWEST_PRIME_ONE_IN};
 use karakuri_engine::{
-    compose, Blend, Committed, Deck, Gpu, HotSwap, Look, Mask, MaskKind, Present, Residency, Set,
-    Sink, Skip, TonemapOp,
+    compose, Blend, Committed, Control, Deck, Gpu, HotSwap, Look, Mask, MaskKind, Present,
+    Residency, Set, Sink, Skip, TonemapOp,
 };
 use karakuri_layout::{Axis, Hit, NodeId, Point};
 use karakuri_operation::{BlendMode, Operation};
@@ -2417,6 +2417,19 @@ fn library(root: &std::path::Path) -> Vec<String> {
 /// one field that owns anything, and it is rewritten only when it differs —
 /// which keeps this off the frame's allocation budget (ADR-0164) rather than
 /// putting a `String` per strip on it every frame.
+/// **What a scheduled move on this control is taking it to**, or `None` for a
+/// control nothing is moving.
+///
+/// The engine's `Transition` carries the instant it starts, its length in
+/// beats and its curve as well, and none of the three crosses this seam: the
+/// console has no beat count, so what it could draw out of them is nothing.
+/// See `view::Strip::gain_to`.
+fn destination(deck: &Deck, slot: usize, control: Control) -> Option<f32> {
+    deck.transitions_on(slot)
+        .find(|t| t.control() == control)
+        .map(|t| t.to())
+}
+
 fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
     out.truncate(deck.slot_count());
     while out.len() < deck.slot_count() {
@@ -2425,7 +2438,9 @@ fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
             tally: view::Tally::Allocated,
             requested: view::Tally::Allocated,
             gain: 0.0,
+            gain_to: None,
             opacity: 0.0,
+            opacity_to: None,
             blend: BlendMode::Add,
             mask: view::Mask::None,
             mask_angle: 0.0,
@@ -2441,6 +2456,19 @@ fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
         strip.requested = tally(deck.requested_residency(slot));
         strip.gain = deck.gain(slot);
         strip.opacity = deck.opacity(slot);
+        // **Where a scheduled move is taking each fader**, which is
+        // `Deck::transitions_on` — *"what is moving on this slot, for a status
+        // line"* — read for a surface instead. `karakuri-cli`'s line prints
+        // `o>0.80` off the same call and for the same reason: with the default
+        // quantum a fade is armed up to a bar before it is due, and a control
+        // that changes something invisible is indistinguishable from one that
+        // is broken.
+        //
+        // **At most one per control**, because `Deck::schedule` cancels
+        // whatever was moving that pair before it pushes — so `find` is the
+        // whole answer rather than the first of several.
+        strip.gain_to = destination(deck, slot, Control::Gain);
+        strip.opacity_to = destination(deck, slot, Control::Opacity);
         strip.blend = blend_mode(deck.blend(slot));
         strip.mask = match deck.mask(slot).kind() {
             MaskKind::None => view::Mask::None,

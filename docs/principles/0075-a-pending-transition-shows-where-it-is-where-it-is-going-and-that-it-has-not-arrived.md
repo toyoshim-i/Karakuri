@@ -156,7 +156,7 @@ assertion to write against a stale pixel.
 
 ## Where it holds
 
-**The mixer strip's residency chip**, and it is the only user so far. A deck asked to prime with no
+**The mixer strip's residency chip**, and it was the first. A deck asked to prime with no
 room sits **parked** — the request stands and the engine has not granted it — and the chip's word
 rolls part of the way toward the residency that was asked for and falls back, about once a second,
 and never lands. `view::Strip` carries both residencies, `Strip::pending` derives the third clause
@@ -178,6 +178,31 @@ the clause about the still frame came out in
 which carries that argument and the half-measure it was nearly replaced with. The presentation, the
 measurements it was chosen on and what a parked deck costs the panel are
 [ADR-0190](../adr/0190-the-parked-tally-rolls-because-two-lamps-do-not-fit-in-fifty-three-pixels.md).
+
+**The mixer strip's two faders**, and they are the second user. A transition is armed on the beat
+grid — `Deck::transitions_on` is what a surface asks, and with the default quantum a fade is due up
+to a bar after the key — so until it lands the control has a value and a destination that disagree.
+The knob and the fill go on saying where the control **is**, a hairline mark on the track says where
+it is **going**, and the fill keeps setting off toward the mark and falling back, once a second,
+never covering the gap. `view::Strip` carries `gain_to` and `opacity_to`, `Strip::gain_pending` and
+`Strip::opacity_pending` derive the third clause from them every frame, and the phase, the curve and
+the staleness are the chip's own — one rate for everything pending on the panel, which is what this
+file's *one phase* section asks for.
+`crates/karakuri-console/tests/armed.rs` is where each of those is asserted.
+
+**Which presentation it is was decided on direction**, and that is the difference from the chip
+worth carrying here: a track can say *which way* a control is going and a capsule cannot, which is
+why a blinking mark — admissible, and cheaper — lost to a mark that is reached for. The measurements
+are [ADR-0206](../adr/0206-a-fader-marks-where-it-is-going-and-keeps-reaching-for-it.md), with the
+still ghost knob that fails the third clause, the second row that costs 20 pixels through four
+numbers that are one sum, and the status line's own `o>0.80` at 30.84 wide against a strip that is
+53.
+
+**Where it does not hold yet, and it is named rather than assumed.** `Control::MaskPosition` is the
+third control a transition can move — a wipe is one scheduled move on it — and the mixer strip has
+no control and no readout for that number at all, so an armed wipe is invisible on the console. It
+is an under-draw of exactly the kind this file exists to name, it is recorded in ADR-0206's
+consequences, and it closes the day a mask-position control lands.
 
 **What this file deliberately does not settle** is what a control with a pending transition may
 *forbid* — the answer is nothing, and it is

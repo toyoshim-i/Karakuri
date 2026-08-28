@@ -362,7 +362,7 @@
   .tally.alloc { background: var(--c-tint); color: var(--c-dim); }
   .tally.off { color: var(--c-faint); }
 
-  /* ── The one animation in this document, and it is the first ──────────────
+  /* ── The first of the two animations in this document ─────────────────────
      A residency request that has been made and not granted. The chip shows
      the residency the slot is actually *in* and rolls part of the way toward
      the one it was asked for, once a second, and falls back — it never lands,
@@ -372,9 +372,11 @@
      strip 53 wide inside its padding, and 57.125 with every pixel of padding
      taken out of both. There is no version of two lamps on this row.
 
-     Nothing else in this stylesheet moves, which was deliberate rather than
-     an oversight (ADR-0188) — no `@keyframes`, no `animation`, no
-     `transition` in 570 lines. This is the design language gaining one. */
+     Nothing in this stylesheet moved before it, which was deliberate rather
+     than an oversight (ADR-0188) — no `@keyframes`, no `animation`, no
+     `transition` in 570 lines. This is the design language gaining one, and
+     the fader below is the second: the same rate, the same curve and the same
+     reach, because everything pending on this panel moves together. */
   .tally.parked { display: block; height: 13.5px; overflow: hidden; }
   /* Both words in flow and block-level, one line-box each, so the capsule is
      as wide as the wider of them and the second sits exactly one box below
@@ -408,6 +410,35 @@
   .vfader b { position: absolute; left: 3px; right: 3px; bottom: 3px; border-radius: 999px; background: linear-gradient(0deg, var(--c-mint), var(--c-lav)); display: block; }
   .vfader s { position: absolute; left: -2px; right: -2px; height: 9px; border-radius: 999px; background: var(--c-panel); box-shadow: 0 0 0 1px var(--c-line), 0 1px 4px rgba(0,0,0,0.2); display: block; }
   .strip.live .vfader s { box-shadow: 0 0 0 1px var(--c-pink), 0 0 9px var(--c-glowp); }
+
+  /* ── The second animation, and it is the same one said on a track ─────────
+     A fade is scheduled on the beat grid, so with the default quantum it is
+     armed up to a bar before it runs, and until it lands the fader has a
+     value and a destination that disagree. That is P-0075 again, and on a
+     control whose whole idiom is *position* it is said differently
+     (ADR-0206): the fill and the knob go on saying where the control is, `i`
+     is a hairline where the knob would be if the move had landed, and `em` is
+     the fill setting off toward it and falling back — 0.4 of the gap, once a
+     second, never covering it.
+
+     The mark is the knob's own width rather than the track's, `left: -2px;
+     right: -2px` exactly as `s` is, so it always has two pixels of strip
+     either side to be read against wherever the fill has got to — a mark the
+     width of the track crosses the fill's own lavender end in lavender. It is
+     last in the box so it paints over the knob: under it, every move shorter
+     than the knob is long — a tenth of this fader, a quarter of the trim —
+     would lose its mark exactly as the control got close. */
+  .vfader i { position: absolute; left: -2px; right: -2px; height: 1px; background: var(--c-lav); display: block; }
+  .vfader em { position: absolute; left: 3px; right: 3px; background: color-mix(in srgb, var(--c-lav) 20%, transparent); display: block; transform-origin: bottom; animation: fader-reach 1s infinite; }
+  /* The band is drawn the whole gap and scaled out of the value's own end, so
+     the 0.4 here is the same 0.4 the chip above rolls — 200ms out, back by
+     400ms, still for the remaining 600ms, and at rest it has no height at
+     all. */
+  @keyframes fader-reach {
+    0%        { transform: scaleY(0); }
+    20%       { transform: scaleY(0.4); }
+    40%, 100% { transform: scaleY(0); }
+  }
   .vmeter { width: 6px; height: 100%; background: var(--c-well); border-radius: 999px; position: relative; overflow: hidden; box-shadow: inset 0 0 0 1px var(--c-hair); }
   .vmeter b { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(0deg, var(--c-mint), var(--c-sun)); display: block; }
   .vmeter u { position: absolute; left: 0; right: 0; height: 2px; background: var(--c-pink); display: block; }
