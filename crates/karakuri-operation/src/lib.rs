@@ -1073,6 +1073,66 @@ operations! {
     /// returning cleanly means it compiled, not that it is on screen.
     SwapOutcome => "Find out what a write did",
 
+    /// **The operator's verdict on a candidate, and it is not the watchdog's.**
+    ///
+    /// A version reaches the screen because it compiled and then held the frame
+    /// budget over thirty measured frames, which is
+    /// `karakuri_engine::swap::Event::Accepted` and is a judgement about
+    /// **cost**. Whether it is the one to keep is a judgement about **taste**
+    /// and nothing in this instrument can take it. This row is where a person
+    /// takes it.
+    ///
+    /// **The engine's three words are deliberately not reused.** *Accepted*,
+    /// *rejected* and *rolled back* already name the budget's verdict on the
+    /// same object, and the staging lane is the one surface where both
+    /// verdicts are visible at once — a lane offering *accept* over a
+    /// candidate the watchdog had already accepted would spell two different
+    /// judgements the same way
+    /// (`docs/principles/0031-a-name-means-one-thing-across-the-system.md`).
+    ///
+    /// **Addressed by the node rather than by the version, because a node has
+    /// at most one unsettled version.** A write is not held anywhere: it is
+    /// checked, written, built on a worker and swapped at a frame boundary, so
+    /// the candidate for a node **is** what that node is playing. Choosing
+    /// among several older versions is a different operation and it is
+    /// [`Operation::WalkHistory`], which is still undecided for want of the
+    /// address this row is able to do without.
+    ///
+    /// **Silent, and that is its shape rather than an omission.** The material
+    /// already changed and `karakuri_store::record::Record::Procedure` was
+    /// written where the swap landed. What this changes is the lane: the node
+    /// stops being one with a version nobody has ruled on.
+    KeepCandidate { deck: u8, node: NodeAt } => "Keep a candidate",
+
+    /// **What *a rejected candidate costs nothing* is made of.** The version
+    /// before it is a file under `<store>/history/`, kept because it
+    /// **compiled** rather than because it landed — so the one thing a person
+    /// most wants back, a real attempt that was rolled back for cost, is
+    /// exactly the one that is there.
+    ///
+    /// **One step, and never a cursor.** Back to the version this one
+    /// replaced. Walking further is [`Operation::WalkHistory`] and needs the
+    /// address that row says nobody has settled.
+    ///
+    /// **Not [`Operation::WriteProcedure`] carrying that file's text, and the
+    /// reason is the surface.** A write takes a `source: String` because
+    /// whoever asks for one is holding the text: a model has it in the
+    /// conversation, an editor has it in a buffer. A staging lane holds
+    /// neither. It can say *not this one* and it cannot say four kilobytes of
+    /// IR, and making it say them would put the store inside the console —
+    /// the same reach the Library bay already declines for a date format
+    /// (`docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md`).
+    /// So the surface says the part it can say and whoever performs it reads
+    /// the file, which is
+    /// `docs/adr/0192-an-operation-asks-for-what-a-surface-can-say-and-the-record-stays-whole.md`.
+    ///
+    /// **This does write a record**, where [`Operation::KeepCandidate`] does
+    /// not: it is a procedure change, it lands at a swap like any other, and a
+    /// session in which the operator put a version back and that replayed with
+    /// the version they threw away is the hole `Record::Procedure` was added
+    /// to close.
+    RestoreProcedure { deck: u8, node: NodeAt } => "Put a node's previous version back",
+
     // ----- Arranging the console ----------------------------------------
 
     /// **Undecided, and the manual says so**: *"How a pane is sized and
@@ -1222,8 +1282,9 @@ mod tests {
     /// split into a tone map and an exposure (ADR-0192), and 48 since the mask
     /// took a row for its shape and a row for its position (ADR-0201); it
     /// moves with the page and is never lowered to make a shorter list pass.
-    /// It was 49 once the arrangement gained a reset (ADR-0208), and is 50
-    /// since a node gained an authority (ADR-0211).
+    /// It was 49 once the arrangement gained a reset (ADR-0208), 50
+    /// since a node gained an authority (ADR-0211), and is 52 since the
+    /// staging lane gained a keep and a put-back.
     #[test]
     fn the_vocabulary_is_not_empty() {
         assert!(
