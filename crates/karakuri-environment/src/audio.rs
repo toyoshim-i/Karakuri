@@ -1,8 +1,10 @@
 //! Audio, from the device to the session — and through the record stream on
 //! the way.
 //!
-//! This is the only place in the CLI that knows a microphone exists, and it is
-//! deliberately the same shape as the one place that knows a clock exists: it
+//! This is the only place in this instrument that knows a microphone exists,
+//! and it is deliberately the same shape as the one place that knows a clock
+//! exists — `karakuri-cli`'s `Clock`, which ADR-0215 says belongs beside this
+//! file and has not moved yet: it
 //! **measures, emits records, and hands the engine what the records say**. The
 //! engine is given an `AudioFrame` and a tempo correction, never a device, so
 //! a replay that decoded the same records would hand it the same two things.

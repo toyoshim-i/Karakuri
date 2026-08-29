@@ -18,7 +18,9 @@ use karakuri_ir::typed::Checked;
 /// function of *these* bytes. A second reader asking the path again is a second
 /// answer to "what is this node running", and it is a different answer the
 /// moment anything has rewritten the file in between: an editor, a model over
-/// MCP, a formatter. See [`crate::Placed`], which is where these bytes are kept.
+/// MCP, a formatter. See `karakuri-cli`'s `Placed`, which is where these bytes
+/// are kept — one crate over since ADR-0214, and a plain name rather than a link
+/// for that reason.
 pub fn load(path: &Path) -> Result<(Checked, String), String> {
     let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let checked = compile(&src).map_err(|report| format!("{}:\n{report}", path.display()))?;

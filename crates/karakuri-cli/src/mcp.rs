@@ -134,7 +134,7 @@ pub struct SaveRequest {
     pub slot: usize,
     /// What to file it under, or `None` to let the loop name it after the
     /// moment — which is what a key press gets, for the reason
-    /// [`crate::history::stamped_id`] states: a key cannot type a name.
+    /// [`karakuri_environment::history::stamped_id`] states: a key cannot type a name.
     pub id: Option<String>,
     /// Where the answer goes.
     pub reply: Reply,
@@ -242,7 +242,7 @@ impl Slots {
     /// `kind` line names, at its position *within that layer*, keeping file
     /// order. That is the rule `history::seed` files snapshots under and the
     /// rule the startup path sorts a `--set` chain by, and it is
-    /// [`crate::history::declared_kind`] here rather than a second scanner:
+    /// [`karakuri_environment::history::declared_kind`] here rather than a second scanner:
     /// two readers of a `kind` line would be two answers to what layer a file
     /// is on, and the layer a version is filed under has to be the layer an
     /// agent addresses it by.
@@ -280,7 +280,7 @@ impl Slots {
         for path in &pair.1 {
             let layer = std::fs::read(path)
                 .ok()
-                .and_then(|source| crate::history::declared_kind(&source))
+                .and_then(|source| karakuri_environment::history::declared_kind(&source))
                 .and_then(layer_named)
                 .unwrap_or(Kind::L4);
             let index = match next.iter_mut().find(|(held, _)| *held == layer) {
@@ -1492,7 +1492,7 @@ fn write_procedure(deck: u8, node: NodeAt, source: &str, state: &State) -> Resul
     // **Checked before it is written, and the diagnostics are handed back.**
     // Writing first and letting the watcher report would put the compiler's
     // answer on a terminal the model cannot see.
-    let checked = crate::compile::check(source)?;
+    let checked = karakuri_environment::compile::check(source)?;
     // **The address and the source have to agree**, and the comparison is now
     // between two `Kind`s rather than between a string and a guess. The guess
     // was `L1`, or `L4` for everything else, which made this refusal answer
@@ -2251,7 +2251,7 @@ fn layer_spelled(layer: Layer) -> &'static str {
 
 /// A Set id a client may name, or why not.
 ///
-/// **A Set id is one path component.** [`crate::history::stamped_id`] says so
+/// **A Set id is one path component.** [`karakuri_environment::history::stamped_id`] says so
 /// where it explains why the date is spelled `20260816` rather than
 /// `2026/08/16`, and `Store::set_path` spells the file `sets/<id>.set.ndjson`
 /// without checking that what it was handed is one. That is the operator's own
@@ -2265,7 +2265,8 @@ fn layer_spelled(layer: Layer) -> &'static str {
 /// is told to pick another.
 ///
 /// **A name a client picks twice overwrites, and that is the decision rather
-/// than an oversight.** [`crate::history::unused`] exists because two saves in
+/// than an oversight.** `karakuri-environment`'s private `history::unused`
+/// exists because two saves in
 /// one millisecond produced one stamp and the second file replaced the first
 /// while the operator was told both were kept, and its own doc names this
 /// control as the reach that would make that matter. It is not reached from
@@ -3613,7 +3614,8 @@ proc probe_knobs {
         let store = server.store();
         let hash = store.put_artifact(source.as_bytes()).expect("put");
         if card {
-            let checked = crate::compile::check(source).expect("the fixture compiles");
+            let checked =
+                karakuri_environment::compile::check(source).expect("the fixture compiles");
             store
                 .write_meta(&hash, &crate::meta::card(&hash, &checked))
                 .expect("card");
@@ -3995,7 +3997,8 @@ proc probe_knobs {
         let store = server.store();
         let hash = store.put_artifact(source.as_bytes()).expect("put");
         if card {
-            let checked = crate::compile::check(source).expect("the fixture compiles");
+            let checked =
+                karakuri_environment::compile::check(source).expect("the fixture compiles");
             store
                 .write_meta(&hash, &crate::meta::card(&hash, &checked))
                 .expect("card");
@@ -4890,7 +4893,7 @@ mod tests {
         assert_eq!(checked_id("a_B_9"), Ok("a_B_9".to_string()));
         // What a save with no id is called, so a client can name one the same
         // way the run would have.
-        let stamp = crate::history::stamped_id();
+        let stamp = karakuri_environment::history::stamped_id();
         assert_eq!(checked_id(&stamp), Ok(stamp.clone()), "{stamp}");
 
         for bad in [

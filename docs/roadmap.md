@@ -653,8 +653,19 @@ and `midi`), `nothing_to_save`, `TONEMAPS`, `Names`, and eleven singletons. Ever
 passes the test — material types, constants, and two refusal sentences that
 [P-0061](principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md) says
 belong where both surfaces can reach them. What stays behind is the window, the arguments, the key
-handler and `Live`. The order the move is cheapest in: the nine modules with no intra-crate
-dependency first, then `meta` → `setfile` → `watch`, then `mcp`, then `mix` and `midi`.
+handler and `Live`. The order the move is cheapest in: the **seven** modules that
+reference nothing through `crate::` at all — `audio`, `compile`, `history`, `render`, `scratch`,
+`session`, `tempo_source` — then `meta` → `setfile` → `watch`, then `mcp`, then `mix` and `midi`,
+which are held back only by the shared refusal sentence.
+
+**The seven have landed and the package exists**, with its charter in
+[`karakuri-environment`](../crates/karakuri-environment)'s `lib.rs` — the test, why its second clause
+is load-bearing, and the rule that follows from two binaries sitting over it: **no module here may
+know which surface it is under.** The move needed no shim and nothing had to be pulled across, which
+is the measurement above holding: exactly one item had to widen (`history::declared_kind`, whose own
+comment already said it is shared with `mcp` on purpose), and `png` and `serde` left `karakuri-cli`
+with the files that used them. **Six modules are left**, and `main.rs` keeps all of its non-test
+lines for now.
 
 **The ~10–14 week estimate does not carry this, which is the second time.** *What the range assumes*
 names the four undrawn bays, three decisions and the manual's missing deck head, and not a program to

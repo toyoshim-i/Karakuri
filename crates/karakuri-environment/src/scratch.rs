@@ -41,7 +41,8 @@
 //!
 //! # Sharing is preserved, deliberately
 //!
-//! Two slots naming one file share it — `watch.rs` documents that as supported,
+//! Two slots naming one file share it — `karakuri-cli`'s `watch.rs` documents
+//! that as supported,
 //! and a write through MCP reports the other slots it reached. Copying
 //! per-slot would quietly end that: the same file in two slots would become two
 //! files, an edit would land in one, and the surface's report would be wrong
@@ -222,8 +223,9 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&l1).expect("read"), "original l1");
     }
 
-    /// Two slots naming one file still name one file. `watch.rs` supports that
-    /// and MCP reports it; per-slot copies would have ended both quietly.
+    /// Two slots naming one file still name one file. `karakuri-cli`'s
+    /// `watch.rs` supports that and MCP reports it; per-slot copies would have
+    /// ended both quietly.
     #[test]
     fn two_slots_sharing_a_source_still_share_one_scratch_file() {
         let tmp = tempfile::tempdir().expect("tempdir");

@@ -1219,7 +1219,7 @@ pub fn from_lines(store: &Store, id: &str, lines: &[Line]) -> Result<Loaded, Str
 
     let check = |srcs: &[String]| {
         srcs.iter()
-            .map(|src| crate::compile::check(src))
+            .map(|src| karakuri_environment::compile::check(src))
             .collect::<Result<Vec<_>, _>>()
     };
     let l1s = check(&l1_srcs)?;
@@ -1509,7 +1509,7 @@ pub fn unbundle(store: &Store, lines: &[Line]) -> Result<String, String> {
         // **The card is what a compile produces**, so it is written here and by
         // `put_meta` — the one both compile paths already go through — rather
         // than by a second writer of the same file.
-        match crate::compile::check(text) {
+        match karakuri_environment::compile::check(text) {
             Ok(checked) => {
                 if crate::put_meta(store, hash, &crate::meta::card(hash, &checked)).is_none() {
                     cards += 1;
@@ -1732,7 +1732,7 @@ pub fn summarise(store: &Store) -> Result<Vec<SetSummary>, StoreError> {
 
 /// When a Set was written, spelled the one way every listing spells it.
 ///
-/// **Local, for the reason [`crate::history::stamped_id`] is local**: the
+/// **Local, for the reason [`karakuri_environment::history::stamped_id`] is local**: the
 /// answer has to be the one the person would say out loud, and a UTC clock is
 /// the wrong one for half the world and half the day. To the second, because
 /// that is as fine as a filesystem mtime is worth reading and finer than
@@ -3560,7 +3560,8 @@ proc dissolve {
         let bare = Store::open(elsewhere.path()).expect("store");
         let said = unbundle(&bare, &as_a_file(&lines)).expect("one bad source is not a refusal");
 
-        let report = crate::compile::check(broken).expect_err("the fixture must not compile");
+        let report =
+            karakuri_environment::compile::check(broken).expect_err("the fixture must not compile");
         let first = report.lines().next().expect("a diagnostic").trim();
         assert!(said.contains("veil"), "the node is not named: {said}");
         assert!(

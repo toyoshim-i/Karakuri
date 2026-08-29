@@ -1390,15 +1390,14 @@ dependencies = [
  "chrono",
  "karakuri-audio",
  "karakuri-engine",
+ "karakuri-environment",
  "karakuri-ir",
  "karakuri-midi",
  "karakuri-operation",
  "karakuri-operation-record",
  "karakuri-signal",
  "karakuri-store",
- "png",
  "pollster",
- "serde",
  "serde_json",
  "tempfile",
  "wgpu",
@@ -1446,6 +1445,23 @@ dependencies = [
  "thiserror 2.0.19",
  "wgpu",
  "winit",
+]
+
+[[package]]
+name = "karakuri-environment"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "karakuri-audio",
+ "karakuri-engine",
+ "karakuri-ir",
+ "karakuri-signal",
+ "karakuri-store",
+ "png",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "wgpu",
 ]
 
 [[package]]

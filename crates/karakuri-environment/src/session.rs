@@ -16,8 +16,8 @@
 //!
 //! `Line::new` serialises eagerly and a `String` is an allocation, so a frame
 //! that produced a line would be allocating on the render thread, which nothing
-//! does — and a rule this crate has already had to repair once for a record it
-//! built per frame.
+//! does — and a rule this instrument has already had to repair once for a
+//! record it built per frame.
 //!
 //! So the frame path only ever **moves a `Record` into a `Vec` that already has
 //! room**, and a writer thread does the serialising and the I/O. An `audio`
@@ -41,8 +41,9 @@
 //! that a live run measures from the clock, reads `audio` and `tempo` instead
 //! of opening a device — so a binding to `energy` replays at what a microphone
 //! heard rather than at what the bus invents — and applies the mix and
-//! transport records where they sit. That is the whole of it — the arrangement `audio.rs` and `mix.rs` were
-//! built for, with a file on the other end instead of a device and a keyboard.
+//! transport records where they sit. That is the whole of it — the arrangement
+//! `audio.rs` beside this file and `karakuri-cli`'s `mix.rs` were built for,
+//! with a file on the other end instead of a device and a keyboard.
 
 use std::io::Write;
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError};
@@ -289,7 +290,7 @@ impl Recorder {
 impl Drop for Recorder {
     /// A recorder dropped without [`Recorder::finish`] still ends the writer,
     /// so the file is closed and flushed. What it cannot do is report, which is
-    /// why `finish` exists and is what the CLI calls.
+    /// why `finish` exists and is what a surface calls.
     fn drop(&mut self) {
         self.to_writer = None;
         if let Some(handle) = self.writer.take() {

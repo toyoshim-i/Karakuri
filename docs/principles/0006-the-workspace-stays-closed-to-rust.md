@@ -18,5 +18,5 @@ not exist. It also rules out reaching for a script in another language for repos
 chores; a `cargo test` is the cheaper answer, because it is already installed.
 
 **Where it holds.** [plugins.md](../plugins.md);
-[tempo_source.rs](../../crates/karakuri-cli/src/tempo_source.rs) is the wire format, and
+[tempo_source.rs](../../crates/karakuri-environment/src/tempo_source.rs) is the wire format, and
 the input half that exists.
