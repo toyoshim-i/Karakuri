@@ -140,7 +140,7 @@ pub struct Transport {
     /// The operator's scrub, in beats, added to the room's position under
     /// [`Sync::Beat`]. Signed and unbounded: scrubbing is the one control here
     /// that is *meant* to go backwards.
-    offset_beats: f64,
+    scrub_beats: f64,
     /// Fractional steps carried between frames under [`Sync::Tempo`], so a rate
     /// that does not divide the step count still advances at the right average
     /// rate. The same accumulator shape as spawn quantisation, for the same
@@ -155,7 +155,7 @@ impl Default for Transport {
         Transport {
             sync: Sync::Free,
             anchor_bpm: crate::binding::DEFAULT_BPM,
-            offset_beats: 0.0,
+            scrub_beats: 0.0,
             carry: 0.0,
         }
     }
@@ -170,8 +170,8 @@ impl Transport {
         self.anchor_bpm
     }
 
-    pub fn offset_beats(&self) -> f64 {
-        self.offset_beats
+    pub fn scrub_beats(&self) -> f64 {
+        self.scrub_beats
     }
 
     /// **Whether a mode may be used on material with these properties**, and
@@ -199,7 +199,7 @@ impl Transport {
     /// operator says "call *this* the reference tempo" without a second
     /// control.
     ///
-    /// The scrub offset is cleared with it. A slot brought back to the grid
+    /// The scrub is cleared with it. A slot brought back to the grid
     /// should be on the grid, not on wherever it was scrubbed to a song ago.
     pub fn engage(&mut self, sync: Sync, session_bpm: f32) {
         *self = Transport::engaged(sync, session_bpm);
@@ -209,13 +209,13 @@ impl Transport {
     ///
     /// The policy lives here so that a caller building a record of the change
     /// and a caller applying one agree by construction: the record carries the
-    /// anchor and the offset explicitly, and this is the one place that decides
+    /// anchor and the scrub explicitly, and this is the one place that decides
     /// what they are when an operator engages a mode by hand.
     pub fn engaged(sync: Sync, session_bpm: f32) -> Transport {
         Transport {
             sync,
             anchor_bpm: clamp_anchor(session_bpm),
-            offset_beats: 0.0,
+            scrub_beats: 0.0,
             carry: 0.0,
         }
     }
@@ -228,10 +228,10 @@ impl Transport {
     /// The carry is reset, because it is not state a record carries: it is a
     /// fraction of a step, its whole life is one frame either side, and
     /// recording it would put the smallest thing in the system into the format.
-    pub fn set(&mut self, sync: Sync, anchor_bpm: f32, offset_beats: f64) {
+    pub fn set(&mut self, sync: Sync, anchor_bpm: f32, scrub_beats: f64) {
         self.sync = sync;
         self.anchor_bpm = clamp_anchor(anchor_bpm);
-        self.offset_beats = offset_beats;
+        self.scrub_beats = scrub_beats;
         self.carry = 0.0;
     }
 
@@ -240,10 +240,10 @@ impl Transport {
     /// where it has to.
     ///
     /// Does nothing under [`Sync::Free`] and [`Sync::Tempo`] — those are rates,
-    /// and a rate has no position to offset. The caller is expected to say so
+    /// and a rate has no position to scrub. The caller is expected to say so
     /// rather than let the key read as broken.
     pub fn scrub(&mut self, beats: f64) {
-        self.offset_beats += beats;
+        self.scrub_beats += beats;
     }
 
     /// Set the anchor directly, for a caller replaying a record. Clamped into
@@ -252,8 +252,8 @@ impl Transport {
         self.anchor_bpm = clamp_anchor(bpm);
     }
 
-    pub fn set_offset_beats(&mut self, beats: f64) {
-        self.offset_beats = beats;
+    pub fn set_scrub_beats(&mut self, beats: f64) {
+        self.scrub_beats = beats;
     }
 
     /// **What this slot does this frame.**
@@ -299,7 +299,7 @@ impl Transport {
                 // from an integer counter and nothing may write it directly, or
                 // two runs reaching the same instant stop being the same point
                 // in the session.
-                let beats = grid.beats() + self.offset_beats;
+                let beats = grid.beats() + self.scrub_beats;
                 let seconds = beats * 60.0 / f64::from(self.anchor_bpm);
                 let target = (seconds / f64::from(dt)).round();
                 Advance::SeekTo(if target > 0.0 { target as u64 } else { 0 })

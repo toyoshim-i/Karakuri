@@ -131,7 +131,7 @@ pub struct Mask {
 /// [`Operation::ScrubDeck`] needs to say where it moved *to*.
 ///
 /// All three, because [`Record::Transport`] carries all three and is written
-/// whole: a scrub that wrote an offset without the sync mode and the anchor
+/// whole: a scrub that wrote a scrub position without the sync mode and the anchor
 /// beside it would replay a slot onto a grid it was never on.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Transport {
@@ -139,7 +139,7 @@ pub struct Transport {
     pub anchor_bpm: f32,
     /// Signed and unbounded — the one value in this format meant to go
     /// backwards.
-    pub offset_beats: f64,
+    pub scrub_beats: f64,
 }
 
 /// **What is running, at the instant the operation arrives.**
@@ -417,7 +417,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
             None => Written::Owed(Owed::NotRead(Reading::Mask)),
         },
         // **Relative, and the one operation here that is** — nothing in the
-        // instrument can set a position, so the record's absolute offset is
+        // instrument can set a position, so the record's absolute scrub is
         // the one it is at plus the amount asked for. Which is exactly why it
         // needs a reading where `SetGain` does not.
         Operation::ScrubDeck { deck, beats } => match current.transport {
@@ -425,7 +425,7 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
                 slot: *deck,
                 sync: transport.sync.name().to_string(),
                 anchor_bpm: transport.anchor_bpm,
-                offset_beats: transport.offset_beats + *beats,
+                scrub_beats: transport.scrub_beats + *beats,
             }),
             None => Written::Owed(Owed::NotRead(Reading::Transport)),
         },
@@ -648,7 +648,7 @@ mod tests {
             ),
             Written::Owed(Owed::NotRead(Reading::Transport)),
             "a scrub with no transport read came back with a record — which means the \
-             offset it moved from was invented"
+             scrub it moved from was invented"
         );
     }
 
@@ -775,12 +775,12 @@ mod tests {
     /// can set a position. The record is absolute, so the conversion is the
     /// addition.
     #[test]
-    fn a_scrub_adds_to_the_offset_the_slot_is_at() {
+    fn a_scrub_adds_to_the_scrub_the_slot_is_at() {
         let current = Current {
             transport: Some(Transport {
                 sync: Sync::Beat,
                 anchor_bpm: 128.0,
-                offset_beats: -1.5,
+                scrub_beats: -1.5,
             }),
             ..Current::default()
         };
@@ -797,11 +797,11 @@ mod tests {
                 slot: 2,
                 sync: "beat".to_string(),
                 anchor_bpm: 128.0,
-                offset_beats: -1.25,
+                scrub_beats: -1.25,
             }],
             "a scrub wrote somewhere other than where the slot was plus what was asked \
              for — an absolute record built from a relative operation has to read the \
-             offset it is moving from"
+             scrub it is moving from"
         );
     }
 

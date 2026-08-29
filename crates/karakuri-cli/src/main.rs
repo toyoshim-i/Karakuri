@@ -2404,9 +2404,9 @@ fn apply_replayed(deck: &mut Deck, look: &mut Look, record: &karakuri_store::rec
             slot,
             sync,
             anchor_bpm,
-            offset_beats,
+            scrub_beats,
         })) => {
-            if let Err(refusal) = deck.set_transport(slot, sync, anchor_bpm, offset_beats) {
+            if let Err(refusal) = deck.set_transport(slot, sync, anchor_bpm, scrub_beats) {
                 eprintln!("  slot {slot}: {} sync refused — {refusal}", sync.name());
             }
         }
@@ -5639,7 +5639,7 @@ impl Live {
         });
         eprintln!(
             "slot {slot} scrub {:+.2} beats",
-            self.deck.transport(slot).offset_beats()
+            self.deck.transport(slot).scrub_beats()
         );
     }
 
@@ -6384,17 +6384,14 @@ impl Live {
                 slot,
                 sync,
                 anchor_bpm,
-                offset_beats,
+                scrub_beats,
             } => {
                 // The refusal is reported and nothing moves. It cannot happen
                 // from a key press — `cycle_sync` only offers modes the Set
                 // allows — but a session recorded against one Set and replayed
                 // against another is exactly where it can, and a slot silently
                 // left free would be a performance replayed wrong.
-                if let Err(refusal) = self
-                    .deck
-                    .set_transport(slot, sync, anchor_bpm, offset_beats)
-                {
+                if let Err(refusal) = self.deck.set_transport(slot, sync, anchor_bpm, scrub_beats) {
                     eprintln!("slot {slot}: {} sync refused — {refusal}", sync.name());
                 }
             }
@@ -6655,10 +6652,10 @@ impl Live {
                         self.status,
                         "B{:.0}{} ",
                         transport.anchor_bpm(),
-                        if transport.offset_beats() == 0.0 {
+                        if transport.scrub_beats() == 0.0 {
                             String::new()
                         } else {
-                            format!("{:+.2}", transport.offset_beats())
+                            format!("{:+.2}", transport.scrub_beats())
                         }
                     );
                 }
