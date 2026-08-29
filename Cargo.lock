@@ -1518,6 +1518,7 @@ version = "0.1.0"
 name = "karakuri-store"
 version = "0.1.0"
 dependencies = [
+ "karakuri-layout",
  "serde",
  "serde_json",
  "sha2",

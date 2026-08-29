@@ -981,3 +981,264 @@ fn listing_reads_names_and_not_contents() {
         "the file parsed after all, so listing it proved nothing"
     );
 }
+
+// # Arrangements
+//
+// The console's own shape, filed under a name the operator picked, in the
+// fourth place under the store root. See ADR-0221.
+//
+// **These tests build a real `Layout` and put it through a real file**, rather
+// than a JSON fixture that resembles one. The store's half is bytes and the
+// format's half is `karakuri-layout`'s, and the claim worth checking is the one
+// that spans them: what an operator arranged comes back. A fixture would prove
+// only that `fs::write` works.
+
+/// An arrangement with the two things that have historically not survived a
+/// wire: an unbounded maximum, which JSON cannot spell, and a fold, which is
+/// the flag a solo replaces. Both are in the console's own arrangement, so this
+/// is a small stand-in for it rather than an exotic case.
+fn an_arrangement() -> karakuri_layout::Layout {
+    use karakuri_layout::{Rect, Spec};
+
+    let mut l = karakuri_layout::Layout::new(Spec::row(
+        4.0,
+        vec![
+            Spec::view("library").fixed(240.0).min(120.0).max(400.0),
+            Spec::column(
+                4.0,
+                vec![
+                    Spec::view("program").flex(3.0),
+                    Spec::view("mixer").fixed(180.0),
+                ],
+            )
+            .named("centre")
+            .flex(1.0),
+            Spec::view("inspector").fixed(300.0),
+        ],
+    ));
+    l.set_viewport(Rect::new(0.0, 0.0, 1280.0, 720.0));
+    l.solve();
+    l
+}
+
+/// Every rectangle, in a fixed order, so two arrangements can be compared as
+/// what they draw rather than as what they store.
+fn drawn(l: &karakuri_layout::Layout) -> Vec<(Option<String>, karakuri_layout::Rect, (f32, f32))> {
+    fn walk(
+        l: &karakuri_layout::Layout,
+        id: karakuri_layout::NodeId,
+        out: &mut Vec<(Option<String>, karakuri_layout::Rect, (f32, f32))>,
+    ) {
+        out.push((l.name(id).map(str::to_string), l.rect(id), l.bounds(id)));
+        for child in l.children(id).to_vec() {
+            walk(l, child, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(l, l.root(), &mut out);
+    out
+}
+
+#[test]
+fn an_arrangement_round_trips_through_a_file() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    let mut before = an_arrangement();
+    let mixer = before.find("mixer").unwrap();
+    before.collapse(mixer);
+    before.solve();
+
+    store
+        .write_arrangement("four_deck", serde_json::to_vec(&before).unwrap().as_slice())
+        .unwrap();
+    let text = store.read_arrangement("four_deck").unwrap();
+    let after: karakuri_layout::Layout = serde_json::from_slice(&text).unwrap();
+
+    assert_eq!(drawn(&before), drawn(&after), "the file changed the panel");
+    assert_eq!(before.viewport(), after.viewport());
+    assert!(
+        after.is_collapsed(after.find("mixer").unwrap()),
+        "a fold did not survive the file"
+    );
+    // The unbounded maxima are the reason this asserts `bounds` at all: JSON
+    // has no spelling for an infinity, and one lost on the way out comes back
+    // as a region that will not grow.
+    assert_eq!(
+        after.bounds(after.find("program").unwrap()).1,
+        f32::INFINITY
+    );
+}
+
+#[test]
+fn a_soloed_arrangement_comes_back_soloed_and_still_undoes() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    let open = an_arrangement();
+    let mut before = an_arrangement();
+    let program = before.find("program").unwrap();
+    before.solo(program);
+    before.solve();
+
+    store
+        .write_arrangement("solo", serde_json::to_vec(&before).unwrap().as_slice())
+        .unwrap();
+    let mut after: karakuri_layout::Layout =
+        serde_json::from_slice(&store.read_arrangement("solo").unwrap()).unwrap();
+
+    assert!(after.is_soloed(), "the solo did not survive the file");
+    after.unsolo();
+    after.solve();
+    assert_eq!(
+        drawn(&after),
+        drawn(&open),
+        "the arrangement the solo was covering did not survive the file"
+    );
+}
+
+#[test]
+fn an_arrangement_is_the_bytes_it_was_given_and_nothing_appended() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    // One document, no trailing newline. A store that added one would be
+    // editing a format it has just declared it does not parse.
+    let written = br#"{"nodes":[],"root":0}"#;
+    store.write_arrangement("bytes", written).unwrap();
+    assert_eq!(store.read_arrangement("bytes").unwrap(), written);
+    assert_eq!(
+        fs::read(
+            dir.path()
+                .join("arrangements")
+                .join("bytes.arrangement.json")
+        )
+        .unwrap(),
+        written
+    );
+}
+
+#[test]
+fn a_name_saved_twice_is_the_second_arrangement() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    store.write_arrangement("desk", b"first").unwrap();
+    store.write_arrangement("desk", b"second").unwrap();
+
+    assert_eq!(store.read_arrangement("desk").unwrap(), b"second");
+    assert_eq!(store.list_arrangements().unwrap().len(), 1);
+}
+
+#[test]
+fn reading_an_arrangement_nobody_saved_names_it() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    match store.read_arrangement("four_deck") {
+        Err(StoreError::NoArrangement(name)) => assert_eq!(name, "four_deck"),
+        other => panic!("expected a named refusal, got {other:?}"),
+    }
+    // And it says the name back, because that is the whole of what an operator
+    // who mistyped one needs.
+    assert_eq!(
+        store.read_arrangement("four-deck").unwrap_err().to_string(),
+        "no arrangement named `four-deck`"
+    );
+}
+
+#[test]
+fn an_arrangement_and_a_set_of_the_same_name_are_two_files() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    store.write_set("tonight", &a_set()).unwrap();
+    store.write_arrangement("tonight", b"{}").unwrap();
+
+    assert_eq!(store.read_set("tonight").unwrap(), a_set());
+    assert_eq!(store.read_arrangement("tonight").unwrap(), b"{}");
+    assert_eq!(
+        store
+            .list_sets()
+            .unwrap()
+            .iter()
+            .map(|e| e.id.as_str())
+            .collect::<Vec<_>>(),
+        ["tonight"]
+    );
+    assert_eq!(
+        store
+            .list_arrangements()
+            .unwrap()
+            .iter()
+            .map(|e| e.name.as_str())
+            .collect::<Vec<_>>(),
+        ["tonight"]
+    );
+}
+
+#[test]
+fn list_arrangements_orders_by_name_and_skips_what_the_layout_does_not_claim() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    for name in ["wide", "four_deck", "a-b"] {
+        store.write_arrangement(name, b"{}").unwrap();
+    }
+    let arrangements = dir.path().join("arrangements");
+    // An editor's backup, a write that died, and somebody's directory.
+    fs::write(arrangements.join("four_deck.arrangement.json~"), b"{}").unwrap();
+    fs::write(arrangements.join("wide.arrangement.json.tmp"), b"{}").unwrap();
+    fs::write(arrangements.join("notes.txt"), b"{}").unwrap();
+    fs::create_dir(arrangements.join("old.arrangement.json")).unwrap();
+
+    let listed: Vec<String> = store
+        .list_arrangements()
+        .unwrap()
+        .into_iter()
+        .map(|e| e.name)
+        .collect();
+    assert_eq!(listed, ["a-b", "four_deck", "wide"]);
+    // Repeatable, which is the whole reason the key is the name rather than
+    // the time three files written in one millisecond all share.
+    assert_eq!(
+        store.list_arrangements().unwrap(),
+        store.list_arrangements().unwrap()
+    );
+}
+
+#[test]
+fn an_arrangement_carries_when_it_was_written_and_an_empty_store_carries_none() {
+    let dir = tempdir().unwrap();
+    let store = Store::open(dir.path()).unwrap();
+
+    assert_eq!(store.list_arrangements().unwrap(), Vec::new());
+
+    let before = SystemTime::now() - Duration::from_secs(2);
+    store.write_arrangement("desk", b"{}").unwrap();
+    let entry = store.list_arrangements().unwrap().pop().unwrap();
+    assert_eq!(entry.name, "desk");
+    assert!(entry.written > before, "the write time is not the file's");
+
+    // The directory taken away under the store is an error, not "nothing kept"
+    // — the caller asked what is there and there is no answer.
+    fs::remove_dir_all(dir.path().join("arrangements")).unwrap();
+    assert!(matches!(
+        store.list_arrangements(),
+        Err(StoreError::Io { .. })
+    ));
+}
+
+#[test]
+fn open_establishes_the_arrangements_directory_beside_the_other_three() {
+    let dir = tempdir().unwrap();
+    let root = dir.path().join("library");
+    Store::open(&root).unwrap();
+    assert!(root.join("arrangements").is_dir());
+
+    // A store written by a build that had no arrangements gains the directory
+    // the first time this one opens it.
+    fs::remove_dir_all(root.join("arrangements")).unwrap();
+    Store::open(&root).unwrap();
+    assert!(root.join("arrangements").is_dir());
+}

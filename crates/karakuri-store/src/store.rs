@@ -3,16 +3,36 @@
 //! Layout under the store root (`library/` by default):
 //!
 //! ```text
-//! <hash>.kir              source, immutable
-//! <hash>.meta.ndjson      regenerated metadata
+//! <hash>.kir                        source, immutable
+//! <hash>.meta.ndjson                regenerated metadata
 //! thumbnails/<hash>.mp4
 //! sets/<id>.set.ndjson
 //! sessions/<stamp>.ndjson
+//! arrangements/<name>.arrangement.json
 //! ```
 //!
 //! `<hash>` is the artifact's content address rendered as bare lowercase
 //! hex (no `sha256:` prefix and no colon) so it is safe as a path component
 //! on every platform the store might run on.
+//!
+//! **`arrangements/` is the fourth thing here and it is the operator's own.**
+//! An artifact is material, a Set is a projection of material, a session is a
+//! timeline of material — and an arrangement is none of those: it is the shape
+//! of the console the operator plays them on, with no artifact in it. It is
+//! filed under a **name the operator picked**, because a name is the one handle
+//! that does not move when something unrelated moves
+//! (`docs/principles/0053-a-value-that-must-be-stable-is-recorded-not-derived.md`),
+//! and the name rule is a Set id's rule for the same reason it is a Set id's:
+//! it becomes one path component. See
+//! `docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md`.
+//!
+//! **What this module does not do is parse one.** The bytes are handed over
+//! whole, exactly as `<hash>.kir` source is: the format belongs to
+//! `karakuri-layout`, whose loader refuses an arrangement that disagrees with
+//! itself rather than repairing it
+//! (`docs/adr/0158-a-saved-arrangement-that-disagrees-with-itself-is-refused-not-repaired.md`),
+//! and a check here would be a second answer to a question that already has
+//! one.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -35,6 +55,13 @@ pub enum StoreError {
     },
     #[error("no artifact for {0}")]
     NotFound(Hash),
+    /// No arrangement is filed under that name.
+    ///
+    /// A variant of its own rather than [`StoreError::NotFound`], which carries
+    /// a [`Hash`] and could not say this: an arrangement is addressed by a name
+    /// somebody typed, and the sentence an operator needs is the name back.
+    #[error("no arrangement named `{0}`")]
+    NoArrangement(String),
     /// A Set file carries no time — see `docs/ir-spec.md`, Set file format.
     /// `tick` was the only such record when this was named; `audio` and `tempo`
     /// are the same kind of thing, so the check is `Record::is_set_state` and the
@@ -80,6 +107,11 @@ impl Store {
         fs::create_dir_all(root.join("thumbnails"))?;
         fs::create_dir_all(root.join("sets"))?;
         fs::create_dir_all(root.join("sessions"))?;
+        // Established on `open` like the other three, so that a store written
+        // by an older build gains the directory the first time this one opens
+        // it and `list_arrangements` answers "nothing kept" rather than
+        // "no such directory".
+        fs::create_dir_all(root.join("arrangements"))?;
         Ok(Store { root })
     }
 
@@ -100,6 +132,21 @@ impl Store {
 
     fn session_path(&self, stamp: &str) -> PathBuf {
         self.root.join("sessions").join(format!("{stamp}.ndjson"))
+    }
+
+    /// **`<name>.arrangement.json`, spelled the way `<id>.set.ndjson` is**: the
+    /// operator's name, what kind of thing it is, and the format it is in. The
+    /// middle component is what lets [`Store::list_arrangements`] tell an
+    /// arrangement from an editor's backup or a half-written `.tmp` without
+    /// opening either, which is the same trick `sets/` already turns.
+    ///
+    /// **`.json` and not `.ndjson`.** An arrangement is one document rather
+    /// than a stream of records — there is no line to append and nothing to
+    /// project — so it does not go through [`crate::ndjson`]'s reader at all.
+    fn arrangement_path(&self, name: &str) -> PathBuf {
+        self.root
+            .join("arrangements")
+            .join(format!("{name}.arrangement.json"))
     }
 
     /// Store `.kir` source, content-addressed by its SHA-256. Writing the
@@ -215,6 +262,88 @@ impl Store {
     /// [`project::project`] and `docs/ir-spec.md`, Session stream format.
     pub fn save_session_as_set(&self, set_id: &str, session: &[Line]) -> Result<(), StoreError> {
         self.write_set(set_id, &project::project(session))
+    }
+
+    /// **Write a saved arrangement** (`arrangements/<name>.arrangement.json`).
+    ///
+    /// The bytes are `karakuri-layout`'s, not this crate's: a `Layout`
+    /// serialises to one JSON document and that document is what lands here,
+    /// byte for byte and with nothing appended. Handing it over whole is the
+    /// same contract [`Store::put_artifact`] has with `.kir` source, and for
+    /// the same reason — the store keeps files it does not have to understand,
+    /// and the one place that understands this format is the loader that
+    /// refuses a broken one (ADR-0158).
+    ///
+    /// **Overwrites, like [`Store::write_set`] and unlike
+    /// [`Store::put_artifact`].** A name is an instruction: saving over
+    /// `four_deck` is what an operator who has just moved a divider means by
+    /// saving `four_deck`, and `--save-set ID` has always obeyed the same way.
+    /// Atomic all the same, so a reader never meets half a document, and a
+    /// crash mid-write leaves the previous arrangement rather than nothing.
+    ///
+    /// **Nothing here checks the name**, exactly as nothing checks a Set id:
+    /// `<name>` becomes one path component and that is the caller's rule to
+    /// keep. Where the caller is a protocol rather than a person it is kept —
+    /// `karakuri-environment`'s `mcp::checked_id` is where a name that is not
+    /// one path component is refused rather than sanitised, and an arrangement
+    /// name reached from a model belongs behind the same gate.
+    pub fn write_arrangement(&self, name: &str, arrangement: &[u8]) -> Result<(), StoreError> {
+        ndjson::write_atomic(&self.arrangement_path(name), arrangement)
+    }
+
+    /// **Read a saved arrangement back**, as the bytes that were written.
+    ///
+    /// `StoreError::NoArrangement` where nothing is filed under that name,
+    /// which is an ordinary answer rather than a damaged store: an operator
+    /// asking for an arrangement they have not saved is a person to tell, and
+    /// the name they asked for is what the sentence carries.
+    ///
+    /// **This never returns the built-in.** Resetting the console is a
+    /// different operation reaching different code — the default arrangement is
+    /// what ships, and what ships is not a file anything here can write
+    /// ([P-0048](../../../docs/principles/0048-what-ships-what-you-saved-and-what-you-are-editing-are-three-places.md)).
+    /// A fallback here would make an operator who mistyped a name watch their
+    /// console reset instead of being told the name is wrong.
+    pub fn read_arrangement(&self, name: &str) -> Result<Vec<u8>, StoreError> {
+        fs::read(self.arrangement_path(name)).map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => StoreError::NoArrangement(name.to_string()),
+            _ => StoreError::Io(e),
+        })
+    }
+
+    /// **List the arrangements the store holds**, in ascending name order, each
+    /// with the time its file was last written.
+    ///
+    /// Everything [`Store::list_sets`] says about its listing holds here and
+    /// for the same reasons: the time comes from the filesystem because the
+    /// document carries none; the order is the name's rather than recency's,
+    /// because two files written inside one tick of a coarse clock tie and a
+    /// tied sort is not an order; a name the layout does not claim is skipped
+    /// rather than repaired, so an editor's backup and a `.tmp` left by a write
+    /// that died are not offered as arrangements [`Store::read_arrangement`]
+    /// cannot open; and an empty store lists nothing while a missing directory
+    /// is an error.
+    pub fn list_arrangements(&self) -> Result<Vec<ArrangementEntry>, StoreError> {
+        let mut out = Vec::new();
+        for entry in fs::read_dir(self.root.join("arrangements"))? {
+            let entry = entry?;
+            let file_name = entry.file_name();
+            let Some(name) = file_name
+                .to_str()
+                .and_then(|n| n.strip_suffix(".arrangement.json"))
+            else {
+                continue;
+            };
+            if entry.file_type()?.is_dir() {
+                continue;
+            }
+            out.push(ArrangementEntry {
+                name: name.to_string(),
+                written: entry.metadata()?.modified()?,
+            });
+        }
+        out.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(out)
     }
 
     /// **List the Sets the store holds**, in ascending id order, each with the
@@ -354,6 +483,25 @@ fn parse_hash_stem(stem: &str) -> Option<Hash> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetEntry {
     pub id: String,
+    pub written: SystemTime,
+}
+
+/// An arrangement the store holds, as [`Store::list_arrangements`] found it:
+/// what to hand [`Store::read_arrangement`], and when that file was last
+/// written.
+///
+/// **`name` rather than `id`**, where [`SetEntry`] says `id`. A Set is
+/// ordinarily filed under a stamp nobody chose — `history::stamped_id`, because
+/// a key press cannot type a name — and an arrangement never is: it is saved by
+/// an operator who is telling the console what to call this shape. The two
+/// words are the difference, and carrying `id` here would say a stamp is the
+/// expected case when it is the fallback.
+///
+/// The time is a field for the reason it is one on [`SetEntry`]: a name an
+/// operator typed sorts nowhere near when they typed it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArrangementEntry {
+    pub name: String,
     pub written: SystemTime,
 }
 
