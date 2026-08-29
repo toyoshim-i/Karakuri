@@ -52,7 +52,7 @@ pub const SMALLEST: Rect = Rect {
     x: 0.0,
     y: 0.0,
     w: 990.0,
-    h: 632.0,
+    h: 641.5,
 };
 
 /// **An `egui` context that has drawn once.**

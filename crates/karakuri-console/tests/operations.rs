@@ -113,7 +113,7 @@ fn the_program_height_drags_from_small_to_large() {
     assert_sane(&layout);
     assert_within_bounds(&layout);
     let centre_h = rect_of(&layout, "centre").h;
-    assert!(near(rect_of(&layout, "program").h, centre_h - 10.0 - 126.0));
+    assert!(near(rect_of(&layout, "program").h, centre_h - 10.0 - 151.5));
     assert!(rect_of(&layout, "program").h > 800.0);
 }
 

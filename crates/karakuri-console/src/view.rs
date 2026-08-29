@@ -171,7 +171,7 @@ use std::time::Duration;
 use egui::epaint::text::{LayoutJob, TextFormat};
 use egui::{Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Stroke, StrokeKind, Ui};
 use karakuri_layout::{Axis, Hit, NodeId};
-use karakuri_operation::{BlendMode, Operation, Residency, WipeKind};
+use karakuri_operation::{Authority, BlendMode, Operation, Residency, Sync, WipeKind};
 
 use crate::budget::{Declared, PANEL_PASS};
 use crate::panel::{unit, Grab, InHand, Knob, Op, Panel, GRAB};
@@ -4628,7 +4628,7 @@ const LIBRARY_TITLE: &str = "Library";
 ///   `16:09`. Writing a second spelling here is the kind of second answer this
 ///   repository deletes rather than adds, so the column waits for the one
 ///   spelling to be somewhere both callers can reach.
-/// - **`.lib-row.cursor`, and the `load → C` pill in the foot.** A cursor is a
+/// - **`.lib-row.cursor`, and the `load → A` pill in the foot.** A cursor is a
 ///   selection this console does not keep — the same sentence [`mixer`] writes
 ///   about the deck selection — and the pill is *"How a Set gets from the
 ///   library to a deck"*, which is the second of `console.html`'s own still
@@ -4819,6 +4819,857 @@ fn library_into(ui: &Ui, pal: &Palette, bay: &LibraryBay, sets: &[String]) {
     );
 }
 
+// ---------------------------------------------------------------------------
+// The Inspector
+// ---------------------------------------------------------------------------
+
+/// **How many panes the inspector has**, which is `lib.rs`'s [`arrangement`]
+/// and the mock's `.insp-split` read as one number: the CSS is
+/// `grid-template-columns: 1fr 9px 1fr`, two tracks and the bar between them,
+/// and the arrangement builds `inspector-1` and `inspector-2` to match.
+///
+/// A [`Spec`](karakuri_layout::Spec) builds a
+/// [`Layout`](karakuri_layout::Layout) once and the arena has no insert, so
+/// the count is settled at build time — the mock's `2 up ▾` is an operator
+/// choosing it while running, and that is a control this pass does not add.
+pub const PANES: usize = 2;
+
+/// **The arrangement's name for each pane**, in the order the mock draws them.
+///
+/// Public for [`DECK_LETTERS`]'s reason: a harness that says *which pane* has
+/// to say it in the names the arrangement addresses them by, and a second list
+/// written out there would go on saying `inspector-1` the day this one does
+/// not.
+pub const PANE_NAMES: [&str; PANES] = ["inspector-1", "inspector-2"];
+
+/// **The three levels a node head shows, in the order it shows them.**
+///
+/// `karakuri_operation::Authority` deliberately carries no `ALL` — *"no map
+/// target names an authority … it arrives with the first reader"* — and this
+/// is that first reader, so the list is written here rather than there. The
+/// order is the vocabulary's own declaration order, most restrictive first,
+/// which is also the mock's `man / sug / auto`.
+///
+/// **A fourth level cannot slip past it**: [`auth_word`] is a `match`, so a
+/// level added to the vocabulary does not compile until it has a word here,
+/// and `every_authority_the_vocabulary_names_is_on_the_node_head` holds this
+/// array against that match.
+const AUTHORITIES: [Authority; 3] = [
+    Authority::Manual,
+    Authority::Suggesting,
+    Authority::Automatic,
+];
+
+/// **The node head's abbreviation for one level**, which is the console's own
+/// word and deliberately not `Authority::name`: the vocabulary spells these
+/// *manual*, *suggesting* and *automatic* because that is what a record
+/// carries, and the manual's node head reads `man / sug / auto`.
+///
+/// A `match` for [`blend_mode`](crate::view)'s reason one crate along: a
+/// fourth level in the vocabulary stops the build here rather than drawing a
+/// blank chip.
+fn auth_word(authority: Authority) -> &'static str {
+    match authority {
+        Authority::Manual => "man",
+        Authority::Suggesting => "sug",
+        Authority::Automatic => "auto",
+    }
+}
+
+/// **The word on the sync chip**, which is `karakuri_operation::Sync::name`
+/// and not a second spelling: *free*, *tempo*, *beat* are the manual's three
+/// and the mock's three.
+fn sync_word(sync: Sync) -> &'static str {
+    sync.name()
+}
+
+/// **The letter the anchor readout leads with**: the mock's `T128` under tempo
+/// sync and `B128 +0.25` under beat, and nothing at all under free — *"a free
+/// deck shows neither, because free is the absence of a transport rather than
+/// a setting, and a column reading free on every deck would be four words of
+/// nothing."*
+fn anchor_letter(sync: Sync) -> Option<&'static str> {
+    match sync {
+        Sync::Free => None,
+        Sync::Tempo => Some("T"),
+        Sync::Beat => Some("B"),
+    }
+}
+
+/// **What one pane of the inspector is showing**, handed in by whoever has a
+/// deck — the same seam [`Strip`] crosses, one bay along.
+///
+/// `src/` takes no device and no engine (ADR-0156), so nothing here asks a
+/// `Set` anything: every field is a value somebody who *can* ask read off one
+/// and wrote down. `crates/karakuri` is where that reading is, and it is where
+/// the two omissions below are decided as well.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Pane {
+    /// **Which deck this pane is pointed at**, as an index into
+    /// [`DECK_LETTERS`] — the mock's `deck A`.
+    ///
+    /// **The pane is pointed rather than choosing**, and that is the mock's
+    /// `showing … ▾` not being drawn: the chooser is a control and this pass
+    /// adds none, so whoever fills this says which deck each pane shows. The
+    /// console keeps no selection to choose *with* — the same sentence
+    /// [`mixer`] writes about `.lib-row.cursor` and the deck selection.
+    pub deck: usize,
+    /// **What that deck is playing**, which is the same name the deck's mixer
+    /// strip carries and comes from the same place — see [`Strip::name`], and
+    /// the short of it is that a `Set` has no name of its own and only
+    /// whoever built it knows what to call it.
+    pub material: String,
+    /// What this deck's clock is locked to: `karakuri_engine::transport::Sync`
+    /// as the vocabulary's copy of the same three.
+    pub sync: Sync,
+    /// **The tempo the deck was engaged at**, which is what its rate is
+    /// measured against. Drawn only under [`Sync::Tempo`] and [`Sync::Beat`] —
+    /// see [`anchor_letter`].
+    pub anchor_bpm: f32,
+    /// **The scrub's own value, in beats**, signed. Drawn only under
+    /// [`Sync::Beat`], *"since that is the only mode that reads the offset"*.
+    ///
+    /// In **beats** and one deck's, where the transport row's offset is in
+    /// milliseconds and is the whole instrument's — `style.css` says the unit
+    /// is what tells them apart, *"so neither is ever drawn without one"*, and
+    /// the mock's own `+0.25` is what this is drawn as.
+    pub scrub_beats: f64,
+    /// Whether this deck's Set folds its renderers into one result or
+    /// overdraws them: `karakuri_engine::set::Layering`, as a bit.
+    ///
+    /// **A readout here and a control in the mock.** The chip's tooltip is
+    /// *"Click to overdraw them instead"*, and layering is a **build**
+    /// decision in the engine — `Set::layering` answers off whether the Set
+    /// was built with a merge — so the press is a rebuild rather than a write.
+    /// The word is drawn; the press is not.
+    pub composite: bool,
+    /// **The node groups**, in node order, which is the order a Set addresses
+    /// its own nodes in.
+    pub nodes: Vec<Node>,
+}
+
+/// **One node group**: the head that names a node and says who may move it,
+/// and whatever is under it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Node {
+    /// The mock's `.addr` — `L1:0`, `L2:0`, `L4`. **Written by whoever read
+    /// the Set**, because the layer names are `karakuri-ir`'s `Kind` and this
+    /// crate depends on neither it nor the engine.
+    pub addr: String,
+    /// What the node is called: `Set::node_names`, or the mock's `renderers`
+    /// for the group that folds several.
+    pub name: String,
+    /// **Who may move this node**, or `None` where the group is more than one
+    /// node and so has no one value.
+    ///
+    /// The second case is the mock's own `L4 renderers` head: authority is set
+    /// **per node** (ADR-0211, ADR-0216) and that head stands over every
+    /// renderer the Set has, so a chip on it would be one of *n* answers drawn
+    /// as *the* answer. A Set with one renderer has one node under that head
+    /// and the chip is drawn.
+    pub authority: Option<Authority>,
+    /// The mock's `.rend-row`: every renderer this Set has, and which of them
+    /// is live. Empty on every group that is not the renderers'.
+    pub renderers: Vec<Renderer>,
+    /// The published controls that belong to this node.
+    pub params: Vec<Param>,
+}
+
+/// **One renderer chip.**
+#[derive(Debug, Clone, PartialEq)]
+pub struct Renderer {
+    pub name: String,
+    /// **Whether this is the one that reaches the screen**, and it is only
+    /// ever true under [`Pane::composite`]: *"On, a deck's renderers fold into
+    /// one result and one of them is live; off, they are all overdrawn."*
+    /// Under overdraw every renderer draws, so marking one would assert a
+    /// choice the layering does not make.
+    pub live: bool,
+}
+
+/// **One parameter row**: what the mock's `.param` reads.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Param {
+    /// **The position in the deck's published interface**, counting from one
+    /// and spanning nodes — the mock's `.ord`, and the number a MIDI control
+    /// is learned against: *"knob 3 is knob 3 whatever Set is loaded"*.
+    pub ord: usize,
+    /// What the Set published it as, which may be an alias for the key inside
+    /// the node.
+    pub name: String,
+    /// What it holds.
+    pub value: f32,
+    /// **Where it sits in its published range**, `[0, 1]` — the fader's fill.
+    ///
+    /// A position and not a range plus a value, because the fader is the only
+    /// reader and a second derivation of *where along the track* is a second
+    /// answer. Whoever publishes the control has the range.
+    pub at: f32,
+}
+
+/// **The Inspector's pane, laid out**: the head that says which deck, the deck
+/// head under it, and what is left for the node groups.
+///
+/// # What is in the mock's pane and is deliberately not here
+///
+/// This is [ADR-0200](../../../docs/adr/0200-a-bays-first-pass-draws-the-values-that-exist-and-omits-the-rest.md)
+/// applied to the bay it named as the next one and the hardest: *draw every
+/// part of the mock that has a value behind it and omit the rest outright — no
+/// placeholder, and no empty case the mock did not itself draw.* Nine things
+/// are omitted and each one is named with what it waits on.
+///
+/// **Three are controls, and this pass adds none.**
+///
+/// - **`showing … ▾`**, the chooser in the pane head. Which deck a pane shows
+///   is a selection this console does not keep — the same sentence [`mixer`]
+///   writes about the mock's `.lib-row.cursor` — so the pane is *pointed* by
+///   whoever fills [`Pane::deck`] and the caret is not drawn. The word
+///   `showing` and the deck it names are a readout and are.
+/// - **`keep`**, the pill beside it: *"Keep deck A as a Set, exactly as it is
+///   on screen … It goes into the library under a name."* That is a write into
+///   the store, which is the Library bay's `load → A` from the other end and
+///   the same still-open question — *how a Set gets between the library and a
+///   deck*.
+/// - **The scrub's two arrows.** A scrub is the one control on this panel that
+///   *moves by an amount* rather than naming a destination, and it has no
+///   readout of its own at all: the offset it writes is drawn in the anchor
+///   beside it. There is nothing of it to draw but the press.
+///
+/// **One is a control the mock draws as a readout, and
+/// [ADR-0218](../../../docs/adr/0218-re-anchoring-is-set-sync-naming-the-mode-the-deck-is-in-and-a-cycle-cannot-say-it.md)
+/// is why it is here anyway.** The anchor chip stops being a readout in that
+/// record — a press on it emits `SetSync` naming the mode the deck is already
+/// in, which re-anchors — but its *face* is a reading of two numbers the deck
+/// has, so the face is drawn and the press is not. The sync chip beside it is
+/// the same shape: the mock's chip cycles, the word on it is the mode, and the
+/// word is what is drawn.
+///
+/// **Two have no value in this workspace at all**, which is ADR-0191's rule —
+/// a panel drawing a state the engine never entered is a drawing of one.
+///
+/// - **`.param.bound`'s `.pval.src`**, a bound parameter showing its source
+///   instead of a number. The value exists in the engine —
+///   `Set::bindings` hands back a `Binding` with the signal driving each param
+///   — and **nothing in `crates/karakuri` binds anything**: that binary takes
+///   two `.kir` paths and no `--bind`, so `Set::bindings` is empty in every
+///   run of it and a bound row is a state this program cannot enter. The
+///   mock's other two sources, `midi 21` and `seq 1`, are not bindings at all
+///   — no MIDI map and no sequencer lane exists to be one.
+/// - **The `.sens` row under a bound parameter** — the signal, the curve, the
+///   range and `take back`. It waits on the row above it, and `take back` is a
+///   control besides.
+///
+/// **Two are the shape of the mock disagreeing with the shape of a Set**, and
+/// they are the two things this pass found:
+///
+/// - **A published control that names no node has no row.** The manual groups
+///   parameters *"by node, the way a Set is addressed everywhere else"*, and
+///   the mock draws every `.param` inside a `.node-group`. But
+///   `Published::at` is an `Option` and the **default** interface — the one
+///   every Set in `crates/karakuri` has, since that binary has no `--publish`
+///   — is made entirely of wildcards: *"one control per key, not one per
+///   declaration"*, addressed at every node that declares the key. A wildcard
+///   covering exactly one node is that node's and is drawn there; one covering
+///   several belongs to several groups and is **omitted**, because the mock
+///   draws no row outside a group and inventing a place for one is a
+///   specification written backwards. It waits on the page saying where such a
+///   row goes.
+/// - **The `L4` group's authority chip.** See [`Node::authority`].
+///
+/// **And one is the pane running out of room.** See [`InspectorPane::shown`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct InspectorPane {
+    /// `.half-head`, along the top of the pane, with its rule on the bottom.
+    pub head: Rect,
+    /// `.deck-head`, under it — the deck's own clock and its fold.
+    pub deck_head: Rect,
+    /// What is left under the two heads, where the node groups stack from the
+    /// top with a hairline between them.
+    pub body: Rect,
+    /// **How many node groups are drawn**, which is how many fit **whole** in
+    /// [`body`](Self::body).
+    ///
+    /// # The pane overflows, and this is the console's first scroll position
+    ///
+    /// A Set of any size does not fit in 237 pixels of pane, and **there is no
+    /// scroll position anywhere in this crate**: the Library bay says so at
+    /// its own foot (*"nothing scrolls — which is honest, because there is no
+    /// scroll position anywhere in this crate and inventing one would be a
+    /// control"*), and this is the first region of the console that genuinely
+    /// wants one rather than merely tolerating the lack.
+    ///
+    /// So what does not fit is not drawn, and a group is drawn whole or not at
+    /// all — the same `floor` [`LibraryBay::rows`] takes, on rows of unequal
+    /// height. **A half group is worse than a missing one**: a node head with
+    /// two of its five parameters under it reads as a node with two
+    /// parameters, where a group that is simply not there reads as a pane that
+    /// has run out, which is what it is.
+    ///
+    /// **Zero is a state and not a `None`.** A pane too short for its first
+    /// group still says which deck it is showing and what that deck's clock is
+    /// doing, which is the whole content of the two heads; it is
+    /// [`inspector`]'s `None` that means *there is no pane here to draw*.
+    pub shown: usize,
+}
+
+impl InspectorPane {
+    /// Where the `index`th of the drawn groups goes, and how tall it is.
+    ///
+    /// Derived rather than stored for [`LibraryBay::row`]'s reason — the
+    /// groups are a walk and a `Vec` of rectangles would be an allocation a
+    /// frame does not need — but a walk rather than a stride, because a group
+    /// is as tall as what is in it. `index` past [`shown`](Self::shown) is a
+    /// caller's error and not a state; the one caller iterates `0..shown`.
+    pub fn group(&self, nodes: &[Node], index: usize) -> Rect {
+        let top = self.body.min.y
+            + nodes
+                .iter()
+                .take(index)
+                .map(|node| group_h(node) + size::HAIRLINE)
+                .sum::<f32>();
+        Rect::from_min_size(
+            Pos2::new(self.body.min.x, top),
+            egui::vec2(self.body.width(), group_h(&nodes[index])),
+        )
+    }
+}
+
+/// **How tall one node group is**: its head, the renderer row if it has one,
+/// and a [`size::PARAM_H`] row per parameter.
+///
+/// The hairline between two groups is **not** in here and is added by whoever
+/// stacks them — `.node-group`'s `border-bottom` is `0` on the last of them,
+/// so *n* groups carry *n - 1* rules, which is [`size::PREVIEW_GAP`]'s reading
+/// of a gap one axis along.
+fn group_h(node: &Node) -> f32 {
+    size::NODE_HEAD_H
+        + match node.renderers.is_empty() {
+            true => 0.0,
+            false => size::REND_ROW_H,
+        }
+        + size::PARAM_H * node.params.len() as f32
+}
+
+/// **One pane of the Inspector, derived** — see [`InspectorPane`] for what is
+/// drawn here and for the nine things in the mock's pane that are not.
+///
+/// `index` is which pane, into [`PANE_NAMES`]. `layout` must be solved:
+/// [`Layout::rect`](karakuri_layout::Layout::rect) refuses to answer from a
+/// dirty one. Like [`library`] this asks `egui` for nothing: every box in the
+/// pane is either the full width of the pane or a track of the mock's own
+/// grid, so no rectangle here is the width of the type in it.
+///
+/// `None` where there is no pane by that name, and `None` where there is no
+/// room for the two heads — which is [`picture_rect`]'s rule stated on a pane.
+/// A console with no deck behind it hands over no panes at all, and what the
+/// bay draws then is its card, its head and the bar between the two panes,
+/// exactly as it did before this pass — [`mixer`]'s rule, one bay along.
+pub fn inspector(
+    layout: &karakuri_layout::Layout,
+    index: usize,
+    pane: &Pane,
+) -> Option<InspectorPane> {
+    let region = to_egui(layout.rect(layout.find(PANE_NAMES.get(index)?)?));
+    pane_box(region, &pane.nodes)
+}
+
+/// The arithmetic of a pane, away from the layout it reads.
+///
+/// Term for term from `style.css`:
+///
+/// - `.half-head { padding: 5px 10px; border-bottom: 1px solid var(--c-hair) }`
+///   — a [`size::HALF_HEAD_H`] row along the top of the pane, its rule the
+///   bottom pixel of it.
+/// - `.deck-head { padding: 5px 10px }` — a [`size::DECK_HEAD_H`] row under
+///   it, with no rule of its own: *"Its box is `.node-head`'s without the
+///   tint"*, and the tint is what separates it from the group below.
+/// - what is left is the node groups', stacked from the top.
+///
+/// **The leftover is the last group's and not the pane's**, which is the
+/// opposite of what [`library_box`] does with its foot, and the reason is the
+/// same read the other way: the mock's pane is a flow with nothing under the
+/// groups at all, so there is no row for a leftover to sit under. It shows as
+/// the bay's own card below the last group, which is every other empty body in
+/// this pass.
+fn pane_box(region: Rect, nodes: &[Node]) -> Option<InspectorPane> {
+    let head = Rect::from_min_max(
+        region.min,
+        Pos2::new(region.max.x, region.min.y + size::HALF_HEAD_H),
+    );
+    let deck_head = Rect::from_min_max(
+        Pos2::new(region.min.x, head.max.y),
+        Pos2::new(region.max.x, head.max.y + size::DECK_HEAD_H),
+    );
+    let body = Rect::from_min_max(Pos2::new(region.min.x, deck_head.max.y), region.max);
+    // **Narrower than a parameter row's own padding is no pane**, which is
+    // [`library_box`]'s width check with the mock's own indent in it. There is
+    // no matching check down the pane: a pane too short for a group draws its
+    // two heads and no group, which is what `shown` answers.
+    if body.width() <= size::PARAM_PAD_L + size::PARAM_PAD_R {
+        return None;
+    }
+    if !positive(head) || !positive(deck_head) {
+        return None;
+    }
+    // A walk and not a division: the groups are of unequal height, so *how
+    // many fit* is asked one at a time and stops at the first that does not.
+    // A group that would cross the bottom edge is not drawn at all — see
+    // `InspectorPane::shown`.
+    let mut used = 0.0;
+    let mut shown = 0;
+    for node in nodes {
+        let rule = match shown {
+            0 => 0.0,
+            _ => size::HAIRLINE,
+        };
+        let next = used + rule + group_h(node);
+        if next > body.height() {
+            break;
+        }
+        used = next;
+        shown += 1;
+    }
+    Some(InspectorPane {
+        head,
+        deck_head,
+        body,
+        shown,
+    })
+}
+
+/// **What the anchor reads**, and `None` under free sync.
+///
+/// The mock's own two spellings: `T128` where a deck is tempo-synced, and
+/// `B128 +0.25` where it is beat-synced and sitting a quarter beat ahead of
+/// the room. The tempo is whole because the mock writes it whole —
+/// `T<b>128</b>` — and the offset carries two places and a sign because the
+/// mock's `<em>+0.25</em>` does. **The offset is in beats and the transport
+/// row's is in milliseconds**, so neither is ever drawn without knowing which
+/// it is; here that is the `B` in front of it.
+fn anchor_text(pane: &Pane) -> Option<String> {
+    let letter = anchor_letter(pane.sync)?;
+    Some(match pane.sync {
+        Sync::Beat => format!("{letter}{:.0} {:+.2}", pane.anchor_bpm, pane.scrub_beats),
+        _ => format!("{letter}{:.0}", pane.anchor_bpm),
+    })
+}
+
+/// **What the pane head reads**: the mock's `deck A · drift_night`.
+fn showing_text(pane: &Pane) -> String {
+    format!(
+        "deck {} · {}",
+        DECK_LETTERS.get(pane.deck).copied().unwrap_or("?"),
+        pane.material
+    )
+}
+
+/// The word the mock puts in front of it.
+const SHOWING_LABEL: &str = "showing";
+
+/// **The word on the fold chip**, which is the mock's own and is drawn whether
+/// or not it changes anything: *"A deck publishing a single renderer draws the
+/// chip anyway and says that it changes nothing either way, because a deck
+/// that grows a second one needs the control already where it was."*
+const COMPOSITE_LABEL: &str = "composite";
+
+/// **One pane of the Inspector, painted.**
+///
+/// Where everything goes is [`inspector`]'s, so this paints and derives
+/// nothing but the position of one chip after another along a row, which is
+/// what a flex row is.
+///
+/// Term for term from `style.css`:
+///
+/// - `.half-head` — `color: var(--c-faint)` for the label, `.what`'s
+///   `color: var(--c-text)` for the deck and its material, over a
+///   `border-bottom: 1px solid var(--c-hair)`.
+/// - `.deck-head` — a `.mini` for the sync mode, `.anchor` at
+///   [`size::ANCHOR_SIZE`] beside it, and the fold's `.mini` pushed to the
+///   right by `.sep`'s `flex: 1`.
+/// - `.node-head` — `background: var(--c-tint)`, `.addr`'s
+///   `color: var(--c-lav)`, the name in `var(--c-dim)`, and `.auth`'s three
+///   words at the right.
+/// - `.rend-row` — `.rend` chips, the live one in `var(--c-pink)` over a 15%
+///   wash of it.
+/// - `.param` — the mock's four tracks, with the fader taking what the other
+///   three leave.
+///
+/// **Everything is clipped to the pane**, which is what makes the overflow
+/// safe: a group that fits and a name that does not are the same clip, and it
+/// is the same `with_clip_rect` the picture, a preview cell and the library's
+/// list are each drawn inside.
+fn inspector_into(ui: &Ui, pal: &Palette, at: &InspectorPane, pane: &Pane) {
+    let painter = ui.painter().with_clip_rect(at.head);
+    let mut x = at.head.min.x + size::HALF_HEAD_PAD_X;
+    let label = painter.layout_job(span_at(SHOWING_LABEL, size::BASE, pal.faint));
+    let y = at.head.center().y - label.size().y * 0.5;
+    x += label.size().x + size::HALF_HEAD_GAP;
+    painter.galley(
+        Pos2::new(at.head.min.x + size::HALF_HEAD_PAD_X, y),
+        label,
+        pal.faint,
+    );
+    let what = painter.layout_job(span_at(&showing_text(pane), size::BASE, pal.text));
+    painter.galley(
+        Pos2::new(x, at.head.center().y - what.size().y * 0.5),
+        what,
+        pal.text,
+    );
+    // `.half-head`'s own `border-bottom`, the bottom pixel of the row.
+    let rule = at.head.max.y - size::HAIRLINE * 0.5;
+    painter.line_segment(
+        [
+            Pos2::new(at.head.min.x, rule),
+            Pos2::new(at.head.max.x, rule),
+        ],
+        Stroke::new(size::HAIRLINE, pal.hair),
+    );
+
+    deck_head_into(ui, pal, at.deck_head, pane);
+
+    let painter = ui.painter().with_clip_rect(at.body);
+    for index in 0..at.shown {
+        let node = &pane.nodes[index];
+        let rect = at.group(&pane.nodes, index);
+        node_into(&painter, pal, rect, node);
+        // `.node-group`'s `border-bottom: 1px solid var(--c-hair)`, which
+        // `:last-child` does not carry — so it goes *between* two groups and
+        // the one after the last drawn group is not drawn either, because
+        // there is nothing under it to separate from.
+        if index + 1 < at.shown {
+            let rule = rect.max.y + size::HAIRLINE * 0.5;
+            painter.line_segment(
+                [Pos2::new(rect.min.x, rule), Pos2::new(rect.max.x, rule)],
+                Stroke::new(size::HAIRLINE, pal.hair),
+            );
+        }
+    }
+}
+
+/// **The deck head**: the sync chip, the anchor beside it, and the fold at the
+/// right.
+fn deck_head_into(ui: &Ui, pal: &Palette, row: Rect, pane: &Pane) {
+    let painter = ui.painter().with_clip_rect(row);
+    let mut x = row.min.x + size::DECK_HEAD_PAD_X;
+    x += mini_word(
+        &painter,
+        pal,
+        Pos2::new(x, row.center().y),
+        sync_word(pane.sync),
+        true,
+    );
+    if let Some(text) = anchor_text(pane) {
+        x += size::DECK_HEAD_GAP;
+        let galley = painter.layout_job(span_at(&text, size::ANCHOR_SIZE, pal.faint));
+        painter.galley(
+            Pos2::new(x, row.center().y - galley.size().y * 0.5),
+            galley,
+            pal.faint,
+        );
+    }
+    // `.sep`'s `flex: 1` puts the fold hard against the right of the row.
+    let word = painter.layout_no_wrap(
+        COMPOSITE_LABEL.to_owned(),
+        FontId::new(size::MINI_SIZE, FontFamily::Proportional),
+        pal.faint,
+    );
+    let w = word.size().x + size::MINI_PAD_X * 2.0;
+    mini_word(
+        &painter,
+        pal,
+        Pos2::new(row.max.x - size::DECK_HEAD_PAD_X - w, row.center().y),
+        COMPOSITE_LABEL,
+        pane.composite,
+    );
+}
+
+/// One `.mini` with a word in it, at `left`, centred on that point's `y`.
+/// Returns its width, so a row of them is a running sum and not a second
+/// layout pass.
+fn mini_word(painter: &egui::Painter, pal: &Palette, left: Pos2, text: &str, sel: bool) -> f32 {
+    let galley = painter.layout_no_wrap(
+        text.to_owned(),
+        FontId::new(size::MINI_SIZE, FontFamily::Proportional),
+        pal.faint,
+    );
+    let w = galley.size().x + size::MINI_PAD_X * 2.0;
+    let rect = Rect::from_min_size(
+        Pos2::new(left.x, left.y - size::MINI_H * 0.5),
+        egui::vec2(w, size::MINI_H),
+    );
+    mini_into(painter, pal, rect, sel, |painter, colour| {
+        painter.galley(
+            Pos2::new(
+                rect.min.x + size::MINI_PAD_X,
+                rect.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            colour,
+        );
+    });
+    w
+}
+
+/// **One node group**: the head, the renderer row where there is one, and a
+/// row per parameter.
+fn node_into(painter: &egui::Painter, pal: &Palette, rect: Rect, node: &Node) {
+    let head = Rect::from_min_max(
+        rect.min,
+        Pos2::new(rect.max.x, rect.min.y + size::NODE_HEAD_H),
+    );
+    // `.node-head`'s `background: var(--c-tint)`, which is the wash that tells
+    // a head from the rows under it — the same tint the *allocated* tally
+    // carries.
+    painter.rect_filled(head, CornerRadius::ZERO, pal.tint);
+    let mut x = head.min.x + size::NODE_HEAD_PAD_X;
+    let addr = painter.layout_job(span_at(&node.addr, size::BASE, pal.lav));
+    let w = addr.size().x;
+    painter.galley(
+        Pos2::new(x, head.center().y - addr.size().y * 0.5),
+        addr,
+        pal.lav,
+    );
+    x += w + size::NODE_HEAD_GAP;
+    let name = painter.layout_job(span_at(&node.name, size::BASE, pal.dim));
+    painter.galley(
+        Pos2::new(x, head.center().y - name.size().y * 0.5),
+        name,
+        pal.dim,
+    );
+    if let Some(authority) = node.authority {
+        auth_into(painter, pal, head, authority);
+    }
+
+    let mut y = head.max.y;
+    if !node.renderers.is_empty() {
+        rend_row_into(
+            painter,
+            pal,
+            Rect::from_min_max(
+                Pos2::new(rect.min.x, y),
+                Pos2::new(rect.max.x, y + size::REND_ROW_H),
+            ),
+            &node.renderers,
+        );
+        y += size::REND_ROW_H;
+    }
+    for param in &node.params {
+        param_into(
+            painter,
+            pal,
+            Rect::from_min_max(
+                Pos2::new(rect.min.x, y),
+                Pos2::new(rect.max.x, y + size::PARAM_H),
+            ),
+            param,
+        );
+        y += size::PARAM_H;
+    }
+}
+
+/// **`man / sug / auto`, right-aligned on the node head**, with the one the
+/// node is on filled: `.auth span.sel`'s `color: var(--c-mint)` over a 15%
+/// wash of it, and the other two in `var(--c-faint)` with no box at all.
+///
+/// **All three and not only the one**, which is the manual's own row: *"`man /
+/// sug / auto` on each node head, never a global mode."* The two that are not
+/// selected are the affordance and this pass does not claim a press on them —
+/// what is drawn is which of the three this node is on.
+fn auth_into(painter: &egui::Painter, pal: &Palette, head: Rect, authority: Authority) {
+    let mut chips = Vec::with_capacity(AUTHORITIES.len());
+    let mut total = 0.0;
+    for (n, level) in AUTHORITIES.into_iter().enumerate() {
+        let galley = painter.layout_no_wrap(
+            auth_word(level).to_owned(),
+            FontId::new(size::AUTH_SIZE, FontFamily::Proportional),
+            pal.faint,
+        );
+        let w = galley.size().x + size::AUTH_PAD_X * 2.0;
+        total += w + match n {
+            0 => 0.0,
+            _ => size::AUTH_GAP,
+        };
+        chips.push((level, galley, w));
+    }
+    let mut x = head.max.x - size::NODE_HEAD_PAD_X - total;
+    for (level, galley, w) in chips {
+        let rect = Rect::from_min_size(
+            Pos2::new(x, head.center().y - size::AUTH_H * 0.5),
+            egui::vec2(w, size::AUTH_H),
+        );
+        let sel = level == authority;
+        let colour = match sel {
+            true => pal.mint,
+            false => pal.faint,
+        };
+        if sel {
+            painter.rect_filled(
+                rect,
+                // `border-radius: 999px` on a box this short is a capsule.
+                CornerRadius::same((size::AUTH_H * 0.5) as u8),
+                tint(pal.mint, 15),
+            );
+        }
+        painter.galley(
+            Pos2::new(
+                rect.min.x + size::AUTH_PAD_X,
+                rect.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            colour,
+        );
+        x += w + size::AUTH_GAP;
+    }
+}
+
+/// **The renderer chips**, one per renderer the Set has, from the left.
+///
+/// The live one carries `.rend.sel`: `color: var(--c-pink)` over a 15% wash of
+/// it, no border, and the pink halo `box-shadow: 0 0 9px var(--c-glowp)` —
+/// which is the same 9 the lit beat and a live fader knob carry. The rest are
+/// `.rend`'s `border: 1px solid var(--c-line)` around `var(--c-dim)`.
+///
+/// **One row and what fits of it.** `.rend-row` wraps in the mock and the
+/// console does not: a wrapped row is a group taller than [`group_h`] said it
+/// was, and the pane's own arithmetic is what says whether a group is drawn at
+/// all. A chip past the right-hand edge is clipped, which is the same answer
+/// the pane gives a group past the bottom.
+fn rend_row_into(painter: &egui::Painter, pal: &Palette, row: Rect, renderers: &[Renderer]) {
+    let mut x = row.min.x + size::REND_ROW_PAD_L;
+    let y = row.min.y + size::REND_ROW_PAD_T;
+    for rend in renderers {
+        let galley = painter.layout_no_wrap(
+            rend.name.clone(),
+            FontId::new(size::BASE, FontFamily::Proportional),
+            pal.dim,
+        );
+        let w = galley.size().x + size::REND_PAD_X * 2.0;
+        let rect = Rect::from_min_size(Pos2::new(x, y), egui::vec2(w, size::REND_H));
+        let radius = CornerRadius::same((size::REND_H * 0.5) as u8);
+        match rend.live {
+            true => {
+                painter.add(
+                    egui::epaint::Shadow {
+                        offset: [0, 0],
+                        blur: size::TALLY_GLOW - 1,
+                        spread: 0,
+                        color: pal.glow_pink,
+                    }
+                    .as_shape(rect, radius),
+                );
+                painter.rect_filled(rect, radius, tint(pal.pink, 15));
+            }
+            false => {
+                painter.rect_stroke(
+                    rect,
+                    radius,
+                    Stroke::new(size::HAIRLINE, pal.line),
+                    StrokeKind::Inside,
+                );
+            }
+        }
+        painter.galley(
+            Pos2::new(
+                rect.min.x + size::REND_PAD_X,
+                rect.center().y - galley.size().y * 0.5,
+            ),
+            galley,
+            match rend.live {
+                true => pal.pink,
+                false => pal.dim,
+            },
+        );
+        x += w + size::REND_GAP;
+    }
+}
+
+/// **One parameter row**, in the mock's own four tracks: the ordinal at
+/// [`size::PARAM_ORD_W`] right-aligned, the name at [`size::PARAM_NAME_W`],
+/// the fader taking what is left, and the value at [`size::PARAM_VAL_W`]
+/// right-aligned.
+///
+/// **The value is two places**, which is the mock's `2.40`, `0.71`, `1.20` —
+/// every number in its `.pval` column. It is not a second spelling of the
+/// transport's tempo: that one is a BPM and this is a parameter, and the mock
+/// writes the two differently for that reason.
+fn param_into(painter: &egui::Painter, pal: &Palette, row: Rect, param: &Param) {
+    let left = row.min.x + size::PARAM_PAD_L;
+    let right = row.max.x - size::PARAM_PAD_R;
+    let ord = painter.layout_job(span_at(
+        &param.ord.to_string(),
+        size::PARAM_ORD_SIZE,
+        pal.faint,
+    ));
+    painter.galley(
+        Pos2::new(
+            left + size::PARAM_ORD_W - ord.size().x,
+            row.center().y - ord.size().y * 0.5,
+        ),
+        ord,
+        pal.faint,
+    );
+    let name_x = left + size::PARAM_ORD_W + size::PARAM_GAP;
+    // `.param .pname`'s `overflow: hidden; text-overflow: ellipsis` — one row,
+    // broken anywhere, with an ellipsis for what did not fit. The mock says so
+    // for this column and not for the library's, which is why one elides and
+    // the other clips.
+    let mut job = span_at(&param.name, size::BASE, pal.dim);
+    job.wrap = egui::epaint::text::TextWrapping {
+        max_width: size::PARAM_NAME_W,
+        max_rows: 1,
+        break_anywhere: true,
+        overflow_character: Some('…'),
+    };
+    let name = painter.layout_job(job);
+    painter.galley(
+        Pos2::new(name_x, row.center().y - name.size().y * 0.5),
+        name,
+        pal.dim,
+    );
+    let value = painter.layout_job(span_at(
+        &format!("{:.2}", param.value),
+        size::BASE,
+        pal.text,
+    ));
+    painter.galley(
+        Pos2::new(
+            right - value.size().x,
+            row.center().y - value.size().y * 0.5,
+        ),
+        value,
+        pal.text,
+    );
+    let track = Rect::from_min_size(
+        Pos2::new(
+            name_x + size::PARAM_NAME_W + size::PARAM_GAP,
+            row.center().y - size::FADER_H * 0.5,
+        ),
+        egui::vec2(
+            (right - size::PARAM_VAL_W - size::PARAM_GAP)
+                - (name_x + size::PARAM_NAME_W + size::PARAM_GAP),
+            size::FADER_H,
+        ),
+    );
+    if positive(track) {
+        // `.fader b` fills its 5px track edge to edge, so the inset is zero —
+        // the one argument that tells this fader from the mixer's vertical
+        // one, which `fader` takes for exactly this reason.
+        fader_into(
+            painter,
+            pal,
+            fader(
+                track,
+                Axis::Row,
+                param.at,
+                0.0,
+                egui::vec2(size::FADER_KNOB_W, size::FADER_KNOB_H),
+            ),
+            false,
+            None,
+        );
+    }
+}
+
 /// The console's view: which room it is in, and the frame's plan, kept so a
 /// frame does not allocate one.
 pub struct View {
@@ -4896,6 +5747,32 @@ pub struct View {
     /// for the star and the time the mock draws beside it, and for why neither
     /// is here.
     pub library: Vec<String>,
+    /// **What each Inspector pane is showing this frame**, one per pane the
+    /// console has room to point at something — and **empty** for a console
+    /// with no deck behind it, which is every test in this crate and what the
+    /// bay draws then is its card, its head and the bar between its panes.
+    ///
+    /// **The same seam as [`View::mixer`]**, and empty rather than
+    /// `[Option<Pane>; PANES]` for the same reason: an empty list is already
+    /// the whole of *no deck*, and a pane pointed at nothing and a pane that
+    /// is not there are one bay — one with no head to draw.
+    ///
+    /// **A pane is *pointed*, not choosing.** The mock's `showing … ▾` is a
+    /// control and this pass adds none (ADR-0200), so which deck each pane
+    /// shows is whoever fills this saying so — and pane *i* draws
+    /// `inspector[i]`, in [`PANE_NAMES`]' order.
+    ///
+    /// **Read once rather than per frame**, which is
+    /// `karakuri_engine::set::Set::published`'s own instruction — *"Allocates,
+    /// so not the frame path. A console reads this when a Set lands, not per
+    /// frame."* — and is [`View::library`]'s rule for a second reason: what is
+    /// in here does not move. Nothing in this workspace writes a published
+    /// value, binds a signal in the panel binary, or grants an authority
+    /// (ADR-0216), so a Set that has landed reads the same on every frame
+    /// after it. **The field is rewritable per frame like every other one**;
+    /// what a re-read waits on is a writer, and it is the same writer the
+    /// `man / sug / auto` chip waits on. See [`Pane`] and [`inspector`].
+    pub inspector: Vec<Pane>,
     /// **The shape of what is being rendered**, which is what the Program bay
     /// arranges its body for — [`program_bay`], and [`picture_rect`] for why
     /// it is two numbers rather than a ratio.
@@ -4940,6 +5817,9 @@ impl View {
             // is not a number this crate has, and the list is written once
             // rather than per frame.
             library: Vec::new(),
+            // As many panes as the inspector has, so the frame path never
+            // grows it — the same reason `mixer` is built with a capacity.
+            inspector: Vec::with_capacity(PANES),
             canvas: MOCK_CANVAS,
             phase: Phase::ZERO,
             // Every region the console has, so the frame path never grows it.
@@ -5157,6 +6037,7 @@ impl View {
         let values = self.transport;
         let strips = self.mixer.as_slice();
         let sets = self.library.as_slice();
+        let panes = self.inspector.as_slice();
         let phase = self.phase;
         let frame = egui::Frame::NONE.fill(pal.ground);
         egui::CentralPanel::default().frame(frame).show(ui, |ui| {
@@ -5265,6 +6146,19 @@ impl View {
             if let Some(cells) = cells {
                 for (deck, cell) in cells.into_iter().enumerate() {
                     preview(ui, &pal, cell, deck, previews[deck]);
+                }
+            }
+
+            // **The Inspector's panes, after the loop for the same reason.**
+            // `Kind::Pane` is a unit variant and stays one — `tests/view.rs`
+            // asserts that both panes are one — so it cannot carry *which*
+            // pane, and comparing `inspector-1` against a name on the frame
+            // path is the string in the loop this table exists to avoid. They
+            // sit inside the Inspector bay's card, which the loop has already
+            // painted, and nothing else on the panel overlaps them.
+            for (index, pane) in panes.iter().enumerate().take(PANES) {
+                if let Some(at) = inspector(panel.layout(), index, pane) {
+                    inspector_into(ui, &pal, &at, pane);
                 }
             }
         });
@@ -5630,4 +6524,284 @@ fn spaced(text: &str, size: f32, colour: Color32, tracking: f32) -> LayoutJob {
 /// logical pixels, so this is only two types meeting.
 pub fn to_egui(r: karakuri_layout::Rect) -> Rect {
     Rect::from_min_size(Pos2::new(r.x, r.y), egui::vec2(r.w, r.h))
+}
+
+#[cfg(test)]
+mod tests {
+    //! **The Inspector's own tests, and they are in `src/` rather than in
+    //! `tests/`.**
+    //!
+    //! Every other region of this console is asserted from a file in `tests/`,
+    //! one per region, and this bay would have been `tests/inspector.rs`. It
+    //! is here because [`pane_box`] and [`group_h`] are private — the pane's
+    //! arithmetic is what these check, and the public [`inspector`] is that
+    //! arithmetic plus a layout lookup. Moving them out would mean making the
+    //! derivation public to test it, which is a wider surface for a narrower
+    //! reason.
+    //!
+    //! What is *not* here and belongs in `tests/inspector.rs` when somebody
+    //! writes it: the bay drawn against a real arrangement at the two
+    //! viewports, on `tests/library.rs`'s pattern.
+
+    use super::*;
+
+    /// A pane with `params` parameters under one node and no renderers.
+    fn one_node(params: usize) -> Pane {
+        Pane {
+            deck: 0,
+            material: "drift_shell + soft_points".to_owned(),
+            sync: Sync::Tempo,
+            anchor_bpm: 128.0,
+            scrub_beats: 0.0,
+            composite: false,
+            nodes: vec![Node {
+                addr: "L1:0".to_owned(),
+                name: "drift_shell".to_owned(),
+                authority: Some(Authority::Manual),
+                renderers: Vec::new(),
+                params: (0..params)
+                    .map(|n| Param {
+                        ord: n + 1,
+                        name: format!("p{n}"),
+                        value: 0.5,
+                        at: 0.5,
+                    })
+                    .collect(),
+            }],
+        }
+    }
+
+    /// A rectangle the size of one inspector pane at the narrowest console the
+    /// mock will draw: `.console`'s `min-width: 1010px` holds the centre at
+    /// 484 and each pane at 237.
+    fn pane_at(height: f32) -> Rect {
+        Rect::from_min_size(Pos2::new(0.0, 0.0), egui::vec2(237.0, height))
+    }
+
+    /// **The two heads are the mock's boxes and the leftover is the groups'.**
+    ///
+    /// `.half-head` is `5 + 16.5 + 5` over its own `border-bottom`, and
+    /// `.deck-head` is `5 + 15.5 + 5` with none — the stylesheet's own
+    /// arithmetic for that row. Everything under them is the body.
+    #[test]
+    fn a_pane_is_two_heads_and_what_is_left() {
+        let pane = one_node(2);
+        let at = pane_box(pane_at(400.0), &pane.nodes).expect("a pane with room in it");
+        assert_eq!(at.head.height(), 27.5);
+        assert_eq!(at.deck_head.height(), 25.5);
+        assert_eq!(at.head.max.y, at.deck_head.min.y);
+        assert_eq!(at.deck_head.max.y, at.body.min.y);
+        assert_eq!(at.body.max.y, 400.0);
+    }
+
+    /// **The inspector's own minimum is the least this draws**, and the two
+    /// are one derivation: a pane at the minimum less the bay head has room
+    /// for exactly the one group of two parameters the minimum is written
+    /// from, and a pixel less has room for none of it.
+    ///
+    /// This is what the 151.5 in `lib.rs` *means*: bay head 27, `.half-head`
+    /// 27.5, `.deck-head` 25.5, `.node-head` 26.5 and two `.param` rows at
+    /// 22.5.
+    #[test]
+    fn the_bays_minimum_is_the_least_a_pane_can_draw() {
+        let pane = one_node(2);
+        let pane_h = 151.5 - size::HEAD_H;
+        let at = pane_box(pane_at(pane_h), &pane.nodes).expect("a pane at the minimum");
+        assert_eq!(
+            at.shown, 1,
+            "one node and two of its parameters is what the minimum is written from"
+        );
+        let short = pane_box(pane_at(pane_h - 0.5), &pane.nodes).expect("still two heads");
+        assert_eq!(
+            short.shown, 0,
+            "half a pixel under the minimum and the group no longer fits"
+        );
+    }
+
+    /// **A group is drawn whole or not at all**, which is the pane having no
+    /// scroll position: a node head with two of its five parameters under it
+    /// reads as a node with two parameters.
+    #[test]
+    fn a_group_that_does_not_fit_whole_is_not_drawn() {
+        let pane = Pane {
+            nodes: vec![one_node(2).nodes[0].clone(), one_node(5).nodes[0].clone()],
+            ..one_node(2)
+        };
+        // Room for the first group, the hairline, and all but the last row of
+        // the second.
+        let first = size::NODE_HEAD_H + size::PARAM_H * 2.0;
+        let second = size::NODE_HEAD_H + size::PARAM_H * 5.0;
+        let body = first + size::HAIRLINE + second - size::PARAM_H;
+        let at = pane_box(
+            pane_at(size::HALF_HEAD_H + size::DECK_HEAD_H + body),
+            &pane.nodes,
+        )
+        .expect("a pane with room in it");
+        assert_eq!(at.shown, 1, "the second group is short by one row");
+
+        // One row more and both are drawn.
+        let at = pane_box(
+            pane_at(size::HALF_HEAD_H + size::DECK_HEAD_H + body + size::PARAM_H),
+            &pane.nodes,
+        )
+        .expect("a pane with room in it");
+        assert_eq!(at.shown, 2);
+    }
+
+    /// **Where a group goes is the sum of the groups above it and the rules
+    /// between them**, and the rule is between rather than under: *n* groups
+    /// carry *n - 1* of them, because `.node-group:last-child` has none.
+    #[test]
+    fn a_group_stacks_under_the_one_before_it_with_a_rule_between() {
+        let pane = Pane {
+            nodes: vec![
+                one_node(2).nodes[0].clone(),
+                one_node(1).nodes[0].clone(),
+                one_node(3).nodes[0].clone(),
+            ],
+            ..one_node(2)
+        };
+        let at = pane_box(pane_at(400.0), &pane.nodes).expect("a pane with room in it");
+        assert_eq!(at.shown, 3);
+        let first = at.group(&pane.nodes, 0);
+        let second = at.group(&pane.nodes, 1);
+        let third = at.group(&pane.nodes, 2);
+        assert_eq!(first.min.y, at.body.min.y);
+        assert_eq!(second.min.y, first.max.y + size::HAIRLINE);
+        assert_eq!(third.min.y, second.max.y + size::HAIRLINE);
+        assert_eq!(first.height(), size::NODE_HEAD_H + size::PARAM_H * 2.0);
+        assert_eq!(second.height(), size::NODE_HEAD_H + size::PARAM_H);
+    }
+
+    /// **A renderer row costs a group its own height**, and a group without
+    /// one costs nothing: the mock draws `.rend-row` in the `L4` group and
+    /// nowhere else.
+    #[test]
+    fn a_renderer_row_is_a_row_of_the_group_it_is_in() {
+        let mut node = one_node(1).nodes[0].clone();
+        let without = group_h(&node);
+        node.renderers = vec![Renderer {
+            name: "soft_points".to_owned(),
+            live: true,
+        }];
+        assert_eq!(group_h(&node), without + size::REND_ROW_H);
+    }
+
+    /// **The anchor is the mock's own two spellings, and free shows neither.**
+    ///
+    /// *"`T128` is the tempo a deck was engaged at … `B128 +0.25` is that with
+    /// the deck sitting a quarter beat ahead of the room. A free deck shows
+    /// neither."*
+    #[test]
+    fn the_anchor_reads_what_the_mock_reads() {
+        let mut pane = one_node(1);
+        pane.sync = Sync::Tempo;
+        pane.scrub_beats = 0.25;
+        assert_eq!(
+            anchor_text(&pane).as_deref(),
+            Some("T128"),
+            "tempo sync does not read the offset, so it is not drawn"
+        );
+        pane.sync = Sync::Beat;
+        assert_eq!(anchor_text(&pane).as_deref(), Some("B128 +0.25"));
+        pane.sync = Sync::Free;
+        assert_eq!(
+            anchor_text(&pane),
+            None,
+            "free is the absence of a transport rather than a setting"
+        );
+    }
+
+    /// **The pane head names the deck it is pointed at and what is in it**,
+    /// which is the mock's `deck A · drift_night`.
+    #[test]
+    fn the_pane_head_says_which_deck_it_is_showing() {
+        let mut pane = one_node(1);
+        pane.deck = 1;
+        assert_eq!(showing_text(&pane), "deck B · drift_shell + soft_points");
+    }
+
+    /// **Every level the vocabulary names is on the node head.**
+    ///
+    /// `karakuri_operation::Authority` carries no `ALL` — *"it arrives with
+    /// the first reader"* — so [`AUTHORITIES`] is this crate's list, and the
+    /// thing that can go wrong is the list falling behind the vocabulary while
+    /// [`auth_word`] is updated. This holds the two together: every level
+    /// [`auth_word`] can spell is in the array exactly once, and the array is
+    /// in the vocabulary's own declaration order.
+    #[test]
+    fn every_authority_the_vocabulary_names_is_on_the_node_head() {
+        // A `match` that a fourth level would not compile past, which is what
+        // makes this a check on the *array* rather than on the enum.
+        let expected = [
+            Authority::Manual,
+            Authority::Suggesting,
+            Authority::Automatic,
+        ];
+        assert_eq!(
+            AUTHORITIES.len(),
+            expected.len(),
+            "a level the vocabulary names is missing from the node head"
+        );
+        for (n, level) in expected.into_iter().enumerate() {
+            assert_eq!(AUTHORITIES[n], level, "the three are in declaration order");
+            assert!(
+                !auth_word(level).is_empty(),
+                "every level has the console's own abbreviation for it"
+            );
+        }
+        let words: Vec<&str> = AUTHORITIES.into_iter().map(auth_word).collect();
+        assert_eq!(
+            words,
+            vec!["man", "sug", "auto"],
+            "the manual's node head reads `man / sug / auto`"
+        );
+    }
+
+    /// **A pane narrower than a parameter row's own padding is no pane**,
+    /// which is the picture's rule stated across the axis.
+    #[test]
+    fn a_pane_with_no_room_across_it_draws_nothing() {
+        let pane = one_node(2);
+        let narrow = Rect::from_min_size(
+            Pos2::new(0.0, 0.0),
+            egui::vec2(size::PARAM_PAD_L + size::PARAM_PAD_R, 400.0),
+        );
+        assert!(pane_box(narrow, &pane.nodes).is_none());
+    }
+
+    /// **There are two panes and there is no third.**
+    ///
+    /// The mock's `2 up ▾` is an operator choosing how many while running, and
+    /// a [`Spec`](karakuri_layout::Spec) builds a
+    /// [`Layout`](karakuri_layout::Layout) once — so the count is the
+    /// arrangement's, and a caller asking for a pane it has not got gets
+    /// `None` rather than one of the two it has.
+    ///
+    /// And a console with no deck behind it hands over no pane at all, which
+    /// is every test in this crate.
+    #[test]
+    fn there_are_two_panes_and_no_third() {
+        let mut layout = crate::layout();
+        layout.set_viewport(karakuri_layout::Rect {
+            x: 0.0,
+            y: 0.0,
+            w: 1920.0,
+            h: 1080.0,
+        });
+        layout.solve();
+        let pane = one_node(2);
+        assert_eq!(PANES, 2, "the mock's `.insp-split` is `1fr 9px 1fr`");
+        for index in 0..PANES {
+            assert!(
+                inspector(&layout, index, &pane).is_some(),
+                "pane {index} is in the arrangement and has room in it"
+            );
+        }
+        assert!(
+            inspector(&layout, PANES, &pane).is_none(),
+            "a third pane is a pane the arrangement has not got"
+        );
+        assert!(View::new(Room::Day).inspector.is_empty());
+    }
 }

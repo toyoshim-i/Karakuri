@@ -577,4 +577,112 @@ pub mod size {
     /// this row was drawn and counts the scope row this console does not draw
     /// instead, which is 31 against this 26 and so is the larger of the two.
     pub const LIB_FOOT_H: f32 = LIB_FOOT_PAD_Y * 2.0 + LIB_FOOT_SIZE * LINE + HAIRLINE;
+
+    // -- the inspector's panes ----------------------------------------------
+
+    /// `.half-head`'s `padding: 5px 10px` and its `gap: 6px`: the row that
+    /// says *which* deck a pane is showing, above the deck head that says what
+    /// that deck is doing.
+    pub const HALF_HEAD_PAD_X: f32 = 10.0;
+    pub const HALF_HEAD_PAD_Y: f32 = 5.0;
+    pub const HALF_HEAD_GAP: f32 = 6.0;
+
+    /// The pane head's box: [`BASE`] at [`LINE`] inside that padding, plus the
+    /// one pixel of its own `border-bottom: 1px solid var(--c-hair)` —
+    /// **27.5**, which is the 27.5 the inspector's minimum of 151.5 is written
+    /// from in `lib.rs`, so the row is this tall in both places or in neither.
+    pub const HALF_HEAD_H: f32 = HALF_HEAD_PAD_Y * 2.0 + BASE * LINE + HAIRLINE;
+
+    /// `.deck-head`'s `padding: 5px 10px` and its `gap: 6px`: the strip of
+    /// chips that heads a *deck* rather than a bay — its clock and its fold.
+    pub const DECK_HEAD_PAD_X: f32 = 10.0;
+    pub const DECK_HEAD_PAD_Y: f32 = 5.0;
+    pub const DECK_HEAD_GAP: f32 = 6.0;
+
+    /// The deck head's box: a [`MINI_H`] chip inside that padding — **25.5**,
+    /// which is the stylesheet's own arithmetic for the row (*"the tallest
+    /// thing in it is a `.mini` at 15.5, so the row is 5 + 15.5 + 5"*) and the
+    /// 25.5 the inspector's minimum of 151.5 is written from in `lib.rs`.
+    pub const DECK_HEAD_H: f32 = DECK_HEAD_PAD_Y * 2.0 + MINI_H;
+
+    /// `.anchor`'s `font-size: 9px`: the tempo a deck was engaged at, beside
+    /// the chip that says what its clock is locked to.
+    pub const ANCHOR_SIZE: f32 = 9.0;
+
+    /// `.node-head`'s `padding: 5px 10px` and its `gap: 7px`: a node's
+    /// address, its name and who is allowed to move it.
+    pub const NODE_HEAD_PAD_X: f32 = 10.0;
+    pub const NODE_HEAD_PAD_Y: f32 = 5.0;
+    pub const NODE_HEAD_GAP: f32 = 7.0;
+
+    /// A node head's box: [`BASE`] at [`LINE`] inside that padding — **26.5**,
+    /// which is the 26.5 the inspector's minimum of 151.5 is written from in
+    /// `lib.rs`. The authority chips beside the name are shorter than the name
+    /// is ([`AUTH_H`] against 16.5), so the name is what sets the height.
+    pub const NODE_HEAD_H: f32 = NODE_HEAD_PAD_Y * 2.0 + BASE * LINE;
+
+    /// `.auth`'s `gap: 3px`, between the three words on a node head.
+    pub const AUTH_GAP: f32 = 3.0;
+
+    /// `.auth span`'s `padding: 0 5px` and its `font-size: 9px`: one of
+    /// `man`, `sug` and `auto`.
+    pub const AUTH_PAD_X: f32 = 5.0;
+    pub const AUTH_SIZE: f32 = 9.0;
+
+    /// An authority chip's box: [`AUTH_SIZE`] at [`LINE`] — **13.5**, with no
+    /// border to count, which is what makes it shorter than the node name
+    /// beside it. Its `border-radius: 999px` on a box this short is a capsule.
+    pub const AUTH_H: f32 = AUTH_SIZE * LINE;
+
+    /// `.param`'s `padding: 3px 10px 3px 12px` — **the one row in the mock
+    /// whose two side paddings differ**, twelve in from the left of the pane
+    /// and ten from the right, which is what indents a parameter under the
+    /// node head above it — and its `gap: 8px`, between the four tracks.
+    pub const PARAM_PAD_L: f32 = 12.0;
+    pub const PARAM_PAD_R: f32 = 10.0;
+    pub const PARAM_PAD_Y: f32 = 3.0;
+    pub const PARAM_GAP: f32 = 8.0;
+
+    /// `.param`'s `grid-template-columns: 15px 88px 1fr 58px`: the ordinal a
+    /// MIDI control is learned against, the name, the fader — which takes
+    /// whatever the other three leave — and the value.
+    pub const PARAM_ORD_W: f32 = 15.0;
+    pub const PARAM_NAME_W: f32 = 88.0;
+    pub const PARAM_VAL_W: f32 = 58.0;
+
+    /// `.param .ord`'s `font-size: 9.5px`: the position in the deck's
+    /// published interface, and the only type in the row that is not the
+    /// pane's own size.
+    pub const PARAM_ORD_SIZE: f32 = 9.5;
+
+    /// A parameter row's box: [`BASE`] at [`LINE`] inside that padding —
+    /// **22.5**, which is the 22.5 the inspector's minimum of 151.5 is written
+    /// from in `lib.rs`, so a row is this tall in both places or in neither.
+    /// The fader in the middle of it is [`FADER_H`] and its knob
+    /// [`FADER_KNOB_H`], both shorter than the type either side.
+    pub const PARAM_H: f32 = PARAM_PAD_Y * 2.0 + BASE * LINE;
+
+    /// `.rend-row`'s `padding: 3px 10px 6px 12px` — the renderer chips stand
+    /// on the same 12 and 10 a parameter row does, with more room under them
+    /// than over — and its `gap: 5px`, between two chips.
+    pub const REND_ROW_PAD_L: f32 = 12.0;
+    pub const REND_ROW_PAD_R: f32 = 10.0;
+    pub const REND_ROW_PAD_T: f32 = 3.0;
+    pub const REND_ROW_PAD_B: f32 = 6.0;
+    pub const REND_GAP: f32 = 5.0;
+
+    /// `.rend`'s `padding: 0 7px`, around a renderer's name at [`BASE`].
+    pub const REND_PAD_X: f32 = 7.0;
+
+    /// A renderer chip's box: [`BASE`] at [`LINE`] inside its
+    /// `border: 1px solid var(--c-line)` — the same box [`MINI_H`] is, at the
+    /// pane's own type size rather than a mini's, so **18.5**.
+    pub const REND_H: f32 = BASE * LINE + HAIRLINE * 2.0;
+
+    /// The renderer row's box: one chip inside [`REND_ROW_PAD_T`] and
+    /// [`REND_ROW_PAD_B`] — **27.5**. One row and not a wrap: `.rend-row`
+    /// carries `flex-wrap: wrap` and the console draws the chips that fit,
+    /// which is [`crate::view::inspector`]'s rule about a pane that overflows
+    /// stated one row along.
+    pub const REND_ROW_H: f32 = REND_ROW_PAD_T + REND_H + REND_ROW_PAD_B;
 }

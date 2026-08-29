@@ -1077,7 +1077,49 @@ re-taken once that boundary is drawn.
      readings of a queue that does not exist, and the mock's third row — *a rejected candidate costs
      nothing* — is a standing note beside two candidates rather than what the lane draws when it is
      empty. **The cheapest of the four to build and the one with the least behind it.**
-   - **Inspector — the richest in values and the poorest in decisions.** `Set::published`,
+   - **Inspector — drawn, 2026-08-29, and the drawing found more than it drew.** All seven of the
+    reads it needed answer off a running Set, checked one by one against a real device rather than
+    assumed. What it draws: the pane head, the **deck head** the manual specified the day before, a
+    group per node with its address and its `man / sug / auto`, the renderers folded into one group
+    with the live one marked under composite only, and the parameter rows.
+
+    **The biggest finding is that the manual groups parameters by node and the interface that exists
+    names no nodes.** `Published::at` is an `Option` and the default interface is entirely wildcards
+    — *one control per key, not one per declaration* — and `crates/karakuri` has no `--publish`, so
+    **every control the panel will ever draw is a wildcard**. Read strictly, the headline row of this
+    bay draws nothing in the shipping program. What was done rather than invented: a wildcard over
+    exactly one node **is** that node's and is drawn there; a wildcard over two or more belongs to
+    several groups at once, is dropped, and the program says on stdout how many it dropped. On the
+    repository's own pair all nine resolve to one node each, so the bay draws all nine. **Where a row
+    that names no one node goes is the page's to answer.**
+
+    **Three smaller places the page and the code disagree.** `Set::published` sorts alphabetically,
+    with the engine's own reason — *a console showing its controls in a different order each run is
+    not a console* — while the page promises declaration order, which the engine does not keep, so
+    **the page's sentence is not satisfiable today**. The mock's folded `L4 renderers` head carries
+    one `man / sug / auto` chip over what is *n* nodes, and authority is per node, so the two cannot
+    both be honoured; the chip is dropped when the group folds more than one. And the mock's
+    addresses go `L1:0`, `L2:0`, `L4` with **no `L3`**, while every Set has a built-in camera node.
+
+    **And the guard caught a nine-and-a-half pixel lie.** `tests/arrangement.rs` recomputes the
+    tree's implied minimum and holds it against the number `SMALLEST` claims, *"so the two cannot
+    drift apart"*. The deck head raised the inspector's minimum from 126 to 151.5, which made the
+    centre column the tallest of the three at 539.5 rather than the right pane's 530 — so **the
+    console's claimed smallest window had been short by exactly 9.5 px from the moment the row was
+    specified**, and nothing else would have said so.
+
+    **What is still omitted, each with what it waits on.** Three controls this pass adds none of —
+    `showing`'s selection, `keep`'s write into the store, and the scrub's two arrows, which are the
+    one control here with no readout at all. Three whose *face* is a reading, so the face is drawn
+    and the press is not. **`.param.bound`'s source has no value in this workspace at all**: nothing
+    in `crates/karakuri` binds anything, so a bound row is a state the program cannot enter, and the
+    `.sens` row waits on the row above it. And a node group past the pane's bottom edge waits on a
+    scroll position, which this crate still keeps none of — the panes draw a group **whole or not at
+    all** rather than half of one.
+
+    *(What follows is the survey this replaced, kept because its accounting of the three blockers is
+    what the work was measured against.)* **Inspector — the richest in values and the poorest in
+    decisions.** `Set::published`,
      `Set::params`, `Set::node_names`, `Set::bindings`, `Set::inputs` and `Set::layering` are all
      there, so the node groups, the numbered rows, the values, the renderer row and a bound row's
      source are readable off a running Set. Three things are not. **Authority — `man / sug / auto` —

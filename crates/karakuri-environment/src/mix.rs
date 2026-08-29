@@ -288,9 +288,9 @@ pub fn tonemap(op: TonemapOp) -> karakuri_operation::Tonemap {
 /// this is the only crate that can see both, and the check below needs a
 /// conversion to check. Nothing on the CLI's paths reads `Set::authority` yet —
 /// the console's `man / sug / auto` chip and a live save that writes a
-/// `Record::Authority` are both the reader this is waiting for, and the first
-/// of them to arrive deletes this attribute.
-#[cfg_attr(not(test), allow(dead_code))]
+/// `Record::Authority` were the two readers this waited for, and **the chip
+/// arrived on 2026-08-29** — the Inspector bay draws a node's authority, so this
+/// has a caller outside the tests and the attribute it carried is gone.
 pub fn authority(level: Authority) -> karakuri_operation::Authority {
     match level {
         Authority::Manual => karakuri_operation::Authority::Manual,
