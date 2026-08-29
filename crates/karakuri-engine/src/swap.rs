@@ -166,10 +166,11 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use karakuri_ir::typed::Checked;
+use karakuri_ir::Kind;
 
 use crate::binding::{Binding, Signals};
 use crate::probe::{Measurement, Probe};
-use crate::set::{Set, SetError};
+use crate::set::{Authority, Set, SetError};
 
 /// Frames discarded after a swap, before the watchdog starts measuring. See
 /// "The window" in the module doc: the alternative is rolling everything back.
@@ -369,7 +370,61 @@ pub struct Request {
     /// outright, so a request that left these out would turn every save of a
     /// morph's `.kir` into a rebuild that will not build.
     pub edges: Vec<crate::set::Edge>,
+    /// **Who may move each node the operator has spoken for**, applied once the
+    /// Set is built, and **restated on every rebuild** on exactly the terms the
+    /// params, the bindings, the names and the edges are: a request that
+    /// depended on what happened to be live is not reproducible from a record
+    /// stream.
+    ///
+    /// Left out, the loss is the one
+    /// `docs/adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md`
+    /// says the engine owes a field for: a node an operator granted to an agent
+    /// — or took back from one — comes up at [`crate::set::Authority::default`]
+    /// again on the next save of any `.kir`, saying nothing, and the arrangement
+    /// between the operator and whatever else is in the room is silently a
+    /// different one. `docs/principles/0078-…` is what a rebuild would be
+    /// breaking, and a rebuild is not a surface, so no surface could refuse it.
+    ///
+    /// **Sparse, unlike [`Request::names`] and the salts.** An authority is
+    /// what an operator *said*, one `Record::Authority` per saying, and a Set
+    /// that nobody has spoken for states nothing here — an empty `Vec` is that
+    /// Set, and every node of it lands on the default. A dense list would have
+    /// to be as long as a node count the caller does not know until the build
+    /// derives it, and would spell "nobody has said" and "manual" as two
+    /// different entries when they are one arrangement.
+    ///
+    /// **A node this build no longer has is said and passed over**, on
+    /// [`Request::live`]'s terms: the files were just recompiled and may name
+    /// fewer nodes than the Set the authority was recorded against, which is a
+    /// rebuild rather than an error.
+    pub authorities: Vec<AuthorityAt>,
     pub label: String,
+}
+
+/// One node's authority, as a request states it — the engine's spelling of
+/// `karakuri_operation::Operation::SetAuthority`'s `{ node, authority }`, with
+/// the deck left off because a [`Request`] is already one slot's.
+///
+/// A struct rather than a bare tuple, so that the address and the level cannot
+/// be swapped at a construction site, and addressed the way
+/// [`crate::binding::ParamWrite`] is — except that `at` is not an `Option`
+/// here: a bare name means *every node declaring it*, and there is no such
+/// thing as an authority every node happens to declare.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AuthorityAt {
+    /// Which node, `(layer, index)` — the address every surface in this system
+    /// uses and the one `karakuri_operation::NodeAt` carries.
+    pub at: (Kind, u32),
+    pub authority: Authority,
+}
+
+impl AuthorityAt {
+    pub fn new(layer: Kind, index: u32, authority: Authority) -> AuthorityAt {
+        AuthorityAt {
+            at: (layer, index),
+            authority,
+        }
+    }
 }
 
 /// Where the worker gets its work.
@@ -1228,6 +1283,26 @@ fn run_worker(
                             "  `{signal}` is not published by this Set, so `{layer:?} {key}` \
                              is not bound"
                         ),
+                    }
+                }
+                // **Who may move each node, as the request states it** — see
+                // `Request::authorities`. Order-free, unlike everything above
+                // it: an authority is a permission granted forward and is not
+                // an input to a param, a control or a binding, so nothing here
+                // contends with any of them. It is last because the loop that
+                // has nothing to say about ordering should not sit between two
+                // that do.
+                //
+                // A node this build no longer has is said and passed over, on
+                // the fold's terms: a recompile may name fewer nodes than the
+                // Set the authority was recorded against.
+                for stated in &request.authorities {
+                    let (layer, index) = stated.at;
+                    if !set.set_authority(layer, index, stated.authority) {
+                        eprintln!(
+                            "  this build has no {layer:?} node {index} to give authority to, \
+                             ignoring"
+                        );
                     }
                 }
                 set

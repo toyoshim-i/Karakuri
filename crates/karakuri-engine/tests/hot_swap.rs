@@ -195,6 +195,7 @@ proc wide_points {
             salts: Vec::new(),
             params: Vec::new(),
             bindings: Vec::new(),
+            authorities: Vec::new(),
             label: label.to_string(),
         }
     }
@@ -475,6 +476,92 @@ proc wide_points {
             "the swapped-in Set lost the binding the request stated"
         );
         assert_eq!(set.bindings()[0].signal, "beat");
+    }
+
+    /// **A swapped-in Set is under the authority the request states**, and not
+    /// back at the default because a `.kir` was saved.
+    ///
+    /// This is the field
+    /// `docs/adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md`
+    /// says the engine owes, and its consequences section names the failure it
+    /// prevents: *"a rebuild that let a node's authority be re-derived would
+    /// hand a node back to an agent an operator had taken it from, on the next
+    /// save of any `.kir`, saying nothing."*
+    ///
+    /// **Both directions, because the loss is silent in both and only one of
+    /// them is the sentence above.** A rebuild that drops the restatement puts
+    /// every node back at `Authority::Manual`, so what it actually destroys is
+    /// a grant — the operator who let an agent at `L1:0` finds it theirs again
+    /// and nothing said so. The other half is the one the ADR names, and it is
+    /// asserted here as *the default is not inherited*: `L4:0` is granted on
+    /// one build, stated by nobody on the next, and must come up manual rather
+    /// than carrying the previous Set's grant forward. A rebuild is not a
+    /// surface, so no surface could have refused either
+    /// (`docs/principles/0078-…`).
+    ///
+    /// Two nodes in two different layers, so that the address is exercised past
+    /// `L1:0` and so that one rebuild can ask both questions at once: `L1:0`
+    /// restated and `L4:0` not.
+    #[test]
+    fn a_swapped_in_set_carries_the_authority_the_request_stated() {
+        use karakuri_engine::swap::AuthorityAt;
+        use karakuri_engine::Authority;
+        use karakuri_ir::Kind;
+
+        let (mut h, tx) = Harness::channel_driven(GENEROUS_MS);
+
+        for _ in 0..3 {
+            h.frame();
+        }
+        assert_eq!(
+            h.swap.set().authority(Kind::L1, 0),
+            Some(Authority::Manual),
+            "a Set nobody has spoken for should come up the operator's"
+        );
+
+        let mut req = request(L4, SECOND, "granted");
+        req.authorities = vec![
+            AuthorityAt::new(Kind::L1, 0, Authority::Automatic),
+            AuthorityAt::new(Kind::L4, 0, Authority::Suggesting),
+        ];
+        tx.send(req).expect("worker alive");
+        h.frames_until(is_swapped, "the swap");
+
+        let set = h.swap.set();
+        assert_eq!(set.capacity(), SECOND, "the swap did not land");
+        assert_eq!(
+            set.authority(Kind::L1, 0),
+            Some(Authority::Automatic),
+            "the swapped-in Set lost the authority the request stated for L1:0 — \
+             a grant an operator made is gone and nothing said so"
+        );
+        assert_eq!(
+            set.authority(Kind::L4, 0),
+            Some(Authority::Suggesting),
+            "the swapped-in Set lost the authority the request stated for L4:0"
+        );
+
+        // And the other half: a node this request says nothing about lands on
+        // the default rather than on whatever the previous build had. `L1:0` is
+        // restated and `L4:0` is not, so one rebuild asks both questions.
+        let mut req = request(L4, FIRST, "taken back");
+        req.authorities = vec![AuthorityAt::new(Kind::L1, 0, Authority::Automatic)];
+        tx.send(req).expect("worker alive");
+        h.frames_until(is_swapped, "the second swap");
+
+        let set = h.swap.set();
+        assert_eq!(set.capacity(), FIRST, "the second swap did not land");
+        assert_eq!(
+            set.authority(Kind::L1, 0),
+            Some(Authority::Automatic),
+            "the restatement stopped working on the second rebuild"
+        );
+        assert_eq!(
+            set.authority(Kind::L4, 0),
+            Some(Authority::Manual),
+            "a node nobody spoke for on this build kept the previous build's \
+             authority — an agent was handed a node the request did not give it"
+        );
     }
 
     /// **A swapped-in Set is aimed where the request says**, and not at

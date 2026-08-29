@@ -4283,6 +4283,7 @@ fn build_deck(
                         args.published.clone(),
                         args.bindings.clone(),
                         args.edges.clone(),
+                        Vec::new(),
                     );
                     // The history is kept whether or not a session is
                     // being recorded: the two answer different questions —
@@ -11186,6 +11187,7 @@ mod live_save_tests {
                 salts[0],
                 salts.to_vec(),
                 aimed,
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),

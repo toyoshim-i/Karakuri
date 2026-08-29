@@ -1168,11 +1168,21 @@ than work, and every one of them was found by building the thing next to it.
   **What it unblocks is the Inspector's authority row**, above: that row reads as blocked on
   `man / sug / auto` existing nowhere and was really waiting on the address. The vocabulary
   and the record exist now — `Operation::SetAuthority` and `Record::Authority`, the second
-  session record to name a node — and **what is still owed is the engine**: a per-node flag has
-  to be restated on `karakuri_engine::swap::Request` the way `params`, `published`, `bindings`,
-  `names` and `edges` are, or a rebuild hands a node back to an agent an operator had taken it
-  from, saying nothing. Until that lands nothing writes an `authority` record and the manual's
-  row says so. **What an agent is one *of* is a separate question and is still open** — see the
+  session record to name a node — and **the engine half has landed**
+  ([ADR-0216](adr/0216-a-node-nobody-has-spoken-for-is-manual-and-a-request-states-only-what-was-said.md)). A per-node authority is restated on `karakuri_engine::swap::Request`, which
+  restates **nine** things and not the five this sentence used to name — `layering`, `live`, `salts`,
+  `camera`, `params`, `published`, `bindings`, `names` and `edges`, counted rather than transcribed.
+  **The symptom this bullet described was the wrong way round**: a node nobody has spoken for is
+  `Manual`, because rule 06's *"there is no switch that hands the whole instrument to an agent"*
+  makes any other default that switch thrown for every node by nobody — so dropping the restatement
+  destroys a **grant** rather than taking one back, and the node an operator gave to an agent is
+  silently theirs again. Both directions are the same defect and both are asserted.
+  **What is still owed is a writer, and it is narrower than it sounds**: `Record::Authority` is
+  deliberately excluded from Set-file state in both `setfile.rs` and `karakuri-store`'s
+  `project.rs` — *"a Set file obeying one would hand the node over on every load"* — so the startup
+  path will never seed this the way `--load-set` seeds `layering`, `live`, `camera` and `salts`. The
+  writer has to be a live-session one. The chip can read; nothing can yet make it change, and the
+  manual's row says so. **What an agent is one *of* is a separate question and is still open** — see the
   control plane above.
 - **What `expand` under a solo should do.** `Layout::soloed()` can lie: the solve never reads it and
   `check_structure` only checks that it addresses a node, so a solo's exclusivity lives in flags any

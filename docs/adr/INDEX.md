@@ -241,6 +241,7 @@ number; new records continue from the end.
 | [ADR-0213](0213-the-interface-milestones-meter-is-the-panel-column-and-has-means-an-operator-reaches-it.md) | The Interface milestone's meter is the panel column, and `has` means an operator reaches it | 2026-08-28 | accepted |
 | [ADR-0214](0214-the-program-moves-out-of-the-cli-and-two-thin-binaries-sit-over-it.md) | The program moves out of the CLI, and two thin binaries sit over a shared package | 2026-08-28 | accepted |
 | [ADR-0215](0215-the-package-is-karakuri-environment-and-a-module-belongs-if-what-it-deals-with-is-outside-this-process.md) | The package is `karakuri-environment`, and a module belongs in it if what it deals with is outside this process | 2026-08-28 | accepted |
+| [ADR-0216](0216-a-node-nobody-has-spoken-for-is-manual-and-a-request-states-only-what-was-said.md) | A node nobody has spoken for is manual, and a request states only what was said | 2026-08-29 | accepted |
 
 ## Retired numbers
 

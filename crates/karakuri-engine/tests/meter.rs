@@ -853,6 +853,7 @@ proc nan_points {
                 salts: Vec::new(),
                 params: Vec::new(),
                 bindings: Vec::new(),
+                authorities: Vec::new(),
                 label: "black".to_string(),
             })
             .expect("the worker is alive");
