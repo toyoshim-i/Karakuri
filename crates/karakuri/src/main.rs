@@ -208,8 +208,8 @@ use karakuri_console::panel::{
 use karakuri_console::repaint::{Change, Repaint};
 use karakuri_console::room::Room;
 use karakuri_console::view::{
-    self, mixer as mixer_bay, outputs, picture_rect, preview_rects, Kind, Picture, View, DECKS,
-    DECK_LETTERS,
+    self, arrangement as arrangement_pill, mixer as mixer_bay, outputs, picture_rect,
+    preview_rects, Ask, Kind, Picture, View, DECKS, DECK_LETTERS,
 };
 use karakuri_engine::governor::{Report, SLOWEST_PRIME_ONE_IN};
 // The engine's own `Published`, and its node kinds under the word the address
@@ -1239,6 +1239,15 @@ impl Readout {
     /// both reach the model and move nothing.
     fn op(&mut self, op: Op) -> Outcome {
         let outcome = self.panel.op(op);
+        // **A reset puts the default arrangement on screen and the default has
+        // no name**, so the pill stops naming the file it was showing. Here
+        // rather than at either control, because `r` and the menu's *start a
+        // new one* are one operation and this is the one place both arrive —
+        // and it keys off the outcome rather than off the `Op`, so an op that
+        // asked for a reset and did not get one leaves the name alone.
+        if matches!(outcome, Outcome::Reset) {
+            self.view.arrangement.name = None;
+        }
         self.say_op(op, &outcome);
         outcome
     }
@@ -1350,7 +1359,7 @@ impl Readout {
         // hand, so a claim asked after it would see no drag, route the release
         // to `egui`, and hand `egui` a button-up it never saw the button-down
         // for.
-        let claim = claim(&mut self.panel, ctx, &self.view.mixer, at);
+        let claim = claim(&mut self.panel, ctx, &self.view, at);
         let mut did = Acted::Nothing;
         match (event, claim) {
             // The panel learns where the pointer is either way — every
@@ -1387,6 +1396,31 @@ impl Readout {
             // derivations would be four answers.
             (Pointer::Down, Claim::Panel) => {
                 self.panel.solve();
+                // **The arrangement pill first, and it is the only one of the
+                // six whose order matters.** Its menu is drawn *over* the
+                // bays, so while it is down a press inside the card belongs to
+                // the card and not to whatever it happens to be covering — and
+                // a press anywhere else is the dismissal, which is why the
+                // `None` below is `Ask::Shut` rather than a press that fell
+                // through. Shut, this is one capsule among six that never
+                // overlap and the order is arbitrary.
+                let pill = arrangement_pill(
+                    ctx,
+                    self.panel.layout(),
+                    self.view.transport,
+                    &self.view.arrangement,
+                );
+                let asked = pill
+                    .as_ref()
+                    .and_then(|pill| pill.ask(&self.view.arrangement, at));
+                if self.view.arrangement.open() {
+                    did = self.arranged(asked.unwrap_or(Ask::Shut));
+                    return (claim, did);
+                }
+                if let Some(ask) = asked {
+                    did = self.arranged(ask);
+                    return (claim, did);
+                }
                 let sink = outputs(ctx, self.panel.layout()).filter(|row| row.hit(at));
                 let bay = mixer_bay(ctx, self.panel.layout(), &self.view.mixer);
                 let knob = bay.as_ref().and_then(|bay| bay.grab(at));
@@ -1435,6 +1469,90 @@ impl Readout {
             (Pointer::Down | Pointer::Up | Pointer::Wheel, _) => {}
         }
         (claim, did)
+    }
+
+    /// **A press on the arrangement pill or on its menu**, and what this
+    /// program does about it.
+    ///
+    /// Five answers and this file decides none of them: which one a press asks
+    /// for is `ArrangementPill::ask`'s, off the same laid-out pill `claim`
+    /// hit-tested, and what arrives here is one of them by name. Two are moves
+    /// of the control's own state and are this program telling the console
+    /// about a press it cannot see; two are operations and go where every
+    /// operation goes; the fifth is the reset, which is an `Op` and not a
+    /// record, exactly as ADR-0208 has it — *"`ResetArrangement` reaches code;
+    /// `RestoreArrangement` reaches a file"*.
+    ///
+    /// **The menu shuts on anything that acts.** An operator who has picked an
+    /// item has finished with the list, and a card left standing over the
+    /// console after the thing it was for has happened is the panel arguing
+    /// with itself. It stays open for nothing, because nothing here can be
+    /// picked twice.
+    fn arranged(&mut self, ask: Ask) -> Acted {
+        match ask {
+            Ask::Open => {
+                println!(
+                    "arrangement: `{}` — save it, start a new one, or put one of {} back",
+                    self.view.arrangement.word(),
+                    self.view.arrangement.filed.len()
+                );
+                self.view.arrangement.opened();
+                Acted::Nothing
+            }
+            Ask::Shut => {
+                self.view.arrangement.shut();
+                Acted::Nothing
+            }
+            // **The one flow on this panel that asks for letters.** Reached
+            // only with no arrangement in use: with one in use, saving again
+            // means that name and the pill asks for the operation instead.
+            Ask::Name => {
+                println!(
+                    "arrangement: type a name and press return — letters, digits, `-` and \
+                     `_`, and escape leaves it unsaved"
+                );
+                self.view.arrangement.asks_a_name();
+                Acted::Nothing
+            }
+            // **The same operation `r` performs**, reached from the other end
+            // of the panel exactly as the Outputs row's dot reaches `f`'s
+            // fold. `Readout::op` is what says the arrangement in use is the
+            // default again, whichever surface asked.
+            Ask::Panel(op) => {
+                self.view.arrangement.shut();
+                Acted::Operated(self.op(op))
+            }
+            // **Down the path every other emitted operation takes**, which is
+            // the whole reason `arrangement` sits on it: a record is written
+            // by whoever holds the store, and the pill holds nothing.
+            Ask::Operation(operation) => {
+                self.view.arrangement.shut();
+                Acted::Emitted(Some(operation))
+            }
+        }
+    }
+
+    /// **The name is finished**, and what that asks for.
+    ///
+    /// One operation of the vocabulary, named — the same
+    /// `Operation::SaveArrangement` the menu's *save* asks for with an
+    /// arrangement already in use, so the two ways to reach a save are two
+    /// ways to name one thing rather than two paths to a disk. **The menu is
+    /// shut before the operation is emitted**, whether or not the name is any
+    /// good: a name that is refused is refused out loud by `checked_name`, and
+    /// a card left standing over the refusal would be the panel asking the
+    /// question again without saying the answer.
+    ///
+    /// An empty name arrives here as an empty name and is refused there, which
+    /// is the rule this file keeps everywhere: the surface owns the affordance
+    /// and never the authority (P-0076).
+    fn named(&mut self) -> Acted {
+        let Some(typed) = self.view.arrangement.naming() else {
+            return Acted::Nothing;
+        };
+        let name = typed.to_owned();
+        self.view.arrangement.shut();
+        Acted::Emitted(Some(Operation::SaveArrangement { name }))
     }
 
     /// A press on the Outputs row's one control. **The dot says what it did**
@@ -2656,6 +2774,33 @@ fn library(root: &std::path::Path) -> Vec<String> {
     }
 }
 
+/// **Every arrangement the store holds, by name**, for the pill's menu to
+/// list — [`library`] over the fourth directory rather than the first.
+///
+/// Its two rules are this one's, said again because they are the same two: a
+/// store that is not there is listed as nothing and **is not created**, since
+/// a program that listed a menu by first making a store would change the
+/// directory it was run in; and a store that could not be read says so, since
+/// a menu that is empty because the directory would not open looks exactly
+/// like one that is empty because nobody has saved.
+///
+/// **Read when it changes rather than per frame.** Once at startup, and again
+/// after a save lands — which is the only thing in this program that adds a
+/// name. `Store::list_arrangements` sorts by name, so the menu draws what it
+/// is handed and sorts nothing.
+fn arrangements(root: &std::path::Path) -> Vec<String> {
+    if !root.is_dir() {
+        return Vec::new();
+    }
+    match Store::open(root).and_then(|store| store.list_arrangements()) {
+        Ok(filed) => filed.into_iter().map(|entry| entry.name).collect(),
+        Err(e) => {
+            println!("arrangements: {} could not be listed: {e}", root.display());
+            Vec::new()
+        }
+    }
+}
+
 /// **Where a named arrangement is kept and put back**, and the one route in
 /// this program that both reads an operation and reaches a disk.
 ///
@@ -2724,63 +2869,155 @@ fn library(root: &std::path::Path) -> Vec<String> {
 /// reason — and that is why the wiring is written rather than a reason to
 /// leave it out, exactly as [`unwritten`] is written for controls that do not
 /// exist yet.
-fn arrangement(root: &std::path::Path, panel: &mut Panel, operation: &Operation) -> Option<String> {
+fn arrangement(
+    root: &std::path::Path,
+    panel: &mut Panel,
+    arr: &mut view::Arrangement,
+    operation: &Operation,
+) -> Option<String> {
     match operation {
-        Operation::SaveArrangement { name } => Some(keep_arrangement(root, panel, name)),
-        Operation::RestoreArrangement { name } => Some(put_arrangement_back(root, panel, name)),
+        Operation::SaveArrangement { name } => {
+            let (line, kept) = keep_arrangement(root, panel, name);
+            // **The name in use moves only when the file did.** A save that
+            // was refused leaves the pill saying what it said, because
+            // nothing under that name is on the disk — and the listing is
+            // re-read only then, since a refusal added no name to it.
+            if kept {
+                arr.name = Some(name.clone());
+                arr.filed = arrangements(root);
+            }
+            Some(line)
+        }
+        Operation::RestoreArrangement { name } => {
+            let (line, back) = put_arrangement_back(root, panel, name);
+            if back {
+                arr.name = Some(name.clone());
+            }
+            Some(line)
+        }
         _ => None,
     }
 }
 
-/// The running arrangement, filed under `name`. See [`arrangement`].
-fn keep_arrangement(root: &std::path::Path, panel: &Panel, name: &str) -> String {
+/// The running arrangement, filed under `name` — and whether it landed. See
+/// [`arrangement`].
+fn keep_arrangement(root: &std::path::Path, panel: &Panel, name: &str) -> (String, bool) {
+    if let Err(refusal) = checked_name(name) {
+        return (refusal, false);
+    }
     let bytes = match serde_json::to_vec(panel.layout()) {
         Ok(bytes) => bytes,
-        Err(e) => return format!("arrangement: `{name}` was not kept — it did not serialise: {e}"),
+        Err(e) => {
+            return (
+                format!("arrangement: `{name}` was not kept — it did not serialise: {e}"),
+                false,
+            )
+        }
     };
     let wrote = Store::open(root).and_then(|store| store.write_arrangement(name, &bytes));
     match wrote {
-        Ok(()) => format!(
-            "arrangement: kept as `{name}` — {} bytes at {}",
-            bytes.len(),
-            root.join("arrangements")
-                .join(format!("{name}.arrangement.json"))
-                .display()
+        Ok(()) => (
+            format!(
+                "arrangement: kept as `{name}` — {} bytes at {}",
+                bytes.len(),
+                root.join("arrangements")
+                    .join(format!("{name}.arrangement.json"))
+                    .display()
+            ),
+            true,
         ),
-        Err(e) => format!("arrangement: `{name}` was not kept: {e}"),
+        Err(e) => (format!("arrangement: `{name}` was not kept: {e}"), false),
+    }
+}
+
+/// **The one place a typed arrangement name is refused**, and the reason it is
+/// here rather than in the pill that took the letters.
+///
+/// `<name>` becomes one path component under `<store>/arrangements/`, and
+/// `karakuri-store` says outright that **nothing there checks it**: *"`<name>`
+/// becomes one path component and that is the caller's rule to keep"*
+/// ([ADR-0221](../../../docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md)
+/// §1, which names letters, digits, `-` and `_`). So `../../elsewhere` is a
+/// path, and a path never reaches that call from here.
+///
+/// **The surface owns the affordance and never the authority**
+/// ([P-0076](../../../docs/principles/0076-a-surface-owns-the-affordance-never-the-authority.md)):
+/// the pill takes whatever is typed and this is where it meets the wall, so a
+/// name refused by a hand and a name refused by anything else that ever
+/// reaches this operation meet the same one. A pill that silently dropped the
+/// characters it did not like would be a rule an operator could only find by
+/// experiment — which is the failure the console page names about a control
+/// that quietly declines.
+///
+/// **It says the same three things `mcp::checked_id` says about a Set id**,
+/// which is [P-0061](../../../docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md)
+/// as far as it can be kept today and no further: that function is private to
+/// `karakuri-environment`'s `mcp` module and its sentences say `id` and
+/// `<store>/sets/`, so it cannot be called from here and could not be quoted
+/// if it were. **When an arrangement name gets a second surface — a map line,
+/// an MCP tool, a `--restore-arrangement` flag — the two collapse into one
+/// shared `checked_name`, and this comment is where whoever does it should
+/// start.**
+fn checked_name(name: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err(
+            "arrangement: nothing was typed, and an arrangement is filed under a name — \
+             the default arrangement is the one that has none"
+                .to_owned(),
+        );
+    }
+    match name
+        .chars()
+        .find(|c| !c.is_ascii_alphanumeric() && *c != '-' && *c != '_')
+    {
+        Some(bad) => Err(format!(
+            "arrangement: `{name}` holds `{bad}`, and an arrangement name is letters, digits, \
+             `-` and `_`: it is one path component and it names a file under \
+             `<store>/arrangements/`"
+        )),
+        None => Ok(()),
     }
 }
 
 /// The arrangement filed under `name`, into the window the panel already has.
 /// See [`arrangement`].
-fn put_arrangement_back(root: &std::path::Path, panel: &mut Panel, name: &str) -> String {
+fn put_arrangement_back(root: &std::path::Path, panel: &mut Panel, name: &str) -> (String, bool) {
     if !root.is_dir() {
-        return format!(
-            "arrangement: no store at {}, so nothing is filed under `{name}` — and the \
-             console has not moved",
-            root.display()
+        return (
+            format!(
+                "arrangement: no store at {}, so nothing is filed under `{name}` — and the \
+                 console has not moved",
+                root.display()
+            ),
+            false,
         );
     }
     let bytes = match Store::open(root).and_then(|store| store.read_arrangement(name)) {
         Ok(bytes) => bytes,
-        Err(e) => return format!("arrangement: `{name}` is not back — {e}"),
+        Err(e) => return (format!("arrangement: `{name}` is not back — {e}"), false),
     };
     let layout: Layout = match serde_json::from_slice(&bytes) {
         Ok(layout) => layout,
         // **Refused whole rather than repaired**, which is the loader's own
         // sentence and not this file's judgement (ADR-0158).
         Err(e) => {
-            return format!(
-                "arrangement: `{name}` is not back — the file disagrees with itself and is \
-                 refused rather than repaired: {e}"
+            return (
+                format!(
+                    "arrangement: `{name}` is not back — the file disagrees with itself and is \
+                     refused rather than repaired: {e}"
+                ),
+                false,
             )
         }
     };
     let viewport = panel.layout().viewport();
     panel.restore(layout);
-    format!(
-        "arrangement: `{name}` is back, at the {} x {} this window already had",
-        viewport.w, viewport.h
+    (
+        format!(
+            "arrangement: `{name}` is back, at the {} x {} this window already had",
+            viewport.w, viewport.h
+        ),
+        true,
     )
 }
 
@@ -3712,7 +3949,12 @@ impl App {
     /// which is the difference between *this press writes nothing, and that is
     /// settled* and *this press owes a record nobody has decided how to
     /// write*.
-    fn performed(gfx: &mut Gfx, panel: &mut Panel, acted: &Acted, otherwise: Repaint) -> Repaint {
+    fn performed(
+        gfx: &mut Gfx,
+        readout: &mut Readout,
+        acted: &Acted,
+        otherwise: Repaint,
+    ) -> Repaint {
         match acted {
             Acted::Nothing => otherwise,
             Acted::Operated(outcome) => Change::Operated(outcome).repaint(),
@@ -3726,7 +3968,12 @@ impl App {
                     // below this is the mix. See [`arrangement`], which
                     // answers `None` for every other operation and is why this
                     // is one line rather than a second route into the panel.
-                    if let Some(line) = arrangement(std::path::Path::new(STORE), panel, operation) {
+                    if let Some(line) = arrangement(
+                        std::path::Path::new(STORE),
+                        &mut readout.panel,
+                        &mut readout.view.arrangement,
+                        operation,
+                    ) {
                         println!("{line}");
                     }
                     // **The reading is taken off the deck, and for four of the
@@ -3901,6 +4148,11 @@ impl ApplicationHandler for App {
         // legend says how many Sets the bay lists, and `library` says why
         // where it is none.
         self.readout.view.library = library(std::path::Path::new(STORE));
+        // **And the arrangement pill's menu, once for the run**, for
+        // `library`'s reason and for one more: this is a directory read, and
+        // the only thing that can add a name to it is a save this program
+        // performs — which re-reads it there. See `arrangements`.
+        self.readout.view.arrangement.filed = arrangements(std::path::Path::new(STORE));
         // **And the Inspector's panes, once for the run.** `Set::published`
         // says it is not for the frame path and this deck's two slots are
         // `HotSwap::fixed`, so no Set ever lands after this one — see
@@ -4052,7 +4304,7 @@ impl ApplicationHandler for App {
                 // frame for every one of them.
                 let repaint = App::performed(
                     gfx,
-                    &mut self.readout.panel,
+                    &mut self.readout,
                     &acted,
                     Change::Pointer(claim).repaint(),
                 );
@@ -4079,7 +4331,7 @@ impl ApplicationHandler for App {
                 // the outcome that says so.
                 let repaint = App::performed(
                     gfx,
-                    &mut self.readout.panel,
+                    &mut self.readout,
                     &acted,
                     Change::Pointer(claim).repaint(),
                 );
@@ -4108,6 +4360,56 @@ impl ApplicationHandler for App {
                     unreachable!("the arm this is in")
                 };
                 if key.state != ElementState::Pressed {
+                    return;
+                }
+                // **The one flow on this panel that asks for letters takes the
+                // keyboard whole while it is asking.** Every key here is a
+                // character, a rub-out, the commit or the abandonment, and none
+                // of them is the operation that key names the rest of the time
+                // — `s` is an `s` in a name and not a solo, and the pointer is
+                // not what a name is addressed to. `escape` leaves the program
+                // the rest of the time and leaves the name here, which is the
+                // same word for the same act one level in.
+                //
+                // **Nothing typed is checked here**, which is
+                // [`checked_name`]'s half of the same split: the pill takes
+                // the letters, and the wall is where the file is written.
+                if self.readout.view.arrangement.naming().is_some() {
+                    let (acted, moved) = match key.logical_key.as_ref() {
+                        Key::Named(NamedKey::Escape) => {
+                            println!("arrangement: nothing was saved");
+                            self.readout.view.arrangement.shut();
+                            (Acted::Nothing, true)
+                        }
+                        Key::Named(NamedKey::Enter) => (self.readout.named(), true),
+                        Key::Named(NamedKey::Backspace) => {
+                            (Acted::Nothing, self.readout.view.arrangement.rubbed_out())
+                        }
+                        // **A `Key::Character` is text and not a key**, so it
+                        // may be more than one character — a dead key
+                        // resolving, an IME committing a run — and every one
+                        // of them goes in. `Arrangement::typed` is what
+                        // refuses a control character, because a newline
+                        // arriving as text is the commit rather than a letter.
+                        Key::Character(text) => {
+                            let mut moved = false;
+                            for c in text.chars() {
+                                moved |= self.readout.view.arrangement.typed(c);
+                            }
+                            (Acted::Nothing, moved)
+                        }
+                        Key::Named(NamedKey::Space) => {
+                            (Acted::Nothing, self.readout.view.arrangement.typed(' '))
+                        }
+                        _ => (Acted::Nothing, false),
+                    };
+                    let repaint = App::performed(
+                        gfx,
+                        &mut self.readout,
+                        &acted,
+                        Change::Naming(moved).repaint(),
+                    );
+                    App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
                     return;
                 }
                 let op = match key.logical_key.as_ref() {
@@ -4701,6 +5003,7 @@ mod tests {
         let said = arrangement(
             &root,
             &mut panel,
+            &mut view::Arrangement::default(),
             &Operation::SaveArrangement {
                 name: "four_deck".to_owned(),
             },
@@ -4753,6 +5056,7 @@ mod tests {
         arrangement(
             &root,
             &mut saved,
+            &mut view::Arrangement::default(),
             &Operation::SaveArrangement {
                 name: "night_b".to_owned(),
             },
@@ -4767,6 +5071,7 @@ mod tests {
         let said = arrangement(
             &root,
             &mut window,
+            &mut view::Arrangement::default(),
             &Operation::RestoreArrangement {
                 name: "night_b".to_owned(),
             },
@@ -4828,6 +5133,7 @@ mod tests {
         let said = arrangement(
             &root,
             &mut panel,
+            &mut view::Arrangement::default(),
             &Operation::RestoreArrangement {
                 name: "four_deck".to_owned(),
             },
@@ -4849,6 +5155,7 @@ mod tests {
         let said = arrangement(
             &root,
             &mut panel,
+            &mut view::Arrangement::default(),
             &Operation::RestoreArrangement {
                 name: "four_deck".to_owned(),
             },
@@ -4871,6 +5178,7 @@ mod tests {
         let said = arrangement(
             &root,
             &mut panel,
+            &mut view::Arrangement::default(),
             &Operation::RestoreArrangement {
                 name: "four_deck".to_owned(),
             },
@@ -4882,6 +5190,250 @@ mod tests {
              an operator looking for a name they typed correctly: {said}"
         );
         unchanged(&panel, &said);
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    // -- the arrangement pill's half of the family ----------------------
+
+    /// **A name that is not one path component is refused here**, which is the
+    /// authority the pill deliberately does not hold (P-0076).
+    ///
+    /// The negative control is the point: a check that refused everything
+    /// would pass an assertion that only ever looked for a refusal, so the
+    /// names that must be *accepted* are asserted beside the ones that must
+    /// not (P-0025).
+    #[test]
+    fn a_typed_arrangement_name_is_refused_where_the_file_is_written() {
+        for good in ["night", "four_deck", "set-2", "A9"] {
+            assert!(
+                checked_name(good).is_ok(),
+                "`{good}` is letters, digits, `-` and `_`, and was refused"
+            );
+        }
+        for (bad, why) in [
+            ("", "nothing was typed"),
+            ("../../elsewhere", "a path"),
+            ("night deck", "a space"),
+            ("night.json", "a suffix of its own"),
+        ] {
+            let refusal = checked_name(bad).expect_err(&format!("`{bad}` is {why} and was kept"));
+            assert!(
+                refusal.starts_with("arrangement: "),
+                "the refusal does not say what it is about: {refusal}"
+            );
+            assert!(
+                bad.is_empty() || refusal.contains(bad),
+                "the refusal does not say the name back, so an operator cannot see what \
+                 they typed: {refusal}"
+            );
+        }
+    }
+
+    /// **The name in use follows the file and never the press.**
+    ///
+    /// A save that landed and a restore that landed each make that arrangement
+    /// the one in use, so the pill names it; a save that was refused leaves
+    /// the pill saying what it said, because nothing under that name is on the
+    /// disk. And the menu's listing gains the new name only where a file
+    /// appeared.
+    #[test]
+    fn the_pill_names_the_arrangement_only_once_the_file_is_there() {
+        let root = arrangement_root("in-use");
+        let mut panel = arranged(1280.0, 720.0);
+        let mut arr = view::Arrangement::NONE;
+
+        // Refused: the name is not one path component, so nothing was filed
+        // and nothing is in use.
+        let said = arrangement(
+            &root,
+            &mut panel,
+            &mut arr,
+            &Operation::SaveArrangement {
+                name: "night/one".to_owned(),
+            },
+        )
+        .expect("a save is one of the operations this route answers for");
+        assert!(said.contains("holds `/`"), "{said}");
+        assert_eq!(arr.name, None, "a refused save put a name on the pill");
+        assert!(arr.filed.is_empty());
+
+        // Kept: in use, and listed.
+        arrangement(
+            &root,
+            &mut panel,
+            &mut arr,
+            &Operation::SaveArrangement {
+                name: "night".to_owned(),
+            },
+        )
+        .expect("a save");
+        assert_eq!(arr.name.as_deref(), Some("night"));
+        assert_eq!(arr.filed, vec!["night".to_owned()]);
+
+        // A restore of a name nothing is filed under is refused where the
+        // bytes are, and leaves the pill alone.
+        let said = arrangement(
+            &root,
+            &mut panel,
+            &mut arr,
+            &Operation::RestoreArrangement {
+                name: "rehearsal".to_owned(),
+            },
+        )
+        .expect("a restore");
+        assert!(said.contains("rehearsal"), "{said}");
+        assert_eq!(
+            arr.name.as_deref(),
+            Some("night"),
+            "a refused restore moved the name the pill is showing"
+        );
+
+        // And one that is filed does put it in use.
+        arrangement(
+            &root,
+            &mut panel,
+            &mut arr,
+            &Operation::RestoreArrangement {
+                name: "night".to_owned(),
+            },
+        )
+        .expect("a restore");
+        assert_eq!(arr.name.as_deref(), Some("night"));
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **A reset takes the name off the pill, whichever surface asked.**
+    ///
+    /// `r` and the menu's *start a new one* are one operation and `Readout::op`
+    /// is where both arrive, so this is asserted through the method rather than
+    /// through either control: the default arrangement is what is on screen and
+    /// the default has no name.
+    #[test]
+    fn a_reset_leaves_the_pill_naming_no_file() {
+        let mut readout = Readout::new(1280.0, 720.0);
+        readout.view.arrangement.name = Some("night".to_owned());
+
+        // An operation that is not a reset leaves it alone, which is what says
+        // the clearing is the reset's and not every operation's.
+        let staging = readout.panel.layout().find("staging").expect("staging");
+        readout.op(Op::Fold(staging));
+        assert_eq!(readout.view.arrangement.name.as_deref(), Some("night"));
+
+        assert_eq!(readout.op(Op::Reset), Outcome::Reset);
+        assert_eq!(
+            readout.view.arrangement.name, None,
+            "the console was reset to the default and the pill still names a file"
+        );
+    }
+
+    /// **What the menu's five asks do to this program**, and that every one of
+    /// them that acts shuts the card.
+    #[test]
+    fn every_ask_the_pill_makes_is_acted_on_and_shuts_the_menu() {
+        let mut readout = Readout::new(1280.0, 720.0);
+        readout.view.arrangement.filed = vec!["night".to_owned()];
+
+        assert!(matches!(readout.arranged(Ask::Open), Acted::Nothing));
+        assert!(readout.view.arrangement.open());
+        assert!(matches!(readout.arranged(Ask::Shut), Acted::Nothing));
+        assert!(!readout.view.arrangement.open());
+
+        readout.arranged(Ask::Open);
+        assert!(matches!(readout.arranged(Ask::Name), Acted::Nothing));
+        assert_eq!(
+            readout.view.arrangement.naming(),
+            Some(""),
+            "the one item that asks for letters left nothing asking for any"
+        );
+
+        readout.arranged(Ask::Open);
+        let did = readout.arranged(Ask::Panel(Op::Reset));
+        assert!(
+            matches!(did, Acted::Operated(Outcome::Reset)),
+            "the reset was not performed: {did:?}"
+        );
+        assert!(
+            !readout.view.arrangement.open(),
+            "the card is still standing"
+        );
+
+        readout.arranged(Ask::Open);
+        let want = Operation::RestoreArrangement {
+            name: "night".to_owned(),
+        };
+        let did = readout.arranged(Ask::Operation(want.clone()));
+        assert_eq!(
+            did,
+            Acted::Emitted(Some(want)),
+            "the operation did not go down the path every other emitted operation takes"
+        );
+        assert!(!readout.view.arrangement.open());
+    }
+
+    /// **A finished name is one operation of the vocabulary**, and the card is
+    /// gone before it is emitted — whether or not the name is any good, since
+    /// the refusal is said out loud by `checked_name` and a card left standing
+    /// over it would be the panel asking again without saying the answer.
+    #[test]
+    fn a_finished_name_is_the_save_the_menu_would_have_asked_for() {
+        let mut readout = Readout::new(1280.0, 720.0);
+        assert_eq!(
+            readout.named(),
+            Acted::Nothing,
+            "a console with nothing being typed committed a name"
+        );
+
+        readout.arranged(Ask::Name);
+        for c in "four_deck".chars() {
+            assert!(readout.view.arrangement.typed(c));
+        }
+        assert_eq!(
+            readout.named(),
+            Acted::Emitted(Some(Operation::SaveArrangement {
+                name: "four_deck".to_owned()
+            }))
+        );
+        assert!(!readout.view.arrangement.open());
+
+        // An empty name is emitted as one and refused where the file is
+        // written, rather than being swallowed here.
+        readout.arranged(Ask::Name);
+        assert_eq!(
+            readout.named(),
+            Acted::Emitted(Some(Operation::SaveArrangement {
+                name: String::new()
+            }))
+        );
+    }
+
+    /// **The menu's list is the store's, and a store that is not there is
+    /// listed as nothing and is not created** — `library`'s two rules over the
+    /// fourth directory.
+    #[test]
+    fn the_menu_lists_the_store_and_makes_none() {
+        let root = arrangement_root("listing");
+        assert!(
+            arrangements(&root).is_empty(),
+            "a store that is not there listed something"
+        );
+        assert!(
+            !root.exists(),
+            "listing the arrangements created a store at {}",
+            root.display()
+        );
+
+        let mut panel = arranged(1280.0, 720.0);
+        for name in ["rehearsal", "four_deck"] {
+            keep_arrangement(&root, &panel, name);
+        }
+        panel.solve();
+        assert_eq!(
+            arrangements(&root),
+            vec!["four_deck".to_owned(), "rehearsal".to_owned()],
+            "the menu lists what the store holds, in the order the store sorts it"
+        );
 
         std::fs::remove_dir_all(&root).expect("clean up");
     }
@@ -5751,7 +6303,16 @@ mod key_column {
     /// How the page spells a named key. Nothing in `NamedKey::Escape` says
     /// `esc`, and the page is written for a person rather than for `winit`;
     /// `karakuri-cli` keeps the same two-column table for the same reason.
-    const NAMED_KEYS: &[(&str, &str)] = &[("Escape", "esc")];
+    ///
+    /// **Three of the four are only live while a name is being typed**, and
+    /// they are spelled all the same: this table is what a key is *called*,
+    /// and when it is bound is [`KEYS`]' business.
+    const NAMED_KEYS: &[(&str, &str)] = &[
+        ("Escape", "esc"),
+        ("Enter", "return"),
+        ("Backspace", "backspace"),
+        ("Space", "space"),
+    ];
 
     /// **Every key this program binds, and the rows of [`PAGE`] it reaches.**
     ///
@@ -5785,12 +6346,30 @@ mod key_column {
         ("u", &["Solo a region"]),
         ("z", &["Bring back what is folded"]),
         ("esc", &["Quit"]),
+        // **The three keys that are only live while the arrangement pill is
+        // asking for a name, and they reach no row on purpose.**
+        //
+        // ADR-0221 records that **no key is bound to saving or restoring an
+        // arrangement**, and that is still true: these three do not *name* the
+        // operation and cannot be pressed to reach it. A save is reached by
+        // opening the pill's menu and picking *save*, which is a pointer, and
+        // the *Save the arrangement* row's key badge says `&mdash;` because
+        // there is no way to that operation from the keyboard alone — which is
+        // what the key column means (ADR-0213).
+        //
+        // What they are is the letters of a name and the two ends of typing
+        // one. A row for `return` would claim an operator can save by pressing
+        // it, and the honest test of that claim is to press it on a console
+        // nobody has opened the menu on: nothing happens at all.
+        ("return", &[]),
+        ("backspace", &[]),
+        ("space", &[]),
     ];
 
     /// The keys that reach no row, so that one which starts reaching one stops
     /// being an exception, and a new exception is written down rather than
     /// discovered. The reasons are at the entries in [`KEYS`].
-    const NO_ROW: &[&str] = &["n", "p"];
+    const NO_ROW: &[&str] = &["n", "p", "return", "backspace", "space"];
 
     fn workspace() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))

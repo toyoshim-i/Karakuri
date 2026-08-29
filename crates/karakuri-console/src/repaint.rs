@@ -149,6 +149,20 @@ pub enum Change<'a> {
     /// An operation ran — a fold, a solo, a reset, a report — and this is what
     /// it did.
     Operated(&'a Outcome),
+    /// **A key went into the arrangement pill's name**, with `moved` saying
+    /// whether the buffer actually changed.
+    ///
+    /// **Its own variant for [`Change::Room`]'s reason**: nothing in the
+    /// arrangement moves while a name is being typed, so no [`Outcome`] says
+    /// so and a decision asked only of [`crate::panel`] would leave the caret
+    /// where it was until something else happened. It is the second key that
+    /// changes what is drawn without touching the model.
+    ///
+    /// **And `moved` for [`Change::Rearranged`]'s reason**: a rub-out on an
+    /// empty name and a key that is not a character reach the console and
+    /// change nothing, and a variant that answered *draw* regardless would
+    /// pay a frame for every key an operator leant on.
+    Naming(bool),
     /// The room was toggled.
     ///
     /// **Its own variant because no outcome says so.** The room is the view's
@@ -403,6 +417,14 @@ impl Change<'_> {
             },
 
             Change::Room | Change::Viewport => Repaint::Now,
+
+            // The caret moved, or a letter landed beside it. Nothing at all
+            // where the buffer did not change — the key reached the console
+            // and the console draws exactly what it drew.
+            Change::Naming(moved) => match moved {
+                true => Repaint::Now,
+                false => Repaint::Never,
+            },
         }
     }
 }

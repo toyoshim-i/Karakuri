@@ -60,10 +60,11 @@
 //! - **A false positive on a row already marked `has`.** The one combination
 //!   that passes in silence: text that is not an emission, naming an operation
 //!   the page already claims. Nothing here catches that, and what does is that
-//!   the five `has` rows each have a test that **presses the control** —
+//!   the `has` rows each have a test that **presses the control** —
 //!   `fader.rs` for the trim and the fader, `blend.rs`, `tally.rs` and
-//!   `mask.rs` for the three chips. This file does not press anything; it is an
-//!   inventory, and those four are the proof each item in it is real.
+//!   `mask.rs` for the three chips, and `arrangement_pill.rs` for the save and
+//!   the restore. This file does not press anything; it is an inventory, and
+//!   those five are the proof each item in it is real.
 //! - **Construction is not reachability, and reachability is the definition.**
 //!   The largest one by far. A `pub fn` in `src/` that builds an `Operation`
 //!   and that nothing on the drawn panel calls reads exactly like one a hand
@@ -180,6 +181,17 @@ fn sample(variant: &str) -> Operation {
             deck: 0,
             kind: WipeKind::Linear,
             angle: 0.0,
+        },
+        // The two the transport row's arrangement pill emits. They are the
+        // first emissions from a row of *Arranging the console*, which
+        // [`ELSEWHERE`] exempts from the other direction and not from this
+        // one — so the day the pill landed, this file demanded the two badges
+        // on that page and got them.
+        "SaveArrangement" => Operation::SaveArrangement {
+            name: String::new(),
+        },
+        "RestoreArrangement" => Operation::RestoreArrangement {
+            name: String::new(),
         },
         other => panic!(
             "`{SRC}` constructs `Operation::{other}` and this file has no value for it — a \

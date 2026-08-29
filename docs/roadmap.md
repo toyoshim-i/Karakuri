@@ -578,11 +578,24 @@ program can reach, because `crates/karakuri` builds both deck slots with `HotSwa
 `swap::Event` of any variant is ever emitted — and **Master** and **Sequencer** draw nothing but
 their heads.
 
-**Six controls answer a pointer** — the Outputs dot, the mixer's two faders, its blend chip, its
-tally chip and its mask mini — and **six operations are reached by a key at the panel**: `f` and
-`g` fold, `z` unfolds, `s` and `u` solo, `r` resets the arrangement, `esc` quits. The mixer strip
-is finished as a set of controls; nothing in it is a readout a pointer might have expected to
-answer.
+**Seven controls answer a pointer** — the Outputs dot, the mixer's two faders, its blend chip, its
+tally chip, its mask mini and the transport row's arrangement pill — and **six operations are
+reached by a key at the panel**: `f` and `g` fold, `z` unfolds, `s` and `u` solo, `r` resets the
+arrangement, `esc` quits. The mixer strip is finished as a set of controls; nothing in it is a
+readout a pointer might have expected to answer.
+
+**The seventh is the first control whose gesture outlives the press that opened it**, and it cost
+the pointer rule a fourth clause
+([ADR-0225](adr/0225-a-menu-is-a-gesture-in-hand-rather-than-a-rectangle-on-the-panel.md)): while
+its menu is down every point of the console is the panel's, ahead of a boundary's first refusal,
+because the card is drawn out of a 48-tall row and across the bays under it and no clearance
+arithmetic can be done for that — the card's first row spans 40.25 to 62.75 and the boundary under
+that row grabs 42 to 54, so twelve of its twenty-two and a half pixels would be dead. **The same
+record settles that the menu is flat and the list of names is the load**, a submenu having lost to
+the console page's own sentence. It is also **the first surface here that takes letters** — `crates/karakuri-console` reads no key events, so the program fills the
+buffer a character at a time and the console draws it. The wall on what may be typed is where the
+file is written and not where it is typed, which is
+[P-0076](principles/0076-a-surface-owns-the-affordance-never-the-authority.md) on a path.
 
 **How far the milestone has got is not written down anywhere in prose, on purpose.** The meter is
 the panel column of [every operation](manual/operations.html)
@@ -594,32 +607,39 @@ before believing any sentence in this file about how much is left.
 
 #### 2. What the next piece of work is
 
-**The transport row, and inside it the arrangement family first.** Three reasons, each checkable
-rather than argued:
+**The transport row's `Tone map` and `Exposure`.** Three reasons, each checkable rather than
+argued:
 
-- **It is the largest group left on the board.** The second command below groups every unreached
-  panel operation by the control that would reach it, and `transport` is the biggest group by some
-  way — bigger than the Inspector's, the Library's and the deck head's.
-- **Three of that group are owed nothing but the control.** *Reset the arrangement*, *Save the
-  arrangement* and *Put a saved arrangement back* have their operations, their records' absence
-  argued rather than pending, their store — `<store>/arrangements/<name>.arrangement.json`, nine
-  tests through a real file — and `Panel::restore` on the panel side, all landed with
-  [ADR-0221](adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md). What
-  does not exist is the pill on the transport row that names the file, which the page already
-  specifies as the family's home. **`r` already resets**, so one of the three is a badge the
-  control would move rather than a route that does not exist.
-- **It needs no decision that has not been taken.** ADR-0221 also settles why *no key is bound* —
-  a bare press cannot type a name, and there is no listing control to show an operator the stamp
-  chosen for them — so the panel is the only surface this family can arrive on, and it is not
-  waiting on a page question or on machinery, the way the Master and Sequencer bays each are.
+- **They are owed nothing but the control.** `Operation::SetTonemap` and `Operation::SetExposure`
+  exist, `karakuri-cli` performs both through `Live::operate`, `karakuri-operation-record` converts
+  both, and a MIDI map already names `cc -> exposure`. `karakuri-engine`'s `Look` carries the
+  operator and the level, and the CLI reaches them with `t`, `-`, `=` and `` ` ``. **Every route on
+  those two rows is built except the panel's.**
+- **The row that would hold them has just been shown to hold a control.** The transport row was
+  four readouts and nothing a press acted on until the arrangement pill landed; it is now four
+  readouts and one control, with the clearance arithmetic measured and pinned by a test
+  (`crates/karakuri-console/tests/arrangement_pill.rs`) and the pointer rule extended once,
+  deliberately, in `input.rs`.
+- **The one question either could have raised has been taken.**
+  [ADR-0224](adr/0224-out-and-exposure-are-two-levels-that-multiply-in-different-places.md) settled
+  that `exposure` is the tone mapper's own level and is not the Master bay's `out`, so the Exposure
+  row's home in the *transport* is decided rather than inherited.
 
-**What to do after it is a choice between two, and the survey below is what decides it**: the
-Inspector's remaining controls (the `showing` selection, `keep`'s write into the store, the
-scrub's two arrows) or the deck head's three operations, which the manual described for the first
-time on 2026-08-29 and which the Inspector now has a place to draw.
+**The other two rows in that group are not this**, and the difference is what makes the pair above
+the work: *Attach a beat source* needs an audio input this program does not open, and *Set the
+free-run tempo* has a record nothing routes through yet.
+
+**The board is a tie now and the tie is real** — the second command below returns `transport` and
+`inspector` at four each, where transport was seven. What decides it is not the count but what each
+group is standing on, and the Inspector's four are not owed only a control: *Write a parameter*
+cannot meet its own refusal until something grants an authority
+([ADR-0223](adr/0223-a-wildcard-write-is-refused-where-the-nodes-it-lands-on-disagree.md)), and the
+two source rows want the compiler and the store on a surface that may reach neither.
 
 **Do not start on Master or Sequencer.** Both are blocked on machinery this workspace does not
-hold, and both are argued as such under *The remaining bays, surveyed*.
+hold, and both are argued as such under *The remaining bays, surveyed*. **Master's engine half is
+no longer part of that** — the level and its multiply landed with ADR-0224; what the bay waits on
+is the chain, and a route to the value.
 
 #### 3. What each remaining piece is waiting on
 

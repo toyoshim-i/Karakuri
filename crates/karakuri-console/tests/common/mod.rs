@@ -330,3 +330,62 @@ fn across(axis: Axis, r: Rect) -> (f32, f32) {
         Axis::Column => (r.x, r.w),
     }
 }
+
+/// **A view with these strips in it and nothing else** — the argument
+/// `karakuri_console::input::claim` takes, built where a test used to hand it a
+/// slice.
+///
+/// The rule hit-tests six controls now and two of them read values a caller
+/// wrote: a fader's knob sits on the fill's moving edge, and the arrangement
+/// pill is as wide as the name in it. `claim` takes the whole `View` so that
+/// what it hit-tests is what `View::draw` painted, and this is that view for a
+/// console with no store behind it — the default arrangement, nothing filed
+/// and the menu shut. Pass `&[]` for one with no deck behind it either, which
+/// is every test here that is not about the mixer.
+pub fn showing(strips: &[karakuri_console::view::Strip]) -> karakuri_console::view::View {
+    let mut view = karakuri_console::view::View::new(karakuri_console::room::Room::Day);
+    view.mixer = strips.to_vec();
+    view
+}
+
+/// **A console with an engine behind it**: the mock's transport, and nothing
+/// else written to.
+///
+/// `docs/manual/console.html`'s `.transport` — `128.0 BPM`, the first beat of
+/// bar 37 lit, and `58 fps · 12.4/16.6 ms`. Bar 37 beat 0 is 36 whole bars of
+/// four beats, which is the 144.
+///
+/// **It is here rather than in one test file because the arrangement pill
+/// needs it to exist at all.** The pill sits one `.transport` gap after
+/// `bar 37`, so `view::arrangement` answers `None` for a console with no
+/// engine behind it — the row draws nothing there, and a control in a row that
+/// is not drawn is not a control. Any test that presses the pill therefore has
+/// to hand in a transport, and `tests/vocabulary.rs` is one that has nothing
+/// else to do with a tempo.
+///
+/// The reading itself is [`mock_transport`], which is what `tests/transport.rs`
+/// and `tests/arrangement_pill.rs` ask for: three files wanting one console's
+/// tempo is one console's tempo, written once
+/// ([P-0045](../../../../docs/principles/0045-generate-the-vocabulary-prose-drifts-from-code.md)).
+pub fn running() -> karakuri_console::view::View {
+    let mut view = karakuri_console::view::View::new(karakuri_console::room::Room::Day);
+    view.transport = Some(mock_transport());
+    view
+}
+
+/// **The mock's own transport, as numbers**, and the one copy of them.
+///
+/// `docs/manual/console.html`'s `.transport`: `128.0 BPM`, the first beat of
+/// bar 37 lit, and `58 fps · 12.4/16.6 ms`. **Bar 37 beat 0 is 36 whole bars of
+/// four beats — 144 — and that is the one figure here written rather than
+/// derived**, from the mock's own `bar 37`.
+pub fn mock_transport() -> karakuri_console::view::Transport {
+    karakuri_console::view::Transport {
+        bpm: 128.0,
+        beats: 144.0,
+        beats_per_bar: 4,
+        fps: Some(58.0),
+        frame_ms: 12.4,
+        budget_ms: Some(16.6),
+    }
+}

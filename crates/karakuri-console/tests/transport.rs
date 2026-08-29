@@ -16,9 +16,11 @@
 //!    ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)).
 //! 3. Where everything in the row is, derived from the row's own geometry and
 //!    the mock's boxes.
-//! 4. **That nothing in it is a control**, which is the answer stated rather
-//!    than inferred from the absence of a hit test: `claim` gives every point
-//!    of this row to `egui` unless a boundary has it.
+//! 4. **That the four readouts are not controls**, which is the answer stated
+//!    rather than inferred from the absence of a hit test: `claim` gives every
+//!    point of this row to `egui` unless a boundary has it — or unless it is
+//!    on the arrangement pill, which is the one control this row has and is
+//!    `tests/arrangement_pill.rs`'s whole subject.
 //! 5. That the values are the harness's and the console keeps no copy.
 //!
 //! None of it needs a window or a device. It does need `egui`'s fonts, because
@@ -29,28 +31,19 @@
 
 mod common;
 
-use common::{drawn_once, id_of, near, rect_of, solved, PLAUSIBLE, SMALLEST};
+use common::{drawn_once, id_of, near, rect_of, showing, solved, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{size, Room};
 use karakuri_console::view::{beat_at, transport, Transport, TransportRow, View};
 use karakuri_layout::{Point, Rect};
 
-/// **The mock's own transport, as numbers**: `128.0 BPM`, the first beat of
-/// bar 37 lit, and `58 fps · 12.4/16.6 ms`.
-///
-/// Bar 37 beat 0 is 36 whole bars of four beats — 144 — which is the one place
-/// in this file where a beat count is written rather than derived, and it is
-/// written from the mock's own `bar 37`.
+/// **The mock's own transport, as numbers**, and this file's name for
+/// [`common::mock_transport`] — which is where the numbers are, because three
+/// test files in this crate wanted the same console's tempo and two of them had
+/// their own copy of it.
 fn mock() -> Transport {
-    Transport {
-        bpm: 128.0,
-        beats: 144.0,
-        beats_per_bar: 4,
-        fps: Some(58.0),
-        frame_ms: 12.4,
-        budget_ms: Some(16.6),
-    }
+    common::mock_transport()
 }
 
 /// A panel at a viewport, solved, with a context that has drawn once — the
@@ -984,24 +977,49 @@ fn a_missing_rate_or_budget_drops_its_own_words_and_nothing_else() {
 // Nothing here is a control
 // ---------------------------------------------------------------------------
 
-/// **Every point in this row is `egui`'s, unless a boundary has it.**
+/// **Every readout in this row is `egui`'s, unless a boundary has it.**
 ///
-/// The console's rule has three claims before `egui`'s: a drag in hand, a
-/// boundary within `GRAB`, and a control the console draws (ADR-0176). This
-/// row has no control in it — a tempo, a beat, a bar and a frame time are
-/// readouts, and every control the mock draws here is one of the six things
-/// `view::transport` names and does not draw — so the third claim never
-/// applies and `claim` is unchanged.
+/// The console's rule has four claims before `egui`'s: a drag in hand, an open
+/// menu, a boundary within `GRAB`, and a control the console draws (ADR-0176).
 ///
-/// **Stated rather than inferred**, because the absence of a hit test is not
-/// an answer anybody can read: a future control added to this row without a
-/// decision about the pointer would pass no test at all otherwise, and this
-/// one fails.
+/// **This test said *nothing in this row is a control* until the arrangement
+/// pill landed, and the sentence is narrowed rather than deleted.** It was
+/// never an argument that a control could not go here — it was the statement
+/// that none had, made where a future control added without a decision about
+/// the pointer would fail it. That is exactly what happened, and it failed:
+/// the pill is a control in this row, it has a decision about the pointer,
+/// and `tests/arrangement_pill.rs` is that decision written down — the
+/// clearance it keeps, the boundary band it does not sit in, and the rule an
+/// open menu changes. What is left here is the four readouts, and they are
+/// still readouts: a tempo, a beat, a bar and a frame time are things a press
+/// does not act on, and every *other* control the mock draws in this row is
+/// one of the six things `view::transport` names and does not draw.
+///
+/// The pill is asked for from the same view, so this is not the old assertion
+/// passing because the pill has gone missing: a console with an engine and an
+/// arrangement behind it draws the pill, and every probe below is still
+/// `egui`'s.
 #[test]
-fn nothing_in_the_transport_row_is_a_control() {
+fn the_readouts_in_the_transport_row_are_not_controls() {
     let (mut panel, ctx) = console(PLAUSIBLE);
     let strip = rect_of(panel.layout(), "transport");
     let row = row(&panel, &ctx);
+    // The view this row is drawn from: an engine behind it, so the pill is
+    // there to be claimed and this is not the assertion passing on an absence.
+    let mut view = showing(&[]);
+    view.transport = Some(mock());
+    let pill = karakuri_console::view::arrangement(
+        &ctx,
+        panel.layout(),
+        view.transport,
+        &view.arrangement,
+    )
+    .expect("the row draws its one control");
+    assert_eq!(
+        claim(&mut panel, &ctx, &view, at(pill.pill.center())),
+        Claim::Panel,
+        "the row's one control is not being claimed, so the probes below prove nothing"
+    );
 
     let probes = [
         (row.bpm.center(), "the tempo"),
@@ -1012,13 +1030,17 @@ fn nothing_in_the_transport_row_is_a_control() {
         (row.bar.center(), "the bar"),
         (row.frame.center(), "the frame readout"),
         (
-            egui::pos2(row.bar.max.x + 40.0, row.bar.center().y),
+            // **Past the pill**, which is where the empty middle of this row
+            // now starts: the mock's `learn`, `tap` and the rest are still
+            // not drawn, and the gap between the one control and the frame
+            // readout is what is left of them.
+            egui::pos2(pill.pill.max.x + 20.0, row.bar.center().y),
             "the empty middle of the row",
         ),
     ];
     for (probe, what) in probes {
         assert_eq!(
-            claim(&mut panel, &ctx, &[], at(probe)),
+            claim(&mut panel, &ctx, &view, at(probe)),
             Claim::Egui,
             "{what} is being claimed as a control the panel acts on"
         );
@@ -1029,7 +1051,7 @@ fn nothing_in_the_transport_row_is_a_control() {
     // missing: this row's own bottom edge is inside it.
     let below = Point::new(strip.x + strip.w * 0.5, strip.y + strip.h);
     assert_eq!(
-        claim(&mut panel, &ctx, &[], below),
+        claim(&mut panel, &ctx, &view, below),
         Claim::Panel,
         "the bottom edge of the transport row is not in the grab of the boundary under \
          it, so this test is no longer measuring what it was written for"

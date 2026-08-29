@@ -31,7 +31,7 @@
 
 mod common;
 
-use common::{drawn_once, id_of, near, rect_of, solved, PLAUSIBLE, SMALLEST};
+use common::{drawn_once, id_of, near, rect_of, showing, solved, PLAUSIBLE, SMALLEST};
 use karakuri_console::input::{claim, Claim};
 use karakuri_console::panel::Panel;
 use karakuri_console::room::{size, Room};
@@ -972,7 +972,7 @@ fn a_strip_with_no_reading_draws_an_empty_meter() {
     assert_eq!(
         marks(&without),
         (0, 0),
-        "a strip with no reading drew a column or a peak mark, which is a reading nobody          took"
+        "a strip with no reading drew a column or a peak mark, which is a reading nobody took"
     );
 
     // The well itself is still there either way: no reading is not no meter.
@@ -1080,7 +1080,7 @@ fn the_five_controls_are_claimed_and_the_rest_of_the_bay_is_not() {
         (at.mask.center(), "the mask mini"),
     ] {
         assert_eq!(
-            claim(&mut panel, &ctx, &strips, point(probe)),
+            claim(&mut panel, &ctx, &showing(&strips), point(probe)),
             Claim::Panel,
             "{what} is not being claimed, so it is drawn where it cannot be grabbed"
         );
@@ -1101,7 +1101,7 @@ fn the_five_controls_are_claimed_and_the_rest_of_the_bay_is_not() {
     ];
     for (probe, what) in probes {
         assert_eq!(
-            claim(&mut panel, &ctx, &strips, point(probe)),
+            claim(&mut panel, &ctx, &showing(&strips), point(probe)),
             Claim::Egui,
             "{what} is being claimed as a control the panel acts on"
         );
@@ -1122,7 +1122,7 @@ fn the_five_controls_are_claimed_and_the_rest_of_the_bay_is_not() {
     let region = rect_of(panel.layout(), "mixer");
     let below = Point::new(region.x + region.w * 0.5, region.y + region.h);
     assert_eq!(
-        claim(&mut panel, &ctx, &strips, below),
+        claim(&mut panel, &ctx, &showing(&strips), below),
         Claim::Panel,
         "the bottom edge of the mixer is not in the grab of the boundary under it, so \
          this test is no longer measuring what it was written for"
