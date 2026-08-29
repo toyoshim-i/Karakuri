@@ -1985,12 +1985,23 @@ Recorded here because they are decisions, and the manual states behaviour rather
   inputs an L5 folds becomes a property of the procedure rather than of one built-in shader.
   **Feedback is the exception** and wants a decision of its own: reading the previous frame is
   a cycle.
-- **A step sequencer is a signal source, not an effect.** It produces no pixels. What it does
-  is write controls on the beat, and both halves exist: `karakuri-signal`'s bus is a
-  name-to-value lookup already answering `bpm`, `beat`, `bar`, `energy`, `band`, `band3`, and a
-  `bind` record names a signal as a string with its curve and range. A sequencer is **one more
-  name on that bus**, stepping on the oscillator that already drives `beat`. A lane is a
-  binding, so a lane drives a Set parameter as readily as a deck fader.
+- ~~**A step sequencer is a signal source, not an effect.**~~ **Overturned on 2026-08-29, and both
+  halves of it were false** ([ADR-0222](adr/0222-a-sequencer-lane-is-a-fifth-route-and-not-a-binding.md)). It said a sequencer is *one more name on
+  `karakuri-signal`'s bus* and that *a lane is a binding, so a lane drives a Set parameter as
+  readily as a deck fader*. The bus holds one field — an oscillator — and its own header says every
+  value on it is a pure function of `t` and `bpm` and that nothing seeded lives there, so **a
+  pattern, which is authored state, cannot be on it**; and it is keyed by name alone, so two lanes
+  from one sequence would read the same value in the same frame. A `Binding`'s target is a `param`
+  of a procedure inside a Set, and **three of the mock's four lanes are deck faders**, which are
+  `Record::Opacity` in the session vocabulary with no binding path anywhere in the engine.
+  **A lane is a fifth route into the vocabulary**, which is what
+  [the console page's own rules](manual/console.html) had been saying all along and what
+  [P-0078](principles/0078-the-operator-wins-and-an-automatic-writer-yields-to-a-hand.md) already
+  treats a lane and a binding as. The deciding argument is that principle: **a binding does not
+  cancel** — `cancel` appears in `deck.rs` at every hand-driven setter and **not once in
+  `binding.rs`** — so a lane built as one would be held against the hand every frame, which is the
+  control P-0078 rules out by name. What it still produces is no pixels, which was the part that was
+  right.
 - **A MIDI control is bound to a deck and a position in its published interface**, never to a
   Set's parameter by name. Name-binding makes the mapping a cost paid again on every swap,
   where a learn flow exists to make it a cost paid once; and the deck being in the address

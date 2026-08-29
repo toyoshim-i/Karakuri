@@ -247,6 +247,7 @@ number; new records continue from the end.
 | [ADR-0219](0219-the-crossfader-spans-the-selection-and-the-one-after-it.md) | The crossfader spans the selection and the one after it | 2026-08-29 | accepted |
 | [ADR-0220](0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md) | The key column is the instrument's keyboard, and the CLI's keys are its own | 2026-08-29 | accepted |
 | [ADR-0221](0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md) | An arrangement is named by the operator and kept in a fourth place | 2026-08-29 | accepted |
+| [ADR-0222](0222-a-sequencer-lane-is-a-fifth-route-and-not-a-binding.md) | A sequencer lane is a fifth route and not a binding | 2026-08-29 | accepted |
 
 ## Retired numbers
 
