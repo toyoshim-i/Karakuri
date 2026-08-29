@@ -5516,12 +5516,17 @@ const LIBRARY_TITLE: &str = "Library";
 /// # What is in the mock's bay and is deliberately not here
 ///
 /// - **The `.scopes` row** — `favourites`, `my sets`, `presets`, `folder` and
-///   a `+`. Every chip is a control, three of the four name a collection
-///   nothing in this workspace can produce, and what a folder scope even reads
-///   is one of the two questions `console.html` itself lists as **still
-///   open**: *"A directory of `.kir` files is a different thing from a
-///   directory of Set files, and a bundle is a third."* The `+` is the arena's
-///   own gap drawn a fifth time, which [`outputs`] already names.
+///   a `+`. Every chip is a control and three of the four name a collection
+///   nothing in this workspace can produce. **What a folder scope reads is no
+///   longer the open question it was**: `console.html`'s *A folder scope reads
+///   Sets, and a bundle is not a third thing* settles that a folder row is a
+///   **take** — a Set file and a bundle are one file, and a `.kir` is a part
+///   rather than something a library lists. What it leaves is named there as
+///   owed rather than drawn from: *"no operation in the vocabulary can ask a
+///   folder for its listing"*, because `Operation::ListSets` carries what a
+///   Set holds and has nowhere to put a directory. So the chip waits on an
+///   operation and not on a decision. The `+` is the arena's own gap drawn a
+///   fifth time, which [`outputs`] already names.
 /// - **The `.path` row**, `~/sets/tour-2026/night-b › opening`. It is the
 ///   walk *inside* a folder scope, so it says nothing until that scope is
 ///   decided.
@@ -5534,7 +5539,14 @@ const LIBRARY_TITLE: &str = "Library";
 ///   in this workspace keeps — there is no such field on a `SetEntry`, no
 ///   record that carries one, and no metadata card that mentions one. Drawing
 ///   a hollow star on every row would assert that nothing is a favourite,
-///   which is a reading nobody took.
+///   which is a reading nobody took. **`console.html`'s *What keeps a
+///   favourite, and where it does not travel* decided where the value lives
+///   without giving this anything to read**: beside the Sets, in the library
+///   itself, so that a star does not travel with a Set file and the file stays
+///   byte for byte what it was. That page says the rest itself — *"Nothing in
+///   the vocabulary names a favourite, so there is nothing yet for a key, a
+///   map or a model to reach — and a row invented from this drawing would be
+///   the specification written backwards."*
 /// - **`.lib-row .dim`, the time beside each name.** This one is different
 ///   from the others and is worth the sentence: the *value* exists —
 ///   `SetEntry::written` is the Set file's own mtime — and what does not exist
@@ -5547,12 +5559,39 @@ const LIBRARY_TITLE: &str = "Library";
 ///   and hands it in, the way every other derived value in this module
 ///   arrives. Writing a second spelling here would be the kind of second
 ///   answer this repository deletes rather than adds.
-/// - **`.lib-row.cursor`, and the `load → A` pill in the foot.** A cursor is a
-///   selection this console does not keep — the same sentence [`mixer`] writes
-///   about the deck selection — and the pill is *"How a Set gets from the
-///   library to a deck"*, which is the second of `console.html`'s own still
-///   open questions. **Neither blocks the listing**: what is missing is a way
-///   to play from this bay, not a way to draw it.
+/// - **`.lib-row.cursor`, and the `load → A` pill in the foot.** These two are
+///   the load route, and `console.html`'s *How a Set reaches a deck* has since
+///   settled the question they used to be blocked on: *"what was missing was
+///   never the operation but the route"*, and the route is the arrangement —
+///   the cursor says which Set, the deck selection says which deck, so **a
+///   load is *"a cursor and a key with no pointer anywhere in it"***. That is
+///   why the pill is not a control here and would not become one: it is a
+///   readout that says where a press lands *before* the press, and a drag from
+///   a row onto a strip is named there as *"a second route to the same
+///   command, and never the first"*. `tests/library.rs` is where that is held.
+///
+///   **What is missing is three things, and none of them is a drawing.** The
+///   cursor is a selection this console does not keep — the same sentence
+///   [`mixer`] writes about the deck selection, which ADR-0219 records as
+///   living *"in the specification and not in `karakuri-console`'s code"*. The
+///   pill's letter *is* that selection, so drawing one without it is inventing
+///   a value, which is ADR-0177's row of zeroes a bullet above. And the press
+///   has no key: `console.html` says outright *"The key is owed and this page
+///   does not choose the letter"*, `docs/manual/operations.html` has `—` in
+///   that row's key column, and a letter chosen from here would be the
+///   specification written backwards (ADR-0198).
+///
+///   **Under all three, the operation has nothing to do.**
+///   `Operation::LoadSet` is `Written::Silent(Silent::NoRecord)`, so a surface
+///   that emitted it would have to perform it itself (ADR-0198) — and nothing
+///   in this workspace loads a Set into a *running* deck, which is the row's
+///   own sentence on the operations page and why it is marked `launch`.
+///   `Deck::install` is the one function that puts a Set in a slot, and its
+///   documentation is that it is *"deliberately not reachable from a key or a
+///   surface"*; `--set` and `--load-set` are launch flags.
+///
+///   **None of it blocks the listing**: what is missing is a way to play from
+///   this bay, not a way to draw it.
 ///
 /// # The foot's number is the mock's own, read the mock's way
 ///
