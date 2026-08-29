@@ -168,6 +168,18 @@
                     <span class="mini sel" data-tip="Composite: on. The deck's three renderers are folded into one result rather than overdrawn, which is what makes the chips below a choice of one rather than a list of all of them. Click to overdraw them instead. &#8853; MIDI: unassigned.">composite</span>
                   </div>
 
+                  <div class="node-group wild">
+                    <div class="node-head" data-tip="The controls that name no one node. A published control carries an address or it does not, and one that does not is a single control over every node that declares its key &mdash; one knob moving both renderers' exposure. It belongs to no group below, so it gets this one, and the group is first because a Set that declares no interface publishes nothing but these."><span class="addr">&lowast;</span><b>across nodes</b><span class="sep"></span>
+                      <span class="reach" data-tip="What this group stands over: 2 of this Set's nodes, reached by one control between them. No man / sug / auto here &mdash; authority is one node's and this head is not a node.">2 nodes</span>
+                    </div>
+                    <div class="param wild">
+                      <span class="ord">6</span>
+                      <span class="pname" data-tip="exposure, published bare. It lands on L4:0 soft_points and L4:1 strand_strokes, and moving it moves both together &mdash; so its range is the part both of them said they still look like themselves over, and not either one's on its own. Number 6 because it is sixth in this deck's published interface, which is what a MIDI knob counts; the number follows the interface and not the order the groups are drawn in.">exposure</span>
+                      <span class="fader"><b style="width:42%"></b><s style="left:39%"></s></span>
+                      <span class="pval">0.42</span>
+                    </div>
+                  </div>
+
                   <div class="node-group">
                     <div class="node-head"><span class="addr">L1:0</span><b>drift_shell</b><span class="sep"></span>
                       <span class="auth" data-tip="Authority on this node. Manual: only you move it. Suggest: an agent proposes and you accept. Auto: it acts. Set per node, never globally.">
@@ -215,8 +227,17 @@
                   </div>
 
                   <div class="node-group">
-                    <div class="node-head"><span class="addr">L4</span><b>renderers</b><span class="sep"></span>
-                      <span class="auth"><span>man</span><span class="sel">sug</span><span>auto</span></span>
+                    <div class="node-head"><span class="addr">L3:0</span><b>orbit</b><span class="sep"></span>
+                      <span class="auth" data-tip="Authority on the camera, which is a node like any other and takes one like any other. Manual here because a node nobody has spoken for is manual.">
+                        <span class="sel">man</span><span>sug</span><span>auto</span>
+                      </span>
+                    </div>
+                    <div class="node-note" data-tip="The built-in camera, which every Set has whether or not its files declare one &mdash; last among the L3s, and called orbit where nobody named it. It publishes nothing because it declares nothing: its radius, speed, height, field of view and two clipping distances are the Set's own numbers, set from outside by a camera record and read by this node rather than declared by it. So there is no row to draw and no knob to turn from here, and the operation that would put one here is named in the vocabulary and undecided.">no published parameters &mdash; the orbit's six numbers are the Set's, not this node's</div>
+                  </div>
+
+                  <div class="node-group">
+                    <div class="node-head"><span class="addr">L4</span><b>renderers</b><i class="fold" data-tip="Three renderers folded under one head. Press to open it into three: L4:0, L4:1 and L4:2, each with its own address, its own man / sug / auto and its own rows. The fold saves the height of two heads and gives it back the moment you need an address &mdash; which is the only way a renderer's authority is set, since a head standing over three nodes is not one of them.">&#9662;</i><span class="sep"></span>
+                      <span class="auth-n" data-tip="What the three renderers under this head are set to: two manual, one suggesting. A reading of three nodes and not a control over them &mdash; authority is set per node, so one chip here would be one of three answers drawn as the answer, and a press on it would be the switch rule 06 refuses, at the width of a layer. Open the head to set one.">man &times;2 &middot; sug</span>
                     </div>
                     <div class="rend-row" data-tip="This Set composites, so one renderer is live and the rest are not. Selecting lands on the beat grid, and a kept Set comes back folded the way you left it.">
                       <span class="rend sel">soft_points</span>
@@ -273,8 +294,19 @@
                   </div>
 
                   <div class="node-group">
+                    <div class="node-head"><span class="addr">L3:0</span><b>orbit</b><span class="sep"></span>
+                      <span class="auth" data-tip="Authority on the camera, which is a node like any other and takes one like any other. Manual here because a node nobody has spoken for is manual.">
+                        <span class="sel">man</span><span>sug</span><span>auto</span>
+                      </span>
+                    </div>
+                    <div class="node-note" data-tip="The built-in camera, which every Set has whether or not its files declare one &mdash; last among the L3s, and called orbit where nobody named it. It publishes nothing because it declares nothing: its radius, speed, height, field of view and two clipping distances are the Set's own numbers, set from outside by a camera record and read by this node rather than declared by it. So there is no row to draw and no knob to turn from here, and the operation that would put one here is named in the vocabulary and undecided.">no published parameters &mdash; the orbit's six numbers are the Set's, not this node's</div>
+                  </div>
+
+                  <div class="node-group">
                     <div class="node-head"><span class="addr">L4</span><b>renderers</b><span class="sep"></span>
-                      <span class="auth"><span class="sel">man</span><span>sug</span><span>auto</span></span>
+                      <span class="auth" data-tip="One renderer under this head, so the head stands over one node and the chip is the control it always was. There is no fold mark beside it, because a group of one has nothing to open.">
+                        <span class="sel">man</span><span>sug</span><span>auto</span>
+                      </span>
                     </div>
                     <div class="rend-row"><span class="rend sel">dots</span></div>
                     <div class="param">
@@ -595,11 +627,99 @@
         <h3>Inspector</h3>
         <p>
           <em>n</em> panes, each showing whatever you point it at. Parameters
-          group <strong>by node</strong>, the way a Set is addressed everywhere
-          else (<code>L2:0:amount</code>), so an effect layer's controls need no
+          group <strong>by where they land</strong>, which for most of them is
+          one node, addressed the way a Set is addressed everywhere else
+          (<code>L2:0:amount</code>) so an effect layer's controls need no
           second idea of where things live. Only what a Set
-          <em>publishes</em> &mdash; the reason this is four rows rather than
+          <em>publishes</em> &mdash; the reason this is six rows rather than
           twenty-five.
+        </p>
+        <p>
+          <strong>A control that lands in more than one node is not one of
+          those, and it is not rare.</strong> It goes in the group at the top,
+          which is what the rest of this section is mostly about: it is a
+          published control with no address, it moves every node that declares
+          its key, and a Set that declares no interface at all publishes
+          <em>nothing else</em>.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>A control that names no one node</h3>
+        <p>
+          A published control carries an address or it does not.
+          <strong>Addressed, it is one node's and it is drawn in that node's
+          group</strong> &mdash; <code>L4:0:exposure</code> is a row under
+          <code>L4:0</code>, and the group head is the address.
+          <strong>Unaddressed, it is one control over every node that declares
+          its key</strong>: <code>exposure</code> published bare is a single
+          knob moving both renderers, with a range narrowed to the part
+          <em>both</em> of them said they still look like themselves over. Two
+          shapes, one interface, and the second has no group below to sit in.
+        </p>
+        <p>
+          <strong>It is also the ordinary case rather than the exotic one.</strong>
+          A Set that declares no interface publishes one control per key and
+          nothing else &mdash; a bare name is how you reach every declaration
+          of it, so publishing one control per <em>declaration</em> would put
+          two controls called <code>exposure</code> on a desk, which is a shape
+          the instrument refuses outright. So on a Set nobody wrote an
+          interface for, <em>every row on this panel names no one node</em>,
+          and a panel that grouped only by node would draw an empty pane under
+          a headline promising groups.
+        </p>
+        <p>
+          <strong>So they go first, in a group of their own, and its head says
+          what it stands over instead of where it is.</strong>
+          <code>&lowast; across nodes &middot; 2 nodes</code> is the address a
+          bare name actually has: not a place, but a reach. The rows under it
+          are parameter rows like any other and carry the same mark, so a
+          control the operator can see is a wildcard is one they will not be
+          surprised by later. <strong>The head carries no
+          <code>man / sug / auto</code></strong>, for the reason the folded
+          renderers head below carries none: authority is one node's, and this
+          head is not a node.
+        </p>
+        <p>
+          <strong>First rather than last</strong>, because on a Set with no
+          interface it is the whole panel and every group below it is empty,
+          and a pane that opens with a column of empty node heads before it
+          reaches a knob is a pane read back to front.
+        </p>
+        <p>
+          <strong>The two arrangements it beats, and what each would have
+          cost.</strong> <em>A row in every group it touches</em> draws one
+          control as <em>n</em> rows &mdash; and the number in the left-hand
+          column is a MIDI position, so knob 6 would appear twice, anyone
+          counting rows would count more controls than the deck published, and
+          <em>take back</em> beside two of them would be one binding wearing
+          two faces. <em>A fold, closed by default</em> puts the majority case
+          behind a press, which is the one place hiding something quietly
+          costs most.
+        </p>
+        <p>
+          <strong>A wildcard over exactly one node is that node's, and is
+          drawn there unmarked.</strong> Nothing is invented by doing so:
+          <em>every node that declares the key</em> is a set the Set itself
+          decides, and where it has one member there is no second group the row
+          could go in. <strong>The cost is that the row moves.</strong> Give
+          this Set a second geometry that also declares <code>radius</code> and
+          that row leaves <code>L1:0</code> for the group at the top, having
+          been touched by nobody &mdash; which is the honest consequence of one
+          control per key, and is said here rather than discovered on stage.
+        </p>
+        <p>
+          <strong>What no grouping can fix is that a wildcard crosses
+          authority.</strong> Authority is one node's; a bare
+          <code>exposure</code> writes both renderers in one motion. So a
+          renderer handed to an agent hands it, through that control, a
+          renderer you kept &mdash; rule 06's switch arriving by the back door
+          at the width of a key. What this bay owes is to make the reach
+          visible before the press, and the group head and the row's mark are
+          that. <strong>What happens on the write is not this page's to
+          settle</strong>: the operation that moves a parameter carries the
+          same optional address the control does, and nothing in the vocabulary
+          yet says what an authority may refuse.
         </p>
       </div>
 
@@ -683,10 +803,55 @@
           into two decks is two addresses, because the deck is in the address.
         </p>
         <p>
-          The order is what the Set <em>published</em>, and where it published
-          nothing, the order its parameters were declared. Publishing is already
-          the author deciding what is worth showing; deciding the order is a
-          small extension of a decision they are making anyway.
+          <strong>The order is what the Set <em>published</em></strong> &mdash;
+          an interface is a list and its order is the author's, which is a
+          small extension of a decision they are already making. <strong>Where
+          it published nothing, the order is the Set's own</strong>: node by
+          node in the order the nodes run, and inside a node the order its
+          procedure declared them, each key taken where it first appears. That
+          is what the deck above draws &mdash; 1 and 2 under <code>L1:0</code>,
+          3 and 4 under <code>L2:0</code>, 5 under the renderers, and 6 the
+          control that spans two of them. <strong>The number follows the
+          interface and not the order the groups are drawn in</strong>, which is
+          why 6 is at the top of the pane: a wildcard takes its place among the
+          controls where its key first appears, and it is <em>drawn</em> first
+          because it belongs to no group below. Those are two different
+          questions and the panel answers each in its own terms.
+        </p>
+        <p>
+          <strong>The engine sorts those keys alphabetically instead, and it is
+          right about the thing it is protecting.</strong> The keys come out of
+          a hash map, so left alone they come out in a different order on every
+          run, and <em>a console showing its controls in a different order each
+          run is not a console</em>: a MIDI map is worthless against an order
+          that moves. Stable is the requirement. Alphabetical is one way to
+          meet it and it is the wrong one.
+        </p>
+        <p>
+          <strong>It is wrong because the number is read down the pane.</strong>
+          Sorted by spelling, this deck's six knobs are <code>amount</code> 1,
+          <code>exposure</code> 2, <code>hue</code> 3, <code>radius</code> 4,
+          <code>turbulence</code> 5, <code>twist</code> 6 &mdash; so the left
+          column of the pane reads 4, 5 then 1, 6 then 3, and the one number on
+          this panel whose whole job is to be counted becomes noise. Worse, the
+          order is then an accident of spelling that the Set's author never
+          chose and cannot change without renaming a parameter. Declaration
+          order is the only order that both holds still and means something,
+          and it is the same order the groups are already in.
+        </p>
+        <p>
+          <strong>What it costs the engine is one order kept rather than one
+          derived.</strong> Each node's parameters arrive from its procedure in
+          the order the procedure declares them, and the engine already holds
+          that list per node &mdash; it is what a binding is checked against.
+          What loses the order is the map the values are then kept in. So the
+          cost is that the default interface is built by walking those lists in
+          node order and taking each key the first time it appears, in place of
+          sorting the map's keys: no new state, no new thing for a rebuild to
+          restate, and one guarantee added, which is that the numbering does not
+          move when a parameter is renamed at the other end of the Set.
+        </p>
+        <p>
           <strong>A map is a file</strong> &mdash; which knob is which belongs to
           the hardware in the room, so it is saved and recalled per controller
           and never travels inside a session.
@@ -712,6 +877,123 @@
           Manual is yours alone, suggest proposes into the staging lane, auto
           acts. One of the four properties the whole system is defined by, so it
           belongs on the face of the panel rather than in a preferences window.
+          A node nobody has spoken for is <strong>manual</strong>, which is not
+          a placeholder but the only default that is not that global mode thrown
+          for every node by nobody.
+        </p>
+        <p>
+          <strong>Every node takes one, including the ones that look like they
+          would not.</strong> The camera takes an authority; so does a field,
+          whose parameters are declared, addressable and yours to ride even
+          though it draws nothing. A node whose knobs something else can move is
+          a node something else can be let at, and that is the whole of the
+          test.
+        </p>
+        <p>
+          <strong>A head that folds more than one node carries no chip, because
+          there is nothing for it to carry.</strong> <code>L4 renderers</code>
+          above stands over three nodes. One chip on it would be one of three
+          answers drawn as <em>the</em> answer, and a press on it would set
+          three nodes at once &mdash; the switch rule 06 refuses, narrowed from
+          the instrument to a layer but still the same shape, and still unable
+          to say the arrangement that rule calls useful: <em>this renderer is
+          yours and that one is not</em>.
+        </p>
+        <p>
+          <strong>So the chip's place is filled with a reading rather than left
+          empty.</strong> <code>man &times;2 &middot; sug</code> is what the
+          three under that head are set to. It is not a fourth value &mdash;
+          there are three and they are the vocabulary's &mdash; and it is not a
+          control; it is a count, the way <code>4 of 4</code> in the mixer head
+          is a count. A head that simply dropped its chip would be a control
+          going away without saying why, which is the one thing this panel does
+          not do. <strong>A Set with one renderer has one node under that head
+          and the chip is the control it always was</strong>, and no fold mark
+          beside it, because a group of one has nothing to open.
+        </p>
+        <p>
+          <strong>The head opens, and that is how a renderer's authority is
+          reached at all.</strong> Pressing the mark unfolds the group into one
+          head per renderer &mdash; <code>L4:0</code>, <code>L4:1</code>,
+          <code>L4:2</code>, each with its own address, its own chip and its own
+          rows. That is not a second idea of where things live: it is the same
+          node groups the rest of the pane is made of, and the fold is a saving
+          of two heads' height that you hand back when you need an address. The
+          renderers keep their fold by default because the chip row under the
+          head is a choice of <em>one</em>, and that choice is the deck's rather
+          than any renderer's.
+        </p>
+        <p>
+          <strong>The operation is not owed and the route is.</strong> <em>Set a
+          node's authority</em> names a deck and a node and exists; what did not
+          exist was a way to name the third renderer while its head was folded,
+          and the fold above is that. <strong>The fold itself owes a row on the
+          operations page</strong>, beside the other controls that arrange this
+          console rather than the material &mdash; and it is named as owed here
+          rather than written from this drawing, which is the way round that
+          keeps a specification a specification. <strong>MIDI reaches none of
+          this</strong>: a map line carries a deck number, a range, or a word
+          from a closed list, and it cannot spell a node address at all.
+        </p>
+      </div>
+
+      <div class="note">
+        <h3>The camera is a node, and it is the one with nothing to turn</h3>
+        <p>
+          <strong>A camera procedure is a node like any other.</strong> It gets
+          a group, an address, an authority chip and rows for whatever it
+          publishes, and nothing about it is special enough to say twice.
+          Neither deck above has one, which is a fact about these two Sets and
+          not a rule.
+        </p>
+        <p>
+          The rule is the group under it. <strong>Every Set has a built-in
+          camera whether or not its files declare one</strong> &mdash; a node,
+          last among the <code>L3</code>s, called <code>orbit</code> where
+          nobody named it &mdash; so <code>L3</code> addresses something in
+          every Set that exists, and both panes above draw it.
+        </p>
+        <p>
+          <strong>It is drawn with no rows, and not because it has nothing to
+          set.</strong> The orbit has six numbers: a radius, a speed, a height,
+          a field of view, and two clipping distances. <strong>None of them is a
+          parameter of that node.</strong> They are the Set's own, set from
+          outside when the Set is made or loaded and read by the node rather
+          than declared by it &mdash; which is why the node publishes nothing,
+          and why a head with a line under it saying so is what a Set's camera
+          honestly looks like from here.
+        </p>
+        <p>
+          <strong>The head is drawn rather than the group omitted, because the
+          head has values.</strong> An address, a name, and an authority that a
+          node nobody has spoken for has by default. Leaving it out would make a
+          deck's camera the one part of a deck that the panel where
+          <em>everything about what a deck is</em> lives does not admit exists,
+          and a Set with two cameras would then have one of them appear and the
+          other not, which is worse than both being plain. A control you cannot
+          use says why rather than going away, and a node you cannot reach is
+          the same sentence one level up.
+        </p>
+        <p>
+          <strong>Where an operator reaches those six numbers is: not here, and
+          barely anywhere.</strong> There is no flag that aims a camera. A Set
+          file can record two of the six &mdash; the radius and the speed
+          &mdash; and the other four come back at their defaults, so a camera
+          saved and a camera loaded are not the same camera unless the four were
+          default already. That is a gap this page can name and cannot close.
+        </p>
+        <p>
+          <strong>What is owed is an operation, and it is owed a decision before
+          it is owed a row.</strong> The vocabulary names one and leaves what it
+          acts on open, deliberately, because <em>the camera</em> is two things
+          and they are not one operation: the built-in orbit, whose numbers are
+          the Set's and come in through a record, and a camera procedure, whose
+          parameters are written the way any node's are. Which of the two the
+          row means decides whether it carries numbers of its own or should not
+          exist at all. <strong>This page specifies what the bay shows and
+          stops there</strong> &mdash; the group, the head, and the line saying
+          what it waits on &mdash; because writing the control from this drawing
+          would be answering that question with a picture.
         </p>
       </div>
 

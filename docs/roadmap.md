@@ -1101,6 +1101,31 @@ re-taken once that boundary is drawn.
     both be honoured; the chip is dropped when the group folds more than one. And the mock's
     addresses go `L1:0`, `L2:0`, `L4` with **no `L3`**, while every Set has a built-in camera node.
 
+    **All four are answered on the page now (2026-08-29), and answering them found three things
+    worse than the questions.** A wildcard that names no one node gets **a group of its own, first**,
+    headed by reach rather than by address — a row in every group it touches lost because the ordinal
+    is a MIDI position, so one control would be knob 6 twice and one binding would have two *take
+    back*s. Declaration order wins over the engine's alphabetical sort, and the engine's reason —
+    stability — is conceded and answered: **stability is the requirement and alphabetical is the
+    wrong way to meet it**, and the order is already reachable, since every node's `param_names`
+    is built in declaration order and only the `HashMap` of ranges loses it. The folded `L4` head
+    keeps a **readout** (`man ×2 · sug`, a count rather than a fourth value) and gains a fold, because
+    rule 06's own example — *this renderer is yours and that one is not* — is only expressible
+    unfolded. And the camera is **drawn** with no rows and a line saying why.
+
+    **The mock's ordinals were already impossible**, which turns the second of those from a wording
+    disagreement into a defect: rows numbered 1–5 consecutively down a pane cannot come out of an
+    alphabetical sort, so the page's picture has been asserting declaration order since it was drawn.
+    **The console already draws an `L3:0 orbit` group for every Set** while the mock had no `L3` at
+    all — the page and the running program were showing different node lists. And the sharpest:
+    **a wildcard write crosses authority.** `Operation::WriteParam` carries `ParamAt { node:
+    Option<NodeAt> }`, so one write moves every node that declares the key — which means granting an
+    agent one renderer grants it, through a bare-name control, a renderer the operator kept. That is
+    **rule 06's refused switch at the width of a key**, and it is a hole in
+    [ADR-0211](adr/0211-authority-is-set-per-node-and-the-record-is-the-sessions.md)'s model rather
+    than in the page. Nothing in the vocabulary says what an authority may refuse.
+
+
     **And the guard caught a nine-and-a-half pixel lie.** `tests/arrangement.rs` recomputes the
     tree's implied minimum and holds it against the number `SMALLEST` claims, *"so the two cannot
     drift apart"*. The deck head raised the inspector's minimum from 126 to 151.5, which made the

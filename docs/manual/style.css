@@ -405,6 +405,36 @@
   .rend { padding: 0 7px; border-radius: 999px; border: 1px solid var(--c-line); color: var(--c-dim); }
   .rend.sel { border-color: transparent; color: var(--c-pink); background: color-mix(in srgb, var(--c-pink) 15%, transparent); box-shadow: 0 0 9px var(--c-glowp); }
 
+  /* A group for the controls that name no one node. A published control with
+     no address is one control over *every* node that declares its key, so its
+     head says what it reaches instead of where it is: `.addr` carries the
+     bare-name mark rather than an `L2:0`, and there is no `.auth` on it,
+     because authority is one node's and this head stands over several. It is
+     drawn first, since a Set that declares no interface publishes nothing but
+     these and a pane that opens with empty node heads reads back to front.
+     New selectors only: nothing here changes a box, so the inspector's 151.5
+     is a head and two rows whichever group is first. */
+  .node-group.wild .node-head { background: color-mix(in srgb, var(--c-lav) 9%, transparent); }
+  .reach { font-size: 9px; color: var(--c-lav); }
+  /* The same mark on the row, in the name's own cell rather than in a fifth
+     track — `.param`'s four are the MIDI number, the name, the fader and the
+     value, and a control that reaches two nodes is still one control. */
+  .param.wild .pname::before { content: "\2217\2009"; color: var(--c-lav); }
+
+  /* What a head says where it has no one authority to show: a reading of the
+     n nodes under it, in the chip's own place so the head never goes silent.
+     Not a fourth value and not a control — `man / sug / auto` is set per node
+     and this head is not a node. */
+  .auth-n { font-size: 9px; color: var(--c-faint); }
+  /* The mark on a head that folds more than one node: it opens into one head
+     per node, which is how a renderer's authority is reached at all. */
+  .node-head .fold { font-style: normal; font-size: 9px; color: var(--c-faint); }
+  /* What a group with no rows waits on, on the same indent a `.param` stands
+     on. A head over nothing is drawn rather than omitted where the head
+     itself has values — an address, a name and an authority — and this line
+     is the reason there is nothing under it. */
+  .node-note { padding: 3px 10px 6px 12px; color: var(--c-faint); font-size: 10px; }
+
   /* The deck head: a strip of chips above a deck's node groups, the way a bay
      head is one above a bay. It heads the *deck* and not the pane — the
      `.half-head` over it says which deck is showing, and this is that deck's
