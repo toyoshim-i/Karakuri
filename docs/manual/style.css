@@ -380,6 +380,24 @@
   .rend { padding: 0 7px; border-radius: 999px; border: 1px solid var(--c-line); color: var(--c-dim); }
   .rend.sel { border-color: transparent; color: var(--c-pink); background: color-mix(in srgb, var(--c-pink) 15%, transparent); box-shadow: 0 0 9px var(--c-glowp); }
 
+  /* The deck head: a strip of chips above a deck's node groups, the way a bay
+     head is one above a bay. It heads the *deck* and not the pane — the
+     `.half-head` over it says which deck is showing, and this is that deck's
+     own clock and its fold. Its box is `.node-head`'s without the tint, and the
+     tallest thing in it is a `.mini` at 15.5, so the row is 5 + 15.5 + 5. */
+  .deck-head { display: flex; align-items: center; gap: 6px; padding: 5px 10px; color: var(--c-faint); }
+  .anchor { font-size: 9px; color: var(--c-faint); }
+  .anchor b { color: var(--c-text); font-weight: 500; }
+  /* The scrub's own offset, in beats, and it is one deck's. The offset in the
+     transport is in milliseconds and is the whole instrument's; the unit is
+     what tells them apart, so neither is ever drawn without one. */
+  .anchor em { font-style: normal; font-weight: 500; color: var(--c-lav); margin-left: 3px; }
+  .scrub { display: flex; gap: 3px; }
+  .scrub i { font-style: normal; font-size: 9px; padding: 0 4px; border-radius: 999px; border: 1px solid var(--c-line); color: var(--c-dim); }
+  /* Never grey without a reason: an inert scrub keeps its shape and its tooltip
+     says why beat sync is not available to this deck's material. */
+  .scrub.idle i { color: var(--c-faint); border-color: var(--c-hair); }
+
   /* mixer */
   .mixer-strips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 6px; }
   .strip { border-radius: 9px; background: var(--c-well); display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 7px 4px; min-width: 0; }
