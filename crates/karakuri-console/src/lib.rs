@@ -220,12 +220,18 @@ pub fn arrangement() -> Spec {
             Spec::row(COLUMN_DIVIDER, vec![left_pane(), centre(), right_pane()])
                 .flex(1.0)
                 // The body row's minimum height is the tallest of the
-                // three columns' — the right pane's, at 530. **The model
-                // does not derive this**: a split's minimum is a number it
-                // is given, not a function of its children's, so the sum is
-                // written here and `tests/arrangement.rs` recomputes it from
-                // the tree so the two cannot drift apart.
-                .min(530.0),
+                // three columns'. **It changed hands on 2026-08-29**: it was
+                // the right pane's 530 until the manual gave the inspector a
+                // deck head, and the centre is now the taller at 539.5 —
+                // `program` 378, the divider 10, and `inspector` 151.5.
+                // **The model does not derive this**: a split's minimum is a
+                // number it is given, not a function of its children's, so
+                // the sum is written here and `tests/arrangement.rs`
+                // recomputes it from the tree so the two cannot drift apart.
+                // That guard is what caught the 9.5 px, and the console's
+                // claimed smallest window was short by exactly that from the
+                // moment the row was specified.
+                .min(539.5),
             // `.outputs`: 8px of padding above and below a `.sink` row, which
             // is 11px at line-height 1.5 plus its 1px border top and bottom —
             // 8 + 18.5 + 8, rounded. Fixed for the same reason the transport
@@ -422,11 +428,31 @@ fn inspector() -> Spec {
     // Flexible: the inspector is what gives height to the program and takes it
     // back, which is the other half of "sized by height".
     .flex(1.0)
-    // Minimum: bay head 27, `.half-head` 27, one `.node-head` 27 and two
-    // `.param` rows at 22.5. One node and two of its parameters is the least
-    // that shows what the inspector is for — a group, addressed by node, with
-    // rows under it.
-    .min(126.0)
+    // Minimum: bay head 27, `.half-head` 27.5, the `.deck-head` under it at
+    // 25.5, one `.node-head` 26.5 and two `.param` rows at 22.5 — **151.5**.
+    // A deck head, one node and two of its parameters is the least that shows
+    // what the inspector is for: a deck's clock and its fold, over a group
+    // addressed by node with rows under it.
+    //
+    // **Every term is `room::size`'s**, so the minimum and the boxes the panes
+    // are drawn in are one derivation: [`size::HEAD_H`] 6 + 10 x 1.5 + 6,
+    // [`size::HALF_HEAD_H`] 5 + 16.5 + 5 + 1, [`size::DECK_HEAD_H`] 5 + 15.5 +
+    // 5, [`size::NODE_HEAD_H`] 5 + 16.5 + 5 and [`size::PARAM_H`] 3 + 16.5 + 3.
+    //
+    // **The deck head is the term that was missing**, and the 126 this
+    // replaces was not a rounding of 151.5 but the same sum without it: 27 +
+    // 27.5 + 26.5 + 45 is exactly 126, so the four terms it did have were
+    // right to the half pixel and the comment's `27, 27, 27` was the rounding.
+    // The row landed in `docs/manual/console.html` on 2026-08-29 — *"It sits
+    // under the pane's head rather than in it"* — and a minimum that does not
+    // count it is a minimum at which the console's own first pass overflows.
+    .min(
+        size::HEAD_H
+            + size::HALF_HEAD_H
+            + size::DECK_HEAD_H
+            + size::NODE_HEAD_H
+            + size::PARAM_H * 2.0,
+    )
 }
 
 /// The mixer over the master chain over the sequencer.

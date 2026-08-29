@@ -203,11 +203,16 @@ use karakuri_console::view::{
     DECK_LETTERS,
 };
 use karakuri_engine::governor::{Report, SLOWEST_PRIME_ONE_IN};
+// The engine's own `Published`, and its node kinds under the word the address
+// uses for them: `Kind` is already the console's *region* kind on this side,
+// and one word cannot be two things in one file.
+use karakuri_engine::set::{Layering, Published};
 use karakuri_engine::{
     compose, Blend, Committed, Control, Deck, Gpu, HotSwap, Look, Mask, MaskKind, Present,
     Residency, Set, Sink, Skip, TonemapOp,
 };
 use karakuri_environment::mix;
+use karakuri_ir::Kind as Layer;
 use karakuri_layout::{Axis, Hit, NodeId, Point};
 use karakuri_operation::{BlendMode, Operation};
 use karakuri_operation_record::{written, Current, Written};
@@ -2763,6 +2768,247 @@ fn mixer(deck: &Deck, name: &str, out: &mut Vec<view::Strip>) {
     }
 }
 
+/// **The layer half of a node's address, as the mock's `.addr` spells it** —
+/// `L1:0`, `L2:0`, `L4`.
+///
+/// `karakuri_ir::Kind` carries no name of its own, and `karakuri-cli`'s
+/// `--publish name=L4:0:key` parser is in a package with no library target, so
+/// there is nothing to call. The five words are `docs/ir-spec.md`'s and this
+/// is a **match** for [`blend_mode`]'s reason: a sixth kind stops the build
+/// here rather than drawing an address nothing can be typed back in.
+fn layer_word(layer: Layer) -> &'static str {
+    match layer {
+        Layer::L1 => "L1",
+        Layer::L2 => "L2",
+        Layer::L3 => "L3",
+        Layer::L4 => "L4",
+        Layer::Field => "F",
+    }
+}
+
+/// **Which node a published control belongs to**, and `None` where it belongs
+/// to no one node.
+///
+/// `Published::at` is `Some` for a control an author addressed — the
+/// `--publish name=L4:0:exposure` form — and `None` for a **wildcard**, which
+/// is what the whole of the *default* interface is made of: *"one control per
+/// key, not one per declaration"*, covering every node that declares the key.
+/// This program has no `--publish` flag, so every control it ever draws is a
+/// wildcard.
+///
+/// **A wildcard over exactly one node is that node's**, and the resolution
+/// invents nothing: *every node that declares the key* is a set the Set itself
+/// determines, and where it holds one member there is no second group the row
+/// could go in. Over two or more it belongs to several groups at once, and the
+/// mock draws no `.param` outside a `.node-group` — so the row is dropped and
+/// [`inspector`] says how many were, rather than a place for it being invented
+/// here (ADR-0200: *no placeholder, and no empty case the mock did not itself
+/// draw*).
+fn node_of(set: &Set, control: &Published) -> Option<(Layer, u32)> {
+    if let Some(at) = control.at {
+        return Some(at);
+    }
+    let mut declaring = set
+        .params()
+        .filter(|(_, _, key, _)| *key == control.key)
+        .map(|(layer, index, _, _)| (layer, index));
+    let first = declaring.next()?;
+    match declaring.next() {
+        None => Some(first),
+        Some(_) => None,
+    }
+}
+
+/// **What the Inspector's panes read**: one pane per slot the deck has, up to
+/// the [`PANES`] the arrangement has, out of the seven things a `Set` will say
+/// about itself.
+///
+/// Everything here is reachable from a `Deck` and nothing reaches around one —
+/// `slot`, `transport` and the `Set` behind each slot are its own — and what
+/// crosses into the console is a word, some numbers and some names (ADR-0156).
+///
+/// # Where each one comes from, and what is checked before it is drawn
+///
+/// All seven reads answer off a running `Set`, and each was checked against
+/// the source rather than taken on trust:
+///
+/// - **`Set::layering`** is the fold chip. It is a *build* decision —
+///   `merge.is_some()` — so it is a readout here and the mock's press is a
+///   rebuild rather than a write.
+/// - **`Set::inputs`** is the renderer row: one edge per renderer in draw
+///   order, and `Input::live` says which one reaches the screen. It is
+///   *"empty of meaning under `Layering::Overdraw`"* by the engine's own
+///   words, so `live` is only ever passed on under composite — under overdraw
+///   every renderer draws and marking one would assert a choice the layering
+///   does not make.
+/// - **`Set::node_names`** is a name per node, in node order, and
+///   `Set::node_named` turns each one back into the `(layer, index)` the mock's
+///   `.addr` is.
+/// - **`Set::authority`** is the `man / sug / auto` chip, through
+///   [`mix::authority`]. **Nothing writes one**: `Request::authorities` is
+///   empty in every run of every program in this workspace, and it will stay
+///   empty until a live-session writer exists, because `Record::Authority` is
+///   deliberately excluded from Set-file state in two places (ADR-0216). So
+///   the chip draws `man` on every node of every Set, forever, and that is the
+///   *default* being read rather than a placeholder being drawn — a node
+///   nobody has spoken for **is** manual.
+/// - **`Set::published`** is which controls appear and in what order, which is
+///   what numbers the rows. It **allocates and says it is not for the frame
+///   path**, which is why this is called once — see below.
+/// - **`Set::params`** is what resolves a wildcard control to a node — see
+///   [`node_of`].
+/// - **`Set::bindings`** is the one of the seven this does **not** read, and
+///   the reason is that it cannot say anything here: nothing in this program
+///   binds a signal to anything, so it is empty in every run and a `.pval.src`
+///   drawn off it would be a state the engine never entered (ADR-0191).
+///
+/// # Read once, and that is the engine's instruction rather than a shortcut
+///
+/// `Set::published` is documented *"Allocates, so not the frame path. A
+/// console reads this when a Set lands, not per frame."* This program's two
+/// slots are `HotSwap::fixed`, so no Set ever lands after the first, and every
+/// value above is constant for the run: nothing writes a param, nothing binds
+/// one, nothing grants an authority, and the transport has no caller outside
+/// its own tests (ADR-0218).
+///
+/// **What a re-read waits on is therefore a writer**, and it is the same
+/// writer the authority chip waits on. The field is rewritable per frame like
+/// every other one on the `View`; the day something moves a published value,
+/// this is called where [`mixer`] is.
+fn inspector(deck: &Deck, material: &str, out: &mut Vec<view::Pane>) {
+    out.clear();
+    for slot in 0..deck.slot_count().min(view::PANES) {
+        let set = deck.slot(slot).set();
+        let transport = deck.transport(slot);
+        let composite = set.layering() == Layering::Composite;
+
+        // Every published control, resolved to the node it belongs to and
+        // numbered by its position in the interface — which is the number a
+        // MIDI control is learned against, so it counts the controls that were
+        // published and not the rows that could be placed.
+        let published = set.published();
+        let mut rows: Vec<(Option<(Layer, u32)>, view::Param)> = Vec::new();
+        for (at, control) in published.iter().enumerate() {
+            let [low, high] = control.range;
+            let value = set.published_value(&control.name).unwrap_or(low);
+            rows.push((
+                node_of(set, control),
+                view::Param {
+                    ord: at + 1,
+                    name: control.name.clone(),
+                    value,
+                    at: match high > low {
+                        // A range of no width is a control with one position,
+                        // and the fader sits at its start rather than at a
+                        // division by zero.
+                        false => 0.0,
+                        true => (value - low) / (high - low),
+                    },
+                },
+            ));
+        }
+
+        let mut nodes: Vec<view::Node> = Vec::new();
+        let mut renderers: Vec<view::Renderer> = Vec::new();
+        let mut renderer_nodes = 0;
+        let mut renderer_authority = None;
+        for name in set.node_names() {
+            let Some((layer, index)) = set.node_named(name) else {
+                continue;
+            };
+            let authority = set.authority(layer, index).map(mix::authority);
+            let params = |layer: Layer, index: u32| {
+                rows.iter()
+                    .filter(|(at, _)| *at == Some((layer, index)))
+                    .map(|(_, param)| param.clone())
+                    .collect::<Vec<_>>()
+            };
+            if layer == Layer::L4 {
+                // **The renderers fold into one group**, which is the mock's
+                // own `L4 renderers` head over a row of chips: the chips *are*
+                // the L4 nodes, and the row is what the fold turns into a
+                // choice. Every other layer is one group per node, addressed
+                // `L2:0` the way the mock addresses it.
+                renderers.push(view::Renderer {
+                    name: name.clone(),
+                    live: composite
+                        && set
+                            .inputs()
+                            .get(index as usize)
+                            .is_some_and(|edge| edge.live),
+                });
+                renderer_nodes += 1;
+                renderer_authority = match renderer_nodes {
+                    1 => authority,
+                    // **More than one node under one head has no one
+                    // authority**, and authority is per node (ADR-0216). The
+                    // chip is dropped rather than showing the first of them.
+                    _ => None,
+                };
+                continue;
+            }
+            nodes.push(view::Node {
+                addr: format!("{}:{index}", layer_word(layer)),
+                name: name.clone(),
+                authority,
+                renderers: Vec::new(),
+                params: params(layer, index),
+            });
+        }
+        if renderer_nodes > 0 {
+            // The mock's address for the folded head is the bare layer, with
+            // no index — because it is not one node's.
+            let mut params: Vec<view::Param> = Vec::new();
+            for index in 0..renderer_nodes {
+                params.extend(
+                    rows.iter()
+                        .filter(|(at, _)| *at == Some((Layer::L4, index)))
+                        .map(|(_, param)| param.clone()),
+                );
+            }
+            params.sort_by_key(|param| param.ord);
+            nodes.push(view::Node {
+                addr: layer_word(Layer::L4).to_owned(),
+                name: RENDERERS_NODE.to_owned(),
+                authority: renderer_authority,
+                renderers,
+                params,
+            });
+        }
+
+        let placed: usize = nodes.iter().map(|node| node.params.len()).sum();
+        if placed < published.len() {
+            // **Said rather than swallowed**, for the reason every other
+            // omission in this file is said: a pane short of a row looks
+            // exactly like a Set that published fewer. See `node_of` — a
+            // wildcard over two or more nodes belongs to two or more groups,
+            // and the mock draws no row outside one.
+            println!(
+                "inspector: deck {} publishes {} controls and {} of them name no one node, so \
+                 they have no group to sit in and are not drawn",
+                DECK_LETTERS.get(slot).copied().unwrap_or("?"),
+                published.len(),
+                published.len() - placed
+            );
+        }
+
+        out.push(view::Pane {
+            deck: slot,
+            material: material.to_owned(),
+            sync: mix::sync(transport.sync()),
+            anchor_bpm: transport.anchor_bpm(),
+            scrub_beats: transport.scrub_beats(),
+            composite,
+            nodes,
+        });
+    }
+}
+
+/// **What the mock calls the group its renderer chips sit under.** Not a node
+/// name — every L4 node has one of those and they are the chips themselves —
+/// but the head over all of them, which the mock writes as `L4 renderers`.
+const RENDERERS_NODE: &str = "renderers";
+
 /// **The engine's residency, as the console's word for it** — and, like
 /// [`blend_mode`], a `match` so that a fourth `Residency` stops the build here
 /// rather than drawing a chip nothing can read.
@@ -3500,6 +3746,12 @@ impl ApplicationHandler for App {
         // legend says how many Sets the bay lists, and `library` says why
         // where it is none.
         self.readout.view.library = library(std::path::Path::new(STORE));
+        // **And the Inspector's panes, once for the run.** `Set::published`
+        // says it is not for the frame path and this deck's two slots are
+        // `HotSwap::fixed`, so no Set ever lands after this one — see
+        // `inspector`, which is also where the controls it could not place are
+        // reported.
+        inspector(&engine.deck, &material, &mut self.readout.view.inspector);
         self.readout.print_legend(budget, &governed);
 
         // The first frame is owed to the window appearing, not drawn on a
@@ -4973,6 +5225,94 @@ mod gpu {
     /// copy of the arithmetic here would be a test agreeing with itself about
     /// the one thing it is checking.
     use karakuri_engine::letterbox;
+
+    /// **A real Set reads out into a pane**, which is the seven reads
+    /// [`inspector`] makes held against a Set this program actually builds
+    /// rather than against a fixture it wrote itself (P-0047 — *a fixture the
+    /// product can rewrite is not a fixture*, and this window's input is the
+    /// product).
+    ///
+    /// It is the one place the resolution in [`node_of`] is checked end to
+    /// end: this deck's Sets have the **default** interface, so every control
+    /// they publish is a wildcard, and if the resolution were wrong the bay
+    /// would draw node heads with nothing under them and every other test
+    /// would still pass.
+    #[test]
+    fn a_pane_reads_a_running_set() {
+        let gpu = Gpu::headless().expect("no GPU");
+        let mut renderer = egui_wgpu::Renderer::new(
+            &gpu.device,
+            wgpu::TextureFormat::Rgba8Unorm,
+            egui_wgpu::RendererOptions::default(),
+        );
+        let mut panel = Panel::new(1440.0, 900.0);
+        view::rearrange(&mut panel, CANVAS);
+        let sources = Sources::default();
+        let engine = Engine::new(&gpu, &mut renderer, &sources, panel.layout(), 1.0);
+        let material = sources.material();
+        let mut panes = Vec::new();
+        inspector(&engine.deck, &material, &mut panes);
+
+        // One pane per slot, up to the panes the arrangement has.
+        assert_eq!(panes.len(), view::PANES);
+        let pane = &panes[0];
+        assert_eq!(pane.deck, 0);
+        assert_eq!(pane.material, material);
+        // `Set::build` takes an L1 and an L4 and no merge, so the Set
+        // overdraws — `Set::layering` read rather than assumed.
+        assert!(
+            !pane.composite,
+            "the pair builds with no L5, so there is nothing to fold"
+        );
+
+        // The L1 is its own group and the renderers fold into one, which is
+        // the mock's `L1:0` beside its bare `L4`.
+        let addrs: Vec<&str> = pane.nodes.iter().map(|n| n.addr.as_str()).collect();
+        assert!(addrs.contains(&"L1:0"), "{addrs:?}");
+        assert!(addrs.contains(&"L4"), "{addrs:?}");
+
+        // **Nothing has spoken for any node**, so every chip reads the
+        // default — which is what `Set::authority` answers and not a word this
+        // file chose.
+        for node in &pane.nodes {
+            assert_eq!(
+                node.authority,
+                Some(karakuri_operation::Authority::Manual),
+                "{} reads something other than the default nobody has changed",
+                node.addr
+            );
+        }
+
+        // One chip per renderer, and none of them live: `Input::live` is
+        // *"empty of meaning under Overdraw"*, so it is not passed on.
+        let renderers = pane
+            .nodes
+            .iter()
+            .find(|n| n.addr == "L4")
+            .expect("the renderers group");
+        assert_eq!(renderers.renderers.len(), 1);
+        assert!(
+            !renderers.renderers[0].live,
+            "a deck that overdraws has no live renderer to mark"
+        );
+
+        // **Every published control found a node**, and the ordinals are the
+        // interface's own positions spanning the groups — the number a MIDI
+        // control is learned against.
+        let published = engine.deck.slot(0).set().published().len();
+        assert!(published > 0, "the pair publishes what it declares");
+        let mut ords: Vec<usize> = pane
+            .nodes
+            .iter()
+            .flat_map(|node| node.params.iter().map(|param| param.ord))
+            .collect();
+        ords.sort_unstable();
+        assert_eq!(
+            ords,
+            (1..=published).collect::<Vec<_>>(),
+            "a published control lost its group, so a row this Set publishes is not drawn"
+        );
+    }
 
     /// **ADR-0155's other half, as an assertion: the engine's texels reach the
     /// panel.**
