@@ -1906,14 +1906,21 @@ event rather than an operation), and **the camera**.
 **So M5 opens with naming rather than drawing**, which is the shape M4 opened with — nothing
 could be edited there until nodes had names, and nothing can be routed here until operations
 do. [Every operation](manual/operations.html) is where that enumeration is written down, and a
-surface missing from an operation's row is a line of this milestone's work. **It is written**:
-50 operations, and 56 of the 216 ways in exist. **Six of those arrived from
-the console's own shape** — moving a boundary, folding a bay or a pane, bringing one back, solo, and
-resetting the arrangement — and all twenty-four of their routes are empty except the pointer, which
-four of the six have, and which is the first rule broken by the surface the first rule is about.
-**This sentence has now gone stale three times, the same way every time**, and the third was
-2026-08-29, when five panel badges became `has` and this figure was 51.
-**Do not transcribe it again**: the paragraph below already says so, and saying it did not stop it. It was written as 50 of 208 while
+surface missing from an operation's row is a line of this milestone's work. **How many of them
+exist is not written here, and that is the point of this paragraph.** Six of the fifty arrived from
+the console's own shape — moving a boundary, folding a bay or a pane, bringing one back, solo, and
+resetting the arrangement — and every one of them has a route now, which it did not on
+2026-08-28.
+
+**The figure this sentence used to carry went stale four times, the same way every time.** It read
+50 of 208 while the page said 51; then 49 of 212 while the page said 50 of 216; then 51 while five
+panel badges made it 56; then 56 while
+[ADR-0220](adr/0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md)
+moved it to 42 by settling whose keyboard the key column measures. **Three of the four were caused by
+work in this repository that had no reason to look here**, and the fourth was caused by the commit
+that had just finished writing *do not transcribe it again* two lines below. Saying it did not stop
+it, so the number is gone rather than corrected: the two commands at the end of this paragraph are
+the answer, and there is nothing left to keep in step. The first three read as 50 of 208 while
 the page said 51 of 208 — the mask's front gained a MIDI route in
 [ADR-0202](adr/0202-the-map-reaches-the-masks-front-and-the-shape-has-no-spelling.md) and this
 sentence was not recounted with it — and it then read 49 of 212 while the reset row
