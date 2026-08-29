@@ -865,6 +865,11 @@ pub struct Set {
     /// interface publishes every control over the range its procedure declared.
     /// Nothing else in the engine reads it — the ranges are the console's and
     /// the agent's, and no uniform write is clamped by them.
+    ///
+    /// **The keys and not their order.** A map keeps none, so the default
+    /// interface's order comes from [`Set::declared_names`] and this is asked
+    /// only for the range behind a key it already has — see [`Set::published`],
+    /// which used to sort these keys and now looks each one up instead.
     ranges: Vec<HashMap<String, [f32; 2]>>,
     /// **The producer of the built-in camera's state.** Public because a
     /// `camera` record and a Set file both set it from outside; the six numbers
@@ -3021,54 +3026,7 @@ impl Set {
             }
         }
         let range = self.nodes_of(binding.layer);
-        let names: Vec<&[String]> = match binding.layer {
-            // **One entry per L1 *procedure***, which includes a far
-            // geometry: it is an L1 with params of its own, and an operator
-            // riding them is riding the far end of a morph.
-            //
-            // **Placed by the procedure's ordinal rather than appended**, for
-            // the reason `Source::procedures` exists: the order the simulations
-            // are walked in is not the order the procedures were given in once
-            // an edge decides which of them is the far one.
-            Kind::L1 => {
-                let mut out: Vec<&[String]> = vec![&[]; self.l1_count];
-                for source in &self.sources {
-                    for (k, sim) in std::iter::once(&source.sim)
-                        .chain(source.paired.iter())
-                        .enumerate()
-                    {
-                        out[source.procedures[k]] = sim.param_names();
-                    }
-                }
-                out
-            }
-            // **One entry per L2 procedure, not per instance.** A chain is
-            // instantiated once per source and the procedures are shared, so an
-            // address names the procedure and the Set writes it to every
-            // instance — the first source's list is every procedure's list.
-            Kind::L2 => self.sources[0]
-                .deforms
-                .iter()
-                .map(|d| d.param_names())
-                .collect(),
-            // **One entry per camera node**, so that `L3:1:dist` is checked
-            // against the second camera's declarations. The built-in's is
-            // empty — it is a node and not a procedure.
-            Kind::L3 => self.cameras.iter().map(|c| c.param_names()).collect(),
-            // **One "node" that is no node at all.** A field has no pass and no
-            // buffers, and its params are still declared, addressable, and an
-            // operator's to ride — so what is returned here is the list the
-            // field declared, and every caller writes the same answer into its
-            // own uniform.
-            // **One entry per field**, so that `Field:1:radius` is checked
-            // against the second field's declarations and not the first's.
-            Kind::Field => self.field_declared.iter().map(Vec::as_slice).collect(),
-            Kind::L4 => self.sources[0]
-                .renderers
-                .iter()
-                .map(|r| r.param_names())
-                .collect(),
-        };
+        let names = self.declared_names(binding.layer);
         let found = names.iter().enumerate().any(|(at, n)| {
             binding.covers(at)
                 && self
@@ -3294,6 +3252,74 @@ impl Set {
         }
     }
 
+    /// **What each node of `layer` declares, in node order and in the order
+    /// its procedure declared them.**
+    ///
+    /// One entry per node of that layer, aligned with [`Set::nodes_of`]: entry
+    /// `i` belongs to the slot at `nodes_of(layer).start + i` in
+    /// [`Set::params`] and `ranges`. A node that declares nothing — the
+    /// built-in camera — is an empty entry rather than a missing one, for the
+    /// reason its empty param map exists: a list that skipped it would shift
+    /// every node after it.
+    ///
+    /// **The only place declaration order survives.** `params` and `ranges`
+    /// are maps and a map keeps no order; these lists come straight off each
+    /// procedure's `param` list, so they are what [`Set::published`] walks to
+    /// put the default interface in the order the author wrote — and what
+    /// [`Set::bind`] checks a binding's key against. Two readers of one walk,
+    /// which is why this is a method rather than the block it used to be
+    /// inside `bind`.
+    fn declared_names(&self, layer: Kind) -> Vec<&[String]> {
+        match layer {
+            // **One entry per L1 *procedure***, which includes a far
+            // geometry: it is an L1 with params of its own, and an operator
+            // riding them is riding the far end of a morph.
+            //
+            // **Placed by the procedure's ordinal rather than appended**, for
+            // the reason `Source::procedures` exists: the order the simulations
+            // are walked in is not the order the procedures were given in once
+            // an edge decides which of them is the far one.
+            Kind::L1 => {
+                let mut out: Vec<&[String]> = vec![&[]; self.l1_count];
+                for source in &self.sources {
+                    for (k, sim) in std::iter::once(&source.sim)
+                        .chain(source.paired.iter())
+                        .enumerate()
+                    {
+                        out[source.procedures[k]] = sim.param_names();
+                    }
+                }
+                out
+            }
+            // **One entry per L2 procedure, not per instance.** A chain is
+            // instantiated once per source and the procedures are shared, so an
+            // address names the procedure and the Set writes it to every
+            // instance — the first source's list is every procedure's list.
+            Kind::L2 => self.sources[0]
+                .deforms
+                .iter()
+                .map(|d| d.param_names())
+                .collect(),
+            // **One entry per camera node**, so that `L3:1:dist` is checked
+            // against the second camera's declarations. The built-in's is
+            // empty — it is a node and not a procedure.
+            Kind::L3 => self.cameras.iter().map(|c| c.param_names()).collect(),
+            // **One "node" that is no node at all.** A field has no pass and no
+            // buffers, and its params are still declared, addressable, and an
+            // operator's to ride — so what is returned here is the list the
+            // field declared, and every caller writes the same answer into its
+            // own uniform.
+            // **One entry per field**, so that `Field:1:radius` is checked
+            // against the second field's declarations and not the first's.
+            Kind::Field => self.field_declared.iter().map(Vec::as_slice).collect(),
+            Kind::L4 => self.sources[0]
+                .renderers
+                .iter()
+                .map(|r| r.param_names())
+                .collect(),
+        }
+    }
+
     /// **Set every declaration of `name`, and say how many there were.**
     ///
     /// Zero means nothing in this Set declares it, which is the caller's cue to
@@ -3464,6 +3490,16 @@ impl Set {
     /// **What a console shows**, which for a Set with no interface is
     /// everything it declares, each over its own declared range.
     ///
+    /// **In declaration order, because the position in this list is an
+    /// address.** A MIDI control is learned against *the deck and the position
+    /// in its published interface* — `docs/manual/console.html`, "A knob is
+    /// bound to a deck, not to a Set" — so this order is what the Inspector
+    /// numbers its rows with. An authored interface is the author's own, in the
+    /// order they published it: [`Set::publish`] appends and this hands the list
+    /// back as it stands. The default interface is the Set's own: node by node
+    /// in the order the nodes run, and inside a node the order its procedure
+    /// declared them, each key taken where it first appears.
+    ///
     /// Allocates, so not the frame path. A console reads this when a Set lands,
     /// not per frame.
     pub fn published(&self) -> Vec<Published> {
@@ -3480,11 +3516,41 @@ impl Set {
         // `exposure` is one knob moving both. Per declaration would put two
         // controls called `exposure` on the console, which `publish` refuses
         // when it is asked for explicitly and which nothing could address.
-        let mut keys: Vec<&String> = self.ranges.iter().flat_map(|node| node.keys()).collect();
-        // Declaration order is not kept in a map, and a console showing its
-        // controls in a different order each run is not a console.
-        keys.sort();
-        keys.dedup();
+        //
+        // **The requirement is that the order holds still, and alphabetical met
+        // it badly.** This walked `ranges` and sorted the keys, and the sort was
+        // there for a real reason: the keys came out of a `HashMap`, so left
+        // alone they came out in a different order on every run, and a console
+        // showing its controls in a different order each run is not a console —
+        // a MIDI map is worthless against an order that moves. Spelling holds
+        // still and says nothing: the number read down the pane skipped about,
+        // and the order was an accident the Set's author never chose and could
+        // not change without renaming a parameter.
+        //
+        // **What keeps it still now is that nothing here reads a map's order.**
+        // [`Set::declared_names`] is a `Vec` per layer, each entry a node's own
+        // `param_names` — cloned from the procedure's `param` list at build time
+        // and never re-derived — and [`Kind::ALL`] is a constant array. So the
+        // walk is the same walk every run, on a Set built the same way, and the
+        // order it produces is one the author wrote rather than one the hasher
+        // happened to. `ranges` is still asked for each key's declared range,
+        // which is a lookup and not an iteration.
+        //
+        // Linear membership rather than a `HashSet`, and that is the point: a
+        // set would decide *whether* a key is new, which is all that is wanted,
+        // but reaching for one here is how the iteration this walk must not do
+        // gets back in. An interface is tens of controls and this is off the
+        // frame path.
+        let mut keys: Vec<&String> = Vec::new();
+        for layer in Kind::ALL {
+            for names in self.declared_names(layer) {
+                for key in names {
+                    if !keys.contains(&key) {
+                        keys.push(key);
+                    }
+                }
+            }
+        }
         keys.into_iter()
             .filter_map(|key| {
                 Some(Published {

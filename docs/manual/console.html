@@ -819,8 +819,8 @@
           questions and the panel answers each in its own terms.
         </p>
         <p>
-          <strong>The engine sorts those keys alphabetically instead, and it is
-          right about the thing it is protecting.</strong> The keys come out of
+          <strong>The engine sorted those keys alphabetically until
+          2026-08-29, and it was right about the thing it was protecting.</strong> The keys come out of
           a hash map, so left alone they come out in a different order on every
           run, and <em>a console showing its controls in a different order each
           run is not a console</em>: a MIDI map is worthless against an order
@@ -832,7 +832,7 @@
           Sorted by spelling, this deck's six knobs are <code>amount</code> 1,
           <code>exposure</code> 2, <code>hue</code> 3, <code>radius</code> 4,
           <code>turbulence</code> 5, <code>twist</code> 6 &mdash; so the left
-          column of the pane reads 4, 5 then 1, 6 then 3, and the one number on
+          pane reads 2, 4, 5 then 1, 6 then 3, and the one number on
           this panel whose whole job is to be counted becomes noise. Worse, the
           order is then an accident of spelling that the Set's author never
           chose and cannot change without renaming a parameter. Declaration
@@ -840,8 +840,10 @@
           and it is the same order the groups are already in.
         </p>
         <p>
-          <strong>What it costs the engine is one order kept rather than one
-          derived.</strong> Each node's parameters arrive from its procedure in
+          <strong>What it cost the engine was one order kept rather than one
+          derived, and it is paid.</strong> <code>Set::published</code> walks the
+          procedures' own parameter lists now and the map of ranges is only
+          looked up. Each node's parameters arrive from its procedure in
           the order the procedure declares them, and the engine already holds
           that list per node &mdash; it is what a binding is checked against.
           What loses the order is the map the values are then kept in. So the
