@@ -5259,13 +5259,27 @@ fn group_h(node: &Node) -> f32 {
 /// A console with no deck behind it hands over no panes at all, and what the
 /// bay draws then is its card, its head and the bar between the two panes,
 /// exactly as it did before this pass — [`mixer`]'s rule, one bay along.
+///
+/// **The bay head is taken off the top here and not in [`pane_box`]**, which
+/// is what [`strips_row`] and [`library_box`] do one bay along: the head is
+/// painted *over* the region rather than laid out beside it, so every body in
+/// this file starts at `region.min.y + size::HEAD_H` and the arithmetic under
+/// it is written as if the head were not there. A pane is the one body in the
+/// arrangement whose region is not the bay's own — `inspector-1` is a child of
+/// the split — and that is what hid this: the pane is the full height of the
+/// bay, head included, so a `.half-head` drawn at `region.min` lands on top of
+/// the word `Inspector`.
 pub fn inspector(
     layout: &karakuri_layout::Layout,
     index: usize,
     pane: &Pane,
 ) -> Option<InspectorPane> {
     let region = to_egui(layout.rect(layout.find(PANE_NAMES.get(index)?)?));
-    pane_box(region, &pane.nodes)
+    let under_head = Rect::from_min_max(
+        Pos2::new(region.min.x, region.min.y + size::HEAD_H),
+        region.max,
+    );
+    pane_box(under_head, &pane.nodes)
 }
 
 /// The arithmetic of a pane, away from the layout it reads.
@@ -5303,7 +5317,11 @@ fn pane_box(region: Rect, nodes: &[Node]) -> Option<InspectorPane> {
     if body.width() <= size::PARAM_PAD_L + size::PARAM_PAD_R {
         return None;
     }
-    if !positive(head) || !positive(deck_head) {
+    // **And a pane too short for its two heads is no pane**, which is what
+    // this function's caller promises. `positive` is not enough on its own:
+    // the two heads are stated heights, so they stay positive while running
+    // off the bottom of a region shorter than their sum.
+    if !positive(head) || !positive(deck_head) || deck_head.max.y > region.max.y {
         return None;
     }
     // A walk and not a division: the groups are of unequal height, so *how
@@ -6898,5 +6916,41 @@ mod tests {
             "a third pane is a pane the arrangement has not got"
         );
         assert!(View::new(Room::Day).inspector.is_empty());
+    }
+
+    /// **A pane starts under the bay head and not on top of it.**
+    ///
+    /// The one thing `pane_box`'s own tests cannot see. They are handed a
+    /// rectangle and the head has already been taken off it — the fixture
+    /// says so in the arithmetic, `151.5 - size::HEAD_H` — so every one of
+    /// them passes whether or not the caller does the subtraction. It did
+    /// not: `.half-head` was drawn at the top of `inspector-1`, which is the
+    /// top of the bay, which is where [`bay_head`] paints the word
+    /// `Inspector`. Read against the arrangement rather than against a
+    /// fixture, because the fixture is what could not tell.
+    #[test]
+    fn a_pane_starts_under_the_bay_head() {
+        let mut layout = crate::layout();
+        layout.set_viewport(karakuri_layout::Rect {
+            x: 0.0,
+            y: 0.0,
+            w: 1920.0,
+            h: 1080.0,
+        });
+        layout.solve();
+        let pane = one_node(2);
+        let bay = to_egui(layout.rect(layout.find("inspector").expect("the bay is named")));
+        for index in 0..PANES {
+            let at = inspector(&layout, index, &pane).expect("a pane with room in it");
+            assert_eq!(
+                at.head.min.y,
+                bay.min.y + size::HEAD_H,
+                "pane {index} starts where the bay head ends"
+            );
+            assert!(
+                bay.contains_rect(at.head) && bay.contains_rect(at.deck_head),
+                "pane {index} draws inside the bay it is in"
+            );
+        }
     }
 }
