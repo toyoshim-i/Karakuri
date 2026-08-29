@@ -6,15 +6,30 @@ rust-version.workspace = true
 license.workspace = true
 
 # **What is outside this process, and what it costs to reach it.** Every entry
-# here is a door: `karakuri-audio` is a microphone, `png` and `wgpu` are a file
-# and a device, `chrono` is the operator's calendar, `serde`/`serde_json` are
-# the wire another program speaks. That is the charter (ADR-0215) showing up in
-# the manifest — a dependency this package has no door for does not belong in
-# it, and neither does the module that would have asked for one.
+# here is a door: `karakuri-audio` is a microphone, `karakuri-midi` is a port,
+# `png` and `wgpu` are a file and a device, `chrono` is the operator's calendar,
+# `serde`/`serde_json` are the wire another program speaks — a tempo source's
+# and, since the MCP server moved here, a model's. That is the charter
+# (ADR-0215) showing up in the manifest — a dependency this package has no door
+# for does not belong in it, and neither does the module that would have asked
+# for one. The two `karakuri-operation*` entries are the exception that states
+# the rule: neither is a door, they are the second clause — what the operator
+# asked for, and the record it becomes.
 [dependencies]
 karakuri-audio = { version = "0.1.0", path = "../karakuri-audio" }
 karakuri-engine = { version = "0.1.0", path = "../karakuri-engine" }
 karakuri-ir = { version = "0.1.0", path = "../karakuri-ir" }
+# **A MIDI port.** `midi.rs` opens one and turns what arrives into an
+# operation; the grammar and the map file are that crate's.
+karakuri-midi = { version = "0.1.0", path = "../karakuri-midi" }
+# **What the operator asked for, named once for every surface.** `mcp.rs` and
+# `midi.rs` both hand back an `Operation`, which is the door's own vocabulary
+# rather than a door.
+karakuri-operation = { version = "0.1.0", path = "../karakuri-operation" }
+# **Where an operation becomes a record** — the record being the second clause
+# of the charter. `mix.rs` builds one per control an operator moves and reads it
+# back, so the deck is driven through the record rather than beside it.
+karakuri-operation-record = { version = "0.1.0", path = "../karakuri-operation-record" }
 karakuri-signal = { version = "0.1.0", path = "../karakuri-signal" }
 karakuri-store = { version = "0.1.0", path = "../karakuri-store" }
 png = "0.18.1"

@@ -212,7 +212,7 @@ set is one filter away:
 cargo test --workspace -- --skip gpu::          # everything that needs no device
 cargo test -p karakuri-engine -- --skip gpu::   # the render graph's own arithmetic
 cargo test -p karakuri-engine --lib -- --skip gpu::
-cargo test -p karakuri-cli --bins -- --skip gpu::   # `karakuri-cli` has no library target
+cargo test -p karakuri-cli --bins -- --skip gpu::   # `karakuri-cli` has no library target, and is one file
 ```
 
 The GPU tests are most of the time the whole workspace costs and a minority of its tests —

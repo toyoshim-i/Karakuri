@@ -114,12 +114,12 @@ pub struct Watch {
     /// layer it is on is what its own `kind` declares, which the sort reads
     /// like it reads every other file's. It is first here only because it is
     /// first on the command line, and list order is chain order.
-    head: crate::Named,
+    head: crate::compile::Named,
     /// The rest of the slot's files, in the order they were spelled. Watched
     /// together with the head: a rebuild restates the whole stack, so an edit
     /// to any one of them recompiles all of them and the Set that lands is the
     /// one the files say.
-    rest: Vec<crate::Named>,
+    rest: Vec<crate::compile::Named>,
     /// Whether this slot's renderers composite or overdraw. Restated on every
     /// rebuild rather than read off the outgoing Set, for the reason
     /// `Request::bindings` gives.
@@ -258,7 +258,7 @@ pub struct Watch {
     /// difference is the whole value — a build that was rolled back for costing
     /// too much never becomes a `Record::Procedure`, never reaches a save, and
     /// is exactly the version an operator wants back.
-    snapshots: Option<karakuri_environment::history::Shared>,
+    snapshots: Option<crate::history::Shared>,
 }
 
 impl Watch {
@@ -270,8 +270,8 @@ impl Watch {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         slot: usize,
-        head: crate::Named,
-        rest: Vec<crate::Named>,
+        head: crate::compile::Named,
+        rest: Vec<crate::compile::Named>,
         layering: karakuri_engine::set::Layering,
         live: Option<u32>,
         capacity: Option<u32>,
@@ -341,7 +341,7 @@ impl Watch {
 
     /// Keep every version that compiles under `store_root`, so an edit can be
     /// walked back. See [`crate::history`].
-    pub fn snapshotting_to(mut self, snapshots: karakuri_environment::history::Shared) -> Watch {
+    pub fn snapshotting_to(mut self, snapshots: crate::history::Shared) -> Watch {
         self.snapshots = Some(snapshots);
         self
     }
@@ -373,7 +373,7 @@ impl Source for Watch {
         // procedure that was playing, and the only moment both the text and the
         // build it produced are in the same hand is this one — by the time the
         // swap lands, the file may have changed again.
-        let named: Vec<&crate::Named> = std::iter::once(&self.head)
+        let named: Vec<&crate::compile::Named> = std::iter::once(&self.head)
             .chain(self.rest.iter())
             .collect();
         let paths: Vec<&std::path::Path> = named.iter().map(|n| n.path.as_path()).collect();
@@ -395,7 +395,7 @@ impl Source for Watch {
                 // every rebuild called each node whatever its procedure
                 // declared — harmless while the only thing a name did was
                 // print, and not harmless once an `edge` resolves against one.
-                // The source rides along for the reason [`crate::Placed`]
+                // The source rides along for the reason [`crate::compile::Placed`]
                 // gives: everything said about a node afterwards is a function
                 // of the bytes that were compiled, and the file may have moved
                 // by the time anything asks.
@@ -414,7 +414,7 @@ impl Source for Watch {
             }
         }
         // **Sorted by the `kind` each file declares, in the same code the
-        // startup path sorts with** — see [`crate::sort_compiled`], which says
+        // startup path sorts with** — see [`crate::compile::sort_compiled`], which says
         // why that is one function. This used to be a copy of that match, and a
         // copy is how the two came to disagree about the head: it was taken for
         // the L1 whatever it declared, so a slot spelled with an L2 first
@@ -426,7 +426,7 @@ impl Source for Watch {
         // must not take the picture down — which is the whole of what this side
         // does differently, and the reason the sort returns a sentence rather
         // than exiting.
-        let (material, placed) = match crate::sort_compiled(compiled) {
+        let (material, placed) = match crate::compile::sort_compiled(compiled) {
             Ok(sorted) => sorted,
             Err(e) => {
                 eprintln!("slot {slot}: {e}\nslot {slot} unchanged; its Set is still running");
@@ -455,13 +455,13 @@ impl Source for Watch {
                     // identical files.
                     // **The bytes come off the node, not off a second list
                     // zipped onto it.** `placed` carries the text each file was
-                    // compiled from — see [`crate::Placed`] — so what a version
+                    // compiled from — see [`crate::compile::Placed`] — so what a version
                     // is filed under and what is written into it are read from
                     // one place. Zipping `srcs` back on was a second way to
                     // pair a node with its source, correct only for as long as
                     // the sort kept file order.
                     for node in &placed {
-                        let layer = karakuri_environment::setfile::kind_name(node.layer);
+                        let layer = crate::setfile::kind_name(node.layer);
                         let index = node.index as usize;
                         if let Err(e) =
                             snapshots.record(slot, layer, index, &node.proc, node.source.as_bytes())
@@ -489,19 +489,14 @@ impl Source for Watch {
         // — rather than on the frame that installs it.
         if let Some((store, tx)) = &self.stored {
             // **Each node put from its own carried source**, which is also what
-            // its address is derived from — see [`crate::Placed::put`]. This
+            // its address is derived from — see [`crate::compile::Placed::put`]. This
             // used to put `srcs` and zip the hashes back onto `placed` by
             // position, which paired a node with its bytes a second way.
             let stored: Result<Vec<_>, _> = placed
                 .iter()
                 .map(|node| {
-                    node.put(store).map(|hash| {
-                        (
-                            karakuri_environment::setfile::kind_name(node.layer),
-                            node.index,
-                            hash,
-                        )
-                    })
+                    node.put(store)
+                        .map(|hash| (crate::setfile::kind_name(node.layer), node.index, hash))
                 })
                 .collect();
             match stored {
@@ -519,7 +514,7 @@ impl Source for Watch {
                 ),
             }
         }
-        let crate::Material {
+        let crate::compile::Material {
             l1s,
             l2s,
             l3s,
@@ -599,8 +594,8 @@ mod tests {
     fn watch_on(dir: &std::path::Path) -> Watch {
         Watch::new(
             0,
-            crate::Named::bare(dir.join("a.kir")),
-            vec![crate::Named::bare(dir.join("b.kir"))],
+            crate::compile::Named::bare(dir.join("a.kir")),
+            vec![crate::compile::Named::bare(dir.join("b.kir"))],
             karakuri_engine::set::Layering::Overdraw,
             None,
             Some(4096),
@@ -652,8 +647,12 @@ mod tests {
         let paths: Vec<PathBuf> = files.iter().map(|f| dir.join(f)).collect();
         let watch = Watch::new(
             0,
-            crate::Named::bare(paths[0].clone()),
-            paths[1..].iter().cloned().map(crate::Named::bare).collect(),
+            crate::compile::Named::bare(paths[0].clone()),
+            paths[1..]
+                .iter()
+                .cloned()
+                .map(crate::compile::Named::bare)
+                .collect(),
             karakuri_engine::set::Layering::Overdraw,
             None,
             Some(4096),
@@ -703,8 +702,12 @@ mod tests {
         let salts: Vec<u32> = vec![0x0bad_cafe, 0x1234_5678];
         let mut watch = Watch::new(
             0,
-            crate::Named::bare(paths[0].clone()),
-            paths[1..].iter().cloned().map(crate::Named::bare).collect(),
+            crate::compile::Named::bare(paths[0].clone()),
+            paths[1..]
+                .iter()
+                .cloned()
+                .map(crate::compile::Named::bare)
+                .collect(),
             karakuri_engine::set::Layering::Overdraw,
             None,
             Some(4096),
@@ -758,8 +761,12 @@ mod tests {
         };
         let mut watch = Watch::new(
             0,
-            crate::Named::bare(paths[0].clone()),
-            paths[1..].iter().cloned().map(crate::Named::bare).collect(),
+            crate::compile::Named::bare(paths[0].clone()),
+            paths[1..]
+                .iter()
+                .cloned()
+                .map(crate::compile::Named::bare)
+                .collect(),
             karakuri_engine::set::Layering::Overdraw,
             None,
             Some(4096),
@@ -816,8 +823,12 @@ mod tests {
             .collect();
         let mut watch = Watch::new(
             0,
-            crate::Named::bare(paths[0].clone()),
-            paths[1..].iter().cloned().map(crate::Named::bare).collect(),
+            crate::compile::Named::bare(paths[0].clone()),
+            paths[1..]
+                .iter()
+                .cloned()
+                .map(crate::compile::Named::bare)
+                .collect(),
             // What a composited Set file loads as — no flag was typed here,
             // which is the whole point.
             karakuri_engine::set::Layering::Composite,
@@ -872,10 +883,10 @@ mod tests {
         let paths: Vec<PathBuf> = files.iter().map(|f| tmp.path().join(f)).collect();
         // Named as the command line names them, with the far geometry carrying
         // the name the edge points with.
-        let named: Vec<crate::Named> = paths
+        let named: Vec<crate::compile::Named> = paths
             .iter()
             .zip(["near", "far", "morph", "draw"])
-            .map(|(path, name)| crate::Named {
+            .map(|(path, name)| crate::compile::Named {
                 name: Some(name.to_string()),
                 path: path.clone(),
             })
@@ -959,8 +970,12 @@ mod tests {
         ];
         let mut watch = Watch::new(
             0,
-            crate::Named::bare(paths[0].clone()),
-            paths[1..].iter().cloned().map(crate::Named::bare).collect(),
+            crate::compile::Named::bare(paths[0].clone()),
+            paths[1..]
+                .iter()
+                .cloned()
+                .map(crate::compile::Named::bare)
+                .collect(),
             karakuri_engine::set::Layering::Overdraw,
             None,
             Some(4096),
@@ -987,7 +1002,7 @@ mod tests {
 
     /// **The startup path and the rebuild path answer "which layer is this file
     /// on, and which node of that layer" identically**, which is the whole
-    /// reason [`crate::sort_compiled`] is one function rather than a match in
+    /// reason [`crate::compile::sort_compiled`] is one function rather than a match in
     /// each of them.
     ///
     /// The two used to hold a copy each and had already drifted: the rebuild
@@ -1022,11 +1037,12 @@ mod tests {
         let mut watch = watch.storing_to(store, tx);
         let request = rebuild(&mut watch).expect("the stack compiles, so it rebuilds");
 
-        let rest: Vec<crate::Named> = paths[1..]
+        let rest: Vec<crate::compile::Named> = paths[1..]
             .iter()
-            .map(|p| crate::Named::bare(p.clone()))
+            .map(|p| crate::compile::Named::bare(p.clone()))
             .collect();
-        let (material, placed) = crate::sort_slot(0, &crate::Named::bare(paths[0].clone()), &rest);
+        let (material, placed) =
+            crate::compile::sort_slot(0, &crate::compile::Named::bare(paths[0].clone()), &rest);
 
         let procs = |checked: &[karakuri_ir::typed::Checked]| {
             checked
@@ -1063,12 +1079,7 @@ mod tests {
             .collect();
         let started: Vec<(&str, u32)> = placed
             .iter()
-            .map(|node| {
-                (
-                    karakuri_environment::setfile::kind_name(node.layer),
-                    node.index,
-                )
-            })
+            .map(|node| (crate::setfile::kind_name(node.layer), node.index))
             .collect();
         assert_eq!(
             rebuilt, started,
@@ -1085,7 +1096,7 @@ mod tests {
 
     /// **A rebuild that cannot be assembled leaves the running Set alone.** This
     /// is the one thing the two sorting paths do differently, and the reason
-    /// [`crate::sort_compiled`] hands back a sentence rather than exiting: a
+    /// [`crate::compile::sort_compiled`] hands back a sentence rather than exiting: a
     /// startup with no picture has nothing to keep showing, and an operator
     /// editing a slot into an illegal shape has a picture on stage.
     #[test]
@@ -1123,8 +1134,12 @@ mod tests {
             let paths: Vec<PathBuf> = unique.iter().map(|f| tmp.path().join(f)).collect();
             let mut watch = Watch::new(
                 0,
-                crate::Named::bare(paths[0].clone()),
-                paths[1..].iter().cloned().map(crate::Named::bare).collect(),
+                crate::compile::Named::bare(paths[0].clone()),
+                paths[1..]
+                    .iter()
+                    .cloned()
+                    .map(crate::compile::Named::bare)
+                    .collect(),
                 karakuri_engine::set::Layering::Overdraw,
                 None,
                 Some(4096),

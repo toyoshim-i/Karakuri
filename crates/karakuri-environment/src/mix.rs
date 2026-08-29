@@ -138,8 +138,6 @@ use karakuri_engine::transport::{Sync, Transport};
 use karakuri_engine::Look;
 use karakuri_store::record::Record;
 
-use crate::{op_wire_name, op_wire_names};
-
 /// What one mix record says, decoded into what the engine takes.
 ///
 /// The engine's own types, not the record's: a `Residency` rather than the
@@ -221,9 +219,9 @@ pub enum Change {
 /// which is the cost P-0074 says the vocabulary pays: *"The two rules — be
 /// engine-neutral, and have no toggles — are not jointly satisfiable unless
 /// the vocabulary owns the lists."* A copy needs somewhere the two meet, and
-/// this is that place: `karakuri-cli` is the only crate in the workspace that
-/// sees both, because it is the only one that depends on the engine and on the
-/// vocabulary at once.
+/// this is that place: this package is where the two are seen together,
+/// because a record is what the engine is driven through here and the
+/// vocabulary is what every surface asks in.
 ///
 /// **`From` impls, which is what ADR-0180 said, are not available here.** Both
 /// types are foreign to this package — `Blend` is `karakuri-engine`'s and
@@ -346,7 +344,7 @@ pub fn current_mask(mask: Mask) -> karakuri_operation_record::Mask {
         // the first wipe of a run the hard aliased front `MASK_SOFTNESS`
         // exists to not have. What this program writes is what it has always
         // written.
-        softness: crate::MASK_SOFTNESS,
+        softness: MASK_SOFTNESS,
     }
 }
 
@@ -646,7 +644,7 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
             exposure,
             white_point,
         } => {
-            let op = crate::parse_op(op)
+            let op = parse_op(op)
                 .ok_or_else(|| format!("tonemap `{op}` — expected {}", op_wire_names()))?;
             Ok(Some(Change::Look(Look {
                 op,
@@ -687,6 +685,76 @@ pub fn change(record: &Record, slot_count: usize) -> Result<Option<Change>, Stri
         // performance's facts go.
         _ => Ok(None),
     }
+}
+
+/// How wide a wipe's soft edge is.
+///
+/// Not zero, and not a key. A hard front is an aliased staircase wherever it is
+/// not axis-aligned, and this is the narrowest edge that hides that at the
+/// resolutions this renders at — narrow enough that a wipe still reads as a
+/// wipe rather than a gradient.
+const MASK_SOFTNESS: f32 = 0.02;
+
+/// Every tone map operator there is. The one list, and its length is in its
+/// type, so adding an operator to it is a deliberate act rather than an
+/// oversight in a `Vec`.
+/// The record's own vocabulary for the output look, which is why it is here
+/// rather than with the keys that cycle it.
+pub const TONEMAPS: [TonemapOp; 4] = [
+    TonemapOp::Clamp,
+    TonemapOp::Reinhard,
+    TonemapOp::Aces,
+    TonemapOp::AgX,
+];
+
+/// Both of an operator's spellings: the one a stream and a flag use, and the
+/// one a human reads.
+///
+/// **An exhaustive match, and that is the point.** There were two hand-written
+/// lists — `--tonemap`'s parser and `op_name`'s display arm — and the `look`
+/// record wanted a third. A lookup over a table would have been one list but
+/// would still answer for an operator missing from it, by falling back to
+/// something plausible; a match does not compile until every operator has both
+/// names. Everything below derives from here, parsing included, so the two
+/// directions cannot disagree.
+fn spellings(op: TonemapOp) -> (&'static str, &'static str) {
+    match op {
+        TonemapOp::Clamp => ("clamp", "clamp"),
+        TonemapOp::Reinhard => ("reinhard", "Reinhard"),
+        TonemapOp::Aces => ("aces", "ACES"),
+        TonemapOp::AgX => ("agx", "AgX"),
+    }
+}
+
+/// How a human reads it. Free to be capitalised the way the papers are,
+/// because nothing parses it.
+pub fn op_name(op: TonemapOp) -> &'static str {
+    spellings(op).1
+}
+
+/// How a stream and a flag spell it. Lower case, stable, and the only spelling
+/// anything parses.
+pub fn op_wire_name(op: TonemapOp) -> &'static str {
+    spellings(op).0
+}
+
+/// The wire spelling back to an operator, by searching the one list with the
+/// one spelling function. `None` for a name this build does not have, which is
+/// the caller's to report against [`op_wire_names`].
+pub fn parse_op(name: &str) -> Option<TonemapOp> {
+    TONEMAPS
+        .iter()
+        .copied()
+        .find(|op| op_wire_name(*op) == name)
+}
+
+/// Every wire spelling, for an error message that says what was available.
+pub fn op_wire_names() -> String {
+    TONEMAPS
+        .iter()
+        .map(|op| op_wire_name(*op))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 #[cfg(test)]
@@ -740,7 +808,7 @@ mod tests {
                  `Record::Transport` carries the name"
             );
         }
-        for op in crate::TONEMAPS {
+        for op in TONEMAPS {
             assert_eq!(
                 tonemap(op).name(),
                 op_wire_name(op),
@@ -1114,7 +1182,7 @@ mod tests {
     /// it.
     #[test]
     fn every_tonemap_operator_has_a_wire_name_that_decodes_back() {
-        for op in crate::TONEMAPS {
+        for op in TONEMAPS {
             let look = Look {
                 op,
                 exposure: 1.0,

@@ -44,24 +44,43 @@
 //!
 //! ## What is here, and what is not yet
 //!
-//! ADR-0215 applied its test to thirteen modules and thirteen passed. This
-//! crate holds nine of them — [`audio`], [`compile`], [`history`], [`meta`],
-//! [`render`], [`scratch`], [`session`], [`setfile`] and [`tempo_source`] —
-//! because ADR-0214 left open whether the move lands in one commit or several
-//! and answered its own question with *several is the likelier*. The seven that
-//! came first were the seven that named nothing else in `karakuri-cli`; the
-//! metadata card and the Set file came second, and they brought the two items
-//! they named with them — the card writer that puts a card in a store, and a
-//! Set file's per-layer node names, which are part of that file's shape. Each
-//! slice is a package boundary and not a redesign: `use` paths changed, `pub`
-//! appeared where crate-private had been enough, and the code inside the
-//! functions did not.
+//! ADR-0215 applied its test to thirteen modules and thirteen passed, and all
+//! thirteen are here — [`audio`], [`compile`], [`history`], [`mcp`], [`meta`],
+//! [`midi`], [`mix`], [`render`], [`scratch`], [`session`], [`setfile`],
+//! [`tempo_source`] and [`watch`] — because ADR-0214 left open whether the move
+//! lands in one commit or several and answered its own question with *several
+//! is the likelier*. The seven that came first were the seven that named
+//! nothing else in `karakuri-cli`; the metadata card and the Set file came
+//! second, and they brought the two items they named with them — the card
+//! writer that puts a card in a store, and a Set file's per-layer node names,
+//! which are part of that file's shape. The watcher, the MCP server, the mixer
+//! and the MIDI map came last and brought eighteen items with them, which is
+//! why this file has code in it at all: five of the eighteen belong to no
+//! module here and are reached from several. Each slice is a package boundary
+//! and not a redesign: `use` paths changed, `pub` appeared where crate-private
+//! had been enough, and the code inside the functions did not.
 //!
-//! The watcher, the MCP server, the mixer and the MIDI map are still in
-//! `karakuri-cli` and still pass the test. They are owed the same move. So is
-//! `Clock`, which ADR-0214 refused to guess at and ADR-0215 settled: wall-clock
-//! time comes from outside this process, so it belongs here — while `Live`,
-//! which holds a window and a device, does not and stays with the surface.
+//! **What is left in `karakuri-cli/src/` is `main.rs` and nothing else** — the
+//! window, the arguments, the key handler and `Live`. That is the line
+//! ADR-0214 said it would not name in advance, and ADR-0215 named the two ends
+//! of it: `Live` holds a window and a device and stays with the surface, while
+//! `Clock` is owed a move it has not had yet, because wall-clock time comes
+//! from outside this process.
+//!
+//! ## The five items here that are no module's
+//!
+//! [`no_such_slot`], [`no_such_renderer`] and [`nothing_to_save`] are refusals,
+//! and
+//! `docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md`
+//! says a refusal a person can reach from two surfaces is one sentence. These
+//! are reached from four — the keys, [`mcp`], [`midi`] and a replayed record
+//! through [`mix`] — and [`accepted_save`] is the sentence beside them that is
+//! not a refusal, said to a terminal and to a waiting client at once. **They
+//! are at the crate root because they are nobody's module**: putting
+//! `no_such_slot` in [`mix`] would make [`mcp`] and [`midi`] depend on the
+//! mixer for a sentence, which is a shape rather than a home. [`SAVE_WAIT`] is
+//! here for the other half of that reason — the run bounds its quit by it and
+//! [`mcp`] bounds a client's wait by it plus five, and neither of them owns it.
 //!
 //! **These are one-line restatements; the canonical text is one file each in
 //! `docs/principles/` and one record each in `docs/adr/`, and where this
@@ -77,18 +96,190 @@
 // - `audio` — a microphone, the beat it is tracking, and the record for both.
 // - `compile` — a `.kir` off a disk, through the pipeline, with its bytes kept.
 // - `history` — the edit history: a directory per day, a chain per procedure.
+// - `mcp` — a socket, and the Model Context Protocol a model speaks over it.
 // - `meta` — an artifact's card: what a compile pass can say, and where it lands.
+// - `midi` — a port, and what the operator asked for through it.
+// - `mix` — the performance as records: faders, blends, residency, the look.
 // - `render` — a frame written to a PNG: the window's path, minus the window.
 // - `scratch` — the copies a live run edits, so an original is untouched.
 // - `session` — the recorder that writes the stream and the split that reads it.
 // - `setfile` — the material as a record: what a Set was, written down and read back.
 // - `tempo_source` — another program's clock, and what to believe of it.
+// - `watch` — a slot's files, polled, and the rebuild a change asks for.
 pub mod audio;
 pub mod compile;
 pub mod history;
+pub mod mcp;
 pub mod meta;
+pub mod midi;
+pub mod mix;
 pub mod render;
 pub mod scratch;
 pub mod session;
 pub mod setfile;
 pub mod tempo_source;
+pub mod watch;
+
+/// **How long the end of a run waits for saves still being written.**
+///
+/// Long enough that a save of a few dozen lines and a handful of artifacts
+/// finishes on any disk that is answering, and short enough that one which is
+/// not answering costs a quit five seconds rather than the window. See
+/// the surface's `Live::awaited_saves` for why the wait exists at all.
+pub const SAVE_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// **No such slot**, in the words every surface says it in.
+///
+/// Extracted where a second caller appeared, rather than copied to it: focusing
+/// a slot that does not exist and saving one are the same mistake and were about
+/// to be two sentences about it.
+///
+/// **And "every surface" is now literally every one of them**, which it was not
+/// when this sentence was first written. There were four spellings of one
+/// refusal — the keys said `no slot 9: this deck holds slots 0-3`, `--mcp` said
+/// `holds 0-3`, MIDI said `no slot 9 — this deck holds slots 0-3`, and a `gain`
+/// record naming a slot said `slot 9: this deck holds slots 0-3` — so a model
+/// calling `save_set {"slot":9}` and an operator pressing `9` got different
+/// sentences for the same mistake on the same control. That was tolerable while
+/// each surface reached different controls; it stopped being tolerable when
+/// `save_set` made one control reachable from two of them: the refusals are
+/// the same sentences whoever meets them — see
+/// `docs/principles/0061-a-refusal-a-person-can-reach-from-two-surfaces-is-one-sentence.md`.
+/// `mcp.rs`, `midi.rs` and
+/// `mix.rs` all call this now. Each of them pins it with an `assert_eq!`
+/// against this function rather than trusting this comment — see
+/// `mcp::tests::a_slot_a_layer_and_a_renderer_resolve_and_anything_else_is_refused`,
+/// `mcp::wire_tests::a_save_for_a_slot_that_does_not_exist_is_refused_here`,
+/// `midi::tests::an_unmapped_control_and_a_missing_slot_are_each_reported_once`
+/// and `mix::tests::a_slot_past_the_deck_is_refused_with_the_range_it_missed`.
+/// Every one of them asked only `contains(...)` before, which is why four
+/// spellings could live side by side unnoticed.
+///
+/// The engine's own `no slot` messages are deliberately *not* routed here: they
+/// are `assert!`s on a call that should never have been made, addressed to
+/// whoever is holding the debugger, and a refusal an operator reads and a panic
+/// a programmer reads are two audiences that happen to share a phrase.
+pub fn no_such_slot(slot: usize, slot_count: usize) -> String {
+    match slot_count {
+        // Cannot happen — a run with no slots does not reach a window — and
+        // written anyway, because `slot_count - 1` on it is an underflow and a
+        // panic, which is what the arm that "cannot happen" costs when the shape
+        // around it changes.
+        0 => format!("no slot {slot}: this deck holds none"),
+        n => format!("no slot {slot}: this deck holds slots 0-{}", n - 1),
+    }
+}
+
+/// **A renderer the slot does not draw with**, in the words every surface says
+/// it in.
+///
+/// [`no_such_slot`]'s shape, one address down: the thing named, then what there
+/// was to name. A selection is the first control that addresses *inside* a
+/// slot, so it is the first refusal that needed this — and it is a free
+/// function beside that one rather than a sentence in `Live`, because the key
+/// press and a replayed record both meet it and telling one operator two
+/// stories about one mistake is what `no_such_slot` exists to have stopped.
+///
+/// **The count comes from the Set on screen, not from the flags the run
+/// started with**, which is what makes it true after a hot swap: a rebuilt
+/// slot draws with however many renderers its new sources declare.
+pub fn no_such_renderer(slot: usize, at: usize, count: usize) -> String {
+    match count {
+        // Cannot happen — a Set with no renderer does not build — and written
+        // anyway, because `count - 1` on it underflows and panics, which is
+        // what the arm that "cannot happen" costs when the shape around it
+        // changes. The same reasoning as [`no_such_slot`]'s empty deck.
+        0 => format!("no renderer {at}: slot {slot} draws with none"),
+        n => format!(
+            "no renderer {at}: slot {slot} draws with renderers 0-{}",
+            n - 1
+        ),
+    }
+}
+
+/// **Why a slot has nothing to save**, in the words the operator is given.
+///
+/// **Named, and with the flag that changes the answer.** Every refusal around
+/// this one names the file or the range it is about; this one used to name
+/// neither the id the run came from nor anything the operator could do, which
+/// leaves them pressing a key that reports a fact about the world rather than a
+/// way out of it.
+///
+/// A free function over the two facts it turns on, for the reason the surface's
+/// `drained_saves` is one: it has to reach a model as well as a terminal now,
+/// which makes it worth a test, and `Live` needs a window and a GPU.
+///
+/// `no_files` is whether this slot has any startup sources at all — see the
+/// surface's `Live::startup`, which is empty exactly for a slot filled straight from a Set
+/// file by hash.
+pub fn nothing_to_save(slot: usize, loaded_set: Option<&str>, no_files: bool) -> String {
+    match loaded_set {
+        // **Both flags, because `editable()` is both.** It is `editable()` that
+        // materialises a loaded Set into the scratch and puts it in
+        // `args.sets`, and that is `--watch || --mcp` — so `--load-set X --mcp
+        // PORT` with no `--watch` already saves like any other slot. Naming only
+        // `--watch` sent an operator who had `--mcp` off to restart a set for a
+        // flag they did not need.
+        Some(id) if no_files => format!(
+            "slot {slot}: nothing to save — it was filled from set `{id}` by hash, with no \
+             files behind it and nothing able to rebuild it. Start the run with `--watch` \
+             or `--mcp` and this slot saves like any other"
+        ),
+        _ => format!(
+            "slot {slot}: nothing to save — this slot's sources are not in the store, which \
+             was said at startup, and no rebuild of it has landed since"
+        ),
+    }
+}
+
+/// **A save has been taken and named**, said to the terminal and to whoever
+/// asked for it if that was not a hand. Returns the id it will be filed under.
+///
+/// Said before the store thread starts, because the operator pressed a key and
+/// the answer to "did it take" is owed now rather than when the disk gets round
+/// to it. Where it went is said on arrival — see the surface's `Live::took_save`.
+///
+/// **The same sentence to a waiting client, and this half is the one a timeout
+/// depends on.** [`mcp::Reply`] carries two messages because "accepted, under
+/// this id, outcome not yet known" is a third fact the protocol's one boolean
+/// cannot hold: a client whose deadline passes with this message in hand is
+/// told to go looking under the id, and one without it is told *nothing was
+/// saved and asking again is safe* — which is a false claim to a model about a
+/// save that is running and will land.
+///
+/// **A free function over the four facts it turns on**, for the reason
+/// [`nothing_to_save`] and the surface's `drained_saves` are, and the reason
+/// bites harder here. Those are refusals — said *instead of* a save, and
+/// reachable without a window. This is said *during* one, and inline it sat
+/// below the surface's `playing_values`, which reads `deck.slot(slot)` and is
+/// the single line of its `Live::save_set` that genuinely needs a GPU. So it was the one half of the
+/// accept-then-settle sequence no test could reach: deleting the `accepted`
+/// call left the whole suite green, because every `--mcp` test drives a
+/// stand-in loop that sends `accepted` itself. Above that line it is testable,
+/// and `mcp::tests::a_save_the_loop_has_taken_names_its_id_to_a_client_that_times_out`
+/// is what deleting the call now costs.
+pub fn accepted_save(
+    slot: usize,
+    id: Option<String>,
+    sources: &setfile::Sources,
+    root: &std::path::Path,
+    reply: Option<&mcp::Reply>,
+) -> String {
+    // **A name is a stamp, because a key press cannot type one.** See
+    // `history::stamped_id`, whose convention this is: an operator looks for
+    // the time they saved it. A client that named one gets the name it named —
+    // see `mcp::checked_id` on why a set filed under a name its caller did not
+    // ask for is the worse answer.
+    let id = id.unwrap_or_else(history::stamped_id);
+    let said = format!(
+        "slot {slot}: saving {} node{} as set `{id}` in {}",
+        sources.len(),
+        if sources.len() == 1 { "" } else { "s" },
+        root.display()
+    );
+    eprintln!("{said}");
+    if let Some(reply) = reply {
+        reply.accepted(&said);
+    }
+    id
+}

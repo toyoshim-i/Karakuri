@@ -12,8 +12,10 @@
 //! ```
 //!
 //! **The exhaustiveness moved and did not go.** This used to be one match over
-//! eight `Action`s in [`crate::Live`], and *a control added to one and not the
-//! other does not compile* was its whole claim. Against a fifty-variant
+//! eight `Action`s in the CLI's `Live` — a plain name rather than a link, since
+//! ADR-0215 keeps the window and the device with the surface and this module is
+//! one crate over from it now — and *a control added to one and not the other
+//! does not compile* was its whole claim. Against a fifty-variant
 //! vocabulary that claim would be false, and the guarantee lives where it is
 //! now true: `karakuri_operation_record::written` is one exhaustive match over
 //! all fifty, so an operation nobody has said what to do with stops the build
