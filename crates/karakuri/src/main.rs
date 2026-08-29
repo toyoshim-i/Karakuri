@@ -1,21 +1,32 @@
-//! The console, drawn: every region in its place, with its heading, and
-//! nothing inside.
-//!
-//! **One window loop, not two.** This replaces `examples/layout.rs`, which
-//! painted every region as a flat rectangle and drew no text at all — a
-//! harness written to answer *does a divider drag* before there was a toolkit
-//! to answer it with. `egui` supersedes the painter, and keeping both would
-//! have meant two window loops disagreeing about who owns the pointer.
+//! **The instrument**: the console in a window, with the engine behind it.
 //!
 //! ```sh
-//! cargo run -p karakuri-console --example panel
-//! cargo test -p karakuri-console                   # the model and the view
-//! cargo test -p karakuri-console --example panel   # this file's own tests
+//! cargo run -p karakuri                                # the pair the repository ships
+//! cargo run -p karakuri -- geometry.kir renderer.kir   # a pair of your own
+//! cargo test -p karakuri                               # this file's own tests
 //! ```
 //!
-//! # What this is for
+//! **This is the program, and it used to be an example.** It was
+//! `karakuri-console/examples/panel.rs` until
+//! [ADR-0214](../../../docs/adr/0214-the-program-moves-out-of-the-cli-and-two-thin-binaries-sit-over-it.md),
+//! and it was an example for one reason: everything a program needs beyond the
+//! panel lived in `karakuri-cli`, which has no library target, so there was
+//! nothing for a binary to sit on. There is now — `karakuri-environment` — and
+//! [ADR-0213](../../../docs/adr/0213-the-interface-milestones-meter-is-the-panel-column-and-has-means-an-operator-reaches-it.md)
+//! is why the difference is not a packaging preference: a `has` badge in the
+//! panel column of `docs/manual/operations.html` means **an operator running
+//! the instrument reaches the operation**, and nobody plays a set from
+//! `cargo run --example`.
 //!
-//! Five things, and only one of them is a bay.
+//! **It is still a package with no library target of its own, deliberately.**
+//! Nothing may depend on this one. A surface is where the buck stops.
+//!
+//! # What it is for, and what became free
+//!
+//! The example this was carried five questions in its header. Four of them are
+//! answered by this being a program at all — a person launches it and sees the
+//! answer — and they are kept here because the *code* that answers them is what
+//! moved:
 //!
 //! 1. That `egui` renders through `wgpu` 30 into this window at all, which is
 //!    the bet
@@ -35,40 +46,54 @@
 //! 3. That the arrangement's numbers look right at real sizes against
 //!    `docs/manual/console.html`.
 //! 4. That dragging a boundary still works with a toolkit in the loop.
-//! 5. **What the window costs**, printed once nobody has touched it for a
-//!    while. It used to be *what a still panel costs*, and with a live picture
-//!    in the Program bay and deck A auditioning under it there is no still
-//!    panel to measure — so what is printed is the price of the thing that
-//!    replaced it. See [`Costs::say`].
+//!
+//! **The fifth is the one that is still a harness, and it is still here.**
+//! [`Costs::say`] prints what the window costs once nobody has touched it for
+//! three seconds, and to do it this binary installs a counting
+//! [`#[global_allocator]`](Counting) over the whole process. That is a
+//! measuring instrument inside the instrument, and it is not free: every
+//! allocation a player's run makes pays a thread-local increment for it. It is
+//! kept because nothing else measures these numbers and two of them are load
+//! bearing — `karakuri_console::budget::PANEL_PASS` names this file as what
+//! holds its 1.26 ms honest, and both schedulability conditions are asserted
+//! against that number. **Whether a measurement harness belongs inside the
+//! program a player launches is a decision this move did not take.** Half of
+//! what it collects is not a harness at all: the per-frame timing is what the
+//! transport row draws as `frame_ms` and `fps`.
 //!
 //! **It is deliberately not the start of a bay.** Every body is empty except
 //! the picture and the preview row, and both are empty of everything this file
 //! could have invented — no label, no frame, no placeholder; see
 //! [`karakuri_console::view`].
 //!
-//! **There is one frame loop now, and it is not in this file.**
+//! **There is one frame loop, and it is not in this file.**
 //! `frame::compose` is `karakuri-engine`'s, and `karakuri-cli`'s window and
 //! its PNG writer are the other two callers — which is the point of it: this
-//! example used to hand-roll `begin_frame`, a render, a conditional present
+//! file used to hand-roll `begin_frame`, a render, a conditional present
 //! pass per target, the panel and a submit, beside a loop in another crate
 //! that said the same thing differently, and every replay defect this project
 //! has found came from two such loops disagreeing.
 //!
-//! # The engine here is scaffolding and looks it
+//! # The engine here is the shortest path from two files to texels
 //!
-//! Two slots, built from two of the repository's own `examples/*.kir` the way
-//! `karakuri-cli` builds them, and **no more than that**: no audio, no MIDI,
-//! no argument parsing, and no session. Two things beyond the engine are here
-//! and both are the harness's. **The store is opened to be read** — once, at
+//! Two slots, built from one `.kir` pair the way `karakuri-cli` builds them,
+//! and **no more than that**: no audio, no MIDI, no MCP, no watcher, no replay
+//! and no session. The pair is [`Sources`], and it is the whole of what this
+//! program takes from the command line. Two things beyond the engine are here.
+//! **The store is opened to be read** — once, at
 //! startup, so the Library bay has names to list ([`library`]) — and it is
 //! neither created nor written to. And **records exist**: a mixer control
 //! emits an operation, `karakuri-operation-record` turns it into a `Record`,
 //! and [`apply`] is what moves the deck with it, because
 //! [P-0028](../../../docs/principles/0028-every-control-ends-in-the-same-record.md)
 //! is that every control ends in the same record. Nothing here reaches a disk
-//! either way, and no record stream drives time. What `karakuri-cli` puts
-//! around a deck is a program; this is the shortest path from two files to
-//! texels, because the question being answered is whether the texels arrive.
+//! either way, and no record stream drives time.
+//!
+//! **What is missing is named rather than left to be noticed.** Audio, MIDI,
+//! MCP, the watcher and replay are all `karakuri-environment`'s and all
+//! reachable from here; none of them is wired up in this first version,
+//! because a slice that added them would be unreviewable. `karakuri-cli` is
+//! still what you play a set with while that is true.
 //!
 //! **There is a governor, and it is the one thing here that is not the
 //! shortest path.** It runs once, at startup, and it is [`Engine::ask_to_prime`]:
@@ -85,7 +110,7 @@
 //! gets a live cell; deck B is parked, which is not stepping and not drawn, so
 //! there is nothing to audition in its cell; and C and D have nothing behind
 //! them at all. `off` is a state an operator chooses rather than a thing not
-//! built yet, and all three are the truth about this example rather than a gap
+//! built yet, and all three are the truth about this program rather than a gap
 //! in it.
 //!
 //! # This file owns none of the model, and none of the view
@@ -129,7 +154,7 @@
 //! another frame on its own. A `get_current_texture` that comes back
 //! `Outdated` and is dropped with a bare `return` is therefore a window that
 //! stops drawing and never starts again, with nothing said anywhere — see
-//! [`missed`], carried over from the example this replaces, and
+//! [`missed`], carried over from the example that preceded this one, and
 //! `karakuri-cli`'s window sink, which carries the same table after the same
 //! failure.
 //!
@@ -143,6 +168,16 @@ use std::alloc::{GlobalAlloc, Layout as AllocLayout, System};
 use std::cell::Cell;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+// **The toolkit comes from `karakuri-console` and is not named in this
+// package's manifest.** `egui`, `egui-wgpu` and `egui-winit` move together and
+// `egui-wgpu` is what pins `wgpu`; that crate's `lib.rs` re-exports all three
+// and says why in as many words — *"a window loop written against this crate
+// takes all three from here"*. Depending on them directly would let this
+// package pick an `egui-wgpu` that wants a different `wgpu`, and then the
+// engine and the panel cannot share a `Device`, which is the whole of what
+// ADR-0155 paid a major version for.
+use karakuri_console::{egui, egui_wgpu, egui_winit};
 
 use karakuri_console::budget::PANEL_PASS;
 use karakuri_console::input::{claim, Claim};
@@ -160,6 +195,7 @@ use karakuri_engine::{
     compose, Blend, Committed, Control, Deck, Gpu, HotSwap, Look, Mask, MaskKind, Present,
     Residency, Set, Sink, Skip, TonemapOp,
 };
+use karakuri_environment::mix;
 use karakuri_layout::{Axis, Hit, NodeId, Point};
 use karakuri_operation::{BlendMode, Operation};
 use karakuri_operation_record::{written, Current, Written};
@@ -218,7 +254,7 @@ const SAMPLE: usize = 240;
 /// ([ADR-0191](../../../docs/adr/0191-the-panels-parked-deck-is-parked-by-the-governor-or-it-is-a-drawing-of-one.md)).
 /// Nobody re-checked it for two commits, because nothing was checking it.
 ///
-/// **Taken on 2026-08-26**, over nine runs of this example on an Apple M4 Pro
+/// **Taken on 2026-08-26**, over nine runs of this program on an Apple M4 Pro
 /// with nothing touching the window: per-frame medians of 524 to 538
 /// allocations and 671.4 to 695.3 kB, of which the two below are the middle.
 /// What the panel had in it while they were taken is the last paragraph the
@@ -345,7 +381,7 @@ struct Cost {
     ui: Duration,
     /// Uploading the tessellated geometry, recording the panel's render pass,
     /// and the one submission that carries both halves — the whole of what the
-    /// example records from inside [`compose`]'s `finally`, plus `compose`'s
+    /// program records from inside [`compose`]'s `finally`, plus `compose`'s
     /// own tail: `Frame::finish`, and each sink's `present`, which for these
     /// two sinks is nothing at all. Excludes `Queue::present` on the surface,
     /// which is the display's pace and not a cost.
@@ -382,7 +418,7 @@ struct Cost {
     /// `finish` on the frame's encoder, which is [`compose`]'s last act and is
     /// why this is measured from inside `finally` to after `compose` returns.
     /// The only other thing in that window is each sink's `present`, and both
-    /// of this example's are `Ok(())` — it is five sixths of `paint`.
+    /// of this program's are `Ok(())` — it is five sixths of `paint`.
     ///
     /// Printed because the whole of the rest of `paint` is what caching a bay
     /// into a texture would make cheaper, and this is not: it is `wgpu`'s
@@ -490,7 +526,7 @@ struct Costs {
     /// It is here for one sentence, and the sentence was wrong without it.
     /// With nothing in the Program bay making texels the reading used to blame
     /// the only other thing it knew about — an `egui` repaint delay answered
-    /// immediately — and on this example that is never the answer: folding the
+    /// immediately — and on this program that is never the answer: folding the
     /// picture and the preview row away leaves the window drawing 28.0 to 28.3
     /// frames a second over two runs on 2026-08-26, which is the roll's
     /// declared 30 Hz and not a mishandled delay. Folding the mixer bay away
@@ -554,7 +590,7 @@ impl Costs {
     ///
     /// The other way it can fail is loud rather than quiet: something asking
     /// for frames without pause never lets the window be still for [`STILL`],
-    /// and then no reading is printed at all. **A run of this example that
+    /// and then no reading is printed at all. **A run of this program that
     /// prints no reading is that failure.**
     fn owes(&mut self) {
         self.owed = true;
@@ -614,7 +650,11 @@ impl Costs {
 
     /// The reading. Median and worst rather than a mean for the per-frame
     /// figures: a frame path is judged by its tail.
-    fn say(&mut self) {
+    /// `capacity` and `material` are the run's, handed in rather than read off
+    /// a constant: this program takes its `.kir` pair from the command line, so
+    /// what the engine half of this reading was taken over is only known at run
+    /// time. See [`Engine::capacity`] and [`Sources::material`].
+    fn say(&mut self, capacity: u32, material: &str) {
         if self.said {
             return;
         }
@@ -864,7 +904,7 @@ impl Costs {
                  is no longer ADR-0164's: that record measured 184 allocations and 226.2 kB \
                  a frame here with every bay empty, which this panel has not been since the \
                  mixer bay landed — 456 allocations there, and 525 once deck B was parked \
-                 (ADR-0191). Taken again on {WRITTEN_ON} over nine runs of this example \
+                 (ADR-0191). Taken again on {WRITTEN_ON} over nine runs of this program \
                  with nothing touching the window: {WRITTEN_ALLOCS} allocations and \
                  {WRITTEN_KB:.1} kB a frame in the middle of the nine, which spread 524 to \
                  538 and 671.4 to 695.3 kB. What the panel had in it while they were taken \
@@ -884,9 +924,9 @@ impl Costs {
                 Some(factor) => println!(
                     "  and THIS run read {}, which is {factor:.1}x that — past the {DRIFT:.0}x \
                      this file will quote a figure across. **The sentence above is stale.** \
-                     Re-take it over several runs of this example, write what the panel had in \
+                     Re-take it over several runs of this program, write what the panel had in \
                      it, and re-date `WRITTEN_ALLOCS`, `WRITTEN_KB` and `WRITTEN_ON` in \
-                     `examples/panel.rs` — which is what nobody did for the two commits before \
+                     `crates/karakuri/src/main.rs` — which is what nobody did for the two commits before \
                      this line existed.",
                     allocs[n / 2]
                 ),
@@ -926,7 +966,7 @@ impl Costs {
                 Some(factor) => println!(
                     "  and THIS run read {:.3}, which is {factor:.1}x that — past the \
                      {DRIFT:.0}x this file will quote a figure across. **The declared cost \
-                     is stale.** Re-take it over several runs of this example and rewrite \
+                     is stale.** Re-take it over several runs of this program and rewrite \
                      `PANEL_PASS` in `crates/karakuri-console/src/budget.rs`, with the \
                      machine and the date beside it, because both schedulability \
                      conditions are asserted against that number and nothing else measures \
@@ -947,15 +987,18 @@ impl Costs {
                  tally rolling once a second — over Library, Staging, Inspector, Master and \
                  Sequencer, which are a head and nothing else. That is NOT the workspace's \
                  reference workload. The \
-                 engine half IS: one Set of {} elements at {}x{}, one step a frame — the \
+                 engine half is one Set of `{}` — {} elements at {}x{}, one step a frame — the \
                  deck's second slot is parked, and a parked slot neither steps nor draws, \
                  so it is in none of these numbers — and \
                  that one canvas presented twice — into the picture's rectangle, \
                  and again into deck A's preview cell, both of which are the \
-                 canvas's own shape \
-                 (docs/contributing.md §1). Host clock, debug profile with dependencies \
-                 at opt-level 3.",
-                WINDOW.0, WINDOW.1, CAPACITY, CANVAS.0, CANVAS.1
+                 canvas's own shape. It is the workspace's reference workload \
+                 (docs/contributing.md §1) only while nobody passed a pair on the command \
+                 line: 262144 elements at 1280x720 is what `drift_shell.kir` declares and \
+                 what a bare `cargo run -p karakuri` therefore runs, and the figures above \
+                 are comparable with the rest of this repository's exactly that far. Host \
+                 clock, debug profile with dependencies at opt-level 3.",
+                WINDOW.0, WINDOW.1, material, capacity, CANVAS.0, CANVAS.1
             );
             println!(
                 "  and every figure above is taken on a core that spends the vsync wait \
@@ -1445,7 +1488,7 @@ impl Readout {
         );
         println!(
             "B, C and D read `off`, and for two different reasons. C and D have nothing \
-             behind them: this example's engine is a deck of TWO slots. B has a deck behind \
+             behind them: this program's engine is a deck of TWO slots. B has a deck behind \
              it and no audition — it is PARKED, which is not stepping and not drawn, so \
              there is nothing for a cell to show. three cells saying off are what this \
              program is rather than something left unfinished, and each cell that is on \
@@ -1474,7 +1517,7 @@ impl Readout {
         );
         println!(
             "six things the mock draws in that row are NOT drawn, and each is a control \
-             over machinery that is in neither this crate nor this example: audio-in, tap, \
+             over machinery that is in neither this crate nor this program: audio-in, tap, \
              learn, map, landed and rec. `view::transport` names them one by one with what \
              is missing behind each."
         );
@@ -1498,14 +1541,14 @@ impl Readout {
             self.view.mixer.len()
         );
         // **The park, said in this file's voice and then in the engine's.**
-        // The sentence is the example's, because the words on this window are;
+        // The sentence is this program's, because the words on this window are;
         // the numbers under it are `Report`'s own `Display` and the same three
         // fields `karakuri-cli`'s `report_governing` prints, so an operator
         // reading a park here and a park there is reading one thing.
         println!(
             "deck B's strip is the one that MOVES: its chip reads ALLOC and rolls part of \
              the way toward PRIM once a second and falls back, never landing, because what \
-             the slot was asked for and what it is doing disagree. this example asks for B \
+             the slot was asked for and what it is doing disagree. this program asks for B \
              to be primed at startup and the budget has no room, so `Deck::govern` holds it \
              at allocated with the request intact — that is a PARK, which is `not now` and \
              not `no`: nothing has to be asked twice, and the next pass over a deck with \
@@ -1720,12 +1763,6 @@ fn knob_word(knob: Knob) -> &'static str {
 /// engine renders cannot come from two places — see [`aims`].
 const CANVAS: (u32, u32) = (1280, 720);
 
-/// `drift_shell.kir`'s own `capacity [4096, 1048576] = 262144`, written here
-/// because `Set::build` takes a number rather than reading the `.kir`'s
-/// default. The same number `karakuri-cli` runs by default, for the reason
-/// above.
-const CAPACITY: u32 = 262144;
-
 /// The seed salt, which decides where the elements start. Any value is a
 /// picture; 7 is the one `karakuri-cli`'s own tests use, so this looks like
 /// what they look like.
@@ -1748,36 +1785,122 @@ const WARM_SEED_SALT: u32 = 8;
 const ON_AIR: usize = 0;
 const ASKED_TO_PRIME: usize = 1;
 
-/// **The two `.kir` files each Set is built from**, named once so that what
-/// is loaded and what the mixer strip is called cannot drift apart. See
-/// [`MATERIAL`].
-const L1_KIR: &str = "examples/drift_shell.kir";
-const L4_KIR: &str = "examples/soft_points.kir";
-
-/// **What the mixer strip calls what this deck is playing**, and it is this
-/// file's word rather than the engine's.
+/// **The `.kir` pair this plays, and the whole of what the command line
+/// takes.**
 ///
-/// `view::Strip::name` says why there is no other answer: nothing reachable
-/// from a `Deck` carries a name for the material in a slot. A `Set` names its
-/// *nodes* and its *published controls* and has no name of its own, which is
-/// right — a Set is built from a list of `.kir` files, and only whoever passed
-/// that list knows what to call the result. **This is that list**, derived
-/// from the two paths above rather than typed again, so a strip cannot go on
-/// saying `drift_shell` after somebody loads something else.
-fn material() -> String {
-    let stem = |path: &str| {
-        std::path::Path::new(path)
-            .file_stem()
-            .map_or_else(String::new, |stem| stem.to_string_lossy().into_owned())
-    };
-    format!("{} + {}", stem(L1_KIR), stem(L4_KIR))
+/// A Set is built from an L1 and an L4 — a geometry and a renderer — and
+/// `Set::build` takes exactly those two. **They are one Set, not two slots**:
+/// the deck's two slots are this same pair built twice, at two seed salts
+/// ([`SEED_SALT`] and [`WARM_SEED_SALT`]), so that the slot the budget parks is
+/// a different simulation of the same procedure rather than a second copy of
+/// the same one.
+///
+/// **Deliberately not `karakuri-cli`'s parser.** That program has thirty-odd
+/// flags, `--set a.kir,b.kir` among them, and they live in its own `main.rs`
+/// where nothing else can reach them. A second `--flag` vocabulary here would
+/// be a second answer to *how does an operator name material*, which is the
+/// failure this whole move exists to stop paying for
+/// ([P-0031](../../../docs/principles/0031-a-name-means-one-thing-across-the-system.md)).
+/// So this is two positional paths and nothing else: enough to pick what plays,
+/// and no vocabulary to disagree with. The day the two programs share one, it
+/// comes from a package both can reach and this goes.
+///
+/// `Debug` unconditionally rather than `#[cfg_attr(test, derive(Debug))]`: that
+/// idiom does not survive a crate boundary — `cfg(test)` is set when the
+/// *defining* crate's tests compile and not when a consumer's do — and
+/// ADR-0214 names it as the one class of surprise a move of this kind produces.
+/// Nothing consumes this type today, and writing the version that would break
+/// is not cheaper than writing the one that would not.
+#[derive(Debug)]
+struct Sources {
+    l1: std::path::PathBuf,
+    l4: std::path::PathBuf,
+}
+
+impl Default for Sources {
+    /// **The repository's own pair, resolved against the workspace root** —
+    /// which is what this program drew before it took an argument, so a bare
+    /// `cargo run -p karakuri` behaves as it always did.
+    ///
+    /// Against the workspace root rather than the working directory, and that
+    /// asymmetry with a typed path is on purpose: a default nobody named has to
+    /// find the file wherever the run was started from, and a path an operator
+    /// *typed* is theirs and is read from where they typed it.
+    fn default() -> Sources {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        Sources {
+            l1: root.join("examples/drift_shell.kir"),
+            l4: root.join("examples/soft_points.kir"),
+        }
+    }
+}
+
+impl Sources {
+    /// **What the mixer strip calls what this deck is playing**, and it is this
+    /// file's word rather than the engine's.
+    ///
+    /// `view::Strip::name` says why there is no other answer: nothing reachable
+    /// from a `Deck` carries a name for the material in a slot. A `Set` names
+    /// its *nodes* and its *published controls* and has no name of its own,
+    /// which is right — a Set is built from a list of `.kir` files, and only
+    /// whoever passed that list knows what to call the result. **This is that
+    /// list**, derived from the two paths rather than typed again, so a strip
+    /// cannot go on saying `drift_shell` after somebody loads something else.
+    fn material(&self) -> String {
+        let stem = |path: &std::path::Path| {
+            path.file_stem()
+                .map_or_else(String::new, |stem| stem.to_string_lossy().into_owned())
+        };
+        format!("{} + {}", stem(&self.l1), stem(&self.l4))
+    }
+}
+
+/// **How this program is called**, printed for `--help` and for anything it
+/// cannot read as a pair.
+const USAGE: &str = "\
+usage: karakuri [GEOMETRY.kir RENDERER.kir]
+
+  The console, with a deck behind it. Both paths or neither: a Set is an L1 and
+  an L4, and with neither the repository's own pair is played.
+
+  This is not `karakuri-cli`'s command line and does not try to be — that one
+  has the flags, the store, the audio, the MIDI and the MCP server, and its
+  parser is its own. See `cargo run -p karakuri-cli -- --help`.";
+
+/// **The command line, read.** Two paths or none; `--help` or `-h` prints
+/// [`USAGE`]; anything else is a refusal that prints it.
+///
+/// A free function over an iterator rather than a read of `std::env::args`
+/// inside [`main`], for the reason [`karakuri_environment`]'s refusals are free
+/// functions: `main` cannot be called from a test and a refusal nobody can
+/// reach is a refusal nobody checked. See
+/// `a_set_is_two_paths_or_none_and_anything_else_is_refused`.
+fn sources_from<I: IntoIterator<Item = String>>(args: I) -> Result<Sources, String> {
+    let args: Vec<String> = args.into_iter().collect();
+    if args.iter().any(|a| a == "-h" || a == "--help") {
+        return Err(String::new());
+    }
+    match args.as_slice() {
+        [] => Ok(Sources::default()),
+        [l1, l4] => Ok(Sources {
+            l1: std::path::PathBuf::from(l1),
+            l4: std::path::PathBuf::from(l4),
+        }),
+        [one] => Err(format!(
+            "one path given (`{one}`) and a Set needs two: a geometry and a renderer"
+        )),
+        many => Err(format!(
+            "{} paths given and a Set is built from two: a geometry and a renderer",
+            many.len()
+        )),
+    }
 }
 
 /// **One simulation step per frame drawn, and no clock anywhere.**
 ///
 /// [P-0002](../../../docs/principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md)
 /// says simulation time comes from a record and never from a clock. There is
-/// no record here — this is a panel harness, not a session — so the honest
+/// no record here — this program is not a session — so the honest
 /// third option is neither: a fixed count per frame, which makes the picture's
 /// motion a function of frames drawn and of nothing else. It is not a
 /// performance, and a `karakuri-cli` that measured an interval and wrote a
@@ -1792,7 +1915,7 @@ const STEPS_A_FRAME: u8 = 1;
 /// a key still has to say what the look is. Saying *what `Present` already
 /// defaults to* is the honest answer here: this file has no session, no `look`
 /// record and no key that changes it, so a different value would be this
-/// example inventing an aesthetic the rest of the workspace does not run
+/// program inventing an aesthetic the rest of the workspace does not run
 /// under.
 const LOOK: Look = Look {
     op: TonemapOp::Aces,
@@ -2097,9 +2220,14 @@ impl Sink for Presented {
 /// **Three of the four preview cells are still off, and now for two reasons.**
 /// Deck A is the only audition there is to show: deck B is parked and so is
 /// making no texels, and C and D have nothing behind them at all. Three cells
-/// reading `off` are the truth about this example rather than a gap in it.
+/// reading `off` are the truth about this program rather than a gap in it.
 struct Engine {
     deck: Deck,
+    /// **Elements per geometry, read off the L1's own `capacity` declaration**
+    /// rather than named here — see [`Engine::new`]. Kept because the reading
+    /// [`Costs::say`] prints names it, and a workload figure that is not the
+    /// one the run used is worse than none.
+    capacity: u32,
     present: Present,
     /// The Program bay's picture.
     picture: Presented,
@@ -2138,21 +2266,22 @@ impl Engine {
     fn new(
         gpu: &Gpu,
         renderer: &mut egui_wgpu::Renderer,
+        sources: &Sources,
         layout: &karakuri_layout::Layout,
         scale: f32,
     ) -> Engine {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let l1 = checked(&root.join(L1_KIR));
-        let l4 = checked(&root.join(L4_KIR));
+        let l1 = checked(&sources.l1);
+        let l4 = checked(&sources.l4);
+        let capacity = capacity_of(&l1);
         // **The same pair twice, and the salt is the only difference.** The
         // second slot exists to be asked for and refused, so what is in it
         // matters less than that it is a Set the governor can measure and
         // budget for like any other — building it from a second `.kir` pair
-        // would be this example loading material to make a point about a
+        // would be this program loading material to make a point about a
         // residency.
         let built = |salt| {
-            Set::build(&gpu.device, &gpu.queue, &l1, &l4, CAPACITY, salt)
-                .expect("the example pair builds a Set")
+            Set::build(&gpu.device, &gpu.queue, &l1, &l4, capacity, salt)
+                .expect("the pair builds a Set")
         };
         let mut deck = Deck::new(
             &gpu.device,
@@ -2180,6 +2309,7 @@ impl Engine {
         let [picture, preview] = aims(layout, present.size());
         Engine {
             deck,
+            capacity,
             present,
             picture: Presented::new(gpu, renderer, "program view", picture, scale),
             // Named for the deck it is of, because there is one of these per
@@ -2191,7 +2321,7 @@ impl Engine {
     }
 
     /// **Ask deck B to warm up, and let the budget answer.** The one governor
-    /// pass this example makes, taken at startup where the stall it costs is
+    /// pass this program makes, taken at startup where the stall it costs is
     /// free, and the whole of why a strip on this panel can read one residency
     /// and have been asked for another.
     ///
@@ -2268,7 +2398,7 @@ impl Engine {
     /// deck A's texture from the picture's rectangle was injected there and
     /// every test still passed**. `mod gpu` calls this the way the frame does.
     ///
-    /// **B, C and D stay `None`, and that is this example rather than a gap in
+    /// **B, C and D stay `None`, and that is this program rather than a gap in
     /// it**: deck A is the only slot making texels, so it is the only audition
     /// there is to put in a cell. Deck B is parked and therefore neither
     /// stepping nor drawn, and C and D have nothing behind them. An empty cell
@@ -2411,18 +2541,35 @@ fn transport(
     })
 }
 
-/// **Where this example looks for a library**, and it is the directory
+/// **Where this program looks for a library**, and it is the directory
 /// `karakuri-cli` looks in when nobody passes `--store`.
 ///
-/// Relative, like `L1_KIR` and `L4_KIR` above, because this example is run
-/// from the workspace root and reads its material the same way. The repository
-/// keeps one here, so a `cargo run --example panel` from the root has a Set to
-/// list rather than an empty bay.
+/// Relative to the working directory, deliberately unlike [`Sources`]'s
+/// defaults: a store is a place an operator keeps things and belongs beside
+/// the session, which is `karakuri-cli`'s own reason for the same choice. The
+/// repository keeps one at its root, so a `cargo run -p karakuri` from there
+/// has a Set to list rather than an empty bay.
 ///
-/// Transcribed rather than asked for: `karakuri-cli`'s `DEFAULT_STORE` is a
-/// private constant of a package with no library target, so there is nothing
-/// to ask. The two are the same directory on purpose, and the day one moves
-/// this example lists an empty library rather than the wrong one.
+/// # Still transcribed, and this is the one thing ADR-0214 said would go and
+/// has not
+///
+/// [ADR-0214](../../../docs/adr/0214-the-program-moves-out-of-the-cli-and-two-thin-binaries-sit-over-it.md)
+/// lists this constant as one of two transcriptions the move *deletes rather
+/// than carries*: *"`STORE` asks for `DEFAULT_STORE`, and the residency decode
+/// calls `mix::parse_residency`."* The residency half is done — `apply` calls
+/// `karakuri_environment::mix::parse_residency` now, and that function is
+/// `pub` for this caller.
+///
+/// **This half cannot be done yet, and the reason is which slice moved.**
+/// `DEFAULT_STORE` is at `karakuri-cli/src/main.rs:356` and is private.
+/// ADR-0214's boundary section says `main.rs` is *"7,688 non-test lines
+/// holding both and will not divide along a line anyone can name today"*, and
+/// it is the one module of the fourteen that has not moved: `karakuri-cli/src/`
+/// is that file and nothing else. Until it divides there is nothing to ask, so
+/// the two are the same directory on purpose and the day one moves this
+/// program lists an empty library rather than the wrong one — which is the
+/// sentence this comment has carried since it was written, still true and now
+/// with the blocker named rather than guessed at.
 const STORE: &str = ".karakuri";
 
 /// **What the Library bay lists**: the name of every Set the store holds.
@@ -2437,7 +2584,7 @@ const STORE: &str = ".karakuri";
 /// engine (ADR-0156). What crosses into the console is a list of names.
 ///
 /// The cost of reading it once is that a Set saved while this window is up
-/// does not appear in the bay until the next run. That is the example's
+/// does not appear in the bay until the next run. That is this program's
 /// limitation and not the console's — the field is rewritable per frame like
 /// every other one — and closing it wants a reason to re-read rather than a
 /// timer, which is a decision and not this pass's.
@@ -2447,7 +2594,7 @@ const STORE: &str = ".karakuri";
 /// [`karakuri_store::store::Store::open`] *"establishes the store layout under
 /// `root`, creating any directories that do not exist yet"*, which is the
 /// right thing for a program that is about to write one and the wrong thing
-/// for one that only wants to read. An example that listed a library by first
+/// for one that only wants to read. A program that listed a library by first
 /// making one would change the directory it was run in, so the root is
 /// required to be there already.
 ///
@@ -2637,7 +2784,7 @@ fn tally(residency: Residency) -> view::Tally {
 /// state no operation can name and no MIDI map can reach, with nothing saying
 /// so. Failing here is the loud failure P-0027 asks for.
 ///
-/// **It stays this example's, and that is now settled rather than pending.**
+/// **It stays this program's, and that is now settled rather than pending.**
 /// The console cannot depend on the engine (ADR-0156), and
 /// `karakuri-operation-record` cannot either — it is the vocabulary and the
 /// records and nothing else, by charter. So the two lists meet on the harness
@@ -2675,7 +2822,7 @@ fn blend_mode(blend: Blend) -> BlendMode {
 /// the record *and* what the deck holds afterwards, and printing both would
 /// say one press twice.
 ///
-/// **Nothing this example draws can reach either arm today**, and that is why
+/// **Nothing this program draws can reach either arm today**, and that is why
 /// it is written rather than a reason to leave it out. Its five mixer
 /// controls emit `SetGain`, `SetOpacity`, `SetBlendMode`, `SetResidency` and
 /// `SetMaskShape`, and all five write a record — four from the operation
@@ -2701,31 +2848,6 @@ fn unwritten(operation: &Operation, written: &Written) -> Option<String> {
              decision: {}. nothing moved, and nothing here decides it",
             owed.why()
         )),
-    }
-}
-
-/// **A wire spelling back to the engine's residency**, which is
-/// `mix::parse_residency`'s job and is written here for [`apply`]'s reason:
-/// `karakuri-cli` has no library target, so the same three words cannot be
-/// reached from this file.
-///
-/// **Only this direction is written here**, and it is the direction the
-/// *decode* goes. The other one is `karakuri_operation::Residency::name`,
-/// which is the vocabulary's own spelling of its own values and is what
-/// `karakuri-operation-record` writes into the record — the wire words,
-/// deliberately not the status line's `LIVE`/`prim`/`park` and not the chip's
-/// `live`/`prim`/`alloc`.
-///
-/// `None` for a name the engine has not got, refused rather than defaulted —
-/// the shape [`apply`]'s blend arm has, and `Blend::from_name`'s. Nothing in
-/// this file can produce one, since the chip only ever emits one of the
-/// vocabulary's three and `Residency::name` spells all three.
-fn residency_level(name: &str) -> Option<Residency> {
-    match name {
-        "live" => Some(Residency::Live),
-        "priming" => Some(Residency::Priming),
-        "allocated" => Some(Residency::Allocated),
-        _ => None,
     }
 }
 
@@ -2811,7 +2933,7 @@ fn apply(record: &Record, deck: &mut Deck) -> Option<String> {
         // says what the deck ended up at, which is the half this window shows.
         Record::Residency { slot, ref level } => {
             let slot = held(slot)?;
-            let residency = residency_level(level)?;
+            let residency = mix::parse_residency(level)?;
             deck.set_residency(slot, residency);
             deck.govern();
             Some(format!(
@@ -2968,6 +3090,33 @@ fn budget_ms(window: &Window) -> Option<f32> {
 /// A `.kir` off disk, parsed and checked — the two stages `Set::build` wants a
 /// `Checked` from, and no more. `karakuri-cli`'s `compile::load` is the same
 /// two with a cost estimate and a source it keeps; neither is wanted here.
+/// **How many elements the geometry runs at**, which is the L1's own
+/// declaration and not a number written here.
+///
+/// `capacity [min, max] = default` is in the file and `Set::build` takes a
+/// number, so somebody has to read one across. This used to be a
+/// `const CAPACITY: u32 = 262144` — `drift_shell.kir`'s declared default,
+/// transcribed, which was fine while that was the only file this could load and
+/// silently wrong the moment it took a path: a procedure written for 131072
+/// would have run at 262144 and nothing would have said so.
+///
+/// **The fallback is not the answer, it is the arm that cannot happen.**
+/// `karakuri_ir::DEFAULT_CAPACITY` is what is left when *nothing* declared one,
+/// and `check_header` requires a `capacity` on every L1 — so a `Checked` that
+/// passed always carries one and this `map_or` is the shape of the seam type
+/// rather than a decision. Pointing the whole thing at `DEFAULT_CAPACITY` would
+/// run every procedure at 262144 whatever it declared, which is the defect
+/// `the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none` is run
+/// against.
+///
+/// This is `karakuri-cli`'s `capacity_for` with no `--capacity` to override it,
+/// and `karakuri_environment::watch`'s rebuild is the same line again. There is
+/// no `--capacity` here on purpose: see [`USAGE`].
+fn capacity_of(l1: &karakuri_ir::typed::Checked) -> u32 {
+    l1.capacity
+        .map_or(karakuri_ir::DEFAULT_CAPACITY, |declared| declared.default)
+}
+
 fn checked(path: &std::path::Path) -> karakuri_ir::typed::Checked {
     let src = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     let parsed = karakuri_ir::parse(&src)
@@ -3063,6 +3212,10 @@ struct Gfx {
 
 struct App {
     gfx: Option<Gfx>,
+    /// **What the command line asked for**, read before the event loop starts
+    /// and used once, in `resumed`. It is here rather than in [`Gfx`] because
+    /// it is known before there is a device and outlives every remake of one.
+    sources: Sources,
     /// A validation fault is said once rather than sixty times a second.
     faulted: bool,
     readout: Readout,
@@ -3100,9 +3253,10 @@ struct App {
 }
 
 impl App {
-    fn new() -> App {
+    fn new(sources: Sources) -> App {
         App {
             gfx: None,
+            sources,
             faulted: false,
             readout: Readout::new(WINDOW.0 as f32, WINDOW.1 as f32),
             costs: Costs::new(),
@@ -3258,7 +3412,7 @@ impl ApplicationHandler for App {
         };
 
         let caps = surface.get_capabilities(&gpu.adapter);
-        // **A non-sRGB format, and that is the opposite of what the example
+        // **A non-sRGB format, and that is the opposite of what the program
         // this replaces wanted.** `egui`'s own shader encodes: it is told the
         // target is gamma space and writes gamma-encoded texels, so a surface
         // that also encoded on write would encode twice and wash the panel
@@ -3310,6 +3464,7 @@ impl ApplicationHandler for App {
         let mut engine = Engine::new(
             &gpu,
             &mut renderer,
+            &self.sources,
             self.readout.panel.layout(),
             self.scale as f32,
         );
@@ -3327,7 +3482,7 @@ impl ApplicationHandler for App {
         // **The strips before the legend**, because the legend says how many
         // there are and the answer is the deck's rather than a guess. It is
         // written again on every frame; this is the first one.
-        let material = material();
+        let material = self.sources.material();
         mixer(&engine.deck, &material, &mut self.readout.view.mixer);
         // **The library before the legend too**, and once for the run: the
         // legend says how many Sets the bay lists, and `library` says why
@@ -3369,8 +3524,16 @@ impl ApplicationHandler for App {
                 gfx.window.request_redraw();
             }
         }
+        // **Only once there is something to describe.** The reading names the
+        // workload it was taken over, and that is the run's `.kir` pair rather
+        // than a constant — so it is taken when the engine exists, and not
+        // before. A deadline that comes due first is not lost: `due()` goes on
+        // returning it until the reading is printed.
         if self.costs.due().is_some_and(|due| due <= now) {
-            self.costs.say();
+            if let Some(gfx) = self.gfx.as_ref() {
+                let (capacity, material) = (gfx.engine.capacity, gfx.material.clone());
+                self.costs.say(capacity, &material);
+            }
         }
     }
 
@@ -3908,7 +4071,7 @@ impl ApplicationHandler for App {
                 cost.engine = panel_started - engine_started;
                 cost.paint = panel_started.elapsed();
                 cost.submit = submitting.expect("`finally` runs on every frame").elapsed();
-                // **Said and not returned on**, and neither of this example's
+                // **Said and not returned on**, and neither of this program's
                 // sinks can produce it — `Presented::present` is `Ok(())`. It
                 // is here because a third sink could, and because a frame the
                 // other sinks took is not one this window may drop.
@@ -3971,7 +4134,28 @@ impl ApplicationHandler for App {
     }
 }
 
+/// **The command line, then the window.**
+///
+/// The arguments are read *before* the event loop exists, so a refusal is a
+/// line on stderr and an exit code rather than a window that opens and closes.
+/// `skip(1)` drops the program's own name, which is `std::env::args`'s first
+/// element and not an argument.
 fn main() {
+    let sources = match sources_from(std::env::args().skip(1)) {
+        Ok(sources) => sources,
+        // An empty message is `--help`, which is a request rather than a
+        // mistake: the usage goes to stdout and the exit is 0.
+        Err(why) if why.is_empty() => {
+            println!("{USAGE}");
+            return;
+        }
+        Err(why) => {
+            eprintln!("{why}");
+            eprintln!();
+            eprintln!("{USAGE}");
+            std::process::exit(2)
+        }
+    };
     let event_loop = EventLoop::new().expect("event loop");
     // **The loop sleeps.** A frame is drawn when something changed it or when
     // `egui` asked for one after a delay it named, and on no other occasion —
@@ -3979,7 +4163,7 @@ fn main() {
     // the rule actually lives. This is the state it starts in so that the
     // window between here and the first `about_to_wait` is not a spin either.
     event_loop.set_control_flow(ControlFlow::Wait);
-    event_loop.run_app(&mut App::new()).expect("run");
+    event_loop.run_app(&mut App::new(sources)).expect("run");
 }
 
 // ---------------------------------------------------------------------------
@@ -4003,7 +4187,7 @@ mod tests {
     ///
     /// Two claims, and the second is the one worth a test: `Store::open`
     /// establishes the layout it is pointed at, so a listing that opened first
-    /// would leave a `.karakuri` behind in whatever directory this example was
+    /// would leave a `.karakuri` behind in whatever directory this program was
     /// run from. [`library`] asks whether the root is there before it opens
     /// anything, and this is what says so.
     ///
@@ -4348,7 +4532,7 @@ mod tests {
     /// where it stood, because what this test compares against is the record
     /// that function wrote rather than the function.
     ///
-    /// And the other direction: an operation this example has no control for
+    /// And the other direction: an operation this program has no control for
     /// writes no record here either, and the answer says *which* kind of
     /// nothing rather than a bare `None` — which is the whole of what the
     /// three answers buy.
@@ -4431,13 +4615,13 @@ mod tests {
             // And it reads back as the level it named, which is what says the
             // two spellings are one list rather than two.
             assert_eq!(
-                residency_level(level),
+                mix::parse_residency(level),
                 Some(residency_back(residency)),
                 "the wire spelling `{level}` does not come back as {residency:?}"
             );
         }
 
-        // The vocabulary is 50 operations and this example has five controls
+        // The vocabulary is 50 operations and this program has five controls
         // writing five records. A record invented for the other 45 would be
         // somebody deciding what they mean — and the answer is now *which*
         // nothing rather than `None`, because a surface's own state and a
@@ -4563,7 +4747,7 @@ mod tests {
     }
 
     /// [`blend_mode`] the other way round, for the assertion above alone —
-    /// which is why it is here and not beside it: nothing the example *runs*
+    /// which is why it is here and not beside it: nothing the program *runs*
     /// needs to go this direction, and a conversion in `src` with one test as
     /// its only caller would be an abstraction with no second call site.
     fn blend_mode_back(blend: BlendMode) -> Blend {
@@ -4588,7 +4772,7 @@ mod tests {
     /// auditioning while the loop stops asking for frames, so the panel keeps
     /// changing and nothing draws it.
     ///
-    /// So the assertion is over every sink, not over the one this example
+    /// So the assertion is over every sink, not over the one this program
     /// fills: a cell nobody has wired up yet is asserted live all the same,
     /// because the failure is a sink left out of the list rather than a sink
     /// that is off.
@@ -4623,7 +4807,7 @@ mod tests {
         );
 
         // And the list is closed: every cell counts, including the three this
-        // example leaves off, because the bug is a sink that is not read here.
+        // program leaves off, because the bug is a sink that is not read here.
         for deck in 0..DECKS {
             let mut view = View::new(Room::Day);
             view.previews[deck] = Some(some);
@@ -4639,6 +4823,129 @@ mod tests {
         assert!(
             !live(&view),
             "nothing is rendering and the loop stayed awake"
+        );
+    }
+
+    /// **Two paths or none, and anything else is a refusal rather than a
+    /// guess.**
+    ///
+    /// [`sources_from`] is the whole of this program's command line and this is
+    /// what stops it growing a second one. The mistake it will actually be
+    /// given is *one* path — a Set is two files and reads like one thing — and
+    /// that is refused by name rather than paired with a default renderer,
+    /// because a program that silently supplied half the material would draw
+    /// something nobody asked for and say nothing about it.
+    ///
+    /// A CPU test: nothing here opens a file, and a path that does not exist is
+    /// still a path. What is behind one is [`checked`]'s to complain about.
+    #[test]
+    fn a_set_is_two_paths_or_none_and_anything_else_is_refused() {
+        let of = |args: &[&str]| sources_from(args.iter().map(|a| (*a).to_string()));
+
+        let bare = of(&[]).expect("no arguments is the pair the repository ships");
+        assert_eq!(bare.l1, Sources::default().l1);
+        assert_eq!(bare.l4, Sources::default().l4);
+        assert!(
+            bare.l1.is_file() && bare.l4.is_file(),
+            "the default pair is not on the disk at {} and {}, so a bare run cannot draw",
+            bare.l1.display(),
+            bare.l4.display()
+        );
+
+        let named = of(&["a/geo.kir", "b/ren.kir"]).expect("two paths are a Set");
+        assert_eq!(named.l1, std::path::PathBuf::from("a/geo.kir"));
+        assert_eq!(named.l4, std::path::PathBuf::from("b/ren.kir"));
+        assert_eq!(
+            named.material(),
+            "geo + ren",
+            "the strip is not named after what was actually loaded"
+        );
+
+        let one = of(&["a/geo.kir"]).expect_err(
+            "one path was read as a Set, so this program would have invented the other half",
+        );
+        assert!(
+            one.contains("a/geo.kir"),
+            "the refusal `{one}` does not name the path it refused"
+        );
+        assert!(
+            of(&["a.kir", "b.kir", "c.kir"]).is_err(),
+            "three paths were read as a Set"
+        );
+
+        // **An empty message is `--help`**, which is the one arm that is a
+        // request rather than a mistake — [`main`] prints [`USAGE`] to stdout
+        // and exits 0 on it, and prints it to stderr and exits 2 on every
+        // other. A refusal that came back empty would be a silent exit.
+        assert_eq!(of(&["--help"]).err(), Some(String::new()));
+        assert_eq!(of(&["-h"]).err(), Some(String::new()));
+        assert!(
+            !one.is_empty(),
+            "a refusal came back with no sentence in it, which `main` reads as `--help`"
+        );
+    }
+
+    /// **The capacity is the L1's own declaration, read off the `Checked`.**
+    ///
+    /// It was `const CAPACITY: u32 = 262144` here — `drift_shell.kir`'s
+    /// declared default, transcribed — for as long as this file could only ever
+    /// load that one file. It takes a path now, so a transcription would be
+    /// right about one `.kir` and silently wrong about every other: a procedure
+    /// written for 131072 elements would run at 262144 and nothing would say
+    /// so.
+    ///
+    /// **It is not `karakuri_ir::DEFAULT_CAPACITY` either**, which is the
+    /// language default for a file that declared nothing and is what
+    /// `check_header` makes unreachable for an L1 that passed checking. The
+    /// number below is asserted rather than derived on purpose: it is what a
+    /// bare `cargo run -p karakuri` runs, which is what makes the reading
+    /// [`Costs::say`] prints comparable with the rest of this repository's
+    /// figures (`docs/contributing.md` §1's reference workload).
+    #[test]
+    fn the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none() {
+        let sources = Sources::default();
+        let l1 = checked(&sources.l1);
+        let declared = l1
+            .capacity
+            .expect("an L1 that passed contract checking always carries a capacity");
+        assert_eq!(
+            declared.default, 262_144,
+            "the pair this program plays by default is no longer the workspace's \
+             reference workload, and the reading printed after three quiet seconds \
+             says it is"
+        );
+        assert!(
+            declared.contains(declared.default),
+            "the file's own default is outside the range the same file declares"
+        );
+
+        assert_eq!(capacity_of(&l1), declared.default);
+
+        assert!(
+            checked(&sources.l4).capacity.is_none(),
+            "the renderer declares a capacity — `Set::build` is handed the L1's, and \
+             two declarations would be two answers to how many elements there are"
+        );
+
+        // **A second L1, and it is the one that tells the two mistakes apart.**
+        // `drift_shell.kir` declares 262144, which is also
+        // `karakuri_ir::DEFAULT_CAPACITY` — so every assertion above passes
+        // just as well against a [`capacity_of`] that ignored the file and
+        // returned the language default. `strand_shell.kir` declares 131072
+        // and says why in the file (512 strands x 256 samples), and it is what
+        // that defect fails on.
+        let other = checked(&sources.l1.with_file_name("strand_shell.kir"));
+        assert_eq!(
+            capacity_of(&other),
+            131_072,
+            "a second procedure did not run at what it declares — the capacity is being \
+             read from somewhere other than the file"
+        );
+        assert_ne!(
+            capacity_of(&other),
+            karakuri_ir::DEFAULT_CAPACITY,
+            "the second procedure declares the language default, so this test can no \
+             longer tell a per-file read from a constant — pick another `.kir`"
         );
     }
 }
@@ -4710,7 +5017,25 @@ mod gpu {
         panel.solve();
         let rect = picture_rect(panel.layout(), CANVAS).expect("the picture is on screen");
         let cells = preview_rects(panel.layout(), CANVAS).expect("the preview row is on screen");
-        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &Sources::default(),
+            panel.layout(),
+            1.0,
+        );
+        // **Built at what the file declares**, which is the other half of
+        // `the_capacity_is_the_l1s_own_declaration_and_the_l4_declares_none`:
+        // that one says what the `.kir` says, and this one says the deck was
+        // built with it rather than with a number written here.
+        assert_eq!(
+            engine.capacity,
+            checked(&Sources::default().l1)
+                .capacity
+                .expect("the L1 declares a capacity")
+                .default,
+            "the deck was not built at the capacity its L1 declares"
+        );
 
         // **Aimed by the call the window makes, and the view is what that
         // answered** rather than three lines this test writes by hand: an id
@@ -5025,7 +5350,13 @@ mod gpu {
         panel.solve();
         let rect = picture_rect(panel.layout(), CANVAS).expect("on screen");
         let want = physical(rect, 1.0);
-        let engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
+        let engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &Sources::default(),
+            panel.layout(),
+            1.0,
+        );
 
         // The picture's, in both axes, and **neither of them is the window's**
         // — the picture is narrower than the window by both panes and taller
@@ -5117,7 +5448,13 @@ mod gpu {
             picture_rect(panel.layout(), CANVAS).expect("on screen"),
             1.0,
         );
-        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &Sources::default(),
+            panel.layout(),
+            1.0,
+        );
         let first = engine.picture.id;
         assert_eq!(engine.picture.size, want);
 
@@ -5283,7 +5620,13 @@ mod gpu {
             (112, 63),
             "the mock's own cell, at the mock's own width"
         );
-        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &Sources::default(),
+            panel.layout(),
+            1.0,
+        );
 
         // **The cell's, in both axes** — not the row's, not the picture's and
         // not the window's. The row holds four of these side by side with
@@ -5440,10 +5783,16 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &Sources::default(),
+            panel.layout(),
+            1.0,
+        );
 
         // The strips, written the way the frame writes them.
-        let material = material();
+        let material = Sources::default().material();
         let mut strips = Vec::new();
         mixer(&engine.deck, &material, &mut strips);
         assert_eq!(strips.len(), engine.deck.slot_count());
@@ -5511,7 +5860,7 @@ mod gpu {
     /// **whether the engine can put this panel in that state at all.** A
     /// `Deck` grants every residency it is asked for until something governs,
     /// so before [`Engine::ask_to_prime`] the two halves of the pair could not
-    /// disagree here however long anybody ran the example, and the animation
+    /// disagree here however long anybody ran the program, and the animation
     /// that is fully tested was unreachable in the one place a person would
     /// look at it.
     ///
@@ -5520,7 +5869,7 @@ mod gpu {
     /// measured, [`Deck::govern`] refuses, and [`mixer`] reads the two
     /// residencies back off the deck the way the frame does. **The reason is
     /// asserted and not only the park**, because three of the four reasons
-    /// that satisfy `Deck::is_parked` mean this example forgot to do something
+    /// that satisfy `Deck::is_parked` mean this program forgot to do something
     /// — `Unmeasured` and `CommittedUnknown` are a probe that never ran, and
     /// `NoPrimingNeeded` is a closed-form Set that never needed warming. Only
     /// `NoHeadroom` is the budget refusing.
@@ -5537,8 +5886,14 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
-        let material = material();
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &Sources::default(),
+            panel.layout(),
+            1.0,
+        );
+        let material = Sources::default().material();
 
         // **Before the pass**, which is the state this file was in for its
         // whole life: a deck out of `Deck::new` is Live on every slot, the two
@@ -5594,7 +5949,7 @@ mod gpu {
         // And the panel is live for as long as they disagree **and the bay
         // the chip is in is laid out**, which is the declaration
         // `tests/parked.rs` asserts against strips and folds of its own. The
-        // panel here is the example's own, unfolded, which is the arrangement
+        // panel here is this program's own, unfolded, which is the arrangement
         // this window opens on.
         let mut readout = Readout::new(1440.0, 900.0);
         readout.view.mixer = strips;
@@ -5640,8 +5995,14 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
-        let material = material();
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &Sources::default(),
+            panel.layout(),
+            1.0,
+        );
+        let material = Sources::default().material();
 
         // The state, produced by the governor and not written here.
         let governed = engine.ask_to_prime(&gpu);
@@ -5818,8 +6179,14 @@ mod gpu {
             egui_wgpu::Renderer::new(&gpu.device, FORMAT, egui_wgpu::RendererOptions::default());
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
-        let material = material();
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &Sources::default(),
+            panel.layout(),
+            1.0,
+        );
+        let material = Sources::default().material();
 
         // A wipe in progress on the deck that is on air: a straight front,
         // running at an angle, part of the way across.
@@ -5972,7 +6339,13 @@ mod gpu {
 
         let mut panel = Panel::new(W as f32, H as f32);
         panel.solve();
-        let mut engine = Engine::new(&gpu, &mut renderer, panel.layout(), 1.0);
+        let mut engine = Engine::new(
+            &gpu,
+            &mut renderer,
+            &Sources::default(),
+            panel.layout(),
+            1.0,
+        );
 
         // A different window on a different display, so nothing asserted below
         // can be what construction happened to leave in place — and at 1760

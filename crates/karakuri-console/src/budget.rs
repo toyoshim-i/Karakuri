@@ -119,7 +119,7 @@ pub struct Declared {
 /// read."* Nothing reads this at runtime and nothing samples a clock to get
 /// it.
 ///
-/// **1.26 ms, taken on 2026-08-28** over five runs of `examples/panel.rs` on
+/// **1.26 ms, taken on 2026-08-28** over five runs of `crates/karakuri/src/main.rs` on
 /// an Apple M4 Pro at 1440x900 logical, host clock, debug profile with
 /// dependencies at opt-level 3, with nothing touching the window. It is
 /// `ui + textures + buffers + record` — the whole immediate-mode pass, plus
@@ -141,7 +141,7 @@ pub struct Declared {
 ///
 /// # How it is kept honest
 ///
-/// **`examples/panel.rs` holds this figure against the run it has just
+/// **`crates/karakuri/src/main.rs` holds this figure against the run it has just
 /// taken** and says so when the two have parted company, which is the pattern
 /// already in that file for `WRITTEN_ALLOCS` and the reason that one exists:
 /// a number written into prose reads as current forever, and this repository
@@ -163,7 +163,7 @@ pub const PANEL_PASS: Duration = Duration::from_micros(1260);
 /// **It is the console's only written-down budget and it is the whole frame's,
 /// which is worth reading twice.** `view::Transport::budget_ms` is *"what a
 /// frame has to fit in"* — the `/16.6` the transport row draws — and
-/// `examples/panel.rs` fills it from the display's refresh interval, because
+/// `crates/karakuri/src/main.rs` fills it from the display's refresh interval, because
 /// the surface is `PresentMode::Fifo` and a frame longer than one interval is
 /// a frame that misses a vsync. Nothing anywhere writes down a **panel's
 /// share** of that. So the conditions are asserted in their most permissive
@@ -184,7 +184,7 @@ pub const BUDGET: Duration = Duration::from_nanos(16_666_667);
 /// **How long a frame is**, and the divisor in P-0072's first condition.
 ///
 /// 60 Hz: the rate the mock's transport is drawn against (`12.4/16.6 ms`), the
-/// rate `examples/panel.rs` reads off the monitor it opens on, and the rate
+/// rate `crates/karakuri/src/main.rs` reads off the monitor it opens on, and the rate
 /// every figure in this repository is taken at.
 ///
 /// **The same number as [`BUDGET`] and not the same quantity.** This one is
@@ -217,7 +217,7 @@ pub const FRAME_INTERVAL: Duration = Duration::from_nanos(16_666_667);
 /// a rule that passes by a third of what the measurement itself moves by is a
 /// rule about this laptop rather than about the console. A quarter is 4.17 ms
 /// and leaves a factor of 3.3, which is the same order of headroom
-/// `examples/panel.rs` allows its own quoted figure and for the same reason.
+/// `crates/karakuri/src/main.rs` allows its own quoted figure and for the same reason.
 ///
 /// **A second region declares now and this number did not have to move**,
 /// because `max(cost)` is still one number: both of them declare one whole

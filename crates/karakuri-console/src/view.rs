@@ -565,7 +565,7 @@ pub fn plan_into(panel: &mut Panel, canvas: (u32, u32), out: &mut Vec<Placed>) {
 /// caller does it and hands the result over; this module draws an id and a
 /// rectangle and knows nothing about either. It is the same seam the whole
 /// crate is built on, one level in: `src/` reads and paints, and everything
-/// that takes a device is the example's.
+/// that takes a device is the program's.
 ///
 /// **The rectangle is passed rather than looked up**, and that is what makes
 /// the pair checkable: whoever sized the texture and whoever placed it are the
@@ -1457,7 +1457,7 @@ pub fn rearrange(panel: &mut Panel, canvas: (u32, u32)) -> bool {
 /// panel with nothing live on it is a panel where the oscillator is not
 /// advancing either, so the row is right to be still — see
 /// [`Transport::fps`], which is the one field that would go stale there and
-/// is the one the example leaves `None`.
+/// is the one the program leaves `None`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Transport {
     /// The tempo, drawn in `.bpm`'s treatment. `karakuri_signal`'s
@@ -1612,7 +1612,7 @@ impl Transport {
 /// # What is in the mock's row and is deliberately not here
 ///
 /// The mock draws ten things and **four of them exist**. Each of the other six
-/// is a control over machinery that is in neither this crate nor the example,
+/// is a control over machinery that is in neither this crate nor the program,
 /// and drawing one is the scaffolding this module's documentation refuses — a
 /// pill that looks like a control and does nothing does not get replaced:
 ///
@@ -2410,7 +2410,7 @@ const TRIM_LABEL: &str = "g";
 /// be reading wall time in a repository whose first principle is that nothing
 /// does"*
 /// ([P-0002](../../../docs/principles/0002-simulation-time-comes-from-a-record-never-from-a-clock.md))
-/// — and every `Instant::now` in this crate is in `examples/panel.rs`, which
+/// — and every `Instant::now` in this crate is in `crates/karakuri/src/main.rs`, which
 /// owns the window. An `Instant` is a *reading*; a `Duration` is a number, and
 /// a number is what a caller writes and a test chooses. So this arrives per
 /// frame the way [`Transport`] and [`View::mixer`] arrive
@@ -2880,7 +2880,7 @@ pub struct Strip {
     ///
     /// **So the type is the vocabulary's, and the harness converts.**
     /// `karakuri-console` already depends on `karakuri-operation`, and
-    /// `examples/panel.rs` turns `Deck::blend`'s `karakuri_engine::deck::Blend`
+    /// `crates/karakuri/src/main.rs` turns `Deck::blend`'s `karakuri_engine::deck::Blend`
     /// into one of these with a `match`. The failure that buys is worth
     /// stating: a fourth engine blend mode with no operation variant stops
     /// compiling **at the harness**, rather than drawing a word on a chip no
@@ -3995,7 +3995,7 @@ fn next(tally: Tally) -> Tally {
 /// state on either side stops the build here, where the two lists meet, rather
 /// than at a chip drawing a word no operation can carry.
 ///
-/// The mirror image of it is `examples/panel.rs`'s `tally`, which turns the
+/// The mirror image of it is `crates/karakuri/src/main.rs`'s `tally`, which turns the
 /// *engine's* `Residency` into a [`Tally`] on the way in. Three names for
 /// three states is the cost `karakuri-operation` pays for depending on nothing
 /// (P-0074), and this is one of the two places it is paid.
@@ -4044,7 +4044,7 @@ fn next_shape(mask: Mask) -> Mask {
 /// shape on either side stops the build here, where the two lists meet, rather
 /// than at a chip drawing a mark no operation can carry.
 ///
-/// The mirror image of it is `examples/panel.rs`'s reading of
+/// The mirror image of it is `crates/karakuri/src/main.rs`'s reading of
 /// `Deck::mask(slot).kind()`, which turns the *engine's* `MaskKind` into a
 /// [`Mask`] on the way in.
 fn wipe_kind(mask: Mask) -> WipeKind {

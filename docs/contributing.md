@@ -190,17 +190,27 @@ cargo test -p karakuri-operation   # the operation vocabulary, against the manua
 cargo test -p karakuri-operation-record  # an operation as the records it writes
 cargo test -p karakuri-layout      # the arrangement, solved to rectangles
 cargo test -p karakuri-environment # the program: the disk, the devices, the ports, the record
-cargo test -p karakuri-console     # the console: arrangement, panel model, view (its example needs a GPU)
+cargo test -p karakuri-console     # the console: arrangement, panel model, view (no device at all)
+cargo test -p karakuri            # the panel as a program: the window, the engine behind it (needs a GPU)
 cargo test -p karakuri-cli         # flags, replay, MCP, live save (needs a GPU)
 ```
 
 **Three crates take a device, not one.** Most of `karakuri-engine`'s integration suites do,
 and so does part of `karakuri-cli`: eight tests in the binary build a Set, and the five in
 `tests/replay.rs` drive `karakuri-cli` as a subprocess, which takes a device of its own. The
-third is `karakuri-console`, and **only through its example** — `examples/panel.rs` is a test
-target (`test = true` in its `Cargo.toml`, with the reason beside it), so `cargo test -p
-karakuri-console` builds and runs it; `src/` takes no device at all and that is the seam
-[ADR-0156](adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md) exists to keep.
+third is **`karakuri`**, the panel as a program — its `src/main.rs` opens a window and builds
+a deck, and twelve of its tests are under `mod gpu`.
+
+**`karakuri-console` is not on that list any more, and the change is worth reading the right
+way round.** It used to be third, and only through `examples/panel.rs`. That example became
+`crates/karakuri` (ADR-0214), and with it went every dev-dependency the console kept for it —
+`wgpu`, `winit`, `pollster`, `karakuri-engine`, `karakuri-ir`, `karakuri-signal`,
+`karakuri-store` and `karakuri-operation-record`, eight of nine. So
+[ADR-0156](adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)'s seam is
+**completed rather than weakened**: the rule was that a device stays a dev-dependency so `src/`
+cannot reach for one, and there is now no entry in that manifest to reach for at all.
+`cargo test -p karakuri-console` takes no device by any path.
+
 The other eight crates are pure CPU.
 
 ### Running only the part that needs no GPU

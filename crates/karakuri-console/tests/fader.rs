@@ -13,10 +13,10 @@
 //! opening. What a fader emits is `karakuri-operation`'s, which has no
 //! dependencies at all.
 //!
-//! # Where this stops, and what carries on in the example
+//! # Where this stops, and what carries on in the program
 //!
 //! Everything here ends at the operation. **Turning it into a `Record` and
-//! applying it to a deck is the harness's** — `examples/panel.rs`, where there
+//! applying it to a deck is the harness's** — `crates/karakuri/src/main.rs`, where there
 //! is a deck to apply it to — and the round trip that closes the loop on a
 //! real `Deck` is under that file's `mod gpu`. What is asserted here is the
 //! half that says the console did *not* close it for itself: after a whole

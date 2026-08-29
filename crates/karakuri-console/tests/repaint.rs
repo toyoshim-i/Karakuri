@@ -90,7 +90,7 @@ fn a_still_panel_asks_for_no_repaint() {
     // The resolution is the caller's now (`Panel::under`), so those two keys
     // emit no operation at all and reach no `Change` to ask about — stiller
     // than they were, and asserted where they now happen, in
-    // `examples/panel.rs`. What is left is the case that is about the
+    // `crates/karakuri/src/main.rs`. What is left is the case that is about the
     // arrangement and not about a hand: the root has no split enclosing it.
     assert_eq!(
         Change::Operated(&did(&mut panel, Op::FoldEnclosing(root))).repaint(),

@@ -1,0 +1,83 @@
+[package]
+name = "karakuri"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+# **The instrument: the program a player launches.** `cargo run -p karakuri`.
+#
+# This package is a *surface* and nothing else — a window, an event loop, the
+# `egui` plumbing between them, and the English. Everything it draws with is
+# `karakuri-console`'s and everything outside this process is
+# `karakuri-environment`'s; see
+# [ADR-0214](../../docs/adr/0214-the-program-moves-out-of-the-cli-and-two-thin-binaries-sit-over-it.md),
+# which is why this package exists at all, and
+# [ADR-0156](../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md),
+# which is why it is a package rather than a `[[bin]]` in the console.
+#
+# **Nothing here is a dependency of `karakuri-console`.** This package is a
+# third party to that crate, exactly as `examples/panel.rs` was: the surface,
+# the device and the event loop are on this side of the seam, and that crate's
+# `src/` goes on taking no device. A `[[bin]]` in the console would have
+# promoted `wgpu`, `winit` and `karakuri-engine` to real dependencies of it and
+# demoted a link error to a comment, which ADR-0214 rejected by name.
+[dependencies]
+# **The panel.** The arrangement, the drag, the operations, the palette and the
+# bay heads are all this crate's; what is left on this side is a window and the
+# words. The toolkit comes with it and is *not* named again below — `egui`,
+# `egui-wgpu` and `egui-winit` are re-exported from `karakuri_console`, and its
+# `lib.rs` says why in as many words: the three move together, `egui-wgpu` pins
+# `wgpu`, and a consumer that picked its own could pick one that wants a
+# different `wgpu` — at which point the engine and the panel cannot share a
+# `Device`, which is the whole of what ADR-0155 paid a major version for.
+karakuri-console = { version = "0.1.0", path = "../karakuri-console" }
+
+# **The frame, the deck and the device.** `frame::compose` is the one frame
+# loop (ADR-0172) and `Gpu` is the one way to a device; both are reached from
+# here rather than written again, which is what makes this a surface.
+karakuri-engine.workspace = true
+
+# **Everything outside this process.** The residency spellings a record is
+# decoded through live in `mix`; a store read for the Library bay goes through
+# `karakuri-store`, which this package also names because `Store` and `Record`
+# are said out loud on this side.
+karakuri-environment = { version = "0.1.0", path = "../karakuri-environment" }
+
+# Parse and check, which is what a `.kir` on the command line has to go through
+# before `Set::build` will take it. `karakuri-cli` reaches them the same way and
+# there is no shorter route to a `Checked`.
+karakuri-ir.workspace = true
+
+# The arrangement's own vocabulary — a `Point`, a `NodeId`, an `Axis` — which
+# the panel speaks and this window has to speak back.
+karakuri-layout = { version = "0.1.0", path = "../karakuri-layout" }
+
+# **What the operator asked for**, and where it becomes a record. A control on
+# the panel emits an `Operation`, `karakuri-operation-record` turns it into a
+# `Record`, and this program is what moves the deck with it — P-0028, every
+# control ends in the same record.
+karakuri-operation = { version = "0.1.0", path = "../karakuri-operation" }
+karakuri-operation-record = { version = "0.1.0", path = "../karakuri-operation-record" }
+
+# **For one number: `BEATS_PER_BAR`**, which the transport row's beat grid is as
+# many dots as. It is written down as *provisional* — a fixed assumption of
+# common time until the IR format carries a real time signature — so it is asked
+# for by name rather than transcribed, and the grid follows it the day it moves.
+karakuri-signal.workspace = true
+
+# **For `Record` and for `Store`.** `karakuri-operation-record` answers *what
+# was written* and names `Record` in its answer without re-exporting it, so this
+# side has to be able to say the word; and the Library bay lists what
+# `Store::list_sets` holds.
+karakuri-store.workspace = true
+
+# **The versions match `karakuri-engine`'s** — one `wgpu` and one `winit` in the
+# workspace, so this window opens on the same device path the engine renders
+# through rather than resolving a second copy of either. `egui-wgpu` 0.36 wants
+# `wgpu` 30, which is the pairing ADR-0155 bought.
+wgpu = "30.0.1"
+winit = "0.30.13"
+# How `Gpu`'s async constructor is reached off the event loop, which is not an
+# async context.
+pollster = "1.0.1"

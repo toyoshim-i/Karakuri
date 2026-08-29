@@ -32,6 +32,9 @@ Four properties define it, and each has a document behind it:
 Rust stable and a GPU.
 
 ```sh
+cargo run -p karakuri                                        # the console
+cargo run -p karakuri -- geometry.kir renderer.kir           # the console, on your own pair
+
 cargo run -p karakuri-cli                                    # a window
 cargo run -p karakuri-cli -- --watch                         # edit a .kir, watch it swap
 cargo run -p karakuri-cli -- --set a.kir,b.kir --set c.kir,d.kir   # two Sets, mixed
@@ -39,7 +42,10 @@ cargo run -p karakuri-cli -- --audio-in default --bpm 128    # play to the room
 cargo run -p karakuri-cli -- --render out.png --frames 240   # one frame to a PNG
 ```
 
-Press `h` in the window for the keys and `s` for the status line.
+`karakuri` is the panel and `karakuri-cli` is still what you play a whole set with: the
+console has the picture, the deck previews, the transport, the mixer and the Library bay,
+and no audio, MIDI, MCP, watcher or replay yet. Press `h` in the CLI's window for the keys
+and `s` for the status line.
 
 **To play it rather than to judge it, read [`docs/manual.md`](docs/manual.md)** — a
 walkthrough, every flag and key, what the status line means, and a list of the things it
@@ -57,8 +63,13 @@ not about design, and it had no home until the manual had one.
   application is being built: [`karakuri-console`](crates/karakuri-console) opens a window with the
   panel's arrangement in it — dividers that drag, regions that fold, a live engine frame in the
   Program bay, the deck previews under or beside it, the transport, the mixer read off the deck, the Library bay
-  listing what the store holds, and the outputs. **It is an example rather than a program yet**: `cargo run -p karakuri-console
-  --example panel`, and `karakuri-cli` is still what you play a set with
+  listing what the store holds, and the outputs. **It is a program now** — `cargo run -p karakuri`,
+  the binary in [`crates/karakuri`](crates/karakuri), which is what the panel column of
+  [the operations page](docs/manual/operations.html) is measured against (ADR-0213). It was an
+  example until ADR-0214, and for one reason: everything a program needs beyond the panel was in
+  `karakuri-cli`, which has no library target, so there was nothing for a binary to sit on. There
+  is now — [`karakuri-environment`](crates/karakuri-environment). `karakuri-cli` is still what you
+  play a whole set with: the console has no audio, MIDI, MCP, watcher or replay yet
 - **Every operation is named once and every surface routes into that name** — the manual's first
   rule. [`karakuri-operation`](crates/karakuri-operation) is those 50 names, checked against
   [the manual's own page](docs/manual/operations.html) by a test, and

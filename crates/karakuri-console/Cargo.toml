@@ -39,66 +39,21 @@ egui-winit = "0.36"
 # format-agnostic, exactly as `karakuri-layout` is.
 serde_json.workspace = true
 
-# `examples/panel.rs` only. The half of ADR-0156 that still holds is that the
-# *arrangement* and `panel` pull in no toolkit, no device and no window and are
-# tested with none; a surface, a device and an event loop are the example's,
-# and stay dev-dependencies so that nothing in `src/` can reach for one.
+# **What used to be here and is not any more.** `wgpu`, `winit`, `pollster`,
+# `karakuri-engine`, `karakuri-ir`, `karakuri-signal`, `karakuri-store` and
+# `karakuri-operation-record` were all `examples/panel.rs`'s, and that file is
+# now `crates/karakuri/src/main.rs` — a package of its own, and a third party to
+# this one ([ADR-0214](../../docs/adr/0214-the-program-moves-out-of-the-cli-and-two-thin-binaries-sit-over-it.md)).
+# Nothing left in this package names any of the eight: `tests/` reaches
+# `karakuri-console`, `karakuri-layout`, `karakuri-operation`, `egui` and
+# `serde_json`, and the first four are real dependencies above.
 #
-# **The versions match `karakuri-engine`'s** — one `wgpu` and one `winit` in the
-# workspace, so the example builds against the same device path the CLI opens a
-# window with rather than resolving a second copy of either.
-wgpu = "30.0.1"
-winit = "0.30.13"
-# For `Gpu`: instance, surface-compatible adapter, device and queue, in the one
-# order a windowed caller needs them. Writing that again here would be a second
-# answer to a question `karakuri-engine` already answers, and `pollster` is how
-# its async constructor is reached off the event loop.
-karakuri-engine.workspace = true
-pollster = "1.0.1"
-# **For one number: `BEATS_PER_BAR`, which the transport row's beat grid is as
-# many dots as.** The deck's oscillator lives in this crate, so this is where
-# how many beats a bar has is written down — and it is written down as
-# *provisional*, a fixed assumption of common time until the IR format carries
-# a real time signature. Transcribing the 4 into the example would be a copy
-# that goes on saying four the day that changes; asking for it by name means
-# the grid follows it. `view::Transport` still takes it as a number, so
-# nothing in `src/` gains a dependency (ADR-0156).
-karakuri-signal.workspace = true
-# The `.kir` pair the example's Set is built from goes through parse and check
-# before `Set::build` will take it, and those two stages are `karakuri-ir`'s.
-# `karakuri-cli` reaches them the same way; there is no shorter route to a
-# `Checked` and inventing one would be a second answer to *what does this
-# procedure compile to*.
-karakuri-ir.workspace = true
-# **Where an operation becomes a record**, which is a crate now
-# ([ADR-0194](../../docs/adr/0194-where-an-operation-becomes-a-record-is-a-crate-that-depends-on-both.md)).
-# A control on this panel emits an `Operation` and the deck is moved by the
-# record it writes (P-0028), so the example asks this crate what a press wrote
-# rather than answering for itself — which is ADR-0185's promise kept: the
-# `record` function that used to sit beside `apply` is **deleted**, not moved.
-# It is a dev-dependency because it is the *example's*: `src/` emits operations
-# and applies nothing, and nothing in it may reach a record (ADR-0156).
-karakuri-operation-record = { version = "0.1.0", path = "../karakuri-operation-record" }
-# **For `Record` and for `Store`.** ADR-0185 expected
-# this dependency to leave with the hand-written conversion; it does not, and
-# the reason is the other half of the seam: `apply` takes a `&Record` and turns
-# it into a deck movement, which is the half ADR-0185 never promised to delete.
-# `karakuri-operation-record` answers *what was written* and names `Record` in
-# its answer without re-exporting it, so the example still has to be able to
-# say the word.
-#
-# `Store` is the second reason and it is the Library bay's: the bay lists what
-# the store holds, and `Store::list_sets` is the one answer to *what does this
-# library have in it*. It is a dev-dependency for the same reason the rest of
-# this list is — reading a directory is the harness's, and `src/` takes a list
-# of names (ADR-0156).
-karakuri-store.workspace = true
-
-# **The example carries tests, so it is a test target.** Cargo builds an example
-# under `cargo test` but does not run the tests inside one unless it is asked,
-# and a test that the ordinary command does not run is a test that rots. Its
-# device-touching test is under `mod gpu` like every other one in this
-# workspace, so `--skip gpu::` still subtracts it.
-[[example]]
-name = "panel"
-test = true
+# **The half of [ADR-0156](../../docs/adr/0156-the-consoles-arrangement-is-a-tree-this-repository-owns.md)
+# that mattered is not weakened by their going — it is completed.** The rule was
+# that a surface, a device and an event loop are the harness's and stay
+# dev-dependencies *so that nothing in `src/` can reach for one*; with the
+# harness in another package there is no entry in this manifest that could be
+# reached for at all. `src/` takes no device, and now neither does anything else
+# here. `docs/contributing.md` §3's *"Three crates take a device, not one"* is
+# stale as a result: the third was this crate "and only through its example",
+# and it is not this crate any more.

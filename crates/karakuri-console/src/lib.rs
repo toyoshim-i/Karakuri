@@ -170,7 +170,7 @@ const PROGRAM_DIVIDER: f32 = 8.0;
 /// The body row holding all three has **no name**, and neither has the root
 /// column it sits in — and *nobody addresses them* is not the reason.
 /// `Layout::hit` hands a split out as `Hit::Divider { split, .. }`,
-/// `examples/panel.rs`'s fold-at-pointer turns that into `Op::Fold(split)`,
+/// `crates/karakuri/src/main.rs`'s fold-at-pointer turns that into `Op::Fold(split)`,
 /// and `Outcome::Folded`'s `root` exists to report the root's own case. So
 /// **both splits fold through the pointer today**; what they cannot be is
 /// reached by anything holding only a name — a keyboard, a MIDI map or MCP.

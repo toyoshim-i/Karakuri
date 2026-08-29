@@ -2,7 +2,7 @@
 //!
 //! None of this needs a window or a device: what to draw is a walk of the
 //! arrangement, and who gets an event is a hit test. The one test here that
-//! does need a device is not here at all — it is `examples/panel.rs`'s
+//! does need a device is not here at all — it is `crates/karakuri/src/main.rs`'s
 //! `gpu::egui_paints_the_console_onto_a_device`, under `mod gpu` like every
 //! other one in the workspace.
 
@@ -30,7 +30,7 @@ const BAYS: &[&str] = &[
 ];
 
 /// **The canvas the picture is fitted to**, and it is the workspace's
-/// reference workload — 1280x720, which `examples/panel.rs` names `CANVAS` and
+/// reference workload — 1280x720, which `crates/karakuri/src/main.rs` names `CANVAS` and
 /// builds its `Present` at. It is a value the caller hands in rather than
 /// anything `src/` knows (ADR-0156), so a test hands one in too.
 const CANVAS: (u32, u32) = (1280, 720);
@@ -801,7 +801,7 @@ fn a_folded_preview_row_has_no_rectangles() {
     layout.solve();
     assert!(preview_rects(&layout, CANVAS).is_some());
 
-    // **And the fold the other way round, which is the sentence the example's
+    // **And the fold the other way round, which is the sentence the program's
     // readout now prints**: *"fold the picture away (f over it) and deck A
     // keeps the loop awake on its own"*. The manual's own words are the same
     // claim — *"The deck previews under it are auditions of their own, so they

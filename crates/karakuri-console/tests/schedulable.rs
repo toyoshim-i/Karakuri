@@ -519,7 +519,7 @@ fn a_folded_transport_row_declares_nothing_and_unfolding_puts_it_back() {
 /// test is what has to be changed on purpose.
 ///
 /// The other half of honest is a measurement, it needs a window and three
-/// seconds of nobody touching it, and it is in `examples/panel.rs`, which
+/// seconds of nobody touching it, and it is in `crates/karakuri/src/main.rs`, which
 /// holds `PANEL_PASS` against the run it has just taken.
 #[test]
 fn every_declared_cost_is_one_whole_panel_pass() {

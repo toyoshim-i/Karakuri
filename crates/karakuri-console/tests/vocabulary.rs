@@ -35,7 +35,7 @@
 //!   `Undecided` for the same reason, and says so at the variant.
 //! - **Two splits in the console's arrangement have no name**, so nothing but
 //!   the pointer can reach them: the root column and the body row. `Layout`
-//!   hands both to a caller as `Hit::Divider { split, .. }`, the example's `g`
+//!   hands both to a caller as `Hit::Divider { split, .. }`, the program's `g`
 //!   turns that into [`Op::Fold`] of the split, and
 //!   `Outcome::Folded { root: true }` exists to report one of the two. A
 //!   `String` cannot say either — `Layout::name` answers `None` — so an `Op`
@@ -63,7 +63,7 @@
 //! translation of this, not the operation."* ADR-0175 applied it to this
 //! variant already: *under the pointer* stopped being part of what an
 //! operation **means** and became one way of naming which region, so the two
-//! arms live in `examples/panel.rs` and a divider arrives as
+//! arms live in `crates/karakuri/src/main.rs` and a divider arrives as
 //! [`Op::Fold`] of the split it already names. And [`Op`]'s own doc says it
 //! outright — *"**Resolving the pointer is the caller's**"*.
 //!
@@ -312,7 +312,7 @@ fn the_variants_with_no_row_are_the_ones_written_down() {
 /// `Operation` names a region by `String`, and `Layout::name` answers `None`
 /// for a split the arrangement left unnamed. There are exactly two of those —
 /// the root column and the body row — and both are handed to a caller as
-/// `Hit::Divider { split, .. }`, which `examples/panel.rs` turns into
+/// `Hit::Divider { split, .. }`, which `crates/karakuri/src/main.rs` turns into
 /// `Op::Fold` of the split. So this is the cost of `Op` becoming `Operation`,
 /// counted: it is two, and they are these.
 ///
