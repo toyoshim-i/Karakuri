@@ -93,13 +93,22 @@
 //! and no session. The pair is [`Sources`], and it is the whole of what this
 //! program takes from the command line. Two things beyond the engine are here.
 //! **The store is opened to be read** — once, at
-//! startup, so the Library bay has names to list ([`library`]) — and it is
-//! neither created nor written to. And **records exist**: a mixer control
+//! startup, so the Library bay has names to list ([`library`]) — and **once
+//! to be written**, which is the arrangement family and the one thing in this
+//! program that reaches a disk on purpose: an operator's arrangement is kept
+//! under `arrangements/<name>.arrangement.json` and put back from there
+//! ([`arrangement`],
+//! [ADR-0221](../../../docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md)).
+//! No control emits either operation yet — the panel has nowhere to type a
+//! name — so nothing a player can press writes anything today, and the wiring
+//! is here because it can be nowhere else: the console cannot reach the store
+//! and the store cannot name a layout, so a third party is what joins them.
+//! And **records exist**: a mixer control
 //! emits an operation, `karakuri-operation-record` turns it into a `Record`,
 //! and [`apply`] is what moves the deck with it, because
 //! [P-0028](../../../docs/principles/0028-every-control-ends-in-the-same-record.md)
-//! is that every control ends in the same record. Nothing here reaches a disk
-//! either way, and no record stream drives time.
+//! is that every control ends in the same record. No record reaches a disk,
+//! and no record stream drives time.
 //!
 //! **What is missing is named rather than left to be noticed.** Audio, MIDI,
 //! MCP, the watcher and replay are all `karakuri-environment`'s and all
@@ -213,7 +222,7 @@ use karakuri_engine::{
 };
 use karakuri_environment::mix;
 use karakuri_ir::Kind as Layer;
-use karakuri_layout::{Axis, Hit, NodeId, Point};
+use karakuri_layout::{Axis, Hit, Layout, NodeId, Point};
 use karakuri_operation::{BlendMode, Operation};
 use karakuri_operation_record::{written, Current, Written};
 use karakuri_store::record::Record;
@@ -1274,6 +1283,13 @@ impl Readout {
                 }
             ),
             Outcome::Reset => println!("reset: a fresh arrangement, at the same viewport"),
+            // **Nothing that goes through here can produce this.** A restore
+            // is not an `Op` — it carries a whole arrangement, which only
+            // whoever read the store can hand over — so `arrangement` says its
+            // own sentence, where the name is, and this arm exists because the
+            // match is exhaustive rather than because a line is owed. See
+            // `Panel::restore`.
+            Outcome::Restored => {}
             Outcome::Report(rows) => {
                 println!("regions:");
                 let lines: Vec<String> = rows
@@ -2640,6 +2656,134 @@ fn library(root: &std::path::Path) -> Vec<String> {
     }
 }
 
+/// **Where a named arrangement is kept and put back**, and the one route in
+/// this program that both reads an operation and reaches a disk.
+///
+/// # Why it is here, in a package neither side depends on
+///
+/// The panel cannot reach the store. `karakuri-console` dropped
+/// `karakuri-store` when this program moved out of it, and the drop was the
+/// point — a crate that takes no device and no disk is what ADR-0156 bought,
+/// and its manifest now has no entry that could be reached for at all. The
+/// store cannot reach the panel either: `karakuri-store`'s `src/` must not
+/// name `karakuri-layout`, so it keeps an arrangement as bytes it does not
+/// understand, exactly as it keeps `.kir` source
+/// ([ADR-0221](../../../docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md)
+/// §4). **So the two halves meet in a third party, and this file is the third
+/// party** — the same position it holds for a record, where the vocabulary
+/// says what to write and only somebody holding a `Deck` can apply it
+/// ([`apply`]).
+///
+/// # The route, and where each half of it is decided
+///
+/// - **Saving** is `serde_json::to_vec` of [`Panel::layout`] into
+///   `Store::write_arrangement`, which is ADR-0221's own sentence. The format
+///   is `karakuri-layout`'s hand-written `Serialize`, so an unbounded maximum
+///   goes out as an explicit absence rather than as an infinity JSON cannot
+///   spell, and a `NodeId` goes out as the bare number it is.
+/// - **Putting one back** is `Store::read_arrangement`, `serde_json` into a
+///   [`Layout`], and [`Panel::restore`]. **Neither this file nor the panel
+///   checks the arrangement**: `Layout`'s `TryFrom<Wire>` is the one place a
+///   file that disagrees with itself is refused rather than repaired
+///   (ADR-0158), and a check here would be a second answer to a question that
+///   already has one.
+///
+/// # What it does with each of the three ways it can fail
+///
+/// **Says it and moves nothing**, and never panics: a panic reachable from an
+/// event handler aborts this process rather than unwinding (see the module
+/// documentation). The three are a store it could not open or write, a name
+/// nothing is filed under, and a file that will not read back — and the third
+/// is the one that has to be told apart from the second, because *there is no
+/// such arrangement* and *the arrangement you saved is broken* send an
+/// operator to two different places.
+///
+/// **A name nothing is filed under never falls back to the default.**
+/// `Store::read_arrangement` answers `StoreError::NoArrangement(name)` and
+/// that sentence carries the name, which is the whole reason the store has a
+/// fourth error variant rather than reusing `NotFound`: an operator who
+/// mistyped a name needs to be told the name, not to watch their console reset
+/// (ADR-0221 §2).
+///
+/// # The store is created by a save and not by a restore
+///
+/// [`library`] refuses to create one, because *"a program that listed a
+/// library by first making one would change the directory it was run in"*, and
+/// a restore is a read on exactly those terms. A **save** is the case
+/// `Store::open` establishing the layout is right for — it is a program that
+/// is about to write — so the two halves below differ, deliberately, and the
+/// restore's guard is what keeps `cargo run -p karakuri` in somebody's home
+/// directory from leaving a `.karakuri` behind for having asked a question.
+///
+/// # It answers `None` for every other operation
+///
+/// Which is what lets it sit on the one path every emitted operation already
+/// takes ([`App::performed`]) rather than being a second route into the
+/// panel. **Nothing this program draws emits either of these two today** —
+/// the manual's rows say so, with four empty badges each and a name as the
+/// reason — and that is why the wiring is written rather than a reason to
+/// leave it out, exactly as [`unwritten`] is written for controls that do not
+/// exist yet.
+fn arrangement(root: &std::path::Path, panel: &mut Panel, operation: &Operation) -> Option<String> {
+    match operation {
+        Operation::SaveArrangement { name } => Some(keep_arrangement(root, panel, name)),
+        Operation::RestoreArrangement { name } => Some(put_arrangement_back(root, panel, name)),
+        _ => None,
+    }
+}
+
+/// The running arrangement, filed under `name`. See [`arrangement`].
+fn keep_arrangement(root: &std::path::Path, panel: &Panel, name: &str) -> String {
+    let bytes = match serde_json::to_vec(panel.layout()) {
+        Ok(bytes) => bytes,
+        Err(e) => return format!("arrangement: `{name}` was not kept — it did not serialise: {e}"),
+    };
+    let wrote = Store::open(root).and_then(|store| store.write_arrangement(name, &bytes));
+    match wrote {
+        Ok(()) => format!(
+            "arrangement: kept as `{name}` — {} bytes at {}",
+            bytes.len(),
+            root.join("arrangements")
+                .join(format!("{name}.arrangement.json"))
+                .display()
+        ),
+        Err(e) => format!("arrangement: `{name}` was not kept: {e}"),
+    }
+}
+
+/// The arrangement filed under `name`, into the window the panel already has.
+/// See [`arrangement`].
+fn put_arrangement_back(root: &std::path::Path, panel: &mut Panel, name: &str) -> String {
+    if !root.is_dir() {
+        return format!(
+            "arrangement: no store at {}, so nothing is filed under `{name}` — and the \
+             console has not moved",
+            root.display()
+        );
+    }
+    let bytes = match Store::open(root).and_then(|store| store.read_arrangement(name)) {
+        Ok(bytes) => bytes,
+        Err(e) => return format!("arrangement: `{name}` is not back — {e}"),
+    };
+    let layout: Layout = match serde_json::from_slice(&bytes) {
+        Ok(layout) => layout,
+        // **Refused whole rather than repaired**, which is the loader's own
+        // sentence and not this file's judgement (ADR-0158).
+        Err(e) => {
+            return format!(
+                "arrangement: `{name}` is not back — the file disagrees with itself and is \
+                 refused rather than repaired: {e}"
+            )
+        }
+    };
+    let viewport = panel.layout().viewport();
+    panel.restore(layout);
+    format!(
+        "arrangement: `{name}` is back, at the {} x {} this window already had",
+        viewport.w, viewport.h
+    )
+}
+
 /// **What the mixer strips read this frame**: one per slot the deck has, out
 /// of the six things a `Deck` will say about a slot.
 ///
@@ -3568,12 +3712,23 @@ impl App {
     /// which is the difference between *this press writes nothing, and that is
     /// settled* and *this press owes a record nobody has decided how to
     /// write*.
-    fn performed(gfx: &mut Gfx, acted: &Acted, otherwise: Repaint) -> Repaint {
+    fn performed(gfx: &mut Gfx, panel: &mut Panel, acted: &Acted, otherwise: Repaint) -> Repaint {
         match acted {
             Acted::Nothing => otherwise,
             Acted::Operated(outcome) => Change::Operated(outcome).repaint(),
             Acted::Emitted(operation) => {
                 if let Some(operation) = operation.as_ref() {
+                    // **The two operations that reach a disk**, and they are
+                    // taken first because they are not about the deck at all:
+                    // an arrangement is the console's own state, `written`
+                    // answers `Silent(Surface)` for both, and what they change
+                    // is the panel and a file under the store. Everything
+                    // below this is the mix. See [`arrangement`], which
+                    // answers `None` for every other operation and is why this
+                    // is one line rather than a second route into the panel.
+                    if let Some(line) = arrangement(std::path::Path::new(STORE), panel, operation) {
+                        println!("{line}");
+                    }
                     // **The reading is taken off the deck, and for four of the
                     // five controls it is *I read nothing*.** A gain, an
                     // opacity, a blend mode and a residency carry everything
@@ -3895,7 +4050,12 @@ impl ApplicationHandler for App {
                 // top of its track asks for 1.0 sixty times a second and
                 // changes nothing, and `Change::Pointer(Panel)` would draw a
                 // frame for every one of them.
-                let repaint = App::performed(gfx, &acted, Change::Pointer(claim).repaint());
+                let repaint = App::performed(
+                    gfx,
+                    &mut self.readout.panel,
+                    &acted,
+                    Change::Pointer(claim).repaint(),
+                );
                 App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
             }
             WindowEvent::MouseInput {
@@ -3917,7 +4077,12 @@ impl ApplicationHandler for App {
                 // already a frame, but the operation the dot asked for is the
                 // thing that moved every region in the Program bay, and it is
                 // the outcome that says so.
-                let repaint = App::performed(gfx, &acted, Change::Pointer(claim).repaint());
+                let repaint = App::performed(
+                    gfx,
+                    &mut self.readout.panel,
+                    &acted,
+                    Change::Pointer(claim).repaint(),
+                );
                 App::wants(gfx, &mut self.egui_due, &mut self.costs, repaint);
             }
             WindowEvent::MouseWheel { .. } => {
@@ -4491,6 +4656,232 @@ mod tests {
             vec!["morph01".to_owned(), "night01".to_owned()],
             "the bay lists {listed:?}"
         );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// A root of this test's own, cleaned of whatever a previous run left.
+    fn arrangement_root(what: &str) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "karakuri-arrangement-{what}-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        root
+    }
+
+    /// A panel with something folded and something soloed — the two things an
+    /// arrangement is kept for, and the two a reset forgets.
+    fn arranged(width: f32, height: f32) -> Panel {
+        let mut panel = Panel::new(width, height);
+        let staging = panel.layout().find("staging").expect("a staging bay");
+        panel.op(Op::Fold(staging));
+        let mixer = panel.layout().find("mixer").expect("a mixer bay");
+        panel.op(Op::Solo(mixer));
+        panel.solve();
+        panel
+    }
+
+    /// **The bytes are at the path `karakuri-store`'s own header claims**, read
+    /// off that path and not through the store that wrote them.
+    ///
+    /// This is the assertion ADR-0221 §4 says the store's suite had to spell
+    /// out rather than leave to a round trip: *"a format test is not a location
+    /// test"*, because a defect that files the arrangement in the wrong
+    /// directory entirely is invisible to a test that writes and reads through
+    /// the same wrong path. The same hole is open one layer up — this file
+    /// chooses the name it hands over — so the same assertion is made here,
+    /// about `arrangements/<name>.arrangement.json` under [`STORE`]'s root.
+    #[test]
+    fn an_arrangement_is_kept_at_the_path_the_stores_header_names() {
+        let root = arrangement_root("kept");
+        let mut panel = arranged(1280.0, 720.0);
+
+        let said = arrangement(
+            &root,
+            &mut panel,
+            &Operation::SaveArrangement {
+                name: "four_deck".to_owned(),
+            },
+        )
+        .expect("a save is one of the two operations this route answers for");
+
+        let at = root.join("arrangements").join("four_deck.arrangement.json");
+        let bytes = std::fs::read(&at).unwrap_or_else(|e| {
+            panic!(
+                "nothing at {} after `{said}` — a saved arrangement is one path component of \
+                 name, one of what it is, and one of the format it is in, under the store's \
+                 fourth directory: {e}",
+                at.display()
+            )
+        });
+
+        // And what is at that path is this panel's arrangement rather than
+        // some other document that happens to be there.
+        let back: Layout =
+            serde_json::from_slice(&bytes).expect("the bytes at that path are an arrangement");
+        assert!(
+            back.is_soloed(),
+            "the file at {} did not carry the solo the panel was saved with",
+            at.display()
+        );
+
+        // Nothing else was created under the store: an arrangement is a fourth
+        // thing beside `sets/`, `sessions/` and the artifacts, and not one of
+        // them.
+        assert!(
+            !root.join("sets").join("four_deck.set.ndjson").exists(),
+            "the arrangement was filed as a Set"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **What comes back is the arrangement that was kept, in the window it
+    /// arrives in** — which is `Op::Reset` carrying the viewport across, with
+    /// the arrangement handed in rather than built.
+    ///
+    /// The two viewports differ in both axes on purpose: an arrangement
+    /// carries the viewport it was saved at, so a restore that took the file's
+    /// would open a console arranged on a desktop inside a smaller window with
+    /// every rectangle past the edge.
+    #[test]
+    fn an_arrangement_put_back_arrives_in_the_window_this_one_already_has() {
+        let root = arrangement_root("back");
+        let mut saved = arranged(1920.0, 1080.0);
+        arrangement(
+            &root,
+            &mut saved,
+            &Operation::SaveArrangement {
+                name: "night_b".to_owned(),
+            },
+        )
+        .expect("a save");
+
+        // A window of a different size, with nothing folded and nothing soloed.
+        let mut window = Panel::new(1280.0, 720.0);
+        let staging = window.layout().find("staging").expect("a staging bay");
+        assert!(!window.layout().is_collapsed(staging));
+
+        let said = arrangement(
+            &root,
+            &mut window,
+            &Operation::RestoreArrangement {
+                name: "night_b".to_owned(),
+            },
+        )
+        .expect("a restore");
+
+        let now = window.layout();
+        assert_eq!(
+            (now.viewport().w, now.viewport().h),
+            (1280.0, 720.0),
+            "`{said}` — the arrangement brought the window it was saved at with it. The window \
+             is the operator's and never the file's"
+        );
+        assert!(
+            now.is_soloed() && now.is_collapsed(now.find("staging").expect("staging")),
+            "`{said}` — the fold and the solo did not come back, so what was put back is not \
+             what was kept"
+        );
+
+        std::fs::remove_dir_all(&root).expect("clean up");
+    }
+
+    /// **A name nothing is filed under is said back, and the console does not
+    /// move.**
+    ///
+    /// The refusal that matters most in this family: `read_arrangement` never
+    /// falls back to the built-in, so an operator who mistyped a name is told
+    /// the name rather than watching their console reset (ADR-0221 §2). Asked
+    /// three ways, because the three failures send an operator to three
+    /// different places — no store at all, no such name, and a file that will
+    /// not read back.
+    #[test]
+    fn a_name_nothing_is_filed_under_is_said_back_and_nothing_resets() {
+        let root = arrangement_root("refused");
+        let mut panel = arranged(1280.0, 720.0);
+        let kept: Vec<bool> = panel
+            .nodes()
+            .iter()
+            .map(|n| panel.layout().is_collapsed(n.id))
+            .collect();
+        let unchanged = |panel: &Panel, said: &str| {
+            let now: Vec<bool> = panel
+                .nodes()
+                .iter()
+                .map(|n| panel.layout().is_collapsed(n.id))
+                .collect();
+            assert_eq!(
+                now, kept,
+                "`{said}` and the arrangement moved — a refusal that resets the console is the \
+                 one thing `read_arrangement` promises never to do"
+            );
+            assert!(
+                panel.layout().is_soloed(),
+                "`{said}` and the solo went — see above"
+            );
+        };
+
+        // 1. No store at all, and asking a question does not make one.
+        let said = arrangement(
+            &root,
+            &mut panel,
+            &Operation::RestoreArrangement {
+                name: "four_deck".to_owned(),
+            },
+        )
+        .expect("a restore");
+        assert!(
+            said.contains("four_deck"),
+            "the refusal did not say the name back: {said}"
+        );
+        assert!(
+            !root.exists(),
+            "putting an arrangement back that is not there created a store at {}",
+            root.display()
+        );
+        unchanged(&panel, &said);
+
+        // 2. A store, and no such name in it.
+        Store::open(&root).expect("a store");
+        let said = arrangement(
+            &root,
+            &mut panel,
+            &Operation::RestoreArrangement {
+                name: "four_deck".to_owned(),
+            },
+        )
+        .expect("a restore");
+        assert!(
+            said.contains("four_deck"),
+            "the refusal did not say the name back: {said}"
+        );
+        unchanged(&panel, &said);
+
+        // 3. A file filed under the name that is not an arrangement. Refused
+        //    whole rather than repaired (ADR-0158), and told apart from
+        //    *there is no such arrangement*, which is the distinction the
+        //    sentence carries.
+        Store::open(&root)
+            .expect("a store")
+            .write_arrangement("four_deck", b"{\"nodes\":[]}")
+            .expect("bytes the store does not have to understand");
+        let said = arrangement(
+            &root,
+            &mut panel,
+            &Operation::RestoreArrangement {
+                name: "four_deck".to_owned(),
+            },
+        )
+        .expect("a restore");
+        assert!(
+            said.contains("disagrees with itself"),
+            "a file that will not read back was reported as a missing arrangement, which sends \
+             an operator looking for a name they typed correctly: {said}"
+        );
+        unchanged(&panel, &said);
 
         std::fs::remove_dir_all(&root).expect("clean up");
     }
@@ -5292,6 +5683,32 @@ mod key_column {
     //!   both assertions below read the same list, so an entry naming a row
     //!   that is not marked built fails one and a badge naming a key no entry
     //!   claims fails the other.
+    //! # Two rows this program deliberately binds no key to
+    //!
+    //! *Save the arrangement* and *Put a saved arrangement back* each carry a
+    //! name the operator picked, and **a bare key press cannot type one**.
+    //! ADR-0221 §1 provides a fallback — a surface that cannot type a name
+    //! passes a `history::stamped_id` stamp, as `accepted_save` does for a Set
+    //! — and it is declined here for two reasons, both of which would show up
+    //! as a badge that lies:
+    //!
+    //! - **Putting one back cannot be bound at all.** Nothing at a key press
+    //!   says *which* arrangement, and *the most recent* is a handle derived
+    //!   from where a file sits, which is the failure
+    //!   [P-0053](../../../docs/principles/0053-a-value-that-must-be-stable-is-recorded-not-derived.md)
+    //!   is about and the one ADR-0221 rejected a slot number over.
+    //! - **So a save key alone would keep arrangements nothing can put back.**
+    //!   This program has no control that lists them and no way to show an
+    //!   operator the stamp it picked for them, and `ArrangementEntry`'s own
+    //!   documentation says an arrangement is *"saved by an operator who is
+    //!   telling the console what to call this shape"*. A `has` badge would be
+    //!   true of the press and false of everything the press was for.
+    //!
+    //! Both rows therefore carry four empty badges on [`PAGE`], and the page
+    //! says the same thing in its own words. Binding either one is a change to
+    //! that specification first, and it wants the control this page's *panel*
+    //! badges now name — the transport row — rather than a letter.
+    //!
     //! - **Only the key column.** The panel column is
     //!   `karakuri-console`'s two files, the MCP column is
     //!   `karakuri-environment/src/mcp.rs`, and **the MIDI column is checked by
@@ -5500,7 +5917,7 @@ mod key_column {
     fn the_scan_finds_the_page_and_the_keys() {
         let badges = key_badges();
         assert!(
-            badges.len() >= 50,
+            badges.len() >= 54,
             "only {} rows with a key badge found in {PAGE} — is a row still `{ROW}` followed by \
              an `<h3>` and its `rt` badges?",
             badges.len()

@@ -461,10 +461,46 @@ pub fn written(operation: &Operation, current: &Current) -> Written {
         // reconstructs anything from. It is not `Owed` either: nothing is
         // missing, because there is nothing to write.
         //
-        // **A saved arrangement would not change this arm.** The record it
-        // would need is the panel's own, not the session's — the same reason
-        // `Operation::SizeWindow` is here beside it.
+        // **A saved arrangement did not change this arm**, which was written
+        // as a prediction before the other two members existed and is kept
+        // because it held. The record such a family needs is the panel's own,
+        // not the session's — the same reason `Operation::SizeWindow` is here
+        // beside it.
         | Operation::ResetArrangement
+        // **A save writes a file and no record, and those are two different
+        // kinds of nothing.** This arm answers what goes into the *session
+        // stream*, and an arrangement deliberately does not: ADR-0221 put it
+        // in a fourth place under the store —
+        // `arrangements/<name>.arrangement.json` — precisely **because** it is
+        // not something a replay reconstructs anything from, and a session
+        // replayed on a different window would otherwise arrive carrying
+        // somebody else's panel. So the disk behind these two is beside the
+        // point of this answer rather than an argument against it.
+        //
+        // **Not `Silent::OnLanding`, and that is the arm to think about.**
+        // `Operation::SaveSet` is there, and it looks like the same shape: an
+        // ask, a disk, a write that may be refused. The difference is that a
+        // Set save *has* a record — `Record::Save` — and the only question
+        // that arm answers is *when* it is written, which is at the landing
+        // rather than at the press. Nothing in the session vocabulary is an
+        // arrangement, so there is no record here whose timing could be at
+        // issue; putting these two in `OnLanding` would promise a caller a
+        // record that arrives later, and none ever arrives.
+        //
+        // **Not `Silent::NoRecord` either**, which is where an operation goes
+        // when the record vocabulary has no row for what it does and that is a
+        // gap. This is the opposite: the vocabulary having no row for an
+        // arrangement is the decision (ADR-0221 §2, and ADR-0208 §4 before
+        // it), taken against `Record`-in-the-stream by name. A gap is
+        // something somebody still owes; this is settled, which is what
+        // `Silent::Surface` says and `NoRecord` would deny.
+        //
+        // **Restoring is the same answer for the same reason**, and it is the
+        // one that makes the reading obvious: it moves every fold, every
+        // divider and the solo at once, which is `ResetArrangement`'s own
+        // sentence with a name in it.
+        | Operation::SaveArrangement { .. }
+        | Operation::RestoreArrangement { .. }
         | Operation::SizeWindow { .. } => Written::Silent(Silent::Surface),
 
         // ----- Silent: it asks rather than changes -------------------------
@@ -982,6 +1018,39 @@ mod tests {
             "a stated tempo carried a phase shift or a confidence — it is a statement \
              rather than an estimate, and a shift would move a beat nobody moved"
         );
+    }
+
+    /// **A file is not a record, and the whole arrangement family says so the
+    /// same way.**
+    ///
+    /// Saving one writes `arrangements/<name>.arrangement.json` and nothing
+    /// into the session stream, which is the answer that is easy to get wrong
+    /// in two directions: `Silent::OnLanding` would promise a `Record` that
+    /// arrives when the write lands and none ever does, and
+    /// `Silent::NoRecord` would call the decision a gap. Asserted for all
+    /// three members together, because what makes the answer right is that
+    /// they are one family — a restore is a reset with a name in it.
+    #[test]
+    fn keeping_an_arrangement_writes_a_file_and_no_record() {
+        for operation in [
+            Operation::ResetArrangement,
+            Operation::SaveArrangement {
+                name: "four_deck".to_string(),
+            },
+            Operation::RestoreArrangement {
+                name: "four_deck".to_string(),
+            },
+        ] {
+            assert_eq!(
+                written(&operation, &Current::default()),
+                Written::Silent(Silent::Surface),
+                "`{operation:?}` did not answer `Silent(Surface)`. An arrangement is the \
+                 console's own state and lives in a fourth place under the store rather than \
+                 in the session stream (ADR-0221) — a save writes a file, and a file is not a \
+                 record whose timing `OnLanding` could be about, nor a gap `NoRecord` could be \
+                 about"
+            );
+        }
     }
 
     /// **The three answers are three different things**, and a caller that

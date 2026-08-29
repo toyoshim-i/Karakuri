@@ -81,3 +81,16 @@ winit = "0.30.13"
 # How `Gpu`'s async constructor is reached off the event loop, which is not an
 # async context.
 pollster = "1.0.1"
+
+# **The one format this program writes**, and it is here because the wiring for
+# a saved arrangement could be nowhere else. `Store::write_arrangement` takes
+# bytes and `karakuri-console` cannot make them: `serde_json` is a
+# *dev*-dependency there on purpose, so that `src/` stays format-agnostic
+# exactly as `karakuri-layout` is, and promoting it would give the panel a
+# dependency ADR-0156's whole argument is about not having. `karakuri-store`
+# cannot make them either — its `src/` must not name `karakuri-layout`
+# ([ADR-0221](../../docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md)
+# §4). So the two halves meet here, which is that record's own answer to where
+# the wiring lives: this package is a third party to both. Nothing new enters
+# the tree — `karakuri-store` and `karakuri-environment` already resolve it.
+serde_json.workspace = true

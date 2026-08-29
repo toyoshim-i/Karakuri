@@ -590,6 +590,14 @@ pub enum Outcome {
     Unsoloed { was: bool },
     /// [`Op::Reset`].
     Reset,
+    /// [`Panel::restore`]: a saved arrangement is in, at the viewport the
+    /// window already had.
+    ///
+    /// **No name**, where the operation that asked for it carries one: this
+    /// crate never saw the name. It was handed a `Layout` by whoever read the
+    /// store, and an outcome that repeated a name back would be repeating the
+    /// caller's own argument to it.
+    Restored,
     /// [`Op::Report`].
     Report(Vec<Placement>),
     /// The operation had nothing to act on: [`Op::FoldEnclosing`] on the root,
@@ -1040,6 +1048,47 @@ impl Panel {
         };
         self.solve();
         outcome
+    }
+
+    /// **Put a saved arrangement in**, at the viewport this window already
+    /// has.
+    ///
+    /// It is [`Op::Reset`]'s arm with the arrangement handed in rather than
+    /// built: the viewport is carried across, the tree is flattened again and
+    /// any drag in hand is dropped, because the node a hand had hold of is not
+    /// a node of this arrangement. **The viewport in `layout` is discarded**,
+    /// and that is the decision rather than an omission — an arrangement
+    /// carries the window it was saved at, and a console arranged on a laptop
+    /// would otherwise come back on a projector with the laptop's margin round
+    /// it.
+    ///
+    /// # Why this is a method and not a ninth [`Op`]
+    ///
+    /// An [`Op`] names a [`NodeId`] or nothing at all, and it is `Copy` and
+    /// `Eq` because every one of its eight variants is a handle or a word. A
+    /// restore's payload is a whole arrangement, which no key press, no map
+    /// line and no pointer can produce — **only a third party holding a store
+    /// can**, and this crate has no store and cannot have one (ADR-0156). So
+    /// the operator's operation is
+    /// `karakuri_operation::Operation::RestoreArrangement { name }`, whoever
+    /// holds the store turns that name into a `Layout`, and this is where the
+    /// `Layout` lands. `tests/vocabulary.rs` records the same thing from the
+    /// other side: the row is in its `NO_OP` list, with the reason.
+    ///
+    /// **Nothing here reads or refuses the bytes.** A file that disagrees with
+    /// itself never becomes a `Layout` at all —
+    /// `karakuri_layout::Layout`'s own `TryFrom<Wire>` refuses it
+    /// (`docs/adr/0158-a-saved-arrangement-that-disagrees-with-itself-is-refused-not-repaired.md`)
+    /// — so by the time one arrives here it is an arrangement, and a second
+    /// check would be a second answer to a question that has one.
+    pub fn restore(&mut self, layout: Layout) -> Outcome {
+        let viewport = self.layout.viewport();
+        self.layout = layout;
+        self.layout.set_viewport(viewport);
+        self.rebuild();
+        self.drag = None;
+        self.solve();
+        Outcome::Restored
     }
 
     /// What a fold or an unfold left behind, read out of the layout. One

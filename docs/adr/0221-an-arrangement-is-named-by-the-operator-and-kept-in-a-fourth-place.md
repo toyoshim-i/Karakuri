@@ -57,7 +57,13 @@ only record with a signed unbounded field. So the store half below is tested by 
 A `String` the operator types, in the same namespace shape a Set id has: one path component,
 letters, digits, `-` and `_`. Where no operator is there to type one — a key press cannot — the
 fallback is a stamp from `karakuri-environment`'s `history::stamped_id`, which is the convention
-`accepted_save` already follows for a Set with `id: Option<String>`.
+`accepted_save` already follows for a Set with `id: Option<String>`. *(Annotated the day after: **nothing reaches that fallback and the
+store's own documentation says it never should** — `ArrangementEntry`'s doc argues that a Set is
+ordinarily filed under a stamp nobody chose and an arrangement never is, because it is saved by an
+operator telling the console what to call this shape. The two are reconciled in favour of the store:
+the fallback was written for a caller that does not exist, and it is half of why no key is bound —
+a stamped save would keep arrangements nothing in this program can put back, since there is no
+listing control to show an operator the stamp picked for them.)*
 
 [P-0019](../principles/0019-prefer-the-mechanism-that-already-exists.md) is most of the argument:
 the naming rule, the stamp fallback, the refusal that keeps a name to one path component
@@ -216,6 +222,13 @@ header claims, which is why that assertion is spelled out rather than left to th
   built.
 - **Nothing gains a route on any surface here.** *Reset the arrangement* still has four empty
   badges, and the two new rows are `docs/manual/operations.html`'s to write.
+
+  *(Two corrections, both from the day after. **It did not have four empty badges when this was
+  written**: [ADR-0220](0220-the-key-column-is-the-instruments-keyboard-and-the-clis-keys-are-its-own.md)
+  landed the same day and made that row's key badge `has r`, so the empty one this record meant is
+  the **panel** badge. And the family found a home: all three rows carry `panel transport` now,
+  beside the map pill, which is the only region on the console that is about the instrument rather
+  than about material and whose own tooltip already offers save, load and start a new one.)*
 - **`docs/adr/INDEX.md` owes a row for this record**, which is not added here because that file is
   shared with another session in flight.
 - **The roadmap's M5 *Adds* bullet can lose two of the three things it says do not exist.** The name

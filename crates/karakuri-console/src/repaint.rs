@@ -329,7 +329,18 @@ impl Change<'_> {
                 // widens the centre. So the frame is owed for the panel and
                 // not for the region named, which is why nothing here is
                 // finer-grained than "draw".
-                Outcome::Folded { .. } | Outcome::Soloed(_) | Outcome::Reset => Repaint::Now,
+                //
+                // **A restore is here for the same reason a reset is**, and
+                // unconditionally for a reason of its own: nothing compares
+                // the arrangement that arrived against the one it replaced, so
+                // an operator who put back the arrangement already on screen
+                // pays one frame. That is the cheap side of the trade — the
+                // expensive side is a whole new arrangement drawn a frame late
+                // — and it is a comparison of two trees, not of a flag.
+                Outcome::Folded { .. }
+                | Outcome::Soloed(_)
+                | Outcome::Reset
+                | Outcome::Restored => Repaint::Now,
                 // Both of these are asked speculatively — `u` with no solo,
                 // `z` with nothing folded — and both say which it was.
                 Outcome::Unsoloed { was } => match was {

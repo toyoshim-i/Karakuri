@@ -139,11 +139,13 @@ fn the_manual_and_the_vocabulary_name_the_same_operations() {
     // into a tone map and an exposure (ADR-0192), and 48 since the mask took a
     // row for its shape and a row for its position (ADR-0201), 49 since
     // the arrangement took one for its reset (ADR-0208), 50 since a node
-    // took one for its authority (ADR-0211), and 52 since the staging lane
-    // took one to keep a candidate and one to put a version back; it is meant
-    // to move with the page, never to be lowered to fit a smaller scan.
+    // took one for its authority (ADR-0211), 52 since the staging lane
+    // took one to keep a candidate and one to put a version back, and 54
+    // since the arrangement gained a save and a put-back beside the reset
+    // (ADR-0221); it is meant to move with the page, never to be lowered to
+    // fit a smaller scan.
     assert!(
-        rows.len() >= 50,
+        rows.len() >= 54,
         "only {} operations found in {PAGE} — is a row still `{ROW}` followed by an `<h3>`?",
         rows.len()
     );

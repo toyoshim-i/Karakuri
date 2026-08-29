@@ -1196,20 +1196,71 @@ operations! {
     /// at once. It is the one operation on the page that forgets, and the row
     /// says so.
     ///
-    /// **It is the default member of a family that does not exist**, which is
-    /// the framing this row was written to rather than *start again*: an
+    /// **It is the default member of a family that now exists**, which is the
+    /// framing this row was written to rather than *start again*: an
     /// arrangement is named, kept and put back, and resetting is putting back
-    /// the one that came with the program. The other members have no row here,
-    /// no record to carry a saved arrangement and nowhere on the console to
-    /// live — which is why this row's panel badge names no home. It is the
-    /// second row in the section with no route at all; the other is *Bring
-    /// back what is folded*, and the two are empty for unrelated reasons.
+    /// the one that came with the program.
+    /// [`SaveArrangement`](Operation::SaveArrangement) and
+    /// [`RestoreArrangement`](Operation::RestoreArrangement) are the other two
+    /// members, and the page now says where all three live on the console.
     ///
-    /// **No payload, and that is decided rather than [`Undecided`].** The
-    /// default arrangement is not a value a caller chooses; the day one is,
-    /// this variant gains the name of the arrangement to restore and stops
-    /// being the only member.
+    /// **No payload, and that is decided rather than [`Undecided`]** — and it
+    /// stayed decided when the family landed. The default arrangement is not a
+    /// file and there is no reserved name for it, so this variant reaches code
+    /// where `RestoreArrangement` reaches a file, and the two never meet
+    /// (ADR-0221 §2). A name here would make *the default* one entry of a
+    /// listing an operator can overwrite.
     ResetArrangement => "Reset the arrangement",
+
+    /// **File the running arrangement under a name the operator picked**,
+    /// overwriting whatever is already kept under it.
+    ///
+    /// The name is a `String` and not an `Option<String>`, which is where this
+    /// parts company with [`Operation::SaveSet`] beside it: a Set is
+    /// *ordinarily* filed under a stamp nobody chose and an arrangement is
+    /// not, because the whole of what a name is for here is that the operator
+    /// will look for it again
+    /// (`docs/principles/0053-a-value-that-must-be-stable-is-recorded-not-derived.md`).
+    /// A surface with nobody there to type one passes
+    /// `karakuri_environment::history::stamped_id`, the same stamp
+    /// `accepted_save` reaches for — so the fallback is the *caller's* and
+    /// this payload never has to say *no name*
+    /// (`docs/adr/0221-an-arrangement-is-named-by-the-operator-and-kept-in-a-fourth-place.md`).
+    ///
+    /// **One path component**, letters, digits, `-` and `_`, which is a Set
+    /// id's rule and is the caller's to keep — `karakuri-environment`'s
+    /// `mcp::checked_id` is where a name reached from a protocol is refused
+    /// rather than sanitised.
+    ///
+    /// **What it writes is a file and not a record**, and those are two
+    /// different things: `karakuri-operation-record` answers
+    /// `Silent(Surface)` here, because a saved arrangement lives in a fourth
+    /// place under the store rather than in the session stream, and a replay
+    /// reconstructs nothing from one. See that crate's arm for why this is not
+    /// `Silent::OnLanding`.
+    SaveArrangement { name: String } => "Save the arrangement",
+
+    /// **The arrangement filed under `name`, at the viewport the window
+    /// already has** — which is [`Operation::ResetArrangement`]'s sentence
+    /// with a name in it, and that is the whole relationship between the two.
+    ///
+    /// **Two refusals, and both were written before this row was.** Nothing
+    /// filed under the name is `StoreError::NoArrangement`, which says the
+    /// name back rather than resetting the console under an operator who
+    /// mistyped it; and a file that disagrees with itself is refused by
+    /// `karakuri-layout`'s own loader rather than repaired
+    /// (`docs/adr/0158-a-saved-arrangement-that-disagrees-with-itself-is-refused-not-repaired.md`).
+    ///
+    /// **The viewport in the file is the one it was saved at and is not the
+    /// one it comes back at.** A window is not part of what an operator kept:
+    /// the caller sets the current viewport and solves, exactly as
+    /// [`ResetArrangement`](Operation::ResetArrangement) carries the viewport
+    /// across today.
+    ///
+    /// **This never reaches the built-in.** The default arrangement is not a
+    /// file and there is no reserved name, so an operator may keep one of
+    /// their own called `default` and it shadows nothing (ADR-0221 §2).
+    RestoreArrangement { name: String } => "Put a saved arrangement back",
 
     // ----- Output and recording -----------------------------------------
 
@@ -1283,12 +1334,14 @@ mod tests {
     /// took a row for its shape and a row for its position (ADR-0201); it
     /// moves with the page and is never lowered to make a shorter list pass.
     /// It was 49 once the arrangement gained a reset (ADR-0208), 50
-    /// since a node gained an authority (ADR-0211), and is 52 since the
-    /// staging lane gained a keep and a put-back.
+    /// since a node gained an authority (ADR-0211), 52 since the
+    /// staging lane gained a keep and a put-back, and is 54 since the
+    /// arrangement's reset stopped being the only member of its family
+    /// (ADR-0221).
     #[test]
     fn the_vocabulary_is_not_empty() {
         assert!(
-            Operation::TITLES.len() >= 50,
+            Operation::TITLES.len() >= 54,
             "only {} operations named — the vocabulary has shrunk below what the manual \
              specifies",
             Operation::TITLES.len()
