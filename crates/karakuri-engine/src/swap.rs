@@ -1245,7 +1245,7 @@ fn run_worker(
                 if let Some(at) = request.live {
                     if !set.select_renderer(at as usize) {
                         eprintln!(
-                            "  this build has no renderer {at} to fold to — every renderer                              is live"
+                            "  this build has no renderer {at} to fold to — every renderer is live"
                         );
                     }
                 }

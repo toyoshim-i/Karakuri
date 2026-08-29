@@ -1648,7 +1648,8 @@ fn parse_args_from(args: impl Iterator<Item = String>) -> Result<ParseOutcome, S
     // two different things about what to play.
     if args_out.load_set.is_some() && !args_out.sets.is_empty() {
         return Err(
-            "--load-set names the material and so do the `.kir` paths beside it; give one              or the other"
+            "--load-set names the material and so do the `.kir` paths beside it; give one \
+             or the other"
                 .to_string(),
         );
     }
@@ -3120,7 +3121,8 @@ fn save_set(args: &Args, placed: &[Vec<Placed>], l1s: &[karakuri_ir::typed::Chec
     };
     if placed.len() > 1 {
         eprintln!(
-            "  only slot 0 is saved: a Set file describes one Set, and which Sets a deck              is holding belongs to a session"
+            "  only slot 0 is saved: a Set file describes one Set, and which Sets a deck \
+             is holding belongs to a session"
         );
     }
     let camera = karakuri_engine::camera::Orbit::default();

@@ -136,7 +136,8 @@ fn check_node_name(name: &str) -> Result<(), String> {
     // `L4` would make that count a lie.
     if crate::setfile::layer_named(name).is_some() {
         return Err(format!(
-            "`{name}` is a layer, so it cannot also be a node's name — a `--param` is told              which of the two it names by the shape of what follows"
+            "`{name}` is a layer, so it cannot also be a node's name — a `--param` is told \
+             which of the two it names by the shape of what follows"
         ));
     }
     if let Some(bad) = name
