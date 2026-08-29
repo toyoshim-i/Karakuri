@@ -237,7 +237,7 @@
       </div>
       <div class="op">
         <div class="op-head"><h3>Load material into a deck</h3><span class="op-when launch">launch</span></div>
-        <p>The single largest gap in this table. Nothing loads a Set into a running deck &mdash; the library can be read and not played from.</p>
+        <p>The single largest gap in this table. Nothing loads a Set into a running deck &mdash; the library can be read and not played from. <strong>The panel badge says where the control goes and not that drawing one would be enough</strong>, which is worth saying because a reader working the board will pick this row up as drawing work: <code>Deck::install</code> is the one function that puts a Set in a slot and is documented as deliberately unreachable from a key or a surface, <code>--set</code> and <code>--load-set</code> are launch flags, and the operation writes no record &mdash; so whichever surface names it has to perform it, and there is nothing to perform. The cursor and the deck selection are owed on top of that, and the key letter is owed by this page.</p>
         <div class="rts">
           <span class="rt plan">panel <b>library &rarr; deck</b></span>
           <span class="rt gap">key <b>&mdash;</b></span>
@@ -875,12 +875,13 @@
       <em>Load material into a deck</em> meets over a Set id. MCP is the one
       surface whose grammar has no objection: it already spells a Set id, an
       arrangement name is the same shape, and the tools are simply not published.
-      <strong>So what these two wait on is one control</strong>, and the
-      <em>panel</em> badges say where it goes &mdash; the transport row, beside
-      the map pill, which is already a named file with <em>save</em>,
-      <em>load</em> and <em>start a new one</em> on it. The console page has to
-      draw it; until it does, this page is specifying a home rather than
-      describing one, and it is the only place on this page that does.
+      <strong>What these two waited on was one control, and it is built.</strong>
+      The <em>panel</em> badges said where it went &mdash; the transport row,
+      beside the map pill, which is already a named file with <em>save</em>,
+      <em>load</em> and <em>start a new one</em> on it &mdash; the console page
+      drew it, and the panel reaches all three rows now. It typed the name, which
+      is what the other three surfaces still cannot do, so those columns are
+      unchanged and empty for the reason above rather than for want of a control.
     </p>
     <p>
       <strong>The command line is the only way into most of what a Set is</strong>

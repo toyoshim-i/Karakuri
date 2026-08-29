@@ -472,16 +472,42 @@ fn a_folded_or_soloed_or_short_bay_lists_nothing() {
 // Nothing here is a control, and nothing is stored
 // ---------------------------------------------------------------------------
 
-/// **Nothing in the Library bay answers a pointer**, and that is the answer
-/// rather than an omission: the mock draws four scope chips, two filter
-/// fields, a `+`, a row cursor and a `load → C` pill, and every one of them is
-/// a control over machinery that does not exist. So `claim` hands every point
-/// of this bay to `egui`, exactly as it does the transport row's.
+/// **Nothing in the Library bay answers a pointer**, and for the `load → A`
+/// pill that is the specification rather than a thing not built yet.
+///
+/// The mock draws four scope chips, two filter fields, a `+`, a row cursor and
+/// the pill. Seven of the eight are controls over machinery that does not
+/// exist, which is `view::library`'s own list. **The pill is the one that is
+/// not**: `console.html`'s *How a Set reaches a deck* settles that a load is
+/// *"a cursor and a key with no pointer anywhere in it"*, so the pill names
+/// where a press would land and is never itself pressed — and a drag from a
+/// row onto a strip is *"a second route to the same command, and never the
+/// first"*. So `claim` hands every point of this bay to `egui`, exactly as it
+/// does the transport row's.
+///
+/// # The bay's corners do not reach the pill, and the two numbers say why
+///
+/// The bay's own rectangle inset past [`GRAB`](karakuri_console::panel::GRAB)
+/// is where this test used to stop, and it is **two pixels short of the box
+/// the pill is drawn in**. A `.lib-foot` is `padding: 5px 10px`
+/// ([`size::LIB_FOOT_PAD_X`]) and a flex row whose `.sep { flex: 1 }` pushes
+/// the pill to the far end of it, so the pill's right edge is 10 in from the
+/// bay's — where an inset of `GRAB + 2` is 8. **10 against 6 is the pill
+/// clearing the boundary's grab**, which is what makes it drawable at all and
+/// is `input.rs`'s measurement one bay along; 8 is in the gap between the two,
+/// and a pill that claimed presses would have gone unasked.
+///
+/// So the points are taken off [`LibraryBay`]'s own boxes rather than off the
+/// bay's corners: the foot's content box across its middle, and each drawn
+/// row's. That is the same rule the geometry test above is written to — ask
+/// the derivation that draws it — and it is why this file, not `claim`, is
+/// where the reach is stated.
 #[test]
 fn nothing_in_the_library_is_a_control() {
     let mut panel = console(PLAUSIBLE);
     let ctx = drawn_once();
     let region = to_egui(rect_of(panel.layout(), "library"));
+    let bay = bay(&panel);
     let strips = Vec::new();
 
     // The four corners inside the bay, and its middle — which between them
@@ -493,15 +519,43 @@ fn nothing_in_the_library_is_a_control() {
     // anywhere on the console; what this test is about is whether anything
     // *in* the bay takes a press, and a point on a boundary is not in it.
     let inset = karakuri_console::panel::GRAB + 2.0;
-    let points = [
+    let mut points = vec![
         egui::pos2(region.min.x + inset, region.min.y + inset),
         egui::pos2(region.max.x - inset, region.min.y + inset),
         egui::pos2(region.min.x + inset, region.max.y - inset),
         egui::pos2(region.max.x - inset, region.max.y - inset),
         region.center(),
     ];
+
+    // **The foot's content box, across its middle** — the count at one end and
+    // the pill at the other, with `.sep` between them. Eleven points at the
+    // foot's centre y, which is 13 off the bay's bottom edge and so clear of
+    // the boundary under it.
+    let (left, right) = (
+        bay.foot.min.x + size::LIB_FOOT_PAD_X,
+        bay.foot.max.x - size::LIB_FOOT_PAD_X,
+    );
+    assert!(
+        right - left > 0.0,
+        "the foot's content box is {left} to {right}, which is no box to sweep"
+    );
+    for step in 0..=10 {
+        let t = step as f32 / 10.0;
+        points.push(egui::pos2(left + (right - left) * t, bay.foot.center().y));
+    }
+
+    // **And each drawn row's own box**, which is where a cursor would be and
+    // where a drag onto a strip would start. The row is the full width of the
+    // list, so its text box is one `LIB_ROW_PAD_X` in from either end.
+    for index in 0..bay.rows {
+        let row = bay.row(index);
+        points.push(egui::pos2(row.min.x + size::LIB_ROW_PAD_X, row.center().y));
+        points.push(egui::pos2(row.center().x, row.center().y));
+        points.push(egui::pos2(row.max.x - size::LIB_ROW_PAD_X, row.center().y));
+    }
+
     let mut asked = 0;
-    for p in points {
+    for p in &points {
         let claimed = claim(&mut panel, &ctx, &showing(&strips), Point::new(p.x, p.y));
         assert_eq!(
             claimed,
@@ -510,8 +564,15 @@ fn nothing_in_the_library_is_a_control() {
         );
         asked += 1;
     }
-    // A guard, so this cannot pass by testing nothing.
+    // A guard, so this cannot pass by testing nothing — and a floor under the
+    // reach, so the foot's sweep and the rows cannot quietly go away.
     assert_eq!(asked, points.len(), "not every point was asked");
+    assert!(
+        points.len() >= 5 + 11 + 3,
+        "only {} points asked: the bay's corners, the foot's box and at least one row are the \
+         floor, and fewer is a sweep that has stopped covering the pill",
+        points.len()
+    );
 }
 
 /// **The names are the harness's and the console keeps no copy.**
