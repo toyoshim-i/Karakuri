@@ -1290,8 +1290,38 @@ than work, and every one of them was found by building the thing next to it.
 
   **A sixth was found beside them and is a routing question rather than a gap**: the page routes
   *Tone map* and *Exposure* to `panel transport`, and the mock's transport row draws neither.
-- **The library's two questions are `console.html`'s own, and building the bay is what made them
-  due — and by the rule above they are written into the manual now rather than waiting.** *Whether a folder scope reads Sets or artifacts* is what the scope row is waiting on — a
+- ~~**The library's two questions are `console.html`'s own**~~ — **all three are answered on the page,
+  2026-08-29, and none of them needed an operation invented.**
+
+  **A Set reaches a deck by the deck selection**, which is the value `x` already reads and the
+  reason the page says the selection stays put when you tab away into the library. Keyboard-only is
+  met by the arrangement rather than by a second control, and drag is a second route naming the deck
+  by the strip you drop on. A destination chosen in the library's own foot lost: it would be a third
+  selection on a panel that already explains two. `Operation::LoadSet { deck, set }` already exists
+  and already has a row, so nothing was invented — **what is owed is a key for it**, and MIDI is
+  empty for a reason rather than for want of a letter: every `Target` in `karakuri-midi` carries a
+  slot, a range or a value from a closed list, and **none carries a string**.
+
+  **A folder scope reads Sets.** A Set file and a bundle are one file — `ir-spec.md`'s Set format
+  with `src` runs appended — so the scope draws one kind of row; a `.kir` is one node's source with
+  no layer, slot, parameters or chosen name, and no operation takes one. A folder row is a *take*
+  then a load. What is owed is an operation that can ask a folder for a listing: `ListSets { holds,
+  layer }` has nowhere to put a directory.
+
+  **A favourite is kept beside the Sets, in the library**, decided on the copy consequence rather
+  than on convenience. In the Set file it would travel to whoever you send it to *and* rewrite the
+  file, moving it to the top of a listing ordered by mtime — a favourite indistinguishable from an
+  edit. In a session it would keep nothing with `rec` off and replay as an event. The cost is
+  stated: copy the library and the stars come with it; hand somebody one Set and it arrives
+  unstarred. It also makes `favourites` a filter over *my sets* rather than a fifth collection. An
+  operation that sets one is owed.
+
+  **Two things the answering found.** The mock's `load → C` named a deck nothing else on the panel
+  named — deck A carries the selection ring — so the pill is `load → A` now, and
+  `karakuri-console`'s `view` quotes the old letter in prose. And **the `.path` row cannot carry a
+  tooltip at all**: it sets `overflow: hidden` and a tip is an absolutely-positioned child, so it is
+  clipped — which is rule 03's *anything compact says three things on hover* broken by a
+  declaration rather than by an omission. *Whether a folder scope reads Sets or artifacts* is what the scope row is waiting on — a
   directory of `.kir` files, a directory of Set files and a bundle are three different things, and
   the chip is a control over whichever it turns out to be. *How a Set gets from the library to a
   deck* is the `load → C` pill, and the manual already says what should decide it: the
