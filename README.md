@@ -43,9 +43,11 @@ cargo run -p karakuri-cli -- --render out.png --frames 240   # one frame to a PN
 ```
 
 `karakuri` is the panel and `karakuri-cli` is still what you play a whole set with: the
-console has the picture, the deck previews, the transport, the mixer and the Library bay,
-and no audio, MIDI, MCP, watcher or replay yet. Press `h` in the CLI's window for the keys
-and `s` for the status line.
+console has the picture, the deck previews, the transport, the mixer, the Library bay and
+the Inspector, and no audio, MIDI, MCP, watcher or replay yet. The Staging lane draws its
+empty state, which is the only state that program can reach; the Master and Sequencer bays
+draw nothing but their heads. Press `h` in the CLI's window for the keys and `s` for the
+status line.
 
 **To play it rather than to judge it, read [`docs/manual.md`](docs/manual.md)** — a
 walkthrough, every flag and key, what the status line means, and a list of the things it
@@ -63,7 +65,7 @@ not about design, and it had no home until the manual had one.
   application is being built: [`karakuri-console`](crates/karakuri-console) opens a window with the
   panel's arrangement in it — dividers that drag, regions that fold, a live engine frame in the
   Program bay, the deck previews under or beside it, the transport, the mixer read off the deck, the Library bay
-  listing what the store holds, and the outputs. **It is a program now** — `cargo run -p karakuri`,
+  listing what the store holds, the Inspector read off the running Set, and the outputs. **It is a program now** — `cargo run -p karakuri`,
   the binary in [`crates/karakuri`](crates/karakuri), which is what the panel column of
   [the operations page](docs/manual/operations.html) is measured against (ADR-0213). It was an
   example until ADR-0214, and for one reason: everything a program needs beyond the panel was in
@@ -71,8 +73,10 @@ not about design, and it had no home until the manual had one.
   is now — [`karakuri-environment`](crates/karakuri-environment). `karakuri-cli` is still what you
   play a whole set with: the console has no audio, MIDI, MCP, watcher or replay yet
 - **Every operation is named once and every surface routes into that name** — the manual's first
-  rule. [`karakuri-operation`](crates/karakuri-operation) is those 50 names, checked against
-  [the manual's own page](docs/manual/operations.html) by a test, and
+  rule. [`karakuri-operation`](crates/karakuri-operation) is every one of those names, checked against
+  [the manual's own page](docs/manual/operations.html) by a test — **how many there are is not written
+  down in this repository**, because a transcribed total goes stale in silence every time the page
+  gains a row; `grep -c '<h3' docs/manual/operations.html` is the count. And
   [`karakuri-operation-record`](crates/karakuri-operation-record) is where one becomes a record —
   the step that makes a fader, a key and a MIDI knob the same thing. **The MIDI map is an
   `Operation` now** (ADR-0196), and fifteen of the CLI's thirty-nine keys reach the deck through

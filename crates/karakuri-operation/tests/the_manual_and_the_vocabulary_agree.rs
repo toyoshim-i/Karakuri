@@ -4,7 +4,7 @@
 //!
 //! # Why the page is the specification and not the other way round
 //!
-//! The naming was done there. Fifty operations, one `<h3>` each, grouped
+//! The naming was done there. One `<h3>` per operation, grouped
 //! into sections, each row carrying which of the four surfaces reaches it —
 //! and the page's own footer states the direction of authority for behaviour:
 //! *"Where a row here and the program disagree, the program is right and this

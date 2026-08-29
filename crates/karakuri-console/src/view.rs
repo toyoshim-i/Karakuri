@@ -88,9 +88,12 @@
 //! - **`14:41`** — when it arrived. It waits on what the Library bay's `.dim`
 //!   column waits on and is refused for its reason: the value would exist and
 //!   a *spelling* does not. `karakuri_environment::history`'s is
-//!   `%H%M%S-%3f`, which is half a filename; `karakuri-cli`'s
-//!   `setfile::written_at` is local to the second, in a package with no
-//!   library target; the mock's `14:41` is a third.
+//!   `%H%M%S-%3f`, which is half a filename;
+//!   `karakuri_environment::setfile::written_at` is local to the second; the
+//!   mock's `14:41` is a third. **The reason this column waited has changed**:
+//!   it was that the one spelling sat in a package with no library target, and
+//!   ADR-0214 moved it, so what is left is three spellings and no decision
+//!   about which is the one.
 //! - **The head's `2 waiting`** — a count. It is not a queue depth: a
 //!   finished build is installed at a frame boundary rather than held for a
 //!   verdict, so the number would be *unsettled nodes* and waits on the rows.
@@ -4712,11 +4715,14 @@ const LIBRARY_TITLE: &str = "Library";
 ///   from the others and is worth the sentence: the *value* exists —
 ///   `SetEntry::written` is the Set file's own mtime — and what does not exist
 ///   is a spelling for it. The one answer in this workspace is
-///   `karakuri-cli`'s `setfile::written_at`, in a package with no library
-///   target, and it is local time to the second where the mock's column is
-///   `16:09`. Writing a second spelling here is the kind of second answer this
-///   repository deletes rather than adds, so the column waits for the one
-///   spelling to be somewhere both callers can reach.
+///   `karakuri_environment::setfile::written_at`, local time to the second
+///   where the mock's column is `16:09`. **It is reachable now** — ADR-0214
+///   moved it out of a package with no library target, which is the reason
+///   this comment used to give — but not from here: `karakuri-console` takes
+///   no engine, no store and no environment by design, so the host formats it
+///   and hands it in, the way every other derived value in this module
+///   arrives. Writing a second spelling here would be the kind of second
+///   answer this repository deletes rather than adds.
 /// - **`.lib-row.cursor`, and the `load → A` pill in the foot.** A cursor is a
 ///   selection this console does not keep — the same sentence [`mixer`] writes
 ///   about the deck selection — and the pill is *"How a Set gets from the

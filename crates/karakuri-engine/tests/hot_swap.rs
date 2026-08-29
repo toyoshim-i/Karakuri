@@ -735,7 +735,7 @@ proc wide_points {
     /// enforced by shape rather than by handling: a `.kir` that does not compile
     /// never becomes a `Request`, so there is nothing for the render thread to
     /// reject. A [`Source`] that produces nothing is exactly what
-    /// `karakuri-cli`'s watcher becomes on a parse error, and the running Set must
+    /// `karakuri-environment`'s watcher becomes on a parse error, and the running Set must
     /// not notice.
     #[test]
     fn a_source_that_produces_nothing_leaves_the_running_set_running() {

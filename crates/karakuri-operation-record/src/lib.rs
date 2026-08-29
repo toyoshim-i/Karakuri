@@ -47,7 +47,7 @@
 //!
 //! # What it answers, and the three answers are the survey
 //!
-//! [`written`] is **one exhaustive match over all 50 operations**, which is
+//! [`written`] is **one exhaustive match over every operation in the vocabulary**, which is
 //! what makes the classification a fact rather than an intention: an operation
 //! added to the vocabulary does not compile here until somebody has said what
 //! it writes. The three answers are the three groups the survey found:

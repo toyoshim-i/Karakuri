@@ -4596,7 +4596,7 @@ fn field_value(
 ///
 /// **The fold is `karakuri-ir`'s, not this file's.** It was a private function
 /// here with a note saying a second evaluator elsewhere would agree with the
-/// shader only by coincidence; `karakuri-cli`'s metadata writer is that
+/// shader only by coincidence; `karakuri-environment`'s metadata writer is that
 /// elsewhere, and it records the same number in a `param_decl`. Two folds could
 /// disagree, and the disagreement would be a metadata file describing a run
 /// that never happened.
@@ -4723,7 +4723,7 @@ proc signed_defaults {
     /// and through no reader of its own.**
     ///
     /// The number a node enters a Set with and the number
-    /// `karakuri-cli`'s metadata writer puts in a `param_decl` are one
+    /// `karakuri-environment`'s metadata writer puts in a `param_decl` are one
     /// declaration read twice, and the rule that keeps them equal is that both
     /// call `karakuri_ir::Param::default_scalar`. Nothing in this crate held
     /// the engine to that: the fold moved to `karakuri-ir`, the test above

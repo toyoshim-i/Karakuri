@@ -5276,7 +5276,7 @@ mod tests {
             );
         }
 
-        // The vocabulary is 50 operations and this program has five controls
+        // The vocabulary is larger than what this program reaches: five controls
         // writing five records. A record invented for the other 45 would be
         // somebody deciding what they mean — and the answer is now *which*
         // nothing rather than `None`, because a surface's own state and a

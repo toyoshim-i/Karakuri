@@ -192,14 +192,16 @@ cargo test -p karakuri-layout      # the arrangement, solved to rectangles
 cargo test -p karakuri-environment # the program: the disk, the devices, the ports, the record
 cargo test -p karakuri-console     # the console: arrangement, panel model, view (no device at all)
 cargo test -p karakuri            # the panel as a program: the window, the engine behind it (needs a GPU)
-cargo test -p karakuri-cli         # flags, replay, MCP, live save (needs a GPU)
+cargo test -p karakuri-cli         # flags, the key handler, replay, live save (needs a GPU)
 ```
 
 **Three crates take a device, not one.** Most of `karakuri-engine`'s integration suites do,
 and so does part of `karakuri-cli`: eight tests in the binary build a Set, and the five in
 `tests/replay.rs` drive `karakuri-cli` as a subprocess, which takes a device of its own. The
 third is **`karakuri`**, the panel as a program — its `src/main.rs` opens a window and builds
-a deck, and twelve of its tests are under `mod gpu`.
+a deck, and its device tests are the ones under `mod gpu` in that file. **No count is written
+down**: `awk '/^mod gpu/,0' crates/karakuri/src/main.rs | grep -c '#\[test\]'` is the number, and
+a transcribed one has already gone stale here twice.
 
 **`karakuri-console` is not on that list any more, and the change is worth reading the right
 way round.** It used to be third, and only through `examples/panel.rs`. That example became
@@ -211,7 +213,7 @@ way round.** It used to be third, and only through `examples/panel.rs`. That exa
 cannot reach for one, and there is now no entry in that manifest to reach for at all.
 `cargo test -p karakuri-console` takes no device by any path.
 
-The other eight crates are pure CPU.
+Every other crate in the list above is pure CPU.
 
 ### Running only the part that needs no GPU
 
@@ -358,7 +360,7 @@ re-point the ADRs that cited it
 **An ADR is a description of history**, and that decides what may be edited: the past is not revised,
 a description that was wrong is corrected, and annotating a record with what it later became is
 welcome. An argument that would have to change is a new record, which is what buys the permission to
-stop maintaining a hundred and fifty of them. See
+stop maintaining a catalogue this size — `ls docs/adr/0*.md | wc -l`, and it only grows. See
 [P-0066](principles/0066-an-adr-is-a-description-of-history-corrected-but-never-revised.md), which
 carries the test for the cases that are not obvious.
 
@@ -375,9 +377,20 @@ when the milestone closes the comment still reads plausibly while pointing at no
 comment already states its claim, write no pointer. Where the reason is genuinely elsewhere, an ADR is
 the durable ticket to point at — addressable for as long as the code exists.
 
-Counted on 2026-08-23: **71 references to the roadmap across 26 source files, against one reference to
-an ADR or a principle in all of `crates/`.** That is the number worth watching, and it is not really
-about comment style — it says the catalogue is not yet where anyone reaches while writing code. See
+**That ratio has turned over, and neither side of it is written down here.** Counted on
+2026-08-23 it was seventy-one references to the roadmap across twenty-six source files against a
+single reference to an ADR or a principle in the whole of `crates/` — which is what made it *the
+number worth watching*, and it was never really about comment style: it said the catalogue was not
+yet where anybody reached while writing code. It is now. Two commands are the whole of the
+instrumentation, so nothing here can go stale in silence:
+
+```sh
+grep -rn 'roadmap' --include='*.rs' crates/ | wc -l                     # the schedule, still cited
+grep -rEo 'ADR-[0-9]{4}|P-[0-9]{4}' --include='*.rs' crates/ | wc -l    # what is in force
+```
+
+**Watch the first and expect it near zero**; each hit it returns is a comment to read, because a
+schedule cited from code is what P-0063 forbids. See
 [P-0063](principles/0063-source-cites-what-is-in-force-not-a-plan.md) and
 [ADR-0149](adr/0149-source-cites-what-is-in-force-not-a-plan.md).
 
