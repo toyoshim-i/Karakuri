@@ -296,6 +296,27 @@
     100%     { background: var(--c-pink); box-shadow: 0 0 9px var(--c-glowp); }
   }
 
+  /* The four things in this row that are the beat tracker's, drawn as one
+     group: the pill that says whether there is an audio input, the latency
+     offset — which is a term in the lead the tracker corrects against and not
+     only a delay on the picture — the tap, and the octave. None of them means
+     anything without an input, so they are one item at the pills' own 5px
+     rather than four at the row's 14; and putting them after the bar leaves
+     the tempo, its label, the beat grid and the bar next to each other, which
+     is the order the console's own row is laid out in. The 5 is
+     `console.html`'s inline `gap: 5px`, the same one the pills in a bay head
+     sit at. */
+  .tracker { display: flex; align-items: center; gap: 5px; }
+
+  /* Halve or double the grid, in `.scrub`'s idiom one bay over: two chips that
+     keep their shape when they are refused and say why. **At most one of them
+     is ever live** — the tracker's range is 60 to 200 BPM, which is under two
+     octaves, so a tempo that can be halved cannot also be doubled — and
+     `.idle` is the direction this tempo refuses. Never grey without a reason. */
+  .octave { display: flex; gap: 3px; }
+  .octave i { font-style: normal; font-size: 9px; padding: 0 4px; border-radius: 999px; border: 1px solid var(--c-line); color: var(--c-dim); }
+  .octave i.idle { color: var(--c-faint); border-color: var(--c-hair); }
+
   /* three columns */
   .body-grid { display: grid; grid-template-columns: 218px minmax(340px, 1fr) 268px; gap: 10px; align-items: stretch; }
   .col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }

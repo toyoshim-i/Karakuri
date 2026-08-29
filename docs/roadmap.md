@@ -634,8 +634,32 @@ already says everything about what a deck *is* lives there; the offset beside th
 rather than beside the tempo, because the operation refuses without an audio input and belongs
 against the thing that says whether there is one.
 
-**A fourth home is missing and the earlier sweep did not list it**: *Halve or double the grid* routes
-to `panel ½ ×2` and the transport row draws no such control. **And the sweep's method was wrong in a
+**The fourth home was missing and is written now**: *Halve or double the grid* routed to
+`panel ½ ×2` and the transport row drew no such control — verified three ways before a word was
+added, including against `view.rs`'s own enumeration of the row, because the crossfader had just
+proved that a word absent from the page does not mean a control absent from it. **Both of its
+refusals are predictable rather than reportable** — `BeatLock::octave` refuses outside
+`BPM_RANGE`'s 60..=200 and everything refuses without an audio input — so the page draws `×2` inert
+with its reason at 128 BPM rather than drawing a control that fails when pressed.
+
+**The wrap alarm raised with it was false, and the correction is a lesson about method.** The row
+needed 922.6 of 966 px before the offset pill, not the ~898 that was reported, and had 43.4 px
+spare; the pill is 89.5 and not ~104. The second measurement got there by downloading the two
+webfonts the page links and reading `hmtx` for real advance widths rather than estimating from the
+stylesheet — which is the same move ADR-0190 made for the tally, one document over.
+
+**And it found a real defect that predates all of it: the row's fit rests entirely on the webfont.**
+With `M PLUS 1 Code` not loaded the fallback needs about 1046 px and the row wraps at every width the
+console can be — and it already did before any of this work, at about 1022. `font-display: swap`
+makes that the **first-paint** state, so the row a reader sees first is the wrapped one. Nothing has
+been decided about it.
+
+**Two more the drawing found.** `½` needs 120 BPM or more and `×2` needs 100 or less, and
+`BPM_RANGE` is 1.74 octaves wide, so **between 100 and 120 neither direction is available** — stated
+on the page rather than hidden. And the tracker's own doubt has no home: `Estimate::half_tempo_hint`
+prints ` x2?` on the CLI's status line and is the thing that tells a performer to press `.` at all,
+while the panel draws the control and not the prompt — and above 100 BPM that hint arrives together
+with a refusal of the only move that would answer it. **And the sweep's method was wrong in a
 way worth writing down** — it tested for the home's *words* on the page, and `transition row`,
 `renderer chips`, `sensitivity row`, `tally chip`, `strip fader`, `health readout` and `pane edge`
 all appear zero times there and are all drawn. A word test is not a region test; the reliable one is

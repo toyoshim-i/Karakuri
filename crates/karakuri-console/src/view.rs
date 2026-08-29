@@ -66,9 +66,17 @@
 //! [`Kind::Transport`] draws the tempo, the beat grid, the bar and the frame
 //! readout — **the four things in the mock's row that are a value somebody
 //! measured rather than a control over something that does not exist.** The
-//! other six are named in [`transport`], one by one, with what is missing
-//! behind each; the paragraph above is the whole of the argument and this row
-//! is where it costs the most, because six of the mock's ten items go.
+//! ones the console cannot know are named in [`transport`], one by one, with
+//! what is missing behind each; the paragraph above is the whole of the
+//! argument and this row is where it costs the most, because **most of what the
+//! mock draws there goes.**
+//!
+//! **No count is written here.** This comment said *six of the mock's ten* and
+//! the mock has gained an offset pill and an octave pair since, which is the
+//! third time a transcribed figure about that page has gone stale in this
+//! repository. What the mock holds is
+//! `docs/manual/console.html`'s `.transport` block, and counting it is a
+//! command rather than a memory.
 //!
 //! What it draws with no engine behind it is **nothing at all** — not a row of
 //! zeroes and not a row of dashes, either of which is a reading invented for a
@@ -1645,8 +1653,8 @@ impl Transport {
 ///
 /// # No tooltips, for the reason the Outputs row has none
 ///
-/// Five of the mock's ten items carry a `data-tip` and three of the four drawn
-/// ones do — the beat grid's is what the travelling light means, and it landed
+/// Most of the mock's items carry a `data-tip` and so do most of the drawn
+/// ones — the beat grid's is what the travelling light means, and it landed
 /// with the light
 /// ([ADR-0212](../../../docs/adr/0212-the-beat-is-a-light-that-travels-and-it-declares-for-itself.md)). A tooltip needs `egui` to own a widget, this console paints, and
 /// giving one readout a widget is a decision about who owns the pointer — see
