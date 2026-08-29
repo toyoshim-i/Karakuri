@@ -537,7 +537,8 @@ impl Source for Watch {
                 .into_iter()
                 .map(|l1| {
                     let capacity = self.capacity.unwrap_or_else(|| {
-                        l1.capacity.map_or(crate::DEFAULT_CAPACITY, |c| c.default)
+                        l1.capacity
+                            .map_or(karakuri_ir::DEFAULT_CAPACITY, |c| c.default)
                     });
                     (l1, capacity)
                 })

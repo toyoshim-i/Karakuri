@@ -786,6 +786,22 @@ impl CapacityDecl {
     }
 }
 
+/// Elements per geometry where nothing else names one — neither `--capacity`
+/// nor the procedure's own [`CapacityDecl`].
+///
+/// **A default of the language rather than of a flag**, which is why it sits
+/// beside the grammar it completes rather than in whichever surface last
+/// needed a number. The order it is last in: `--capacity` overrides every
+/// source; below it a procedure runs at the default its own `capacity`
+/// declares; this is what is left when neither spoke.
+///
+/// **Little should ever reach it.** `check_header` requires a `capacity` on
+/// every L1, so a [`Checked`](crate::typed::Checked) that passed contract
+/// checking always carries one and the arm this fills is the one that says so:
+/// `capacity` is an `Option` on the seam type, and a caller holding a
+/// procedure that failed checking still needs a number rather than a panic.
+pub const DEFAULT_CAPACITY: u32 = 262_144;
+
 /// `amplify <factor>`
 ///
 /// **A compile-time constant, on the same terms as a loop bound**, because the
